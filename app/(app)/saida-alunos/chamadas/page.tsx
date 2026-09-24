@@ -21,6 +21,7 @@ const getInitials = (name: string) => {
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { SaidaProvider, useSaida, PickupCall } from '@/lib/saidaContext'
+import { useBroadcastRealtime } from '@/lib/hooks/useBroadcastRealtime'
 import { useData } from '@/lib/dataContext'
 import { useIsMobile } from '@/lib/hooks/useIsMobile'
 import { useApp } from '@/lib/context'
@@ -276,6 +277,24 @@ const CallCard = React.memo(function CallCard({ call, onConfirm, onCancel, onRec
                 {call.guardianName || 'Não Informado'}
               </span>
             </div>
+            {call.targetTime && (
+              <span style={{
+                fontSize: 8.5,
+                fontWeight: 800,
+                color: '#f59e0b',
+                background: 'rgba(245, 158, 11, 0.15)',
+                border: '1px solid rgba(245, 158, 11, 0.3)',
+                padding: '1px 5px',
+                borderRadius: 4,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 3,
+                width: 'fit-content',
+                marginTop: 2
+              }}>
+                <Clock size={8.5} /> {call.targetTime === 'Indefinido' ? 'Indefinido' : `Horário: ${call.targetTime}`}
+              </span>
+            )}
           </div>
           
           {/* Right: Times */}
@@ -1724,8 +1743,19 @@ interface SpecialLaunch {
   confirmedAt?: string
 }
 
+const SPECIAL_AUTH_PRESET_TIMES: string[] = [
+  'Indefinido',
+  ...Array.from({ length: (22 - 6) * 4 + 1 }, (_, i) => {
+    const totalMinutes = 6 * 60 + i * 15
+    const hours = Math.floor(totalMinutes / 60)
+    const minutes = totalMinutes % 60
+    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`
+  })
+]
+
 function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boolean) => void }) {
   const { addSpecialAuth, confirmSpecialExit, deleteCall, cancelCall, callStudent, confirmPickup, recallStudent, activeCalls = [] } = useSaida()
+  const { on: onRealtime } = useBroadcastRealtime()
   const [todasTurmas] = useSupabaseArray<any>('turmas');
   const { currentUser } = useApp()
   const isMobile = useIsMobile()
@@ -1736,29 +1766,132 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
   const [isSearching, setIsSearching] = useState(false)
   const [selectedStudent, setSelectedStudent] = useState<any | null>(null)
   const [authorizedPerson, setAuthorizedPerson] = useState('')
+  const [specialAuthTime, setSpecialAuthTime] = useState('Indefinido')
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
 
-  // ── Persistent accumulator: never loses a special_auth entry even if activeCalls is overwritten ──
-  // Key: call.id → PickupCall  (grows, never shrinks unless deleteCall is called)
+  // ── Persistent accumulator: stores special_auth entries of today ──
   const seenSpecialAuthsRef = useRef<Map<string, PickupCall>>(new Map())
+  const [seenSpecialAuthsVersion, setSeenSpecialAuthsVersion] = useState(0)
 
-  // Whenever activeCalls changes, absorb any special_auth entries into the accumulator
+  // Escuta imediata de eventos broadcast (DELETE_CALL e CANCEL_CALL) para remoção instantânea
+  useEffect(() => {
+    const unsub = onRealtime('*', payload => {
+      const d = payload.data as any
+      if (payload.event === 'DELETE_CALL' && d?.callId) {
+        if (seenSpecialAuthsRef.current.has(d.callId)) {
+          seenSpecialAuthsRef.current.delete(d.callId)
+          setSeenSpecialAuthsVersion(v => v + 1)
+        }
+      } else if (payload.event === 'CANCEL_CALL' && d?.callId) {
+        if (seenSpecialAuthsRef.current.has(d.callId)) {
+          seenSpecialAuthsRef.current.delete(d.callId)
+          setSeenSpecialAuthsVersion(v => v + 1)
+        }
+      }
+    })
+    return () => { unsub() }
+  }, [onRealtime])
+
+  // Sincronização contínua com /api/saida/calls para carregar imediatamente do banco todas as autorizações de hoje com targetTime
+  // e expurgar aquelas deletadas ou canceladas
+  useEffect(() => {
+    let isSubscribed = true
+    const fetchSpecialAuths = async () => {
+      try {
+        const res = await fetch(`/api/saida/calls?_t=${Date.now()}`, {
+          headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }
+        })
+        if (!res.ok) return
+        const data = await res.json()
+        const arr: PickupCall[] = Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : []
+        if (!isSubscribed) return
+        let changed = false
+
+        const dbCallMap = new Map(arr.map(c => [c.id, c]))
+
+        // Prunar autorizações que não existem mais ou foram canceladas no banco
+        for (const [id, seenCall] of seenSpecialAuthsRef.current.entries()) {
+          const dbCall = dbCallMap.get(id)
+          if (!dbCall) {
+            const isVeryRecent = Date.now() - new Date(seenCall.calledAt).getTime() < 5000
+            if (!isVeryRecent) {
+              seenSpecialAuthsRef.current.delete(id)
+              changed = true
+            }
+          } else if (dbCall.status === 'cancelled' || dbCall.status !== 'special_auth') {
+            seenSpecialAuthsRef.current.delete(id)
+            changed = true
+          }
+        }
+
+        for (const c of arr) {
+          if (c.status === 'special_auth') {
+            const existing = seenSpecialAuthsRef.current.get(c.id)
+            const incomingTargetTime = c.targetTime || (c as any).target_time || (c as any).dados?.targetTime || (c as any).dados?.target_time || (c as any).horarioPrevisto || (c as any).scheduledTime || null
+            if (!existing || existing.targetTime !== incomingTargetTime || JSON.stringify(existing) !== JSON.stringify(c)) {
+              seenSpecialAuthsRef.current.set(c.id, {
+                ...existing,
+                ...c,
+                targetTime: incomingTargetTime || existing?.targetTime || undefined
+              })
+              changed = true
+            }
+          }
+        }
+        if (changed) setSeenSpecialAuthsVersion(v => v + 1)
+      } catch (err) {
+        console.warn('[SpecialExitSticker] Falha ao sincronizar autorizações especiais:', err)
+      }
+    }
+    fetchSpecialAuths()
+    const timer = setInterval(fetchSpecialAuths, 15000)
+    return () => {
+      isSubscribed = false
+      clearInterval(timer)
+    }
+  }, [])
+
+  // Whenever activeCalls changes, absorb any special_auth entries into the accumulator,
+  // e remove aquelas canceladas ou deletadas
   useEffect(() => {
     let changed = false
-    for (const c of activeCalls) {
-      if (c.status === 'special_auth') {
-        const existing = seenSpecialAuthsRef.current.get(c.id)
-        if (!existing || JSON.stringify(existing) !== JSON.stringify(c)) {
-          seenSpecialAuthsRef.current.set(c.id, c)
+    const activeMap = new Map(activeCalls.map(c => [c.id, c]))
+
+    // 1. Prunar cancelados ou deletados
+    for (const [id, seenCall] of seenSpecialAuthsRef.current.entries()) {
+      const liveCall = activeMap.get(id)
+      if (liveCall) {
+        if (liveCall.status === 'cancelled' || (liveCall.status !== 'special_auth' && liveCall.status !== 'confirmed')) {
+          seenSpecialAuthsRef.current.delete(id)
+          changed = true
+        }
+      } else {
+        const isVeryRecent = Date.now() - new Date(seenCall.calledAt).getTime() < 5000
+        if (!isVeryRecent) {
+          seenSpecialAuthsRef.current.delete(id)
           changed = true
         }
       }
     }
-    // Force a re-render if new entries were absorbed
+
+    // 2. Absorver special_auth
+    for (const c of activeCalls) {
+      if (c.status === 'special_auth') {
+        const existing = seenSpecialAuthsRef.current.get(c.id)
+        const incomingTargetTime = c.targetTime || (c as any).target_time || (c as any).dados?.targetTime || (c as any).dados?.target_time || (c as any).horarioPrevisto || (c as any).scheduledTime || null
+        if (!existing || existing.targetTime !== incomingTargetTime || JSON.stringify(existing) !== JSON.stringify(c)) {
+          seenSpecialAuthsRef.current.set(c.id, {
+            ...existing,
+            ...c,
+            targetTime: incomingTargetTime || existing?.targetTime || undefined
+          })
+          changed = true
+        }
+      }
+    }
+    // Force a re-render if entries changed
     if (changed) setSeenSpecialAuthsVersion(v => v + 1)
   }, [activeCalls])
-
-  const [seenSpecialAuthsVersion, setSeenSpecialAuthsVersion] = useState(0)
 
   // Remove a specific special_auth from the accumulator (called from the delete handler)
   const removeFromAccumulator = useCallback((callId: string) => {
@@ -1789,6 +1922,31 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
         ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
         : c.calledAt.split('T')[0]
 
+      // Resolução inteligente do horário inserido (targetTime)
+      let resolvedTargetTime = 
+        c.targetTime ||
+        (c as any).target_time ||
+        (c as any).dados?.targetTime ||
+        (c as any).dados?.target_time ||
+        (c as any).horarioPrevisto ||
+        (c as any).horario_previsto ||
+        (c as any).scheduledTime ||
+        (c as any).scheduled_time ||
+        (c as any).horario ||
+        (c as any).dados?.horario ||
+        null
+
+      if (!resolvedTargetTime && c.guardianName) {
+        // Fallback para autorizações lançadas anteriormente onde o horário veio no texto
+        const match = c.guardianName.match(/(?:às|as|horário|horario|ás)?\s*(\b[0-2]?\d[h:][0-5]\d\b|\b[0-2]?\dh\b)/i)
+        if (match) {
+          resolvedTargetTime = match[1].replace('h', ':').replace(/:$/, ':00')
+          if (resolvedTargetTime.length === 4 && resolvedTargetTime.indexOf(':') === 1) {
+            resolvedTargetTime = '0' + resolvedTargetTime
+          }
+        }
+      }
+
       return {
         id: c.id,
         studentId: c.studentId,
@@ -1799,6 +1957,7 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
         loggedBy: c.operatorId || 'Sistema',
         date: dateStr,
         time: fmtTime(c.calledAt),
+        targetTime: resolvedTargetTime,
         calledAtMs: new Date(c.calledAt).getTime(),
         confirmedOut: !!pickUpCall,
         confirmedAt: pickUpCall
@@ -1867,7 +2026,8 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
       sClass,
       authPerson,
       operatorName,
-      sPhoto
+      sPhoto,
+      specialAuthTime || 'Indefinido'
     )
 
     showToast(`Autorização lançada no card para ${sName}! Clique no alto-falante 📣 para chamar.`, true)
@@ -1876,6 +2036,7 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
     setSelectedStudent(null)
     setSearch('')
     setAuthorizedPerson('')
+    setSpecialAuthTime('Indefinido')
   }
 
 
@@ -2071,6 +2232,34 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
           />
         </div>
 
+        {/* COLUMN 3: SCHEDULED TIME */}
+        <div style={{ flex: '0 0 auto', minWidth: 125, position: 'relative' }}>
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 5, height: 38,
+            padding: '0 8px', borderRadius: 12,
+            border: '1px solid rgba(245, 158, 11, 0.45)',
+            background: 'hsl(var(--bg-surface))',
+            boxSizing: 'border-box',
+            opacity: selectedStudent ? 1 : 0.5,
+          }}>
+            <Clock size={13} color="#d97706" style={{ flexShrink: 0 }} />
+            <select
+              value={specialAuthTime}
+              onChange={e => setSpecialAuthTime(e.target.value)}
+              disabled={!selectedStudent}
+              style={{
+                border: 'none', background: 'transparent',
+                fontSize: 11.5, fontWeight: 700, color: 'hsl(var(--text-primary))',
+                outline: 'none', width: '100%', cursor: selectedStudent ? 'pointer' : 'not-allowed',
+              }}
+            >
+              {SPECIAL_AUTH_PRESET_TIMES.map(t => (
+                <option key={t} value={t}>{t === 'Indefinido' ? 'Indefinido' : t}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
         {/* SUBMIT BUTTON: LANÇAR AUTORIZAÇÃO */}
         <button
           type="button"
@@ -2151,6 +2340,45 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
                 <div style={{ fontSize: 9, color: 'hsl(var(--text-muted))', marginTop: 1, lineHeight: 1.35, wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
                   retirado por: <span style={{ color: l.confirmedOut ? '#10b981' : '#d97706', fontWeight: 700 }}>{l.authorizedPerson}</span>
                 </div>
+                {/* ── Horário Inserido na Autorização (Prominente & Ultra Moderno) ── */}
+                <div style={{ marginTop: 2.5, marginBottom: 1, display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
+                  {l.targetTime && l.targetTime !== 'Indefinido' ? (
+                    <span style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 3.5,
+                      fontSize: 9,
+                      fontWeight: 900,
+                      padding: '1.5px 7px',
+                      borderRadius: 6,
+                      background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.22), rgba(217, 119, 6, 0.14))',
+                      color: '#b45309',
+                      border: '1px solid rgba(245, 158, 11, 0.4)',
+                      boxShadow: '0 1px 3px rgba(245, 158, 11, 0.12)',
+                      letterSpacing: '0.02em',
+                    }}>
+                      <Clock size={9.5} strokeWidth={2.5} color="#d97706" />
+                      <span>Horário: <strong>{l.targetTime}</strong></span>
+                    </span>
+                  ) : (
+                    <span style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 3.5,
+                      fontSize: 8.5,
+                      fontWeight: 800,
+                      padding: '1.5px 6.5px',
+                      borderRadius: 6,
+                      background: 'rgba(100, 116, 139, 0.12)',
+                      color: '#475569',
+                      border: '1px solid rgba(100, 116, 139, 0.22)',
+                      letterSpacing: '0.01em',
+                    }}>
+                      <Clock size={9.5} strokeWidth={2.4} color="#64748b" />
+                      <span>Horário: <strong>Indefinido</strong></span>
+                    </span>
+                  )}
+                </div>
                 <div style={{ fontSize: 8.5, color: 'hsl(var(--text-muted))', marginTop: 2, display: 'flex', gap: 4, fontWeight: 500, flexWrap: 'wrap' }}>
                   <span>{l.time}</span>
                   <span>·</span>
@@ -2196,7 +2424,9 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
                               l.authorizedPerson,
                               'manual',
                               undefined,
-                              l.studentPhoto
+                              l.studentPhoto,
+                              false,
+                              l.targetTime
                             )
                             showToast(`Aluno ${l.studentName} chamado na TV!`, true)
                           }
@@ -2238,7 +2468,8 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
                         l.studentName,
                         l.studentClass,
                         l.authorizedPerson,
-                        l.studentPhoto
+                        l.studentPhoto,
+                        l.targetTime
                       )
                       showToast(`Saída de ${l.studentName} confirmada!`, true)
                     }}

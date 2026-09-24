@@ -7,9 +7,11 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { 
   Megaphone, Users, CheckCircle2, Loader2, Send, AlertTriangle, 
-  X, Check, LogOut, ShieldCheck, Calendar, ChevronRight, UserCheck 
+  X, Check, LogOut, ShieldCheck, Calendar, ChevronRight, UserCheck,
+  Clock, Sparkles, Menu, ChevronDown
 } from 'lucide-react'
 import { useSaida } from '@/lib/saidaContext'
+import { invalidateCache } from '@/lib/useSupabaseCollection'
 import { triggerHaptic } from '@/lib/utils/haptics'
 import { getInitials } from '@/lib/utils'
 import { abbreviateName } from './StudentHeaderCard'
@@ -44,6 +46,16 @@ function isStudentMatch(callStudentId?: any, studentId?: any, studentMatricula?:
 
   return false
 }
+
+const ALL_AIRPORT_TIMES: string[] = [
+  'Indefinido',
+  ...Array.from({ length: (22 - 6) * 4 + 1 }, (_, i) => {
+    const totalMinutes = 6 * 60 + i * 15
+    const hours = Math.floor(totalMinutes / 60)
+    const minutes = totalMinutes % 60
+    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`
+  })
+]
 
 function formatTime(isoStr?: string): string {
   if (!isoStr) return ''
@@ -87,7 +99,7 @@ export function StudentCallButton({
   meusAlunos?: any[]
 }) {
   const searchParams = useSearchParams()
-  const { activeCalls, cancelCall } = useSaida()
+  const { activeCalls, cancelCall, deleteCall } = useSaida()
   const [localConfirmed, setLocalConfirmed] = useState(false)
 
   const espelharRespId = searchParams?.get('espelhar_responsavel')
@@ -690,9 +702,24 @@ export function StudentCallButton({
     return (
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', height: 56 }}>
         <button 
-          onClick={() => specialAuthCalls.forEach(c => {
-             cancelCall(c.id)
-          })}
+          onClick={() => {
+            triggerHaptic('impactLight')
+            const matchingSpecialCalls = activeCalls.filter(c => 
+              c.status === 'special_auth' && (
+                isStudentMatch(c.studentId, aluno?.id, aluno?.matricula) ||
+                specialAuthCalls.some(sc => sc.id === c.id) ||
+                (call && call.id === c.id) ||
+                (myCall && myCall.id === c.id)
+              )
+            )
+            const toDelete = matchingSpecialCalls.length > 0 ? matchingSpecialCalls : specialAuthCalls
+            toDelete.forEach(c => {
+              deleteCall(c.id)
+            })
+            if (aluno?.id && typeof window !== 'undefined') {
+              try { localStorage.removeItem(`edu-confirmed-exit-${aluno.id}`) } catch(e) {}
+            }
+          }}
           title="Cancelar autorização"
           style={{
             width: 46, height: 56, borderRadius: 16, cursor: 'pointer',
@@ -846,17 +873,76 @@ export const StudentCallController = React.memo(function StudentCallController({
   isMirrorModeActive,
   onLogout
 }: StudentCallControllerProps) {
-  const { callStudent, addSpecialAuth, activeCalls } = useSaida()
+  const { callStudent, addSpecialAuth, deleteCall, activeCalls } = useSaida()
   
   const [isSpecialAuthModalOpen, setIsSpecialAuthModalOpen] = useState(false)
   const [selectedAlunos, setSelectedAlunos] = useState<string[]>([])
   const [specialAuthText, setSpecialAuthText] = useState('')
+  const [specialAuthTime, setSpecialAuthTime] = useState('')
+  const [specialAuthTimeInput, setSpecialAuthTimeInput] = useState('')
+  const [isSandwichOpen, setIsSandwichOpen] = useState(false)
+  const sandwichRef = useRef<HTMLDivElement>(null)
   const [specialAuthSending, setSpecialAuthSending] = useState(false)
   const [specialAuthSent, setSpecialAuthSent] = useState(false)
-  const specialAuthTextRef = useRef<HTMLTextAreaElement>(null)
+  const specialAuthTextRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent | TouchEvent) {
+      if (sandwichRef.current && !sandwichRef.current.contains(event.target as Node)) {
+        setIsSandwichOpen(false)
+      }
+    }
+    if (isSandwichOpen) {
+      document.addEventListener('mousedown', handleClickOutside)
+      document.addEventListener('touchstart', handleClickOutside)
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+      document.removeEventListener('touchstart', handleClickOutside)
+    }
+  }, [isSandwichOpen])
+
+  const handleTimeInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value
+    if (!raw.trim()) {
+      setSpecialAuthTimeInput('')
+      setSpecialAuthTime('')
+      return
+    }
+
+    if (/^i/i.test(raw.trim())) {
+      setSpecialAuthTimeInput('Indefinido')
+      setSpecialAuthTime('Indefinido')
+      return
+    }
+
+    const digitsOnly = raw.replace(/\D/g, '').slice(0, 4)
+    let formatted = digitsOnly
+    if (digitsOnly.length >= 3) {
+      formatted = `${digitsOnly.slice(0, 2)}:${digitsOnly.slice(2)}`
+    }
+
+    setSpecialAuthTimeInput(formatted)
+
+    if (digitsOnly.length === 4) {
+      let hours = parseInt(digitsOnly.slice(0, 2), 10)
+      let minutes = parseInt(digitsOnly.slice(2), 10)
+      if (hours > 23) hours = 23
+      if (minutes > 59) minutes = 59
+      const validTime = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`
+      setSpecialAuthTimeInput(validTime)
+      setSpecialAuthTime(validTime)
+      triggerHaptic('selection')
+    } else {
+      setSpecialAuthTime('')
+    }
+  }
 
   const handleOpenModal = useCallback(() => {
     setIsSpecialAuthModalOpen(true)
+    setSpecialAuthTime('')
+    setSpecialAuthTimeInput('')
+    setIsSandwichOpen(false)
     const all = meusAlunos && meusAlunos.length > 0 ? meusAlunos : (aluno ? [aluno] : [])
     const isConfirmed = (sId: string, matricula?: any) => {
       if (activeCalls.some(c => isStudentMatch(c.studentId, sId, matricula) && c.status === 'confirmed')) return true
@@ -909,12 +995,13 @@ export const StudentCallController = React.memo(function StudentCallController({
       alert("Ação desabilitada no modo de visualização/espelhamento.")
       return
     }
-    if (!specialAuthText.trim() || selectedAlunos.length === 0) return
+    if (!specialAuthText.trim() || !specialAuthTime.trim() || selectedAlunos.length === 0) return
     setSpecialAuthSending(true)
     triggerHaptic('impactMedium')
 
     try {
       const gName = currentUser?.nome || 'Responsável'
+      const formattedTime = specialAuthTime.trim()
       await Promise.all(selectedAlunos.map(async id => {
         const a = meusAlunos?.find((x: any) => x.id === id) || (aluno?.id === id ? aluno : null)
         if (!a) return
@@ -932,6 +1019,7 @@ export const StudentCallController = React.memo(function StudentCallController({
           specialAuthText.trim(),
           gName,
           a.foto || a.imagem1 || null,
+          formattedTime
         )
 
         await fetch('/api/saida/calls', {
@@ -947,17 +1035,20 @@ export const StudentCallController = React.memo(function StudentCallController({
             guardianName: newCall.guardianName,
             operatorId: newCall.operatorId,
             calledAt: newCall.calledAt,
+            targetTime: formattedTime,
             status: 'special_auth',
             source: 'agenda_digital',
           })
         }).catch(err => console.warn('[SpecialAuth] DB persist failed:', err))
       }))
 
+      invalidateCache('saida/calls')
       triggerHaptic('success')
       setSpecialAuthSent(true)
       setTimeout(() => {
         setIsSpecialAuthModalOpen(false)
         setSpecialAuthText('')
+        setSpecialAuthTime('')
         setSpecialAuthSent(false)
       }, 2000)
     } catch (err) {
@@ -966,7 +1057,7 @@ export const StudentCallController = React.memo(function StudentCallController({
     } finally {
       setSpecialAuthSending(false)
     }
-  }, [specialAuthText, selectedAlunos, meusAlunos, aluno, turmas, currentUser, addSpecialAuth, isMirrorModeActive])
+  }, [specialAuthText, specialAuthTime, selectedAlunos, meusAlunos, aluno, turmas, currentUser, addSpecialAuth, isMirrorModeActive])
 
   const isAlunoCargo = currentUser?.cargo === 'Aluno'
 
@@ -1030,6 +1121,9 @@ export const StudentCallController = React.memo(function StudentCallController({
                 left: 0,
                 right: 0,
                 bottom: 0,
+                width: '100vw',
+                maxWidth: '100vw',
+                height: '100dvh',
                 background: 'rgba(15, 23, 42, 0.65)',
                 zIndex: 99999,
                 display: 'flex',
@@ -1037,13 +1131,19 @@ export const StudentCallController = React.memo(function StudentCallController({
                 justifyContent: 'center',
                 backdropFilter: 'blur(16px)',
                 WebkitBackdropFilter: 'blur(16px)',
-                padding: '0 16px',
+                padding: '12px 14px',
+                boxSizing: 'border-box',
+                overflowX: 'hidden',
+                overflowY: 'auto',
                 overscrollBehavior: 'none'
               }}
               onClick={() => {
                 if (!specialAuthSending) {
                   setIsSpecialAuthModalOpen(false)
                   setSpecialAuthText('')
+                  setSpecialAuthTime('')
+                  setSpecialAuthTimeInput('')
+                  setIsSandwichOpen(false)
                 }
               }}
             >
@@ -1056,14 +1156,16 @@ export const StudentCallController = React.memo(function StudentCallController({
                 className="ad-modal-container"
                 style={{
                   background: 'linear-gradient(145deg, #ffffff 0%, #f8fafc 100%)',
-                  borderRadius: 26,
-                  padding: '22px 22px 20px',
+                  borderRadius: 24,
+                  padding: '18px 18px 16px',
                   width: '100%',
-                  maxWidth: 430,
-                  maxHeight: 'min(90vh, 760px)',
+                  maxWidth: 440,
+                  maxHeight: 'min(94vh, 780px)',
                   boxShadow: '0 28px 70px rgba(0,0,0,0.16), 0 0 0 1px rgba(0,0,0,0.05)',
                   position: 'relative',
-                  overflowY: 'auto',
+                  overflow: 'visible',
+                  boxSizing: 'border-box',
+                  touchAction: 'pan-y',
                   fontFamily: 'Outfit, sans-serif'
                 }}
                 onClick={e => e.stopPropagation()}
@@ -1071,22 +1173,22 @@ export const StudentCallController = React.memo(function StudentCallController({
                 {/* Decorative gradient blob */}
                 <div style={{
                   position: 'absolute',
-                  top: -60,
-                  right: -60,
-                  width: 200,
-                  height: 200,
-                  background: 'radial-gradient(circle, rgba(99,102,241,0.15) 0%, transparent 70%)',
-                  borderRadius: '50%',
+                  top: 0,
+                  right: 0,
+                  width: 130,
+                  height: 130,
+                  background: 'radial-gradient(circle, rgba(99,102,241,0.12) 0%, transparent 70%)',
+                  borderRadius: 24,
                   pointerEvents: 'none',
                 }} />
                 <div style={{
                   position: 'absolute',
-                  bottom: -40,
-                  left: -40,
-                  width: 160,
-                  height: 160,
+                  bottom: 0,
+                  left: 0,
+                  width: 120,
+                  height: 120,
                   background: 'radial-gradient(circle, rgba(245,158,11,0.08) 0%, transparent 70%)',
-                  borderRadius: '50%',
+                  borderRadius: 24,
                   pointerEvents: 'none',
                 }} />
 
@@ -1095,7 +1197,7 @@ export const StudentCallController = React.memo(function StudentCallController({
                   display: 'flex',
                   justifyContent: 'space-between',
                   alignItems: 'center',
-                  marginBottom: 14,
+                  marginBottom: 12,
                   position: 'relative',
                   zIndex: 1
                 }}>
@@ -1111,11 +1213,11 @@ export const StudentCallController = React.memo(function StudentCallController({
                       boxShadow: '0 4px 14px rgba(99,102,241,0.25)',
                       flexShrink: 0,
                     }}>
-                      <Megaphone size={17} color="#fff" strokeWidth={2.5} />
+                      <Megaphone size={18} color="#fff" strokeWidth={2.5} />
                     </div>
                     <div>
                       <h3 style={{
-                        fontSize: 17,
+                        fontSize: 16.5,
                         fontWeight: 900,
                         color: '#0f172a',
                         margin: 0,
@@ -1125,7 +1227,7 @@ export const StudentCallController = React.memo(function StudentCallController({
                       }}>
                         Opções de Retirada
                       </h3>
-                      <p style={{ fontSize: 11.5, color: '#64748b', margin: 0, lineHeight: 1.2 }}>
+                      <p style={{ fontSize: 11.5, color: '#64748b', margin: 0, lineHeight: 1.2, marginTop: 1 }}>
                         Como deseja retirar o(a) aluno(a)?
                       </p>
                     </div>
@@ -1135,14 +1237,17 @@ export const StudentCallController = React.memo(function StudentCallController({
                       if (!specialAuthSending) {
                         setIsSpecialAuthModalOpen(false)
                         setSpecialAuthText('')
+                        setSpecialAuthTime('')
+                        setSpecialAuthTimeInput('')
+                        setIsSandwichOpen(false)
                       }
                     }}
                     style={{
                       background: 'rgba(0,0,0,0.03)',
                       border: '1px solid rgba(0,0,0,0.06)',
                       borderRadius: 9,
-                      width: 30,
-                      height: 30,
+                      width: 28,
+                      height: 28,
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
@@ -1151,21 +1256,19 @@ export const StudentCallController = React.memo(function StudentCallController({
                       flexShrink: 0,
                     }}
                   >
-                    <X size={16} />
+                    <X size={15} />
                   </button>
                 </div>
 
-                {/* Student Cards List */}
+                {/* Student Cards List - Sem rolagem interna, com informações destacadas */}
                 <div style={{
                   display: 'flex',
                   flexDirection: 'column',
                   gap: 8,
-                  marginBottom: 14,
+                  marginBottom: 12,
                   position: 'relative',
                   zIndex: 1,
-                  maxHeight: 190,
-                  overflowY: 'auto',
-                  paddingRight: 3
+                  boxSizing: 'border-box'
                 }}>
                   {(meusAlunos && meusAlunos.length > 0 ? meusAlunos : (aluno ? [aluno] : [])).map((a: any) => {
                     const tObj = (turmas || []).find((t: any) => t && (String(t.id) === String(a.turma) || String(t.codigo) === String(a.turma) || String(t.nome) === String(a.turma)))
@@ -1173,6 +1276,8 @@ export const StudentCallController = React.memo(function StudentCallController({
                     if (aTurma && aTurma !== 'S/T' && aTurma.includes('-')) {
                       aTurma = aTurma.split('-')[0].trim()
                     }
+                    const aTurno = a.turno || tObj?.turno || null
+                    const aMatricula = a.matricula || null
                     const isSelected = selectedAlunos.includes(a.id)
 
                     const isConfirmedExit = (() => {
@@ -1203,32 +1308,35 @@ export const StudentCallController = React.memo(function StudentCallController({
                         style={{
                           background: isConfirmedExit 
                             ? 'rgba(0,0,0,0.02)' 
-                            : isSelected ? 'rgba(99,102,241,0.05)' : 'rgba(0,0,0,0.02)',
-                          border: `1px solid ${isConfirmedExit ? 'rgba(0,0,0,0.04)' : isSelected ? 'rgba(99,102,241,0.3)' : 'rgba(0,0,0,0.04)'}`,
+                            : isSelected ? 'linear-gradient(135deg, rgba(99,102,241,0.06) 0%, rgba(168,85,247,0.03) 100%)' : '#ffffff',
+                          border: `1.5px solid ${isConfirmedExit ? 'rgba(0,0,0,0.05)' : isSelected ? '#6366f1' : 'rgba(0,0,0,0.08)'}`,
                           borderRadius: 14,
-                          padding: '9px 13px',
+                          padding: '10px 13px',
                           display: 'flex',
                           alignItems: 'center',
                           gap: 12,
                           cursor: isConfirmedExit ? 'not-allowed' : 'pointer',
-                          opacity: isConfirmedExit ? 0.6 : 1,
-                          transition: 'all 0.2s',
+                          opacity: isConfirmedExit ? 0.62 : 1,
+                          transition: 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
+                          boxSizing: 'border-box',
+                          width: '100%',
+                          boxShadow: isSelected && !isConfirmedExit ? '0 4px 14px rgba(99,102,241,0.14)' : '0 1px 3px rgba(0,0,0,0.02)',
                         }}
                       >
                         <div style={{
-                          width: 42,
-                          height: 42,
-                          borderRadius: 13,
+                          width: 44,
+                          height: 44,
+                          borderRadius: 12,
                           flexShrink: 0,
                           overflow: 'hidden',
                           background: isConfirmedExit ? '#cbd5e1' : 'linear-gradient(135deg, #a855f7, #ec4899)',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
-                          fontSize: 15,
+                          fontSize: 16,
                           fontWeight: 900,
                           color: '#fff',
-                          boxShadow: isSelected && !isConfirmedExit ? '0 3px 12px rgba(168,85,247,0.22)' : 'none',
+                          boxShadow: isSelected && !isConfirmedExit ? '0 4px 14px rgba(168,85,247,0.25)' : 'none',
                           filter: isConfirmedExit ? 'grayscale(0.6)' : 'none',
                         }}>
                           {a.foto || a.imagem1
@@ -1238,52 +1346,66 @@ export const StudentCallController = React.memo(function StudentCallController({
                         </div>
                         <div style={{ minWidth: 0, flex: 1 }}>
                           <div style={{
-                            fontSize: 14.5,
-                            fontWeight: 800,
+                            fontSize: 15,
+                            fontWeight: 900,
                             color: isConfirmedExit ? '#64748b' : '#0f172a',
                             fontFamily: 'Outfit, sans-serif',
                             overflow: 'hidden',
                             textOverflow: 'ellipsis',
                             whiteSpace: 'nowrap',
-                            lineHeight: 1.2
+                            lineHeight: 1.25,
+                            letterSpacing: '-0.01em'
                           }}>
                             {abbreviateName(a.nome || '')}
                           </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3, flexWrap: 'wrap' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3.5, flexWrap: 'wrap' }}>
                             <span style={{
-                              fontSize: 10.5,
+                              fontSize: 11,
                               fontWeight: 800,
-                              color: isConfirmedExit ? '#64748b' : '#4f46e5',
-                              background: isConfirmedExit ? 'rgba(0,0,0,0.05)' : 'rgba(99,102,241,0.1)',
-                              padding: '2px 7px',
-                              borderRadius: 100,
+                              color: isConfirmedExit ? '#64748b' : '#4338ca',
+                              background: isConfirmedExit ? 'rgba(0,0,0,0.05)' : 'rgba(99,102,241,0.12)',
+                              padding: '2.5px 8px',
+                              borderRadius: 7,
+                              letterSpacing: '0.01em'
                             }}>{aTurma}</span>
+
+                            {aTurno && (
+                              <span style={{
+                                fontSize: 10.5,
+                                fontWeight: 700,
+                                color: '#475569',
+                                background: 'rgba(0,0,0,0.04)',
+                                padding: '2px 7px',
+                                borderRadius: 6,
+                              }}>{aTurno}</span>
+                            )}
+
                             {isConfirmedExit && (
                               <span style={{
-                                fontSize: 10,
+                                fontSize: 10.5,
                                 fontWeight: 800,
                                 color: '#059669',
                                 background: 'rgba(16,185,129,0.12)',
-                                padding: '2px 7px',
-                                borderRadius: 100,
+                                padding: '2px 8px',
+                                borderRadius: 7,
                                 display: 'flex',
                                 alignItems: 'center',
-                                gap: 3
+                                gap: 3.5
                               }}>
-                                <CheckCircle2 size={11} /> Retirado
+                                <CheckCircle2 size={11} strokeWidth={2.5} /> Retirado
                               </span>
                             )}
                             {isPendingCall && (
                               <span style={{
-                                fontSize: 10,
+                                fontSize: 10.5,
                                 fontWeight: 800,
                                 color: '#d97706',
                                 background: 'rgba(245,158,11,0.12)',
-                                padding: '2px 7px',
-                                borderRadius: 100,
+                                padding: '2px 8px',
+                                borderRadius: 7,
                                 display: 'flex',
                                 alignItems: 'center',
-                                gap: 3
+                                gap: 3.5
                               }}>
                                 <Loader2 size={11} className="spin-anim" /> Em chamada
                               </span>
@@ -1297,7 +1419,7 @@ export const StudentCallController = React.memo(function StudentCallController({
                             style={{ 
                               width: 22,
                               height: 22,
-                              borderRadius: 7.5,
+                              borderRadius: 7,
                               flexShrink: 0,
                               border: '1px solid rgba(0,0,0,0.1)',
                               background: 'rgba(0,0,0,0.04)',
@@ -1312,16 +1434,17 @@ export const StudentCallController = React.memo(function StudentCallController({
                           <div style={{ 
                             width: 22,
                             height: 22,
-                            borderRadius: 7.5,
+                            borderRadius: 7,
                             flexShrink: 0,
-                            border: `2px solid ${isSelected ? '#6366f1' : 'rgba(0,0,0,0.15)'}`,
-                            background: isSelected ? '#6366f1' : 'transparent',
+                            border: `2px solid ${isSelected ? '#6366f1' : 'rgba(0,0,0,0.18)'}`,
+                            background: isSelected ? '#6366f1' : '#ffffff',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            transition: 'all 0.2s'
+                            transition: 'all 0.2s',
+                            boxShadow: isSelected ? '0 2px 6px rgba(99,102,241,0.3)' : 'none'
                           }}>
-                            {isSelected && <Check size={13} color="#fff" strokeWidth={3} />}
+                            {isSelected && <Check size={14} color="#fff" strokeWidth={3} />}
                           </div>
                         )}
                       </div>
@@ -1330,27 +1453,27 @@ export const StudentCallController = React.memo(function StudentCallController({
                 </div>
 
                 {/* Primary Action: Normal Call */}
-                <div style={{ position: 'relative', zIndex: 1, marginBottom: 12 }}>
+                <div style={{ position: 'relative', zIndex: 1, marginBottom: 8 }}>
                   <button
                     onClick={handleNormalCallConfirm}
                     disabled={specialAuthSending || specialAuthSent || selectedAlunos.length === 0}
                     style={{
                       width: '100%',
-                      height: 48,
-                      borderRadius: 14,
+                      height: 44,
+                      borderRadius: 12,
                       border: 'none',
                       background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
                       color: '#fff',
-                      fontSize: 15,
+                      fontSize: 14,
                       fontWeight: 800,
                       cursor: (specialAuthSending || specialAuthSent || selectedAlunos.length === 0) ? 'not-allowed' : 'pointer',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      gap: 9,
+                      gap: 8,
                       fontFamily: 'Outfit, sans-serif',
                       transition: 'all 0.3s',
-                      boxShadow: '0 6px 20px rgba(16,185,129,0.25)',
+                      boxShadow: '0 4px 14px rgba(16,185,129,0.22)',
                       opacity: (specialAuthSending || specialAuthSent || selectedAlunos.length === 0) ? 0.6 : 1
                     }}
                     onMouseEnter={e => {
@@ -1387,20 +1510,20 @@ export const StudentCallController = React.memo(function StudentCallController({
                 {/* Modern Dedicated Card: Special Authorization */}
                 <div style={{
                   position: 'relative',
-                  zIndex: 1,
+                  zIndex: isSandwichOpen ? 50 : 1,
                   background: 'linear-gradient(160deg, #fdfefe 0%, #fffbf2 50%, #fef7e7 100%)',
-                  borderRadius: 18,
-                  padding: '13px 14px 12px',
+                  borderRadius: 16,
+                  padding: '12px 13px 11px',
                   border: '1.5px solid rgba(245,158,11,0.22)',
                   boxShadow: '0 3px 16px rgba(245,158,11,0.05), 0 1px 2px rgba(0,0,0,0.02)',
                 }}>
                   {/* Card Header */}
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 9 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <div style={{
-                        width: 28,
-                        height: 28,
-                        borderRadius: 9,
+                        width: 26,
+                        height: 26,
+                        borderRadius: 8,
                         background: 'linear-gradient(135deg, rgba(245,158,11,0.2), rgba(217,119,6,0.12))',
                         color: '#d97706',
                         display: 'flex',
@@ -1409,11 +1532,11 @@ export const StudentCallController = React.memo(function StudentCallController({
                         flexShrink: 0,
                         border: '1px solid rgba(245,158,11,0.25)',
                       }}>
-                        <UserCheck size={15} strokeWidth={2.4} />
+                        <UserCheck size={14} strokeWidth={2.4} />
                       </div>
                       <div>
                         <div style={{
-                          fontSize: 12.5,
+                          fontSize: 12,
                           fontWeight: 800,
                           color: '#0f172a',
                           fontFamily: 'Outfit, sans-serif',
@@ -1421,18 +1544,18 @@ export const StudentCallController = React.memo(function StudentCallController({
                         }}>
                           Autorização de Retirada
                         </div>
-                        <div style={{ fontSize: 10.5, color: '#64748b', fontWeight: 500, lineHeight: 1.2, marginTop: 2 }}>
+                        <div style={{ fontSize: 10, color: '#64748b', fontWeight: 500, lineHeight: 1.2, marginTop: 1 }}>
                           Avó, tio, motorista ou terceiro
                         </div>
                       </div>
                     </div>
                     <span style={{
-                      fontSize: 9,
+                      fontSize: 8.5,
                       fontWeight: 800,
                       color: '#b45309',
                       background: 'rgba(245,158,11,0.14)',
                       border: '1px solid rgba(245,158,11,0.2)',
-                      padding: '2px 7px',
+                      padding: '2px 6px',
                       borderRadius: 999,
                       letterSpacing: '0.04em',
                       textTransform: 'uppercase',
@@ -1442,112 +1565,441 @@ export const StudentCallController = React.memo(function StudentCallController({
                     </span>
                   </div>
 
-                  {/* Text Field */}
-                  <div style={{ position: 'relative', marginBottom: 7 }}>
-                    <textarea
-                      ref={specialAuthTextRef}
-                      value={specialAuthText}
-                      onChange={e => setSpecialAuthText(e.target.value)}
-                      placeholder="Ex: Avó Maria Silva — irá buscar às 17h30, carro prata..."
-                      rows={2}
-                      disabled={specialAuthSending || specialAuthSent}
-                      style={{
-                        width: '100%',
-                        padding: '8px 11px',
-                        borderRadius: 12,
-                        border: specialAuthText.trim()
-                          ? '1.5px solid rgba(245,158,11,0.55)'
-                          : '1.5px solid rgba(0,0,0,0.08)',
-                        background: '#ffffff',
-                        fontSize: 12.5,
-                        color: '#0f172a',
-                        outline: 'none',
-                        resize: 'none',
-                        fontFamily: 'Outfit, sans-serif',
-                        lineHeight: 1.45,
-                        boxSizing: 'border-box',
-                        transition: 'all 0.2s ease',
-                        boxShadow: specialAuthText.trim()
-                          ? '0 0 0 2px rgba(245,158,11,0.12)'
-                          : '0 1px 2px rgba(0,0,0,0.02)',
-                      }}
-                    />
-                  </div>
+                  {/* ── 2 COLUNAS: DIGITAR NOME (ESQUERDA) | LISTA SANDUÍCHE DE HORÁRIOS (DIREITA) ── */}
+                  {(() => {
+                    const isSpecialAuthValid = Boolean(specialAuthText.trim() && specialAuthTime.trim() && selectedAlunos.length > 0)
 
-                  {/* Status / Instruction text */}
-                  <div style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    marginBottom: 9,
-                    padding: '0 2px'
-                  }}>
-                    <span style={{
-                      fontSize: 10.5,
-                      color: specialAuthText.trim() ? '#b45309' : '#94a3b8',
-                      fontWeight: 600,
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 4
-                    }}>
-                      <ShieldCheck size={12} strokeWidth={2.4} color={specialAuthText.trim() ? '#d97706' : '#94a3b8'} />
-                      {specialAuthText.trim() ? 'Identificação preenchida' : 'Identificação de quem busca obrigatória'}
-                    </span>
-                    {specialAuthText.length > 0 && (
-                      <span style={{ fontSize: 9.5, color: '#94a3b8', fontWeight: 600 }}>
-                        {specialAuthText.length} carac.
-                      </span>
-                    )}
-                  </div>
+                    return (
+                      <>
+                        <div style={{
+                          position: 'relative',
+                          zIndex: isSandwichOpen ? 60 : 1,
+                          display: 'grid',
+                          gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)',
+                          gap: 9,
+                          marginBottom: 8,
+                        }}>
+                          {/* COLUNA ESQUERDA: CAMPO DE DIGITAR NOME / IDENTIFICAÇÃO */}
+                          <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                            <div style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              marginBottom: 5,
+                              padding: '0 1px',
+                            }}>
+                              <div style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 4,
+                                fontSize: 11,
+                                fontWeight: 800,
+                                color: '#0f172a',
+                                fontFamily: 'Outfit, sans-serif',
+                              }}>
+                                <UserCheck size={12} color="#d97706" strokeWidth={2.4} />
+                                <span>Quem retira?</span>
+                                <span style={{ color: '#ef4444', fontWeight: 900, fontSize: 12, marginLeft: 1 }}>*</span>
+                              </div>
+                            </div>
 
-                  {/* Actions */}
-                  <button
-                    onClick={handleSpecialAuthConfirm}
-                    disabled={!specialAuthText.trim() || specialAuthSending || specialAuthSent || selectedAlunos.length === 0}
-                    style={{
-                      width: '100%',
-                      height: 42,
-                      borderRadius: 12,
-                      border: 'none',
-                      background: specialAuthSent
-                        ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)'
-                        : !specialAuthText.trim() || specialAuthSending
-                          ? 'rgba(245,158,11,0.12)'
-                          : 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
-                      color: specialAuthSent
-                        ? '#fff'
-                        : !specialAuthText.trim() || specialAuthSending
-                          ? '#b45309'
-                          : '#fff',
-                      fontSize: 12.5,
-                      fontWeight: 800,
-                      cursor: specialAuthText.trim() && !specialAuthSending && !specialAuthSent ? 'pointer' : 'not-allowed',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: 8,
-                      fontFamily: 'Outfit, sans-serif',
-                      transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
-                      boxShadow: specialAuthText.trim() && !specialAuthSending && !specialAuthSent
-                        ? '0 6px 18px rgba(245,158,11,0.3)'
-                        : 'none',
-                      opacity: (!specialAuthText.trim() && !specialAuthSent) ? 0.65 : 1,
-                    }}
-                    onMouseEnter={e => {
-                      if (!e.currentTarget.disabled) e.currentTarget.style.transform = 'translateY(-1px)'
-                    }}
-                    onMouseLeave={e => {
-                      e.currentTarget.style.transform = 'translateY(0)'
-                    }}
-                  >
-                    {specialAuthSent ? (
-                      <><CheckCircle2 size={15} /> Autorização Registrada!</>
-                    ) : specialAuthSending ? (
-                      <><Loader2 size={15} className="spin-anim" /> Enviando...</>
-                    ) : (
-                      <><Send size={14} /> Confirmar Autorização Especial</>
-                    )}
-                  </button>
+                            <input
+                              ref={specialAuthTextRef}
+                              type="text"
+                              value={specialAuthText}
+                              onChange={e => setSpecialAuthText(e.target.value)}
+                              placeholder="Ex: Avó Maria..."
+                              disabled={specialAuthSending || specialAuthSent}
+                              style={{
+                                width: '100%',
+                                height: 40,
+                                padding: '0 9px',
+                                borderRadius: 9,
+                                border: specialAuthText.trim()
+                                  ? '1.5px solid rgba(245,158,11,0.55)'
+                                  : '1.5px solid rgba(0,0,0,0.1)',
+                                background: '#ffffff',
+                                fontSize: 11,
+                                color: '#0f172a',
+                                outline: 'none',
+                                fontFamily: 'Outfit, sans-serif',
+                                boxSizing: 'border-box',
+                                transition: 'all 0.2s ease',
+                                boxShadow: specialAuthText.trim()
+                                  ? '0 0 0 2px rgba(245,158,11,0.1)'
+                                  : '0 1px 2px rgba(0,0,0,0.02)',
+                              }}
+                            />
+                          </div>
+
+                          {/* COLUNA DIREITA: SELETOR DE HORÁRIOS COMPACTO (LISTA AO CLICAR OU DIGITAR) */}
+                          <div
+                            style={{
+                              display: 'flex',
+                              flexDirection: 'column',
+                              minWidth: 0,
+                              position: 'relative',
+                              zIndex: isSandwichOpen ? 70 : 1,
+                            }}
+                            ref={sandwichRef}
+                          >
+                            <div style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              marginBottom: 5,
+                              padding: '0 1px',
+                            }}>
+                              <div style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 4,
+                                fontSize: 11,
+                                fontWeight: 800,
+                                color: '#0f172a',
+                                fontFamily: 'Outfit, sans-serif',
+                              }}>
+                                <Clock size={12} color="#d97706" strokeWidth={2.4} />
+                                <span>Horário</span>
+                                <span style={{ color: '#ef4444', fontWeight: 900, fontSize: 12, marginLeft: 1 }}>*</span>
+                              </div>
+                            </div>
+
+                            {/* Campo Compacto (Altura 40px alinhada com o campo da esquerda) */}
+                            <div
+                              onClick={() => setIsSandwichOpen(true)}
+                              style={{
+                                height: 40,
+                                background: '#ffffff',
+                                borderRadius: 9,
+                                border: isSandwichOpen
+                                  ? '1.5px solid #d97706'
+                                  : specialAuthTime
+                                    ? '1.5px solid rgba(245,158,11,0.55)'
+                                    : '1.5px solid rgba(0, 0, 0, 0.1)',
+                                boxShadow: isSandwichOpen || specialAuthTime
+                                  ? '0 0 0 2px rgba(245, 158, 11, 0.1)'
+                                  : '0 1px 2px rgba(0, 0, 0, 0.02)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                padding: '0 7px',
+                                gap: 5,
+                                boxSizing: 'border-box',
+                                transition: 'all 0.15s ease',
+                                cursor: 'text',
+                              }}
+                            >
+                              <Clock size={13} color={specialAuthTime ? '#d97706' : '#94a3b8'} strokeWidth={2.4} style={{ flexShrink: 0 }} />
+
+                              <input
+                                type="text"
+                                value={specialAuthTimeInput}
+                                onChange={handleTimeInputChange}
+                                onFocus={() => {
+                                  setIsSandwichOpen(true)
+                                  if (specialAuthTime === 'Indefinido') {
+                                    setSpecialAuthTimeInput('')
+                                  }
+                                }}
+                                placeholder="Selecione..."
+                                disabled={specialAuthSending || specialAuthSent}
+                                style={{
+                                  flex: 1,
+                                  minWidth: 0,
+                                  height: '100%',
+                                  border: 'none',
+                                  background: 'transparent',
+                                  color: '#0f172a',
+                                  fontSize: 11,
+                                  fontWeight: specialAuthTime ? 700 : 500,
+                                  fontFamily: 'Outfit, sans-serif',
+                                  outline: 'none',
+                                  padding: 0,
+                                }}
+                              />
+
+                              {/* Botão limpar quando preenchido */}
+                              {specialAuthTime && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    setSpecialAuthTime('')
+                                    setSpecialAuthTimeInput('')
+                                  }}
+                                  style={{
+                                    background: 'none',
+                                    border: 'none',
+                                    padding: 2,
+                                    cursor: 'pointer',
+                                    color: '#94a3b8',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    borderRadius: 4,
+                                  }}
+                                  title="Limpar horário"
+                                >
+                                  <X size={11} />
+                                </button>
+                              )}
+
+                              {/* Botão Dropdown Chevron */}
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  triggerHaptic('selection')
+                                  setIsSandwichOpen(prev => !prev)
+                                }}
+                                disabled={specialAuthSending || specialAuthSent}
+                                title="Abrir seleção de horários"
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  background: isSandwichOpen ? 'rgba(245, 158, 11, 0.15)' : 'rgba(0,0,0,0.04)',
+                                  border: 'none',
+                                  borderRadius: 5,
+                                  width: 22,
+                                  height: 22,
+                                  color: isSandwichOpen ? '#d97706' : '#64748b',
+                                  cursor: 'pointer',
+                                  flexShrink: 0,
+                                  transition: 'all 0.15s ease',
+                                }}
+                              >
+                                <ChevronDown
+                                  size={13}
+                                  strokeWidth={2.5}
+                                  style={{
+                                    transform: isSandwichOpen ? 'rotate(180deg)' : 'none',
+                                    transition: 'transform 0.2s ease',
+                                  }}
+                                />
+                              </button>
+                            </div>
+
+                            {/* DROPDOWN FLUTUANTE QUE SOBREPÕE O MODAL (ABRE PARA CIMA COM Z-INDEX MÁXIMO) */}
+                            {isSandwichOpen && (
+                              <div
+                                style={{
+                                  position: 'absolute',
+                                  bottom: 'calc(100% + 6px)',
+                                  left: 0,
+                                  right: 0,
+                                  background: '#ffffff',
+                                  borderRadius: 12,
+                                  border: '1.5px solid rgba(245, 158, 11, 0.45)',
+                                  boxShadow: '0 -12px 36px rgba(0, 0, 0, 0.22), 0 4px 16px rgba(0, 0, 0, 0.08)',
+                                  zIndex: 999999,
+                                  maxHeight: 180,
+                                  overflowY: 'auto',
+                                  overflowX: 'hidden',
+                                  padding: '5px',
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                  boxSizing: 'border-box',
+                                }}
+                              >
+                                {/* Opção 1: INDEFINIDO */}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    triggerHaptic('selection')
+                                    setSpecialAuthTime('Indefinido')
+                                    setSpecialAuthTimeInput('Indefinido')
+                                    setIsSandwichOpen(false)
+                                  }}
+                                  style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    padding: '6px 8px',
+                                    borderRadius: 6,
+                                    margin: '1px 1px 3px 1px',
+                                    background: specialAuthTime === 'Indefinido'
+                                      ? 'rgba(245, 158, 11, 0.16)'
+                                      : 'rgba(245, 158, 11, 0.06)',
+                                    border: specialAuthTime === 'Indefinido'
+                                      ? '1px solid #d97706'
+                                      : '1px dashed rgba(245, 158, 11, 0.35)',
+                                    color: '#b45309',
+                                    fontSize: 10.5,
+                                    fontWeight: 800,
+                                    fontFamily: 'Outfit, sans-serif',
+                                    cursor: 'pointer',
+                                    textAlign: 'left',
+                                    transition: 'background 0.15s',
+                                  }}
+                                >
+                                  <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                    <Sparkles size={11} color="#d97706" />
+                                    <span>Indefinido</span>
+                                  </span>
+                                  {specialAuthTime === 'Indefinido' && <Check size={11} color="#d97706" strokeWidth={3} />}
+                                </button>
+
+                                <div style={{ height: 1, background: 'rgba(0,0,0,0.06)', margin: '2px 3px' }} />
+
+                                {/* Lista de horários filtrável */}
+                                {(() => {
+                                  const term = (specialAuthTimeInput || '').trim().toLowerCase()
+                                  const filtered = ALL_AIRPORT_TIMES.filter(t => {
+                                    if (t === 'Indefinido') return false
+                                    if (!term || term === 'indefinido') return true
+                                    return t.includes(term)
+                                  })
+
+                                  if (filtered.length === 0) {
+                                    return (
+                                      <div style={{
+                                        padding: '7px',
+                                        fontSize: 10,
+                                        color: '#94a3b8',
+                                        textAlign: 'center',
+                                        fontFamily: 'Outfit, sans-serif',
+                                      }}>
+                                        Nenhum horário encontrado
+                                      </div>
+                                    )
+                                  }
+
+                                  return filtered.map(t => {
+                                    const isSel = specialAuthTime === t
+                                    return (
+                                      <button
+                                        key={t}
+                                        type="button"
+                                        onClick={() => {
+                                          triggerHaptic('selection')
+                                          setSpecialAuthTime(t)
+                                          setSpecialAuthTimeInput(t)
+                                          setIsSandwichOpen(false)
+                                        }}
+                                        style={{
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          justifyContent: 'space-between',
+                                          padding: '5px 7px',
+                                          borderRadius: 5,
+                                          background: isSel ? 'rgba(245, 158, 11, 0.14)' : 'transparent',
+                                          border: isSel ? '1px solid rgba(245, 158, 11, 0.3)' : '1px solid transparent',
+                                          color: isSel ? '#b45309' : '#1e293b',
+                                          fontSize: 10.5,
+                                          fontWeight: isSel ? 800 : 500,
+                                          fontFamily: 'Outfit, sans-serif',
+                                          cursor: 'pointer',
+                                          textAlign: 'left',
+                                          transition: 'all 0.1s ease',
+                                        }}
+                                        onMouseEnter={e => {
+                                          if (!isSel) e.currentTarget.style.background = '#f8fafc'
+                                        }}
+                                        onMouseLeave={e => {
+                                          if (!isSel) e.currentTarget.style.background = 'transparent'
+                                        }}
+                                      >
+                                        <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                          <Clock size={10} color={isSel ? '#d97706' : '#94a3b8'} />
+                                          <span>{t}</span>
+                                        </span>
+                                        {isSel && <Check size={11} color="#d97706" strokeWidth={3} />}
+                                      </button>
+                                    )
+                                  })
+                                })()}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Status / Instrução Simples */}
+                        <div style={{
+                          position: 'relative',
+                          zIndex: 1,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          marginBottom: 7,
+                          padding: '0 2px',
+                        }}>
+                          <span style={{
+                            fontSize: 9.5,
+                            color: isSpecialAuthValid ? '#059669' : '#94a3b8',
+                            fontWeight: 600,
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 4,
+                          }}>
+                            <ShieldCheck size={11} strokeWidth={2.4} color={isSpecialAuthValid ? '#10b981' : '#94a3b8'} />
+                            {isSpecialAuthValid ? 'Pronto para confirmar' : 'Preencha quem retira e o horário previsto'}
+                          </span>
+                          {specialAuthTime && (
+                            <span style={{
+                              fontSize: 9,
+                              fontWeight: 800,
+                              color: '#b45309',
+                              background: 'rgba(245,158,11,0.12)',
+                              padding: '1px 5px',
+                              borderRadius: 999,
+                            }}>
+                              {specialAuthTime}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Actions */}
+                        <button
+                          onClick={handleSpecialAuthConfirm}
+                          disabled={!isSpecialAuthValid || specialAuthSending || specialAuthSent}
+                          style={{
+                            position: 'relative',
+                            zIndex: 1,
+                            width: '100%',
+                            height: 40,
+                            borderRadius: 11,
+                            border: 'none',
+                            background: specialAuthSent
+                              ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)'
+                              : !isSpecialAuthValid || specialAuthSending
+                                ? 'rgba(245,158,11,0.12)'
+                                : 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                            color: specialAuthSent
+                              ? '#fff'
+                              : !isSpecialAuthValid || specialAuthSending
+                                ? '#b45309'
+                                : '#fff',
+                            fontSize: 12,
+                            fontWeight: 800,
+                            cursor: isSpecialAuthValid && !specialAuthSending && !specialAuthSent ? 'pointer' : 'not-allowed',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: 7,
+                            fontFamily: 'Outfit, sans-serif',
+                            transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
+                            boxShadow: isSpecialAuthValid && !specialAuthSending && !specialAuthSent
+                              ? '0 4px 14px rgba(245,158,11,0.25)'
+                              : 'none',
+                            opacity: (!isSpecialAuthValid && !specialAuthSent) ? 0.65 : 1,
+                          }}
+                          onMouseEnter={e => {
+                            if (!e.currentTarget.disabled) e.currentTarget.style.transform = 'translateY(-1px)'
+                          }}
+                          onMouseLeave={e => {
+                            e.currentTarget.style.transform = 'translateY(0)'
+                          }}
+                        >
+                          {specialAuthSent ? (
+                            <><CheckCircle2 size={14} /> Autorização Registrada!</>
+                          ) : specialAuthSending ? (
+                            <><Loader2 size={14} className="spin-anim" /> Enviando...</>
+                          ) : (
+                            <><Send size={13} /> Confirmar Autorização Especial</>
+                          )}
+                        </button>
+                      </>
+                    )
+                  })()}
                 </div>
               </motion.div>
             </motion.div>

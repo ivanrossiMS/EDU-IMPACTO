@@ -52,6 +52,7 @@ export interface PickupCall {
   // Access control fields
   blockReason?: string       // human-readable reason when status === 'blocked'
   blockType?: 'proibido' | 'dia_restrito'  // machine-readable block type
+  targetTime?: string | null // Horário previsto para retirada ou "Indefinido"
 }
 
 export interface SaidaLog {
@@ -154,15 +155,15 @@ interface SaidaCtx {
   realtimeStatus: 'online' | 'connecting' | 'offline'
   isLoadingCalls: boolean
   // actions
-  callStudent: (studentId: string, studentName: string, studentClass: string, guardianId: string, guardianName: string, source?: CallSource, rfidCode?: string, studentPhoto?: string | null, forceNewCall?: boolean) => PickupCall | null
+  callStudent: (studentId: string, studentName: string, studentClass: string, guardianId: string, guardianName: string, source?: CallSource, rfidCode?: string, studentPhoto?: string | null, forceNewCall?: boolean, targetTime?: string | null) => PickupCall | null
   blockAttempt: (studentId: string, studentName: string, studentClass: string, guardianId: string, guardianName: string, rfidCode: string | undefined, blockType: 'proibido' | 'dia_restrito', blockReason: string, studentPhoto?: string | null) => PickupCall
   confirmPickup: (callId: string) => void
   cancelCall: (callId: string) => void
   recallStudent: (callId: string, speakFn: (text: string) => void) => void
   revertCall: (callId: string) => void
   deleteCall: (callId: string) => void
-  addSpecialAuth: (studentId: string, studentName: string, studentClass: string, authorizedPerson: string, operatorName: string, studentPhoto?: string | null) => PickupCall
-  confirmSpecialExit: (studentId: string, studentName: string, studentClass: string, authorizedPerson: string, studentPhoto?: string | null) => PickupCall
+  addSpecialAuth: (studentId: string, studentName: string, studentClass: string, authorizedPerson: string, operatorName: string, studentPhoto?: string | null, targetTime?: string | null) => PickupCall
+  confirmSpecialExit: (studentId: string, studentName: string, studentClass: string, authorizedPerson: string, studentPhoto?: string | null, targetTime?: string | null) => PickupCall
   confirmSoloExit: (studentId: string, studentName: string, studentClass: string, studentPhoto?: string | null) => PickupCall | null
   broadcastAnnouncement: (phrase: string, options?: { repeat?: number, chime?: boolean, title?: string, operatorName?: string, rate?: number, pitch?: number }) => void
   cancelAnnouncement: () => void
@@ -229,6 +230,7 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
 
   const persistSingleCall = useCallback(async (call: PickupCall) => {
     try {
+      invalidateCache('saida/calls')
       const res = await fetch('/api/saida/calls', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -312,7 +314,9 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
                   const idx = arr.findIndex(c => c.id === call.id)
                   if (idx >= 0) {
                     const updated = [...arr]
-                    updated[idx] = { ...updated[idx], ...call, status: 'special_auth' }
+                    const existingCall = updated[idx]
+                    const targetTime = call.targetTime || (call as any).target_time || (call as any).dados?.targetTime || (call as any).dados?.target_time || existingCall.targetTime || undefined
+                    updated[idx] = { ...existingCall, ...call, targetTime, status: 'special_auth' }
                     return updated
                   }
                   return [call, ...arr]
@@ -339,6 +343,17 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
               const callStudentId = call.studentId ? String(call.studentId) : null
               setActiveCallsLocalRef.current?.((prev: PickupCall[]) => {
                 const arr = prev || []
+                if (call.status === 'special_auth') {
+                  const idx = arr.findIndex(c => c.id === call.id)
+                  if (idx >= 0) {
+                    const updated = [...arr]
+                    const existingCall = updated[idx]
+                    const targetTime = call.targetTime || (call as any).target_time || (call as any).dados?.targetTime || (call as any).dados?.target_time || existingCall.targetTime || undefined
+                    updated[idx] = { ...existingCall, ...call, targetTime, status: 'special_auth' }
+                    return updated
+                  }
+                  return [call, ...arr]
+                }
                 const isAlreadyConfirmed = callStudentId ? arr.some(c => c.studentId != null && String(c.studentId) === callStudentId && c.status === 'confirmed') : false
                 if (isAlreadyConfirmed && (call.status === 'waiting' || call.status === 'called') && !(call as any).isRevert) {
                   return arr.map(c => (c.studentId != null && String(c.studentId) === callStudentId && c.status !== 'special_auth') ? { ...c, status: 'confirmed' } : c)
@@ -372,7 +387,9 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
                   const idx = arr.findIndex(c => c.id === data.id)
                   if (idx >= 0) {
                     const updated = [...arr]
-                    updated[idx] = { ...updated[idx], ...data, status: 'special_auth' }
+                    const existingCall = updated[idx]
+                    const targetTime = data.targetTime || (data as any).target_time || (data as any).dados?.targetTime || (data as any).dados?.target_time || existingCall.targetTime || undefined
+                    updated[idx] = { ...existingCall, ...data, targetTime, status: 'special_auth' }
                     return updated
                   }
                   return [data, ...arr]
@@ -410,6 +427,8 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
                   return null
                 }).filter(Boolean) as PickupCall[]
               })
+            } else if (event === 'DELETE_CALL') {
+              setActiveCallsLocalRef.current?.((prev: PickupCall[]) => (prev || []).filter(c => c.id !== data.callId))
             } else if (event === 'CLEAR_ALL_CALLS') {
               setActiveCallsLocalRef.current?.([])
             } else if (event === 'ANNOUNCEMENT_VOICE') {
@@ -449,10 +468,15 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
       if (payload.event === 'CALL_STUDENT') {
         setActiveCallsLocal?.(prev => {
           const arr = prev || []
-          // special_auth entries must ALWAYS stay as special_auth — never auto-confirm them
           if (d.status === 'special_auth') {
             const idx = arr.findIndex(c => c.id === d.id)
-            if (idx >= 0) return arr // already present, no change needed
+            if (idx >= 0) {
+              const updated = [...arr]
+              const existingCall = updated[idx]
+              const targetTime = d.targetTime || (d as any).target_time || (d as any).dados?.targetTime || (d as any).dados?.target_time || existingCall.targetTime || undefined
+              updated[idx] = { ...existingCall, ...d, targetTime, status: 'special_auth' }
+              return updated
+            }
             return [d, ...arr]
           }
           const isAlreadyConfirmed = dStudentId ? arr.some(c => c.studentId != null && String(c.studentId) === dStudentId && c.status === 'confirmed') : false
@@ -486,6 +510,9 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
           }).filter(Boolean) as typeof arr
         })
       }
+      if (payload.event === 'DELETE_CALL' && d.callId) {
+        setActiveCallsLocal?.(prev => (prev || []).filter(c => c.id !== d.callId))
+      }
       if (payload.event === 'CLEAR_ALL_CALLS') {
         setActiveCallsLocal?.([])
       }
@@ -505,7 +532,7 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
     studentId: string, studentName: string, studentClass: string,
     guardianId: string, guardianName: string,
     source: CallSource = 'manual', rfidCode?: string, studentPhoto?: string | null,
-    forceNewCall = false
+    forceNewCall = false, targetTime?: string | null
   ): PickupCall | null => {
     const sIdStr = studentId ? String(studentId) : ''
     
@@ -535,7 +562,8 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
       studentPhoto: studentPhoto ?? null,
       guardianId, guardianName, rfidCode,
       calledAt: now(), status: 'waiting', source,
-      isRevert: existingConfirmed ? true : undefined
+      isRevert: existingConfirmed ? true : undefined,
+      targetTime: targetTime || undefined,
     }
     setActiveCallsLocal?.(prev => [call, ...(prev || [])])
     persistSingleCall(call)
@@ -720,13 +748,20 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
   // ─── deleteCall ───────────────────────────────────────────────────────────
   const deleteCall = useCallback(async (callId: string) => {
     let callName = callId;
+    let targetStudentId: string | undefined = undefined;
     // Remove from local state
     setActiveCallsLocal?.(prev => {
       const arr = prev || []
       const call = arr.find(c => c.id === callId)
-      if (call) callName = call.studentName
+      if (call) {
+        callName = call.studentName
+        targetStudentId = call.studentId ? String(call.studentId) : undefined
+      }
       return arr.filter(c => c.id !== callId)
     })
+    invalidateCache('saida/calls')
+    emit('DELETE_CALL', { callId, studentId: targetStudentId, _remote: false })
+    sendBroadcast('DELETE_CALL', { callId, studentId: targetStudentId })
     // Also delete from DB directly
     try {
       await fetch('/api/saida/calls', {
@@ -737,14 +772,14 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
     } catch (e) {
       console.error('Failed to delete call', e)
     }
-    // We don't need a custom broadcast because Supabase Realtime will send a DELETE event
     addLog('DELETE', `Autorização especial deletada: ${callName}`)
-  }, [setActiveCallsLocal, addLog])
+  }, [setActiveCallsLocal, emit, sendBroadcast, addLog])
 
   // ─── addSpecialAuth ───────────────────────────────────────────────────────
   const addSpecialAuth = useCallback((
     studentId: string, studentName: string, studentClass: string,
-    authorizedPerson: string, operatorName: string, studentPhoto?: string | null
+    authorizedPerson: string, operatorName: string, studentPhoto?: string | null,
+    targetTime?: string | null
   ): PickupCall => {
     const sIdStr = studentId ? String(studentId) : ''
     const call: PickupCall = {
@@ -753,18 +788,21 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
       guardianId: 'special', guardianName: authorizedPerson,
       operatorId: operatorName,
       calledAt: now(), status: 'special_auth', source: 'manual',
+      targetTime: targetTime || undefined,
     }
+    invalidateCache('saida/calls')
     setActiveCallsLocal?.(prev => [call, ...(prev || [])])
     persistSingleCall(call)
     emit('CALL_STUDENT', { ...call })
     sendBroadcast('CALL_STUDENT', call)
-    addLog('SPECIAL_AUTH', `Autorização Especial: ${studentName} liberado para ${authorizedPerson}`)
+    addLog('SPECIAL_AUTH', `Autorização Especial: ${studentName} liberado para ${authorizedPerson}${targetTime ? ` (${targetTime})` : ''}`)
     return call
   }, [setActiveCallsLocal, emit, addLog, sendBroadcast, persistSingleCall])
 
   // ─── confirmSpecialExit ────────────────────────────────────────────────────
   const confirmSpecialExit = useCallback((
-    studentId: string, studentName: string, studentClass: string, authorizedPerson: string, studentPhoto?: string | null
+    studentId: string, studentName: string, studentClass: string, authorizedPerson: string, studentPhoto?: string | null,
+    targetTime?: string | null
   ): PickupCall => {
     const sIdStr = studentId ? String(studentId) : ''
     const sNameNorm = studentName ? studentName.trim().toLowerCase() : ''
@@ -790,6 +828,7 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
         calledAt: currentNow,
         status: 'special_auth',
         source: 'manual',
+        targetTime: targetTime || undefined,
       }
     }
 

@@ -820,9 +820,12 @@
             padding-left: 36px !important;
           }
           .ad-modal-container {
-            padding: 20px !important;
-            border-radius: 16px !important;
+            padding: 16px 16px 14px !important;
+            border-radius: 24px !important;
             width: 95% !important;
+            max-width: 440px !important;
+            box-sizing: border-box !important;
+            overflow: visible !important;
           }
           .ad-modal-container h2, .ad-modal-container h3 {
             font-size: 18px !important;
@@ -1285,9 +1288,12 @@
             width: 100% !important;
           }
           .ad-modal-container {
-            padding: 24px !important;
-            border-radius: 16px !important;
-            width: 95% !important;
+            padding: 16px 14px 14px !important;
+            border-radius: 22px !important;
+            width: 96% !important;
+            max-width: 440px !important;
+            box-sizing: border-box !important;
+            overflow: visible !important;
           }
           .ad-feed-list {
             display: flex !important;
