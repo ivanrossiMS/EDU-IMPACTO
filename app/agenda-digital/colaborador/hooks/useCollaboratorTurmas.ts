@@ -34,19 +34,33 @@ export function useCollaboratorTurmas(options?: { includeGroups?: boolean }) {
   const espelharColabFoto = searchParams?.get('espelhar_foto')
   const isMirrorMode = !!espelharColabId
 
+  const mirroredColab = useMemo(() => {
+    if (!isMirrorMode || !espelharColabId) return null
+    const cleanId = String(espelharColabId).replace(/^f_?/, '').trim().toLowerCase()
+    return (colaboradores || []).find((c: any) => {
+      const cId = String(c.id || c.dados?.id || '').replace(/^f_?/, '').trim().toLowerCase()
+      const cAuth = String(c.auth_id || c.dados?.auth_id || '').replace(/^f_?/, '').trim().toLowerCase()
+      const cLegacy = String(c.uid_legacy || c.dados?.uid_legacy || '').replace(/^f_?/, '').trim().toLowerCase()
+      return cId === cleanId || cAuth === cleanId || cLegacy === cleanId
+    })
+  }, [isMirrorMode, espelharColabId, colaboradores])
+
   const effectiveUser = useMemo(() => {
     if (isMirrorMode) {
       return {
         ...currentUser,
         id: espelharColabId,
-        nome: espelharColabNome || currentUser?.nome || 'Colaborador',
-        cargo: espelharColabCargo || currentUser?.cargo || 'Colaborador',
-        perfil: espelharColabPerfil || 'colaborador',
-        foto: espelharColabFoto || null
+        nome: espelharColabNome || mirroredColab?.nome || currentUser?.nome || 'Colaborador',
+        cargo: espelharColabCargo || mirroredColab?.cargo || currentUser?.cargo || 'Colaborador',
+        perfil: espelharColabPerfil || mirroredColab?.perfil || 'colaborador',
+        foto: espelharColabFoto || mirroredColab?.foto || mirroredColab?.dados?.foto || null,
+        email: mirroredColab?.email || mirroredColab?.dados?.email || '',
+        auth_id: mirroredColab?.auth_id || mirroredColab?.dados?.auth_id || '',
+        uid_legacy: mirroredColab?.uid_legacy || mirroredColab?.dados?.uid_legacy || ''
       }
     }
     return currentUser
-  }, [isMirrorMode, espelharColabId, espelharColabNome, espelharColabCargo, espelharColabPerfil, espelharColabFoto, currentUser])
+  }, [isMirrorMode, espelharColabId, espelharColabNome, espelharColabCargo, espelharColabPerfil, espelharColabFoto, currentUser, mirroredColab])
 
   // Identificadores possíveis do colaborador (IDs, legado, auth_id, email, etc.)
   const candidateColabIds = useMemo(() => {
@@ -63,63 +77,65 @@ export function useCollaboratorTurmas(options?: { includeGroups?: boolean }) {
       }
     }
 
-    addId(effectiveUser?.id)
-    addId((effectiveUser as any)?.uid_legacy)
-    addId((effectiveUser as any)?.auth_id)
-    addId((effectiveUser as any)?.colaborador_id)
-    addId((effectiveUser as any)?.system_user_id)
-    addId((effectiveUser as any)?.usuarioId)
-    addId((effectiveUser as any)?.dados?.id)
-    addId((effectiveUser as any)?.dados?.auth_id)
-    addId((effectiveUser as any)?.dados?.uid_legacy)
+    if (isMirrorMode) {
+      addId(espelharColabId)
+      addId(effectiveUser?.id)
+      addId((effectiveUser as any)?.auth_id)
+      addId((effectiveUser as any)?.uid_legacy)
+      addId(mirroredColab?.id)
+      addId(mirroredColab?.dados?.id)
+      addId(mirroredColab?.auth_id)
+      addId(mirroredColab?.dados?.auth_id)
+      addId(mirroredColab?.uid_legacy)
+      addId(mirroredColab?.dados?.uid_legacy)
+      addId(mirroredColab?.colaborador_id)
+      addId(mirroredColab?.usuarioId)
+    } else {
+      addId(currentUser?.id)
+      addId((currentUser as any)?.uid_legacy)
+      addId((currentUser as any)?.auth_id)
+      addId((currentUser as any)?.colaborador_id)
+      addId((currentUser as any)?.system_user_id)
+      addId((currentUser as any)?.usuarioId)
+      addId((currentUser as any)?.dados?.id)
+      addId((currentUser as any)?.dados?.auth_id)
+      addId((currentUser as any)?.dados?.uid_legacy)
 
-    addId(currentUser?.id)
-    addId((currentUser as any)?.uid_legacy)
-    addId((currentUser as any)?.auth_id)
-    addId((currentUser as any)?.colaborador_id)
-    addId((currentUser as any)?.system_user_id)
-    addId((currentUser as any)?.usuarioId)
-    addId((currentUser as any)?.dados?.id)
-    addId((currentUser as any)?.dados?.auth_id)
-    addId((currentUser as any)?.dados?.uid_legacy)
+      const curEmail = String(currentUser?.email || (currentUser as any)?.dados?.email || '').trim().toLowerCase()
+      const curCpf = String((currentUser as any)?.cpf || (currentUser as any)?.dados?.cpf || '').replace(/\D/g, '')
+      const curNome = normalizeStr(currentUser?.nome || (currentUser as any)?.dados?.nome || '')
 
-    const effEmail = String(effectiveUser?.email || (effectiveUser as any)?.dados?.email || '').trim().toLowerCase()
-    const effCpf = String((effectiveUser as any)?.cpf || (effectiveUser as any)?.dados?.cpf || '').replace(/\D/g, '')
-    const effNome = normalizeStr(effectiveUser?.nome || (effectiveUser as any)?.dados?.nome || '')
-    const curEmail = String(currentUser?.email || (currentUser as any)?.dados?.email || '').trim().toLowerCase()
+      ;(colaboradores || []).forEach((c: any) => {
+        const cEmail = String(c.email || c.dados?.email || '').trim().toLowerCase()
+        const cCpf = String(c.cpf || c.dados?.cpf || '').replace(/\D/g, '')
+        const cNome = normalizeStr(c.nome || c.dados?.nome || '')
+        const cId = String(c.id || c.dados?.id || '').trim().toLowerCase()
+        const cLegacy = String(c.uid_legacy || c.dados?.uid_legacy || '').trim().toLowerCase()
+        const cAuthId = String(c.auth_id || c.dados?.auth_id || '').trim().toLowerCase()
 
-    ;(colaboradores || []).forEach((c: any) => {
-      const cEmail = String(c.email || c.dados?.email || '').trim().toLowerCase()
-      const cCpf = String(c.cpf || c.dados?.cpf || '').replace(/\D/g, '')
-      const cNome = normalizeStr(c.nome || c.dados?.nome || '')
-      const cId = String(c.id || c.dados?.id || '').trim().toLowerCase()
-      const cLegacy = String(c.uid_legacy || c.dados?.uid_legacy || '').trim().toLowerCase()
-      const cAuthId = String(c.auth_id || c.dados?.auth_id || '').trim().toLowerCase()
+        const match = (
+          (curEmail && cEmail && curEmail === cEmail) ||
+          (curCpf && cCpf && curCpf === cCpf) ||
+          (currentUser?.id && (cId === String(currentUser.id).toLowerCase() || cLegacy === String(currentUser.id).toLowerCase() || cAuthId === String(currentUser.id).toLowerCase())) ||
+          (curNome && cNome && (curNome === cNome || curNome.includes(cNome) || cNome.includes(curNome)))
+        )
 
-      const match = (
-        (effEmail && cEmail && effEmail === cEmail) ||
-        (curEmail && cEmail && curEmail === cEmail) ||
-        (effCpf && cCpf && effCpf === cCpf) ||
-        (effectiveUser?.id && (cId === String(effectiveUser.id).toLowerCase() || cLegacy === String(effectiveUser.id).toLowerCase() || cAuthId === String(effectiveUser.id).toLowerCase())) ||
-        (currentUser?.id && (cId === String(currentUser.id).toLowerCase() || cLegacy === String(currentUser.id).toLowerCase() || cAuthId === String(currentUser.id).toLowerCase())) ||
-        (effNome && cNome && (effNome === cNome || effNome.includes(cNome) || cNome.includes(effNome)))
-      )
-
-      if (match) {
-        addId(c.id)
-        addId(c.dados?.id)
-        addId(c.uid_legacy)
-        addId(c.dados?.uid_legacy)
-        addId(c.auth_id)
-        addId(c.dados?.auth_id)
-        addId(c.colaborador_id || c.dados?.colaborador_id)
-        addId(c.usuarioId || c.dados?.usuarioId)
-        addId(c.system_user_id || c.dados?.system_user_id)
-      }
-    })
+        if (match) {
+          addId(c.id)
+          addId(c.dados?.id)
+          addId(c.uid_legacy)
+          addId(c.dados?.uid_legacy)
+          addId(c.auth_id)
+          addId(c.dados?.auth_id)
+          addId(c.colaborador_id || c.dados?.colaborador_id)
+          addId(c.usuarioId || c.dados?.usuarioId)
+          addId(c.system_user_id || c.dados?.system_user_id)
+        }
+      })
+    }
 
     return Array.from(ids)
-  }, [colaboradores, effectiveUser, currentUser])
+  }, [colaboradores, effectiveUser, currentUser, isMirrorMode, espelharColabId, mirroredColab])
 
   // Helper para verificar se o colaborador atual é membro de um grupo de chatGroups
   const isColabMemberOfGroup = (g: any) => {
@@ -184,14 +200,22 @@ export function useCollaboratorTurmas(options?: { includeGroups?: boolean }) {
       'inspetor', 'inspetora', 'inspetores',
       'apoio pedagógico', 'apoio', 'equipe escolar', 'institucional', 'gestor', 'gestora'
     ]
-    const userPerfil = String(effectiveUser?.perfil || currentUser?.perfil || '').toLowerCase().trim()
-    const userCargo = String(effectiveUser?.cargo || currentUser?.cargo || '').toLowerCase().trim()
-    const userAcesso = String((effectiveUser as any)?.acesso || (currentUser as any)?.acesso || '').toLowerCase().trim()
+    const userPerfil = isMirrorMode
+      ? String(effectiveUser?.perfil || '').toLowerCase().trim()
+      : String(effectiveUser?.perfil || currentUser?.perfil || '').toLowerCase().trim()
+    const userCargo = isMirrorMode
+      ? String(effectiveUser?.cargo || '').toLowerCase().trim()
+      : String(effectiveUser?.cargo || currentUser?.cargo || '').toLowerCase().trim()
+    const userAcesso = isMirrorMode
+      ? String((effectiveUser as any)?.acesso || '').toLowerCase().trim()
+      : String((effectiveUser as any)?.acesso || (currentUser as any)?.acesso || '').toLowerCase().trim()
 
-    const hasStaffRole = (
+    const isTeacher = userCargo.includes('professor') || userPerfil.includes('professor')
+
+    const hasStaffRole = !isTeacher && (
       staffRoles.some(r => userPerfil.includes(r) || userCargo.includes(r)) ||
-      userAcesso === 'institucional' ||
-      Boolean((effectiveUser as any)?.isMasterAdmin || (currentUser as any)?.isMasterAdmin) ||
+      (userAcesso === 'institucional' && !isTeacher) ||
+      Boolean((effectiveUser as any)?.isMasterAdmin || (!isMirrorMode && (currentUser as any)?.isMasterAdmin)) ||
       effectiveUser?.perfil === 'administrador' ||
       effectiveUser?.perfil === 'admin'
     )

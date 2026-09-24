@@ -27,6 +27,7 @@ export async function GET(request: Request) {
     const offset = offsetParam ? parseInt(offsetParam, 10) : 0
     const alunoId = searchParams.get('aluno_id')
     const idParam = searchParams.get('id')
+    const colaboradorId = searchParams.get('colaborador_id') || searchParams.get('espelhar_colaborador')
 
     // VERIFICAÇÃO DE PERFIL E IDOR
     const perfil = (user.user_metadata?.perfil || '').trim();
@@ -202,33 +203,57 @@ export async function GET(request: Request) {
       });
 
       query = query.or(conditions.join(','));
-    } else if (!isAdmin) {
-       // Se for colaborador
+    } else if (colaboradorId || !isAdmin) {
+       // Se for colaborador ou espelhamento de colaborador
         const perfisMasterAdmin = ['administrador master', 'administrador', 'admin', 'diretor geral', 'diretora geral', 'master'];
-        const isAdmin = perfisMasterAdmin.some(p => p === perfil.toLowerCase() || p === cargo.toLowerCase());
+        const isSelfMasterAdmin = !colaboradorId && perfisMasterAdmin.some(p => p === perfil.toLowerCase() || p === cargo.toLowerCase());
         
-        if (!isAdmin) {
-          const candidateUserIds = new Set<string>([String(user.id)]);
-          if (user.user_metadata?.uid_legacy) candidateUserIds.add(String(user.user_metadata.uid_legacy));
-          if (user.user_metadata?.id) candidateUserIds.add(String(user.user_metadata.id));
-          if (user.user_metadata?.colaborador_id) candidateUserIds.add(String(user.user_metadata.colaborador_id));
-          if (user.user_metadata?.system_user_id) candidateUserIds.add(String(user.user_metadata.system_user_id));
+        if (!isSelfMasterAdmin) {
+          const candidateUserIds = new Set<string>();
+          let userEmail = '';
+          let userNome = '';
 
-          const userEmail = (user.email || user.user_metadata?.email || '').trim().toLowerCase();
-          const userNome = (user.user_metadata?.nome || '').trim().toLowerCase();
+          if (colaboradorId) {
+            candidateUserIds.add(String(colaboradorId));
+            const { data: colabUsers } = await supabase
+              .from('system_users')
+              .select('id, email, nome, auth_id, dados')
+              .or(`id.eq."${colaboradorId}",auth_id.eq."${colaboradorId}"`)
+              .limit(5);
 
-          let sysUserQuery = supabase.from('system_users').select('id, email, nome, dados');
-          if (userEmail) {
-            sysUserQuery = sysUserQuery.or(`id.eq."${user.id}",email.ilike."${userEmail}"`);
+            if (colabUsers && colabUsers.length > 0) {
+              colabUsers.forEach((cu: any) => {
+                if (cu.id) candidateUserIds.add(String(cu.id));
+                if (cu.auth_id) candidateUserIds.add(String(cu.auth_id));
+                if (cu.email) userEmail = String(cu.email).trim().toLowerCase();
+                if (cu.nome) userNome = String(cu.nome).trim().toLowerCase();
+                if (cu.dados?.auth_id) candidateUserIds.add(String(cu.dados.auth_id));
+                if (cu.dados?.uid_legacy) candidateUserIds.add(String(cu.dados.uid_legacy));
+              });
+            }
           } else {
-            sysUserQuery = sysUserQuery.eq('id', user.id);
-          }
-          const { data: sysUsers } = await sysUserQuery.limit(5);
-          if (sysUsers && sysUsers.length > 0) {
-            sysUsers.forEach((su: any) => {
-              if (su.id) candidateUserIds.add(String(su.id));
-              if (su.dados?.auth_id) candidateUserIds.add(String(su.dados.auth_id));
-            });
+            candidateUserIds.add(String(user.id));
+            if (user.user_metadata?.uid_legacy) candidateUserIds.add(String(user.user_metadata.uid_legacy));
+            if (user.user_metadata?.id) candidateUserIds.add(String(user.user_metadata.id));
+            if (user.user_metadata?.colaborador_id) candidateUserIds.add(String(user.user_metadata.colaborador_id));
+            if (user.user_metadata?.system_user_id) candidateUserIds.add(String(user.user_metadata.system_user_id));
+
+            userEmail = (user.email || user.user_metadata?.email || '').trim().toLowerCase();
+            userNome = (user.user_metadata?.nome || '').trim().toLowerCase();
+
+            let sysUserQuery = supabase.from('system_users').select('id, email, nome, dados');
+            if (userEmail) {
+              sysUserQuery = sysUserQuery.or(`id.eq."${user.id}",email.ilike."${userEmail}"`);
+            } else {
+              sysUserQuery = sysUserQuery.eq('id', user.id);
+            }
+            const { data: sysUsers } = await sysUserQuery.limit(5);
+            if (sysUsers && sysUsers.length > 0) {
+              sysUsers.forEach((su: any) => {
+                if (su.id) candidateUserIds.add(String(su.id));
+                if (su.dados?.auth_id) candidateUserIds.add(String(su.dados.auth_id));
+              });
+            }
           }
 
           const conditions: string[] = [];

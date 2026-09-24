@@ -4,6 +4,7 @@ import Image from 'next/image';
 import { supabase } from '@/lib/supabase';
 
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
+import { useQueryComunicados } from '@/lib/hooks/useAgendaQueries'
 import { Bell, Search, Filter, Pin, CheckCircle2, X, Paperclip, FileText, FileBarChart, DollarSign, Image as ImageIcon, Video, ShieldAlert, Calendar, Trash2, Edit2, Loader2, ChevronDown } from 'lucide-react'
 import { EmptyStateCard } from '../../components/EmptyStateCard'
 import { UserAvatar } from '@/components/UserAvatar'
@@ -134,19 +135,36 @@ function ColaboradorComunicadosContent() {
   const espelharColabId = searchParams?.get('espelhar_colaborador')
   const espelharPerfil = searchParams?.get('espelhar_perfil')
   const isMirroring = !!espelharColabId
+
+  const [alunos, , { loading: alunosLoading }] = useSupabaseArray<any>('alunos/lightweight?limit=2000')
+  const [colaboradores, , { loading: colabLoading }] = useSupabaseArray<any>('configuracoes/usuarios')
+
+  const mirroredColab = useMemo(() => {
+    if (!isMirroring || !espelharColabId) return null
+    const cleanId = String(espelharColabId).replace(/^f_?/, '').trim().toLowerCase()
+    return (colaboradores || []).find((c: any) => {
+      const cId = String(c.id || c.dados?.id || '').replace(/^f_?/, '').trim().toLowerCase()
+      const cAuth = String(c.auth_id || c.dados?.auth_id || '').replace(/^f_?/, '').trim().toLowerCase()
+      const cLegacy = String(c.uid_legacy || c.dados?.uid_legacy || '').replace(/^f_?/, '').trim().toLowerCase()
+      return cId === cleanId || cAuth === cleanId || cLegacy === cleanId
+    })
+  }, [isMirroring, espelharColabId, colaboradores])
   
   const effectiveUser = useMemo(() => {
     if (espelharColabId) {
       return {
         ...currentUser,
         id: espelharColabId,
-        nome: searchParams?.get('espelhar_nome') || 'Colaborador',
-        cargo: searchParams?.get('espelhar_cargo') || 'Colaborador',
-        perfil: espelharPerfil || 'colaborador'
+        nome: searchParams?.get('espelhar_nome') || mirroredColab?.nome || 'Colaborador',
+        cargo: searchParams?.get('espelhar_cargo') || mirroredColab?.cargo || 'Colaborador',
+        perfil: espelharPerfil || mirroredColab?.perfil || 'colaborador',
+        email: mirroredColab?.email || mirroredColab?.dados?.email || '',
+        auth_id: mirroredColab?.auth_id || mirroredColab?.dados?.auth_id || '',
+        uid_legacy: mirroredColab?.uid_legacy || mirroredColab?.dados?.uid_legacy || ''
       }
     }
     return currentUser
-  }, [currentUser, espelharColabId, searchParams])
+  }, [currentUser, espelharColabId, espelharPerfil, searchParams, mirroredColab])
 
   const userSlug = effectiveUser?.id || 'colaborador';
   const { adAlert, chatGroups } = useAgendaDigital()
@@ -163,26 +181,58 @@ function ColaboradorComunicadosContent() {
     }, 600)
     return () => clearTimeout(timer)
   }, [])
-  
-  const [alunos, , { loading: alunosLoading }] = useSupabaseArray<any>('alunos/lightweight?limit=2000')
-  const [colaboradores, , { loading: colabLoading }] = useSupabaseArray<any>('configuracoes/usuarios')
 
   const candidateColabIds = useMemo(() => {
     const ids = new Set<string>();
-    if (effectiveUser?.id) ids.add(String(effectiveUser.id).replace(/^f_?/, '').trim().toLowerCase());
-    if ((effectiveUser as any)?.uid_legacy) ids.add(String((effectiveUser as any).uid_legacy).replace(/^f_?/, '').trim().toLowerCase());
-    if (currentUser?.id) ids.add(String(currentUser.id).replace(/^f_?/, '').trim().toLowerCase());
-    if ((currentUser as any)?.uid_legacy) ids.add(String((currentUser as any).uid_legacy).replace(/^f_?/, '').trim().toLowerCase());
-    
-    const colab = (colaboradores || []).find((c: any) => 
-      (c.email && effectiveUser?.email && String(c.email).toLowerCase() === String(effectiveUser.email).toLowerCase()) ||
-      (c.email && currentUser?.email && String(c.email).toLowerCase() === String(currentUser.email).toLowerCase()) ||
-      (c.id && effectiveUser?.id && String(c.id).toLowerCase() === String(effectiveUser.id).toLowerCase())
-    );
-    if (colab?.id) ids.add(String(colab.id).replace(/^f_?/, '').trim().toLowerCase());
-    if (colab?.uid_legacy) ids.add(String(colab.uid_legacy).replace(/^f_?/, '').trim().toLowerCase());
+    const addClean = (val: any) => {
+      if (!val) return;
+      const s = String(val).trim().toLowerCase();
+      if (!s) return;
+      ids.add(s);
+      const clean = s.replace(/^f_?/, '');
+      if (clean) {
+        ids.add(clean);
+        ids.add(`f_${clean}`);
+      }
+    };
+
+    if (isMirroring) {
+      addClean(espelharColabId);
+      addClean(effectiveUser?.id);
+      addClean((effectiveUser as any)?.auth_id);
+      addClean((effectiveUser as any)?.uid_legacy);
+      addClean(mirroredColab?.id);
+      addClean(mirroredColab?.dados?.id);
+      addClean(mirroredColab?.auth_id);
+      addClean(mirroredColab?.dados?.auth_id);
+      addClean(mirroredColab?.uid_legacy);
+      addClean(mirroredColab?.dados?.uid_legacy);
+      addClean(mirroredColab?.colaborador_id);
+    } else {
+      addClean(currentUser?.id);
+      addClean((currentUser as any)?.uid_legacy);
+      addClean((currentUser as any)?.auth_id);
+      addClean((currentUser as any)?.colaborador_id);
+      addClean((currentUser as any)?.dados?.auth_id);
+      addClean((currentUser as any)?.dados?.uid_legacy);
+
+      const effEmail = String(currentUser?.email || '').trim().toLowerCase();
+      const colab = (colaboradores || []).find((c: any) => 
+        (effEmail && c.email && String(c.email).toLowerCase() === effEmail) ||
+        (currentUser?.id && String(c.id).toLowerCase() === String(currentUser.id).toLowerCase()) ||
+        (currentUser?.id && String(c.auth_id).toLowerCase() === String(currentUser.id).toLowerCase())
+      );
+      if (colab) {
+        addClean(colab.id);
+        addClean(colab.auth_id);
+        addClean(colab.dados?.auth_id);
+        addClean(colab.uid_legacy);
+        addClean(colab.dados?.uid_legacy);
+      }
+    }
+
     return Array.from(ids);
-  }, [colaboradores, effectiveUser, currentUser]);
+  }, [colaboradores, effectiveUser, currentUser, isMirroring, espelharColabId, mirroredColab]);
 
   const effectiveColabId = useMemo(() => {
     return candidateColabIds[0] || effectiveUser?.id;
@@ -206,7 +256,8 @@ function ColaboradorComunicadosContent() {
     const cargosAdmin = ['Administrador Master', 'Diretor Geral', 'Coordenador', 'Coordenadora', 'Secretaria', 'Secretário', 'Auxiliar Administrativo', 'Diretor', 'Diretora']; 
     const perfilStr = effectiveUser?.perfil || ''; 
     const cargoStr = effectiveUser?.cargo || ''; 
-    return effectiveUser.perfil === 'administrador' || effectiveUser.perfil === 'admin' || perfisAdmin.some(p => p.toLowerCase() === perfilStr.toLowerCase()) || cargosAdmin.some(c => c.toLowerCase() === cargoStr.toLowerCase());
+    const isTeacher = cargoStr.toUpperCase().includes('PROFESSOR') || perfilStr.toUpperCase().includes('PROFESSOR');
+    return !isTeacher && (effectiveUser.perfil === 'administrador' || effectiveUser.perfil === 'admin' || perfisAdmin.some(p => p.toLowerCase() === perfilStr.toLowerCase()) || cargosAdmin.some(c => c.toLowerCase() === cargoStr.toLowerCase()));
   }, [effectiveUser]);
 
   const turmaOptions = useMemo(() => {
@@ -278,13 +329,35 @@ function ColaboradorComunicadosContent() {
       if (colabs.some((id: any) => candidateColabIds.includes(String(id).replace(/^f_?/, '').trim().toLowerCase()))) {
         const syncId = String(g.syncId || g.id).replace('sync-', '');
         allowedTurmasIds.push(syncId);
+        if (g.turmaId) allowedTurmasIds.push(String(g.turmaId));
       }
     });
 
-    return turmas.filter((t: any) => allowedTurmasIds.includes(String(t.id)));
+    return turmas.filter((t: any) => {
+      const tid = String(t.id);
+      return allowedTurmasIds.includes(tid) || userGroups.some((g: any) => String(g.nome).trim().toLowerCase() === String(t.nome).trim().toLowerCase());
+    });
   }, [turmas, userGroups, effectiveUser, candidateColabIds])
   
-  const { comunicados, setComunicados, setComunicadosLocally, isDataLoading, comunicadosLoading, chatGroupsLoading, hasNextPageComunicados, fetchNextPageComunicados } = useAgendaDigital()
+  const { setComunicados, setComunicadosLocally, isDataLoading, chatGroupsLoading } = useAgendaDigital()
+  
+  const endpoint = espelharColabId 
+    ? `/api/comunicados?colaborador_id=${encodeURIComponent(espelharColabId)}` 
+    : '/api/comunicados'
+  
+  const { 
+    data: comunicadosData, 
+    isLoading: comunicadosLoadingLocal, 
+    isFetching: comunicadosFetchingLocal, 
+    refetch: refetchComunicados, 
+    hasNextPage: hasNextPageComunicados, 
+    fetchNextPage: fetchNextPageComunicados, 
+    isFetchingNextPage: isFetchingNextPageComunicados 
+  } = useQueryComunicados(endpoint, 5, { enabled: true })
+
+  const comunicados = useMemo(() => comunicadosData?.pages?.flat() || [], [comunicadosData?.pages])
+  const comunicadosLoading = comunicadosLoadingLocal || comunicadosFetchingLocal
+
   const alunosAtivos = (alunos || []).filter((a: any) => a.status === 'matriculado' || a.status === 'ativo')
 
   const [isRefreshing, setIsRefreshing] = useState(false)
@@ -295,12 +368,13 @@ function ColaboradorComunicadosContent() {
     try {
       await Promise.allSettled([
         queryClient.invalidateQueries({ queryKey: ['agenda', 'comunicados'], refetchType: 'all' }),
-        queryClient.refetchQueries({ queryKey: ['agenda', 'comunicados'] })
+        queryClient.refetchQueries({ queryKey: ['agenda', 'comunicados'] }),
+        refetchComunicados()
       ])
     } finally {
       setTimeout(() => setIsRefreshing(false), 500)
     }
-  }, [queryClient, isRefreshing])
+  }, [queryClient, isRefreshing, refetchComunicados])
 
   // Ao entrar na tela ou voltar de outras abas, sincroniza de imediato
   useEffect(() => {
@@ -1399,7 +1473,8 @@ function ColaboradorComunicadosContent() {
           const cargosAdmin = ['Administrador Master', 'Diretor Geral', 'Coordenador', 'Coordenadora']; 
           const perfilStr = effectiveUser?.perfil || ''; 
           const cargoStr = effectiveUser?.cargo || ''; 
-          const isMaster = perfisAdmin.some(p => p.toLowerCase() === perfilStr.toLowerCase()) || cargosAdmin.some(c => c.toLowerCase() === cargoStr.toLowerCase());
+          const isTeacher = cargoStr.toUpperCase().includes('PROFESSOR') || perfilStr.toUpperCase().includes('PROFESSOR');
+          const isMaster = !isTeacher && (perfisAdmin.some(p => p.toLowerCase() === perfilStr.toLowerCase()) || cargosAdmin.some(c => c.toLowerCase() === cargoStr.toLowerCase()));
           const myTurmaNames = feedTurmaOptions.map((t: any) => t.nome);
           const myGroups = (chatGroups || []).filter((g: any) => {
             let colabs = g.colaboradoresIds;
@@ -1423,7 +1498,12 @@ function ColaboradorComunicadosContent() {
 
           const filteredComunicados = uniqueComunicados.filter((c: any) => {
             if (c.id?.startsWith('AD-COM-REL-STU')) return false;
-            const isAuthor = String(c.autorId) === String(effectiveUser?.id) || c.autor === effectiveUser?.nome;
+            const authorIdClean = String(c.autorId || c.dados?.autorId || '').replace(/^f_?/, '').trim().toLowerCase();
+            const authorNameClean = String(c.autor || c.dados?.autor || '').trim().toLowerCase();
+            const effNameClean = String(effectiveUser?.nome || '').trim().toLowerCase();
+            const isAuthor = 
+              (authorIdClean && candidateColabIds.includes(authorIdClean)) ||
+              (authorNameClean && effNameClean && (authorNameClean === effNameClean || effNameClean.includes(authorNameClean) || authorNameClean.includes(effNameClean)));
             if ((c.status === 'rascunho' || c.status === 'agendado') && !isAuthor) return false;
             const isTodos = c.destino === 'todos';
             
@@ -1439,7 +1519,11 @@ function ColaboradorComunicadosContent() {
                 return mClean === gClean || mClean.includes(gClean) || gClean.includes(mClean);
               });
             });
-            const inTurmas = targetTurmas.some((t: string) => myTurmaNames.some((m: string) => String(m).toLowerCase().trim() === String(t).toLowerCase().trim()));
+            const inTurmas = targetTurmas.some((t: string) => {
+              const tClean = String(t).toLowerCase().trim();
+              return myTurmaNames.some((m: string) => String(m).toLowerCase().trim() === tClean) ||
+                     myGroups.some((m: string) => String(m).toLowerCase().trim() === tClean);
+            });
             
             if (!isAuthor && !isTodos && !inFuncs && !inGrupos && !inTurmas && !isMaster) {
               return false;

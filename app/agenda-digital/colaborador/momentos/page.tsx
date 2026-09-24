@@ -23,6 +23,7 @@ import { MomentoSkeleton } from '../../components/MomentoSkeleton'
 import { MomentoLightbox } from '@/components/agenda/MomentoLightbox'
 import { useScreenshotProtection } from '@/hooks/useScreenshotProtection'
 import { PrivacyProtectionModal } from '@/components/agenda/PrivacyProtectionModal'
+import { useQueryMomentos } from '@/lib/hooks/useAgendaQueries'
 
 const ClientPortal = ({ children }: { children: React.ReactNode }) => {
   const [mounted, setMounted] = useState(false);
@@ -39,10 +40,10 @@ const ClientPortal = ({ children }: { children: React.ReactNode }) => {
 export default function ADMomentosPage() {
   const queryClient = useQueryClient()
   const { 
-    momentosFeed, 
+    momentosFeed: globalMomentosFeed, 
     isDataLoading, 
-    hasNextPageMomentos, 
-    fetchNextPageMomentos, 
+    hasNextPageMomentos: globalHasNextPageMomentos, 
+    fetchNextPageMomentos: globalFetchNextPageMomentos, 
     setMomentosFeed, 
     setMomentosFeedLocally, 
     adAlert,
@@ -63,25 +64,64 @@ export default function ADMomentosPage() {
   const espelharColabId = searchParams?.get('espelhar_colaborador')
   const espelharPerfil = searchParams?.get('espelhar_perfil')
   const isMirroring = !!espelharColabId
+
+  const { turmas = [], cfgCalendarioLetivo = [] } = useData()
+  const [alunos] = useSupabaseArray<any>('alunos/lightweight?limit=2000')
+  const [colaboradores = []] = useSupabaseArray<any>('configuracoes/usuarios')
+
+  const mirroredColab = useMemo(() => {
+    if (!isMirroring || !espelharColabId) return null
+    const cleanId = String(espelharColabId).replace(/^f_?/, '').trim().toLowerCase()
+    return (colaboradores || []).find((c: any) => {
+      const cId = String(c.id || c.dados?.id || '').replace(/^f_?/, '').trim().toLowerCase()
+      const cAuth = String(c.auth_id || c.dados?.auth_id || '').replace(/^f_?/, '').trim().toLowerCase()
+      const cLegacy = String(c.uid_legacy || c.dados?.uid_legacy || '').replace(/^f_?/, '').trim().toLowerCase()
+      return cId === cleanId || cAuth === cleanId || cLegacy === cleanId
+    })
+  }, [isMirroring, espelharColabId, colaboradores])
+
   const effectiveUser = useMemo(() => {
     if (espelharColabId) {
       return {
         ...currentUser,
         id: espelharColabId,
-        nome: searchParams?.get('espelhar_nome') || 'Colaborador',
-        cargo: searchParams?.get('espelhar_cargo') || 'Colaborador',
-        perfil: espelharPerfil || 'colaborador'
+        nome: searchParams?.get('espelhar_nome') || mirroredColab?.nome || 'Colaborador',
+        cargo: searchParams?.get('espelhar_cargo') || mirroredColab?.cargo || 'Colaborador',
+        perfil: espelharPerfil || mirroredColab?.perfil || 'colaborador',
+        email: mirroredColab?.email || mirroredColab?.dados?.email || '',
+        auth_id: mirroredColab?.auth_id || mirroredColab?.dados?.auth_id || '',
+        uid_legacy: mirroredColab?.uid_legacy || mirroredColab?.dados?.uid_legacy || ''
       }
     }
     return currentUser
-  }, [currentUser, espelharColabId, searchParams])
+  }, [currentUser, espelharColabId, espelharPerfil, searchParams, mirroredColab])
 
   // Flag de permissão: se falso, desativa comentários no mural
   const canComment = adConfig?.permissoes?.comentariosMural !== false
-  
-  const { turmas = [], cfgCalendarioLetivo = [] } = useData()
-  const [alunos] = useSupabaseArray<any>('alunos/lightweight?limit=2000')
-  const [colaboradores = []] = useSupabaseArray<any>('configuracoes/usuarios')
+
+  const endpointMomentos = espelharColabId 
+    ? `/api/agenda/momentos?colaborador_id=${encodeURIComponent(espelharColabId)}` 
+    : '/api/agenda/momentos'
+
+  const {
+    data: localMomentosData,
+    isLoading: localMomentosLoading,
+    isFetching: localMomentosFetching,
+    fetchNextPage: localFetchNextPageMomentos,
+    hasNextPage: localHasNextPageMomentos,
+    isFetchingNextPage: localIsFetchingNextPage
+  } = useQueryMomentos(endpointMomentos, 20, { enabled: true })
+
+  const momentosFeed = useMemo(() => {
+    if (espelharColabId) {
+      return localMomentosData?.pages?.flat() || []
+    }
+    return globalMomentosFeed
+  }, [espelharColabId, localMomentosData?.pages, globalMomentosFeed])
+
+  const momentosLoading = espelharColabId ? (localMomentosLoading || localMomentosFetching) : false
+  const fetchNextPageMomentos = espelharColabId ? localFetchNextPageMomentos : globalFetchNextPageMomentos
+  const hasNextPageMomentos = espelharColabId ? localHasNextPageMomentos : globalHasNextPageMomentos
   
   const [showModal, setShowModal] = useState(false)
   const [showDestModal, setShowDestModal] = useState(false)
@@ -257,27 +297,33 @@ export default function ADMomentosPage() {
 
   // 1. Identificação precisa se o usuário atual é Administrador Master
   const isMasterAdmin = useMemo(() => {
+    if (isMirroring) return false;
     if (!effectiveUser) return false;
     const perfil = String(effectiveUser.perfil || '').toLowerCase().trim();
     const cargo = String(effectiveUser.cargo || '').toLowerCase().trim();
     const masterRoles = ['administrador master', 'administrador', 'admin', 'diretor geral', 'diretora geral', 'master'];
-    return masterRoles.includes(cargo) || masterRoles.includes(perfil);
-  }, [effectiveUser]);
+    const isTeacher = cargo.includes('prof') || perfil.includes('prof');
+    return !isTeacher && (masterRoles.includes(cargo) || masterRoles.includes(perfil));
+  }, [effectiveUser, isMirroring]);
 
   // Identificadores possíveis do colaborador logado (Auth UUID, ID numérico do system_users, etc.)
   const candidateColabIds = useMemo(() => {
     const ids = new Set<string>();
     const effId = String(effectiveUser?.id || '').replace(/^f_?/, '').trim().toLowerCase();
-    const curId = String(currentUser?.id || '').replace(/^f_?/, '').trim().toLowerCase();
     if (effId) ids.add(effId);
-    if (curId) ids.add(curId);
+    if (!isMirroring) {
+      const curId = String(currentUser?.id || '').replace(/^f_?/, '').trim().toLowerCase();
+      if (curId) ids.add(curId);
+      if ((currentUser as any)?.colaborador_id) ids.add(String((currentUser as any).colaborador_id).replace(/^f_?/, '').trim().toLowerCase());
+      if ((currentUser as any)?.system_user_id) ids.add(String((currentUser as any).system_user_id).replace(/^f_?/, '').trim().toLowerCase());
+    }
     if ((effectiveUser as any)?.colaborador_id) ids.add(String((effectiveUser as any).colaborador_id).replace(/^f_?/, '').trim().toLowerCase());
     if ((effectiveUser as any)?.system_user_id) ids.add(String((effectiveUser as any).system_user_id).replace(/^f_?/, '').trim().toLowerCase());
-    if ((currentUser as any)?.colaborador_id) ids.add(String((currentUser as any).colaborador_id).replace(/^f_?/, '').trim().toLowerCase());
-    if ((currentUser as any)?.system_user_id) ids.add(String((currentUser as any).system_user_id).replace(/^f_?/, '').trim().toLowerCase());
+    if ((effectiveUser as any)?.auth_id) ids.add(String((effectiveUser as any).auth_id).replace(/^f_?/, '').trim().toLowerCase());
+    if ((effectiveUser as any)?.uid_legacy) ids.add(String((effectiveUser as any).uid_legacy).replace(/^f_?/, '').trim().toLowerCase());
 
-    const effEmail = (effectiveUser?.email || currentUser?.email || '').trim().toLowerCase();
-    const effNome = (effectiveUser?.nome || currentUser?.nome || '').trim().toLowerCase();
+    const effEmail = (effectiveUser?.email || (!isMirroring ? currentUser?.email : '') || '').trim().toLowerCase();
+    const effNome = (effectiveUser?.nome || (!isMirroring ? currentUser?.nome : '') || '').trim().toLowerCase();
 
     (colaboradores || []).forEach((c: any) => {
       const cEmail = (c.email || c.dados?.email || '').trim().toLowerCase();
@@ -288,8 +334,7 @@ export default function ADMomentosPage() {
       const match = (
         (effEmail && cEmail && cEmail === effEmail) ||
         (effNome && cNome && cNome === effNome) ||
-        (effId && (cId === effId || cAuthId === effId)) ||
-        (curId && (cId === curId || cAuthId === curId))
+        (effId && (cId === effId || cAuthId === effId))
       );
 
       if (match) {
@@ -302,7 +347,7 @@ export default function ADMomentosPage() {
     });
 
     return Array.from(ids);
-  }, [colaboradores, effectiveUser, currentUser]);
+  }, [colaboradores, effectiveUser, currentUser, isMirroring]);
 
   // Helper para verificar se o colaborador atual é membro de um grupo de agenda_grupos
   const isColabInGroup = React.useCallback((g: any) => {
@@ -974,7 +1019,7 @@ export default function ADMomentosPage() {
 
       const isAuthor = Boolean(
         (effectiveUser?.id && (mAuthorId === String(effectiveUser.id).replace(/^f_?/, '').trim().toLowerCase())) ||
-        (currentUser?.id && (mAuthorId === String(currentUser.id).replace(/^f_?/, '').trim().toLowerCase())) ||
+        (!isMirroring && currentUser?.id && (mAuthorId === String(currentUser.id).replace(/^f_?/, '').trim().toLowerCase())) ||
         (mAuthorId && candidateColabIds.includes(mAuthorId)) ||
         (myName && mAuthor && (mAuthor === myName || mAuthor.includes(myName) || myName.includes(mAuthor)))
       );
@@ -1941,7 +1986,7 @@ export default function ADMomentosPage() {
                     {/* Comentários Minimais */}
                     {canComment && (m.comments || []).length > 0 && (
                       <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 110, overflowY: 'auto', paddingRight: 4, background: '#f8fafc', padding: 8, borderRadius: 10, border: '1px solid #f1f5f9' }}>
-                        {(m.comments || []).map(c => (
+                        {(m.comments || []).map((c: any) => (
                           <div key={c.id} className="group" style={{ fontSize: 12, lineHeight: 1.4, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                             <div>
                               <span style={{ fontWeight: 700, marginRight: 6, color: '#1e293b' }}>{c.author}</span>
