@@ -28,7 +28,7 @@ import { useApp } from '@/lib/context'
 import {
   CheckCircle2, Clock, Search, Megaphone, X, GraduationCap,
   UserCheck, ChevronRight, RotateCcw, RefreshCw, Trash2, Pin,
-  Users, Sparkles, AlertCircle
+  Users, Sparkles, AlertCircle, Volume2, VolumeX
 } from 'lucide-react'
 
 type FilterType = 'all' | 'waiting' | 'confirmed' | 'saiu_sozinho' | 'cancelled' | 'blocked'
@@ -1767,6 +1767,79 @@ const SPECIAL_AUTH_PRESET_TIMES: string[] = [
   })
 ]
 
+// ── Web Audio Chime para Novas Autorizações Especiais ────────────────────────
+let sharedSpecialAuthAudioCtx: AudioContext | null = null
+
+function getSpecialAuthAudioCtx(): AudioContext | null {
+  if (typeof window === 'undefined') return null
+  const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext
+  if (!AudioContextClass) return null
+  if (!sharedSpecialAuthAudioCtx || sharedSpecialAuthAudioCtx.state === 'closed') {
+    sharedSpecialAuthAudioCtx = new AudioContextClass()
+  }
+  if (sharedSpecialAuthAudioCtx.state === 'suspended') {
+    sharedSpecialAuthAudioCtx.resume().catch(() => {})
+  }
+  return sharedSpecialAuthAudioCtx
+}
+
+function playSpecialAuthChime(): void {
+  try {
+    const ctx = getSpecialAuthAudioCtx()
+    if (!ctx) return
+    const now = ctx.currentTime
+
+    // Sequência melódica chamativa e elegante estilo aviso escolar / aeroporto (~2.2s total):
+    // Frase 1 (Aviso/Atenção): Sol4 (392Hz) -> Dó5 (523Hz) -> Mi5 (659Hz)
+    // Frase 2 (Destaque Principal): Sol5 (784Hz) -> Dó6 (1046.5Hz) com ressonância de sino
+    const pattern = [
+      { time: 0.00, freq: 392.00, duration: 0.36, gain: 0.28 }, // G4
+      { time: 0.24, freq: 523.25, duration: 0.36, gain: 0.30 }, // C5
+      { time: 0.48, freq: 659.25, duration: 0.40, gain: 0.32 }, // E5
+      { time: 0.74, freq: 783.99, duration: 0.46, gain: 0.34 }, // G5
+      { time: 1.02, freq: 1046.50, duration: 1.25, gain: 0.38 }, // C6 (Sino principal agudo sustentado)
+      { time: 1.04, freq: 523.25, duration: 1.20, gain: 0.22 },  // C5 (Corpo harmônico de apoio)
+    ]
+
+    pattern.forEach(({ time, freq, duration, gain: maxGain }) => {
+      const startTime = now + time
+      const endTime = startTime + duration
+
+      // Oscilador 1: Tom fundamental limpo e encorpado
+      const osc1 = ctx.createOscillator()
+      const gain1 = ctx.createGain()
+      osc1.type = 'sine'
+      osc1.frequency.setValueAtTime(freq, startTime)
+
+      gain1.gain.setValueAtTime(0.0001, startTime)
+      gain1.gain.exponentialRampToValueAtTime(maxGain, startTime + 0.025)
+      gain1.gain.exponentialRampToValueAtTime(0.0001, endTime)
+
+      osc1.connect(gain1)
+      gain1.connect(ctx.destination)
+      osc1.start(startTime)
+      osc1.stop(endTime + 0.05)
+
+      // Oscilador 2: Brilho metálico tipo sino (triangle na oitava superior)
+      const osc2 = ctx.createOscillator()
+      const gain2 = ctx.createGain()
+      osc2.type = 'triangle'
+      osc2.frequency.setValueAtTime(freq * 2, startTime)
+
+      gain2.gain.setValueAtTime(0.0001, startTime)
+      gain2.gain.exponentialRampToValueAtTime(maxGain * 0.24, startTime + 0.02)
+      gain2.gain.exponentialRampToValueAtTime(0.0001, startTime + Math.min(duration, 0.42))
+
+      osc2.connect(gain2)
+      gain2.connect(ctx.destination)
+      osc2.start(startTime)
+      osc2.stop(startTime + Math.min(duration, 0.42) + 0.05)
+    })
+  } catch (err) {
+    console.warn('[SpecialAuthChime] Não foi possível reproduzir som:', err)
+  }
+}
+
 function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boolean) => void }) {
   const { addSpecialAuth, confirmSpecialExit, deleteCall, cancelCall, callStudent, confirmPickup, recallStudent, activeCalls = [] } = useSaida()
   const { on: onRealtime } = useBroadcastRealtime()
@@ -1783,11 +1856,80 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
   const [specialAuthTime, setSpecialAuthTime] = useState('Indefinido')
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
 
+  // ── Alerta Sonoro de Autorização Especial ──
+  const [soundEnabled, setSoundEnabled] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return true
+    try {
+      const saved = localStorage.getItem('saida_special_auth_sound')
+      return saved !== null ? saved === 'true' : true
+    } catch {
+      return true
+    }
+  })
+
+  const toggleSound = useCallback(() => {
+    setSoundEnabled(prev => {
+      const next = !prev
+      try {
+        localStorage.setItem('saida_special_auth_sound', String(next))
+      } catch {}
+      if (next) {
+        playSpecialAuthChime()
+      }
+      return next
+    })
+  }, [])
+
+  // Desbloqueia o AudioContext no primeiro gesto do usuário na página
+  useEffect(() => {
+    const unlockAudio = () => {
+      const ctx = getSpecialAuthAudioCtx()
+      if (ctx && ctx.state === 'suspended') {
+        ctx.resume().catch(() => {})
+      }
+      window.removeEventListener('click', unlockAudio)
+      window.removeEventListener('keydown', unlockAudio)
+      window.removeEventListener('touchstart', unlockAudio)
+    }
+    window.addEventListener('click', unlockAudio, { passive: true })
+    window.addEventListener('keydown', unlockAudio, { passive: true })
+    window.addEventListener('touchstart', unlockAudio, { passive: true })
+    return () => {
+      window.removeEventListener('click', unlockAudio)
+      window.removeEventListener('keydown', unlockAudio)
+      window.removeEventListener('touchstart', unlockAudio)
+    }
+  }, [])
+
+  // Ref para controlar que o som só toque em novas autorizações e não no carregamento inicial
+  const initialLoadDoneRef = useRef(false)
+  const recentlyPlayedIdsRef = useRef<Set<string>>(new Set())
+
+  const triggerSpecialAuthSound = useCallback((callId?: string) => {
+    if (!soundEnabled) return
+    if (callId) {
+      if (recentlyPlayedIdsRef.current.has(callId)) return
+      recentlyPlayedIdsRef.current.add(callId)
+      setTimeout(() => {
+        recentlyPlayedIdsRef.current.delete(callId)
+      }, 30000)
+    }
+    playSpecialAuthChime()
+  }, [soundEnabled])
+
+  // Após 1.5s, qualquer autorização recebida é considerada nova e toca o sino
+  useEffect(() => {
+    const t = setTimeout(() => {
+      initialLoadDoneRef.current = true
+    }, 1500)
+    return () => clearTimeout(t)
+  }, [])
+
   // ── Persistent accumulator: stores special_auth entries of today ──
   const seenSpecialAuthsRef = useRef<Map<string, PickupCall>>(new Map())
   const [seenSpecialAuthsVersion, setSeenSpecialAuthsVersion] = useState(0)
 
-  // Escuta imediata de eventos broadcast (DELETE_CALL e CANCEL_CALL) para remoção instantânea
+  // Escuta imediata de eventos broadcast (DELETE_CALL, CANCEL_CALL e CALL_STUDENT para special_auth)
   useEffect(() => {
     const unsub = onRealtime('*', payload => {
       const d = payload.data as any
@@ -1801,10 +1943,24 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
           seenSpecialAuthsRef.current.delete(d.callId)
           setSeenSpecialAuthsVersion(v => v + 1)
         }
+      } else if (payload.event === 'CALL_STUDENT' && d?.status === 'special_auth') {
+        const incomingId = d.id || d.callId
+        if (incomingId && !seenSpecialAuthsRef.current.has(incomingId)) {
+          const incomingTargetTime = d.targetTime || d.target_time || d.dados?.targetTime || d.dados?.target_time || d.horarioPrevisto || d.scheduledTime || null
+          seenSpecialAuthsRef.current.set(incomingId, {
+            ...d,
+            id: incomingId,
+            targetTime: incomingTargetTime || undefined
+          })
+          setSeenSpecialAuthsVersion(v => v + 1)
+          if (initialLoadDoneRef.current) {
+            triggerSpecialAuthSound(incomingId)
+          }
+        }
       }
     })
     return () => { unsub() }
-  }, [onRealtime])
+  }, [onRealtime, triggerSpecialAuthSound])
 
   // Sincronização contínua com /api/saida/calls para carregar imediatamente do banco todas as autorizações de hoje com targetTime
   // e expurgar aquelas deletadas ou canceladas
@@ -1842,7 +1998,16 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
           if (c.status === 'special_auth') {
             const existing = seenSpecialAuthsRef.current.get(c.id)
             const incomingTargetTime = c.targetTime || (c as any).target_time || (c as any).dados?.targetTime || (c as any).dados?.target_time || (c as any).horarioPrevisto || (c as any).scheduledTime || null
-            if (!existing || existing.targetTime !== incomingTargetTime || JSON.stringify(existing) !== JSON.stringify(c)) {
+            if (!existing) {
+              seenSpecialAuthsRef.current.set(c.id, {
+                ...c,
+                targetTime: incomingTargetTime || undefined
+              })
+              changed = true
+              if (initialLoadDoneRef.current) {
+                triggerSpecialAuthSound(c.id)
+              }
+            } else if (existing.targetTime !== incomingTargetTime || JSON.stringify(existing) !== JSON.stringify(c)) {
               seenSpecialAuthsRef.current.set(c.id, {
                 ...existing,
                 ...c,
@@ -1851,6 +2016,9 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
               changed = true
             }
           }
+        }
+        if (!initialLoadDoneRef.current) {
+          initialLoadDoneRef.current = true
         }
         if (changed) setSeenSpecialAuthsVersion(v => v + 1)
       } catch (err) {
@@ -1863,7 +2031,7 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
       isSubscribed = false
       clearInterval(timer)
     }
-  }, [])
+  }, [triggerSpecialAuthSound])
 
   // Whenever activeCalls changes, absorb any special_auth entries into the accumulator,
   // e remove aquelas canceladas ou deletadas
@@ -1893,7 +2061,16 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
       if (c.status === 'special_auth') {
         const existing = seenSpecialAuthsRef.current.get(c.id)
         const incomingTargetTime = c.targetTime || (c as any).target_time || (c as any).dados?.targetTime || (c as any).dados?.target_time || (c as any).horarioPrevisto || (c as any).scheduledTime || null
-        if (!existing || existing.targetTime !== incomingTargetTime || JSON.stringify(existing) !== JSON.stringify(c)) {
+        if (!existing) {
+          seenSpecialAuthsRef.current.set(c.id, {
+            ...c,
+            targetTime: incomingTargetTime || undefined
+          })
+          changed = true
+          if (initialLoadDoneRef.current) {
+            triggerSpecialAuthSound(c.id)
+          }
+        } else if (existing.targetTime !== incomingTargetTime || JSON.stringify(existing) !== JSON.stringify(c)) {
           seenSpecialAuthsRef.current.set(c.id, {
             ...existing,
             ...c,
@@ -1905,7 +2082,7 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
     }
     // Force a re-render if entries changed
     if (changed) setSeenSpecialAuthsVersion(v => v + 1)
-  }, [activeCalls])
+  }, [activeCalls, triggerSpecialAuthSound])
 
   // Remove a specific special_auth from the accumulator (called from the delete handler)
   const removeFromAccumulator = useCallback((callId: string) => {
@@ -2034,7 +2211,7 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
     const authPerson = authorizedPerson.trim()
     
     // Registra no histórico de lançamentos de autorização especial (apenas lança no card)
-    addSpecialAuth(
+    const createdCall = addSpecialAuth(
       sId,
       sName,
       sClass,
@@ -2043,6 +2220,12 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
       sPhoto,
       specialAuthTime || 'Indefinido'
     )
+
+    if (createdCall?.id) {
+      triggerSpecialAuthSound(createdCall.id)
+    } else {
+      triggerSpecialAuthSound()
+    }
 
     showToast(`Autorização lançada no card para ${sName}! Clique no alto-falante 📣 para chamar.`, true)
 
@@ -2089,8 +2272,61 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
         📌
       </div>
 
-      <div style={{ fontWeight: 900, fontSize: 13, color: '#d97706', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'Outfit, sans-serif', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-        📝 Autorização Especial do Dia
+      <div style={{
+        fontWeight: 900,
+        fontSize: 13,
+        color: '#d97706',
+        marginBottom: 8,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 6,
+        fontFamily: 'Outfit, sans-serif',
+        textTransform: 'uppercase',
+        letterSpacing: '0.05em'
+      }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          📝 Autorização Especial do Dia
+        </span>
+        <button
+          type="button"
+          onClick={toggleSound}
+          title={soundEnabled ? 'Alerta sonoro ativado para novas autorizações (clique para silenciar)' : 'Alerta sonoro desativado (clique para ativar)'}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 5,
+            padding: '3px 8px',
+            borderRadius: 999,
+            fontSize: 11,
+            fontWeight: 700,
+            cursor: 'pointer',
+            border: soundEnabled ? '1px solid rgba(245, 158, 11, 0.45)' : '1px solid rgba(148, 163, 184, 0.3)',
+            background: soundEnabled ? 'rgba(245, 158, 11, 0.16)' : 'rgba(148, 163, 184, 0.12)',
+            color: soundEnabled ? '#d97706' : '#94a3b8',
+            transition: 'all 0.15s ease',
+            textTransform: 'none',
+            letterSpacing: 'normal',
+          }}
+          onMouseEnter={e => {
+            e.currentTarget.style.transform = 'scale(1.04)'
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.transform = 'scale(1)'
+          }}
+        >
+          {soundEnabled ? (
+            <>
+              <Volume2 size={13} style={{ color: '#d97706' }} />
+              <span>Som Ativo</span>
+            </>
+          ) : (
+            <>
+              <VolumeX size={13} style={{ color: '#94a3b8' }} />
+              <span>Mudo</span>
+            </>
+          )}
+        </button>
       </div>
 
       {/* COMPACT FORM GRID (SEARCH, AUTHORIZED PERSON, SUBMIT BUTTON) */}
@@ -2102,7 +2338,7 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
         flexWrap: 'wrap',
       }}>
         {/* COLUMN 1: STUDENT SEARCH OR SELECTION */}
-        <div style={{ flex: '1 1 140px', minWidth: 0, position: 'relative' }}>
+        <div style={{ flex: '2 1 200px', minWidth: 170, position: 'relative' }}>
           {!selectedStudent ? (
             <div style={{ position: 'relative' }}>
               <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#d97706' }}/>
@@ -2228,7 +2464,7 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
         </div>
 
         {/* COLUMN 2: AUTHORIZED PERSON */}
-        <div style={{ flex: '1.1 1 150px', minWidth: 0 }}>
+        <div style={{ flex: '1.2 1 150px', minWidth: 130 }}>
           <input
             value={authorizedPerson}
             onChange={e => setAuthorizedPerson(e.target.value)}
@@ -2247,7 +2483,7 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
         </div>
 
         {/* COLUMN 3: SCHEDULED TIME */}
-        <div style={{ flex: '0 0 auto', minWidth: 125, position: 'relative' }}>
+        <div style={{ flex: '0 0 auto', minWidth: 110, position: 'relative' }}>
           <div style={{
             display: 'flex', alignItems: 'center', gap: 5, height: 38,
             padding: '0 8px', borderRadius: 12,
@@ -2274,7 +2510,7 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
           </div>
         </div>
 
-        {/* SUBMIT BUTTON: LANÇAR AUTORIZAÇÃO */}
+        {/* SUBMIT BUTTON: LANÇAR */}
         <button
           type="button"
           onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleConfirm(); }}
@@ -2302,7 +2538,7 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
             e.currentTarget.style.transform = 'none'
           }}
         >
-          <CheckCircle2 size={13}/> Lançar Autorização
+          <CheckCircle2 size={13}/> Lançar
         </button>
       </div>
 
