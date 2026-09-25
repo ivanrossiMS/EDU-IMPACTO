@@ -138,11 +138,29 @@ def salvar_estado_catracas(estado):
         pass
 
 
+def sincronizar_relogio_catraca(base_url, session):
+    """Calibra o relógio interno da catraca com o horário exato do computador."""
+    now = datetime.now()
+    try:
+        post_json(f"{base_url}/set_system_time.fcgi", {
+            "day": now.day,
+            "month": now.month,
+            "year": now.year,
+            "hour": now.hour,
+            "minute": now.minute,
+            "second": now.second
+        }, cookie=session)
+        return True
+    except Exception:
+        return False
+
+
 def get_access_logs_hoje(base_url, session, last_log_id=0):
     """
     Busca os logs de acesso da catraca:
     - Utiliza uma janela de 24 horas para cobrir qualquer horário sem falhas de fuso horário.
     - Se last_log_id > 0, filtra logs novos superiores ao último ID lido.
+    - Se o relógio da catraca estiver descalibrado (ex: ano de fábrica 2020/2024), aciona modo de recuperação automática.
     """
     now_ts = int(datetime.now().timestamp())
     ts_limite = now_ts - 86400  # últimas 24 horas
@@ -181,7 +199,44 @@ def get_access_logs_hoje(base_url, session, last_log_id=0):
             last_log_id = 0
 
         if last_log_id > 0:
-            return [l for l in logs_hoje if l.get("id", 0) > last_log_id]
+            logs_hoje = [l for l in logs_hoje if l.get("id", 0) > last_log_id]
+
+    # ── MODO DE RECUPERAÇÃO AUTOMÁTICA (Para catracas novas ou com relógio descalibrado) ──
+    if not logs_hoje:
+        try:
+            # Busca os logs mais recentes sem o filtro de time para checar se a passagem ocorreu com ano/relógio de fábrica
+            where_id = {"access_logs": {"id": {">": last_log_id}}} if last_log_id > 0 else {}
+            body_fb = {"object": "access_logs", "limit": 100}
+            if where_id:
+                body_fb["where"] = where_id
+
+            r_fb = post_json(f"{base_url}/load_objects.fcgi", body_fb, cookie=session)
+            all_logs = r_fb.get("access_logs", [])
+
+            if all_logs:
+                if last_log_id > 0:
+                    all_logs = [l for l in all_logs if l.get("id", 0) > last_log_id]
+
+                # Se last_log_id == 0 e houver muitos registros antigos, foca nos últimos 50
+                if last_log_id == 0 and len(all_logs) > 50:
+                    all_logs = all_logs[-50:]
+
+                reconhecidos = [l for l in all_logs if l.get("user_id", 0) > 0]
+                if reconhecidos:
+                    print(f"     🔍 [Recuperação de Logs] Encontrados {len(reconhecidos)} evento(s) na memória da catraca sem filtro de horário.")
+                    for l in reconhecidos:
+                        l_time = l.get("time", 0)
+                        if l_time < ts_limite:
+                            dt_str = datetime.fromtimestamp(l_time).strftime("%d/%m/%Y %H:%M:%S") if l_time > 0 else "sem data"
+                            print(f"     🕒 Corrigindo data do Log #{l.get('id')} (Aluno {l.get('user_id')} - Data original na catraca: {dt_str}) → HOJE.")
+                            l["time"] = now_ts
+                        logs_hoje.append(l)
+                else:
+                    sem_user = [l for l in all_logs if l.get("user_id", 0) == 0]
+                    if sem_user:
+                        print(f"     ℹ️  Encontrado(s) {len(sem_user)} evento(s) no leitor sem ID de aluno (face não identificada ou giro livre).")
+        except Exception as e_rec:
+            print(f"     ⚠️ Falha na busca de contingência de logs: {e_rec}")
 
     return logs_hoje
 
@@ -476,6 +531,26 @@ def rodar_um_ciclo():
         proto = "HTTPS" if base_url.startswith("https") else "HTTP"
         print(f"     ✅ Conectado via {proto} (sessão: {session[:12]}…)")
         cats_conectadas.append({"cat": cat, "base_url": base_url, "session": session})
+
+        # Sincroniza o relógio interno da catraca com o horário do computador
+        relogio_ok = sincronizar_relogio_catraca(base_url, session)
+        if relogio_ok:
+            print(f"     🕒 Relógio calibrado: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}")
+
+        # Se for catraca de saída, verifica se a aluna 4697 está cadastrada
+        if is_saida:
+            try:
+                r_usr = post_json(f"{base_url}/load_objects.fcgi",
+                                  {"object": "users", "where": {"users": {"id": 4697}}},
+                                  cookie=session)
+                usuarios = r_usr.get("users", [])
+                if usuarios:
+                    u = usuarios[0]
+                    print(f"     👤 Aluna Cecília (ID 4697) confirmada nesta catraca: '{u.get('name')}'")
+                else:
+                    print(f"     ℹ️  Aluna ID 4697 não encontrada no cadastro desta catraca (pode ter sido cadastrada com outro ID).")
+            except Exception:
+                pass
 
         # Configura o monitor automaticamente com os parâmetros da catraca
         ok_monitor = configurar_monitor(base_url, session, cat)
