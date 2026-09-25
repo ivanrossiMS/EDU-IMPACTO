@@ -218,11 +218,13 @@ export async function POST(req: Request) {
     // Resolver dispositivo
     let dispositivoId = ''
     let dispositivoNome = ''
+    let dispositivoSentido: 'entrada' | 'saida' = 'entrada'
+
     if (deviceSerial) {
       const serialAlt = deviceSerial.includes('/') ? deviceSerial.replace('/', '-') : deviceSerial.replace('-', '/')
       const { data: dev } = await supabase
         .from('portaria_dispositivos')
-        .select('id, nome')
+        .select('id, nome, ip, configuracao')
         .or(`id.eq.${deviceSerial},id.eq.${serialAlt},configuracao->>serial.eq.${deviceSerial},configuracao->>serial.eq.${serialAlt},ip.eq.${deviceSerial}`)
         .limit(1)
         .maybeSingle()
@@ -230,6 +232,17 @@ export async function POST(req: Request) {
       if (dev) {
         dispositivoId = dev.id
         dispositivoNome = dev.nome
+        const devCfg = (dev.configuracao as any) || {}
+        if (
+          devCfg.sentido === 'saida' ||
+          devCfg.tipo === 'saida' ||
+          /sa[ií]da/i.test(dev.nome || '') ||
+          dev.ip === '192.168.1.154' ||
+          (dev.ip && dev.ip.endsWith('.154')) ||
+          dev.id === '0M0200/0263A6'
+        ) {
+          dispositivoSentido = 'saida'
+        }
       }
     }
 
@@ -242,7 +255,7 @@ export async function POST(req: Request) {
       if (clientIp && clientIp !== '127.0.0.1' && clientIp !== '::1') {
         const { data: devByIp } = await supabase
           .from('portaria_dispositivos')
-          .select('id, nome')
+          .select('id, nome, ip, configuracao')
           .eq('ip', clientIp)
           .limit(1)
           .maybeSingle()
@@ -250,20 +263,52 @@ export async function POST(req: Request) {
         if (devByIp) {
           dispositivoId = devByIp.id
           dispositivoNome = devByIp.nome
+          const devCfg = (devByIp.configuracao as any) || {}
+          if (
+            devCfg.sentido === 'saida' ||
+            devCfg.tipo === 'saida' ||
+            /sa[ií]da/i.test(devByIp.nome || '') ||
+            devByIp.ip === '192.168.1.154' ||
+            (devByIp.ip && devByIp.ip.endsWith('.154')) ||
+            devByIp.id === '0M0200/0263A6'
+          ) {
+            dispositivoSentido = 'saida'
+          }
         }
       }
+    }
+
+    // Se o próprio payload ou o query param indicar o sentido da catraca
+    const explicitTipo = searchParams.get('tipo') || searchParams.get('sentido') || payload?.tipo || payload?.sentido || payload?.event_type
+    if (explicitTipo && String(explicitTipo).toLowerCase() === 'saida') {
+      dispositivoSentido = 'saida'
+    } else if (
+      (deviceSerial && (deviceSerial === '0M0200/0263A6' || deviceSerial.includes('0263A6') || deviceSerial === '192.168.1.154')) ||
+      (dispositivoNome && /sa[ií]da/i.test(dispositivoNome))
+    ) {
+      dispositivoSentido = 'saida'
     }
 
     // Se o dispositivo não foi identificado, usar o primeiro disponível
     if (!dispositivoId) {
       const { data: firstDev } = await supabase
         .from('portaria_dispositivos')
-        .select('id, nome')
+        .select('id, nome, ip, configuracao')
         .limit(1)
         .maybeSingle()
 
       dispositivoId = firstDev?.id || 'unknown'
       dispositivoNome = firstDev?.nome || 'Desconhecido'
+      const devCfg = (firstDev?.configuracao as any) || {}
+      if (
+        devCfg.sentido === 'saida' ||
+        devCfg.tipo === 'saida' ||
+        /sa[ií]da/i.test(firstDev?.nome || '') ||
+        firstDev?.ip === '192.168.1.154' ||
+        firstDev?.id === '0M0200/0263A6'
+      ) {
+        dispositivoSentido = 'saida'
+      }
     }
 
     const configVal = config
@@ -280,7 +325,7 @@ export async function POST(req: Request) {
       // Face presente mas não cadastrada na catraca → negado
       eventStatus = 'negado'
     } else if (alunoId) {
-      // Aluno identificado → Presença sempre confirmada como sucesso independente do horário de entrada
+      // Aluno identificado → Sempre confirmado como sucesso
       eventStatus = 'sucesso'
     } else if (userIdNum && userIdNum > 0) {
       // user_id presente mas aluno não encontrado no ERP → inconsistencia
@@ -312,7 +357,7 @@ export async function POST(req: Request) {
       aluno_nome: alunoNome,
       dispositivo_id: dispositivoId,
       dispositivo_nome: dispositivoNome,
-      tipo: 'entrada',
+      tipo: dispositivoSentido,
       status: eventStatus,
       data_hora: eventTime,
       // Guardar o user_id numérico original da catraca para diagnóstico
@@ -327,7 +372,7 @@ export async function POST(req: Request) {
       console.error('[Supabase Portaria Insert Error]', insertErr)
     }
 
-    // Integração automática de presença em academico/frequencia (Apenas registro de horário de entrada)
+    // Integração automática de presença e saída (Frequência Escolar & Agenda Digital)
     if (eventStatus === 'sucesso' && alunoId) {
       try {
         // 1. Resolver data e hora local do evento extraindo UTC (pois a catraca grava o local como UTC)
@@ -342,72 +387,161 @@ export async function POST(req: Request) {
         const localMin = eventDateObj.getUTCMinutes()
         const localTimeStr = `${String(localHour).padStart(2, '0')}:${String(localMin).padStart(2, '0')}`
 
-        // 2. Verificar se já existe lançamento de frequência para este aluno neste dia (NÃO SOBREPOR)
+        const currentYear = new Date().getFullYear().toString()
         const freqId = `FREQ-${alunoId}-${localDate}`
+        const diarioId = alunoTurma ? `DIARIO-${alunoTurma}-${currentYear}` : `DIARIO-PORTARIA-${currentYear}`
+
         const { data: existingFreq } = await supabase
           .from('frequencias')
           .select('*')
           .eq('id', freqId)
           .maybeSingle()
 
-        if (existingFreq) {
-          console.log(`ℹ️ [Portaria Integration] Aluno ${alunoNome} (ID: ${alunoId}) já possui registro de entrada em ${localDate}. Registro preservado sem sobreposição.`)
-        } else {
-          // 3. Salvar registro de entrada (sem tempos de aula)
-          const currentYear = new Date().getFullYear().toString()
-          const diarioId = alunoTurma ? `DIARIO-${alunoTurma}-${currentYear}` : `DIARIO-PORTARIA-${currentYear}`
+        if (dispositivoSentido === 'saida') {
+          // ══════════════════════════════════════════════════════════════
+          // FLUXO DE SAÍDA DE ALUNOS (CATRACA DE SAÍDA - .154)
+          // ══════════════════════════════════════════════════════════════
+          console.log(`🚪 [Portaria Webhook] Registrando SAÍDA para ${alunoNome} às ${localTimeStr} via ${dispositivoNome}`)
 
-          const row = {
+          // 1. Atualizar ou criar registro de frequência com o horário de saída
+          await supabase.from('frequencias').upsert({
             id: freqId,
             aluno_id: alunoId,
-            turma_id: alunoTurma || null,
+            turma_id: alunoTurma || existingFreq?.turma_id || null,
             data: localDate,
-            presente: true,
-            justificativa: '',
+            presente: existingFreq?.presente ?? true,
+            tempos: existingFreq?.tempos || null,
+            justificativa: existingFreq?.justificativa || '',
             dados: {
-              diarioId,
+              ...(existingFreq?.dados || {}),
+              saidaHorario: localTimeStr,
+              saidaResponsavel: 'Saiu Sozinho (Catraca Rua das Garças)',
+              saidaOrigem: 'catraca',
               anoLetivo: currentYear,
-              registradoPor: 'Catraca iDFace',
-              horaEntrada: localTimeStr,
-              horaRegistro: localTimeStr
+              diarioId: existingFreq?.dados?.diarioId || diarioId,
+              horaEntrada: existingFreq?.dados?.horaEntrada || '',
+              horaRegistro: existingFreq?.dados?.horaRegistro || localTimeStr,
             }
+          })
+
+          // 2. Registrar na tabela saida_calls para exibição imediata no painel de chamadas, TV monitor e histórico
+          const callId = `saida-catraca-${alunoId}-${localDate}`
+          await supabase.from('saida_calls').upsert({
+            id: callId,
+            dados: {
+              studentId: String(alunoId),
+              studentName: alunoNome,
+              studentClass: alunoTurma || '',
+              guardianId: 'catraca-saida',
+              guardianName: 'Saiu Sozinho (Catraca Rua das Garças)',
+              calledAt: eventTime,
+              confirmedAt: eventTime,
+              status: 'confirmed',
+              tipo: 'sozinho',
+              origem: 'catraca_idface',
+              dispositivoNome: dispositivoNome || 'Saida - Rua das Garças',
+              horaSaida: localTimeStr,
+            },
+            created_at: eventTime
+          }, { onConflict: 'id' })
+
+          // 3. Disparo do Push Notification para os Responsáveis na Agenda Digital
+          try {
+            const { sendAgendaPushNotification } = await import('@/lib/server/agendaNotifications')
+            const { getResponsavelIdsForTargets } = await import('@/lib/server/notificationHelper')
+            const { formatFriendlyStudentName } = await import('@/lib/studentNameHelper')
+
+            const nomeAmigavel = formatFriendlyStudentName(alunoNome)
+            const unpaddedId = String(alunoId).replace(/^0+/, '')
+            const studentTargets = Array.from(new Set([String(alunoId), unpaddedId, unpaddedId.padStart(6, '0')].filter(Boolean)))
+            const targetIds = await getResponsavelIdsForTargets({ targetStudents: studentTargets })
+
+            if (targetIds.length > 0) {
+              const pushItemId = `saida_catraca_${alunoId}_${localDate}`
+              await sendAgendaPushNotification({
+                type: 'saida',
+                itemId: pushItemId,
+                title: '🎓 Saída Confirmada',
+                message: `A saída de ${nomeAmigavel} foi confirmada na portaria às ${localTimeStr} (Saiu sozinho).`,
+                targetUserIds: targetIds,
+                targetUrl: `/agenda-digital/${alunoId}/frequencia`,
+                metadata: {
+                  aluno_id: String(alunoId),
+                  data: String(localDate),
+                  hora: localTimeStr,
+                  tipo: 'saida_sozinho',
+                  dispositivo: dispositivoNome || 'Catraca Rua das Garças'
+                }
+              })
+              console.log(`✅ [Portaria Webhook] Push de Saída Confirmada disparado para ${nomeAmigavel} (${targetIds.length} destinatários)`)
+            } else {
+              console.warn(`⚠️ [Portaria Webhook] Nenhum responsável encontrado para envio de push de saída do aluno ${alunoNome} (ID: ${alunoId})`)
+            }
+          } catch (pushErr: any) {
+            console.error('[Push Saida Dispatch Error]', pushErr)
           }
 
-          const { error: insertErr } = await supabase.from('frequencias').insert(row)
-          if (insertErr) {
-            console.error('[Portaria Integration Frequencia Insert Error]', insertErr)
+        } else {
+          // ══════════════════════════════════════════════════════════════
+          // FLUXO DE ENTRADA (COMPORTAMENTO ORIGINAL TOTALMENTE PRESERVADO)
+          // ══════════════════════════════════════════════════════════════
+          // 2. Verificar se já existe lançamento de frequência para este aluno neste dia (NÃO SOBREPOR)
+          if (existingFreq) {
+            console.log(`ℹ️ [Portaria Integration] Aluno ${alunoNome} (ID: ${alunoId}) já possui registro de entrada em ${localDate}. Registro preservado sem sobreposição.`)
           } else {
-            console.log(`✅ [Portaria Integration] Horário de entrada (${localTimeStr}) registrado com sucesso para ${alunoNome} em ${localDate}`)
-            
-            // 4. Disparo do Push Notification para os Pais na Agenda Digital
-            if (alunoId) {
-              try {
-                const { sendAgendaPushNotification } = await import('@/lib/server/agendaNotifications')
-                const { getResponsavelIdsForTargets } = await import('@/lib/server/notificationHelper')
-                const targetIds = await getResponsavelIdsForTargets({ targetStudents: [alunoId] })
-                
-                if (targetIds.length > 0) {
-                  await sendAgendaPushNotification({
-                    type: 'frequencia',
-                    itemId: String(freqId),
-                    title: '✅ Presença Confirmada',
-                    message: `A presença de ${alunoNome} foi confirmada na escola (Entrada às ${localTimeStr}).`,
-                    targetUserIds: targetIds,
-                    targetUrl: `/agenda-digital/${alunoId}/frequencia`,
-                    metadata: {
-                      aluno_id: String(alunoId),
-                      data: String(localDate)
-                    }
-                  })
+            // 3. Salvar registro de entrada (sem tempos de aula)
+            const row = {
+              id: freqId,
+              aluno_id: alunoId,
+              turma_id: alunoTurma || null,
+              data: localDate,
+              presente: true,
+              justificativa: '',
+              dados: {
+                diarioId,
+                anoLetivo: currentYear,
+                registradoPor: 'Catraca iDFace',
+                horaEntrada: localTimeStr,
+                horaRegistro: localTimeStr
+              }
+            }
+
+            const { error: insertErr } = await supabase.from('frequencias').insert(row)
+            if (insertErr) {
+              console.error('[Portaria Integration Frequencia Insert Error]', insertErr)
+            } else {
+              console.log(`✅ [Portaria Integration] Horário de entrada (${localTimeStr}) registrado com sucesso para ${alunoNome} em ${localDate}`)
+              
+              // 4. Disparo do Push Notification para os Pais na Agenda Digital
+              if (alunoId) {
+                try {
+                  const { sendAgendaPushNotification } = await import('@/lib/server/agendaNotifications')
+                  const { getResponsavelIdsForTargets } = await import('@/lib/server/notificationHelper')
+                  const targetIds = await getResponsavelIdsForTargets({ targetStudents: [alunoId] })
+                  
+                  if (targetIds.length > 0) {
+                    await sendAgendaPushNotification({
+                      type: 'frequencia',
+                      itemId: String(freqId),
+                      title: '✅ Presença Confirmada',
+                      message: `A presença de ${alunoNome} foi confirmada na escola (Entrada às ${localTimeStr}).`,
+                      targetUserIds: targetIds,
+                      targetUrl: `/agenda-digital/${alunoId}/frequencia`,
+                      metadata: {
+                        aluno_id: String(alunoId),
+                        data: String(localDate)
+                      }
+                    })
+                  }
+                } catch (e) {
+                  console.error('[Push Dispatch Error]', e)
                 }
-              } catch (e) {
-                console.error('[Push Dispatch Error]', e)
               }
             }
           }
         }
       } catch (err: any) {
-        console.error('[Portaria Integration Frequencia Error]', err.message)
+        console.error('[Portaria Integration Error]', err.message)
       }
     }
 

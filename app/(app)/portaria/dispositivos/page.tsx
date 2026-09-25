@@ -340,14 +340,30 @@ export default function DispositivosPage() {
                       {d.modelo} · {d.unidade || 'Sem unidade'}
                     </div>
                   </div>
-                  <span style={{
-                    fontSize: 9.5, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.05em',
-                    padding: '4px 10px', borderRadius: 8,
-                    background: isOnline ? 'rgba(16,185,129,0.1)' : 'rgba(244,63,94,0.08)',
-                    color: isOnline ? '#10b981' : '#f43f5e'
-                  }}>
-                    {isOnline ? '● ONLINE' : '● OFFLINE'}
-                  </span>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
+                    <span style={{
+                      fontSize: 9.5, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.05em',
+                      padding: '4px 10px', borderRadius: 8,
+                      background: isOnline ? 'rgba(16,185,129,0.1)' : 'rgba(244,63,94,0.08)',
+                      color: isOnline ? '#10b981' : '#f43f5e'
+                    }}>
+                      {isOnline ? '● ONLINE' : '● OFFLINE'}
+                    </span>
+                    {(() => {
+                      const isSaida = d.configuracao?.sentido === 'saida' || /sa[ií]da/i.test(d.nome || '') || d.ip === '192.168.1.154'
+                      return (
+                        <span style={{
+                          fontSize: 9, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.05em',
+                          padding: '3px 8px', borderRadius: 6,
+                          background: isSaida ? 'rgba(168,85,247,0.1)' : 'rgba(6,182,212,0.1)',
+                          color: isSaida ? '#a855f7' : '#0891b2',
+                          border: `1px solid ${isSaida ? 'rgba(168,85,247,0.25)' : 'rgba(6,182,212,0.25)'}`
+                        }}>
+                          {isSaida ? '🚪 SAÍDA' : '🟢 ENTRADA'}
+                        </span>
+                      )
+                    })()}
+                  </div>
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20, background: 'hsl(var(--bg-base))', padding: 14, borderRadius: 14, border: '1px solid hsl(var(--border-subtle))' }}>
@@ -614,6 +630,25 @@ export default function DispositivosPage() {
                 </div>
               ))}
               
+              {/* Sentido / Função do Leitor */}
+              <div>
+                <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-muted))', textTransform: 'uppercase', marginBottom: 6 }}>
+                  Função do Leitor (Sentido)
+                </label>
+                <select
+                  className="form-input"
+                  value={editDevice.configuracao?.sentido || (/sa[ií]da/i.test(editDevice.nome || '') || editDevice.ip === '192.168.1.154' ? 'saida' : 'entrada')}
+                  onChange={e => setEditDevice({
+                    ...editDevice,
+                    configuracao: { ...editDevice.configuracao, sentido: e.target.value }
+                  })}
+                  style={{ width: '100%', height: 40, borderRadius: 10, fontSize: 13, fontWeight: 700 }}
+                >
+                  <option value="entrada">🟢 Entrada (Presença e acesso à escola)</option>
+                  <option value="saida">🚪 Saída (Saída de Alunos - Saiu Sozinho)</option>
+                </select>
+              </div>
+
               {/* Login / Password do iDFace */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                 <div>

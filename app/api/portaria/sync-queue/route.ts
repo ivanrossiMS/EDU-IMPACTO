@@ -10,20 +10,28 @@ const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env
  * Retorna as pendências de sincronização para os leitores localmente ou via daemon.
  * Query params: ?dispositivo_id=... &limit=...
  */
-async function getRegistradosHoje() {
+async function getRegistradosHoje(sentido: 'entrada' | 'saida' = 'entrada') {
   try {
     const formatter = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' })
     const todayStr = formatter.format(new Date())
     const startOfTodayIso = `${todayStr}T00:00:00.000Z`
 
-    const { data: eventosHoje } = await supabase
+    let evQuery = supabase
       .from('portaria_eventos')
-      .select('user_id_equipamento, aluno_id')
+      .select('user_id_equipamento, aluno_id, tipo')
       .gte('data_hora', startOfTodayIso)
+
+    if (sentido === 'saida') {
+      evQuery = evQuery.eq('tipo', 'saida')
+    } else {
+      evQuery = evQuery.or('tipo.eq.entrada,tipo.is.null')
+    }
+
+    const { data: eventosHoje } = await evQuery
 
     const { data: freqHoje } = await supabase
       .from('frequencias')
-      .select('aluno_id')
+      .select('aluno_id, dados')
       .eq('data', todayStr)
 
     const registeredSet = new Set<string>()
@@ -37,7 +45,11 @@ async function getRegistradosHoje() {
       if (e.aluno_id) alunoUuids.add(String(e.aluno_id))
     }
     for (const f of freqHoje || []) {
-      if (f.aluno_id) alunoUuids.add(String(f.aluno_id))
+      if (sentido === 'saida') {
+        if (f.dados?.saidaHorario && f.aluno_id) alunoUuids.add(String(f.aluno_id))
+      } else {
+        if (f.aluno_id) alunoUuids.add(String(f.aluno_id))
+      }
     }
 
     if (alunoUuids.size > 0) {
@@ -81,10 +93,32 @@ export async function GET(req: NextRequest) {
     const { data: pendingRows, error: pendingErr, count } = await query.limit(limitParam)
     if (pendingErr) throw pendingErr
 
-    const registrados_hoje = await getRegistradosHoje()
+    const registrados_entrada_hoje = await getRegistradosHoje('entrada')
+    const registrados_saida_hoje = await getRegistradosHoje('saida')
+    const registrados_hoje = registrados_entrada_hoje
+
+    const { data: activeDevices } = await supabase
+      .from('portaria_dispositivos')
+      .select('id, nome, ip, porta, modelo, status, configuracao')
+
+    const dispositivos = (activeDevices || []).map(d => ({
+      id: d.id,
+      nome: d.nome,
+      ip: d.ip,
+      porta: d.porta || 80,
+      tipo: (d.configuracao as any)?.sentido || (/sa[ií]da/i.test(d.nome || '') || d.ip === '192.168.1.154' ? 'saida' : 'entrada'),
+      senha: (d.configuracao as any)?.password || 'Pass1081$'
+    }))
 
     if (!pendingRows || pendingRows.length === 0) {
-      return NextResponse.json({ pendentes: [], registrados_hoje, total: count || 0 })
+      return NextResponse.json({
+        pendentes: [],
+        registrados_hoje,
+        registrados_entrada_hoje,
+        registrados_saida_hoje,
+        dispositivos,
+        total: count || 0
+      })
     }
 
     const alunoIds = Array.from(new Set(pendingRows.map(r => r.aluno_id)))
@@ -128,6 +162,9 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       pendentes: result,
       registrados_hoje,
+      registrados_entrada_hoje,
+      registrados_saida_hoje,
+      dispositivos,
       total: count ?? result.length
     })
   } catch (err: any) {

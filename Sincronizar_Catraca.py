@@ -50,14 +50,15 @@ NETLIFY_URL   = SERVER_URL.rstrip('/')
 CATRACA_SENHA = "Pass1081$"
 CATRACA_LOGIN = "admin"
 
-# Cada catraca: nome, ip, porta, id (serial do equipamento)
+# Cada catraca: nome, ip, porta, id (serial do equipamento), tipo ('entrada' ou 'saida')
 # Porta 80  → HTTP
 # Porta 443 → HTTPS
 # Porta 88  → tenta HTTP primeiro, depois HTTPS
 CATRACAS = [
-    {"nome": "Portaria Médio - PRINCIPAL", "ip": "192.168.1.150", "id": "0M0200/02638E", "porta": 80},
-    {"nome": "Portaria FUND1- PRINCIPAL",  "ip": "192.168.1.155", "id": "0M0200/02639C", "porta": 80},
-    {"nome": "Portaria PRINCIPAL -INF",   "ip": "192.168.1.105", "id": "0M0200/0262CE", "porta": 80},
+    {"nome": "Portaria Médio - PRINCIPAL", "ip": "192.168.1.150", "id": "0M0200/02638E", "porta": 80, "tipo": "entrada"},
+    {"nome": "Portaria FUND1- PRINCIPAL",  "ip": "192.168.1.155", "id": "0M0200/02639C", "porta": 80, "tipo": "entrada"},
+    {"nome": "Portaria PRINCIPAL -INF",   "ip": "192.168.1.105", "id": "0M0200/0262CE", "porta": 80, "tipo": "entrada"},
+    {"nome": "Saida - Rua das Garças",    "ip": "192.168.1.154", "id": "0M0200/0263A6", "porta": 80, "tipo": "saida", "senha": "Pass1081"},
 ]
 # ══════════════════════════════════════════════════════════════
 
@@ -95,16 +96,26 @@ def detectar_base_url(cat):
     else:  # porta não padrão: tenta HTTP e HTTPS
         candidatos = [f"http://{ip}:{porta}", f"https://{ip}:{porta}"]
 
+    senhas_para_tentar = []
+    if cat.get("senha"):
+        senhas_para_tentar.append(cat["senha"])
+    if cat.get("password"):
+        senhas_para_tentar.append(cat["password"])
+    if CATRACA_SENHA not in senhas_para_tentar:
+        senhas_para_tentar.append(CATRACA_SENHA)
+    if "Pass1081" not in senhas_para_tentar:
+        senhas_para_tentar.append("Pass1081")
+
     for url in candidatos:
-        try:
-            r = post_json(f"{url}/login.fcgi",
-                          {"login": CATRACA_LOGIN, "password": CATRACA_SENHA},
-                          timeout=5)
-            if r.get("session"):
-                return url, r["session"]
-        except Exception as e:
-            print(f"     [DEBUG] Falha ao tentar {url}: {e}")
-            pass
+        for pwd in senhas_para_tentar:
+            try:
+                r = post_json(f"{url}/login.fcgi",
+                              {"login": CATRACA_LOGIN, "password": pwd},
+                              timeout=5)
+                if r.get("session"):
+                    return url, r["session"]
+            except Exception as e:
+                pass
     return None, None
 
 
@@ -207,13 +218,17 @@ def enviar_para_webhook(log_entry, cat):
     """
     Envia o evento de acesso ao webhook do ERP.
     Inclui o device_id (serial da catraca) e o user_id numérico para que o servidor
-    consiga identificar corretamente o dispositivo e o aluno.
+    consiga identificar corretamente o dispositivo e o aluno, além do tipo (entrada/saida).
     """
     user_id = log_entry.get("user_id", 0)
     log_id  = log_entry.get("id", 0)
+    tipo    = cat.get("tipo") or ("saida" if "saida" in cat.get("nome", "").lower() or cat.get("ip") == "192.168.1.154" else "entrada")
     payload = {
         # device_id = serial ou IP da catraca (o webhook tenta as duas formas)
         "device_id": cat.get("id") or cat["ip"],
+        "tipo": tipo,
+        "sentido": tipo,
+        "event_type": tipo,
         "object_changes": [{
             "object": "access_logs",
             "type":   "inserted",
@@ -221,6 +236,7 @@ def enviar_para_webhook(log_entry, cat):
                 "id":      log_id,
                 "user_id": user_id,
                 "time":    log_entry.get("time", 0),
+                "tipo":    tipo,
             }
         }],
     }
@@ -362,7 +378,7 @@ def processar_fila_pendencias_erp(cats_conectadas):
 
 
 def carregar_registrados_do_erp():
-    """Consulta o ERP online para obter a lista de alunos que já possuem presença/evento registrado HOJE."""
+    """Consulta o ERP online para obter a lista de alunos que já possuem presença/evento registrado HOJE, além de catracas ativas."""
     url_queue = f"{NETLIFY_URL}/api/portaria/sync-queue"
     try:
         req = urllib.request.Request(url_queue, method="GET")
@@ -370,15 +386,18 @@ def carregar_registrados_do_erp():
         ctx = SSL_CTX if url_queue.startswith("https") else None
         with urllib.request.urlopen(req, timeout=8, context=ctx) as r:
             data = json.loads(r.read())
-            registrados = data.get("registrados_hoje", [])
-            return set(str(x) for x in registrados if x)
+            reg_entrada = set(str(x) for x in data.get("registrados_entrada_hoje", data.get("registrados_hoje", [])) if x)
+            reg_saida   = set(str(x) for x in data.get("registrados_saida_hoje", []) if x)
+            dispositivos = data.get("dispositivos", [])
+            return reg_entrada, reg_saida, dispositivos
     except Exception as e:
         print(f"     ⚠️ Não foi possível consultar registros prévios do ERP: {e}")
-        return set()
+        return set(), set(), []
 
 
 def rodar_um_ciclo():
     hoje_str = date.today().strftime("%d/%m/%Y")
+    hoje_iso = date.today().strftime('%Y_%m_%d')
     print()
     print("  ══════════════════════════════════════════════════")
     print("   🔄  SINCRONIZAÇÃO BIDIRECIONAL (CATRACA ⇄ ERP)")
@@ -386,35 +405,62 @@ def rodar_um_ciclo():
     print("  ══════════════════════════════════════════════════")
 
     estado = carregar_estado_catracas()
-    cache_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), f"sincronizados_{date.today().strftime('%Y_%m_%d')}.txt")
-    ja_sincronizados = set()
-    if os.path.exists(cache_file):
-        with open(cache_file, "r") as f:
-            for line in f:
-                if line.strip():
-                    ja_sincronizados.add(line.strip())
+    cache_file_entrada = os.path.join(os.path.dirname(os.path.abspath(__file__)), f"sincronizados_entrada_{hoje_iso}.txt")
+    cache_file_saida   = os.path.join(os.path.dirname(os.path.abspath(__file__)), f"sincronizados_saida_{hoje_iso}.txt")
+    legacy_cache_file  = os.path.join(os.path.dirname(os.path.abspath(__file__)), f"sincronizados_{hoje_iso}.txt")
 
-    # 🌐 Consulta o ERP online para carregar alunos que já possuem presença registrada hoje
-    print("\n  🌐 Consultando registros já salvos no ERP online para hoje…")
-    registrados_erp = carregar_registrados_do_erp()
-    if registrados_erp:
-        ja_sincronizados.update(registrados_erp)
-        print(f"     ✅ {len(registrados_erp)} aluno(s) já possuem presença registrada no ERP (serão pulados).")
-        try:
-            with open(cache_file, "a") as f:
-                for uid in registrados_erp:
-                    f.write(uid + "\n")
-        except Exception:
-            pass
+    ja_sincronizados_entrada = set()
+    ja_sincronizados_saida   = set()
+
+    for cf, target_set in [(cache_file_entrada, ja_sincronizados_entrada), (cache_file_saida, ja_sincronizados_saida), (legacy_cache_file, ja_sincronizados_entrada)]:
+        if os.path.exists(cf):
+            try:
+                with open(cf, "r") as f:
+                    for line in f:
+                        if line.strip():
+                            target_set.add(line.strip())
+            except Exception:
+                pass
+
+    # 🌐 Consulta o ERP online para carregar alunos que já possuem presença/saída registradas hoje
+    print("\n  🌐 Consultando registros e catracas salvas no ERP online para hoje…")
+    reg_entrada_erp, reg_saida_erp, dispositivos_erp = carregar_registrados_do_erp()
+    if reg_entrada_erp:
+        ja_sincronizados_entrada.update(reg_entrada_erp)
+        print(f"     ✅ {len(reg_entrada_erp)} aluno(s) com entrada confirmada hoje no ERP.")
+    if reg_saida_erp:
+        ja_sincronizados_saida.update(reg_saida_erp)
+        print(f"     ✅ {len(reg_saida_erp)} aluno(s) com saída confirmada hoje no ERP.")
+
+    # Mesclar novos dispositivos cadastrados no ERP dinamicamente
+    if dispositivos_erp:
+        ips_existentes = {c.get("ip") for c in CATRACAS}
+        ids_existentes = {c.get("id") for c in CATRACAS if c.get("id")}
+        for d in dispositivos_erp:
+            if d.get("ip") and d["ip"] not in ips_existentes and d.get("id") not in ids_existentes:
+                CATRACAS.append({
+                    "nome": d.get("nome", "Catraca"),
+                    "ip": d["ip"],
+                    "id": d.get("id", ""),
+                    "porta": d.get("porta", 80),
+                    "tipo": d.get("tipo", "entrada"),
+                    "senha": d.get("senha") or CATRACA_SENHA
+                })
+                print(f"     ➕ Nova catraca detectada dinamicamente via ERP: {d.get('nome')} ({d['ip']}) - Tipo: {d.get('tipo', 'entrada').upper()}")
 
     total_enviados = 0
     total_erros    = 0
     cats_conectadas = []
 
     for cat in CATRACAS:
+        is_saida = cat.get("tipo") == "saida" or "saida" in cat.get("nome", "").lower() or cat.get("ip") == "192.168.1.154"
+        cat_tipo_label = "SAÍDA" if is_saida else "ENTRADA"
+        ja_sincronizados = ja_sincronizados_saida if is_saida else ja_sincronizados_entrada
+        cache_file = cache_file_saida if is_saida else cache_file_entrada
+
         cat_key = cat.get("id") or cat["ip"]
         last_id = estado.get(cat_key, 0)
-        print(f"\n  📡 {cat['nome']} ({cat['ip']}:{cat['porta']}) [Último Log ID lido: {last_id}]")
+        print(f"\n  📡 {cat['nome']} [{cat_tipo_label}] ({cat['ip']}:{cat['porta']}) [Último Log ID lido: {last_id}]")
 
         base_url, session = detectar_base_url(cat)
         if not base_url:
@@ -446,7 +492,7 @@ def rodar_um_ciclo():
 
         reconhecidos = [l for l in logs_hoje if l.get("user_id", 0) > 0]
 
-        # Filtra para enviar apenas 1 registro por aluno (o primeiro do dia)
+        # Filtra para enviar apenas 1 registro por aluno por sentido (o primeiro do dia)
         unicos = {}
         for l in reconhecidos:
             uid = str(l.get("user_id", ""))
@@ -482,7 +528,7 @@ def rodar_um_ciclo():
                 result = enviar_para_webhook(log, cat)
                 status = result.get("evento", result.get("status", "?"))
                 if status in ("sucesso", "ok", "ignorado (já registrado)", "inconsistencia", "?") or "actions" in result:
-                    print(f"     ✅ Aluno {uid:<6} às {hora}  [sucesso]")
+                    print(f"     ✅ Aluno {uid:<6} às {hora}  [{cat_tipo_label} - sucesso]")
                     ok += 1
                     if cache_f:
                         try:
@@ -492,7 +538,7 @@ def rodar_um_ciclo():
                             pass
                     ja_sincronizados.add(uid)
                 else:
-                    print(f"     ⚠️  Aluno {uid:<6} às {hora}  [{status}]")
+                    print(f"     ⚠️  Aluno {uid:<6} às {hora}  [{cat_tipo_label} - {status}]")
                     ok += 1
             except Exception as e:
                 print(f"     ❌ Aluno {uid:<6} às {hora}: {e}")

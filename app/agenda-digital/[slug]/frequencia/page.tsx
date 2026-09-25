@@ -170,7 +170,9 @@ export default function ADFrequenciaPage({ params }: { params: any }) {
       if (!e || !e.data_hora) return false
       if (!e.status) return true
       const s = String(e.status).toLowerCase().trim()
-      return s === 'sucesso' || s === 'liberado' || s === 'autorizado' || s === 'ok' || s === 'permitido' || s === 'entrada'
+      const isOk = s === 'sucesso' || s === 'liberado' || s === 'autorizado' || s === 'ok' || s === 'permitido' || s === 'entrada'
+      const sentido = String(e.sentido || e.tipo || '').toLowerCase()
+      return isOk && sentido !== 'saida'
     })
     const sorted = [...validEvents].sort((a, b) => (a.data_hora || '').localeCompare(b.data_hora || ''))
 

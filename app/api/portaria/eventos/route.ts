@@ -14,6 +14,7 @@ export async function GET(req: NextRequest) {
     const aluno_id = url.searchParams.get('aluno_id')
     const dispositivo_id = url.searchParams.get('dispositivo_id')
     const status = url.searchParams.get('status')
+    const tipo = url.searchParams.get('tipo')
     const data_inicio = url.searchParams.get('data_inicio')
     const data_fim = url.searchParams.get('data_fim')
 
@@ -45,7 +46,7 @@ export async function GET(req: NextRequest) {
 
     let query = supabase
       .from('portaria_eventos')
-      .select('id, data_hora, user_id_equipamento, aluno_id, aluno_nome, dispositivo_nome, status, confianca, payload_raw')
+      .select('id, data_hora, user_id_equipamento, aluno_id, aluno_nome, dispositivo_id, dispositivo_nome, tipo, status, confianca, payload_raw')
       .order('data_hora', { ascending: false })
       .limit(limit)
 
@@ -94,7 +95,8 @@ export async function GET(req: NextRequest) {
     }
 
     if (dispositivo_id) query = query.eq('dispositivo_id', dispositivo_id)
-    if (status) query = query.eq('status', status)
+    if (status && status !== 'Todos') query = query.eq('status', status)
+    if (tipo && tipo !== 'Todos') query = query.eq('tipo', tipo)
     if (dataInicioVal) query = query.gte('data_hora', dataInicioVal)
     if (dataFimVal) query = query.lte('data_hora', dataFimVal)
 

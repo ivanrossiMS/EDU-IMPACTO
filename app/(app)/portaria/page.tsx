@@ -5,7 +5,8 @@ import { useApiQuery } from '@/hooks/useApi'
 import {
   LayoutDashboard, Users, Clock, Wifi, WifiOff, TrendingUp,
   ArrowRight, Scan, Activity, UserCheck, Building2, AlertTriangle,
-  ShieldCheck, ShieldAlert, BadgeInfo, Play, Pause, Camera, Eye
+  ShieldCheck, ShieldAlert, BadgeInfo, Play, Pause, Camera, Eye,
+  LogOut, LogIn
 } from 'lucide-react'
 
 const ACCENT = '#06b6d4'
@@ -67,7 +68,10 @@ export default function PortariaDashboardPage() {
   }, [liveMonitoring, refetchEventos])
 
   // KPIs
-  const totalEntradas = eventos.filter(e => e.status === 'sucesso').length
+  const eventosSucesso = eventos.filter(e => e.status === 'sucesso')
+  const totalEntradas = eventosSucesso.filter(e => e.tipo !== 'saida').length
+  const totalSaidas = eventosSucesso.filter(e => e.tipo === 'saida').length
+  const alunosNoColegio = Math.max(0, totalEntradas - totalSaidas)
   const totalFalhas = eventos.filter(e => e.status === 'falha').length
   const totalInconsistencias = eventos.filter(e => e.status === 'inconsistencia').length
   const devicesOnline = dispositivos.filter(d => d.status === 'online').length
@@ -173,11 +177,12 @@ export default function PortariaDashboardPage() {
       </div>
 
       {/* KPI Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16, marginBottom: 24 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16, marginBottom: 24 }}>
         {[
-          { label: filtroData === new Date().toISOString().slice(0, 10) ? 'Entradas Hoje' : 'Entradas na Data', value: totalEntradas, icon: <UserCheck size={22} />, color: '#10b981', bg: 'rgba(16,185,129,0.06)', bd: 'rgba(16,185,129,0.2)' },
+          { label: filtroData === todayBRT ? 'Entradas Hoje' : 'Entradas na Data', value: totalEntradas, icon: <UserCheck size={22} />, color: '#10b981', bg: 'rgba(16,185,129,0.06)', bd: 'rgba(16,185,129,0.2)' },
+          { label: filtroData === todayBRT ? 'Saídas Registradas' : 'Saídas na Data', value: totalSaidas, icon: <LogOut size={22} />, color: '#0ea5e9', bg: 'rgba(14,165,233,0.06)', bd: 'rgba(14,165,233,0.2)' },
+          { label: 'Alunos no Colégio', value: alunosNoColegio, icon: <Users size={22} />, color: '#8b5cf6', bg: 'rgba(139,92,246,0.06)', bd: 'rgba(139,92,246,0.2)' },
           { label: 'Inconsistências', value: totalInconsistencias, icon: <AlertTriangle size={22} />, color: '#f59e0b', bg: 'rgba(245,158,11,0.06)', bd: 'rgba(245,158,11,0.2)' },
-          { label: 'Acessos Negados', value: totalFalhas, icon: <ShieldAlert size={22} />, color: '#f43f5e', bg: 'rgba(244,63,94,0.06)', bd: 'rgba(244,63,94,0.2)' },
           { label: 'Leitores Conectados', value: `${devicesOnline}/${dispositivos.length}`, icon: devicesOnline > 0 ? <Wifi size={22} /> : <WifiOff size={22} />, color: devicesOnline > 0 ? '#06b6d4' : '#94a3b8', bg: devicesOnline > 0 ? 'rgba(6,182,212,0.06)' : 'rgba(148,163,184,0.06)', bd: devicesOnline > 0 ? 'rgba(6,182,212,0.2)' : 'rgba(148,163,184,0.15)' },
         ].map((kpi, i) => (
           <div key={i} style={{
@@ -228,9 +233,13 @@ export default function PortariaDashboardPage() {
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <ShieldCheck size={18} color="#10b981" />
+              {ultimoReconhecimento?.tipo === 'saida' ? (
+                <LogOut size={18} color="#0ea5e9" />
+              ) : (
+                <ShieldCheck size={18} color="#10b981" />
+              )}
               <div style={{ fontSize: 14, fontWeight: 800, color: 'hsl(var(--text-primary))', fontFamily: 'Outfit,sans-serif' }}>
-                🟢 Último Acesso Autorizado
+                {ultimoReconhecimento?.tipo === 'saida' ? '🚪 Última Saída Autorizada' : '🟢 Último Acesso Autorizado'}
               </div>
             </div>
             {ultimoReconhecimento && (
@@ -277,14 +286,14 @@ export default function PortariaDashboardPage() {
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, background: 'hsl(var(--bg-base))', padding: '12px 16px', borderRadius: 14, border: '1px solid hsl(var(--border-subtle))' }}>
                     {[
                       ['Turma', ultimoReconhecimento.turma],
-                      ['Horário de Entrada', (() => {
+                      [ultimoReconhecimento.tipo === 'saida' ? 'Horário de Saída' : 'Horário de Entrada', (() => {
                         const d = new Date(ultimoReconhecimento.data_hora);
                         const h = String(d.getUTCHours()).padStart(2, '0');
                         const m = String(d.getUTCMinutes()).padStart(2, '0');
                         const s = String(d.getUTCSeconds()).padStart(2, '0');
                         return `${h}:${m}:${s}`;
                       })()],
-                      ['Dispositivo', ultimoReconhecimento.dispositivo_nome],
+                      ['Dispositivo', `${ultimoReconhecimento.dispositivo_nome} (${ultimoReconhecimento.tipo === 'saida' ? 'Saída' : 'Entrada'})`],
                       ['Confiança', `${ultimoReconhecimento.confianca || 98}%`],
                     ].map(([l, v]) => (
                       <div key={l}>
@@ -422,6 +431,18 @@ export default function PortariaDashboardPage() {
                         <span>Código: {e.user_id_equipamento || '—'}</span>
                         <span>·</span>
                         <span>{e.dispositivo_nome}</span>
+                        {e.tipo && (
+                          <span style={{
+                            fontSize: 9,
+                            fontWeight: 800,
+                            padding: '1px 6px',
+                            borderRadius: 4,
+                            background: e.tipo === 'saida' ? 'rgba(14,165,233,0.12)' : 'rgba(16,185,129,0.12)',
+                            color: e.tipo === 'saida' ? '#0ea5e9' : '#10b981'
+                          }}>
+                            {e.tipo === 'saida' ? 'SAÍDA' : 'ENTRADA'}
+                          </span>
+                        )}
                       </div>
                     </div>
 

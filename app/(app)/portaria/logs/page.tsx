@@ -20,6 +20,7 @@ const getTodayBRT = () => {
 export default function PortariaLogsPage() {
   const [busca, setBusca] = useState('')
   const [filtroStatus, setFiltroStatus] = useState('Todos')
+  const [filtroTipo, setFiltroTipo] = useState('Todos')
   const [filtroData, setFiltroData] = useState(getTodayBRT())
   const [expandedPayload, setExpandedPayload] = useState<string | null>(null)
   const [loadedPhotos, setLoadedPhotos] = useState<Record<string, string>>({})
@@ -59,31 +60,39 @@ export default function PortariaLogsPage() {
   }
 
   const { data: eventosRes, isLoading, refetch } = useApiQuery<{ data: any[] }>(
-    ['portaria-logs', filtroData, filtroStatus],
+    ['portaria-logs', filtroData, filtroStatus, filtroTipo],
     '/api/portaria/eventos',
     {
       data_inicio: `${filtroData}T00:00:00`,
       data_fim: `${filtroData}T23:59:59`,
       limit: '1000',
       ...(filtroStatus !== 'Todos' ? { status: filtroStatus } : {}),
+      ...(filtroTipo !== 'Todos' ? { tipo: filtroTipo } : {}),
     },
     { staleTime: 15000 }
   )
   const eventos = eventosRes?.data || []
 
   const filtered = useMemo(() => {
-    if (!busca) return eventos
+    let list = eventos
+    if (filtroTipo !== 'Todos') {
+      list = list.filter(e => (e.tipo || 'entrada').toLowerCase() === filtroTipo.toLowerCase())
+    }
+    if (!busca) return list
     const q = busca.toLowerCase()
-    return eventos.filter(e =>
+    return list.filter(e =>
       (e.aluno_nome || '').toLowerCase().includes(q) ||
       (e.user_id_equipamento || '').includes(q) ||
       (e.dispositivo_nome || '').toLowerCase().includes(q) ||
-      (e.status || '').includes(q)
+      (e.status || '').includes(q) ||
+      (e.tipo || '').includes(q)
     )
-  }, [eventos, busca])
+  }, [eventos, busca, filtroTipo])
 
   const statusCounts = useMemo(() => ({
     total: eventos.length,
+    entradas: eventos.filter(e => (e.tipo || 'entrada') === 'entrada' && e.status === 'sucesso').length,
+    saidas: eventos.filter(e => e.tipo === 'saida' && e.status === 'sucesso').length,
     sucesso: eventos.filter(e => e.status === 'sucesso').length,
     falha: eventos.filter(e => e.status === 'falha').length,
     inconsistencia: eventos.filter(e => e.status === 'inconsistencia').length,
@@ -123,7 +132,8 @@ export default function PortariaLogsPage() {
       <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
         {[
           { label: 'Total Hoje', value: statusCounts.total, color: 'hsl(var(--text-primary))', icon: <FileText size={14} /> },
-          { label: 'Sucesso', value: statusCounts.sucesso, color: '#10b981', icon: <CheckCircle size={14} /> },
+          { label: 'Entradas', value: statusCounts.entradas, color: '#10b981', icon: <CheckCircle size={14} /> },
+          { label: 'Saídas (Catraca)', value: statusCounts.saidas, color: '#a855f7', icon: <Activity size={14} /> },
           { label: 'Falhas / Bloqueados', value: statusCounts.falha, color: '#f43f5e', icon: <XCircle size={14} /> },
           { label: 'Inconsistências', value: statusCounts.inconsistencia, color: '#f59e0b', icon: <AlertTriangle size={14} /> },
         ].map(s => (
@@ -174,6 +184,16 @@ export default function PortariaLogsPage() {
           <option value="falha">Falha</option>
           <option value="inconsistencia">Inconsistência</option>
         </select>
+        <select
+          className="form-input"
+          value={filtroTipo}
+          onChange={e => setFiltroTipo(e.target.value)}
+          style={{ height: 38, borderRadius: 10, fontSize: 12, fontWeight: 700, minWidth: 150 }}
+        >
+          <option value="Todos">Todos os Sentidos</option>
+          <option value="entrada">🟢 Apenas Entradas</option>
+          <option value="saida">🚪 Apenas Saídas</option>
+        </select>
       </div>
 
       {/* Log entries */}
@@ -184,12 +204,12 @@ export default function PortariaLogsPage() {
         boxShadow: '0 4px 20px rgba(0,0,0,0.01)'
       }}>
         <div style={{
-          display: 'grid', gridTemplateColumns: '160px 80px 1.2fr 1.2fr 1.2fr 140px 50px',
+          display: 'grid', gridTemplateColumns: '150px 75px 1.2fr 1fr 1fr 100px 125px 40px',
           gap: 12, padding: '14px 20px',
           borderBottom: '1px solid hsl(var(--border-subtle))',
           background: 'hsl(var(--bg-base))'
         }}>
-          {['HORÁRIO PING', 'ID LEITOR', 'ALUNO IDENTIFICADO', 'TURMA', 'DISPOSITIVO', 'STATUS EVENTO', 'AÇÃO'].map(h => (
+          {['HORÁRIO PING', 'ID LEITOR', 'ALUNO IDENTIFICADO', 'TURMA', 'DISPOSITIVO', 'SENTIDO', 'STATUS EVENTO', 'AÇÃO'].map(h => (
             <div key={h} style={{ fontSize: 10, fontWeight: 800, color: 'hsl(var(--text-muted))', textTransform: 'uppercase', letterSpacing: 1 }}>{h}</div>
           ))}
         </div>
@@ -210,11 +230,12 @@ export default function PortariaLogsPage() {
               const badge = statusBadge(e.status)
               const isExpanded = expandedPayload === e.id
               const nomeTurma = e.aluno_turma ? (e.aluno_turma.includes(' - ') ? e.aluno_turma.split(' - ')[1] : e.aluno_turma) : '—'
+              const isSaida = e.tipo === 'saida' || (e.dispositivo_nome && /sa[ií]da/i.test(e.dispositivo_nome))
               return (
                 <div key={e.id || i} style={{ borderBottom: '1px solid hsl(var(--border-subtle))' }}>
                   <div
                     style={{
-                      display: 'grid', gridTemplateColumns: '160px 80px 1.2fr 1.2fr 1.2fr 140px 50px',
+                      display: 'grid', gridTemplateColumns: '150px 75px 1.2fr 1fr 1fr 100px 125px 40px',
                       gap: 12, padding: '11px 20px', alignItems: 'center',
                       transition: 'background 0.15s', cursor: 'pointer',
                       background: e.status !== 'sucesso' ? badge.bg : 'transparent',
@@ -241,6 +262,17 @@ export default function PortariaLogsPage() {
                     </div>
                     <div style={{ fontSize: 12, color: 'hsl(var(--text-secondary))', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {e.dispositivo_nome || '—'}
+                    </div>
+                    <div>
+                      <span style={{
+                        display: 'inline-flex', alignItems: 'center', gap: 4,
+                        fontSize: 10, fontWeight: 800, padding: '3px 8px', borderRadius: 6,
+                        background: isSaida ? 'rgba(168,85,247,0.1)' : 'rgba(16,185,129,0.08)',
+                        border: `1px solid ${isSaida ? 'rgba(168,85,247,0.25)' : 'rgba(16,185,129,0.2)'}`,
+                        color: isSaida ? '#a855f7' : '#10b981',
+                      }}>
+                        {isSaida ? '🚪 Saída' : '🟢 Entrada'}
+                      </span>
                     </div>
                     <div>
                       <span style={{ display: 'block', fontSize: 10.5, fontWeight: 800, padding: '3px 8px', borderRadius: 6, background: badge.bg, border: `1px solid ${badge.border}`, color: badge.color, textAlign: 'center' }}>
