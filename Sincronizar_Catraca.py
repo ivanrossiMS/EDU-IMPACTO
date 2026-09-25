@@ -140,19 +140,14 @@ def salvar_estado_catracas(estado):
 
 def get_access_logs_hoje(base_url, session, last_log_id=0):
     """
-    Busca os logs de hoje da catraca:
-    Mede a faixa do dia de hoje e resgata os logs.
-    Se last_log_id for maior do que o maior ID existente hoje no equipamento
-    (por exemplo, se foi salvo antes da correção do mapa de IPs), auto-corrige e resetá-lo.
+    Busca os logs de acesso da catraca:
+    - Utiliza uma janela de 24 horas para cobrir qualquer horário sem falhas de fuso horário.
+    - Se last_log_id > 0, filtra logs novos superiores ao último ID lido.
     """
-    hoje = date.today()
-    inicio_ts = int(datetime(hoje.year, hoje.month, hoje.day, tzinfo=timezone.utc).timestamp())
-    fim_ts = inicio_ts + 86400
+    now_ts = int(datetime.now().timestamp())
+    ts_limite = now_ts - 86400  # últimas 24 horas
 
-    time_filter = {">=": inicio_ts - 10800, "<=": fim_ts + 10800}
-
-    # Busca os logs do dia pela faixa temporal (para resiliência total)
-    where_cond = {"access_logs": {"time": time_filter}}
+    where_cond = {"access_logs": {"time": {">=": ts_limite}}}
 
     logs_hoje = []
     batch = 500
@@ -161,7 +156,7 @@ def get_access_logs_hoje(base_url, session, last_log_id=0):
     while True:
         try:
             r = post_json(f"{base_url}/load_objects.fcgi",
-                          {"object": "access_logs", "where": where_cond, "limit": batch, "offset": off},
+                          {"object": "access_logs", "where": where_cond, "limit": batch, "offset": off, "order": "id ASC"},
                           cookie=session)
             chunk = r.get("access_logs", [])
         except Exception as e:
@@ -171,8 +166,7 @@ def get_access_logs_hoje(base_url, session, last_log_id=0):
         if not chunk:
             break
 
-        de_hoje = [l for l in chunk if inicio_ts <= l.get("time", 0) <= fim_ts]
-        logs_hoje.extend(de_hoje)
+        logs_hoje.extend(chunk)
 
         if len(chunk) < batch:
             break  # Fim do buffer de novos registros
@@ -180,8 +174,8 @@ def get_access_logs_hoje(base_url, session, last_log_id=0):
 
     if logs_hoje:
         max_id_equipamento = max(l.get("id", 0) for l in logs_hoje)
-        # Se o last_log_id salvo no arquivo de estado for maior do que qualquer log hoje na catraca,
-        # significa que veio do descompasso antigo de IPs! Reseta automaticamente.
+        # Se o last_log_id salvo no arquivo de estado for maior do que qualquer log na catraca,
+        # auto-corrige e reseta para 0
         if last_log_id > max_id_equipamento:
             print(f"     🔄 [Auto-Fix] Último Log ID salvo ({last_log_id}) era maior que o máximo da catraca ({max_id_equipamento}). Reseta para 0.")
             last_log_id = 0
@@ -192,13 +186,24 @@ def get_access_logs_hoje(base_url, session, last_log_id=0):
     return logs_hoje
 
 
-def configurar_monitor(base_url, session):
-    """Configura o Monitor do iDFace para enviar eventos ao webhook Netlify."""
+def configurar_monitor(base_url, session, cat=None):
+    """Configura o Monitor do iDFace para enviar eventos ao webhook Netlify com parâmetros de identificação."""
     from urllib.parse import urlparse
     p = urlparse(WEBHOOK_URL)
     hostname = p.hostname
     porta = str(p.port or (443 if p.scheme == "https" else 80))
+    
+    query_parts = []
+    if cat:
+        dev_id = cat.get("id") or cat.get("ip") or ""
+        dev_tipo = cat.get("tipo", "entrada")
+        if dev_id:
+            query_parts.append(f"device_id={dev_id}")
+        query_parts.append(f"sentido={dev_tipo}")
+
     path = p.path
+    if query_parts:
+        path = f"{path}?{'&'.join(query_parts)}"
 
     try:
         post_json(f"{base_url}/set_configuration.fcgi",
@@ -472,32 +477,31 @@ def rodar_um_ciclo():
         print(f"     ✅ Conectado via {proto} (sessão: {session[:12]}…)")
         cats_conectadas.append({"cat": cat, "base_url": base_url, "session": session})
 
-        # Configura o monitor automaticamente
-        ok_monitor = configurar_monitor(base_url, session)
+        # Configura o monitor automaticamente com os parâmetros da catraca
+        ok_monitor = configurar_monitor(base_url, session, cat)
         if ok_monitor:
-            print(f"     🔧 Monitor configurado → {WEBHOOK_URL}")
+            print(f"     🔧 Monitor configurado → {WEBHOOK_URL} (sentido: {cat.get('tipo', 'entrada')})")
         else:
             print(f"     ⚠️  Monitor não configurado (pode não suportar)")
 
-        # Busca logs de hoje de forma incremental
+        # Busca logs de forma incremental
         print(f"     🔍 Buscando novos logs da catraca...")
         logs_hoje = get_access_logs_hoje(base_url, session, last_log_id=last_id)
-        
-        # Atualizar last_id se novos logs forem lidos
-        if logs_hoje:
-            max_log_id = max([l.get("id", 0) for l in logs_hoje], default=last_id)
-            if max_log_id > last_id:
-                estado[cat_key] = max_log_id
-                salvar_estado_catracas(estado)
 
         reconhecidos = [l for l in logs_hoje if l.get("user_id", 0) > 0]
 
-        # Filtra para enviar apenas 1 registro por aluno por sentido (o primeiro do dia)
+        # Filtra para enviar apenas 1 registro por aluno por sentido
+        # Na saída: se o aluno passou mais de uma vez hoje, considera a passagem mais recente
+        # Na entrada: considera a primeira passagem da manhã
         unicos = {}
         for l in reconhecidos:
             uid = str(l.get("user_id", ""))
-            if uid not in unicos or l.get("time", 0) < unicos[uid].get("time", 0):
-                unicos[uid] = l
+            if is_saida:
+                if uid not in unicos or l.get("time", 0) > unicos[uid].get("time", 0):
+                    unicos[uid] = l
+            else:
+                if uid not in unicos or l.get("time", 0) < unicos[uid].get("time", 0):
+                    unicos[uid] = l
         
         reconhecidos_unicos = list(unicos.values())
         
@@ -507,9 +511,14 @@ def rodar_um_ciclo():
                 novos_para_enviar.append(log)
         
         pulados = len(reconhecidos_unicos) - len(novos_para_enviar)
-        print(f"     📋 {len(logs_hoje)} novos eventos lidos / {len(reconhecidos_unicos)} alunos únicos / {len(novos_para_enviar)} para enviar ({pulados} pulados por duplicidade)")
+        print(f"     📋 {len(logs_hoje)} eventos lidos / {len(reconhecidos_unicos)} alunos únicos / {len(novos_para_enviar)} para enviar ({pulados} já sincronizados hoje)")
 
         if not novos_para_enviar:
+            if logs_hoje:
+                max_log_id = max([l.get("id", 0) for l in logs_hoje], default=last_id)
+                if max_log_id > last_id:
+                    estado[cat_key] = max_log_id
+                    salvar_estado_catracas(estado)
             print(f"     ℹ️  Nenhum novo registro pendente para esta catraca.")
             continue
 
@@ -549,6 +558,12 @@ def rodar_um_ciclo():
                 cache_f.close()
             except:
                 pass
+
+        if logs_hoje:
+            max_log_id = max([l.get("id", 0) for l in logs_hoje], default=last_id)
+            if max_log_id > last_id:
+                estado[cat_key] = max_log_id
+                salvar_estado_catracas(estado)
 
         total_enviados += ok
         total_erros    += falhas
@@ -665,8 +680,8 @@ def main():
         desinstalar_no_windows()
         sys.exit(0)
         
-    loop_mode = "--loop" in sys.argv or "--daemon" in sys.argv or "-d" in sys.argv
-    intervalo = 30
+    loop_mode = "--once" not in sys.argv
+    intervalo = 15
     
     for arg in sys.argv:
         if arg.startswith("--intervalo="):
@@ -676,10 +691,9 @@ def main():
                 pass
 
     if loop_mode:
-        print(f"\n  🚀 MODO AUTOMÁTICO CONTINUO ATIVO!")
-        print(f"  O script rodará continuamente em segundo plano a cada {intervalo}s.")
-        print("  Leitura incremental ativa: apenas novos registros serão lidos e gravados.")
-        print("  Pressione Ctrl+C para parar.\n")
+        print(f"\n  🚀 MODO CONTÍNUO ATIVO!")
+        print(f"  O script sincronizará em tempo real a cada {intervalo}s.")
+        print("  Pressione Ctrl+C para encerrar (ou passe --once para rodar apenas uma vez).\n")
         while True:
             try:
                 rodar_um_ciclo()

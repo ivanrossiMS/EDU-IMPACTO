@@ -81,6 +81,13 @@ export async function POST(req: Request) {
       else if (payload.userId !== undefined && payload.userId !== null)         userIdRaw = payload.userId
       else if (payload.user_id_equipamento !== undefined && payload.user_id_equipamento !== null) userIdRaw = payload.user_id_equipamento
       else if (payload.id_usuario !== undefined && payload.id_usuario !== null) userIdRaw = payload.id_usuario
+      else if (payload.access_logs?.user_id !== undefined && payload.access_logs?.user_id !== null) userIdRaw = payload.access_logs.user_id
+      else if (payload.event?.user_id !== undefined && payload.event?.user_id !== null) userIdRaw = payload.event.user_id
+      else if (payload.data?.user_id !== undefined && payload.data?.user_id !== null) userIdRaw = payload.data.user_id
+    }
+
+    if (!eventTimeRaw) {
+      eventTimeRaw = payload.access_logs?.time || payload.event?.time || payload.data?.time || ''
     }
 
     // Normalizar userId: null = ausente, 0 = face negada, >0 = usuário reconhecido
@@ -375,17 +382,12 @@ export async function POST(req: Request) {
     // Integração automática de presença e saída (Frequência Escolar & Agenda Digital)
     if (eventStatus === 'sucesso' && alunoId) {
       try {
-        // 1. Resolver data e hora local do evento extraindo UTC (pois a catraca grava o local como UTC)
+        // 1. Resolver data e hora local do evento no fuso oficial da escola (America/Campo_Grande)
         const eventDateObj = new Date(eventTime)
+        const tzEscola = 'America/Campo_Grande'
         
-        const year = eventDateObj.getUTCFullYear()
-        const month = String(eventDateObj.getUTCMonth() + 1).padStart(2, '0')
-        const day = String(eventDateObj.getUTCDate()).padStart(2, '0')
-        const localDate = `${year}-${month}-${day}`
-        
-        const localHour = eventDateObj.getUTCHours()
-        const localMin = eventDateObj.getUTCMinutes()
-        const localTimeStr = `${String(localHour).padStart(2, '0')}:${String(localMin).padStart(2, '0')}`
+        const localDate = new Intl.DateTimeFormat('en-CA', { timeZone: tzEscola, year: 'numeric', month: '2-digit', day: '2-digit' }).format(eventDateObj)
+        const localTimeStr = new Intl.DateTimeFormat('pt-BR', { timeZone: tzEscola, hour: '2-digit', minute: '2-digit', hour12: false }).format(eventDateObj)
 
         const currentYear = new Date().getFullYear().toString()
         const freqId = `FREQ-${alunoId}-${localDate}`
