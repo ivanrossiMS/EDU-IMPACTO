@@ -330,6 +330,20 @@ export async function POST(request: Request) {
               calledAt: row.dados?.calledAt,
             })
           }
+        } else if (row.dados?.status === 'special_auth') {
+          const isNewCall = !existing || existing.status !== 'special_auth'
+          if (isNewCall) {
+            await dispatchSpecialAuthNotification({
+              callId: row.id,
+              studentId: row.dados?.studentId,
+              studentName: row.dados?.studentName,
+              studentClass: row.dados?.studentClass,
+              authorizedPerson: row.dados?.guardianName,
+              targetTime: row.dados?.targetTime,
+              operatorName: row.dados?.operatorId,
+              studentPhoto: row.dados?.studentPhoto,
+            })
+          }
         }
       })
       await Promise.allSettled(pushTasks)
@@ -466,6 +480,20 @@ export async function POST(request: Request) {
           studentName: data.dados?.studentName,
           studentClass: data.dados?.studentClass,
           calledAt: data.dados?.calledAt,
+        })
+      }
+    } else if (data.dados?.status === 'special_auth') {
+      const isNewCall = !existingRow || previousStatus !== 'special_auth'
+      if (isNewCall) {
+        await dispatchSpecialAuthNotification({
+          callId: data.id,
+          studentId: data.dados?.studentId,
+          studentName: data.dados?.studentName,
+          studentClass: data.dados?.studentClass,
+          authorizedPerson: data.dados?.guardianName,
+          targetTime: data.dados?.targetTime,
+          operatorName: data.dados?.operatorId,
+          studentPhoto: data.dados?.studentPhoto,
         })
       }
     }
@@ -679,5 +707,96 @@ async function dispatchSaidaConfirmadaPush({
     }
   } catch (err: any) {
     console.error('[API Saida] Erro ao disparar push de Saída Confirmada:', err.message)
+  }
+}
+
+async function dispatchSpecialAuthNotification({
+  callId,
+  studentId,
+  studentName,
+  studentClass,
+  authorizedPerson,
+  targetTime,
+  operatorName,
+  studentPhoto,
+}: {
+  callId: string
+  studentId?: string
+  studentName?: string
+  studentClass?: string
+  authorizedPerson?: string
+  targetTime?: string
+  operatorName?: string
+  studentPhoto?: string | null
+}) {
+  try {
+    const supabaseService = getAdminClient()
+
+    // 1. Fetch current saida_config to check if notifications are enabled and get target user IDs
+    const { data: configRow } = await supabaseService
+      .from('saida_config')
+      .select('dados')
+      .eq('id', 'default')
+      .maybeSingle()
+
+    const configDados = (configRow?.dados && typeof configRow.dados === 'object') ? configRow.dados : {}
+    const isEnabled = configDados.specialAuthNotificationsEnabled !== false
+    const targetUserIds: string[] = Array.isArray(configDados.specialAuthNotificationUserIds)
+      ? configDados.specialAuthNotificationUserIds.filter(Boolean)
+      : []
+
+    if (!isEnabled || targetUserIds.length === 0) {
+      console.log('[API Saida] Notificação de Autorização Especial: desativada ou nenhum colaborador configurado.')
+      return
+    }
+
+    // 2. Fetch collaborator users from system_users
+    const { data: targetUsers, error: usersErr } = await supabaseService
+      .from('system_users')
+      .select('id, auth_id, nome, email, perfil, cargo')
+      .in('id', targetUserIds)
+
+    if (usersErr || !targetUsers || targetUsers.length === 0) {
+      console.warn('[API Saida] Colaboradores configurados não encontrados na system_users:', targetUserIds)
+      return
+    }
+
+    const { formatFriendlyStudentName } = await import('@/lib/studentNameHelper')
+    const rawNomeAluno = studentName || 'o aluno'
+    const nomeAmigavel = formatFriendlyStudentName(rawNomeAluno)
+    const horaStr = targetTime && targetTime !== 'Indefinido' ? ` às ${targetTime}` : ''
+
+    // 3. Dispatch OneSignal Mobile Push Notification if enabled
+    const pushEnabled = configDados.specialAuthNotifyPush !== false
+    if (pushEnabled) {
+      const { sendAgendaPushNotification } = await import('@/lib/server/agendaNotifications')
+      
+      const pushTargets = new Set<string>()
+      targetUsers.forEach(u => {
+        if (u.id) pushTargets.add(String(u.id))
+        if (u.auth_id) pushTargets.add(String(u.auth_id))
+        if (u.email) pushTargets.add(String(u.email).toLowerCase().trim())
+      })
+
+      const pushItemId = `special_auth_${callId}_${Date.now()}`
+      await sendAgendaPushNotification({
+        type: 'saida',
+        itemId: pushItemId,
+        title: '📝 Autorização Especial: Saída Liberada',
+        message: `${nomeAmigavel}${studentClass ? ` (${studentClass})` : ''} liberado(a) para retirada por ${authorizedPerson || 'Pessoa Autorizada'}${horaStr}.`,
+        targetUserIds: Array.from(pushTargets),
+        targetUrl: '/saida-alunos/chamadas',
+        metadata: {
+          tipo: 'autorizacao_especial',
+          aluno_id: studentId || '',
+          call_id: String(callId),
+          perfil_destino: 'colaborador',
+          targetUrl: '/saida-alunos/chamadas'
+        }
+      })
+      console.log(`[API Saida] Push de Autorização Especial enviado para ${targetUsers.length} colaboradores:`, targetUsers.map(u => u.nome))
+    }
+  } catch (err: any) {
+    console.error('[API Saida] Erro ao disparar notificação de Autorização Especial:', err.message)
   }
 }

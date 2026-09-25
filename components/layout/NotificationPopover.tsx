@@ -3,7 +3,7 @@
 import { useState, useMemo } from 'react'
 import * as Popover from '@radix-ui/react-popover'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Bell, Calendar as CalendarIcon, ClipboardCheck, ShieldAlert, Megaphone, CheckCircle2, Clock, X } from 'lucide-react'
+import { Bell, Calendar as CalendarIcon, ClipboardCheck, ShieldAlert, Megaphone, CheckCircle2, Clock, X, UserCheck } from 'lucide-react'
 import { useData } from '@/lib/dataContext'
 import { useSupabaseArray } from '@/lib/useSupabaseCollection'
 import { format, isAfter, subDays } from 'date-fns'
@@ -12,12 +12,13 @@ import { ptBR } from 'date-fns/locale'
 export function NotificationPopover() {
   const [open, setOpen] = useState(false)
   const [markedRead, setMarkedRead] = useState<string[]>([])
-  const [activeTab, setActiveTab] = useState<'all' | 'tarefas' | 'agenda' | 'ocorrencias' | 'comunicado'>('all')
+  const [activeTab, setActiveTab] = useState<'all' | 'tarefas' | 'agenda' | 'ocorrencias' | 'comunicado' | 'autorizacao'>('all')
 
   const { tarefas = [], eventosAgenda = [], ocorrencias = [] } = useData()
   const { currentUser } = require('@/lib/context').useApp()
   // Ensure we fetch recent ones by ordering desc
   const [comunicados] = useSupabaseArray<any>('comunicados?order=created_at.desc&limit=10')
+  const [saidaCalls] = useSupabaseArray<any>('saida/calls')
 
   // Derive notifications
   const notifications = useMemo(() => {
@@ -99,9 +100,25 @@ export function NotificationPopover() {
       }
     })
 
+    // 5. Autorizações Especiais da Portaria
+    ;(saidaCalls || []).filter((c: any) => c.status === 'special_auth').forEach((c: any) => {
+      const cDate = c.calledAt ? new Date(c.calledAt) : new Date()
+      const targetTimeStr = c.targetTime && c.targetTime !== 'Indefinido' ? ` (${c.targetTime})` : ''
+      list.push({
+        id: `spec-auth-${c.id}`,
+        type: 'autorizacao',
+        title: `Autorização Especial: ${c.studentName || 'Aluno'}`,
+        subtitle: `${c.studentClass ? `${c.studentClass} · ` : ''}Liberado para ${c.guardianName || 'Responsável'}${targetTimeStr}`,
+        date: cDate,
+        icon: <UserCheck size={16} color="#d97706" />,
+        bg: 'rgba(245, 158, 11, 0.12)',
+        link: '/saida-alunos/chamadas'
+      })
+    })
+
     // Sort by date desc
     return list.sort((a, b) => b.date.getTime() - a.date.getTime())
-  }, [tarefas, eventosAgenda, ocorrencias, comunicados, currentUser])
+  }, [tarefas, eventosAgenda, ocorrencias, comunicados, saidaCalls, currentUser])
 
   const unreadCount = notifications.filter(n => !markedRead.includes(n.id)).length
 
@@ -181,6 +198,7 @@ export function NotificationPopover() {
                 <div style={{ display: 'flex', gap: 4, padding: '16px 20px 8px', justifyContent: 'center' }}>
                   {[
                     { id: 'all', label: 'Todas' },
+                    { id: 'autorizacao', label: 'Autorizações' },
                     { id: 'comunicado', label: 'Comunicados' },
                     { id: 'agenda', label: 'Agenda' },
                     { id: 'tarefa', label: 'Tarefas' },

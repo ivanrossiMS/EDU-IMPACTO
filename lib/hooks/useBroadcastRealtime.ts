@@ -12,6 +12,7 @@ export type RealtimeEvent =
   | 'ANNOUNCEMENT_VOICE'
   | 'CANCEL_ANNOUNCEMENT'
   | 'DELETE_CALL'
+  | 'SPECIAL_AUTH_NOTIFY'
 
 export interface RealtimePayload {
   event: RealtimeEvent

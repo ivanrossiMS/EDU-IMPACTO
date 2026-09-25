@@ -23,6 +23,7 @@ import { Preferences } from '@capacitor/preferences'
 import { notificationService } from '@/lib/notifications/notificationService'
 import { triggerHaptic } from '@/lib/utils/haptics'
 import { X } from 'lucide-react'
+import { useBroadcastRealtime } from '@/lib/hooks/useBroadcastRealtime'
 
 export const PENDING_PUSH_ROUTE_KEY = 'edu_pending_push_route'
 
@@ -588,6 +589,55 @@ export function GlobalNotificationProvider() {
       })
     }
   }, [hydrated, currentUser?.id, currentUser?.perfil, currentUser?.cargo])
+
+  // 3. Listener em tempo real para Notificações de Autorização Especial da Portaria
+  const { on: onRealtime } = useBroadcastRealtime()
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const unsub = onRealtime('SPECIAL_AUTH_NOTIFY', (payload: any) => {
+      try {
+        const d = payload?.data as any
+        if (!d) return
+
+        const user = currentUserRef.current
+        if (!user) return
+
+        const targetUserIds: string[] = Array.isArray(d.targetUserIds) ? d.targetUserIds : []
+        const myId = String(user.id || '')
+        const mySystemUserId = String(user.system_user_id || '')
+        const myColabId = String(user.colaborador_id || '')
+        const myEmail = String(user.email || '').toLowerCase().trim()
+
+        const isRecipient =
+          targetUserIds.length === 0 || // Se não filtrado, fallback
+          targetUserIds.includes(myId) ||
+          targetUserIds.includes(mySystemUserId) ||
+          targetUserIds.includes(myColabId) ||
+          (user.perfil && ['Admin', 'Administrador', 'Diretor', 'Diretor Geral'].includes(user.perfil))
+
+        if (isRecipient) {
+          const studentName = d.studentName || 'Aluno'
+          const studentClass = d.studentClass ? ` (${d.studentClass})` : ''
+          const authorizedPerson = d.guardianName || d.authorizedPerson || 'Pessoa autorizada'
+          const targetTime = d.targetTime && d.targetTime !== 'Indefinido' ? ` às ${d.targetTime}` : ''
+
+          showForegroundPushBanner({
+            id: `spec_auth_banner_${d.id || Date.now()}`,
+            title: '📝 Nova Autorização Especial do Dia',
+            body: `${studentName}${studentClass} liberado(a) para ${authorizedPerson}${targetTime}.`,
+            data: {
+              targetUrl: '/saida-alunos/chamadas',
+              tipo: 'autorizacao_especial'
+            },
+            time: 'Agora'
+          })
+        }
+      } catch (err) {
+        console.warn('[GlobalPush] Erro ao processar SPECIAL_AUTH_NOTIFY:', err)
+      }
+    })
+    return () => { unsub() }
+  }, [onRealtime, showForegroundPushBanner])
 
   return (
     <>

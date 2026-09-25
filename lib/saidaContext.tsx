@@ -142,6 +142,10 @@ export interface SaidaConfig {
   tvUrgentTime: number    // minutes to flag a student as late/urgent
   requireConfirmation: boolean
   allowMultiRFID: boolean
+  specialAuthNotificationUserIds?: string[]
+  specialAuthNotificationsEnabled?: boolean
+  specialAuthNotifyPush?: boolean
+  specialAuthNotifySound?: boolean
 }
 
 // ─── Defaults ─────────────────────────────────────────────────────────────────
@@ -159,6 +163,10 @@ const DEFAULT_CONFIG: SaidaConfig = {
   tvUrgentTime: 5,
   requireConfirmation: true,
   allowMultiRFID: true,
+  specialAuthNotificationUserIds: [],
+  specialAuthNotificationsEnabled: true,
+  specialAuthNotifyPush: true,
+  specialAuthNotifySound: true,
 }
 
 // ─── localStorage helpers ──────────────────────────────────────────────────────
@@ -836,9 +844,15 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
     persistSingleCall(call)
     emit('CALL_STUDENT', { ...call })
     sendBroadcast('CALL_STUDENT', call)
+    
+    // Dispara evento em tempo real para os colaboradores notificados
+    const targetUserIds = config?.specialAuthNotificationUserIds || []
+    emit('SPECIAL_AUTH_NOTIFY', { ...call, targetUserIds })
+    sendBroadcast('SPECIAL_AUTH_NOTIFY', { ...call, targetUserIds })
+
     addLog('SPECIAL_AUTH', `Autorização Especial: ${studentName} liberado para ${authorizedPerson}${targetTime ? ` (${targetTime})` : ''}`)
     return call
-  }, [setActiveCallsLocal, emit, addLog, sendBroadcast, persistSingleCall])
+  }, [setActiveCallsLocal, emit, addLog, sendBroadcast, persistSingleCall, config])
 
   // ─── confirmSpecialExit ────────────────────────────────────────────────────
   const confirmSpecialExit = useCallback((

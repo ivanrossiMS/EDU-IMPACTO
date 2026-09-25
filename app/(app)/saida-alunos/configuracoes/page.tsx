@@ -12,6 +12,7 @@ import {
   Settings, TestTube2, BarChart3, ShieldOff, UserCheck,
   Wifi, WifiOff, Filter, Download, Search, ChevronDown,
   CheckCircle2, XCircle, AlertTriangle, Users, GraduationCap,
+  Bell, Send, Smartphone, Volume2, Check, Sparkles, RefreshCw, Sliders
 } from 'lucide-react'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -578,6 +579,946 @@ function TabConfiguracoes() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// ABA: Notificações de Autorizações Especiais da Portaria
+// ─────────────────────────────────────────────────────────────────────────────
+function TabNotificacoes() {
+  const isMobile = useIsMobile()
+  const { config, updateConfig, isConfigLoading } = useSaida()
+
+  const [collaborators, setCollaborators] = useState<any[]>([])
+  const [isLoadingColabs, setIsLoadingColabs] = useState(true)
+  const [localConfig, setLocalConfig] = useState<any>(null)
+  const [search, setSearch] = useState('')
+  const [roleFilter, setRoleFilter] = useState<string>('todos')
+  const [saving, setSaving] = useState(false)
+  const [testing, setTesting] = useState(false)
+  const [testSuccessMessage, setTestSuccessMessage] = useState<string | null>(null)
+  const [showSuccessModal, setShowSuccessModal] = useState(false)
+
+  // 1. Carregar lista de colaboradores cadastrados no sistema
+  useEffect(() => {
+    let isMounted = true
+    const fetchColabs = async () => {
+      setIsLoadingColabs(true)
+      try {
+        const res = await fetch('/api/configuracoes/usuarios?type=colaboradores&limit=1000')
+        if (!res.ok) throw new Error('Falha ao obter lista de colaboradores')
+        const json = await res.json()
+        const rawList = Array.isArray(json.data) ? json.data : Array.isArray(json) ? json : []
+        if (isMounted) {
+          // Filtrar apenas ativos ou sem status explícito de inativo
+          const activeList = rawList.filter((u: any) => u.status !== 'inativo')
+          setCollaborators(activeList)
+        }
+      } catch (err) {
+        console.error('[TabNotificacoes] Erro ao carregar colaboradores:', err)
+      } finally {
+        if (isMounted) setIsLoadingColabs(false)
+      }
+    }
+    fetchColabs()
+    return () => { isMounted = false }
+  }, [])
+
+  // 2. Sincronizar o estado de rascunho com o config global da Portaria
+  useEffect(() => {
+    if (!isConfigLoading && config) {
+      setLocalConfig({
+        ...config,
+        specialAuthNotificationUserIds: Array.isArray(config.specialAuthNotificationUserIds)
+          ? [...config.specialAuthNotificationUserIds]
+          : [],
+        specialAuthNotificationsEnabled: config.specialAuthNotificationsEnabled ?? true,
+        specialAuthNotifyPush: config.specialAuthNotifyPush ?? true,
+        specialAuthNotifySound: config.specialAuthNotifySound ?? true,
+      })
+    }
+  }, [config, isConfigLoading])
+
+  const updateLocalField = (field: string, value: any) => {
+    setLocalConfig((prev: any) => (prev ? { ...prev, [field]: value } : prev))
+  }
+
+  // 3. Detectar alterações pendentes de salvar
+  const hasChanges = useMemo(() => {
+    if (!localConfig || !config) return false
+    const origIds = (config.specialAuthNotificationUserIds || []).slice().sort().join(',')
+    const localIds = (localConfig.specialAuthNotificationUserIds || []).slice().sort().join(',')
+    if (origIds !== localIds) return true
+    if ((config.specialAuthNotificationsEnabled ?? true) !== (localConfig.specialAuthNotificationsEnabled ?? true)) return true
+    if ((config.specialAuthNotifyPush ?? true) !== (localConfig.specialAuthNotifyPush ?? true)) return true
+    if ((config.specialAuthNotifySound ?? true) !== (localConfig.specialAuthNotifySound ?? true)) return true
+    return false
+  }, [localConfig, config])
+
+  const handleDiscard = () => {
+    if (config) {
+      setLocalConfig({
+        ...config,
+        specialAuthNotificationUserIds: Array.isArray(config.specialAuthNotificationUserIds)
+          ? [...config.specialAuthNotificationUserIds]
+          : [],
+        specialAuthNotificationsEnabled: config.specialAuthNotificationsEnabled ?? true,
+        specialAuthNotifyPush: config.specialAuthNotifyPush ?? true,
+        specialAuthNotifySound: config.specialAuthNotifySound ?? true,
+      })
+    }
+  }
+
+  // 4. Salvar configurações no Supabase
+  const handleSave = async () => {
+    if (!localConfig) return
+    setSaving(true)
+    try {
+      const res = await fetch('/api/saida/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(localConfig),
+      })
+      if (!res.ok) {
+        throw new Error('Falha ao salvar no banco de dados')
+      }
+
+      await updateConfig(localConfig)
+      setLocalConfig({ ...localConfig })
+      setShowSuccessModal(true)
+      setTimeout(() => setShowSuccessModal(false), 3500)
+    } catch (err: any) {
+      console.error('[TabNotificacoes] Erro ao salvar configurações:', err)
+      alert('Erro ao salvar configurações de notificação. Verifique sua conexão e tente novamente.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // 5. Testar disparo de notificação
+  const handleTestNotification = async () => {
+    const selectedIds: string[] = localConfig?.specialAuthNotificationUserIds || []
+    if (selectedIds.length === 0) {
+      alert('Selecione pelo menos um colaborador para enviar o teste de notificação.')
+      return
+    }
+
+    setTesting(true)
+    setTestSuccessMessage(null)
+    try {
+      const res = await fetch('/api/saida/notificar-autorizacao', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ test: true, userIds: selectedIds }),
+      })
+      const json = await res.json()
+      if (!res.ok || !json.ok) {
+        throw new Error(json.error || 'Falha ao disparar o teste')
+      }
+      setTestSuccessMessage(`Teste disparado com sucesso para ${json.notifiedCount || selectedIds.length} colaborador(es)!`)
+      setTimeout(() => setTestSuccessMessage(null), 5000)
+    } catch (err: any) {
+      console.error('[TabNotificacoes] Erro no teste:', err)
+      alert(`Erro no teste: ${err.message}`)
+    } finally {
+      setTesting(false)
+    }
+  }
+
+  // Toggle de seleção de usuário
+  const toggleUser = (userId: string) => {
+    if (!localConfig) return
+    const currentList: string[] = localConfig.specialAuthNotificationUserIds || []
+    const exists = currentList.includes(userId)
+    const nextList = exists ? currentList.filter(id => id !== userId) : [...currentList, userId]
+    updateLocalField('specialAuthNotificationUserIds', nextList)
+  }
+
+  // Funções de categorização de cargo/perfil
+  const getCategory = (cargo: string, perfil: string): string => {
+    const text = `${cargo || ''} ${perfil || ''}`.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    if (text.includes('coord')) return 'coordenacao'
+    if (text.includes('dire') || text.includes('admin') || text.includes('gest')) return 'direcao'
+    if (text.includes('port') || text.includes('inspet') || text.includes('vigia') || text.includes('seguran')) return 'portaria'
+    if (text.includes('prof')) return 'professor'
+    if (text.includes('secr') || text.includes('atend') || text.includes('recep')) return 'secretaria'
+    return 'outros'
+  }
+
+  const getRoleBadgeStyle = (cat: string) => {
+    switch (cat) {
+      case 'direcao':
+        return { bg: 'rgba(168, 85, 247, 0.14)', color: '#c084fc', border: 'rgba(168, 85, 247, 0.35)' }
+      case 'coordenacao':
+        return { bg: 'rgba(6, 182, 212, 0.14)', color: '#22d3ee', border: 'rgba(6, 182, 212, 0.35)' }
+      case 'portaria':
+        return { bg: 'rgba(245, 158, 11, 0.14)', color: '#fbbf24', border: 'rgba(245, 158, 11, 0.35)' }
+      case 'professor':
+        return { bg: 'rgba(16, 185, 129, 0.14)', color: '#34d399', border: 'rgba(16, 185, 129, 0.35)' }
+      case 'secretaria':
+        return { bg: 'rgba(59, 130, 246, 0.14)', color: '#60a5fa', border: 'rgba(59, 130, 246, 0.35)' }
+      default:
+        return { bg: 'hsl(var(--bg-overlay))', color: 'hsl(var(--text-muted))', border: 'hsl(var(--border-subtle))' }
+    }
+  }
+
+  const getInitials = (name: string): string => {
+    if (!name) return '?'
+    const parts = name.trim().split(/\s+/).filter(Boolean)
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+  }
+
+  // Filtragem da lista
+  const selectedUserIds: string[] = localConfig?.specialAuthNotificationUserIds || []
+
+  const filteredColabs = useMemo(() => {
+    return collaborators.filter(u => {
+      // Filtro de texto (nome, email, cargo)
+      if (search.trim()) {
+        const q = search.toLowerCase().trim()
+        const matchName = (u.nome || '').toLowerCase().includes(q)
+        const matchEmail = (u.email || '').toLowerCase().includes(q)
+        const matchCargo = (u.cargo || '').toLowerCase().includes(q)
+        const matchPerfil = (u.perfil || '').toLowerCase().includes(q)
+        if (!matchName && !matchEmail && !matchCargo && !matchPerfil) return false
+      }
+
+      // Filtro de categoria de perfil
+      if (roleFilter === 'selecionados') {
+        return selectedUserIds.includes(u.id)
+      } else if (roleFilter !== 'todos') {
+        const cat = getCategory(u.cargo, u.perfil)
+        if (cat !== roleFilter) return false
+      }
+
+      return true
+    })
+  }, [collaborators, search, roleFilter, selectedUserIds])
+
+  // Ações em massa
+  const handleSelectAllVisible = () => {
+    if (!localConfig) return
+    const visibleIds = filteredColabs.map(u => u.id)
+    const combined = Array.from(new Set([...selectedUserIds, ...visibleIds]))
+    updateLocalField('specialAuthNotificationUserIds', combined)
+  }
+
+  const handleDeselectAllVisible = () => {
+    if (!localConfig) return
+    const visibleIdsSet = new Set(filteredColabs.map(u => u.id))
+    const updated = selectedUserIds.filter(id => !visibleIdsSet.has(id))
+    updateLocalField('specialAuthNotificationUserIds', updated)
+  }
+
+  // Shimmer Skeleton Loader
+  if (!localConfig || isLoadingColabs) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 20, maxWidth: 900 }}>
+        {Array.from({ length: 3 }).map((_, i) => (
+          <div key={i} style={{
+            background: 'hsl(var(--bg-elevated))',
+            borderRadius: 16,
+            border: '1px solid hsl(var(--border-subtle))',
+            padding: '24px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 16,
+            position: 'relative',
+            overflow: 'hidden'
+          }}>
+            <div style={{ width: '40%', height: 18, borderRadius: 6, background: 'rgba(255,255,255,0.06)' }} className="skeleton-shimmer" />
+            <div style={{ width: '75%', height: 12, borderRadius: 4, background: 'rgba(255,255,255,0.03)' }} className="skeleton-shimmer" />
+            <div style={{ width: '100%', height: 10, borderRadius: 4, background: 'rgba(255,255,255,0.03)' }} className="skeleton-shimmer" />
+          </div>
+        ))}
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 22, maxWidth: 900, paddingBottom: hasChanges ? 90 : 20 }}>
+
+      {/* ── Banner Informativo ── */}
+      <div style={{
+        padding: '16px 20px',
+        borderRadius: 16,
+        background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.08) 0%, rgba(6, 182, 212, 0.05) 100%)',
+        border: '1.5px solid rgba(245, 158, 11, 0.3)',
+        display: 'flex',
+        alignItems: 'flex-start',
+        justifyContent: 'space-between',
+        gap: 16,
+        flexWrap: 'wrap',
+      }}>
+        <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
+          <div style={{
+            width: 42,
+            height: 42,
+            borderRadius: 12,
+            background: 'rgba(245, 158, 11, 0.15)',
+            border: '1px solid rgba(245, 158, 11, 0.35)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: '#f59e0b',
+            flexShrink: 0
+          }}>
+            <Bell size={20} />
+          </div>
+          <div>
+            <div style={{ fontWeight: 800, fontSize: 14, color: '#f59e0b', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
+              Notificações de Autorização Especial do Dia
+              <span style={{
+                fontSize: 10,
+                padding: '2px 8px',
+                borderRadius: 100,
+                fontWeight: 900,
+                background: localConfig.specialAuthNotificationsEnabled ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                color: localConfig.specialAuthNotificationsEnabled ? '#10b981' : '#ef4444',
+                border: `1px solid ${localConfig.specialAuthNotificationsEnabled ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`,
+              }}>
+                {localConfig.specialAuthNotificationsEnabled ? 'ATIVO' : 'DESATIVADO'}
+              </span>
+            </div>
+            <div style={{ fontSize: 12, color: 'hsl(var(--text-secondary))', lineHeight: 1.6, maxWidth: 620 }}>
+              Quando um operador registrar uma nova liberação no card <strong>"Autorização Especial do Dia"</strong> da Gestão de Chamadas,
+              os colaboradores selecionados abaixo receberão alertas imediatos no <strong>celular (Push)</strong>,
+              no <strong>sino de notificações</strong> e aviso <strong>sonoro (chime)</strong> no navegador.
+            </div>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, alignSelf: isMobile ? 'stretch' : 'center' }}>
+          <button
+            onClick={handleTestNotification}
+            disabled={testing || selectedUserIds.length === 0}
+            title="Envia uma notificação de teste para todos os colaboradores selecionados"
+            style={{
+              padding: '9px 16px',
+              borderRadius: 12,
+              background: 'rgba(6, 182, 212, 0.12)',
+              border: '1px solid rgba(6, 182, 212, 0.3)',
+              color: '#06b6d4',
+              fontSize: 12,
+              fontWeight: 700,
+              cursor: (testing || selectedUserIds.length === 0) ? 'not-allowed' : 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 7,
+              transition: 'all 0.2s',
+              opacity: (testing || selectedUserIds.length === 0) ? 0.6 : 1,
+              whiteSpace: 'nowrap'
+            }}
+          >
+            {testing ? <RefreshCw size={13} className="spin-icon" /> : <Send size={13} />}
+            {testing ? 'Disparando...' : 'Testar Notificação'}
+          </button>
+
+          <button
+            onClick={handleSave}
+            disabled={saving || !hasChanges}
+            style={{
+              padding: '9px 18px',
+              borderRadius: 12,
+              background: hasChanges ? 'linear-gradient(135deg, #06b6d4, #6366f1)' : 'hsl(var(--bg-overlay))',
+              border: hasChanges ? 'none' : '1px solid hsl(var(--border-subtle))',
+              color: hasChanges ? '#fff' : 'hsl(var(--text-muted))',
+              fontSize: 12,
+              fontWeight: 800,
+              cursor: (!hasChanges || saving) ? 'not-allowed' : 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              boxShadow: hasChanges ? '0 4px 12px rgba(6, 182, 212, 0.3)' : 'none',
+              transition: 'all 0.2s',
+              whiteSpace: 'nowrap'
+            }}
+          >
+            {saving ? <RefreshCw size={13} className="spin-icon" /> : <Check size={13} />}
+            {saving ? 'Salvando...' : 'Salvar Alterações'}
+          </button>
+        </div>
+      </div>
+
+      {/* Mensagem de sucesso do teste */}
+      {testSuccessMessage && (
+        <div style={{
+          padding: '12px 18px',
+          borderRadius: 12,
+          background: 'rgba(16, 185, 129, 0.12)',
+          border: '1px solid rgba(16, 185, 129, 0.35)',
+          color: '#10b981',
+          fontSize: 13,
+          fontWeight: 700,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+          animation: 'modalFadeIn 0.3s forwards'
+        }}>
+          <CheckCircle2 size={16} />
+          {testSuccessMessage}
+        </div>
+      )}
+
+      {/* ── Opções Globais de Envio ── */}
+      <div style={{
+        background: 'hsl(var(--bg-elevated))',
+        borderRadius: 16,
+        border: '1px solid hsl(var(--border-subtle))',
+        padding: '20px 24px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 16
+      }}>
+        <div style={{ fontWeight: 800, fontSize: 14, color: 'hsl(var(--text-primary))', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <Sliders size={16} color="#06b6d4" /> Canais & Preferências de Notificação
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: 14 }}>
+          {/* Master Switch */}
+          <div style={{
+            padding: '14px 16px',
+            borderRadius: 12,
+            background: 'hsl(var(--bg-base))',
+            border: `1px solid ${localConfig.specialAuthNotificationsEnabled ? 'rgba(6,182,212,0.3)' : 'hsl(var(--border-subtle))'}`,
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'space-between',
+            gap: 10,
+            transition: 'all 0.2s'
+          }}>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 800, color: 'hsl(var(--text-primary))', marginBottom: 2 }}>
+                Notificações Ativas
+              </div>
+              <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>
+                Habilita o envio para colaboradores selecionados
+              </div>
+            </div>
+            <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', alignSelf: 'flex-start' }}>
+              <div style={{ width: 44, height: 24, borderRadius: 12, position: 'relative', background: localConfig.specialAuthNotificationsEnabled ? '#06b6d4' : 'hsl(var(--bg-overlay))', transition: 'background 0.2s' }}>
+                <div style={{ position: 'absolute', top: 3, left: localConfig.specialAuthNotificationsEnabled ? 22 : 3, width: 18, height: 18, borderRadius: '50%', background: '#fff', transition: 'left 0.2s' }}/>
+              </div>
+              <input type="checkbox" checked={localConfig.specialAuthNotificationsEnabled ?? true} onChange={e => updateLocalField('specialAuthNotificationsEnabled', e.target.checked)} style={{ display: 'none' }}/>
+            </label>
+          </div>
+
+          {/* Push Switch */}
+          <div style={{
+            padding: '14px 16px',
+            borderRadius: 12,
+            background: 'hsl(var(--bg-base))',
+            border: `1px solid ${localConfig.specialAuthNotifyPush ? 'rgba(99,102,241,0.3)' : 'hsl(var(--border-subtle))'}`,
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'space-between',
+            gap: 10,
+            transition: 'all 0.2s'
+          }}>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 800, color: 'hsl(var(--text-primary))', marginBottom: 2, display: 'flex', alignItems: 'center', gap: 6 }}>
+                <Smartphone size={14} color="#6366f1" /> Push no Celular (OneSignal)
+              </div>
+              <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>
+                Alerta na tela de bloqueio do smartphone
+              </div>
+            </div>
+            <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', alignSelf: 'flex-start' }}>
+              <div style={{ width: 44, height: 24, borderRadius: 12, position: 'relative', background: localConfig.specialAuthNotifyPush ? '#6366f1' : 'hsl(var(--bg-overlay))', transition: 'background 0.2s' }}>
+                <div style={{ position: 'absolute', top: 3, left: localConfig.specialAuthNotifyPush ? 22 : 3, width: 18, height: 18, borderRadius: '50%', background: '#fff', transition: 'left 0.2s' }}/>
+              </div>
+              <input type="checkbox" checked={localConfig.specialAuthNotifyPush ?? true} onChange={e => updateLocalField('specialAuthNotifyPush', e.target.checked)} style={{ display: 'none' }}/>
+            </label>
+          </div>
+
+          {/* Sound Switch */}
+          <div style={{
+            padding: '14px 16px',
+            borderRadius: 12,
+            background: 'hsl(var(--bg-base))',
+            border: `1px solid ${localConfig.specialAuthNotifySound ? 'rgba(245,158,11,0.3)' : 'hsl(var(--border-subtle))'}`,
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'space-between',
+            gap: 10,
+            transition: 'all 0.2s'
+          }}>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 800, color: 'hsl(var(--text-primary))', marginBottom: 2, display: 'flex', alignItems: 'center', gap: 6 }}>
+                <Volume2 size={14} color="#f59e0b" /> Alerta Sonoro (Chime)
+              </div>
+              <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>
+                Toca sino harmônico nas telas ativas
+              </div>
+            </div>
+            <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', alignSelf: 'flex-start' }}>
+              <div style={{ width: 44, height: 24, borderRadius: 12, position: 'relative', background: localConfig.specialAuthNotifySound ? '#f59e0b' : 'hsl(var(--bg-overlay))', transition: 'background 0.2s' }}>
+                <div style={{ position: 'absolute', top: 3, left: localConfig.specialAuthNotifySound ? 22 : 3, width: 18, height: 18, borderRadius: '50%', background: '#fff', transition: 'left 0.2s' }}/>
+              </div>
+              <input type="checkbox" checked={localConfig.specialAuthNotifySound ?? true} onChange={e => updateLocalField('specialAuthNotifySound', e.target.checked)} style={{ display: 'none' }}/>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Seleção de Colaboradores ── */}
+      <div style={{
+        background: 'hsl(var(--bg-elevated))',
+        borderRadius: 16,
+        border: '1px solid hsl(var(--border-subtle))',
+        padding: '20px 24px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 16
+      }}>
+        {/* Top Header com contagem */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+          <div>
+            <div style={{ fontWeight: 800, fontSize: 15, color: 'hsl(var(--text-primary))', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Users size={17} color="#06b6d4" /> Selecionar Colaboradores do Sistema
+            </div>
+            <div style={{ fontSize: 12, color: 'hsl(var(--text-muted))', marginTop: 2 }}>
+              <strong style={{ color: '#06b6d4' }}>{selectedUserIds.length}</strong> de <strong>{collaborators.length}</strong> colaborador(es) selecionado(s)
+            </div>
+          </div>
+
+          {/* Botões de Ação Rápida */}
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              onClick={handleSelectAllVisible}
+              style={{
+                padding: '6px 12px',
+                borderRadius: 8,
+                fontSize: 11,
+                fontWeight: 700,
+                background: 'rgba(6,182,212,0.1)',
+                border: '1px solid rgba(6,182,212,0.25)',
+                color: '#06b6d4',
+                cursor: 'pointer',
+                transition: 'all 0.15s'
+              }}
+            >
+              Selecionar Visíveis ({filteredColabs.length})
+            </button>
+            <button
+              onClick={handleDeselectAllVisible}
+              style={{
+                padding: '6px 12px',
+                borderRadius: 8,
+                fontSize: 11,
+                fontWeight: 700,
+                background: 'rgba(239,68,68,0.08)',
+                border: '1px solid rgba(239,68,68,0.2)',
+                color: '#ef4444',
+                cursor: 'pointer',
+                transition: 'all 0.15s'
+              }}
+            >
+              Desmarcar Visíveis
+            </button>
+          </div>
+        </div>
+
+        {/* Toolbar de Busca e Filtros */}
+        <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: 10, alignItems: isMobile ? 'stretch' : 'center' }}>
+          {/* Campo de Busca */}
+          <div style={{ position: 'relative', flex: 1 }}>
+            <Search size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'hsl(var(--text-muted))' }} />
+            <input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Buscar colaborador por nome, cargo ou e-mail..."
+              style={{
+                width: '100%',
+                padding: '9px 12px 9px 34px',
+                borderRadius: 10,
+                border: '1px solid hsl(var(--border-subtle))',
+                background: 'hsl(var(--bg-base))',
+                color: 'hsl(var(--text-primary))',
+                fontSize: 13,
+                outline: 'none',
+                boxSizing: 'border-box'
+              }}
+            />
+            {search && (
+              <button
+                onClick={() => setSearch('')}
+                style={{
+                  position: 'absolute',
+                  right: 10,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  color: 'hsl(var(--text-muted))'
+                }}
+              >
+                ✕
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Chips de Categorias de Perfil */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+          {[
+            { id: 'todos', label: 'Todos', count: collaborators.length },
+            { id: 'selecionados', label: 'Selecionados', count: selectedUserIds.length },
+            { id: 'coordenacao', label: 'Coordenação', count: collaborators.filter(u => getCategory(u.cargo, u.perfil) === 'coordenacao').length },
+            { id: 'direcao', label: 'Direção / Admin', count: collaborators.filter(u => getCategory(u.cargo, u.perfil) === 'direcao').length },
+            { id: 'portaria', label: 'Portaria / Inspetores', count: collaborators.filter(u => getCategory(u.cargo, u.perfil) === 'portaria').length },
+            { id: 'professor', label: 'Professores', count: collaborators.filter(u => getCategory(u.cargo, u.perfil) === 'professor').length },
+            { id: 'secretaria', label: 'Secretaria / Atendimento', count: collaborators.filter(u => getCategory(u.cargo, u.perfil) === 'secretaria').length },
+          ].map(chip => {
+            const active = roleFilter === chip.id
+            return (
+              <button
+                key={chip.id}
+                onClick={() => setRoleFilter(chip.id)}
+                style={{
+                  padding: '5px 12px',
+                  borderRadius: 100,
+                  fontSize: 11,
+                  fontWeight: active ? 800 : 600,
+                  border: `1px solid ${active ? '#06b6d4' : 'hsl(var(--border-subtle))'}`,
+                  background: active ? 'rgba(6, 182, 212, 0.15)' : 'hsl(var(--bg-base))',
+                  color: active ? '#06b6d4' : 'hsl(var(--text-muted))',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6
+                }}
+              >
+                {chip.label}
+                <span style={{
+                  fontSize: 10,
+                  padding: '1px 6px',
+                  borderRadius: 100,
+                  background: active ? '#06b6d4' : 'hsl(var(--bg-overlay))',
+                  color: active ? '#fff' : 'hsl(var(--text-muted))',
+                  fontWeight: 900
+                }}>
+                  {chip.count}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+
+        {/* Grid de Cards de Colaboradores */}
+        {filteredColabs.length === 0 ? (
+          <div style={{
+            padding: '48px 24px',
+            textAlign: 'center',
+            borderRadius: 14,
+            border: '1px dashed hsl(var(--border-subtle))',
+            color: 'hsl(var(--text-muted))',
+            fontSize: 13
+          }}>
+            Nenhum colaborador encontrado com os filtros selecionados.
+          </div>
+        ) : (
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(270px, 1fr))',
+            gap: 10
+          }}>
+            {filteredColabs.map(colab => {
+              const isSelected = selectedUserIds.includes(colab.id)
+              const cat = getCategory(colab.cargo, colab.perfil)
+              const badgeStyle = getRoleBadgeStyle(cat)
+              const initials = getInitials(colab.nome)
+
+              return (
+                <div
+                  key={colab.id}
+                  onClick={() => toggleUser(colab.id)}
+                  style={{
+                    padding: '12px 14px',
+                    borderRadius: 14,
+                    background: isSelected ? 'linear-gradient(135deg, rgba(6, 182, 212, 0.08) 0%, rgba(99, 102, 241, 0.04) 100%)' : 'hsl(var(--bg-base))',
+                    border: isSelected ? '1.5px solid rgba(6, 182, 212, 0.5)' : '1px solid hsl(var(--border-subtle))',
+                    boxShadow: isSelected ? '0 4px 14px rgba(6, 182, 212, 0.15)' : 'none',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 12,
+                    cursor: 'pointer',
+                    userSelect: 'none',
+                    transition: 'all 0.18s ease'
+                  }}
+                  onMouseEnter={e => {
+                    if (!isSelected) {
+                      e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.2)'
+                      e.currentTarget.style.background = 'hsl(var(--bg-overlay))'
+                    }
+                  }}
+                  onMouseLeave={e => {
+                    if (!isSelected) {
+                      e.currentTarget.style.borderColor = 'hsl(var(--border-subtle))'
+                      e.currentTarget.style.background = 'hsl(var(--bg-base))'
+                    }
+                  }}
+                >
+                  {/* Monograma / Avatar */}
+                  <div style={{
+                    width: 38,
+                    height: 38,
+                    borderRadius: 10,
+                    background: isSelected ? 'linear-gradient(135deg, #06b6d4, #6366f1)' : badgeStyle.bg,
+                    border: `1px solid ${isSelected ? 'transparent' : badgeStyle.border}`,
+                    color: isSelected ? '#fff' : badgeStyle.color,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: 13,
+                    fontWeight: 900,
+                    flexShrink: 0,
+                    boxShadow: isSelected ? '0 2px 8px rgba(6,182,212,0.3)' : 'none',
+                    transition: 'all 0.2s'
+                  }}>
+                    {initials}
+                  </div>
+
+                  {/* Informações do Usuário */}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{
+                      fontSize: 13,
+                      fontWeight: 800,
+                      color: isSelected ? '#06b6d4' : 'hsl(var(--text-primary))',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      marginBottom: 2
+                    }}>
+                      {colab.nome}
+                    </div>
+                    <div style={{
+                      fontSize: 11,
+                      color: 'hsl(var(--text-muted))',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      marginBottom: 5
+                    }}>
+                      {colab.email}
+                    </div>
+                    <span style={{
+                      fontSize: 9,
+                      padding: '2px 7px',
+                      borderRadius: 6,
+                      fontWeight: 800,
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.04em',
+                      background: badgeStyle.bg,
+                      color: badgeStyle.color,
+                      border: `1px solid ${badgeStyle.border}`,
+                      display: 'inline-block'
+                    }}>
+                      {colab.cargo || colab.perfil || 'Colaborador'}
+                    </span>
+                  </div>
+
+                  {/* Switch iOS Style */}
+                  <div style={{ flexShrink: 0 }}>
+                    <div style={{
+                      width: 40,
+                      height: 22,
+                      borderRadius: 11,
+                      position: 'relative',
+                      background: isSelected ? '#06b6d4' : 'hsl(var(--bg-overlay))',
+                      transition: 'background 0.2s',
+                      boxShadow: isSelected ? '0 2px 6px rgba(6,182,212,0.4)' : 'none'
+                    }}>
+                      <div style={{
+                        position: 'absolute',
+                        top: 2,
+                        left: isSelected ? 20 : 2,
+                        width: 18,
+                        height: 18,
+                        borderRadius: '50%',
+                        background: '#fff',
+                        transition: 'left 0.2s cubic-bezier(0.16, 1, 0.3, 1)'
+                      }} />
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* ── Barra Flutuante de Alterações Pendentes ── */}
+      {hasChanges && (
+        <div style={{
+          position: 'fixed',
+          bottom: 24,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          width: 'calc(100% - 48px)',
+          maxWidth: 580,
+          background: 'rgba(15, 23, 42, 0.88)',
+          backdropFilter: 'blur(16px)',
+          border: '1px solid rgba(255, 255, 255, 0.1)',
+          boxShadow: '0 20px 40px rgba(0, 0, 0, 0.5), 0 0 30px rgba(6, 182, 212, 0.2)',
+          borderRadius: 24,
+          padding: '14px 20px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 16,
+          zIndex: 999,
+          animation: 'slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: 18, animation: 'pulseEmoji 1.5s infinite' }}>⚠️</span>
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <span style={{ fontSize: 13, fontWeight: 800, color: '#fff' }}>Alterações nas Notificações</span>
+              <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.6)', marginTop: 2 }}>
+                {selectedUserIds.length} colaborador(es) selecionado(s)
+              </span>
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button
+              onClick={handleDiscard}
+              style={{
+                padding: '8px 16px',
+                borderRadius: 12,
+                background: 'transparent',
+                border: '1px solid rgba(255,255,255,0.15)',
+                color: '#e2e8f0',
+                fontSize: 12,
+                fontWeight: 700,
+                cursor: 'pointer',
+                transition: 'all 0.2s'
+              }}
+            >
+              Descartar
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              style={{
+                padding: '8px 18px',
+                borderRadius: 12,
+                background: 'linear-gradient(135deg, #06b6d4, #6366f1)',
+                border: 'none',
+                color: '#fff',
+                fontSize: 12,
+                fontWeight: 800,
+                cursor: 'pointer',
+                boxShadow: '0 4px 12px rgba(6, 182, 212, 0.3)',
+                transition: 'all 0.2s',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6
+              }}
+            >
+              {saving ? 'Salvando...' : 'Salvar Alterações'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal de Sucesso ── */}
+      {showSuccessModal && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(2, 6, 23, 0.75)',
+          backdropFilter: 'blur(12px)',
+          zIndex: 9999,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: 20,
+          animation: 'modalFadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards'
+        }}>
+          <div className="glass-card animate-modal" style={{
+            width: '100%',
+            maxWidth: 420,
+            background: 'hsl(var(--bg-elevated))',
+            border: '1px solid rgba(16, 185, 129, 0.35)',
+            boxShadow: '0 25px 50px rgba(0, 0, 0, 0.4), 0 0 40px rgba(16, 185, 129, 0.15)',
+            borderRadius: 24,
+            padding: '32px 24px',
+            textAlign: 'center',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+          }}>
+            <div className="success-circle" style={{
+              width: 72,
+              height: 72,
+              borderRadius: '50%',
+              background: 'rgba(16, 185, 129, 0.12)',
+              border: '2px dashed rgba(16, 185, 129, 0.4)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginBottom: 20,
+            }}>
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                <polyline className="success-checkmark" points="20 6 9 17 4 12" />
+              </svg>
+            </div>
+
+            <h3 style={{
+              fontFamily: 'Outfit, sans-serif',
+              fontSize: 20,
+              fontWeight: 900,
+              color: 'hsl(var(--text-primary))',
+              margin: '0 0 8px 0',
+              letterSpacing: '-0.02em'
+            }}>
+              Notificações Atualizadas!
+            </h3>
+            
+            <p style={{
+              fontSize: 13,
+              color: 'hsl(var(--text-muted))',
+              lineHeight: 1.6,
+              margin: '0 0 24px 0'
+            }}>
+              Os colaboradores selecionados foram vinculados com sucesso e agora receberão alertas instantâneos de cada nova Autorização Especial lançada na portaria.
+            </p>
+
+            <button
+              onClick={() => setShowSuccessModal(false)}
+              style={{
+                width: '100%',
+                padding: '12px 24px',
+                borderRadius: 14,
+                background: 'linear-gradient(135deg, #10b981, #059669)',
+                border: 'none',
+                color: '#fff',
+                fontSize: 13,
+                fontWeight: 800,
+                cursor: 'pointer',
+                boxShadow: '0 4px 12px rgba(16, 185, 129, 0.25)',
+                transition: 'all 0.2s'
+              }}
+            >
+              Concluído
+            </button>
+          </div>
+        </div>
+      )}
+
+      <style>{`
+        .spin-icon {
+          animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Tipos auxiliares
 // ─────────────────────────────────────────────────────────────────────────────
 type FilterKey =
@@ -1031,15 +1972,16 @@ function TabRelatorios() {
 // ─────────────────────────────────────────────────────────────────────────────
 // PÁGINA PRINCIPAL com abas
 // ─────────────────────────────────────────────────────────────────────────────
-type Tab = 'config' | 'relatorios'
+type Tab = 'config' | 'notificacoes' | 'relatorios'
 
 function ConfigContent() {
   const isMobile = useIsMobile()
   const [tab, setTab] = useState<Tab>('config')
 
   const tabs: { key: Tab; label: string; icon: React.ReactNode }[] = [
-    { key: 'config',     label: 'Configurações',  icon: <Settings size={14}/>   },
-    { key: 'relatorios', label: 'Relatórios',      icon: <BarChart3 size={14}/>  },
+    { key: 'config',       label: 'Configurações',                icon: <Settings size={14}/>   },
+    { key: 'notificacoes', label: 'Notificações de Autorização', icon: <Bell size={14}/>       },
+    { key: 'relatorios',   label: 'Relatórios',                   icon: <BarChart3 size={14}/>  },
   ]
 
   return (
@@ -1084,8 +2026,9 @@ function ConfigContent() {
       </div>
 
       {/* Tab content */}
-      {tab === 'config'     && <TabConfiguracoes />}
-      {tab === 'relatorios' && <TabRelatorios />}
+      {tab === 'config'       && <TabConfiguracoes />}
+      {tab === 'notificacoes' && <TabNotificacoes />}
+      {tab === 'relatorios'   && <TabRelatorios />}
     </div>
   )
 }
