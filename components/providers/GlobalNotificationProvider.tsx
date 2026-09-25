@@ -24,6 +24,7 @@ import { notificationService } from '@/lib/notifications/notificationService'
 import { triggerHaptic } from '@/lib/utils/haptics'
 import { X } from 'lucide-react'
 import { useBroadcastRealtime } from '@/lib/hooks/useBroadcastRealtime'
+import { supabase } from '@/lib/supabase'
 
 export const PENDING_PUSH_ROUTE_KEY = 'edu_pending_push_route'
 
@@ -574,6 +575,16 @@ export function GlobalNotificationProvider() {
         console.warn('[GlobalPush] Aviso na sincronização do usuário:', err)
       })
 
+      // Se for dispositivo nativo (iOS/Android), solicita permissão de notificações se ainda não concedida
+      if (Capacitor.isNativePlatform()) {
+        notificationService.refresh().then(diag => {
+          if (diag?.canRequest) {
+            console.log('📱 [GlobalPush] Solicitando permissão de notificações nativas para usuário logado...')
+            notificationService.requestNotificationPermission().catch(() => {})
+          }
+        }).catch(() => {})
+      }
+
       // Retry de segurança após 3 segundos para garantir que tokens assíncronos do APNs sejam vinculados
       const retryTimer = setTimeout(() => {
         notificationService.syncUser(currentUser).catch(() => {})
@@ -591,12 +602,14 @@ export function GlobalNotificationProvider() {
   }, [hydrated, currentUser?.id, currentUser?.perfil, currentUser?.cargo])
 
   // 3. Listener em tempo real para Notificações de Autorização Especial da Portaria
+  // Escuta tanto via BroadcastChannel local quanto via Supabase Realtime (rede entre múltiplos aparelhos)
   const { on: onRealtime } = useBroadcastRealtime()
   useEffect(() => {
     if (typeof window === 'undefined') return
-    const unsub = onRealtime('SPECIAL_AUTH_NOTIFY', (payload: any) => {
+
+    const handleSpecialAuthPayload = (payload: any) => {
       try {
-        const d = payload?.data as any
+        const d = payload?.data || payload
         if (!d) return
 
         const user = currentUserRef.current
@@ -606,7 +619,6 @@ export function GlobalNotificationProvider() {
         const myId = String(user.id || '')
         const mySystemUserId = String(user.system_user_id || '')
         const myColabId = String(user.colaborador_id || '')
-        const myEmail = String(user.email || '').toLowerCase().trim()
 
         const isRecipient =
           targetUserIds.length === 0 || // Se não filtrado, fallback
@@ -623,7 +635,7 @@ export function GlobalNotificationProvider() {
 
           showForegroundPushBanner({
             id: `spec_auth_banner_${d.id || Date.now()}`,
-            title: '📝 Nova Autorização Especial do Dia',
+            title: d.isTest ? '🔔 Teste: Autorização Especial' : '📝 Nova Autorização Especial do Dia',
             body: `${studentName}${studentClass} liberado(a) para ${authorizedPerson}${targetTime}.`,
             data: {
               targetUrl: '/saida-alunos/chamadas',
@@ -635,8 +647,24 @@ export function GlobalNotificationProvider() {
       } catch (err) {
         console.warn('[GlobalPush] Erro ao processar SPECIAL_AUTH_NOTIFY:', err)
       }
+    }
+
+    // 3a. Listener local (mesma máquina / abas locais)
+    const unsubLocal = onRealtime('SPECIAL_AUTH_NOTIFY', (payload: any) => {
+      handleSpecialAuthPayload(payload?.data)
     })
-    return () => { unsub() }
+
+    // 3b. Listener Supabase Realtime multi-dispositivos (rede de computadores e smartphones)
+    const realtimeChannel = supabase.channel('saida_calls_shared_room_global_listener')
+      .on('broadcast', { event: 'SPECIAL_AUTH_NOTIFY' }, (ev: any) => {
+        handleSpecialAuthPayload(ev.payload?.data || ev.payload)
+      })
+      .subscribe()
+
+    return () => {
+      unsubLocal()
+      supabase.removeChannel(realtimeChannel)
+    }
   }, [onRealtime, showForegroundPushBanner])
 
   return (

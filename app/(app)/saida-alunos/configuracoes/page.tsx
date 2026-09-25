@@ -594,6 +594,51 @@ function TabNotificacoes() {
   const [testing, setTesting] = useState(false)
   const [testSuccessMessage, setTestSuccessMessage] = useState<string | null>(null)
   const [showSuccessModal, setShowSuccessModal] = useState(false)
+  const [deviceStatusMap, setDeviceStatusMap] = useState<Record<string, { hasActiveDevice: boolean; deviceCount: number; devices: Array<{ type: string; id: string }> }>>({})
+  const [browserPermission, setBrowserPermission] = useState<string>('default')
+  const [testResultDetails, setTestResultDetails] = useState<any>(null)
+
+  // Checar permissão de notificação do navegador local
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      setBrowserPermission(Notification.permission)
+    } else {
+      setBrowserPermission('unsupported')
+    }
+  }, [])
+
+  // Buscar status de aparelhos no OneSignal para colaboradores
+  const fetchDeviceStatuses = async () => {
+    try {
+      const res = await fetch('/api/saida/notificar-autorizacao')
+      if (res.ok) {
+        const json = await res.json()
+        if (json.status) {
+          setDeviceStatusMap(json.status)
+        }
+      }
+    } catch {}
+  }
+
+  useEffect(() => {
+    fetchDeviceStatuses()
+  }, [])
+
+  // Solicitar permissão de push no navegador diretamente
+  const handleRequestBrowserPermission = async () => {
+    try {
+      const { notificationService } = await import('@/lib/notifications/notificationService')
+      const granted = await notificationService.requestNotificationPermission()
+      if (typeof window !== 'undefined' && 'Notification' in window) {
+        setBrowserPermission(Notification.permission)
+      }
+      if (granted) {
+        fetchDeviceStatuses()
+      }
+    } catch (e) {
+      console.warn('Erro ao solicitar permissão no navegador:', e)
+    }
+  }
 
   // 1. Carregar lista de colaboradores cadastrados no sistema
   useEffect(() => {
@@ -701,6 +746,7 @@ function TabNotificacoes() {
 
     setTesting(true)
     setTestSuccessMessage(null)
+    setTestResultDetails(null)
     try {
       const res = await fetch('/api/saida/notificar-autorizacao', {
         method: 'POST',
@@ -711,8 +757,13 @@ function TabNotificacoes() {
       if (!res.ok || !json.ok) {
         throw new Error(json.error || 'Falha ao disparar o teste')
       }
-      setTestSuccessMessage(`Teste disparado com sucesso para ${json.notifiedCount || selectedIds.length} colaborador(es)!`)
-      setTimeout(() => setTestSuccessMessage(null), 5000)
+      setTestResultDetails(json)
+      const reachedCount = json.directDevicesReached ?? 0
+      setTestSuccessMessage(
+        `Teste disparado com sucesso! ${json.notifiedCount || selectedIds.length} colaborador(es) selecionado(s)${reachedCount > 0 ? ` (${reachedCount} aparelho(s) ativo(s) alcançado(s) com push direto)` : ''}.`
+      )
+      fetchDeviceStatuses()
+      setTimeout(() => setTestSuccessMessage(null), 8000)
     } catch (err: any) {
       console.error('[TabNotificacoes] Erro no teste:', err)
       alert(`Erro no teste: ${err.message}`)
@@ -885,7 +936,33 @@ function TabNotificacoes() {
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, alignSelf: isMobile ? 'stretch' : 'center' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, alignSelf: isMobile ? 'stretch' : 'center', flexWrap: 'wrap' }}>
+          <a
+            href="/diagnostico-push"
+            target="_blank"
+            rel="noopener noreferrer"
+            title="Diagnóstico detalhado dos aparelhos celulares e OneSignal"
+            style={{
+              padding: '9px 12px',
+              borderRadius: 12,
+              background: 'hsl(var(--bg-overlay))',
+              border: '1px solid hsl(var(--border-subtle))',
+              color: 'hsl(var(--text-secondary))',
+              fontSize: 12,
+              fontWeight: 600,
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              textDecoration: 'none',
+              transition: 'all 0.2s',
+              whiteSpace: 'nowrap'
+            }}
+          >
+            <Smartphone size={13} />
+            Diagnóstico Push
+          </a>
+
           <button
             onClick={handleTestNotification}
             disabled={testing || selectedUserIds.length === 0}
@@ -937,6 +1014,52 @@ function TabNotificacoes() {
         </div>
       </div>
 
+      {/* Banner para Ativar Notificações no Navegador deste Computador */}
+      {browserPermission === 'default' && (
+        <div style={{
+          padding: '12px 18px',
+          borderRadius: 14,
+          background: 'linear-gradient(135deg, rgba(6,182,212,0.12), rgba(99,102,241,0.08))',
+          border: '1px solid rgba(6,182,212,0.35)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 12,
+          flexWrap: 'wrap'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: 20 }}>🔔</span>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 800, color: 'hsl(var(--text-primary))' }}>
+                Ativar Notificações neste Navegador
+              </div>
+              <div style={{ fontSize: 11, color: 'hsl(var(--text-secondary))' }}>
+                Receba alertas sonoros e visuais na tela deste computador sempre que uma autorização especial for cadastrada.
+              </div>
+            </div>
+          </div>
+          <button
+            onClick={handleRequestBrowserPermission}
+            style={{
+              padding: '8px 16px',
+              borderRadius: 10,
+              fontSize: 12,
+              fontWeight: 800,
+              background: '#06b6d4',
+              color: '#fff',
+              border: 'none',
+              cursor: 'pointer',
+              boxShadow: '0 2px 10px rgba(6,182,212,0.3)',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6
+            }}
+          >
+            <Sparkles size={14} /> Ativar Notificações no PC
+          </button>
+        </div>
+      )}
+
       {/* Mensagem de sucesso do teste */}
       {testSuccessMessage && (
         <div style={{
@@ -948,12 +1071,19 @@ function TabNotificacoes() {
           fontSize: 13,
           fontWeight: 700,
           display: 'flex',
-          alignItems: 'center',
-          gap: 10,
+          flexDirection: 'column',
+          gap: 6,
           animation: 'modalFadeIn 0.3s forwards'
         }}>
-          <CheckCircle2 size={16} />
-          {testSuccessMessage}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <CheckCircle2 size={16} />
+            <span>{testSuccessMessage}</span>
+          </div>
+          {testResultDetails?.deviceBreakdown && Object.keys(testResultDetails.deviceBreakdown).length > 0 && (
+            <div style={{ fontSize: 11, color: 'hsl(var(--text-secondary))', paddingLeft: 26 }}>
+              Aparelhos ativos confirmados: {Object.entries(testResultDetails.deviceBreakdown).map(([name, devs]: any) => `${name} (${devs.join(', ')})`).join(' • ')}
+            </div>
+          )}
         </div>
       )}
 
@@ -1301,20 +1431,75 @@ function TabNotificacoes() {
                     }}>
                       {colab.email}
                     </div>
-                    <span style={{
-                      fontSize: 9,
-                      padding: '2px 7px',
-                      borderRadius: 6,
-                      fontWeight: 800,
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.04em',
-                      background: badgeStyle.bg,
-                      color: badgeStyle.color,
-                      border: `1px solid ${badgeStyle.border}`,
-                      display: 'inline-block'
-                    }}>
-                      {colab.cargo || colab.perfil || 'Colaborador'}
-                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                      <span style={{
+                        fontSize: 9,
+                        padding: '2px 7px',
+                        borderRadius: 6,
+                        fontWeight: 800,
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.04em',
+                        background: badgeStyle.bg,
+                        color: badgeStyle.color,
+                        border: `1px solid ${badgeStyle.border}`,
+                        display: 'inline-block'
+                      }}>
+                        {colab.cargo || colab.perfil || 'Colaborador'}
+                      </span>
+                      {(() => {
+                        const devStatus = deviceStatusMap[colab.id] || (colab.auth_id ? deviceStatusMap[colab.auth_id] : null)
+                        if (!devStatus) return null
+                        if (devStatus.hasActiveDevice) {
+                          const deviceTypes = Array.from(new Set(devStatus.devices.map(d => d.type.replace('Push', ''))))
+                          return (
+                            <div style={{ display: 'inline-flex', gap: 4, flexWrap: 'wrap', alignItems: 'center' }}>
+                              {deviceTypes.map(t => {
+                                const isMob = t.toLowerCase().includes('ios') || t.toLowerCase().includes('android')
+                                return (
+                                  <span
+                                    key={t}
+                                    title="Aparelho conectado e pronto para receber notificações push"
+                                    style={{
+                                      fontSize: 9,
+                                      padding: '2px 6px',
+                                      borderRadius: 6,
+                                      fontWeight: 800,
+                                      background: isMob ? 'rgba(16, 185, 129, 0.12)' : 'rgba(6, 182, 212, 0.12)',
+                                      color: isMob ? '#10b981' : '#06b6d4',
+                                      border: `1px solid ${isMob ? 'rgba(16, 185, 129, 0.28)' : 'rgba(6, 182, 212, 0.28)'}`,
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: 3
+                                    }}
+                                  >
+                                    {isMob ? '📱' : '💻'} {t} Ativo
+                                  </span>
+                                )
+                              })}
+                            </div>
+                          )
+                        }
+                        return (
+                          <span
+                            title="Nenhum aparelho com sessão ativa no momento"
+                            style={{
+                              fontSize: 9,
+                              padding: '2px 6px',
+                              borderRadius: 6,
+                              fontWeight: 700,
+                              background: 'rgba(245, 158, 11, 0.08)',
+                              color: '#f59e0b',
+                              border: '1px solid rgba(245, 158, 11, 0.2)',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 3
+                            }}
+                          >
+                            ⚠️ Sem aparelho
+                          </span>
+                        )
+                      })()}
+                    </div>
                   </div>
 
                   {/* Switch iOS Style */}

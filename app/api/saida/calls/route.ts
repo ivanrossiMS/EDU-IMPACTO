@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/server/authGuard'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
+import { resolveCollaboratorUsers } from '@/lib/server/collaboratorLookup'
 
 export const dynamic = 'force-dynamic'
 
@@ -750,14 +751,11 @@ async function dispatchSpecialAuthNotification({
       return
     }
 
-    // 2. Fetch collaborator users from system_users
-    const { data: targetUsers, error: usersErr } = await supabaseService
-      .from('system_users')
-      .select('id, auth_id, nome, email, perfil, cargo')
-      .in('id', targetUserIds)
+    // 2. Fetch collaborator users safely (avoiding PostgreSQL 22P02 UUID cast errors)
+    const effectiveUsers = await resolveCollaboratorUsers(supabaseService, targetUserIds)
 
-    if (usersErr || !targetUsers || targetUsers.length === 0) {
-      console.warn('[API Saida] Colaboradores configurados não encontrados na system_users:', targetUserIds)
+    if (effectiveUsers.length === 0) {
+      console.warn('[API Saida] Colaboradores configurados não encontrados no banco de dados:', targetUserIds)
       return
     }
 
@@ -766,17 +764,47 @@ async function dispatchSpecialAuthNotification({
     const nomeAmigavel = formatFriendlyStudentName(rawNomeAluno)
     const horaStr = targetTime && targetTime !== 'Indefinido' ? ` às ${targetTime}` : ''
 
+    const pushTargets = new Set<string>()
+    effectiveUsers.forEach(u => {
+      if (u.id) pushTargets.add(String(u.id))
+      if (u.auth_id) pushTargets.add(String(u.auth_id))
+      if (u.email) pushTargets.add(String(u.email).toLowerCase().trim())
+    })
+
     // 3. Dispatch OneSignal Mobile Push Notification if enabled
     const pushEnabled = configDados.specialAuthNotifyPush !== false
     if (pushEnabled) {
       const { sendAgendaPushNotification } = await import('@/lib/server/agendaNotifications')
-      
-      const pushTargets = new Set<string>()
-      targetUsers.forEach(u => {
-        if (u.id) pushTargets.add(String(u.id))
-        if (u.auth_id) pushTargets.add(String(u.auth_id))
-        if (u.email) pushTargets.add(String(u.email).toLowerCase().trim())
-      })
+
+      // Resolver subscriptions físicas diretas no OneSignal em paralelo
+      const appId = process.env.ONESIGNAL_APP_ID || process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID || ''
+      const apiKey = process.env.ONESIGNAL_REST_API_KEY || ''
+      const directSubIds: string[] = []
+
+      if (appId && apiKey) {
+        const subQueries = effectiveUsers.map(async u => {
+          const idCandidates = [u.id, u.auth_id, u.email].filter(Boolean).map(String)
+          for (const ident of idCandidates) {
+            try {
+              const res = await fetch(`https://onesignal.com/api/v1/apps/${appId}/users/by/external_id/${encodeURIComponent(ident)}`, {
+                headers: { Authorization: `Basic ${apiKey}` },
+                cache: 'no-store'
+              })
+              if (res.ok) {
+                const data = await res.json()
+                const subs = Array.isArray(data.subscriptions) ? data.subscriptions : []
+                for (const s of subs) {
+                  if (s.id && s.enabled !== false && s.notification_types !== -99) {
+                    directSubIds.push(s.id)
+                  }
+                }
+                if (subs.length > 0) break
+              }
+            } catch {}
+          }
+        })
+        await Promise.allSettled(subQueries)
+      }
 
       const pushItemId = `special_auth_${callId}_${Date.now()}`
       await sendAgendaPushNotification({
@@ -785,6 +813,7 @@ async function dispatchSpecialAuthNotification({
         title: '📝 Autorização Especial: Saída Liberada',
         message: `${nomeAmigavel}${studentClass ? ` (${studentClass})` : ''} liberado(a) para retirada por ${authorizedPerson || 'Pessoa Autorizada'}${horaStr}.`,
         targetUserIds: Array.from(pushTargets),
+        targetSubscriptionIds: directSubIds.length > 0 ? Array.from(new Set(directSubIds)) : undefined,
         targetUrl: '/saida-alunos/chamadas',
         metadata: {
           tipo: 'autorizacao_especial',
@@ -794,7 +823,31 @@ async function dispatchSpecialAuthNotification({
           targetUrl: '/saida-alunos/chamadas'
         }
       })
-      console.log(`[API Saida] Push de Autorização Especial enviado para ${targetUsers.length} colaboradores:`, targetUsers.map(u => u.nome))
+      console.log(`[API Saida] Push de Autorização Especial enviado para ${effectiveUsers.length} colaboradores (${directSubIds.length} aparelhos diretos):`, effectiveUsers.map(u => u.nome))
+    }
+
+    // 4. Emitir broadcast Realtime via Supabase para todas as instâncias conectadas
+    try {
+      const channel = supabaseService.channel('saida_calls_shared_room')
+      await channel.send({
+        type: 'broadcast',
+        event: 'SPECIAL_AUTH_NOTIFY',
+        payload: {
+          data: {
+            id: callId,
+            studentName: studentName || 'Aluno',
+            studentClass: studentClass || '',
+            authorizedPerson: authorizedPerson || 'Pessoa Autorizada',
+            targetTime: targetTime || '',
+            studentPhoto: studentPhoto || null,
+            targetUserIds: Array.from(pushTargets),
+            isTest: false
+          }
+        }
+      })
+      await supabaseService.removeChannel(channel)
+    } catch (realtimeErr) {
+      console.warn('[API Saida] Falha no broadcast Realtime de Autorização Especial:', realtimeErr)
     }
   } catch (err: any) {
     console.error('[API Saida] Erro ao disparar notificação de Autorização Especial:', err.message)

@@ -128,21 +128,22 @@ async function attemptSend(
       }
     }
 
-    // Auto-recuperação: se o OneSignal rejeitar porque o android_channel_id não existe no dashboard,
-    // reenvia imediatamente sem o canal para garantir 100% de entrega a todos os aparelhos
+    // Auto-recuperação: se o OneSignal rejeitar porque o android_channel_id ou existing_android_channel_id
+    // não existe no dashboard/aparelho, reenvia imediatamente sem o canal para garantir 100% de entrega a todos os aparelhos
     const isChannelError =
       response.status === 400 &&
-      Boolean(payload.android_channel_id) &&
+      (Boolean(payload.android_channel_id) || Boolean(payload.existing_android_channel_id)) &&
       (
-        (Array.isArray(parsedBody.errors) && parsedBody.errors.some((e: any) => typeof e === 'string' && e.includes('android_channel_id'))) ||
-        (typeof parsedBody.errors === 'string' && parsedBody.errors.includes('android_channel_id')) ||
-        (typeof responseBody === 'string' && responseBody.includes('android_channel_id'))
+        (Array.isArray(parsedBody.errors) && parsedBody.errors.some((e: any) => typeof e === 'string' && (e.includes('android_channel_id') || e.includes('channel')))) ||
+        (typeof parsedBody.errors === 'string' && (parsedBody.errors.includes('android_channel_id') || parsedBody.errors.includes('channel'))) ||
+        (typeof responseBody === 'string' && (responseBody.includes('android_channel_id') || responseBody.includes('channel')))
       )
 
     if (isChannelError) {
-      console.warn(`⚠️ [PushService] OneSignal rejeitou android_channel_id '${payload.android_channel_id}'. Reenviando automaticamente sem o canal para garantir a entrega aos dispositivos...`)
+      console.warn(`⚠️ [PushService] OneSignal rejeitou canal android. Reenviando automaticamente sem canal para garantir a entrega aos dispositivos...`)
       const payloadWithoutChannel = { ...payload }
       delete payloadWithoutChannel.android_channel_id
+      delete payloadWithoutChannel.existing_android_channel_id
       return attemptSend(payloadWithoutChannel, apiKey, attempt)
     }
 
@@ -293,25 +294,33 @@ export async function sendPushNotification(params: PushPayload): Promise<PushRes
     ios_badgeType: 'Increase',
     ios_badgeCount: 1,
     android_sound: 'default',
-    android_channel_id: process.env.ONESIGNAL_ANDROID_CHANNEL_ID?.trim() || 'impacto_edu_default',
+    existing_android_channel_id: process.env.ONESIGNAL_ANDROID_CHANNEL_ID?.trim() || 'impacto_edu_default',
+    ...(process.env.ONESIGNAL_DASHBOARD_CHANNEL_ID ? { android_channel_id: process.env.ONESIGNAL_DASHBOARD_CHANNEL_ID.trim() } : {}),
     android_accent_color: 'FF4F46E5',
     android_visibility: 1,
     ttl: 86400,
   }
 
-  // ── Envio Direto por Subscription ID (para diagnóstico e teste físico do aparelho) ──
-  if (params.targetSubscriptionIds && params.targetSubscriptionIds.length > 0) {
-    const validSubIds = params.targetSubscriptionIds
-      .filter(id => id && typeof id === 'string' && id.trim().length > 0)
-      .map(id => id.trim())
-    if (validSubIds.length > 0) {
-      console.log(`🎯 [PushService] Envio direcionado a ${validSubIds.length} Subscription ID(s) específico(s):`, validSubIds)
-      const directSubPayload: Record<string, any> = {
-        ...commonFields,
-        include_subscription_ids: validSubIds,
-        include_player_ids: validSubIds,
-      }
-      return await attemptSend(directSubPayload, ONESIGNAL_REST_API_KEY)
+  // ── Envio Direto por Subscription ID (para garantia física de entrega aos aparelhos) ──
+  let directSubResult: PushResult | null = null
+  const validSubIds = (params.targetSubscriptionIds || [])
+    .filter(id => id && typeof id === 'string' && id.trim().length > 0)
+    .map(id => id.trim())
+
+  if (validSubIds.length > 0) {
+    console.log(`🎯 [PushService] Envio direcionado a ${validSubIds.length} Subscription ID(s) específico(s):`, validSubIds)
+    const directSubPayload: Record<string, any> = {
+      ...commonFields,
+      include_subscription_ids: validSubIds,
+    }
+    directSubResult = await attemptSend(directSubPayload, ONESIGNAL_REST_API_KEY)
+    if (!directSubResult.success && directSubResult.statusCode === 400) {
+      console.warn(`⚠️ [PushService] Tentando fallback para include_player_ids...`)
+      const playerPayload = { ...commonFields, include_player_ids: validSubIds }
+      directSubResult = await attemptSend(playerPayload, ONESIGNAL_REST_API_KEY)
+    }
+    if (uniqueTargetUserIds.length === 0) {
+      return directSubResult
     }
   }
 
@@ -430,8 +439,13 @@ export async function sendPushNotification(params: PushPayload): Promise<PushRes
     }
   }
 
+  if (directSubResult?.success && (directSubResult.recipients ?? 0) > 0) {
+    console.log(`✅ [PushService] Envio direto por Subscription ID entregou com sucesso para ${directSubResult.recipients} dispositivo(s).`)
+    return directSubResult
+  }
+
   // Retornar o resultado com o erro mais informativo
-  return resultExternalId.error ? resultExternalId : resultLegacy
+  return resultExternalId.error ? resultExternalId : (directSubResult || resultLegacy)
 }
 
 /**

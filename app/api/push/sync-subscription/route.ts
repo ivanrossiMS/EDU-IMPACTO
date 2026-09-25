@@ -102,7 +102,7 @@ export async function POST(request: NextRequest) {
     if (email) aliases['email'] = String(email).toLowerCase().trim()
 
     // 2a. PATCH na identidade do usuário OneSignal pelo external_id
-    const identityRes = await fetch(
+    let identityRes = await fetch(
       `https://onesignal.com/api/v1/apps/${appId}/users/by/external_id/${encodeURIComponent(cleanUserId)}/identity`,
       {
         method: 'PATCH',
@@ -112,19 +112,53 @@ export async function POST(request: NextRequest) {
         },
         body: JSON.stringify({
           identity: aliases,
-          properties: { tags: tagPayload },
         }),
       }
     )
     identityData = await identityRes.json().catch(() => ({}))
 
-    // 2b. Se precisou de re-vínculo, faz também PATCH na subscrição diretamente
-    let subscriptionPatchData: any = {}
-    if (needsForceRelink) {
-      console.log(`🔗 [Push Sync] Player sem external_user_id detectado. Forçando re-vínculo via Subscription API...`)
+    // Se houver conflito de aliases (409 - One or more Aliases claimed by another User):
+    if (identityRes.status === 409 && Array.isArray(identityData?.errors)) {
+      console.warn(`⚠️ [Push Sync] Conflito de aliases no OneSignal detectado (409). Auto-recuperando...`, identityData.errors)
+      for (const err of identityData.errors) {
+        if (err.meta && typeof err.meta === 'object') {
+          for (const [conflictLabel, conflictVal] of Object.entries(err.meta)) {
+            try {
+              const holderRes = await fetch(
+                `https://onesignal.com/api/v1/apps/${appId}/users/by/${encodeURIComponent(conflictLabel)}/${encodeURIComponent(String(conflictVal))}`,
+                { headers: { Authorization: authHeader } }
+              )
+              if (holderRes.ok) {
+                const holderData = await holderRes.json()
+                const holderExtId = holderData.identity?.external_id
+                if (holderExtId && holderExtId !== cleanUserId) {
+                  const hasActiveSubs = Array.isArray(holderData.subscriptions) && holderData.subscriptions.some((s: any) => s.enabled !== false && s.notification_types !== -99)
+                  if (!hasActiveSubs || !holderData.subscriptions || holderData.subscriptions.length === 0) {
+                    console.log(`🧹 [Push Sync] Deletando usuário órfão que segurava alias ${conflictLabel}=${conflictVal} (ext_id: ${holderExtId})...`)
+                    await fetch(`https://onesignal.com/api/v1/apps/${appId}/users/by/external_id/${encodeURIComponent(holderExtId)}`, {
+                      method: 'DELETE',
+                      headers: { Authorization: authHeader }
+                    })
+                  } else {
+                    console.log(`✂️ [Push Sync] Removendo alias conflitante ${conflictLabel} do usuário anterior ${holderExtId}...`)
+                    await fetch(`https://onesignal.com/api/v1/apps/${appId}/users/by/external_id/${encodeURIComponent(holderExtId)}/identity/${encodeURIComponent(conflictLabel)}`, {
+                      method: 'DELETE',
+                      headers: { Authorization: authHeader }
+                    })
+                  }
+                }
+              }
+            } catch (cleanupErr: any) {
+              console.warn(`[Push Sync] Falha ao liberar alias ${conflictLabel}:`, cleanupErr?.message)
+            }
+          }
+        }
+      }
+
+      // Re-tentar o PATCH após a liberação dos aliases órfãos
       try {
-        const subPatchRes = await fetch(
-          `https://onesignal.com/api/v1/apps/${appId}/users/by/subscriptions/${cleanSubId}/identity`,
+        identityRes = await fetch(
+          `https://onesignal.com/api/v1/apps/${appId}/users/by/external_id/${encodeURIComponent(cleanUserId)}/identity`,
           {
             method: 'PATCH',
             headers: {
@@ -134,11 +168,44 @@ export async function POST(request: NextRequest) {
             body: JSON.stringify({ identity: aliases }),
           }
         )
-        subscriptionPatchData = await subPatchRes.json().catch(() => ({}))
-        console.log(`✅ [Push Sync] Re-vínculo via Subscription API concluído:`, subPatchRes.status)
-      } catch (subPatchErr: any) {
-        console.warn('[Push Sync] Falha no PATCH por subscrição (não crítico):', subPatchErr?.message)
-      }
+        identityData = await identityRes.json().catch(() => ({}))
+        console.log(`✅ [Push Sync] Re-tentativa de vínculo pós-resolução de conflito:`, identityRes.status)
+      } catch {}
+    }
+
+    // 2b. Sempre vincular a subscrição ao usuário via Subscription Owner API e Users Subscriptions API (OneSignal v5)
+    let subscriptionPatchData: any = {}
+    try {
+      // 1. PATCH /subscriptions/{sub_id}/owner transfere ou vincula a subscrição diretamente ao external_id
+      const subPatchRes = await fetch(
+        `https://onesignal.com/api/v1/apps/${appId}/subscriptions/${cleanSubId}/owner`,
+        {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: authHeader,
+          },
+          body: JSON.stringify({ identity: { external_id: cleanUserId } }),
+        }
+      )
+      subscriptionPatchData = await subPatchRes.json().catch(() => ({}))
+
+      // 2. Adicionalmente associa a subscrição ao usuário via POST /users/by/external_id/{id}/subscriptions
+      await fetch(
+        `https://onesignal.com/api/v1/apps/${appId}/users/by/external_id/${encodeURIComponent(cleanUserId)}/subscriptions`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: authHeader,
+          },
+          body: JSON.stringify({ subscription: { id: cleanSubId } }),
+        }
+      ).catch(() => {})
+
+      console.log(`✅ [Push Sync] Vínculo via Subscription Owner API concluído:`, subPatchRes.status)
+    } catch (subPatchErr: any) {
+      console.warn('[Push Sync] Falha no PATCH por subscrição (não crítico):', subPatchErr?.message)
     }
 
     console.log(`✅ [Push Sync Subscription] Aparelho ${cleanSubId} associado ao usuário ${cleanUserId}`, {

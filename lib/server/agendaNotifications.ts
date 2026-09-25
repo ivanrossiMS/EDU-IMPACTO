@@ -33,6 +33,8 @@ interface SendAgendaPushParams {
   targetUrl: string
   /** IDs externos dos usuários (responsáveis/colaboradores) no banco de dados */
   targetUserIds: string[]
+  /** Subscription IDs diretos (Player IDs do OneSignal) para garantia física de entrega */
+  targetSubscriptionIds?: string[]
   senderUserId?: string
   metadata?: Record<string, any>
   /** ISO string para agendamento: "2024-01-01 20:00:00 GMT-0300" */
@@ -144,6 +146,7 @@ export async function sendAgendaPushNotification({
   message,
   targetUrl,
   targetUserIds,
+  targetSubscriptionIds,
   senderUserId,
   metadata,
   sendAfter,
@@ -264,6 +267,7 @@ export async function sendAgendaPushNotification({
       title,
       body: message,
       targetUserIds: cleanTargetIds,
+      targetSubscriptionIds,
       url: fullUrl,
       data: {
         type,
