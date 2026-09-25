@@ -49,10 +49,51 @@ export interface PickupCall {
   status: CallStatus
   source: CallSource
   isRevert?: boolean
-  // Access control fields
   blockReason?: string       // human-readable reason when status === 'blocked'
   blockType?: 'proibido' | 'dia_restrito'  // machine-readable block type
   targetTime?: string | null // Horário previsto para retirada ou "Indefinido"
+  tipo?: string
+  origem?: string
+  dispositivoNome?: string
+  horaSaida?: string
+}
+
+export function isSaiuSozinhoCall(call: any): boolean {
+  if (!call) return false
+  const gName = (call.guardianName || '').toLowerCase().trim()
+  const gId = (call.guardianId || '').toLowerCase().trim()
+  const tipo = (call.tipo || '').toLowerCase().trim()
+  const origem = (call.origem || '').toLowerCase().trim()
+  const source = (call.source || '').toLowerCase().trim()
+  const dispNome = (call.dispositivoNome || '').toLowerCase().trim()
+
+  // 1. Marcados como saiu sozinho
+  if (
+    gId === 'sozinho' ||
+    gId === 'solo' ||
+    tipo === 'sozinho' ||
+    gName === 'saiu sozinho' ||
+    gName.startsWith('saiu sozinho') ||
+    gName.includes('sozinho')
+  ) {
+    return true
+  }
+
+  // 2. Passaram pela catraca de saída
+  if (
+    gId === 'catraca-saida' ||
+    gId === 'catraca' ||
+    origem === 'catraca_idface' ||
+    origem === 'catraca' ||
+    source === 'catraca' ||
+    dispNome.includes('saida') ||
+    dispNome.includes('catraca') ||
+    gName.includes('catraca')
+  ) {
+    return true
+  }
+
+  return false
 }
 
 export interface SaidaLog {
@@ -916,11 +957,13 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
         guardianId: 'sozinho',
         guardianName: 'Saiu Sozinho',
         status: 'confirmed' as const,
+        tipo: 'sozinho',
+        origem: 'manual',
         confirmedAt: currentNow
       }))
       const primaryUpdated = updatedCalls.find(c => c.id === existingWaiting.id) || updatedCalls[0]
 
-      setActiveCallsLocal?.(prev => (prev || []).map(c => (c.studentId != null && String(c.studentId) === sIdStr && c.status !== 'cancelled' && c.status !== 'special_auth') ? { ...c, guardianId: 'sozinho', guardianName: 'Saiu Sozinho', status: 'confirmed', confirmedAt: currentNow } : c))
+      setActiveCallsLocal?.(prev => (prev || []).map(c => (c.studentId != null && String(c.studentId) === sIdStr && c.status !== 'cancelled' && c.status !== 'special_auth') ? { ...c, guardianId: 'sozinho', guardianName: 'Saiu Sozinho', status: 'confirmed', tipo: 'sozinho', origem: 'manual', confirmedAt: currentNow } : c))
       updatedCalls.forEach(uCall => persistSingleCall(uCall))
       emit('CONFIRM_PICKUP', { callId: existingWaiting.id, studentId: sIdStr, confirmedAt: currentNow, _remote: false })
       sendBroadcast('CONFIRM_PICKUP', { callId: existingWaiting.id, studentId: sIdStr, confirmedAt: currentNow })
@@ -948,6 +991,8 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
       calledAt: currentNow,
       confirmedAt: currentNow,
       status: 'confirmed',
+      tipo: 'sozinho',
+      origem: 'manual',
       source: 'manual',
     }
 

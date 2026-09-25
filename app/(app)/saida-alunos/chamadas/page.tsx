@@ -20,7 +20,7 @@ const getInitials = (name: string) => {
 }
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
-import { SaidaProvider, useSaida, PickupCall } from '@/lib/saidaContext'
+import { SaidaProvider, useSaida, PickupCall, isSaiuSozinhoCall } from '@/lib/saidaContext'
 import { useBroadcastRealtime } from '@/lib/hooks/useBroadcastRealtime'
 import { useData } from '@/lib/dataContext'
 import { useIsMobile } from '@/lib/hooks/useIsMobile'
@@ -31,14 +31,23 @@ import {
   Users, Sparkles, AlertCircle
 } from 'lucide-react'
 
-type FilterType = 'all' | 'waiting' | 'confirmed' | 'cancelled' | 'blocked'
+type FilterType = 'all' | 'waiting' | 'confirmed' | 'saiu_sozinho' | 'cancelled' | 'blocked'
 
 // ── Helper ────────────────────────────────────────────────────────────────────
 function statusMeta(call: PickupCall) {
   if (call.status === 'waiting' || call.status === 'called')
     return { color: '#f59e0b', label: 'AGUARDANDO' }
-  if (call.status === 'confirmed')
+  if (call.status === 'confirmed') {
+    const isSolo = isSaiuSozinhoCall(call)
+    if (isSolo) {
+      const isCatraca = (call.guardianId === 'catraca-saida' || (call as any).origem === 'catraca_idface' || (call.guardianName || '').toLowerCase().includes('catraca'))
+      return {
+        color: '#06b6d4',
+        label: isCatraca ? 'CATRACA SAÍDA' : 'SAIU SOZINHO'
+      }
+    }
     return { color: '#10b981', label: 'CONFIRMADO'  }
+  }
   if (call.status === 'blocked')
     return {
       color: call.blockType === 'dia_restrito' ? '#f97316' : '#ef4444',
@@ -129,6 +138,8 @@ const CallCard = React.memo(function CallCard({ call, onConfirm, onCancel, onRec
   const isActive   = call.status === 'waiting' || call.status === 'called'
   const isFinished = call.status === 'confirmed' || call.status === 'cancelled'
   const isBlocked  = call.status === 'blocked'
+  const isSolo     = isSaiuSozinhoCall(call)
+  const isCatraca  = isSolo && (call.guardianId === 'catraca-saida' || (call as any).origem === 'catraca_idface' || (call.guardianName || '').toLowerCase().includes('catraca'))
   
   const urgentLimit = (config?.tvUrgentTime ?? 5) * 60
   const urgent = isActive && secs > urgentLimit
@@ -209,6 +220,7 @@ const CallCard = React.memo(function CallCard({ call, onConfirm, onCancel, onRec
           zIndex: 10,
         }}>
           {isActive ? <Clock size={9} className={urgent ? 'tv-pulse-icon' : ''} /> : 
+           isSolo ? <span style={{ fontSize: 9 }}>🚶‍♂️</span> :
            call.status === 'confirmed' ? <CheckCircle2 size={9} /> : <X size={9} />}
           {urgent ? 'ATRASADO' : meta.label}
         </div>
@@ -269,12 +281,12 @@ const CallCard = React.memo(function CallCard({ call, onConfirm, onCancel, onRec
           {/* Left: Guardian */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1, minWidth: 0, paddingRight: 6 }}>
             <span style={{ fontSize: 8, color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              Responsável
+              {isSolo ? (isCatraca ? 'Catraca de Saída' : 'Saída Autônoma') : 'Responsável'}
             </span>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#f8fafc', fontSize: 10, fontWeight: 800, textTransform: 'uppercase' }}>
-              <UserCheck size={10} color="#cbd5e1" style={{ flexShrink: 0 }} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: isSolo ? '#38bdf8' : '#f8fafc', fontSize: 10, fontWeight: 800, textTransform: 'uppercase' }}>
+              {isSolo ? <span style={{ fontSize: 10 }}>🚶‍♂️</span> : <UserCheck size={10} color="#cbd5e1" style={{ flexShrink: 0 }} />}
               <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {call.guardianName || 'Não Informado'}
+                {call.guardianName || (isSolo ? 'Saiu Sozinho' : 'Não Informado')}
               </span>
             </div>
             {call.targetTime && (
@@ -386,6 +398,8 @@ const CallCard = React.memo(function CallCard({ call, onConfirm, onCancel, onRec
   return prev.call.id === next.call.id &&
          prev.call.status === next.call.status &&
          prev.call.calledAt === next.call.calledAt &&
+         prev.call.confirmedAt === next.call.confirmedAt &&
+         prev.call.guardianName === next.call.guardianName &&
          prev.call.blockType === next.call.blockType
 })
 
@@ -2956,12 +2970,22 @@ function ChamadasContent() {
     activeCalls.filter(c => (c.status === 'waiting' || c.status === 'called') && c.studentId != null && !confirmedStudentIds.has(String(c.studentId))),
     [activeCalls, confirmedStudentIds]
   )
+  const saiuSozinho = useMemo(() => {
+    const list = activeCalls.filter(c => isSaiuSozinhoCall(c) && c.status !== 'cancelled' && c.status !== 'special_auth')
+    const seen = new Set<string>()
+    const dedup: PickupCall[] = []
+    for (const c of list) {
+      const key = (c.studentId ? String(c.studentId).trim() : '') || (c.studentName ? c.studentName.trim().toLowerCase() : c.id)
+      if (!seen.has(key)) {
+        seen.add(key)
+        dedup.push(c)
+      }
+    }
+    return dedup
+  }, [activeCalls])
+
   const cancelled = useMemo(() => 
     activeCalls.filter(c => c.status === 'cancelled'),
-    [activeCalls]
-  )
-  const blocked = useMemo(() => 
-    activeCalls.filter(c => c.status === 'blocked'),
     [activeCalls]
   )
 
@@ -2998,8 +3022,17 @@ function ChamadasContent() {
         return true
       })
     }
+    else if (filter === 'saiu_sozinho') {
+      list = list.filter(c => isSaiuSozinhoCall(c) && c.status !== 'cancelled' && c.status !== 'special_auth')
+      const seen = new Set<string>()
+      list = list.filter(c => {
+        const key = (c.studentId ? String(c.studentId).trim() : '') || (c.studentName ? c.studentName.trim().toLowerCase() : c.id)
+        if (seen.has(key)) return false
+        seen.add(key)
+        return true
+      })
+    }
     else if (filter === 'cancelled') list = list.filter(c => c.status === 'cancelled')
-    else if (filter === 'blocked')   list = list.filter(c => c.status === 'blocked')
     
     if (callSearch.trim()) {
       const q = callSearch.toLowerCase()
@@ -3009,11 +3042,11 @@ function ChamadasContent() {
   }, [activeCalls, filter, callSearch, confirmedStudentIds])
 
   const FILTERS = [
-    { key: 'all'       as FilterType, label: 'Todos',       color: '#818cf8', count: mounted ? allCalls.length : 0 },
-    { key: 'waiting'   as FilterType, label: 'Aguardando',  color: '#f59e0b', count: mounted ? waiting.length    : 0 },
-    { key: 'confirmed' as FilterType, label: 'Confirmados', color: '#10b981', count: mounted ? confirmed.length  : 0 },
-    { key: 'cancelled' as FilterType, label: 'Cancelados',  color: '#94a3b8', count: mounted ? cancelled.length  : 0 },
-    { key: 'blocked'   as FilterType, label: 'Bloqueados',  color: '#ef4444', count: mounted ? blocked.length    : 0 },
+    { key: 'all'          as FilterType, label: 'Todos',        color: '#818cf8', count: mounted ? allCalls.length    : 0 },
+    { key: 'waiting'      as FilterType, label: 'Aguardando',   color: '#f59e0b', count: mounted ? waiting.length     : 0 },
+    { key: 'confirmed'    as FilterType, label: 'Confirmados',  color: '#10b981', count: mounted ? confirmed.length   : 0 },
+    { key: 'saiu_sozinho' as FilterType, label: 'Saiu Sozinho', color: '#06b6d4', count: mounted ? saiuSozinho.length : 0 },
+    { key: 'cancelled'    as FilterType, label: 'Cancelados',   color: '#94a3b8', count: mounted ? cancelled.length   : 0 },
   ]
 
   if (isLoadingCalls) {
@@ -3234,35 +3267,38 @@ function ChamadasContent() {
       </div>
 
       {/* ── FILTERS ─────────────────────────────────────────────────── */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap', alignItems: 'center' }}>
-        <div style={{ fontSize: 11, fontWeight: 800, color: 'hsl(var(--text-muted))', marginRight: 4 }}>HISTÓRICO</div>
-        {FILTERS.map(f => (
-          <button key={f.key} type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); setFilter(f.key); }} style={{
-            padding: '7px 12px', borderRadius: 100, fontSize: isMobile ? 11 : 12, fontWeight: 700,
-            border: `1px solid ${filter === f.key ? f.color : 'hsl(var(--border-subtle))'}`,
-            background: filter === f.key ? `${f.color}12` : 'hsl(var(--bg-elevated))',
-            color: filter === f.key ? f.color : 'hsl(var(--text-muted))',
-            cursor: 'pointer', transition: 'all 0.15s',
-            display: 'flex', alignItems: 'center', gap: 5,
-          }}>
-            {f.label}
-            <span style={{
-              background: filter === f.key ? `${f.color}20` : 'hsl(var(--bg-overlay))',
+      {/* ── FILTERS ROW (ABAS NA ESQUERDA + ZERAR CHAMADAS ALINHADO À DIREITA) ── */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 12,
+        marginBottom: 14,
+        flexWrap: 'wrap',
+      }}>
+        {/* Left: Histórico Label + Tabs */}
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          <div style={{ fontSize: 11, fontWeight: 800, color: 'hsl(var(--text-muted))', marginRight: 4 }}>HISTÓRICO</div>
+          {FILTERS.map(f => (
+            <button key={f.key} type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); setFilter(f.key); }} style={{
+              padding: '7px 12px', borderRadius: 100, fontSize: isMobile ? 11 : 12, fontWeight: 700,
+              border: `1px solid ${filter === f.key ? f.color : 'hsl(var(--border-subtle))'}`,
+              background: filter === f.key ? `${f.color}12` : 'hsl(var(--bg-elevated))',
               color: filter === f.key ? f.color : 'hsl(var(--text-muted))',
-              borderRadius: 100, fontSize: 10, padding: '1px 7px', fontWeight: 900,
-            }}>{f.count}</span>
-          </button>
-        ))}
-        <input
-          value={callSearch} onChange={e => setCallSearch(e.target.value)}
-          placeholder="Filtrar histórico..."
-          style={{
-            marginLeft: 'auto', padding: '8px 16px', borderRadius: 10, fontSize: 12,
-            border: '1px solid hsl(var(--border-subtle))', background: 'hsl(var(--bg-elevated))',
-            color: '#000000', outline: 'none', minWidth: 180,
-          }}
-        />
+              cursor: 'pointer', transition: 'all 0.15s',
+              display: 'flex', alignItems: 'center', gap: 5,
+            }}>
+              {f.label}
+              <span style={{
+                background: filter === f.key ? `${f.color}20` : 'hsl(var(--bg-overlay))',
+                color: filter === f.key ? f.color : 'hsl(var(--text-muted))',
+                borderRadius: 100, fontSize: 10, padding: '1px 7px', fontWeight: 900,
+              }}>{f.count}</span>
+            </button>
+          ))}
+        </div>
 
+        {/* Right: Zerar Chamadas (Na linha das abas, alinhado à direita) */}
         {isAdmin && (
           <button
             type="button"
@@ -3272,10 +3308,12 @@ function ChamadasContent() {
               setConfirmClearAll(true)
             }}
             style={{
+              marginLeft: 'auto',
               padding: '8px 16px', borderRadius: 10, fontSize: 12, fontWeight: 700,
               border: 'none', background: 'rgba(239,68,68,0.1)', color: '#ef4444',
               cursor: 'pointer', transition: 'all 0.15s',
-              display: 'flex', alignItems: 'center', gap: 5,
+              display: 'flex', alignItems: 'center', gap: 6,
+              whiteSpace: 'nowrap',
             }}
             onMouseEnter={e => {
               const el = e.currentTarget as HTMLButtonElement
@@ -3289,6 +3327,41 @@ function ChamadasContent() {
             }}
           >
             <X size={14}/> Zerar Chamadas
+          </button>
+        )}
+      </div>
+
+      {/* ── SEARCH INPUT (FILTRAR HISTÓRICO) ─────────────────────────── */}
+      <div style={{ position: 'relative', marginBottom: 20 }}>
+        <Search size={15} style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: 'hsl(var(--text-muted))', pointerEvents: 'none' }} />
+        <input
+          value={callSearch}
+          onChange={e => setCallSearch(e.target.value)}
+          placeholder="Filtrar histórico..."
+          style={{
+            width: '100%',
+            padding: '10px 16px 10px 38px',
+            borderRadius: 12,
+            fontSize: 13,
+            border: '1px solid hsl(var(--border-subtle))',
+            background: 'hsl(var(--bg-elevated))',
+            color: 'hsl(var(--text-primary))',
+            outline: 'none',
+            boxSizing: 'border-box',
+            transition: 'all 0.2s ease',
+          }}
+        />
+        {callSearch && (
+          <button
+            type="button"
+            onClick={() => setCallSearch('')}
+            style={{
+              position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)',
+              background: 'none', border: 'none', cursor: 'pointer',
+              color: 'hsl(var(--text-muted))', padding: 4, display: 'flex', alignItems: 'center',
+            }}
+          >
+            <X size={14} />
           </button>
         )}
       </div>

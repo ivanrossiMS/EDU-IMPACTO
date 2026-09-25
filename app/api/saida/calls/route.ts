@@ -59,21 +59,39 @@ export async function GET(request: Request) {
       freqQuery = freqQuery.lte('data', todayStr)
     }
 
+    let eventosQuery = supabase
+      .from('portaria_eventos')
+      .select('id, aluno_id, aluno_nome, data_hora, dispositivo_nome, status, tipo')
+      .eq('tipo', 'saida')
+      .eq('status', 'sucesso')
+
+    if (effectiveFrom) {
+      eventosQuery = eventosQuery.gte('data_hora', `${effectiveFrom}T00:00:00-04:00`)
+    }
+    if (effectiveTo) {
+      eventosQuery = eventosQuery.lte('data_hora', `${effectiveTo}T23:59:59.999-04:00`)
+    }
+
     // Executa as consultas ao Supabase em paralelo para reduzir tempo de resposta
-    const [callsRes, freqRes] = await Promise.all([query, freqQuery])
+    const [callsRes, freqRes, eventosRes] = await Promise.all([
+      query,
+      freqQuery,
+      Promise.resolve(eventosQuery).catch(() => ({ data: [] as any[] }))
+    ])
     if (callsRes.error) throw new Error(callsRes.error.message)
     
     const data = callsRes.data
-    const freqRecords = freqRes.data || []
-    let rawResult = (data || []).map(row => ({ id: row.id, ...(row.dados || {}) }))
+    const freqRecords: any[] = freqRes.data || []
+    const exitEvents: any[] = (eventosRes && 'data' in eventosRes && Array.isArray((eventosRes as any).data)) ? (eventosRes as any).data : []
+    let rawResult: any[] = (data || []).map((row: any) => ({ id: row.id, ...(row.dados || {}) }))
 
-    const existingStudentIds = new Set(rawResult.map(c => String(c.studentId || '').trim()))
+    const existingStudentIds = new Set(rawResult.map((c: any) => String(c.studentId || '').trim()))
 
     if (freqRecords && freqRecords.length > 0) {
       const missingStudentIds = freqRecords
-        .filter(f => f.dados && (f.dados.saidaHorario || f.dados.saidaResponsavel))
-        .map(f => String(f.aluno_id).trim())
-        .filter(id => id && !existingStudentIds.has(id))
+        .filter((f: any) => f.dados && (f.dados.saidaHorario || f.dados.saidaResponsavel))
+        .map((f: any) => String(f.aluno_id).trim())
+        .filter((id: string) => id && !existingStudentIds.has(id))
 
       let alunosMap: Record<string, any> = {}
       if (missingStudentIds.length > 0) {
@@ -93,7 +111,10 @@ export async function GET(request: Request) {
         if (!aId) continue
         const sHorario = fRecord.dados?.saidaHorario
         const sResp = fRecord.dados?.saidaResponsavel
+        const sOrigem = fRecord.dados?.saidaOrigem
         if (sHorario || sResp) {
+          const isCatraca = sOrigem === 'catraca' || (sResp && sResp.toLowerCase().includes('catraca'))
+          const isSolo = isCatraca || (sResp && sResp.toLowerCase().includes('sozinho'))
           if (!existingStudentIds.has(aId)) {
             existingStudentIds.add(aId)
             const al = alunosMap[aId]
@@ -104,22 +125,83 @@ export async function GET(request: Request) {
               studentName: al?.nome || aId,
               studentClass: al?.turma || fRecord.turma_id || '',
               studentPhoto: al?.foto || al?.foto_url || null,
-              guardianId: 'frequencia-diario',
-              guardianName: sResp || 'Responsável Cadastrado',
+              guardianId: isCatraca ? 'catraca-saida' : (isSolo ? 'sozinho' : 'frequencia-diario'),
+              guardianName: sResp || (isSolo ? 'Saiu Sozinho' : 'Responsável Cadastrado'),
               calledAt: sHorario || fRecord.created_at || `${recordDate}T12:00:00-04:00`,
               confirmedAt: sHorario || fRecord.created_at || `${recordDate}T12:00:00-04:00`,
               status: 'confirmed',
-              source: 'frequencia'
+              source: isCatraca ? 'catraca' : 'frequencia',
+              tipo: isSolo ? 'sozinho' : undefined,
+              origem: isCatraca ? 'catraca_idface' : (isSolo ? 'manual' : undefined)
             })
+          } else {
+            const existingCall = rawResult.find((c: any) => String(c.studentId || '').trim() === aId)
+            if (existingCall && isSolo) {
+              if (!existingCall.tipo) existingCall.tipo = 'sozinho'
+              if (isCatraca && !existingCall.origem) existingCall.origem = 'catraca_idface'
+            }
+          }
+        }
+      }
+    }
+
+    if (exitEvents && exitEvents.length > 0) {
+      const missingEventStudentIds = exitEvents
+        .map((e: any) => String(e.aluno_id || '').trim())
+        .filter((id: string) => id && !existingStudentIds.has(id))
+
+      let missingAlunosMap: Record<string, any> = {}
+      if (missingEventStudentIds.length > 0) {
+        const { data: dbAlunos } = await supabase
+          .from('alunos')
+          .select('id, nome, turma, foto, foto_url')
+          .in('id', missingEventStudentIds)
+        if (dbAlunos) {
+          dbAlunos.forEach((a: any) => {
+            missingAlunosMap[String(a.id)] = a
+          })
+        }
+      }
+
+      for (const ev of exitEvents) {
+        const aId = String(ev.aluno_id || '').trim()
+        if (!aId) continue
+        const dispNome = ev.dispositivo_nome || 'Catraca de Saída'
+        if (!existingStudentIds.has(aId)) {
+          existingStudentIds.add(aId)
+          const al = missingAlunosMap[aId]
+          const recordDate = ev.data_hora ? ev.data_hora.slice(0, 10) : targetDate
+          rawResult.push({
+            id: `catraca-saida-${aId}-${recordDate}`,
+            studentId: aId,
+            studentName: ev.aluno_nome || al?.nome || aId,
+            studentClass: al?.turma || '',
+            studentPhoto: al?.foto || al?.foto_url || null,
+            guardianId: 'catraca-saida',
+            guardianName: `Saiu Sozinho (${dispNome})`,
+            calledAt: ev.data_hora || `${recordDate}T12:00:00-04:00`,
+            confirmedAt: ev.data_hora || `${recordDate}T12:00:00-04:00`,
+            status: 'confirmed',
+            tipo: 'sozinho',
+            origem: 'catraca_idface',
+            dispositivoNome: dispNome,
+            source: 'catraca'
+          })
+        } else {
+          const existingCall = rawResult.find((c: any) => String(c.studentId || '').trim() === aId)
+          if (existingCall) {
+            existingCall.tipo = 'sozinho'
+            existingCall.origem = 'catraca_idface'
+            if (!existingCall.dispositivoNome) existingCall.dispositivoNome = dispNome
           }
         }
       }
     }
 
     // Retroalimentação / Enriquecimento de foto para chamadas que possuem studentId mas vieram sem foto
-    const callsMissingPhoto = rawResult.filter(c => !c.studentPhoto && c.studentId)
+    const callsMissingPhoto = rawResult.filter((c: any) => !c.studentPhoto && c.studentId)
     if (callsMissingPhoto.length > 0) {
-      const studentIdsToFetch = Array.from(new Set(callsMissingPhoto.map(c => String(c.studentId).trim()).filter(Boolean)))
+      const studentIdsToFetch = Array.from(new Set(callsMissingPhoto.map((c: any) => String(c.studentId).trim()).filter(Boolean)))
       if (studentIdsToFetch.length > 0) {
         const { data: dbAlunosPhotos } = await supabase
           .from('alunos')
@@ -140,12 +222,12 @@ export async function GET(request: Request) {
     // Build set of studentIds that have a confirmed call today
     const confirmedStudentIds = new Set(
       rawResult
-        .filter(c => c.status === 'confirmed' && c.studentId != null)
-        .map(c => String(c.studentId))
+        .filter((c: any) => c.status === 'confirmed' && c.studentId != null)
+        .map((c: any) => String(c.studentId))
     )
 
     // Normalize: if a student has a confirmed call, mark any un-reverted waiting/called calls for that student as confirmed
-    const result = rawResult.map(c => {
+    const result = rawResult.map((c: any) => {
       if (c.studentId != null && confirmedStudentIds.has(String(c.studentId)) && (c.status === 'waiting' || c.status === 'called') && !c.isRevert) {
         return { ...c, status: 'confirmed' }
       }

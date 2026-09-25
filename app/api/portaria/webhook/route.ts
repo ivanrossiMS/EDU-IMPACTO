@@ -405,6 +405,8 @@ export async function POST(req: Request) {
           // ══════════════════════════════════════════════════════════════
           console.log(`🚪 [Portaria Webhook] Registrando SAÍDA para ${alunoNome} às ${localTimeStr} via ${dispositivoNome}`)
 
+          const labelCatraca = dispositivoNome ? `Saiu Sozinho (${dispositivoNome})` : 'Saiu Sozinho (Catraca Rua das Garças)'
+
           // 1. Atualizar ou criar registro de frequência com o horário de saída
           await supabase.from('frequencias').upsert({
             id: freqId,
@@ -417,7 +419,7 @@ export async function POST(req: Request) {
             dados: {
               ...(existingFreq?.dados || {}),
               saidaHorario: localTimeStr,
-              saidaResponsavel: 'Saiu Sozinho (Catraca Rua das Garças)',
+              saidaResponsavel: labelCatraca,
               saidaOrigem: 'catraca',
               anoLetivo: currentYear,
               diarioId: existingFreq?.dados?.diarioId || diarioId,
@@ -435,7 +437,7 @@ export async function POST(req: Request) {
               studentName: alunoNome,
               studentClass: alunoTurma || '',
               guardianId: 'catraca-saida',
-              guardianName: 'Saiu Sozinho (Catraca Rua das Garças)',
+              guardianName: labelCatraca,
               calledAt: eventTime,
               confirmedAt: eventTime,
               status: 'confirmed',
