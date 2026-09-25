@@ -25,6 +25,7 @@ export interface PushPayload {
    * Subscription IDs diretos (ou Player IDs do OneSignal) para teste direcionado ao aparelho.
    */
   targetSubscriptionIds?: string[]
+  collapseId?: string
   url?: string
   data?: Record<string, any>
   sendAfter?: string // formato: "2024-01-01 20:00:00 GMT-0300"
@@ -281,6 +282,9 @@ export async function sendPushNotification(params: PushPayload): Promise<PushRes
         route: relativeRoute,
       }),
     },
+    ...((params.collapseId || params.data?.call_id || params.data?.item_id)
+      ? { collapse_id: String(params.collapseId || params.data?.call_id || params.data?.item_id).slice(0, 64) }
+      : {}),
     ...(params.sendAfter && { send_after: params.sendAfter }),
     chrome_web_icon: params.largeIcon || `${process.env.NEXT_PUBLIC_APP_URL || 'https://impacto-edu.net'}/logo-impacto.png`,
     adm_large_icon: params.largeIcon || `${process.env.NEXT_PUBLIC_APP_URL || 'https://impacto-edu.net'}/logo-impacto.png`,
@@ -301,30 +305,27 @@ export async function sendPushNotification(params: PushPayload): Promise<PushRes
     ttl: 86400,
   }
 
-  // ── Envio Direto por Subscription ID (para garantia física de entrega aos aparelhos) ──
-  let directSubResult: PushResult | null = null
   const validSubIds = (params.targetSubscriptionIds || [])
     .filter(id => id && typeof id === 'string' && id.trim().length > 0)
     .map(id => id.trim())
 
-  if (validSubIds.length > 0) {
-    console.log(`🎯 [PushService] Envio direcionado a ${validSubIds.length} Subscription ID(s) específico(s):`, validSubIds)
+  // ── CASO 1: Envio direcionado exclusivamente a Subscription IDs (ex: teste unitário de aparelho) ──
+  if (validSubIds.length > 0 && uniqueTargetUserIds.length === 0) {
+    console.log(`🎯 [PushService] Envio direcionado exclusivamente a ${validSubIds.length} Subscription ID(s):`, validSubIds)
     const directSubPayload: Record<string, any> = {
       ...commonFields,
       include_subscription_ids: validSubIds,
     }
-    directSubResult = await attemptSend(directSubPayload, ONESIGNAL_REST_API_KEY)
+    let directSubResult = await attemptSend(directSubPayload, ONESIGNAL_REST_API_KEY)
     if (!directSubResult.success && directSubResult.statusCode === 400) {
       console.warn(`⚠️ [PushService] Tentando fallback para include_player_ids...`)
       const playerPayload = { ...commonFields, include_player_ids: validSubIds }
       directSubResult = await attemptSend(playerPayload, ONESIGNAL_REST_API_KEY)
     }
-    if (uniqueTargetUserIds.length === 0) {
-      return directSubResult
-    }
+    return directSubResult
   }
 
-  // ── Tentativa 1: OneSignal User Model (external_id + colaborador_id + system_user_id + responsavel_id + aluno_id + email) ──
+  // ── CASO 2: Envio primário por Usuário no OneSignal (User Model multi-aliases completo) ──
   // Usuários autenticados no app via OneSignal.login(userId) possuem external_id = userId.
   // Colaboradores e Administradores possuem aliases colaborador_id e system_user_id associados.
   // Responsáveis e alunos possuem aliases responsavel_id e aluno_id associados ao usuário.
@@ -347,12 +348,35 @@ export async function sendPushNotification(params: PushPayload): Promise<PushRes
     Boolean(resultExternalId.data?.id && typeof resultExternalId.data.id === 'string' && resultExternalId.data.id.trim() !== '') &&
     (resultExternalId.recipients ?? 0) > 0
 
+  // Se o User Model entregou para os destinatários, RETORNA IMEDIATAMENTE!
+  // NUNCA fazer um segundo disparo por subscription ID quando o User Model já entregou,
+  // pois isso causaria recebimento duplicado nos aparelhos dos usuários!
   if (externalIdSucceeded) {
     return resultExternalId
   }
 
-  // ── Tentativa 2 (Fallback): Legacy include_external_user_ids (OneSignal v1) ──
-  console.warn(`⚠️ [PushService] Tentativa 1 retornou 0 inscritos. Executando Tentativa 2: Fallback Legacy (include_external_user_ids)...`)
+  // ── CASO 3 (Fallback): Se o User Model não alcançou nenhum inscrito, tenta Subscription IDs diretos se informados ──
+  let directSubResult: PushResult | null = null
+  if (validSubIds.length > 0) {
+    console.warn(`⚠️ [PushService] User Model retornou 0 inscritos. Tentando Fallback para ${validSubIds.length} Subscription ID(s)...`)
+    const directSubPayload: Record<string, any> = {
+      ...commonFields,
+      include_subscription_ids: validSubIds,
+    }
+    directSubResult = await attemptSend(directSubPayload, ONESIGNAL_REST_API_KEY)
+    if (!directSubResult.success && directSubResult.statusCode === 400) {
+      console.warn(`⚠️ [PushService] Tentando fallback para include_player_ids...`)
+      const playerPayload = { ...commonFields, include_player_ids: validSubIds }
+      directSubResult = await attemptSend(playerPayload, ONESIGNAL_REST_API_KEY)
+    }
+    if (directSubResult.success && (directSubResult.recipients ?? 0) > 0) {
+      console.log(`✅ [PushService] Fallback direto por Subscription ID entregou com sucesso para ${directSubResult.recipients} dispositivo(s).`)
+      return directSubResult
+    }
+  }
+
+  // ── CASO 4 (Fallback Legacy): Legacy include_external_user_ids (OneSignal v1) ──
+  console.warn(`⚠️ [PushService] Tentativa 1 e 2 retornaram 0 inscritos. Executando Tentativa 4: Fallback Legacy (include_external_user_ids)...`)
   const legacyPayload: Record<string, any> = {
     ...commonFields,
     include_external_user_ids: uniqueTargetUserIds,
@@ -363,8 +387,8 @@ export async function sendPushNotification(params: PushPayload): Promise<PushRes
     return resultLegacy
   }
 
-  // ── Tentativa 3 (Fallback): Custom Alias responsavel_id ──
-  console.warn(`⚠️ [PushService] Tentativa 2 retornou 0 inscritos. Executando Tentativa 3: Custom Alias (responsavel_id)...`)
+  // ── CASO 5 (Fallback): Custom Alias responsavel_id ──
+  console.warn(`⚠️ [PushService] Tentativa 4 retornou 0 inscritos. Executando Tentativa 5: Custom Alias (responsavel_id)...`)
   const respPayload: Record<string, any> = {
     ...commonFields,
     include_aliases: {
@@ -378,8 +402,8 @@ export async function sendPushNotification(params: PushPayload): Promise<PushRes
     return resultResp
   }
 
-  // ── Tentativa 4 (Fallback): Custom Alias aluno_id ──
-  console.warn(`⚠️ [PushService] Tentativa 3 retornou 0 inscritos. Executando Tentativa 4: Custom Alias (aluno_id)...`)
+  // ── CASO 6 (Fallback): Custom Alias aluno_id ──
+  console.warn(`⚠️ [PushService] Tentativa 5 retornou 0 inscritos. Executando Tentativa 6: Custom Alias (aluno_id)...`)
   const alunoPayload: Record<string, any> = {
     ...commonFields,
     include_aliases: {
@@ -393,8 +417,8 @@ export async function sendPushNotification(params: PushPayload): Promise<PushRes
     return resultAluno
   }
 
-  // ── Tentativa 5 (Fallback): Custom Alias colaborador_id ──
-  console.warn(`⚠️ [PushService] Tentativa 4 retornou 0 inscritos. Executando Tentativa 5: Custom Alias (colaborador_id)...`)
+  // ── CASO 7 (Fallback): Custom Alias colaborador_id ──
+  console.warn(`⚠️ [PushService] Tentativa 6 retornou 0 inscritos. Executando Tentativa 7: Custom Alias (colaborador_id)...`)
   const colabPayload: Record<string, any> = {
     ...commonFields,
     include_aliases: {
@@ -408,7 +432,7 @@ export async function sendPushNotification(params: PushPayload): Promise<PushRes
     return resultColab
   }
 
-  // ── Tentativa 6 (Fallback): Custom Alias system_user_id ──
+  // ── CASO 8 (Fallback): Custom Alias system_user_id ──
   const sysUserPayload: Record<string, any> = {
     ...commonFields,
     include_aliases: {
@@ -422,7 +446,7 @@ export async function sendPushNotification(params: PushPayload): Promise<PushRes
     return resultSysUser
   }
 
-  // ── Tentativa 6 (Fallback): Custom Alias email ──
+  // ── CASO 9 (Fallback): Custom Alias email ──
   const emailTargets = uniqueTargetUserIds.filter(id => id.includes('@'))
   if (emailTargets.length > 0) {
     const emailPayload: Record<string, any> = {
@@ -437,11 +461,6 @@ export async function sendPushNotification(params: PushPayload): Promise<PushRes
       console.log(`✅ [PushService] Custom alias email entregou com sucesso para ${resultEmail.recipients} dispositivo(s)!`)
       return resultEmail
     }
-  }
-
-  if (directSubResult?.success && (directSubResult.recipients ?? 0) > 0) {
-    console.log(`✅ [PushService] Envio direto por Subscription ID entregou com sucesso para ${directSubResult.recipients} dispositivo(s).`)
-    return directSubResult
   }
 
   // Retornar o resultado com o erro mais informativo

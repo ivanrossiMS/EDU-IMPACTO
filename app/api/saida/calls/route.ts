@@ -814,6 +814,7 @@ async function dispatchSpecialAuthNotification({
         message: `${nomeAmigavel}${studentClass ? ` (${studentClass})` : ''} liberado(a) para retirada por ${authorizedPerson || 'Pessoa Autorizada'}${horaStr}.`,
         targetUserIds: Array.from(pushTargets),
         targetSubscriptionIds: directSubIds.length > 0 ? Array.from(new Set(directSubIds)) : undefined,
+        collapseId: `saida_auth_${callId}`,
         targetUrl: '/saida-alunos/chamadas',
         metadata: {
           tipo: 'autorizacao_especial',

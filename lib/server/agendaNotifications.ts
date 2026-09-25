@@ -35,6 +35,7 @@ interface SendAgendaPushParams {
   targetUserIds: string[]
   /** Subscription IDs diretos (Player IDs do OneSignal) para garantia física de entrega */
   targetSubscriptionIds?: string[]
+  collapseId?: string
   senderUserId?: string
   metadata?: Record<string, any>
   /** ISO string para agendamento: "2024-01-01 20:00:00 GMT-0300" */
@@ -147,6 +148,7 @@ export async function sendAgendaPushNotification({
   targetUrl,
   targetUserIds,
   targetSubscriptionIds,
+  collapseId,
   senderUserId,
   metadata,
   sendAfter,
@@ -268,6 +270,7 @@ export async function sendAgendaPushNotification({
       body: message,
       targetUserIds: cleanTargetIds,
       targetSubscriptionIds,
+      collapseId: collapseId || (metadata?.call_id ? `call_${metadata.call_id}` : itemId ? `item_${itemId}` : undefined),
       url: fullUrl,
       data: {
         type,

@@ -249,6 +249,7 @@ export async function POST(request: Request) {
       message,
       targetUserIds: Array.from(pushTargets),
       targetSubscriptionIds: targetSubscriptionIds.length > 0 ? Array.from(new Set(targetSubscriptionIds)) : undefined,
+      collapseId: isTest ? `test_${Date.now()}` : `saida_auth_${callId || Date.now()}`,
       targetUrl: '/saida-alunos/chamadas',
       metadata: {
         tipo: 'autorizacao_especial',
