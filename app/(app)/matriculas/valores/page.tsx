@@ -754,6 +754,7 @@ export default function ValoresPage() {
   const [descontoPercent, setDescontoPercent] = useState<number>(0)
   const [convenioSelecionado, setConvenioSelecionado] = useState<string>('')
   const [selectedMeses, setSelectedMeses] = useState<string[]>(['Outubro', 'Novembro', 'Dezembro', 'Regular'])
+  const [selectedMesReferencia, setSelectedMesReferencia] = useState<string>('Outubro')
   const [formaMatricula, setFormaMatricula] = useState<'avista' | 'parcelado' | 'ambos'>('ambos')
   const [numParcelasMatricula, setNumParcelasMatricula] = useState<number>(5)
 
@@ -1133,9 +1134,17 @@ export default function ValoresPage() {
     if (mes === 'Todas') {
       if (selectedMeses.length === 4) {
         setSelectedMeses(['Outubro'])
+        setSelectedMesReferencia('Outubro')
       } else {
         setSelectedMeses(['Outubro', 'Novembro', 'Dezembro', 'Regular'])
+        setSelectedMesReferencia('Outubro')
       }
+      return
+    }
+
+    // Se o mês já está selecionado mas não é a referência atual, ativa-o como referência principal
+    if (selectedMeses.includes(mes) && selectedMesReferencia !== mes) {
+      setSelectedMesReferencia(mes)
       return
     }
 
@@ -1146,19 +1155,38 @@ export default function ValoresPage() {
           showToast('⚠️ Mantenha ao menos uma etapa selecionada.')
           return prev
         }
-        return prev.filter(m => m !== mes)
+        const updated = prev.filter(m => m !== mes)
+        if (selectedMesReferencia === mes) {
+          const nextRef = order.find(m => updated.includes(m)) || updated[0] || 'Outubro'
+          setSelectedMesReferencia(nextRef)
+        }
+        return updated
       } else {
         const next = [...prev, mes]
+        setSelectedMesReferencia(mes)
         return order.filter(m => next.includes(m))
       }
     })
   }
 
+  const handleSelectMesReferencia = (mes: string) => {
+    setSelectedMesReferencia(mes)
+    if (!selectedMeses.includes(mes)) {
+      setSelectedMeses(prev => {
+        const order = ['Outubro', 'Novembro', 'Dezembro', 'Regular']
+        const next = [...prev, mes]
+        return order.filter(m => next.includes(m))
+      })
+    }
+  }
+
   const currentAntecipacao = useMemo(() => {
     const order = ['Outubro', 'Novembro', 'Dezembro', 'Regular']
-    const firstSelected = order.find(m => selectedMeses.includes(m)) || selectedMeses[0] || 'Outubro'
-    return ANTECIPACAO_REGRAS.find(r => r.mes === firstSelected) || ANTECIPACAO_REGRAS[0]
-  }, [selectedMeses])
+    const effectiveMes = (selectedMesReferencia && selectedMeses.includes(selectedMesReferencia))
+      ? selectedMesReferencia
+      : (order.find(m => selectedMeses.includes(m)) || selectedMeses[0] || 'Outubro')
+    return ANTECIPACAO_REGRAS.find(r => r.mes === effectiveMes) || ANTECIPACAO_REGRAS[0]
+  }, [selectedMeses, selectedMesReferencia])
 
   const primeiroMesNome = useMemo(() => {
     return currentAntecipacao.mes === 'Regular' ? 'A partir de Jan' : currentAntecipacao.mes
@@ -2680,22 +2708,32 @@ export default function ValoresPage() {
                     {ANTECIPACAO_REGRAS.map(regra => {
                       const isTodas = regra.mes === 'Todas'
                       const isSelected = isTodas ? isAllMeses : selectedMeses.includes(regra.mes)
+                      const isRef = !isTodas && isSelected && currentAntecipacao.mes === regra.mes
                       return (
                         <div
                           key={regra.mes}
                           onClick={() => handleToggleMes(regra.mes)}
+                          role="button"
+                          tabIndex={0}
+                          title={isTodas ? 'Selecionar todas as etapas' : `Selecionar ${regra.mes}`}
                           style={{
                             padding: 12, borderRadius: 12,
-                            border: isSelected
-                              ? (isTodas ? '2px solid #8b5cf6' : '2px solid #059669')
-                              : (isTodas ? '1px solid #e9d5ff' : '1px solid #e2e8f0'),
-                            background: isSelected
-                              ? (isTodas ? '#f5f3ff' : '#ecfdf5')
-                              : (isTodas ? '#faf5ff' : '#ffffff'),
+                            border: isRef
+                              ? '2.5px solid #059669'
+                              : (isSelected
+                                ? (isTodas ? '2px solid #8b5cf6' : '1.5px solid #10b981')
+                                : (isTodas ? '1px solid #e9d5ff' : '1px solid #e2e8f0')),
+                            background: isRef
+                              ? '#ecfdf5'
+                              : (isSelected
+                                ? (isTodas ? '#f5f3ff' : '#f0fdf4')
+                                : (isTodas ? '#faf5ff' : '#ffffff')),
                             cursor: 'pointer',
-                            boxShadow: isSelected
-                              ? (isTodas ? '0 2px 10px rgba(139, 92, 246, 0.25)' : '0 2px 8px rgba(5, 150, 105, 0.15)')
-                              : 'none',
+                            boxShadow: isRef
+                              ? '0 3px 10px rgba(5, 150, 105, 0.22)'
+                              : (isSelected
+                                ? (isTodas ? '0 2px 10px rgba(139, 92, 246, 0.25)' : '0 2px 6px rgba(5, 150, 105, 0.1)')
+                                : 'none'),
                             transition: 'all 0.15s ease',
                             userSelect: 'none'
                           }}
@@ -3913,23 +3951,27 @@ export default function ValoresPage() {
                                 const isSelectedMonth = selectedMeses.includes(m.mes)
                                 const isRegular = m.mes === 'Regular'
                                 const labelMes = isRegular ? 'A partir de Jan' : m.mes
-                                const isBestMonth = isSelectedMonth && (m.mes === 'Outubro' || sc.matCampanha.filter(x => selectedMeses.includes(x.mes))[0]?.mes === m.mes)
+                                const isHighlighted = isSelectedMonth && m.mes === currentAntecipacao.mes
                                 const regraInfo = ANTECIPACAO_REGRAS.find(r => r.mes === m.mes)
                                 const tagDestaque = m.aVistaPct > 0 ? (regraInfo?.destaque || `Até ${m.aVistaPct}% OFF`) : 'Padrão'
 
                                 return (
                                   <div
                                     key={m.mes}
+                                    onClick={() => handleSelectMesReferencia(m.mes)}
+                                    role="button"
+                                    tabIndex={0}
+                                    title={`Clique para selecionar as condições de ${labelMes}`}
                                     style={{
                                       padding: '10px 11px',
                                       borderRadius: 14,
-                                      background: isBestMonth
+                                      background: isHighlighted
                                         ? 'linear-gradient(180deg, #f0fdf4 0%, #ffffff 50%)'
                                         : '#ffffff',
-                                      border: isBestMonth
+                                      border: isHighlighted
                                         ? '1.5px solid #10b981'
                                         : (isSelectedMonth ? '1.5px solid #cbd5e1' : '1px solid #f1f5f9'),
-                                      boxShadow: isBestMonth
+                                      boxShadow: isHighlighted
                                         ? '0 3px 10px -2px rgba(16, 185, 129, 0.18)'
                                         : '0 1px 4px rgba(0, 0, 0, 0.03)',
                                       display: 'flex',
@@ -3937,7 +3979,9 @@ export default function ValoresPage() {
                                       justifyContent: 'space-between',
                                       gap: 7,
                                       opacity: isSelectedMonth ? 1 : 0.5,
-                                      position: 'relative'
+                                      position: 'relative',
+                                      cursor: 'pointer',
+                                      transition: 'all 0.15s ease'
                                     }}
                                   >
                                     {/* Cabeçalho do Mês Sincronizado com o Site */}
@@ -3945,7 +3989,7 @@ export default function ValoresPage() {
                                       <span style={{
                                         fontSize: 12.5,
                                         fontWeight: 900,
-                                        color: isBestMonth ? '#065f46' : '#1e293b',
+                                        color: isHighlighted ? '#065f46' : '#1e293b',
                                         whiteSpace: 'nowrap',
                                         lineHeight: 1.2
                                       }}>
@@ -3966,10 +4010,10 @@ export default function ValoresPage() {
 
                                     {/* Bloco À Vista */}
                                     <div style={{
-                                      background: isBestMonth ? '#ffffff' : '#f8fafc',
+                                      background: isHighlighted ? '#ffffff' : '#f8fafc',
                                       padding: '7px 9px',
                                       borderRadius: 9,
-                                      border: isBestMonth ? '1px solid #bbf7d0' : '1px solid #e2e8f0',
+                                      border: isHighlighted ? '1px solid #bbf7d0' : '1px solid #e2e8f0',
                                       display: 'flex',
                                       flexDirection: 'column',
                                       gap: 2.5
@@ -3993,7 +4037,7 @@ export default function ValoresPage() {
                                       <div style={{
                                         fontSize: 15.5,
                                         fontWeight: 900,
-                                        color: isBestMonth ? '#047857' : '#0f172a',
+                                        color: isHighlighted ? '#047857' : '#0f172a',
                                         lineHeight: 1.2,
                                         whiteSpace: 'nowrap'
                                       }}>
@@ -4012,10 +4056,10 @@ export default function ValoresPage() {
 
                                     {/* Bloco Parcelado */}
                                     <div style={{
-                                      background: isBestMonth ? '#ffffff' : '#f8fafc',
+                                      background: isHighlighted ? '#ffffff' : '#f8fafc',
                                       padding: '7px 9px',
                                       borderRadius: 9,
-                                      border: isBestMonth ? '1px solid #bbf7d0' : '1px solid #e2e8f0',
+                                      border: isHighlighted ? '1px solid #bbf7d0' : '1px solid #e2e8f0',
                                       display: 'flex',
                                       flexDirection: 'column',
                                       gap: 2.5
@@ -4249,7 +4293,7 @@ export default function ValoresPage() {
                   )}
 
                   {/* Banner de Condições e Economia da Campanha */}
-                  {(calculations.aVistaPct > 0 || descontoPercent > 0) && (
+                  {(Boolean(currentAntecipacao) || calculations.aVistaPct > 0 || descontoPercent > 0) && (
                     <div className="print-avoid-break" style={{
                       marginTop: 2,
                       padding: '14px 20px',
@@ -4259,11 +4303,11 @@ export default function ValoresPage() {
                       display: 'flex',
                       justifyContent: 'space-between',
                       alignItems: 'center',
-                      flexWrap: 'nowrap',
+                      flexWrap: 'wrap',
                       gap: 14,
                       boxShadow: '0 3px 12px rgba(5, 150, 105, 0.18)'
                     }}>
-                      <div style={{ minWidth: 0 }}>
+                      <div style={{ minWidth: 0, flex: 1 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
                           <Sparkles size={16} color="#6ee7b7" />
                           <span style={{ fontSize: 12, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#6ee7b7' }}>
@@ -4271,20 +4315,29 @@ export default function ValoresPage() {
                           </span>
                         </div>
 
-                        <span style={{ fontSize: 12.5, color: '#e6fffa', display: 'block', marginTop: 3, fontWeight: 600, whiteSpace: 'nowrap' }}>
-                          {primeiroMesNome} • Cartão de crédito em até {numParcelasMatricula}x sem juros
+                        <span style={{ fontSize: 12.5, color: '#e6fffa', display: 'block', marginTop: 3, fontWeight: 600 }}>
+                          {primeiroMesNome} • Cartão de crédito em até {numParcelasMatricula}x {currentAntecipacao.parceladoPct > 0 ? `com ${currentAntecipacao.parceladoPct}% off` : 'sem juros'}
                         </span>
                       </div>
-                      {calculations.aVistaPct > 0 && (
-                        <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                          <span style={{ fontSize: 10.5, color: '#a7f3d0', textTransform: 'uppercase', fontWeight: 800, display: 'block' }}>
-                            Matrícula
+                      <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                        <span style={{ fontSize: 10.5, color: '#a7f3d0', textTransform: 'uppercase', fontWeight: 800, display: 'block' }}>
+                          Matrícula
+                        </span>
+                        {currentAntecipacao.aVistaPct > 0 ? (
+                          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'flex-end', gap: 5, whiteSpace: 'nowrap' }}>
+                            <span style={{ fontSize: 19, fontWeight: 900, color: '#ffffff', letterSpacing: '-0.02em' }}>
+                              {currentAntecipacao.aVistaPct}% OFF
+                            </span>
+                            <span style={{ fontSize: 11, fontWeight: 800, color: '#a7f3d0', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                              à vista
+                            </span>
+                          </div>
+                        ) : (
+                          <span style={{ fontSize: 14, fontWeight: 900, color: '#ffffff', whiteSpace: 'nowrap', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+                            Tabela Padrão
                           </span>
-                          <span style={{ fontSize: 19, fontWeight: 900, color: '#ffffff', whiteSpace: 'nowrap' }}>
-                            {calculations.aVistaPct}% OFF
-                          </span>
-                        </div>
-                      )}
+                        )}
+                      </div>
                     </div>
                   )}
                 </div>
