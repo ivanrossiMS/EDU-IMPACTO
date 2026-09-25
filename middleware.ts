@@ -32,6 +32,7 @@ const PUBLIC_PATHS = [
   '/monitor-tv',        // painel TV da portaria
   '/painel-tablet',     // tablet da portaria
   '/api/portaria/webhook', // catraca iDFace — recebe push dos dispositivos (auth por token próprio)
+  '/api/notifications', // endpoints padrão de push do Control iD (/api/notifications/dao, etc.)
   '/api/portaria/sync-queue', // fila de sincronização para catracas/daemon local
   '/api/portaria/cron-push', // cron job da portaria
   '/api/cron',          // rotas de cron jobs agendados (auth interna via CRON_SECRET)
