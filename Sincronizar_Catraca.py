@@ -156,7 +156,7 @@ def get_access_logs_hoje(base_url, session, last_log_id=0):
     while True:
         try:
             r = post_json(f"{base_url}/load_objects.fcgi",
-                          {"object": "access_logs", "where": where_cond, "limit": batch, "offset": off, "order": "id ASC"},
+                          {"object": "access_logs", "where": where_cond, "limit": batch, "offset": off},
                           cookie=session)
             chunk = r.get("access_logs", [])
         except Exception as e:
@@ -415,9 +415,10 @@ def rodar_um_ciclo():
     legacy_cache_file  = os.path.join(os.path.dirname(os.path.abspath(__file__)), f"sincronizados_{hoje_iso}.txt")
 
     ja_sincronizados_entrada = set()
-    ja_sincronizados_saida   = set()
+    logs_saida_enviados      = set()
+    ja_sincronizados_saida   = logs_saida_enviados
 
-    for cf, target_set in [(cache_file_entrada, ja_sincronizados_entrada), (cache_file_saida, ja_sincronizados_saida), (legacy_cache_file, ja_sincronizados_entrada)]:
+    for cf, target_set in [(cache_file_entrada, ja_sincronizados_entrada), (cache_file_saida, logs_saida_enviados), (legacy_cache_file, ja_sincronizados_entrada)]:
         if os.path.exists(cf):
             try:
                 with open(cf, "r") as f:
@@ -434,8 +435,7 @@ def rodar_um_ciclo():
         ja_sincronizados_entrada.update(reg_entrada_erp)
         print(f"     ✅ {len(reg_entrada_erp)} aluno(s) com entrada confirmada hoje no ERP.")
     if reg_saida_erp:
-        ja_sincronizados_saida.update(reg_saida_erp)
-        print(f"     ✅ {len(reg_saida_erp)} aluno(s) com saída confirmada hoje no ERP.")
+        print(f"     ℹ️  {len(reg_saida_erp)} saída(s) já registradas hoje no ERP (re-saídas com novo horário são permitidas).")
 
     # Mesclar novos dispositivos cadastrados no ERP dinamicamente
     if dispositivos_erp:
@@ -490,28 +490,29 @@ def rodar_um_ciclo():
 
         reconhecidos = [l for l in logs_hoje if l.get("user_id", 0) > 0]
 
-        # Filtra para enviar apenas 1 registro por aluno por sentido
-        # Na saída: se o aluno passou mais de uma vez hoje, considera a passagem mais recente
-        # Na entrada: considera a primeira passagem da manhã
-        unicos = {}
-        for l in reconhecidos:
-            uid = str(l.get("user_id", ""))
-            if is_saida:
-                if uid not in unicos or l.get("time", 0) > unicos[uid].get("time", 0):
-                    unicos[uid] = l
-            else:
+        novos_para_enviar = []
+        if is_saida:
+            # Na saída: se um aluno já passou e saiu, ele pode sair novamente e marcar um novo horário!
+            # Deduplicação feita pelo ID do log na catraca para enviar apenas logs que ainda não foram transmitidos
+            for log in reconhecidos:
+                lid = str(log.get("id", ""))
+                if lid not in logs_saida_enviados:
+                    novos_para_enviar.append(log)
+            pulados = len(reconhecidos) - len(novos_para_enviar)
+            print(f"     📋 {len(logs_hoje)} eventos lidos / {len(novos_para_enviar)} saídas para enviar ({pulados} já transmitidas)")
+        else:
+            # Na entrada: mantém apenas 1 registro por aluno por dia (o primeiro da manhã)
+            unicos = {}
+            for l in reconhecidos:
+                uid = str(l.get("user_id", ""))
                 if uid not in unicos or l.get("time", 0) < unicos[uid].get("time", 0):
                     unicos[uid] = l
-        
-        reconhecidos_unicos = list(unicos.values())
-        
-        novos_para_enviar = []
-        for log in reconhecidos_unicos:
-            if str(log.get("user_id", "")) not in ja_sincronizados:
-                novos_para_enviar.append(log)
-        
-        pulados = len(reconhecidos_unicos) - len(novos_para_enviar)
-        print(f"     📋 {len(logs_hoje)} eventos lidos / {len(reconhecidos_unicos)} alunos únicos / {len(novos_para_enviar)} para enviar ({pulados} já sincronizados hoje)")
+            for log in unicos.values():
+                uid = str(log.get("user_id", ""))
+                if uid not in ja_sincronizados_entrada:
+                    novos_para_enviar.append(log)
+            pulados = len(unicos) - len(novos_para_enviar)
+            print(f"     📋 {len(logs_hoje)} eventos lidos / {len(unicos)} alunos únicos / {len(novos_para_enviar)} para enviar ({pulados} já sincronizados hoje)")
 
         if not novos_para_enviar:
             if logs_hoje:
@@ -532,6 +533,7 @@ def rodar_um_ciclo():
         falhas = 0
         for log in novos_para_enviar:
             uid  = str(log.get("user_id", "?"))
+            lid  = str(log.get("id", ""))
             hora = formatar_hora(log.get("time", 0))
             try:
                 result = enviar_para_webhook(log, cat)
@@ -541,11 +543,14 @@ def rodar_um_ciclo():
                     ok += 1
                     if cache_f:
                         try:
-                            cache_f.write(uid + "\n")
+                            cache_f.write((lid if is_saida else uid) + "\n")
                             cache_f.flush()
                         except Exception:
                             pass
-                    ja_sincronizados.add(uid)
+                    if is_saida:
+                        logs_saida_enviados.add(lid)
+                    else:
+                        ja_sincronizados_entrada.add(uid)
                 else:
                     print(f"     ⚠️  Aluno {uid:<6} às {hora}  [{cat_tipo_label} - {status}]")
                     ok += 1

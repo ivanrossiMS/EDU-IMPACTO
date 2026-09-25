@@ -459,7 +459,7 @@ export async function POST(req: Request) {
             const targetIds = await getResponsavelIdsForTargets({ targetStudents: studentTargets })
 
             if (targetIds.length > 0) {
-              const pushItemId = `saida_catraca_${alunoId}_${localDate}`
+              const pushItemId = `saida_catraca_${alunoId}_${localDate}_${localTimeStr.replace(':', '')}`
               await sendAgendaPushNotification({
                 type: 'saida',
                 itemId: pushItemId,
