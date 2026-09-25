@@ -47,6 +47,14 @@ function formatTimeFromIso(isoStr?: string): string | undefined {
       const parts = str.split(':')
       return `${parts[0].padStart(2, '0')}:${parts[1].padStart(2, '0')}`
     }
+    // As catracas/portaria gravam o horário local nos dígitos ISO (ex: "2026-09-25T06:56:52+00:00").
+    // Extrai o HH:mm diretamente para evitar shifts indevidos de fuso pelo navegador.
+    if (str.includes('T')) {
+      const timePart = str.split('T')[1]
+      if (timePart && timePart.length >= 5) {
+        return timePart.slice(0, 5)
+      }
+    }
     if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(str)) {
       str += '-04:00'
     }
@@ -823,7 +831,7 @@ export default function FrequenciaPage() {
         if (aId && dt && !map.has(key)) {
           const studentObj = (alunos || []).find((a: any) => String(a.id) === aId)
           const tId = studentObj?.turma || studentObj?.dados?.turma || ev.turma_id
-          const localTimeStr = ev.data_hora ? new Date(ev.data_hora).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : 'Catraca'
+          const localTimeStr = ev.data_hora ? (String(ev.data_hora).split('T')[1]?.slice(0, 5) || formatTimeFromIso(ev.data_hora) || 'Catraca') : 'Catraca'
           map.set(key, {
             id: `CATRACA-${ev.id}`,
             aluno_id: aId,

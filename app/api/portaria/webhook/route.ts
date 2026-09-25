@@ -95,18 +95,46 @@ export async function POST(req: Request) {
     const userId = userIdNum !== null ? String(userIdNum) : ''
 
     // Converter data de UNIX em segundos/milissegundos ou String para ISO 8601
-    let eventTime = new Date().toISOString()
+    // As catracas Control iD gravam o horário local da escola (America/Campo_Grande)
+    // diretamente no timestamp numérico (sem fuso).
+    let eventTime = ''
     if (eventTimeRaw) {
       const numTime = Number(eventTimeRaw)
       if (!isNaN(numTime) && numTime > 0) {
         const isSeconds = String(numTime).length <= 10
         eventTime = new Date(numTime * (isSeconds ? 1000 : 1)).toISOString()
-      } else {
-        const d = new Date(eventTimeRaw)
-        if (!isNaN(d.getTime())) {
-          eventTime = d.toISOString()
+      } else if (typeof eventTimeRaw === 'string') {
+        const trimmed = eventTimeRaw.trim()
+        const noTzMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?$/)
+        if (noTzMatch) {
+          const [, y, m, dia, h, min, s = '00'] = noTzMatch
+          eventTime = `${y}-${m}-${dia}T${h}:${min}:${s}.000Z`
+        } else {
+          const d = new Date(trimmed)
+          if (!isNaN(d.getTime())) {
+            const parts = new Intl.DateTimeFormat('en-CA', {
+              timeZone: 'America/Campo_Grande',
+              year: 'numeric', month: '2-digit', day: '2-digit',
+              hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+            }).formatToParts(d)
+            const map: Record<string, string> = {}
+            parts.forEach(p => map[p.type] = p.value)
+            eventTime = `${map.year}-${map.month}-${map.day}T${map.hour}:${map.minute}:${map.second}.000Z`
+          }
         }
       }
+    }
+
+    if (!eventTime) {
+      const now = new Date()
+      const parts = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'America/Campo_Grande',
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+      }).formatToParts(now)
+      const map: Record<string, string> = {}
+      parts.forEach(p => map[p.type] = p.value)
+      eventTime = `${map.year}-${map.month}-${map.day}T${map.hour}:${map.minute}:${map.second}.000Z`
     }
 
     // Tentar resolver o aluno pelo código do equipamento
@@ -383,11 +411,18 @@ export async function POST(req: Request) {
     if (eventStatus === 'sucesso' && alunoId) {
       try {
         // 1. Resolver data e hora local do evento no fuso oficial da escola (America/Campo_Grande)
+        // NOTA TÉCNICA: O eventTime armazena os dígitos exatos da data e hora local da escola em campos UTC
+        // (ex: "2026-09-25T06:56:52.000Z" representa 06:56:52 local da escola).
+        // Extraímos os componentes de data e hora via métodos UTC para NÃO aplicar desconto duplo de fuso.
         const eventDateObj = new Date(eventTime)
-        const tzEscola = 'America/Campo_Grande'
+        const year = eventDateObj.getUTCFullYear()
+        const month = String(eventDateObj.getUTCMonth() + 1).padStart(2, '0')
+        const day = String(eventDateObj.getUTCDate()).padStart(2, '0')
+        const localDate = `${year}-${month}-${day}`
         
-        const localDate = new Intl.DateTimeFormat('en-CA', { timeZone: tzEscola, year: 'numeric', month: '2-digit', day: '2-digit' }).format(eventDateObj)
-        const localTimeStr = new Intl.DateTimeFormat('pt-BR', { timeZone: tzEscola, hour: '2-digit', minute: '2-digit', hour12: false }).format(eventDateObj)
+        const localHour = String(eventDateObj.getUTCHours()).padStart(2, '0')
+        const localMin = String(eventDateObj.getUTCMinutes()).padStart(2, '0')
+        const localTimeStr = `${localHour}:${localMin}`
 
         const currentYear = new Date().getFullYear().toString()
         const freqId = `FREQ-${alunoId}-${localDate}`
@@ -438,15 +473,15 @@ export async function POST(req: Request) {
               studentClass: alunoTurma || '',
               guardianId: 'catraca-saida',
               guardianName: labelCatraca,
-              calledAt: eventTime,
-              confirmedAt: eventTime,
+              calledAt: `${localDate}T${localTimeStr}:00-04:00`,
+              confirmedAt: `${localDate}T${localTimeStr}:00-04:00`,
               status: 'confirmed',
               tipo: 'sozinho',
               origem: 'catraca_idface',
               dispositivoNome: dispositivoNome || 'Saida - Rua das Garças',
               horaSaida: localTimeStr,
             },
-            created_at: eventTime
+            created_at: new Date().toISOString()
           }, { onConflict: 'id' })
 
           // 3. Disparo do Push Notification para os Responsáveis na Agenda Digital
