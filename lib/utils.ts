@@ -126,6 +126,28 @@ export function formatProfessorHeaderName(nome: string): string {
   return `${firstName} ${lastInitial}.`
 }
 
+/**
+ * Retorna apenas o primeiro e segundo nome de uma pessoa.
+ * Preserva preposições entre nomes caso o segundo termo seja preposição (ex: "Juliane de Fátima" ou "João da Silva").
+ * Exemplo: "Maria Auxiliadora de Araujo Honorio" -> "Maria Auxiliadora"
+ */
+export function formatFirstAndSecondName(rawName?: string | null): string {
+  if (!rawName || typeof rawName !== 'string') return ''
+  const trimmed = rawName.trim()
+  if (!trimmed) return ''
+
+  const parts = trimmed.split(/\s+/).filter(Boolean)
+  if (parts.length <= 2) return trimmed
+
+  const prepositions = new Set(['de', 'da', 'do', 'dos', 'das', 'e', "d'"])
+
+  if (prepositions.has(parts[1].toLowerCase()) && parts[2]) {
+    return `${parts[0]} ${parts[1]} ${parts[2]}`
+  }
+
+  return `${parts[0]} ${parts[1]}`
+}
+
 export function slugify(text: string): string {
   return text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
 }

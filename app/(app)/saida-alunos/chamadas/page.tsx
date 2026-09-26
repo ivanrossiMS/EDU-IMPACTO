@@ -20,6 +20,7 @@ const getInitials = (name: string) => {
 }
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
+import { formatFirstAndSecondName } from '@/lib/utils'
 import { SaidaProvider, useSaida, PickupCall, isSaiuSozinhoCall } from '@/lib/saidaContext'
 import { useBroadcastRealtime } from '@/lib/hooks/useBroadcastRealtime'
 import { useData } from '@/lib/dataContext'
@@ -2632,7 +2633,7 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
                 <div style={{ fontSize: 8.5, color: 'hsl(var(--text-muted))', marginTop: 2, display: 'flex', gap: 4, fontWeight: 500, flexWrap: 'wrap' }}>
                   <span>{l.time}</span>
                   <span>·</span>
-                  <span>por: <span style={{ color: 'hsl(var(--text-secondary))', fontWeight: 700 }}>{l.loggedBy}</span></span>
+                  <span title={l.loggedBy}>por: <span style={{ color: 'hsl(var(--text-secondary))', fontWeight: 700 }}>{formatFirstAndSecondName(l.loggedBy)}</span></span>
                 </div>
                 {l.confirmedOut && (
                   <div style={{ fontSize: 8.5, color: '#10b981', fontWeight: 800, marginTop: 3, display: 'flex', alignItems: 'center', gap: 3, flexWrap: 'wrap', wordBreak: 'break-word' }}>
