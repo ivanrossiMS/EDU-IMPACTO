@@ -4,7 +4,7 @@ import React from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { 
-  Bell, Image as ImageIcon, Calendar, DollarSign, 
+  Bell, MessageSquare, Image as ImageIcon, Calendar, DollarSign, 
   BarChart2, AlertTriangle, GraduationCap, UserCog 
 } from 'lucide-react'
 import { triggerHaptic } from '@/lib/utils/haptics'

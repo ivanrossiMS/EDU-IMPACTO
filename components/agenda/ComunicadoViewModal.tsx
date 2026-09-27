@@ -2,12 +2,14 @@
 
 import React, { useState, useEffect, useRef, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Paperclip, FileText, CheckCircle2, ShieldAlert, Calendar, Mic, Send, Share, Bookmark, MoreHorizontal, Edit2, Trash2, Loader2, CreditCard, Info, ExternalLink } from 'lucide-react'
+import { X, Paperclip, FileText, CheckCircle2, ShieldAlert, Calendar, Mic, Send, Share, Bookmark, MoreHorizontal, Edit2, Trash2, Loader2, CreditCard, Info, ExternalLink, Vote } from 'lucide-react'
 import Image from 'next/image'
 import Portal from '@/components/Portal'
 import { UserAvatar } from '@/components/UserAvatar'
 import { uploadFileToSupabase } from '@/lib/upload/uploadClient'
 import { getCachedStudentPhoto, setCachedStudentPhoto, fetchStudentPhotos } from '@/lib/studentPhotoCache'
+import { EnqueteWidget } from '@/components/agenda/enquetes/EnqueteWidget'
+import { AutorizacaoWidget } from '@/components/agenda/autorizacoes/AutorizacaoWidget'
 
 // Helpers
 const parseAnexo = (anexoData: any) => {
@@ -147,41 +149,52 @@ export function ComunicadoViewModal({
   const [comunicado, setComunicado] = useState<any>(initialComunicado)
   const [isLoadingFull, setIsLoadingFull] = useState(!initialComunicado.conteudo && !initialComunicado.texto)
   
-  const [cobranca, setCobranca] = useState<any>(null)
-  const [cobrancaDestinatario, setCobrancaDestinatario] = useState<any>(null)
-  const [isGeneratingPayment, setIsGeneratingPayment] = useState(false)
-  const [paymentLink, setPaymentLink] = useState('')
+  useEffect(() => {
+    if (initialComunicado) {
+      setComunicado(initialComunicado)
+    }
+  }, [initialComunicado])
+  
+  const initialCobs = Array.isArray(comunicado?.cobrancas || comunicado?.dados?.cobrancas)
+    ? (comunicado?.cobrancas || comunicado?.dados?.cobrancas)
+    : (comunicado?.cobranca || comunicado?.dados?.cobranca ? [comunicado.cobranca || comunicado.dados.cobranca] : []);
+  const [cobrancasList, setCobrancasList] = useState<any[]>(initialCobs)
+  const [generatingPaymentIds, setGeneratingPaymentIds] = useState<Record<string, boolean>>({})
+  const [paymentLinksMap, setPaymentLinksMap] = useState<Record<string, string>>({})
 
   useEffect(() => {
     if (comunicado?.id) {
-      const fetchCobranca = async () => {
+      const fetchCobrancas = async () => {
          const { supabase } = await import('@/lib/supabase');
          const { data, error } = await supabase
            .from('agenda_cobrancas')
            .select('*, agenda_cobrancas_destinatarios(*)')
            .eq('comunicado_id', String(comunicado.id))
-           .maybeSingle();
+           .order('created_at', { ascending: true });
            
-         if (data) {
-            setCobranca(data); // Sempre salva a cobrança se existir
+         if (data && data.length > 0) {
+            setCobrancasList(data);
             
-            if ((data as any).agenda_cobrancas_destinatarios && currentUserSlug && !isAdminMode) {
+            if (currentUserSlug && !isAdminMode) {
                const cleanSlug = currentUserSlug.replace(/^(a_|_ALU)/, '');
-               const dest = (data as any).agenda_cobrancas_destinatarios.find((d: any) => 
-                  String(d.destinatario_id).replace(/^(a_|_ALU)/, '') === cleanSlug
-               );
-               if (dest) {
-                  setCobrancaDestinatario(dest);
-                  if (dest.url_pagamento) {
-                     setPaymentLink(dest.url_pagamento);
-                  }
-               }
+               const newLinks: Record<string, string> = {};
+               data.forEach((cob: any) => {
+                 if (cob.agenda_cobrancas_destinatarios) {
+                   const dest = cob.agenda_cobrancas_destinatarios.find((d: any) => 
+                      String(d.destinatario_id).replace(/^(a_|_ALU)/, '') === cleanSlug
+                   );
+                   if (dest && dest.url_pagamento) {
+                      newLinks[cob.id] = dest.url_pagamento;
+                   }
+                 }
+               });
+               setPaymentLinksMap(prev => ({ ...prev, ...newLinks }));
             }
          }
       }
-      fetchCobranca();
+      fetchCobrancas();
       // Poll every 5 seconds to catch webhook updates in real-time
-      const cobInterval = setInterval(fetchCobranca, 5000);
+      const cobInterval = setInterval(fetchCobrancas, 5000);
       return () => clearInterval(cobInterval);
     }
   }, [comunicado.id, currentUserSlug, isAdminMode])
@@ -578,22 +591,23 @@ export function ComunicadoViewModal({
     }
   }
 
-  const handleGeneratePayment = async () => {
-    setIsGeneratingPayment(true);
+  const handleGeneratePaymentForCob = async (cob: any, dest: any) => {
+    if (!dest?.id || !cob?.id) return;
+    setGeneratingPaymentIds(prev => ({ ...prev, [cob.id]: true }));
     try {
       const res = await fetch('/api/cobrancas/mercadopago-generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          cobranca_destinatario_id: cobrancaDestinatario.id,
-          cobranca_id: cobranca.id
+          cobranca_destinatario_id: dest.id,
+          cobranca_id: cob.id
         })
       });
       const data = await res.json();
       if (data.error) {
         alert('Erro ao gerar cobrança: ' + data.error);
       } else {
-        setPaymentLink(data.invoiceUrl);
+        setPaymentLinksMap(prev => ({ ...prev, [cob.id]: data.invoiceUrl }));
         // Abre automaticamente a fatura recém gerada
         if (typeof window !== 'undefined' && (window as any).Capacitor) {
           window.open(data.invoiceUrl, '_system') || window.open(data.invoiceUrl, '_blank');
@@ -604,7 +618,7 @@ export function ComunicadoViewModal({
     } catch (e: any) {
       alert('Erro inesperado: ' + e.message);
     } finally {
-      setIsGeneratingPayment(false);
+      setGeneratingPaymentIds(prev => ({ ...prev, [cob.id]: false }));
     }
   }
 
@@ -960,113 +974,211 @@ export function ComunicadoViewModal({
               )}
             </div>
 
-            {/* Cobrança UI */}
-            {cobranca && (cobrancaDestinatario || isAdminMode) && (() => {
-              const statusStr = cobrancaDestinatario?.status || 'PENDING';
-              const isPaid = statusStr === 'CONFIRMED' || statusStr === 'RECEIVED';
-              const isOverdue = !isPaid && new Date(cobranca.vencimento) < new Date(new Date().setHours(0,0,0,0));
+            {/* ENQUETE INTERATIVA */}
+            {(comunicado.enquete || comunicado.dados?.enquete) && (
+              <div style={{ marginTop: 24, width: '100%', maxWidth: 800 }}>
+                <EnqueteWidget
+                  enquete={comunicado.enquete || comunicado.dados?.enquete}
+                  comunicadoId={String(comunicado.id)}
+                  currentUser={{ id: currentUserSlug, nome: currentUserName, foto: currentUserAvatar }}
+                  currentAluno={alunos && alunos.length === 1 ? alunos[0] : null}
+                  isAdminMode={isAdminMode}
+                  onVoteSuccess={(updatedEnquete) => {
+                    setComunicado((prev: any) => ({
+                      ...prev,
+                      enquete: updatedEnquete,
+                      dados: {
+                        ...(prev?.dados || {}),
+                        enquete: updatedEnquete
+                      }
+                    }))
+                  }}
+                />
+              </div>
+            )}
+
+            {/* AUTORIZAÇÃO DIGITAL */}
+            {(comunicado.autorizacao || comunicado.dados?.autorizacao) && (
+              <div style={{ marginTop: 24, width: '100%', maxWidth: 800 }}>
+                <AutorizacaoWidget
+                  autorizacao={comunicado.autorizacao || comunicado.dados?.autorizacao}
+                  comunicadoId={String(comunicado.id)}
+                  currentUser={{ id: currentUserSlug, nome: currentUserName, foto: currentUserAvatar }}
+                  currentAluno={alunos && alunos.length === 1 ? alunos[0] : null}
+                  isAdminMode={isAdminMode}
+                  onUpdateSuccess={(updatedAut) => {
+                    setComunicado((prev: any) => ({
+                      ...prev,
+                      autorizacao: updatedAut,
+                      dados: {
+                        ...(prev?.dados || {}),
+                        autorizacao: updatedAut
+                      }
+                    }))
+                  }}
+                />
+              </div>
+            )}
+
+            {/* Cobranças UI */}
+            {cobrancasList && cobrancasList.length > 0 && (() => {
+              const cleanSlug = (currentUserSlug || '').replace(/^(a_|_ALU)/, '');
               
-              let colors = {
-                bg: '#ffffff',
-                border: 'rgba(0,0,0,0.08)',
-                accent: '#3b82f6',
-                accentBg: 'rgba(59,130,246,0.1)',
-                text: '#0f172a',
-                label: '#64748b'
-              };
+              // Filter to charges relevant to user or show all for admin
+              const relevantCobs = cobrancasList.filter(cob => {
+                if (isAdminMode) return true;
+                const dest = (cob.agenda_cobrancas_destinatarios || []).find((d: any) => 
+                  String(d.destinatario_id).replace(/^(a_|_ALU)/, '') === cleanSlug
+                );
+                return !!dest;
+              });
 
-              let badgeText = "COBRANÇA DIGITAL";
-              let Icon = FileText;
+              if (relevantCobs.length === 0 && !isAdminMode) return null;
 
-              if (isAdminMode) {
-                colors.bg = '#f8fafc';
-                colors.accent = '#64748b';
-                colors.accentBg = '#f1f5f9';
-                badgeText = "COBRANÇA (ADMIN)";
-                Icon = Info;
-              } else if (isPaid) {
-                colors.bg = '#f0fdf4';
-                colors.accent = '#10b981';
-                colors.accentBg = '#ecfdf5';
-                colors.border = 'rgba(16,185,129,0.25)';
-                badgeText = "PAGAMENTO RECEBIDO";
-                Icon = CheckCircle2;
-              } else if (isOverdue) {
-                colors.bg = '#fef2f2';
-                colors.accent = '#ef4444'; // Red
-                colors.accentBg = '#fef2f2';
-                colors.border = 'rgba(239,68,68,0.25)';
-                badgeText = "COBRANÇA VENCIDA";
-                Icon = ShieldAlert;
-              } else {
-                colors.bg = '#fffbeb';
-                colors.accent = '#f59e0b'; // Orange
-                colors.accentBg = '#fffbeb';
-                colors.border = 'rgba(245,158,11,0.25)';
-                badgeText = "PAGAMENTO EM ABERTO";
-                Icon = Calendar;
-              }
+              const totalAmount = relevantCobs.reduce((acc, c) => acc + (Number(c.valor) || 0), 0);
 
               return (
-                <div style={{ 
-                  marginTop: 24, 
-                  background: colors.bg, 
-                  border: `1px solid ${colors.border}`, 
-                  borderRadius: 16, 
-                  padding: '16px 20px',
-                  display: 'flex', 
-                  flexWrap: 'wrap',
-                  alignItems: 'center', 
-                  justifyContent: 'space-between',
-                  gap: 20, 
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.03)' 
-                }}>
-                  {/* Left Column: Icon + Info */}
-                  <div style={{ display: 'flex', gap: 16, alignItems: 'center', flex: '1 1 250px' }}>
-                     <div style={{ width: 46, height: 46, borderRadius: '50%', background: colors.accentBg, color: colors.accent, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: `inset 0 0 0 1px ${colors.border}` }}>
-                       <Icon size={22} />
-                     </div>
-                     <div>
-                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
-                         <span style={{ fontSize: 11, fontWeight: 800, color: colors.accent, letterSpacing: 0.5 }}>{badgeText}</span>
-                         <span style={{ fontSize: 11, color: colors.label, fontWeight: 500 }}>• Venc: {new Date(cobranca.vencimento).toLocaleDateString('pt-BR', {timeZone: 'UTC'})}</span>
-                       </div>
-                       <div style={{ fontSize: 14, fontWeight: 600, color: colors.text, marginBottom: 2 }}>{cobranca.titulo}</div>
-                       <div style={{ fontSize: 22, fontWeight: 800, color: colors.text, letterSpacing: -0.5 }}>
-                          R$ {Number(cobranca.valor).toFixed(2).replace('.', ',')}
-                       </div>
-                     </div>
-                  </div>
+                <div style={{ marginTop: 24, width: '100%', maxWidth: 800, margin: '24px auto 0' }}>
+                  {relevantCobs.length > 1 && (
+                    <div style={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      justifyContent: 'space-between', 
+                      marginBottom: 10, 
+                      padding: '8px 14px',
+                      background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(5, 150, 105, 0.04) 100%)',
+                      borderRadius: 12,
+                      border: '1px solid rgba(16, 185, 129, 0.2)'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 700, color: '#047857' }}>
+                        <CreditCard size={16} color="#10B981" />
+                        <span>Cobranças Anexadas ({relevantCobs.length})</span>
+                      </div>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: '#334155' }}>
+                        Total: <span style={{ color: '#065F46', fontWeight: 800, fontSize: 15 }}>R$ {totalAmount.toFixed(2).replace('.', ',')}</span>
+                      </div>
+                    </div>
+                  )}
 
-                  {/* Right Column: Actions */}
-                  <div style={{ flexShrink: 0, flex: '1 1 auto', display: 'flex', justifyContent: 'flex-end' }}>
-                     {isAdminMode ? (
-                       <div style={{ color: '#64748b', fontSize: 12, fontWeight: 500, maxWidth: 160, textAlign: 'right', padding: '8px 12px', background: '#f1f5f9', borderRadius: 8 }}>
-                          Visualização restrita do modo Admin.
-                       </div>
-                     ) : isPaid ? (
-                       <div style={{ color: colors.accent, fontWeight: 700, fontSize: 14, display: 'flex', alignItems: 'center', gap: 6, background: colors.accentBg, padding: '10px 20px', borderRadius: 12, border: `1px solid ${colors.border}` }}>
-                          <CheckCircle2 size={18} /> Pago
-                       </div>
-                     ) : paymentLink ? (
-                        <button 
-                          onClick={() => !isOverdue && window.open(paymentLink, '_blank')}
-                          disabled={isOverdue}
-                          style={{ width: '100%', background: isOverdue ? '#94a3b8' : colors.accent, color: '#fff', border: 'none', padding: '12px 24px', borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: isOverdue ? 'not-allowed' : 'pointer', transition: 'all 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: isOverdue ? 'none' : `0 4px 12px ${colors.accent}40` }}
-                        >
-                          <ExternalLink size={18} />
-                          ACESSAR FATURA
-                        </button>
-                     ) : (
-                        <button 
-                          onClick={handleGeneratePayment}
-                          disabled={isGeneratingPayment || isOverdue}
-                          style={{ width: '100%', background: isOverdue ? '#94a3b8' : colors.accent, color: '#fff', border: 'none', padding: '12px 24px', borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: (isGeneratingPayment || isOverdue) ? (isOverdue ? 'not-allowed' : 'wait') : 'pointer', transition: 'all 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: isOverdue ? 'none' : `0 4px 12px ${colors.accent}40`, opacity: (isGeneratingPayment && !isOverdue) ? 0.7 : 1 }}
-                        >
-                          <CreditCard size={18} />
-                          {isGeneratingPayment ? 'GERANDO LINK...' : 'PAGAR AGORA'}
-                        </button>
-                     )}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    {relevantCobs.map((cob: any, idx: number) => {
+                      const cobDest = (cob.agenda_cobrancas_destinatarios || []).find((d: any) => 
+                        String(d.destinatario_id).replace(/^(a_|_ALU)/, '') === cleanSlug
+                      );
+                      const statusStr = cobDest?.status || 'PENDING';
+                      const isPaid = statusStr === 'CONFIRMED' || statusStr === 'RECEIVED';
+                      const isOverdue = !isPaid && cob.vencimento && new Date(cob.vencimento) < new Date(new Date().setHours(0,0,0,0));
+                      const curPaymentLink = paymentLinksMap[cob.id] || cobDest?.url_pagamento || '';
+                      const isGenerating = !!generatingPaymentIds[cob.id];
+
+                      let colors = {
+                        bg: '#ffffff',
+                        border: 'rgba(0,0,0,0.08)',
+                        accent: '#3b82f6',
+                        accentBg: 'rgba(59,130,246,0.1)',
+                        text: '#0f172a',
+                        label: '#64748b'
+                      };
+
+                      let badgeText = relevantCobs.length > 1 ? `COBRANÇA #${idx + 1}` : "COBRANÇA DIGITAL";
+                      let Icon = FileText;
+
+                      if (isAdminMode) {
+                        colors.bg = '#f8fafc';
+                        colors.accent = '#64748b';
+                        colors.accentBg = '#f1f5f9';
+                        badgeText = relevantCobs.length > 1 ? `COBRANÇA #${idx + 1} (ADMIN)` : "COBRANÇA (ADMIN)";
+                        Icon = Info;
+                      } else if (isPaid) {
+                        colors.bg = '#f0fdf4';
+                        colors.accent = '#10b981';
+                        colors.accentBg = '#ecfdf5';
+                        colors.border = 'rgba(16,185,129,0.25)';
+                        badgeText = "PAGAMENTO RECEBIDO";
+                        Icon = CheckCircle2;
+                      } else if (isOverdue) {
+                        colors.bg = '#fef2f2';
+                        colors.accent = '#ef4444'; // Red
+                        colors.accentBg = '#fef2f2';
+                        colors.border = 'rgba(239,68,68,0.25)';
+                        badgeText = "COBRANÇA VENCIDA";
+                        Icon = ShieldAlert;
+                      } else {
+                        colors.bg = '#fffbeb';
+                        colors.accent = '#f59e0b'; // Orange
+                        colors.accentBg = '#fffbeb';
+                        colors.border = 'rgba(245,158,11,0.25)';
+                        badgeText = "PAGAMENTO EM ABERTO";
+                        Icon = Calendar;
+                      }
+
+                      return (
+                        <div key={cob.id || idx} style={{ 
+                          background: colors.bg, 
+                          border: `1px solid ${colors.border}`, 
+                          borderRadius: 16, 
+                          padding: '16px 20px',
+                          display: 'flex', 
+                          flexWrap: 'wrap',
+                          alignItems: 'center', 
+                          justifyContent: 'space-between',
+                          gap: 16, 
+                          boxShadow: '0 4px 12px rgba(0,0,0,0.03)' 
+                        }}>
+                          {/* Left Column: Icon + Info */}
+                          <div style={{ display: 'flex', gap: 16, alignItems: 'center', flex: '1 1 250px' }}>
+                             <div style={{ width: 46, height: 46, borderRadius: '50%', background: colors.accentBg, color: colors.accent, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: `inset 0 0 0 1px ${colors.border}` }}>
+                               <Icon size={22} />
+                             </div>
+                             <div>
+                               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
+                                 <span style={{ fontSize: 11, fontWeight: 800, color: colors.accent, letterSpacing: 0.5 }}>{badgeText}</span>
+                                 {cob.vencimento && (
+                                   <span style={{ fontSize: 11, color: colors.label, fontWeight: 500 }}>
+                                     • Venc: {new Date(cob.vencimento).toLocaleDateString('pt-BR', {timeZone: 'UTC'})}
+                                   </span>
+                                 )}
+                               </div>
+                               <div style={{ fontSize: 14, fontWeight: 600, color: colors.text, marginBottom: 2 }}>{cob.titulo}</div>
+                               <div style={{ fontSize: 22, fontWeight: 800, color: colors.text, letterSpacing: -0.5 }}>
+                                  R$ {Number(cob.valor).toFixed(2).replace('.', ',')}
+                                </div>
+                             </div>
+                          </div>
+
+                          {/* Right Column: Actions */}
+                          <div style={{ flexShrink: 0, flex: '1 1 auto', display: 'flex', justifyContent: 'flex-end' }}>
+                             {isAdminMode ? (
+                               <div style={{ color: '#64748b', fontSize: 12, fontWeight: 500, maxWidth: 160, textAlign: 'right', padding: '8px 12px', background: '#f1f5f9', borderRadius: 8 }}>
+                                  Visualização restrita do modo Admin.
+                               </div>
+                             ) : isPaid ? (
+                               <div style={{ color: colors.accent, fontWeight: 700, fontSize: 14, display: 'flex', alignItems: 'center', gap: 6, background: colors.accentBg, padding: '10px 20px', borderRadius: 12, border: `1px solid ${colors.border}` }}>
+                                  <CheckCircle2 size={18} /> Pago
+                               </div>
+                             ) : curPaymentLink ? (
+                                <button 
+                                  onClick={() => !isOverdue && window.open(curPaymentLink, '_blank')}
+                                  disabled={isOverdue}
+                                  style={{ width: '100%', background: isOverdue ? '#94a3b8' : colors.accent, color: '#fff', border: 'none', padding: '12px 24px', borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: isOverdue ? 'not-allowed' : 'pointer', transition: 'all 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: isOverdue ? 'none' : `0 4px 12px ${colors.accent}40` }}
+                                >
+                                  <ExternalLink size={18} />
+                                  ACESSAR FATURA
+                                </button>
+                             ) : (
+                                <button 
+                                  onClick={() => handleGeneratePaymentForCob(cob, cobDest)}
+                                  disabled={isGenerating || isOverdue}
+                                  style={{ width: '100%', background: isOverdue ? '#94a3b8' : colors.accent, color: '#fff', border: 'none', padding: '12px 24px', borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: (isGenerating || isOverdue) ? (isOverdue ? 'not-allowed' : 'wait') : 'pointer', transition: 'all 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: isOverdue ? 'none' : `0 4px 12px ${colors.accent}40`, opacity: (isGenerating && !isOverdue) ? 0.7 : 1 }}
+                                >
+                                  <CreditCard size={18} />
+                                  {isGenerating ? 'GERANDO LINK...' : 'PAGAR AGORA'}
+                                </button>
+                             )}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               );
@@ -1079,6 +1191,15 @@ export function ComunicadoViewModal({
                   const parsed = parseAnexo(anexo)
                   if (!parsed) return null
                   
+                  const isEnquete = parsed.name.startsWith('Enquete:') || parsed.url.startsWith('enquete:') || parsed.mime === 'enquete'
+                  if (isEnquete) return null
+
+                  const isAutorizacao = parsed.name.startsWith('Autorização:') || parsed.url.startsWith('autorizacao:') || parsed.mime === 'autorizacao'
+                  if (isAutorizacao) return null
+
+                  const isCobranca = parsed.name.startsWith('Cobrança:') || parsed.name.startsWith('Cobranca:') || parsed.url.startsWith('cobranca:') || parsed.mime === 'cobranca' || parsed.mime === 'cobrança'
+                  if (isCobranca) return null
+
                   const isForm = parsed.name.startsWith('Formulário: ') && parsed.url.startsWith('form:')
                   const isRel = parsed.name.startsWith('Relatório: ') && parsed.url.startsWith('form:')
                   const isReportTask = parsed.name.startsWith('Tarefa de Relatório:') && parsed.url.startsWith('report-task:')

@@ -291,7 +291,7 @@ export default function ADAdminComunicados() {
   
   
   const handleEnviar = (data: any, asRascunho = false) => {
-    const { titulo, conteudo, anexos, dataAgendamento, cobranca } = data;
+    const { titulo, conteudo, anexos, dataAgendamento, cobranca, cobrancas, enquete, autorizacao } = data;
     const newTitulo = titulo;
     const newConteudo = conteudo;
     if (!newTitulo.trim() || !newConteudo.trim()) {
@@ -309,7 +309,10 @@ export default function ADAdminComunicados() {
         autorId: currentUser?.id || '',
         autorFoto: currentUser?.foto || null,
         anexos: anexos,
-        cobranca: cobranca,
+        cobranca: cobranca || (cobrancas && cobrancas[0]) || null,
+        cobrancas: cobrancas || (cobranca ? [cobranca] : []),
+        enquete: enquete || null,
+        autorizacao: autorizacao || null,
         dataAgendamento: dataAgendamento || null,
         status: (asRascunho ? 'rascunho' : dataAgendamento ? 'agendado' : 'enviado') as 'rascunho' | 'agendado' | 'enviado',
         turmas: selectedDest.filter(d => d.type === 'turma').map(d => d.name),
@@ -336,7 +339,7 @@ export default function ADAdminComunicados() {
         id: `AD-COM-NEW-${Date.now()}`,
         titulo: newTitulo,
         conteudo: newConteudo,
-        tipo: 'texto',
+        tipo: ((cobrancas && cobrancas.length > 0) || cobranca ? 'cobrança' : autorizacao ? 'autorização' : enquete ? 'enquete' : 'texto') as any,
         autor: currentUser?.nome || 'Usuário ERP',
         autorCargo: currentUser?.cargo || currentUser?.perfil || 'Administração',
         autorId: currentUser?.id || '',
@@ -354,7 +357,10 @@ export default function ADAdminComunicados() {
         dataEnvio: new Date().toISOString(),
         dataAgendamento: dataAgendamento || null,
         anexos: anexos,
-        cobranca: cobranca,
+        cobranca: cobranca || (cobrancas && cobrancas[0]) || null,
+        cobrancas: cobrancas || (cobranca ? [cobranca] : []),
+        enquete: enquete || null,
+        autorizacao: autorizacao || null,
         leituras: {},
         ciencias: {},
         status: (asRascunho ? 'rascunho' : dataAgendamento ? 'agendado' : 'enviado') as 'rascunho' | 'agendado' | 'enviado'
@@ -1600,6 +1606,9 @@ export default function ADAdminComunicados() {
                       <option value="video">Vídeos</option>
                       <option value="formulario">Formulários</option>
                       <option value="relatorio">Relatórios</option>
+                      <option value="enquete">Enquetes</option>
+                      <option value="autorizacao">Autorizações</option>
+                      <option value="cobranca">Cobranças</option>
                     </select>
                   </div>
                   <button className="btn btn-ghost btn-sm" onClick={() => setShowMonthlyReport(false)} style={{ color: '#fff', padding: 0 }}><X size={20} /></button>
@@ -1627,7 +1636,7 @@ export default function ADAdminComunicados() {
                       const hasAny = anexosList.length > 0;
                       if (attachmentFilter === 'nenhum' && hasAny) valid = false;
                       if (attachmentFilter === 'qualquer' && !hasAny) valid = false;
-                      if (['relatorio', 'formulario', 'imagem', 'video'].includes(attachmentFilter)) {
+                      if (['relatorio', 'formulario', 'imagem', 'video', 'enquete', 'autorizacao', 'cobranca'].includes(attachmentFilter)) {
                         const matchesType = anexosList.some((anexo: any) => {
                           let name = '';
                           let url = '';
@@ -1654,13 +1663,16 @@ export default function ADAdminComunicados() {
                           }
                           if (attachmentFilter === 'relatorio' && name.startsWith('Relatório:')) return true;
                           if (attachmentFilter === 'formulario' && name.startsWith('Formulário:')) return true;
+                          if (attachmentFilter === 'enquete' && (name.startsWith('Enquete:') || mimeType === 'enquete' || c.enquete || (c as any).dados?.enquete)) return true;
+                          if (attachmentFilter === 'autorizacao' && (name.startsWith('Autorização:') || mimeType === 'autorizacao' || c.autorizacao || (c as any).dados?.autorizacao)) return true;
+                          if (attachmentFilter === 'cobranca' && (name.startsWith('Cobrança:') || name.startsWith('Cobranca:') || mimeType === 'cobranca' || c.cobranca || (c as any).dados?.cobranca || (c.cobrancas && c.cobrancas.length > 0) || ((c as any).dados?.cobrancas && (c as any).dados?.cobrancas.length > 0) || c.tipo === 'cobrança' || (c.tipo as any) === 'cobranca')) return true;
                           const isImg = mimeType.startsWith('image/') || (url && url.startsWith('data:image')) || /\.(jpg|jpeg|png|webp|gif)$/i.test(name);
                           if (attachmentFilter === 'imagem' && isImg) return true;
                           const isVid = mimeType.startsWith('video/') || (url && url.startsWith('data:video')) || /\.(mp4|webm|ogg|mov)$/i.test(name);
                           if (attachmentFilter === 'video' && isVid) return true;
                           return false;
                         });
-                        if (!matchesType) valid = false;
+                        if (!matchesType && !(attachmentFilter === 'enquete' && (c.enquete || (c as any).dados?.enquete)) && !(attachmentFilter === 'autorizacao' && (c.autorizacao || (c as any).dados?.autorizacao)) && !(attachmentFilter === 'cobranca' && (c.cobranca || (c as any).dados?.cobranca || (c.cobrancas && c.cobrancas.length > 0) || ((c as any).dados?.cobrancas && (c as any).dados?.cobrancas.length > 0) || c.tipo === 'cobrança' || (c.tipo as any) === 'cobranca'))) valid = false;
                       }
                     }
 

@@ -237,8 +237,16 @@ function extractLogCandidateReadIds(log: any): string[] {
   const ids = new Set<string>()
   if (log.item_id) {
     ids.add(log.item_id)
-    const base = log.item_id.replace(/(_aluno_\d+|_perfil_\w+|-\w+_\d+)$/, '')
+    const base = log.item_id.replace(/(_aluno_\d+|_perfil_\w+|-\w+_\d+|_familia|_colaborador)$/, '')
     if (base && base !== log.item_id) ids.add(base)
+  }
+  if (log.type === 'chat') {
+    try {
+      if (log.onesignal_response) {
+        const p = typeof log.onesignal_response === 'string' ? JSON.parse(log.onesignal_response) : log.onesignal_response
+        if (p?._metadata?.message_id) ids.add(String(p._metadata.message_id))
+      }
+    } catch {}
   }
   if (log.target_url) {
     const m = log.target_url.match(/[?&]id=([^&#]+)/)
@@ -257,6 +265,7 @@ function extractLogCandidateReadIds(log: any): string[] {
 }
 
 function extractLogStudentId(log: any): string | null {
+  if (log?.type === 'chat') return null
   const m1 = log.item_id?.match(/aluno_(\d+)/i)
   if (m1) return m1[1]
   const m2 = log.target_url?.match(/\/agenda-digital\/(\d+)/i) || log.target_url?.match(/aluno_id=(\d+)/i)
@@ -297,8 +306,8 @@ async function resolveLogFullDetails(logIdOrLog: string | any, supabase: any) {
     }
   } catch {}
 
-  // 1. Caso seja relativo a Aluno
-  if (alunoId) {
+  // 1. Caso seja relativo a Aluno (comunicados, momentos, frequência, saída - exceto chat que possui destinatários específicos)
+  if (alunoId && log.type !== 'chat') {
     const [{ data: aluno }, { data: vinculos }] = await Promise.all([
       supabase.from('alunos').select('id, nome, matricula, turma, foto, status').eq('id', alunoId).maybeSingle(),
       supabase.from('aluno_responsavel').select('responsavel_id').eq('aluno_id', alunoId)
@@ -435,9 +444,14 @@ async function resolveLogFullDetails(logIdOrLog: string | any, supabase: any) {
     summary = `${aluno?.nome || 'Aluno'} (${resps.length} responsável(is) vinculado(s))`
   } else if (isColaborador) {
     // 2. Caso seja relativo a Colaborador
-    const { data: colabs } = await supabase.from('system_users')
-      .select('id, nome, email, cargo, perfil, auth_id, dados')
-      .limit(30)
+    const targetColabIds = Array.from(targetAliases)
+    let colabQuery = supabase.from('system_users').select('id, nome, email, cargo, perfil, auth_id, dados')
+    if (targetColabIds.length > 0) {
+      colabQuery = colabQuery.in('id', targetColabIds)
+    } else {
+      colabQuery = colabQuery.limit(30)
+    }
+    const { data: colabs } = await colabQuery
 
     for (const c of colabs || []) {
       recipients.push({
@@ -454,8 +468,101 @@ async function resolveLogFullDetails(logIdOrLog: string | any, supabase: any) {
       if (c.auth_id) targetAliases.add(c.auth_id)
     }
     summary = `Equipe Escolar / Colaboradores (${(colabs || []).length} destinatários)`
+  } else if (log.type === 'chat') {
+    // 3. Caso seja mensagem de Chat
+    const targetIds = Array.from(targetAliases)
+    if (targetIds.length > 0) {
+      const numericIds = targetIds.filter(id => /^\d+$/.test(id))
+      const uuidIds = targetIds.filter(id => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id))
+      const emailIds = targetIds.filter(id => id.includes('@'))
+
+      const queries: Promise<any>[] = []
+      if (numericIds.length > 0) {
+        queries.push(supabase.from('responsaveis').select('id, nome, email, telefone, celular').in('id', numericIds).limit(50))
+      } else {
+        queries.push(Promise.resolve({ data: [] }))
+      }
+
+      if (uuidIds.length > 0 || emailIds.length > 0) {
+        let q = supabase.from('system_users').select('id, nome, email, cargo, perfil, auth_id')
+        const conds: string[] = []
+        if (uuidIds.length > 0) {
+          conds.push(`id.in.(${uuidIds.map(u => `"${u}"`).join(',')})`)
+          conds.push(`auth_id.in.(${uuidIds.map(u => `"${u}"`).join(',')})`)
+        }
+        if (emailIds.length > 0) {
+          conds.push(`email.in.(${emailIds.map(e => `"${e}"`).join(',')})`)
+        }
+        queries.push(q.or(conds.join(',')).limit(50))
+      } else {
+        queries.push(Promise.resolve({ data: [] }))
+      }
+
+      const [{ data: resps }, { data: sysUsers }] = await Promise.all(queries)
+
+      for (const r of resps || []) {
+        const devices = await fetchDevicesForGuardian({
+          responsavel_id: r.id,
+          email: r.email,
+        })
+        const hasActive = devices.some((d: any) => d.isSubscribed)
+        const deviceModels = devices.map((d: any) => d.modelo || d.tipo).filter(Boolean)
+
+        recipients.push({
+          id: String(r.id),
+          nome: r.nome || 'Responsável',
+          tipo: 'responsavel',
+          tipoLabel: 'Responsável',
+          email: r.email || null,
+          telefone: formatPhoneDisplay(r.telefone || r.celular),
+          devicesCount: devices.length,
+          devices,
+          hasActiveDevice: hasActive,
+          deviceSummary: devices.length > 0 ? deviceModels.join(', ') : 'App desinstalado ou sem permissão',
+          accountStatus: hasActive ? 'active_device' : 'no_device',
+          accountStatusLabel: hasActive ? 'Push Ativo' : 'Sem Aparelho Ativo',
+          accountStatusDetail: deviceModels.join(', ') || 'Sem permissão',
+          statusTone: hasActive ? 'success' : 'danger',
+        })
+      }
+
+      for (const c of sysUsers || []) {
+        const devices = await fetchDevicesForGuardian({
+          system_user_id: String(c.id),
+          colaborador_id: String(c.id),
+          email: c.email,
+        })
+        const hasActive = devices.some((d: any) => d.isSubscribed)
+        const deviceModels = devices.map((d: any) => d.modelo || d.tipo).filter(Boolean)
+
+        recipients.push({
+          id: String(c.id),
+          nome: c.nome || 'Colaborador',
+          tipo: 'colaborador',
+          tipoLabel: c.cargo || c.perfil || 'Equipe Escolar',
+          email: c.email || null,
+          cargo: c.cargo || c.perfil || 'Equipe Escolar',
+          devicesCount: devices.length,
+          devices,
+          hasActiveDevice: hasActive,
+          deviceSummary: devices.length > 0 ? deviceModels.join(', ') : 'Dispositivo conectado',
+          statusTone: hasActive ? 'success' : 'neutral',
+        })
+      }
+    }
+
+    let metaTitle = ''
+    let metaRecipient = ''
+    try {
+      const p = typeof log.onesignal_response === 'string' ? JSON.parse(log.onesignal_response) : log.onesignal_response
+      metaTitle = p?._metadata?.conversation_title || ''
+      metaRecipient = p?._metadata?.recipient_name || ''
+    } catch {}
+
+    const friendlyName = metaRecipient || metaTitle || (recipients[0]?.nome) || 'Destinatário'
+    summary = `${friendlyName} (${recipients.length || log.target_count || 1} destinatário(s))`
   } else {
-    // 3. Fallback genérico
+    // 4. Fallback genérico
     summary = `${log.target_count || 1} destinatário(s) na lista`
   }
 
@@ -492,6 +599,34 @@ async function resolveLogFullDetails(logIdOrLog: string | any, supabase: any) {
         if (su) readInfo.readerName = su.nome
       }
     }
+  }
+
+  // Se for chat e não constar em agenda_notification_reads, checar em chat_messages
+  if (!readInfo.isRead && log.type === 'chat') {
+    try {
+      let msgId: string | null = null
+      if (log.onesignal_response) {
+        const p = typeof log.onesignal_response === 'string' ? JSON.parse(log.onesignal_response) : log.onesignal_response
+        msgId = p?._metadata?.message_id || null
+      }
+      if (!msgId && log.item_id) {
+        const m = log.item_id.match(/(?:^|_)msg_([a-zA-Z0-9-]+?)(?:_(?:familia|colaborador))?$/)
+        if (m) msgId = m[1]
+      }
+      if (msgId) {
+        const { data: cmsg } = await supabase
+          .from('chat_messages')
+          .select('id, status, updated_at')
+          .eq('id', msgId)
+          .maybeSingle()
+
+        if (cmsg && cmsg.status === 'read') {
+          readInfo.isRead = true
+          readInfo.readAt = cmsg.updated_at
+          readInfo.readerName = 'Lido no chat'
+        }
+      }
+    } catch {}
   }
 
   // Estatísticas de entrega ao vivo OneSignal
@@ -733,6 +868,13 @@ export async function GET(request: Request) {
               studentOrConditions.push(`message.ilike.%turma de ${friendlyName}%`)
             }
 
+            if (aluno.turma) {
+              const cleanTurma = String(aluno.turma).replace(/^sync-/, '')
+              studentOrConditions.push(`item_id.ilike.%turma_${aluno.turma}%`)
+              studentOrConditions.push(`item_id.ilike.%turma_${cleanTurma}%`)
+              studentOrConditions.push(`item_id.ilike.%turma_sync-${cleanTurma}%`)
+            }
+
             query = query.or(studentOrConditions.join(','))
 
             // Buscar responsáveis do aluno para trazer os aparelhos vinculados
@@ -850,6 +992,37 @@ export async function GET(request: Request) {
         }
       }
 
+      // Para mensagens de chat, também verificar leitura em chat_messages
+      const chatMessageIds = (logs || [])
+        .filter((l: any) => l.type === 'chat')
+        .map((l: any) => {
+          try {
+            const p = typeof l.onesignal_response === 'string' ? JSON.parse(l.onesignal_response) : l.onesignal_response
+            return p?._metadata?.message_id
+          } catch {
+            return null
+          }
+        })
+        .filter(Boolean)
+
+      if (chatMessageIds.length > 0) {
+        const { data: readChatMsgs } = await supabase
+          .from('chat_messages')
+          .select('id, status, updated_at')
+          .in('id', chatMessageIds)
+          .eq('status', 'read')
+
+        if (readChatMsgs) {
+          readChatMsgs.forEach((m: any) => {
+            readsMap[m.id] = {
+              read_at: m.updated_at,
+              usuario_id: 'destinatario',
+              perfil: 'destinatario'
+            }
+          })
+        }
+      }
+
       // 2. Resolução semântica de destinatários em lote (Alunos e Responsáveis)
       const batchAlunoIds = Array.from(new Set(
         (logs || []).map((l: any) => extractLogStudentId(l)).filter(Boolean) as string[]
@@ -932,6 +1105,17 @@ export async function GET(request: Request) {
         } else if (log.item_id?.includes('colaborador') || log.target_url?.includes('/colaborador/')) {
           recipient_summary = `Equipe Escolar (${log.target_count || 1} alvos)`
           recipients_preview = [{ nome: 'Equipe de Colaboradores', tipo: 'colaborador' }]
+        } else if (log.type === 'chat') {
+          let metaTitle = ''
+          let metaRecipient = ''
+          try {
+            const p = typeof log.onesignal_response === 'string' ? JSON.parse(log.onesignal_response) : log.onesignal_response
+            metaTitle = p?._metadata?.conversation_title || ''
+            metaRecipient = p?._metadata?.recipient_name || ''
+          } catch {}
+          const displayName = metaRecipient || metaTitle || 'Participante do Chat'
+          recipient_summary = `${displayName} (${log.target_count || 1} alvo${(log.target_count || 1) !== 1 ? 's' : ''})`
+          recipients_preview = [{ nome: displayName, tipo: 'chat' }]
         }
 
         return {

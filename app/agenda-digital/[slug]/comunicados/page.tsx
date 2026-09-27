@@ -4,7 +4,7 @@ import { useSearchParams, useRouter, useParams } from 'next/navigation';
 import Image from 'next/image'
 
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
-import { Bell, Search, Filter, Pin, CheckCircle2, X, Paperclip, FileText, FileBarChart, DollarSign, Image as ImageIcon, Video, ShieldAlert, Calendar, Loader2, ChevronDown, RotateCw } from 'lucide-react'
+import { Bell, Search, Filter, Pin, CheckCircle2, X, Paperclip, FileText, FileBarChart, DollarSign, Image as ImageIcon, Video, ShieldAlert, Calendar, Loader2, ChevronDown, RotateCw, Vote, FileCheck2 } from 'lucide-react'
 import { EmptyStateCard } from '../../components/EmptyStateCard'
 import { UserAvatar } from '@/components/UserAvatar'
 
@@ -67,11 +67,20 @@ const getAnexoType = (anexoStr: string) => {
   if (!parsed) return null;
   const { name, url, mime } = parsed;
   
+  if (name.startsWith('Autorização:') || mime === 'autorizacao' || url.startsWith('autorizacao:')) {
+    return { label: 'Autorização', icon: <FileCheck2 size={13} strokeWidth={2} color="#059669" />, color: 'rgba(16,185,129,0.1)', textColor: '#059669' };
+  }
+  if (name.startsWith('Enquete:') || mime === 'enquete' || url.startsWith('enquete:')) {
+    return { label: 'Enquete', icon: <Vote size={13} strokeWidth={2} color="#f59e0b" />, color: 'rgba(245,158,11,0.1)', textColor: '#d97706' };
+  }
   if (name.startsWith('Formulário:')) {
     return { label: 'Formulário', icon: <FileText size={13} strokeWidth={2} color="#3b82f6" />, color: 'rgba(59,130,246,0.1)', textColor: '#3b82f6' };
   }
   if (name.startsWith('Relatório:') || name.startsWith('Relatório Personalizado:') || url.startsWith('payload:')) {
     return { label: 'Relatório', icon: <FileBarChart size={13} strokeWidth={2} color="#8b5cf6" />, color: 'rgba(139,92,246,0.1)', textColor: '#8b5cf6' };
+  }
+  if (name.startsWith('Cobrança:') || name.startsWith('Cobranca:') || mime === 'cobranca' || mime === 'cobrança' || url.startsWith('cobranca:') || name.startsWith('Fatura:')) {
+    return { label: 'Cobrança', icon: <DollarSign size={13} strokeWidth={2.5} color="#059669" />, color: 'rgba(16,185,129,0.1)', textColor: '#059669' };
   }
   if (name.toLowerCase().endsWith('.pdf')) {
     return { label: 'PDF', icon: <FileText size={13} strokeWidth={2} color="#ef4444" />, color: 'rgba(239,68,68,0.1)', textColor: '#ef4444' };
@@ -1176,29 +1185,73 @@ export default function ADComunicadosPage({ params }: { params: any }) {
                        </div>
 
                        {/* Attachments Section */}
-                       {c.anexos && c.anexos.length > 0 && (
-                         <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                           {c.anexos.map((anexo: string, idx: number) => {
-                             const typeInfo = getAnexoType(anexo);
-                             if (!typeInfo) return null;
-                             return (
-                               <div key={idx} title={typeInfo.label} style={{ 
-                                  background: typeInfo.color, 
-                                  display: 'flex', 
-                                  alignItems: 'center', 
-                                  justifyContent: 'center', 
-                                  width: 24, 
-                                  height: 24, 
-                                  borderRadius: '7px', 
-                                  border: `1px solid ${typeInfo.textColor}3a`, 
-                                  boxShadow: `0 2px 6px ${typeInfo.color}`, 
-                               }}> 
-                                 {typeInfo.icon} 
-                               </div>
-                             );
-                           })}
-                         </div>
-                       )}
+                       {(() => {
+                         const effectiveAnexos = [...(c.anexos || [])];
+                         const cobrancasArr = Array.isArray(c.cobrancas || (c as any).dados?.cobrancas)
+                           ? (c.cobrancas || (c as any).dados?.cobrancas)
+                           : (c.cobranca || (c as any).dados?.cobranca ? [c.cobranca || (c as any).dados?.cobranca] : []);
+                         const cobrancaObj = c.cobranca || (c as any).dados?.cobranca;
+                         
+                         if (cobrancasArr.length > 0) {
+                           if (!effectiveAnexos.some((a: any) => {
+                             const str = typeof a === 'string' ? a : (a?.name || '');
+                             return str.startsWith('Cobrança:') || str.startsWith('Cobranca:') || str.includes('|cobranca');
+                           })) {
+                             cobrancasArr.forEach((cobItem: any) => {
+                               const tituloCob = cobItem?.titulo || 'Cobrança';
+                               const valorCob = cobItem?.valor || '';
+                               effectiveAnexos.push(`Cobrança: ${tituloCob}|cobranca:${valorCob}|cobranca`);
+                             });
+                           }
+                         } else if ((cobrancaObj || c.tipo === 'cobrança' || c.tipo === 'cobranca') && !effectiveAnexos.some((a: any) => {
+                           const str = typeof a === 'string' ? a : (a?.name || '');
+                           return str.startsWith('Cobrança:') || str.startsWith('Cobranca:') || str.includes('|cobranca');
+                         })) {
+                           const tituloCob = cobrancaObj?.titulo || 'Cobrança';
+                           const valorCob = cobrancaObj?.valor || '';
+                           effectiveAnexos.push(`Cobrança: ${tituloCob}|cobranca:${valorCob}|cobranca`);
+                         }
+                         const enqueteObj = c.enquete || (c as any).dados?.enquete;
+                         if ((enqueteObj || c.tipo === 'enquete') && !effectiveAnexos.some((a: any) => {
+                           const str = typeof a === 'string' ? a : (a?.name || '');
+                           return str.startsWith('Enquete:') || str.includes('|enquete');
+                         })) {
+                           effectiveAnexos.push(`Enquete: ${enqueteObj?.pergunta || enqueteObj?.titulo || 'Enquete'}|enquete:${enqueteObj?.id || 'poll'}|enquete`);
+                         }
+                         const autorizacaoObj = c.autorizacao || (c as any).dados?.autorizacao;
+                         if ((autorizacaoObj || c.tipo === 'autorização' || c.tipo === 'autorizacao') && !effectiveAnexos.some((a: any) => {
+                           const str = typeof a === 'string' ? a : (a?.name || '');
+                           return str.startsWith('Autorização:') || str.includes('|autorizacao');
+                         })) {
+                           effectiveAnexos.push(`Autorização: ${autorizacaoObj?.titulo || 'Autorização'}|autorizacao:${autorizacaoObj?.id || 'auth'}|autorizacao`);
+                         }
+
+                         if (effectiveAnexos.length === 0) return null;
+
+                         return (
+                           <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                             {effectiveAnexos.map((anexo: string, idx: number) => {
+                               const typeInfo = getAnexoType(anexo);
+                               if (!typeInfo) return null;
+                               return (
+                                 <div key={idx} title={typeInfo.label} style={{ 
+                                    background: typeInfo.color, 
+                                    display: 'flex', 
+                                    alignItems: 'center', 
+                                    justifyContent: 'center', 
+                                    width: 24, 
+                                    height: 24, 
+                                    borderRadius: '7px', 
+                                    border: `1px solid ${typeInfo.textColor}3a`, 
+                                    boxShadow: `0 2px 6px ${typeInfo.color}`, 
+                                 }}> 
+                                   {typeInfo.icon} 
+                                 </div>
+                               );
+                             })}
+                           </div>
+                         );
+                       })()}
                     </div>
                   </div>
                   

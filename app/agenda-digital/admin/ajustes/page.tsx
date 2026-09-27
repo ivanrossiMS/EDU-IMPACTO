@@ -2,9 +2,10 @@
 
 import React, { useState, useRef, useEffect } from 'react'
 import Link from 'next/link'
-import { Settings, Shield, Bell, Smartphone, Palette, Save, Clock, CheckCircle2, Upload, MessageCircle, Radio, ArrowRight, Sparkles } from 'lucide-react'
+import { Settings, Shield, Bell, Smartphone, Palette, Save, Clock, CheckCircle2, Upload, MessageCircle, MessageSquare, Radio, ArrowRight, Sparkles } from 'lucide-react'
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 import { AdminWhatsAppContactsManager } from '@/components/AdminWhatsAppContactsManager'
+import { AdminChatSettingsManager } from '@/components/AdminChatSettingsManager'
 
 export default function ADAdminAjustes() {
   const { bannerUrl, setBannerUrl, adConfig, setAdConfig, adAlert } = useAgendaDigital()
@@ -275,6 +276,13 @@ export default function ADAdminAjustes() {
               style={{ justifyContent: 'flex-start', background: activeTab === 'permissoes' ? 'rgba(79,70,229,0.1)' : 'transparent', color: activeTab === 'permissoes' ? '#4f46e5' : 'inherit' }}
             >
               <Shield size={18} style={{ marginRight: 8 }}/> Permissões e Uso
+            </button>
+            <button 
+              onClick={() => setActiveTab('chat')}
+              className={`ad-ajustes-nav-btn ${activeTab === 'chat' ? 'btn' : 'btn btn-ghost'}`}
+              style={{ justifyContent: 'flex-start', background: activeTab === 'chat' ? 'rgba(79,70,229,0.1)' : 'transparent', color: activeTab === 'chat' ? '#4f46e5' : 'inherit' }}
+            >
+              <MessageSquare size={18} style={{ marginRight: 8 }}/> Chat & Autoatendimento
             </button>
             <button 
               onClick={() => setActiveTab('notificacoes')}
@@ -690,6 +698,17 @@ export default function ADAdminAjustes() {
                   )}
                 </div>
               </div>
+            )}
+
+            {activeTab === 'chat' && (
+              <AdminChatSettingsManager
+                localConfig={localConfig}
+                setLocalConfig={setLocalConfig}
+                onSave={async (newConfig: any) => {
+                  setLocalConfig(newConfig)
+                  setAdConfig(newConfig)
+                }}
+              />
             )}
 
            {activeTab === 'whatsapp' && (

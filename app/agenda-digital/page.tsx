@@ -96,7 +96,7 @@ function AgendaDigitalIndexContent() {
 
       // Para colaboradores que NÃO são alunos nem família
       const isStaff = !['Família', 'Responsável', 'Aluno'].includes(perfil) && !['Responsável', 'Aluno'].includes(cargo);
-      const hasDualRole = Boolean(currentUser.hasDualRole || currentUser.responsavel_id);
+      const hasDualRole = isStaff && Boolean(currentUser.hasDualRole || currentUser.responsavel_id);
 
       // Se é colaborador puro (sem filhos/responsável vinculados), vai direto para colaborador sem esperar
       if (isStaff && !hasDualRole) {

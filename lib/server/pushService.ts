@@ -249,6 +249,8 @@ export async function sendPushNotification(params: PushPayload): Promise<PushRes
     return { success: allOk, data: results }
   }
 
+  const appBaseUrl = (process.env.NEXT_PUBLIC_APP_URL || 'https://impacto-edu.net').replace(/\/$/, '')
+
   // Extrair rota interna relativa para uso no aplicativo móvel
   const relativeRoute = (() => {
     if (!params.url) return undefined
@@ -261,17 +263,29 @@ export async function sendPushNotification(params: PushPayload): Promise<PushRes
     return params.url.replace(/^[a-zA-Z0-9._-]+:\/*/, '/')
   })()
 
+  // web_url para OneSignal: OBRIGATORIAMENTE deve começar com http:// ou https://
+  const absoluteWebUrl = params.url
+    ? (params.url.startsWith('http://') || params.url.startsWith('https://')
+        ? params.url
+        : `${appBaseUrl}${params.url.startsWith('/') ? '' : '/'}${params.url}`)
+    : undefined
+
+  // app_url no OneSignal: Apenas schemes customizados (ex: impactoedu://).
+  // NUNCA passar caminhos relativos (/...) nem URLs http(s) no app_url para evitar erro 400 no OneSignal.
+  const customSchemeAppUrl = Boolean(
+    params.url &&
+    /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(params.url) &&
+    !params.url.startsWith('http://') &&
+    !params.url.startsWith('https://')
+  ) ? params.url : undefined
+
   const commonFields = {
     app_id: ONESIGNAL_APP_ID,
     headings: { en: params.title, pt: params.title },
     contents: { en: params.body, pt: params.body },
-    ...(params.url && {
-      // web_url é exclusivo para Web Push (navegadores desktop). Ao clicar no PC, abre a URL web.
-      web_url: params.url,
-      // NUNCA enviar URLs http:// ou https:// no app_url. No iOS e Android, URLs http(s) no app_url
-      // são tratadas pelo OneSignal nativo como Launch URL externa, forçando a abertura no Safari/Chrome.
-      // Apenas schemes customizados (ex: impactoedu://) são aceitos como app_url nativo.
-      ...(!params.url.startsWith('http://') && !params.url.startsWith('https://') ? { app_url: params.url } : {}),
+    ...(absoluteWebUrl && {
+      web_url: absoluteWebUrl,
+      ...(customSchemeAppUrl ? { app_url: customSchemeAppUrl } : {}),
     }),
     data: {
       ...(params.data || {}),

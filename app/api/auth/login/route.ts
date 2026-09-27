@@ -261,6 +261,20 @@ export async function POST(request: NextRequest) {
         perfil = 'Família'
         const rFoto = responsavelRecord.dados?.foto
         if (rFoto) resolvedFoto = rFoto
+
+        // Verifica se este responsável também é colaborador ativo na system_users
+        if (resolvedEmail) {
+          const { data: sysUserMatch } = await supabaseAdmin
+            .from('system_users')
+            .select('id, cargo, perfil, status')
+            .or(`auth_id.eq.${user?.id || ''},email.ilike.${resolvedEmail}`)
+            .eq('status', 'ativo')
+            .limit(1)
+          if (sysUserMatch && sysUserMatch.length > 0) {
+            hasDualRole = true
+            dbSystemUser = sysUserMatch[0]
+          }
+        }
       } else if (userType === 'aluno' && alunoRecord) {
         dbRecordExists = true
         alunoFoundRecord = alunoRecord
@@ -359,7 +373,7 @@ export async function POST(request: NextRequest) {
       userMetadataUpdate.colaborador_id = dbSystemUser.id
       userMetadataUpdate.system_user_id = dbSystemUser.id
     }
-    if (hasDualRole) userMetadataUpdate.hasDualRole = true
+    userMetadataUpdate.hasDualRole = Boolean(hasDualRole)
     if (resolvedFoto) userMetadataUpdate.foto = resolvedFoto
 
     if (user) {
@@ -378,8 +392,8 @@ export async function POST(request: NextRequest) {
     const enrichedUser = {
       ...user,
       foto: resolvedFoto,
-      hasDualRole,
-      user_metadata: { ...user?.user_metadata, ...userMetadataUpdate }
+      hasDualRole: Boolean(hasDualRole),
+      user_metadata: { ...user?.user_metadata, ...userMetadataUpdate, hasDualRole: Boolean(hasDualRole) }
     }
 
     const response = NextResponse.json({ user: enrichedUser, session: session }, { status: 200 })

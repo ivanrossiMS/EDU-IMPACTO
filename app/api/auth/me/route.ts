@@ -196,6 +196,17 @@ export async function GET(request: Request) {
   }
 
   // Combine top-level auth data (id, email) with user_metadata and database fields
+  const hasStaffRole = Boolean(dbUser && (dbUser.perfil || dbUser.cargo) && dbUser.status !== 'inativo');
+  const hasFamilyRole = Boolean(
+    dbResp || 
+    dbAluno || 
+    (dbUser?.dados?.responsavel_id && String(dbUser.dados.responsavel_id).trim() !== '') || 
+    (dbUser?.dados?.aluno_id && String(dbUser.dados.aluno_id).trim() !== '') ||
+    (user.user_metadata?.responsavel_id && String(user.user_metadata.responsavel_id).trim() !== '') ||
+    (user.user_metadata?.aluno_id && String(user.user_metadata.aluno_id).trim() !== '')
+  );
+  const isDualRole = Boolean(hasStaffRole && hasFamilyRole);
+
   const userData = {
     ...user.user_metadata,
     id: user.id,
@@ -205,12 +216,19 @@ export async function GET(request: Request) {
     perfil: dbUser?.perfil || (dbResp ? 'Família' : (dbAluno ? 'Família' : user.user_metadata?.perfil)),
     cargo: dbUser?.cargo || (dbResp ? 'Responsável' : (dbAluno ? 'Aluno' : user.user_metadata?.cargo)),
     status: dbUser?.status || (dbAluno?.status ? dbAluno.status : 'ativo'),
-    colaborador_id: dbUser?.id || user.user_metadata?.colaborador_id || '',
-    system_user_id: dbUser?.id || user.user_metadata?.system_user_id || '',
-    hasDualRole: Boolean(user.user_metadata?.hasDualRole || dbUser?.dados?.responsavel_id || user.user_metadata?.responsavel_id || (dbUser && dbResp)),
+    colaborador_id: dbUser?.id || '',
+    system_user_id: dbUser?.id || '',
+    hasDualRole: isDualRole,
     responsavel_id: dbResp?.id || dbUser?.dados?.responsavel_id || user.user_metadata?.responsavel_id || '',
     aluno_id: dbAluno?.id || dbUser?.dados?.aluno_id || user.user_metadata?.aluno_id || '',
   };
+
+  // Corrige metadados no Supabase se hasDualRole estiver dessincronizado
+  if (user.user_metadata?.hasDualRole !== isDualRole) {
+    void supabaseAdmin.auth.admin
+      .updateUserById(user.id, { user_metadata: { ...(user.user_metadata || {}), hasDualRole: isDualRole } })
+      .catch(() => {});
+  }
 
   return NextResponse.json({ user: userData, ip }, {
     headers: NO_CACHE_HEADERS

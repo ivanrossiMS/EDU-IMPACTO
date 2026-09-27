@@ -3,6 +3,8 @@ import { motion } from 'framer-motion'
 import { X, CheckCircle2, XCircle, FileText, FileBarChart, Paperclip, ChevronDown, ChevronUp, Users, Loader2 } from 'lucide-react'
 import { ADComunicado } from '@/lib/agendaDigitalContext'
 import { supabase } from '@/lib/supabase'
+import { EnqueteWidget } from '@/components/agenda/enquetes/EnqueteWidget'
+import { AutorizacaoWidget } from '@/components/agenda/autorizacoes/AutorizacaoWidget'
 
 interface TargetStudent {
   id: string
@@ -313,6 +315,28 @@ export function ComunicadoReportModal({ selectedCom, alunosAtivos, turmas, chatG
           <div style={{ padding: 20, background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', fontSize: 14, lineHeight: 1.6, color: '#334155', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
             {renderConteudo(selectedCom.conteudo || (selectedCom as any).texto || '')}
           </div>
+
+          {/* ENQUETE INTERATIVA */}
+          {(selectedCom.enquete || (selectedCom as any).dados?.enquete) && (
+            <div style={{ marginTop: 16 }}>
+              <EnqueteWidget
+                enquete={selectedCom.enquete || (selectedCom as any).dados?.enquete}
+                comunicadoId={String(selectedCom.id)}
+                isAdminMode={true}
+              />
+            </div>
+          )}
+
+          {/* AUTORIZAÇÃO DIGITAL */}
+          {(selectedCom.autorizacao || (selectedCom as any).dados?.autorizacao) && (
+            <div style={{ marginTop: 16 }}>
+              <AutorizacaoWidget
+                autorizacao={selectedCom.autorizacao || (selectedCom as any).dados?.autorizacao}
+                comunicadoId={String(selectedCom.id)}
+                isAdminMode={true}
+              />
+            </div>
+          )}
           
           {selectedCom.anexos && selectedCom.anexos.length > 0 && (
             <div style={{ marginTop: 12, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -320,6 +344,10 @@ export function ComunicadoReportModal({ selectedCom, alunosAtivos, turmas, chatG
                 const parsed = parseAnexo(anexo);
                 if (!parsed) return null;
                 const { name, url, mime } = parsed;
+                const isEnquete = name.startsWith('Enquete:') || url.startsWith('enquete:') || mime === 'enquete';
+                const isAutorizacao = name.startsWith('Autorização:') || url.startsWith('autorizacao:') || mime === 'autorizacao';
+                const isCobranca = name.startsWith('Cobrança:') || name.startsWith('Cobranca:') || url.startsWith('cobranca:') || mime === 'cobranca' || mime === 'cobrança';
+                if (isEnquete || isAutorizacao || isCobranca) return null;
                 const isForm = name.startsWith('Formulário:');
                 const isRel = name.startsWith('Relatório:');
                 const isImg = url.startsWith('data:image/') || mime.startsWith('image/') || name.toLowerCase().endsWith('.png') || name.toLowerCase().endsWith('.jpg') || name.toLowerCase().endsWith('.jpeg') || name.toLowerCase().endsWith('.webp') || name.toLowerCase().endsWith('.gif');

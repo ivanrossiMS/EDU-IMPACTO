@@ -11,7 +11,7 @@ export interface ADComunicado {
   id: string
   titulo: string
   conteudo: string
-  tipo: 'texto' | 'formulário' | 'cobrança' | 'enquete' | 'compromisso' | 'relatório' | 'arquivo'
+  tipo: 'texto' | 'formulário' | 'cobrança' | 'enquete' | 'autorização' | 'compromisso' | 'relatório' | 'arquivo'
   autor: string
   autorCargo: string
   autorId?: string
@@ -33,6 +33,9 @@ export interface ADComunicado {
   status: 'rascunho' | 'agendado' | 'enviado'
   autorFoto?: string | null
   cobranca?: any
+  cobrancas?: any[]
+  enquete?: any
+  autorizacao?: any
 }
 
 export type ADChat = { id: number | string, name: string, status: string, preview: string, time: string, unread: number, tag: string, date?: string, startDate?: string, startTime?: string }
@@ -41,6 +44,60 @@ export type ADMedia = { type: 'image' | 'video', url: string }
 export type ADComment = { id: string, author: string, text: string, time: string }
 export type ADChatGroup = { id: string, nome: string, cor?: string, colaboradoresIds: string[], alunosIds: string[], isGlobalAccess?: boolean, isEquipeEscolar?: boolean, ano?: string, dados?: any, syncId?: string }
 export type ADMomento = { id: number | string, author: string, authorId?: string, targetClasses: string[], targetClassesIds?: string[], alunosIds?: string[], alunosNomes?: string[], funcionariosIds?: string[], media: ADMedia[], desc: string, status: 'pending' | 'approved' | 'rejected', time: string, reason?: string, likes: string[], comments: ADComment[], dados?: any, date?: string, created_at?: string, _isNew?: boolean, grupos?: string[], targetGrupos?: string[] }
+
+export interface ADChatAutoConfig {
+  saudacao: {
+    ativa: boolean
+    mensagem: string
+    frequencia: 'always' | '1x_day' | '1x_2days' | '1x_3days' | '1x_week' | 'first_time'
+  }
+  horarioAtendimento: {
+    ativo: boolean
+    diasSemana: number[] // 0: Dom, 1: Seg, 2: Ter, 3: Qua, 4: Qui, 5: Sex, 6: Sáb
+    horarioInicio: string // ex: "07:00"
+    horarioFim: string // ex: "18:00"
+    temIntervaloAlmoco: boolean
+    almocoInicio: string // ex: "12:00"
+    almocoFim: string // ex: "13:00"
+    bloquearEnvioForaHorario: boolean
+    mensagemAusencia: string
+    frequenciaAusencia: 'always' | '1x_hour' | '1x_day' | '1x_2days' | '1x_night'
+  }
+  recursos: {
+    permitirImagens: boolean
+    permitirDocumentos: boolean
+    permitirAudio: boolean
+    permitirExcluirMensagem: boolean
+    tempoEstimadoResposta: string
+  }
+}
+
+export const DEFAULT_CHAT_AUTO_CONFIG: ADChatAutoConfig = {
+  saudacao: {
+    ativa: true,
+    mensagem: 'Olá, {nome_contato}! {saudacao_tempo}! Agradecemos a sua mensagem. Nossa equipe pedagógica já foi notificada e retornará em breve.',
+    frequencia: '1x_day'
+  },
+  horarioAtendimento: {
+    ativo: true,
+    diasSemana: [1, 2, 3, 4, 5],
+    horarioInicio: '07:00',
+    horarioFim: '18:00',
+    temIntervaloAlmoco: false,
+    almocoInicio: '12:00',
+    almocoFim: '13:00',
+    bloquearEnvioForaHorario: true,
+    mensagemAusencia: 'Olá, {nome_contato}! No momento estamos fora do nosso horário de atendimento escolar ({horario_inicio} às {horario_fim}). O envio de mensagens está desabilitado e será liberado no próximo expediente.',
+    frequenciaAusencia: '1x_day'
+  },
+  recursos: {
+    permitirImagens: true,
+    permitirDocumentos: true,
+    permitirAudio: true,
+    permitirExcluirMensagem: true,
+    tempoEstimadoResposta: 'Até 4 horas úteis'
+  }
+}
 
 export interface ADConfig {
   permissoes: { 
@@ -84,6 +141,7 @@ export interface ADConfig {
     ativo: boolean
     ordem: number
   }>
+  chatAuto?: ADChatAutoConfig
 }
 
 interface ADContextState {
@@ -140,7 +198,8 @@ const AgendaDigitalContext = createContext<ADContextState>({
     permissoes: { chat: false, comentariosMural: false, visualizarAniversariantes: true, visualizarRelatorios: false, confirmarPresencaEventos: false, visualizarFinanceiro: true, visualizarNotas: true, visualizarFrequencia: true, visualizarOcorrencias: true, chamadaAlunoPortaria: true },
     horarios: { inicio: '07:00', fim: '18:00', msgAusencia: 'Fora do horário amigão' },
     notificacoes: { pushComunicados: true, pushMomentos: true, pushFinanceiro: true, pushCalendario: true, pushMensagemChat: false, pushRelatorios: false, pushAlteracaoCalendario: true },
-    saudacao: { ativa: false, titulo: 'Bem-vindo à nossa escola!', mensagem: 'Olá {nome_responsavel},\n\nÉ com muita alegria que recebemos o(a) aluno(a) {nome_aluno} em nossa instituição.', imagemUrl: '' }
+    saudacao: { ativa: false, titulo: 'Bem-vindo à nossa escola!', mensagem: 'Olá {nome_responsavel},\n\nÉ com muita alegria que recebemos o(a) aluno(a) {nome_aluno} em nossa instituição.', imagemUrl: '' },
+    chatAuto: DEFAULT_CHAT_AUTO_CONFIG
   },
   setAdConfig: () => {},
   adAlert: () => {},
@@ -306,9 +365,9 @@ export function AgendaDigitalProvider({ children, isFamily = false }: { children
   }
 
   const defaultInitialConfig: ADConfig = {
-    permissoes: { chat: false, comentariosMural: true, visualizarAniversariantes: true, visualizarRelatorios: false, confirmarPresencaEventos: false, visualizarFinanceiro: true, visualizarNotas: true, visualizarFrequencia: true, visualizarOcorrencias: true, chamadaAlunoPortaria: true },
+    permissoes: { chat: true, comentariosMural: true, visualizarAniversariantes: true, visualizarRelatorios: false, confirmarPresencaEventos: false, visualizarFinanceiro: true, visualizarNotas: true, visualizarFrequencia: true, visualizarOcorrencias: true, chamadaAlunoPortaria: true },
     horarios: { inicio: '07:00', fim: '18:00', msgAusencia: 'Olá!\nNosso horário de atendimento encerrou.' },
-    notificacoes: { pushComunicados: true, pushMomentos: true, pushFinanceiro: true, pushCalendario: true, pushAlteracaoCalendario: true, pushFrequencia: true, pushOcorrencias: true, pushNotas: true, pushSaidaPortaria: true, pushMensagemChat: false, pushRelatorios: false },
+    notificacoes: { pushComunicados: true, pushMomentos: true, pushFinanceiro: true, pushCalendario: true, pushAlteracaoCalendario: true, pushFrequencia: true, pushOcorrencias: true, pushNotas: true, pushSaidaPortaria: true, pushMensagemChat: true, pushRelatorios: false },
     saudacao: { ativa: false, titulo: 'Bem-vindo à nossa escola!', mensagem: 'Olá {nome_responsavel},\n\nÉ com muita alegria que recebemos o(a) aluno(a) {nome_aluno} em nossa instituição.', imagemUrl: '' }
   }
 
@@ -410,7 +469,7 @@ export function AgendaDigitalProvider({ children, isFamily = false }: { children
                 visualizarOcorrencias: true,
                 chamadaAlunoPortaria: true,
                 ...(db.ad_config.permissoes || {}),
-                chat: false,
+                chat: true,
                 visualizarRelatorios: false,
                 confirmarPresencaEventos: false,
               },
@@ -425,7 +484,7 @@ export function AgendaDigitalProvider({ children, isFamily = false }: { children
                 pushNotas: true,
                 pushSaidaPortaria: true,
                 ...(db.ad_config.notificacoes || {}),
-                pushMensagemChat: false,
+                pushMensagemChat: true,
                 pushRelatorios: false,
               }
             }

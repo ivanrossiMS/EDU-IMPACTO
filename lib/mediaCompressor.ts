@@ -103,22 +103,66 @@ export async function extractVideoThumbnail(file: File): Promise<{ thumbnailUrl:
 }
 
 /**
+ * Converte dataURL de thumbnail (JPEG) para File pronto para upload
+ */
+export async function thumbnailDataUrlToFile(dataUrl: string, baseName = 'thumb'): Promise<File | null> {
+  if (!dataUrl || !dataUrl.startsWith('data:')) return null;
+  try {
+    const res = await fetch(dataUrl);
+    const blob = await res.blob();
+    return new File([blob], `${baseName}_${Date.now()}.jpg`, { type: 'image/jpeg' });
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Comprime uma imagem utilizando HTML5 Canvas e converte para WebP (ou JPEG).
+ * Suporta arquivos padrão (PNG, JPG) e arquivos HEIC/HEIF de iPhones.
  * Adapta a resolução e a qualidade dinamicamente com base no tamanho do arquivo.
  */
 export async function compressImage(
   file: File,
   options: ImageCompressOptions = {}
 ): Promise<File> {
-  const fileSize = file.size;
+  const isHeic = 
+    file.type.toLowerCase().includes('heic') || 
+    file.type.toLowerCase().includes('heif') || 
+    /\.(heic|heif)$/i.test(file.name);
+
+  let sourceFile = file;
+
+  // Se for imagem no formato HEIC/HEIF (padrão iPhone/iPad), converte previamente para JPEG compatível
+  if (isHeic && typeof window !== 'undefined') {
+    try {
+      const heic2anyModule = await import('heic2any');
+      const heic2any = (heic2anyModule as any).default || heic2anyModule;
+      const convertedBlobOrBlobs = await heic2any({
+        blob: file,
+        toType: 'image/jpeg',
+        quality: 0.85
+      });
+      const convertedBlob: Blob = Array.isArray(convertedBlobOrBlobs) ? convertedBlobOrBlobs[0] : convertedBlobOrBlobs;
+      const baseName = file.name.substring(0, file.name.lastIndexOf('.')) || file.name;
+      sourceFile = new File([convertedBlob], `${baseName}.jpg`, {
+        type: 'image/jpeg',
+        lastModified: Date.now()
+      });
+      console.info(`[Image Compressor] Arquivo HEIC "${file.name}" convertido para JPEG com sucesso.`);
+    } catch (heicErr) {
+      console.warn('[Image Compressor] Falha na conversão com heic2any, tentando fallback direto:', heicErr);
+    }
+  }
+
+  const fileSize = sourceFile.size;
   let quality = options.quality;
   let maxWidth = options.maxWidth;
   let maxHeight = options.maxHeight;
   const format = options.format || 'image/webp';
 
   // Se a imagem já for WebP e for menor que 150KB, não precisa comprimir mais
-  if (fileSize < 150 * 1024 && file.type === 'image/webp') {
-    return file;
+  if (!isHeic && fileSize < 150 * 1024 && sourceFile.type === 'image/webp') {
+    return sourceFile;
   }
 
   // Definição de qualidade e dimensões adaptativas
@@ -132,12 +176,12 @@ export async function compressImage(
 
   return new Promise((resolve) => {
     const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onerror = () => resolve(file); // Fallback suave: mantém original se leitor falhar
+    reader.readAsDataURL(sourceFile);
+    reader.onerror = () => resolve(sourceFile);
     reader.onload = (event) => {
       const img = new Image();
       img.src = event.target?.result as string;
-      img.onerror = () => resolve(file); // Fallback suave se decodificação falhar (ex: formato exótico)
+      img.onerror = () => resolve(sourceFile);
       img.onload = () => {
         try {
           const canvas = document.createElement('canvas');
@@ -160,7 +204,7 @@ export async function compressImage(
 
           const ctx = canvas.getContext('2d');
           if (!ctx) {
-            return resolve(file);
+            return resolve(sourceFile);
           }
 
           ctx.drawImage(img, 0, 0, width, height);
@@ -171,14 +215,14 @@ export async function compressImage(
           canvas.toBlob(
             (blob) => {
               if (!blob) {
-                return resolve(file);
+                return resolve(sourceFile);
               }
 
               // Se o navegador não suporta WebP e gerou PNG muito grande, tentar JPEG
               if (targetFormat === 'image/webp' && blob.type === 'image/png') {
                 canvas.toBlob((jpgBlob) => {
-                  if (!jpgBlob || jpgBlob.size >= file.size) {
-                    return resolve(file);
+                  if (!jpgBlob || (!isHeic && jpgBlob.size >= fileSize)) {
+                    return resolve(sourceFile);
                   }
                   const baseName = file.name.substring(0, file.name.lastIndexOf('.')) || file.name;
                   const compressedFile = new File([jpgBlob], `${baseName}.jpg`, {
@@ -199,11 +243,12 @@ export async function compressImage(
                 lastModified: Date.now()
               });
 
-              // Usa o comprimido se for menor
-              if (compressedFile.size < file.size) {
+              // Usa o comprimido se for menor ou se o original era HEIC (que não abre nos navegadores)
+              if (isHeic || compressedFile.size < fileSize) {
+                console.info(`[Image Compressor] Otimizado: ${file.name} (${(file.size / 1024).toFixed(0)}KB) -> ${compressedFile.name} (${(compressedFile.size / 1024).toFixed(0)}KB)`);
                 resolve(compressedFile);
               } else {
-                resolve(file);
+                resolve(sourceFile);
               }
             },
             targetFormat,
@@ -211,11 +256,13 @@ export async function compressImage(
           );
         } catch (e) {
           console.warn('[Image Compressor] Erro ao processar:', e);
+          resolve(sourceFile);
         }
       };
     };
   });
 }
+
 
 
 /**

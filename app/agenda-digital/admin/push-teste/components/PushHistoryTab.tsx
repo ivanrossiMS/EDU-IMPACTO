@@ -6,7 +6,7 @@ import {
   CheckCircle2, AlertTriangle, ArrowRight, User, Users,
   GraduationCap, Briefcase, ChevronLeft, ChevronRight,
   ExternalLink, X, Send, Radio, Sparkles, Check, Info,
-  Laptop, Calendar, Camera, FileText, DollarSign, Car, Bell
+  Laptop, Calendar, Camera, FileText, DollarSign, Car, Bell, MessageSquare
 } from 'lucide-react'
 import { UserAvatar } from '@/components/UserAvatar'
 import { PushUserSearchModal, SelectedHistoryUser } from './PushUserSearchModal'
@@ -22,6 +22,7 @@ const CATEGORY_MAP: Record<string, { label: string; color: string; bg: string; i
   notas: { label: 'Boletim & Notas', color: '#6366f1', bg: 'rgba(99, 102, 241, 0.12)', icon: FileText },
   ocorrencias: { label: 'Ocorrências', color: '#f59e0b', bg: 'rgba(245, 158, 11, 0.12)', icon: AlertTriangle },
   cobrancas: { label: 'Cobranças & Fin.', color: '#f43f5e', bg: 'rgba(244, 63, 94, 0.12)', icon: DollarSign },
+  chat: { label: 'Chat & Mensagens', color: '#059669', bg: 'rgba(5, 150, 105, 0.12)', icon: MessageSquare },
   test: { label: 'Teste / Diagnóstico', color: '#64748b', bg: 'rgba(100, 116, 139, 0.12)', icon: Radio },
 }
 
@@ -442,6 +443,7 @@ export function PushHistoryTab({ onSwitchToTesterWithPayload }: PushHistoryTabPr
             }}
           >
             <option value="all">Todas as Categorias</option>
+            <option value="chat">💬 Chat & Mensagens</option>
             <option value="saida">🚗 Portaria & Saída</option>
             <option value="frequencia">✅ Frequência Escolar</option>
             <option value="comunicados">📢 Comunicados Oficiais</option>

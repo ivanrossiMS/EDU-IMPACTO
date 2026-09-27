@@ -26,6 +26,10 @@ function normalizeRow(row: any) {
   merged.exigeCiencia = Boolean(merged.exigeCiencia)
   merged.permiteResposta = Boolean(merged.permiteResposta)
   merged.anexos = Array.isArray(merged.anexos) ? merged.anexos : []
+  merged.enquete = merged.enquete || row.dados?.enquete || row.enquete || null
+  merged.autorizacao = merged.autorizacao || row.dados?.autorizacao || row.autorizacao || null
+  merged.cobrancas = Array.isArray(merged.cobrancas) ? merged.cobrancas : (Array.isArray(row.dados?.cobrancas) ? row.dados.cobrancas : (merged.cobranca || row.dados?.cobranca ? [merged.cobranca || row.dados?.cobranca] : []))
+  merged.cobranca = merged.cobranca || row.dados?.cobranca || row.cobranca || merged.cobrancas[0] || null
   // Map DB column names to app field names
   if (!merged.conteudo && merged.texto) merged.conteudo = merged.texto
   if (!merged.dataEnvio && merged.data) merged.dataEnvio = merged.data
@@ -633,41 +637,64 @@ export async function POST(request: Request) {
     let cobrancaError = false;
     let cobrancaErrorMessage = '';
     
-    if (body.cobranca && data.destino !== 'interno') {
+    const cobrancasToSave: any[] = [];
+    if (Array.isArray(body.cobrancas) && body.cobrancas.length > 0) {
+      cobrancasToSave.push(...body.cobrancas);
+    } else if (body.cobranca && body.cobranca.valor) {
+      cobrancasToSave.push(body.cobranca);
+    }
+
+    if (cobrancasToSave.length > 0 && data.destino !== 'interno') {
        try {
-         const cobrancaObj = {
-           comunicado_id: String(data.id),
-           titulo: body.cobranca.titulo,
-           valor: parseFloat(body.cobranca.valor),
-           vencimento: body.cobranca.vencimento
+         const { students } = await getStudentTargetsForComunicados(data.dados);
+
+         // Limpar cobranças antigas se for edição para evitar duplicatas
+         const { data: existingCobs } = await supabase
+           .from('agenda_cobrancas')
+           .select('id')
+           .eq('comunicado_id', String(data.id));
+
+         if (existingCobs && existingCobs.length > 0) {
+           const existingCobIds = existingCobs.map((c: any) => c.id);
+           await supabase.from('agenda_cobrancas_destinatarios').delete().in('cobranca_id', existingCobIds);
+           await supabase.from('agenda_cobrancas').delete().eq('comunicado_id', String(data.id));
          }
-         
-         const { data: cobrancaSalva, error: cobrancaErr } = await supabase.from('agenda_cobrancas').insert(cobrancaObj).select().single()
-         
-         if (cobrancaErr) {
-            cobrancaError = true;
-            cobrancaErrorMessage = cobrancaErr.message;
-         } else if (cobrancaSalva) {
-            const { students } = await getStudentTargetsForComunicados(data.dados);
-            const destinatariosToInsert = students.map((s: any) => ({
-              cobranca_id: cobrancaSalva.id,
-              destinatario_id: s.aluno_id,
-              destinatario_nome: s.aluno_nome,
-              status: 'PENDING'
-            }))
-            
-            if (destinatariosToInsert.length > 0) {
-               const { error: destErr } = await supabase.from('agenda_cobrancas_destinatarios').insert(destinatariosToInsert)
-               if (destErr) {
-                 cobrancaError = true;
-                 cobrancaErrorMessage = destErr.message;
-               }
-            }
+
+         for (const cob of cobrancasToSave) {
+           if (!cob || !cob.valor) continue;
+           const cobrancaObj = {
+             comunicado_id: String(data.id),
+             titulo: cob.titulo || 'Cobrança',
+             valor: typeof cob.valor === 'string' ? parseFloat(cob.valor.replace(',', '.')) : Number(cob.valor),
+             vencimento: cob.vencimento
+           };
+           
+           const { data: cobrancaSalva, error: cobrancaErr } = await supabase.from('agenda_cobrancas').insert(cobrancaObj).select().single();
+           
+           if (cobrancaErr) {
+              cobrancaError = true;
+              cobrancaErrorMessage = cobrancaErr.message;
+              break;
+           } else if (cobrancaSalva && students.length > 0) {
+              const destinatariosToInsert = students.map((s: any) => ({
+                cobranca_id: cobrancaSalva.id,
+                destinatario_id: s.aluno_id,
+                destinatario_nome: s.aluno_nome,
+                status: 'PENDING'
+              }));
+              
+              const { error: destErr } = await supabase.from('agenda_cobrancas_destinatarios').insert(destinatariosToInsert);
+              if (destErr) {
+                cobrancaError = true;
+                cobrancaErrorMessage = destErr.message;
+                break;
+              }
+           }
          }
        } catch (err: any) {
-         console.error('Erro ao salvar cobrança anexada:', err)
+         console.error('Erro ao salvar cobranças anexadas:', err);
          cobrancaError = true;
-         cobrancaErrorMessage = err.message || 'Erro desconhecido ao salvar cobrança';
+         cobrancaErrorMessage = err.message || 'Erro desconhecido ao salvar cobranças';
        }
     }
 
@@ -1132,6 +1159,11 @@ function buildRow(c: any) {
     leituras: (rest.leituras && typeof rest.leituras === 'object' && !Array.isArray(rest.leituras)) ? rest.leituras : {},
     ciencias: (rest.ciencias && typeof rest.ciencias === 'object' && !Array.isArray(rest.ciencias)) ? rest.ciencias : {},
     anexos: Array.isArray(rest.anexos) ? rest.anexos : [],
+    enquete: rest.enquete || c.enquete || null,
+    autorizacao: rest.autorizacao || c.autorizacao || null,
+    cobranca: rest.cobranca || c.cobranca || (Array.isArray(rest.cobrancas) ? rest.cobrancas[0] : null) || (Array.isArray(c.cobrancas) ? c.cobrancas[0] : null) || null,
+    cobrancas: Array.isArray(rest.cobrancas) ? rest.cobrancas : (Array.isArray(c.cobrancas) ? c.cobrancas : (rest.cobranca || c.cobranca ? [rest.cobranca || c.cobranca] : [])),
+    tipo: ((Array.isArray(rest.cobrancas) && rest.cobrancas.length > 0) || (Array.isArray(c.cobrancas) && c.cobrancas.length > 0) || rest.cobranca || c.cobranca) ? 'cobrança' : (rest.autorizacao || c.autorizacao) ? 'autorização' : (rest.enquete || c.enquete) ? 'enquete' : (rest.tipo || 'texto'),
     exigeCiencia: Boolean(rest.exigeCiencia),
     permiteResposta: Boolean(rest.permiteResposta),
   }

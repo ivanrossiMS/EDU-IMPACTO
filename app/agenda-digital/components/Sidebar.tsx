@@ -41,15 +41,15 @@ import { useState, useEffect, useRef } from 'react'
 import { useApp, saveSetting } from '@/lib/context'
 import { UserAvatar } from '@/components/UserAvatar'
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
-import { useIsMobile } from '@/lib/hooks/useIsMobile'
 import { useQuery } from '@tanstack/react-query'
+
 const menuItems = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, href: '/agenda-digital/admin' },
   { id: 'turmas', label: 'Turmas', icon: BookOpen, href: '/agenda-digital/admin/turmas' },
   { id: 'pessoas', label: 'Usuários', icon: Users, href: '/agenda-digital/admin/pessoas' },
   { id: 'espelhar', label: 'Espelhar Agenda', icon: MonitorSmartphone, href: '/agenda-digital/admin/espelhar' },
+  { id: 'chat', label: 'Chat & Moderação', icon: MessageSquare, href: '/agenda-digital/admin/chat' },
   { id: 'comunicados', label: 'Comunicados', icon: Bell, href: '/agenda-digital/admin/comunicados' },
-
   { id: 'momentos', label: 'Mídia', icon: ImageIcon, href: '/agenda-digital/admin/momentos' },
   { id: 'calendario', label: 'Calendário', icon: Calendar, href: '/agenda-digital/admin/calendario' },
   { id: 'relatorios', label: 'Relatórios/Formulários', icon: FileText, href: '/agenda-digital/admin/relatorios' },
@@ -195,8 +195,8 @@ export function ADSidebar() {
         { id: 'turmas', label: 'Turmas', icon: BookOpen, href: '/agenda-digital/admin/turmas' },
         { id: 'pessoas', label: 'Usuários', icon: Users, href: '/agenda-digital/admin/pessoas' },
         { id: 'espelhar', label: 'Espelhar', icon: MonitorSmartphone, href: '/agenda-digital/admin/espelhar' },
+        { id: 'chat', label: 'Chat', icon: MessageSquare, href: '/agenda-digital/admin/chat' },
         { id: 'comunicados', label: 'comunicados', icon: Bell, href: '/agenda-digital/admin/comunicados' },
-
         { id: 'momentos', label: 'Mídia', icon: ImageIcon, href: '/agenda-digital/admin/momentos' },
         { id: 'calendario', label: 'Agenda', icon: Calendar, href: '/agenda-digital/admin/calendario' },
         { id: 'relatorios', label: 'Relatórios', icon: FileText, href: '/agenda-digital/admin/relatorios' },
@@ -372,7 +372,6 @@ export function ADSidebar() {
                         />
                       )}
                       <item.icon size={20} strokeWidth={isActive ? 2.5 : 2} style={{ filter: isActive ? 'drop-shadow(0 0 6px rgba(255,255,255,0.5))' : 'none', zIndex: 1 }} />
-
                     </motion.div>
                     <span style={{ fontSize: 9, fontWeight: isActive ? 800 : 500, color: 'white', textTransform: 'uppercase', letterSpacing: 0.3, whiteSpace: 'nowrap' }}>
                       {item.label}

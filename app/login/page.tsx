@@ -273,14 +273,18 @@ export default function LoginPage() {
                   id: user.id,
                   nome: meta.nome || user.email?.split('@')[0],
                   email: user.email,
-                  cargo: meta.cargo || 'Colaborador',
-                  perfil: meta.perfil || 'Usuário',
+                  cargo: meta.cargo || (meta.responsavel_id ? 'Responsável' : (meta.aluno_id ? 'Aluno' : 'Colaborador')),
+                  perfil: meta.perfil || ((meta.responsavel_id || meta.aluno_id) ? 'Família' : 'Usuário'),
                   foto: meta.foto,
                   aluno_id: meta.aluno_id || '',
                   responsavel_id: meta.responsavel_id || '',
                   colaborador_id: meta.colaborador_id || meta.system_user_id || '',
                   system_user_id: meta.system_user_id || meta.colaborador_id || '',
-                  hasDualRole: Boolean(meta.hasDualRole || meta.responsavel_id),
+                  hasDualRole: Boolean(
+                    meta.hasDualRole && 
+                    (meta.colaborador_id || meta.system_user_id) && 
+                    (meta.responsavel_id || meta.aluno_id)
+                  ),
                   user_metadata: meta
                 }
                 saveSetting('edu-current-user', storedUser)
@@ -560,8 +564,14 @@ export default function LoginPage() {
       // Update local context with enriched profile from system_users
       const meta = authData.user?.user_metadata || {}
       const nomeReal = meta.nome || cleanEmail.split('@')[0]
-      const cargoReal = meta.cargo || 'Colaborador'
-      const perfilReal = meta.perfil || 'Usuário'
+      const cargoReal = meta.cargo || (meta.responsavel_id ? 'Responsável' : (meta.aluno_id ? 'Aluno' : 'Colaborador'))
+      const perfilReal = meta.perfil || ((meta.responsavel_id || meta.aluno_id) ? 'Família' : 'Usuário')
+
+      const isDualRoleUser = Boolean(
+        (meta.hasDualRole || authData.user?.hasDualRole) && 
+        (meta.colaborador_id || meta.system_user_id || authData.user?.colaborador_id) &&
+        (meta.responsavel_id || meta.aluno_id || authData.user?.responsavel_id)
+      )
 
       const userFoto = authData.user?.foto || meta.foto || undefined
       const userObj = { 
@@ -575,7 +585,7 @@ export default function LoginPage() {
         responsavel_id: meta.responsavel_id || '',
         colaborador_id: meta.colaborador_id || meta.system_user_id || '',
         system_user_id: meta.system_user_id || meta.colaborador_id || '',
-        hasDualRole: Boolean(meta.hasDualRole || authData.user?.hasDualRole || meta.responsavel_id),
+        hasDualRole: isDualRoleUser,
         user_metadata: meta
       }
       setCurrentUser(userObj)
@@ -671,7 +681,8 @@ export default function LoginPage() {
         return
       }
 
-      const isAlsoFamily = !!meta.responsavel_id || !!authData.user?.hasDualRole;
+      const isStaffUser = !['Aluno', 'Responsável'].includes(cargoReal) && perfilReal !== 'Família'
+      const isAlsoFamily = isStaffUser && Boolean(meta.responsavel_id || meta.aluno_id || authData.user?.hasDualRole);
 
       // 1. Aluno / Família / Responsável têm exclusivamente acesso à Agenda Digital
       if (cargoReal === 'Aluno' || perfilReal === 'Família' || cargoReal === 'Responsável') {
@@ -680,7 +691,7 @@ export default function LoginPage() {
           cargo: cargoReal,
           aluno_id: meta.aluno_id,
           responsavel_id: meta.responsavel_id,
-          hasDualRole: isAlsoFamily
+          hasDualRole: false
         })
         navigateSafely(dest)
         return

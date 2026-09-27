@@ -63,6 +63,8 @@
     "dotenv": "^17.4.2",
     "emoji-picker-react": "^4.19.1",
     "framer-motion": "^12.38.0",
+    "heic-convert": "^2.1.0",
+    "heic2any": "^0.0.4",
     "html-to-image": "^1.11.13",
     "html2canvas": "^1.4.1",
     "jose": "^6.2.2",

@@ -999,7 +999,7 @@ function SelecionarAlunoContent() {
   const { currentUser, setCurrentUser, hydrated, setLoadingPath } = useApp()
   const router = useRouter()
   const searchParams = useSearchParams()
-  const redirectTarget = searchParams.get('redirect') || 'comunicados'
+  const redirectTarget = searchParams.get('redirect') || (searchParams.get('conversation_id') ? 'chat' : 'comunicados')
 
   const getForwardParams = useCallback(() => {
     if (typeof window === 'undefined') return ''
@@ -1259,8 +1259,8 @@ function SelecionarAlunoContent() {
               return
             }
 
-            // Se for um módulo direto sem aluno (ex: /agenda-digital/comunicados?id=123 ou /agenda-digital/momentos?id=456)
-            const knownModules = ['comunicados', 'momentos', 'ocorrencias', 'notas', 'frequencia', 'cardapio', 'calendario', 'financeiro', 'carteirinha', 'horarios', 'mensagens']
+            // Se for um módulo direto sem aluno (ex: /agenda-digital/comunicados?id=123 ou /agenda-digital/momentos?id=456 ou /agenda-digital/chat?conversation_id=...)
+            const knownModules = ['comunicados', 'momentos', 'ocorrencias', 'notas', 'frequencia', 'cardapio', 'calendario', 'financeiro', 'carteirinha', 'horarios', 'mensagens', 'chat']
             if (knownModules.includes(targetSlug) && meusAlunos.length > 0) {
               const targetStudent = meusAlunos[0]
               const fixedDest = dest.replace(`/agenda-digital/${targetSlug}`, `/agenda-digital/${targetStudent.id}/${targetSlug}`)
@@ -1280,15 +1280,30 @@ function SelecionarAlunoContent() {
         }
       }
 
-      // Se o usuário é Família e tem APENAS UM aluno e não veio com intenção explícita de trocar
+      // Se o usuário é Família e não veio com intenção explícita de trocar
       const isManual = searchParams.get('manual') === 'true' || searchParams.get('trocar') === 'true'
       const isColab = currentUser && currentUser.perfil !== 'Família' && currentUser.perfil !== 'Responsável' && currentUser.cargo !== 'Aluno'
-      if (!isManual && !isColab && meusAlunos.length === 1) {
-        const singleStudent = meusAlunos[0]
-        const singleDest = `/agenda-digital/${singleStudent.id}/${redirectTarget}${getForwardParams()}`
-        console.log(`[SelecionarAluno] Família com 1 aluno único (${singleStudent.nome}). Redirecionando direto para ${singleDest}...`)
-        window.location.replace(singleDest)
-        return
+      if (!isManual && !isColab && meusAlunos.length > 0) {
+        // Se houver parâmetro de turma (ex: push do mural da turma) e mais de 1 aluno, tentar selecionar o aluno daquela turma
+        const paramTurmaId = searchParams.get('turma_id')
+        if (paramTurmaId && meusAlunos.length > 1) {
+          const matchStudent = meusAlunos.find((a: any) => String(a.turma) === String(paramTurmaId) || String(a.turma_id) === String(paramTurmaId))
+          if (matchStudent) {
+            const matchDest = `/agenda-digital/${matchStudent.id}/${redirectTarget}${getForwardParams()}`
+            console.log(`[SelecionarAluno] Aluno correspondente à turma (${matchStudent.nome}). Redirecionando direto para ${matchDest}...`)
+            window.location.replace(matchDest)
+            return
+          }
+        }
+
+        // Se tem apenas 1 aluno único
+        if (meusAlunos.length === 1) {
+          const singleStudent = meusAlunos[0]
+          const singleDest = `/agenda-digital/${singleStudent.id}/${redirectTarget}${getForwardParams()}`
+          console.log(`[SelecionarAluno] Família com 1 aluno único (${singleStudent.nome}). Redirecionando direto para ${singleDest}...`)
+          window.location.replace(singleDest)
+          return
+        }
       }
     }
 

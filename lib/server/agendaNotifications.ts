@@ -22,6 +22,7 @@ export type AgendaPushType =
   | 'notas'
   | 'cobrancas'
   | 'saida'
+  | 'chat'
   | 'test' // ← adicionado para não quebrar tipagem no diagnóstico
 
 interface SendAgendaPushParams {
@@ -201,6 +202,7 @@ export async function sendAgendaPushNotification({
           notas:       notifs.pushNotas,
           cobrancas:   notifs.pushFinanceiro,
           saida:       notifs.pushSaidaPortaria,
+          chat:        notifs.pushMensagemChat !== false,
           test:        true, // testes de diagnóstico sempre passam
         }
 

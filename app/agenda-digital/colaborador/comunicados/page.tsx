@@ -15,7 +15,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useFormularios, FormTemplate } from '@/lib/formulariosContext'
 import { useSupabaseArray } from '@/lib/useSupabaseCollection'
 import { useApp } from '@/lib/context'
-import { Plus, RotateCw, ChevronRight, ChevronLeft, HelpCircle, Users, ArrowRight, Send, Send as SendIcon, Clock, Bold, Italic, Link as LinkIcon, List, Underline, Smile, BadgeDollarSign, ClipboardList } from 'lucide-react'
+import { Plus, RotateCw, ChevronRight, ChevronLeft, HelpCircle, Users, ArrowRight, Send, Send as SendIcon, Clock, Bold, Italic, Link as LinkIcon, List, Underline, Smile, BadgeDollarSign, ClipboardList, Vote, FileCheck2 } from 'lucide-react'
 import { useData } from '@/lib/dataContext'
 import Portal from '@/components/Portal'
 import { ComunicadoChat } from '@/components/ComunicadoChat'
@@ -81,6 +81,12 @@ const getAnexoType = (anexoStr: any) => {
   if (!parsed) return null;
   const { name, url, mime } = parsed;
   
+  if (name.startsWith('Autorização:') || mime === 'autorizacao' || url.startsWith('autorizacao:')) {
+    return { label: 'Autorização', icon: <FileCheck2 size={13} strokeWidth={2} color="#059669" />, color: 'rgba(16,185,129,0.1)', textColor: '#059669' };
+  }
+  if (name.startsWith('Enquete:') || mime === 'enquete' || url.startsWith('enquete:')) {
+    return { label: 'Enquete', icon: <Vote size={13} strokeWidth={2} color="#f59e0b" />, color: 'rgba(245,158,11,0.1)', textColor: '#d97706' };
+  }
   if (name.startsWith('Formulário:')) {
     return { label: 'Formulário', icon: <FileText size={13} strokeWidth={2} color="#3b82f6" />, color: 'rgba(59,130,246,0.1)', textColor: '#3b82f6' };
   }
@@ -89,6 +95,9 @@ const getAnexoType = (anexoStr: any) => {
   }
   if (name.startsWith('Relatório:') || name.startsWith('Relatório Personalizado:') || url.startsWith('payload:')) {
     return { label: 'Relatório', icon: <FileBarChart size={13} strokeWidth={2} color="#8b5cf6" />, color: 'rgba(139,92,246,0.1)', textColor: '#8b5cf6' };
+  }
+  if (name.startsWith('Cobrança:') || name.startsWith('Cobranca:') || mime === 'cobranca' || mime === 'cobrança' || url.startsWith('cobranca:') || name.startsWith('Fatura:')) {
+    return { label: 'Cobrança', icon: <DollarSign size={13} strokeWidth={2.5} color="#059669" />, color: 'rgba(16,185,129,0.1)', textColor: '#059669' };
   }
   if (name.toLowerCase().endsWith('.pdf')) {
     return { label: 'PDF', icon: <FileText size={13} strokeWidth={2} color="#ef4444" />, color: 'rgba(239,68,68,0.1)', textColor: '#ef4444' };
@@ -458,7 +467,7 @@ function ColaboradorComunicadosContent() {
   }, [queryClient, setComunicadosLocally])
 
   const handleEnviar = (data: any, asRascunho = false) => {
-    const { titulo, conteudo, anexos, dataAgendamento, cobranca } = data;
+    const { titulo, conteudo, anexos, dataAgendamento, cobranca, cobrancas, enquete, autorizacao } = data;
     const newTitulo = titulo;
     const newConteudo = conteudo;
     if (!newTitulo.trim() || !newConteudo.trim()) {
@@ -526,7 +535,10 @@ function ColaboradorComunicadosContent() {
         autorId: effectiveUser?.id || '',
         autorFoto: effectiveUser?.foto || null,
         anexos: anexos,
-        cobranca: cobranca,
+        cobranca: cobranca || (cobrancas && cobrancas[0]) || null,
+        cobrancas: cobrancas || (cobranca ? [cobranca] : []),
+        enquete: enquete || null,
+        autorizacao: autorizacao || null,
         dataAgendamento: dataAgendamento || null,
         status: asRascunho ? 'rascunho' : dataAgendamento ? 'agendado' : 'enviado',
         turmas: selectedDest.filter(d => d.type === 'turma').map(d => d.name),
@@ -552,7 +564,7 @@ function ColaboradorComunicadosContent() {
         id: `AD-COM-COLAB-${Date.now()}`,
         titulo: newTitulo,
         conteudo: newConteudo,
-        tipo: 'texto',
+        tipo: ((cobrancas && cobrancas.length > 0) || cobranca ? 'cobrança' : autorizacao ? 'autorização' : enquete ? 'enquete' : 'texto'),
         autor: effectiveUser?.nome || 'Usuário ERP',
         autorCargo: effectiveUser?.cargo || effectiveUser?.perfil || 'Colaborador',
         autorId: effectiveUser?.id || '',
@@ -569,7 +581,10 @@ function ColaboradorComunicadosContent() {
         dataEnvio: new Date().toISOString(),
         dataAgendamento: dataAgendamento || null,
         anexos: anexos,
-        cobranca: cobranca,
+        cobranca: cobranca || (cobrancas && cobrancas[0]) || null,
+        cobrancas: cobrancas || (cobranca ? [cobranca] : []),
+        enquete: enquete || null,
+        autorizacao: autorizacao || null,
         leituras: {},
         ciencias: {},
         status: asRascunho ? 'rascunho' : dataAgendamento ? 'agendado' : 'enviado'
@@ -1776,31 +1791,73 @@ function ColaboradorComunicadosContent() {
                        </div>
 
                        {/* Attachments Section */}
-                       {c.anexos && c.anexos.length > 0 && (
-                         <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                           {(() => {
-                             let reportCount = 0;
-                             let firstReportTypeInfo: any = null;
+                       {(() => {
+                         const effectiveAnexos = [...(c.anexos || [])];
+                         const cobrancasArr = Array.isArray(c.cobrancas || (c as any).dados?.cobrancas)
+                           ? (c.cobrancas || (c as any).dados?.cobrancas)
+                           : (c.cobranca || (c as any).dados?.cobranca ? [c.cobranca || (c as any).dados?.cobranca] : []);
+                         const cobrancaObj = c.cobranca || (c as any).dados?.cobranca;
+                         
+                         if (cobrancasArr.length > 0) {
+                           if (!effectiveAnexos.some((a: any) => {
+                             const str = typeof a === 'string' ? a : (a?.name || '');
+                             return str.startsWith('Cobrança:') || str.startsWith('Cobranca:') || str.includes('|cobranca');
+                           })) {
+                             cobrancasArr.forEach((cobItem: any) => {
+                               const tituloCob = cobItem?.titulo || 'Cobrança';
+                               const valorCob = cobItem?.valor || '';
+                               effectiveAnexos.push(`Cobrança: ${tituloCob}|cobranca:${valorCob}|cobranca`);
+                             });
+                           }
+                         } else if ((cobrancaObj || c.tipo === 'cobrança' || c.tipo === 'cobranca') && !effectiveAnexos.some((a: any) => {
+                           const str = typeof a === 'string' ? a : (a?.name || '');
+                           return str.startsWith('Cobrança:') || str.startsWith('Cobranca:') || str.includes('|cobranca');
+                         })) {
+                           const tituloCob = cobrancaObj?.titulo || 'Cobrança';
+                           const valorCob = cobrancaObj?.valor || '';
+                           effectiveAnexos.push(`Cobrança: ${tituloCob}|cobranca:${valorCob}|cobranca`);
+                         }
+                         const enqueteObj = c.enquete || (c as any).dados?.enquete;
+                         if ((enqueteObj || c.tipo === 'enquete') && !effectiveAnexos.some((a: any) => {
+                           const str = typeof a === 'string' ? a : (a?.name || '');
+                           return str.startsWith('Enquete:') || str.includes('|enquete');
+                         })) {
+                           effectiveAnexos.push(`Enquete: ${enqueteObj?.pergunta || enqueteObj?.titulo || 'Enquete'}|enquete:${enqueteObj?.id || 'poll'}|enquete`);
+                         }
+                         const autorizacaoObj = c.autorizacao || (c as any).dados?.autorizacao;
+                         if ((autorizacaoObj || c.tipo === 'autorização' || c.tipo === 'autorizacao') && !effectiveAnexos.some((a: any) => {
+                           const str = typeof a === 'string' ? a : (a?.name || '');
+                           return str.startsWith('Autorização:') || str.includes('|autorizacao');
+                         })) {
+                           effectiveAnexos.push(`Autorização: ${autorizacaoObj?.titulo || 'Autorização'}|autorizacao:${autorizacaoObj?.id || 'auth'}|autorizacao`);
+                         }
 
-                             const otherAnexos: { anexo: string, idx: number, typeInfo: any }[] = [];
+                         if (effectiveAnexos.length === 0) return null;
 
-                             c.anexos.forEach((anexo: any, idx: number) => {
-                                const typeInfo = getAnexoType(anexo);
-                                if (!typeInfo) return;
-                                
-                                const anexoStr = typeof anexo === 'string' ? anexo : anexo?.name || '';
-                                if (anexoStr.endsWith('|report-payload') || anexoStr.includes('Relatório Personalizado:')) {
-                                  reportCount++;
-                                  if (!firstReportTypeInfo) {
-                                    firstReportTypeInfo = typeInfo;
-                                  }
-                                } else {
-                                  otherAnexos.push({ anexo, idx, typeInfo });
-                                }
-                              });
+                         let reportCount = 0;
+                         let firstReportTypeInfo: any = null;
 
-                             if (reportCount <= 1) {
-                               return c.anexos.map((anexo: string, idx: number) => {
+                         const otherAnexos: { anexo: string, idx: number, typeInfo: any }[] = [];
+
+                         effectiveAnexos.forEach((anexo: any, idx: number) => {
+                            const typeInfo = getAnexoType(anexo);
+                            if (!typeInfo) return;
+                            
+                            const anexoStr = typeof anexo === 'string' ? anexo : anexo?.name || '';
+                            if (anexoStr.endsWith('|report-payload') || anexoStr.includes('Relatório Personalizado:')) {
+                              reportCount++;
+                              if (!firstReportTypeInfo) {
+                                firstReportTypeInfo = typeInfo;
+                              }
+                            } else {
+                              otherAnexos.push({ anexo, idx, typeInfo });
+                            }
+                          });
+
+                         return (
+                           <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                             {reportCount <= 1 ? (
+                               effectiveAnexos.map((anexo: string, idx: number) => {
                                  const typeInfo = getAnexoType(anexo);
                                  if (!typeInfo) return null;
                                  return (
@@ -1818,10 +1875,8 @@ function ColaboradorComunicadosContent() {
                                      {typeInfo.icon} 
                                    </div>
                                  );
-                               });
-                             }
-
-                             return (
+                               })
+                             ) : (
                                <>
                                  {otherAnexos.map(({ anexo, idx, typeInfo }) => (
                                    <div key={`other-${idx}`} title={typeInfo.label} style={{ 
@@ -1855,10 +1910,11 @@ function ColaboradorComunicadosContent() {
                                      {firstReportTypeInfo?.icon} 
                                  </div>
                                </>
-                             );
-                           })()}
-                         </div>
-                       )}
+                             )}
+                           </div>
+                         );
+                       })()}
+
                     </div>
                   </div>
                   

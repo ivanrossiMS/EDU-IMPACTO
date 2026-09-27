@@ -5,7 +5,8 @@ import {
   X, SendIcon, Clock, FileText, Paperclip, Image as ImageIcon, 
   Bold, Italic, Underline, List, Link as LinkIcon, Smile, 
   ChevronRight, Save, UploadCloud, Users, Trash2, Calendar,
-  Palette, BarChart2, CircleDollarSign, Shield, GraduationCap
+  Palette, BarChart2, CircleDollarSign, Shield, GraduationCap,
+  Vote, Check, FileCheck2
 } from 'lucide-react'
 import Image from 'next/image'
 import { UserAvatar } from '@/components/UserAvatar'
@@ -13,6 +14,10 @@ import { compressImage, compressVideo, compressPDF } from '@/lib/mediaCompressor
 import { uploadFileToSupabase } from '@/lib/upload/uploadClient'
 import { useRelatorios } from '@/lib/relatoriosContext'
 import { ReportsSelectionModal } from '@/components/agenda/ReportsSelectionModal'
+import { EnqueteModal } from '@/components/agenda/enquetes/EnqueteModal'
+import { EnqueteData } from '@/lib/enquetes/types'
+import { AutorizacaoModal } from '@/components/agenda/autorizacoes/AutorizacaoModal'
+import { AutorizacaoData } from '@/lib/autorizacoes/types'
 
 const AttachmentSize = ({ url, initialSize }: { url?: string; initialSize?: number | string | null }) => {
   const [sizeStr, setSizeStr] = useState<string>('');
@@ -50,6 +55,13 @@ const AttachmentSize = ({ url, initialSize }: { url?: string; initialSize?: numb
   if (!sizeStr) return null;
   return <span>{sizeStr}</span>;
 };
+
+export interface CobrancaItem {
+  id: string;
+  titulo: string;
+  valor: string;
+  vencimento: string;
+}
 
 export interface NovoComunicadoModalProps {
   isOpen: boolean;
@@ -93,7 +105,17 @@ export default function NovoComunicadoModal({
 
   // ASAAS Cobranças
   const [showCobrancaModal, setShowCobrancaModal] = useState(false)
-  const [cobrancaForm, setCobrancaForm] = useState({ titulo: '', valor: '', vencimento: '' })
+  const [cobrancasList, setCobrancasList] = useState<CobrancaItem[]>([])
+  const [editingCobrancaId, setEditingCobrancaId] = useState<string | null>(null)
+  const [cobrancaInput, setCobrancaInput] = useState({ titulo: '', valor: '', vencimento: '' })
+
+  // Enquete Interativa
+  const [showEnqueteModal, setShowEnqueteModal] = useState(false)
+  const [enqueteData, setEnqueteData] = useState<EnqueteData | null>(null)
+
+  // Autorização Digital
+  const [showAutorizacaoModal, setShowAutorizacaoModal] = useState(false)
+  const [autorizacaoData, setAutorizacaoData] = useState<AutorizacaoData | null>(null)
 
   const editorRef = useRef<HTMLDivElement>(null)
   
@@ -103,7 +125,33 @@ export default function NovoComunicadoModal({
         setTitulo(initialData.titulo || '')
         setConteudo(initialData.conteudo || initialData.texto || '')
         setAnexos(initialData.anexos || [])
-        setDataAgendamento(initialData.dataAgendamento || '')
+        setEnqueteData(initialData.enquete || initialData.dados?.enquete || null)
+        setAutorizacaoData(initialData.autorizacao || initialData.dados?.autorizacao || null)
+        
+        let loadedCobs: CobrancaItem[] = [];
+        const rawCobs = initialData.cobrancas || initialData.dados?.cobrancas;
+        if (Array.isArray(rawCobs) && rawCobs.length > 0) {
+          loadedCobs = rawCobs.map((c: any, idx: number) => ({
+            id: c.id || `cob_${Date.now()}_${idx}`,
+            titulo: c.titulo || '',
+            valor: String(c.valor || ''),
+            vencimento: c.vencimento ? String(c.vencimento).split('T')[0] : ''
+          }));
+        } else {
+          const initialCob = initialData.cobranca || initialData.dados?.cobranca;
+          if (initialCob && (initialCob.valor || initialCob.titulo)) {
+            loadedCobs = [{
+              id: initialCob.id || `cob_${Date.now()}`,
+              titulo: initialCob.titulo || '',
+              valor: String(initialCob.valor || ''),
+              vencimento: initialCob.vencimento ? String(initialCob.vencimento).split('T')[0] : ''
+            }];
+          }
+        }
+        setCobrancasList(loadedCobs);
+        setEditingCobrancaId(null);
+        setCobrancaInput({ titulo: '', valor: '', vencimento: '' });
+
         if (editorRef.current) {
           editorRef.current.innerHTML = initialData.conteudo || initialData.texto || ''
         }
@@ -112,7 +160,11 @@ export default function NovoComunicadoModal({
         setConteudo('')
         setAnexos([])
         setDataAgendamento('')
-        setCobrancaForm({ titulo: '', valor: '', vencimento: '' })
+        setCobrancasList([])
+        setEditingCobrancaId(null)
+        setCobrancaInput({ titulo: '', valor: '', vencimento: '' })
+        setEnqueteData(null)
+        setAutorizacaoData(null)
         if (editorRef.current) editorRef.current.innerHTML = ''
       }
     } else {
@@ -121,11 +173,17 @@ export default function NovoComunicadoModal({
       setConteudo('')
       setAnexos([])
       setDataAgendamento('')
-      setCobrancaForm({ titulo: '', valor: '', vencimento: '' })
+      setCobrancasList([])
+      setEditingCobrancaId(null)
+      setCobrancaInput({ titulo: '', valor: '', vencimento: '' })
+      setEnqueteData(null)
+      setAutorizacaoData(null)
       if (editorRef.current) editorRef.current.innerHTML = ''
       localStorage.removeItem('@edu-impacto/comunicado-draft')
       setShowRelsModal(false)
       setShowCobrancaModal(false)
+      setShowEnqueteModal(false)
+      setShowAutorizacaoModal(false)
       setShowScheduleModal(false)
       setShowEmojiPicker(false)
     }
@@ -161,12 +219,39 @@ export default function NovoComunicadoModal({
     if (isSubmitting) return;
     setIsSubmitting(true);
     try {
+      let finalAnexos = [...anexos];
+      if (enqueteData) {
+        finalAnexos = finalAnexos.filter(a => !String(a).startsWith('Enquete:'));
+        finalAnexos.push(`Enquete: ${enqueteData.pergunta}|enquete:${enqueteData.id}|enquete`);
+      } else {
+        finalAnexos = finalAnexos.filter(a => !String(a).startsWith('Enquete:'));
+      }
+
+      if (autorizacaoData) {
+        finalAnexos = finalAnexos.filter(a => !String(a).startsWith('Autorização:'));
+        finalAnexos.push(`Autorização: ${autorizacaoData.titulo}|autorizacao:${autorizacaoData.id}|autorizacao`);
+      } else {
+        finalAnexos = finalAnexos.filter(a => !String(a).startsWith('Autorização:'));
+      }
+
+      finalAnexos = finalAnexos.filter(a => !String(a).startsWith('Cobrança:') && !String(a).startsWith('Cobranca:'));
+      if (cobrancasList.length > 0) {
+        cobrancasList.forEach(cob => {
+          if (cob.valor) {
+            finalAnexos.push(`Cobrança: ${cob.titulo || 'Cobrança'}|cobranca:${cob.valor}|cobranca`);
+          }
+        });
+      }
+
       await onSave({
         titulo,
         conteudo,
-        anexos,
+        anexos: finalAnexos,
         dataAgendamento,
-        cobranca: cobrancaForm.valor ? cobrancaForm : null
+        cobrancas: cobrancasList,
+        cobranca: cobrancasList[0] || null,
+        enquete: enqueteData || null,
+        autorizacao: autorizacaoData || null
       }, isDraft);
       localStorage.removeItem('@edu-impacto/comunicado-draft');
     } finally {
@@ -477,9 +562,19 @@ export default function NovoComunicadoModal({
         }
         .ad-nc-attach-grid {
           display: grid !important;
-          grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+          grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
           gap: 8px !important;
           width: 100% !important;
+        }
+        @media (max-width: 640px) {
+          .ad-nc-attach-grid {
+            grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+          }
+        }
+        @media (max-width: 420px) {
+          .ad-nc-attach-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+          }
         }
         .ad-nc-attach-btn {
           width: 100% !important;
@@ -803,19 +898,96 @@ export default function NovoComunicadoModal({
               <button 
                 type="button"
                 className="ad-nc-attach-btn"
-                onClick={(e) => { e.preventDefault(); setShowCobrancaModal(true); }}
+                onClick={(e) => { e.preventDefault(); setShowEnqueteModal(true); }}
+                title="Criar e personalizar enquete interativa"
+                style={enqueteData ? { borderColor: '#F59E0B', background: 'rgba(245, 158, 11, 0.06)', position: 'relative' } : { position: 'relative' }}
+              >
+                <div className="ad-nc-attach-icon-wrap" style={{ background: 'rgba(245, 158, 11, 0.1)' }}>
+                  <Vote size={15} color="#D97706" style={{ filter: 'drop-shadow(0 1px 2px rgba(217, 119, 6, 0.25))' }} />
+                </div>
+                <span className="ad-nc-attach-label">Enquete</span>
+                {enqueteData && (
+                  <span style={{
+                    position: 'absolute',
+                    top: 5,
+                    right: 6,
+                    width: 7,
+                    height: 7,
+                    borderRadius: '50%',
+                    background: '#10B981',
+                    boxShadow: '0 0 6px #10B981'
+                  }} />
+                )}
+              </button>
+
+              <button 
+                type="button"
+                className="ad-nc-attach-btn"
+                onClick={(e) => { e.preventDefault(); setShowAutorizacaoModal(true); }}
+                title="Criar e personalizar termo de autorização ou passeio"
+                style={autorizacaoData ? { borderColor: '#10B981', background: 'rgba(16, 185, 129, 0.06)', position: 'relative' } : { position: 'relative' }}
+              >
+                <div className="ad-nc-attach-icon-wrap" style={{ background: 'rgba(16, 185, 129, 0.1)' }}>
+                  <FileCheck2 size={15} color="#059669" style={{ filter: 'drop-shadow(0 1px 2px rgba(5, 150, 105, 0.25))' }} />
+                </div>
+                <span className="ad-nc-attach-label">Autorização</span>
+                {autorizacaoData && (
+                  <span style={{
+                    position: 'absolute',
+                    top: 5,
+                    right: 6,
+                    width: 7,
+                    height: 7,
+                    borderRadius: '50%',
+                    background: '#10B981',
+                    boxShadow: '0 0 6px #10B981'
+                  }} />
+                )}
+              </button>
+
+              <button 
+                type="button"
+                className="ad-nc-attach-btn"
+                onClick={(e) => { 
+                  e.preventDefault(); 
+                  setEditingCobrancaId(null);
+                  setCobrancaInput({ titulo: '', valor: '', vencimento: '' });
+                  setShowCobrancaModal(true); 
+                }}
                 title="Anexar cobrança Asaas"
+                style={cobrancasList.length > 0 ? { borderColor: '#10B981', background: 'rgba(16, 185, 129, 0.06)', position: 'relative' } : { position: 'relative' }}
               >
                 <div className="ad-nc-attach-icon-wrap" style={{ background: 'rgba(16, 185, 129, 0.08)' }}>
                   <CircleDollarSign size={15} color="#10B981" style={{ filter: 'drop-shadow(0 1px 2px rgba(16, 185, 129, 0.2))' }} />
                 </div>
                 <span className="ad-nc-attach-label">Cobrança</span>
+                {cobrancasList.length > 0 && (
+                  <span style={{
+                    position: 'absolute',
+                    top: 4,
+                    right: 6,
+                    minWidth: 16,
+                    height: 16,
+                    padding: '0 4px',
+                    borderRadius: 8,
+                    background: '#10B981',
+                    color: '#FFF',
+                    fontSize: 10,
+                    fontWeight: 800,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    boxShadow: '0 0 6px rgba(16, 185, 129, 0.4)'
+                  }}>
+                    {cobrancasList.length}
+                  </span>
+                )}
               </button>
             </div>
 
             {/* PREVIEW ANEXOS */}
-            {(anexos.length > 0 || cobrancaForm.valor) && (
-              <div style={{ marginTop: 16, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))', gap: 12 }}>
+            {(anexos.length > 0 || cobrancasList.length > 0 || enqueteData || autorizacaoData) && (
+              <div style={{ marginTop: 16, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))', gap: 12 }}>
                 {anexos.map((anexo, i) => {
                   let name = '';
                   let url = '';
@@ -823,6 +995,7 @@ export default function NovoComunicadoModal({
                   let size: string | null = null;
                   let originalSize: string | null = null;
                   if (typeof anexo === 'string') {
+                    if (anexo.startsWith('Enquete:') || anexo.startsWith('Autorização:')) return null;
                     if (anexo.endsWith('|report-payload')) {
                       const firstPipe = anexo.indexOf('|');
                       const lastPipe = anexo.lastIndexOf('|');
@@ -840,6 +1013,7 @@ export default function NovoComunicadoModal({
                   } else {
                     name = String(anexo);
                   }
+                  if (name.startsWith('Enquete:') || mimeType === 'enquete' || name.startsWith('Autorização:') || mimeType === 'autorizacao' || name.startsWith('Cobrança:') || name.startsWith('Cobranca:') || mimeType === 'cobranca') return null;
                   const isImg = mimeType.startsWith('image/') || (url && url.startsWith('data:image')) || /\.(jpg|jpeg|png|webp|gif)$/i.test(name);
                   
                   // Calcular redução obtida com a compressão automática
@@ -897,21 +1071,159 @@ export default function NovoComunicadoModal({
                     </div>
                   )
                 })}
-                
-                {/* Cobrança Anexada visualmente na mesma lista */}
-                {cobrancaForm.valor && (
-                  <div style={{ position: 'relative', height: 100, background: '#ECFDF5', border: '1px solid #10B981', borderRadius: 12, padding: '12px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                     <div style={{ fontSize: 11, fontWeight: 700, color: '#10B981', marginBottom: 4 }}>COBRANÇA</div>
-                     <div style={{ fontSize: 13, fontWeight: 600, color: '#047857', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{cobrancaForm.titulo}</div>
-                     <div style={{ fontSize: 14, fontWeight: 800, color: '#065F46', marginTop: 4 }}>R$ {cobrancaForm.valor}</div>
+
+                {/* Enquete Anexada visualmente */}
+                {enqueteData && (
+                  <div 
+                    onClick={() => setShowEnqueteModal(true)}
+                    style={{
+                      position: 'relative',
+                      height: 100,
+                      background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.08) 0%, rgba(217, 119, 6, 0.04) 100%)',
+                      border: '1.5px solid #F59E0B',
+                      borderRadius: 14,
+                      padding: '10px 12px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'center',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                      boxShadow: '0 2px 8px rgba(245, 158, 11, 0.1)'
+                    }}
+                    title="Clique para editar a enquete"
+                  >
+                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
+                       <div style={{ fontSize: 10, fontWeight: 800, color: '#D97706', display: 'flex', alignItems: 'center', gap: 4 }}>
+                         <Vote size={12} /> ENQUETE
+                       </div>
+                       <span style={{ fontSize: 9, fontWeight: 700, color: '#D97706', background: 'rgba(245, 158, 11, 0.15)', padding: '1px 5px', borderRadius: 4 }}>
+                         {enqueteData.opcoes?.length || 0} opções
+                       </span>
+                     </div>
+                     <div style={{ fontSize: 12, fontWeight: 700, color: '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                       {enqueteData.pergunta}
+                     </div>
+                     <div style={{ fontSize: 10, fontWeight: 600, color: '#B45309', marginTop: 3 }}>
+                       {enqueteData.tipo === 'unica' ? 'Escolha única' : 'Múltipla escolha'} {enqueteData.anonima ? '• Anônima' : ''}
+                     </div>
                      <button 
-                        onClick={(e) => { e.preventDefault(); setCobrancaForm({ titulo: '', valor: '', vencimento: '' }); }}
-                        style={{ position: 'absolute', top: -6, right: -6, width: 24, height: 24, background: '#EF4444', color: '#FFF', borderRadius: '50%', border: '2px solid #FFF', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 10 }}
+                        onClick={(e) => { 
+                          e.preventDefault(); 
+                          e.stopPropagation(); 
+                          setEnqueteData(null); 
+                          setAnexos(anexos.filter(a => !String(a).startsWith('Enquete:'))); 
+                        }}
+                        style={{ position: 'absolute', top: -6, right: -6, width: 22, height: 22, background: '#EF4444', color: '#FFF', borderRadius: '50%', border: '2px solid #FFF', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 10 }}
+                        title="Remover enquete"
                       >
-                        <X size={14} />
+                        <X size={12} />
                       </button>
                   </div>
                 )}
+
+                {/* Autorização Anexada visualmente */}
+                {autorizacaoData && (
+                  <div 
+                    onClick={() => setShowAutorizacaoModal(true)}
+                    style={{
+                      position: 'relative',
+                      height: 100,
+                      background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(5, 150, 105, 0.04) 100%)',
+                      border: '1.5px solid #10B981',
+                      borderRadius: 14,
+                      padding: '10px 12px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'center',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                      boxShadow: '0 2px 8px rgba(16, 185, 129, 0.1)'
+                    }}
+                    title="Clique para editar a autorização"
+                  >
+                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
+                       <div style={{ fontSize: 10, fontWeight: 800, color: '#047857', display: 'flex', alignItems: 'center', gap: 4 }}>
+                         <FileCheck2 size={12} /> AUTORIZAÇÃO
+                       </div>
+                       <span style={{ fontSize: 9, fontWeight: 700, color: '#047857', background: 'rgba(16, 185, 129, 0.15)', padding: '1px 5px', borderRadius: 4 }}>
+                         {autorizacaoData.opcoes?.length || 2} opções
+                       </span>
+                     </div>
+                     <div style={{ fontSize: 12, fontWeight: 700, color: '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                       {autorizacaoData.titulo}
+                     </div>
+                     <div style={{ fontSize: 10, fontWeight: 600, color: '#059669', marginTop: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                       {autorizacaoData.localEvento ? `📍 ${autorizacaoData.localEvento}` : 'Termo com Assinatura Digital'}
+                     </div>
+                     <button 
+                        onClick={(e) => { 
+                          e.preventDefault(); 
+                          e.stopPropagation(); 
+                          setAutorizacaoData(null); 
+                          setAnexos(anexos.filter(a => !String(a).startsWith('Autorização:'))); 
+                        }}
+                        style={{ position: 'absolute', top: -6, right: -6, width: 22, height: 22, background: '#EF4444', color: '#FFF', borderRadius: '50%', border: '2px solid #FFF', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 10 }}
+                        title="Remover autorização"
+                      >
+                        <X size={12} />
+                      </button>
+                  </div>
+                )}
+                
+                {/* Cobranças Anexadas visualmente na mesma lista */}
+                {cobrancasList.map((cob, idx) => (
+                  <div 
+                    key={cob.id || idx} 
+                    onClick={() => {
+                      setEditingCobrancaId(cob.id);
+                      setCobrancaInput({ titulo: cob.titulo, valor: cob.valor, vencimento: cob.vencimento });
+                      setShowCobrancaModal(true);
+                    }}
+                    style={{ 
+                      position: 'relative', 
+                      minHeight: 100, 
+                      background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(5, 150, 105, 0.04) 100%)', 
+                      border: '1.5px solid #10B981', 
+                      borderRadius: 14, 
+                      padding: '10px 12px', 
+                      display: 'flex', 
+                      flexDirection: 'column', 
+                      justifyContent: 'center',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                      boxShadow: '0 2px 8px rgba(16, 185, 129, 0.1)'
+                    }}
+                    title="Clique para editar esta cobrança"
+                  >
+                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
+                       <div style={{ fontSize: 10, fontWeight: 800, color: '#047857', display: 'flex', alignItems: 'center', gap: 4 }}>
+                         <CircleDollarSign size={12} /> COBRANÇA {cobrancasList.length > 1 ? `#${idx + 1}` : ''}
+                       </div>
+                       {cob.vencimento && (
+                         <span style={{ fontSize: 9, fontWeight: 700, color: '#047857', background: 'rgba(16, 185, 129, 0.15)', padding: '1px 5px', borderRadius: 4 }}>
+                           Venc: {cob.vencimento.split('-').reverse().join('/')}
+                         </span>
+                       )}
+                     </div>
+                     <div style={{ fontSize: 12, fontWeight: 700, color: '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                       {cob.titulo || 'Cobrança sem título'}
+                     </div>
+                     <div style={{ fontSize: 14, fontWeight: 800, color: '#065F46', marginTop: 4 }}>
+                       R$ {cob.valor ? Number(cob.valor.replace(',', '.')).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0,00'}
+                     </div>
+                     <button 
+                        onClick={(e) => { 
+                          e.preventDefault(); 
+                          e.stopPropagation(); 
+                          setCobrancasList(prev => prev.filter(c => c.id !== cob.id)); 
+                        }}
+                        style={{ position: 'absolute', top: -6, right: -6, width: 22, height: 22, background: '#EF4444', color: '#FFF', borderRadius: '50%', border: '2px solid #FFF', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 10 }}
+                        title="Remover cobrança"
+                      >
+                        <X size={12} />
+                      </button>
+                  </div>
+                ))}
               </div>
             )}
 
@@ -1048,28 +1360,87 @@ export default function NovoComunicadoModal({
           // Não precisa fechar aqui, o ReportsSelectionModal chama onClose internamente no handleFinish
         }}
       />
+      {/* MODAL DE ENQUETE */}
+      <EnqueteModal
+        isOpen={showEnqueteModal}
+        onClose={() => setShowEnqueteModal(false)}
+        initialData={enqueteData}
+        currentUser={currentUser}
+        onSave={(savedEnquete) => {
+          setEnqueteData(savedEnquete);
+        }}
+      />
+      {/* MODAL DE AUTORIZAÇÃO */}
+      <AutorizacaoModal
+        isOpen={showAutorizacaoModal}
+        onClose={() => setShowAutorizacaoModal(false)}
+        initialData={autorizacaoData}
+        currentUser={currentUser}
+        onSave={(savedAut) => {
+          setAutorizacaoData(savedAut);
+        }}
+      />
       {/* MODAL DE COBRANÇA */}
       {showCobrancaModal && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 9999999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
           <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="card" style={{ width: '100%', maxWidth: 400, background: '#FFF', borderRadius: 24, padding: 24 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-              <h3 style={{ fontSize: 18, fontWeight: 800 }}>Anexar Cobrança (Asaas)</h3>
-              <button onClick={() => setShowCobrancaModal(false)} className="btn btn-ghost btn-circle btn-sm"><X size={18}/></button>
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                <h3 style={{ fontSize: 18, fontWeight: 800, margin: 0, color: '#0F172A' }}>
+                  {editingCobrancaId ? 'Editar Cobrança' : 'Anexar Cobrança'} (Asaas)
+                </h3>
+                {cobrancasList.length > 0 && !editingCobrancaId && (
+                  <span style={{ fontSize: 12, color: '#64748B', fontWeight: 500, marginTop: 2 }}>
+                    Já existem {cobrancasList.length} cobrança(s) anexada(s)
+                  </span>
+                )}
+              </div>
+              <button 
+                onClick={() => {
+                  setShowCobrancaModal(false);
+                  setEditingCobrancaId(null);
+                  setCobrancaInput({ titulo: '', valor: '', vencimento: '' });
+                }} 
+                className="btn btn-ghost btn-circle btn-sm"
+              >
+                <X size={18}/>
+              </button>
             </div>
             
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               <div>
                 <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#475569', marginBottom: 6 }}>Título da Cobrança</label>
-                <input type="text" className="input" placeholder="Ex: Taxa de Material Didático" value={cobrancaForm.titulo} onChange={e => setCobrancaForm({...cobrancaForm, titulo: e.target.value})} style={{ width: '100%', padding: '12px 16px', background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 12 }} />
+                <input 
+                  type="text" 
+                  className="input" 
+                  placeholder="Ex: Taxa de Material Didático" 
+                  value={cobrancaInput.titulo} 
+                  onChange={e => setCobrancaInput({...cobrancaInput, titulo: e.target.value})} 
+                  style={{ width: '100%', padding: '12px 16px', background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 12 }} 
+                />
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div>
                   <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#475569', marginBottom: 6 }}>Valor (R$)</label>
-                  <input type="number" step="0.01" className="input" placeholder="0.00" value={cobrancaForm.valor} onChange={e => setCobrancaForm({...cobrancaForm, valor: e.target.value})} style={{ width: '100%', padding: '12px 16px', background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 12 }} />
+                  <input 
+                    type="number" 
+                    step="0.01" 
+                    className="input" 
+                    placeholder="0.00" 
+                    value={cobrancaInput.valor} 
+                    onChange={e => setCobrancaInput({...cobrancaInput, valor: e.target.value})} 
+                    style={{ width: '100%', padding: '12px 16px', background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 12 }} 
+                  />
                 </div>
                 <div>
                   <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#475569', marginBottom: 6 }}>Vencimento</label>
-                  <input type="date" className="input" value={cobrancaForm.vencimento} onChange={e => setCobrancaForm({...cobrancaForm, vencimento: e.target.value})} style={{ width: '100%', padding: '12px 16px', background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 12 }} />
+                  <input 
+                    type="date" 
+                    className="input" 
+                    value={cobrancaInput.vencimento} 
+                    onChange={e => setCobrancaInput({...cobrancaInput, vencimento: e.target.value})} 
+                    style={{ width: '100%', padding: '12px 16px', background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 12 }} 
+                  />
                 </div>
               </div>
               
@@ -1079,16 +1450,24 @@ export default function NovoComunicadoModal({
 
               <button 
                 className="btn btn-primary" 
-                style={{ width: '100%', marginTop: 8, padding: 16, background: '#10B981', border: 0, borderRadius: 12, color: '#fff', fontWeight: 700 }}
+                style={{ width: '100%', marginTop: 8, padding: 16, background: '#10B981', border: 0, borderRadius: 12, color: '#fff', fontWeight: 700, cursor: 'pointer' }}
                 onClick={() => {
-                  if(!cobrancaForm.titulo || !cobrancaForm.valor || !cobrancaForm.vencimento) {
+                  if(!cobrancaInput.titulo || !cobrancaInput.valor || !cobrancaInput.vencimento) {
                     alert("Preencha todos os campos da cobrança!");
                     return;
                   }
+                  if (editingCobrancaId) {
+                    setCobrancasList(prev => prev.map(c => c.id === editingCobrancaId ? { ...c, ...cobrancaInput } : c));
+                  } else {
+                    const newId = 'cob_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+                    setCobrancasList(prev => [...prev, { id: newId, ...cobrancaInput }]);
+                  }
                   setShowCobrancaModal(false);
+                  setEditingCobrancaId(null);
+                  setCobrancaInput({ titulo: '', valor: '', vencimento: '' });
                 }}
               >
-                Anexar Cobrança
+                {editingCobrancaId ? 'Salvar Alterações' : 'Anexar Cobrança'}
               </button>
             </div>
           </motion.div>

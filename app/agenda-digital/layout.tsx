@@ -12,7 +12,7 @@ import { useApp } from '@/lib/context'
 import { useData } from '@/lib/dataContext'
 import { useRouter, usePathname } from 'next/navigation'
 import { ADSidebar } from './components/Sidebar'
-import { FloatingWhatsApp } from '@/components/FloatingWhatsApp'
+import { FloatingChat } from '@/components/chat/FloatingChat'
 import { AgendaRealtimeProvider } from './components/AgendaRealtimeProvider'
 import { Loader2 } from 'lucide-react'
 import { hideSplashScreen } from '@/lib/capacitor/splash'
@@ -128,6 +128,7 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
           setRouteNavigating(true)
 
           if (href.includes('comunicados')) setNavTargetLabel('Carregando comunicados...')
+          else if (href.includes('chat')) setNavTargetLabel('Carregando mensagens e conversas...')
           else if (href.includes('momentos')) setNavTargetLabel('Carregando galeria e mídia...')
           else if (href.includes('calendario')) setNavTargetLabel('Carregando calendário escolar...')
           else if (href.includes('financeiro')) setNavTargetLabel('Carregando dados financeiros...')
@@ -454,7 +455,7 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
 
         </div>
         
-        <FloatingWhatsApp />
+        <FloatingChat />
         <AgendaRealtimeProvider />
         <AgendaLuxuryLoader isLoading={isMasterLoading} statusText={currentStatusText} />
       </div>

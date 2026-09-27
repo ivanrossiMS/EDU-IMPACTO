@@ -51,6 +51,7 @@ const PUBLIC_PATHS = [
   '/_next',             // assets Next.js
   '/favicon.ico',
   '/pdf.worker',
+  '/api/chat/media/preview',
   '/manifest.webmanifest',
   '/manifest.json',
   '/api/webhooks',      // webhooks externos (Asaas, etc)
@@ -292,6 +293,7 @@ export async function middleware(request: NextRequest) {
       '/api/alunos',
       '/api/comunicados',
       '/api/agenda',
+      '/api/chat',
       '/api/aluno-responsavel',
       '/api/auth',
       '/api/financeiro/baixar-por-responsavel',

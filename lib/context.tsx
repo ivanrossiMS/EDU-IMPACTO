@@ -269,14 +269,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 id: u.id,
                 nome: meta.nome || u.email?.split('@')[0] || 'Usuário',
                 email: u.email || '',
-                cargo: meta.cargo || 'Colaborador',
-                perfil: meta.perfil || 'Usuário',
+                cargo: meta.cargo || (meta.responsavel_id ? 'Responsável' : (meta.aluno_id ? 'Aluno' : 'Colaborador')),
+                perfil: meta.perfil || ((meta.responsavel_id || meta.aluno_id) ? 'Família' : 'Usuário'),
                 foto: meta.foto,
                 aluno_id: meta.aluno_id || '',
                 responsavel_id: meta.responsavel_id || '',
                 colaborador_id: meta.colaborador_id || meta.system_user_id || '',
                 system_user_id: meta.system_user_id || meta.colaborador_id || '',
-                hasDualRole: Boolean(meta.hasDualRole || meta.responsavel_id),
+                hasDualRole: Boolean(
+                  meta.hasDualRole && 
+                  (meta.colaborador_id || meta.system_user_id) && 
+                  (meta.responsavel_id || meta.aluno_id)
+                ),
                 user_metadata: meta
               }
               saveSetting('edu-current-user', savedUser)
