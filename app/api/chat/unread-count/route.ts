@@ -42,6 +42,11 @@ export async function GET(request: Request) {
         user.id
       ].filter(Boolean))) as string[]
 
+      if (isColabMode && !isAdmin) {
+        const { syncAndResolveGroupMemberships } = await import('@/lib/server/chatGroupMembership')
+        await syncAndResolveGroupMemberships(supabase, userIds, cargo, perfil)
+      }
+
       const { data: parts, error } = await supabase
         .from('chat_participants')
         .select('unread_count')
@@ -85,7 +90,6 @@ export async function GET(request: Request) {
       .from('chat_conversations')
       .select('id, type, grupo_id, turma_id, aluno_id')
       .in('id', convIds)
-      .eq('type', 'direct')
       .is('deleted_at', null)
 
     const { data: allParts } = await supabase
@@ -106,7 +110,10 @@ export async function GET(request: Request) {
       if (!conv) continue
 
       let isAllowed = false
-      if (conv.type === 'direct') {
+      if (conv.type === 'group') {
+        isAllowed = (conv.grupo_id && familyScope.allGroupIds.has(conv.grupo_id)) ||
+                    (conv.turma_id && (familyScope.allTurmaIds.has(conv.turma_id) || familyScope.allGroupIds.has(conv.turma_id)))
+      } else if (conv.type === 'direct') {
         const cp = partsByConv.get(conv.id) || []
         const other = cp.find(p => !userIds.includes(p.user_id))
         if (other) {

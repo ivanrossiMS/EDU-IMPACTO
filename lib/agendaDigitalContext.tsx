@@ -64,6 +64,8 @@ export interface ADChatAutoConfig {
     frequenciaAusencia: 'always' | '1x_hour' | '1x_day' | '1x_2days' | '1x_night'
   }
   recursos: {
+    permitirConversaColaborador: boolean
+    permitirColaboradorEnviarGrupoTurma: boolean
     permitirImagens: boolean
     permitirDocumentos: boolean
     permitirAudio: boolean
@@ -91,6 +93,8 @@ export const DEFAULT_CHAT_AUTO_CONFIG: ADChatAutoConfig = {
     frequenciaAusencia: '1x_day'
   },
   recursos: {
+    permitirConversaColaborador: true,
+    permitirColaboradorEnviarGrupoTurma: true,
     permitirImagens: true,
     permitirDocumentos: true,
     permitirAudio: true,

@@ -21,7 +21,10 @@ import {
   Save,
   Check,
   ChevronDown,
-  Lock
+  Lock,
+  Users,
+  UserCheck,
+  GraduationCap
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { ADChatAutoConfig, DEFAULT_CHAT_AUTO_CONFIG } from '@/lib/agendaDigitalContext'
@@ -398,7 +401,140 @@ export function AdminChatSettingsManager({
         </div>
 
         {/* ══════════════════════════════════════════════════════════════════════
-            SEÇÃO 2: HORÁRIO DE EXPEDIENTE & MENSAGEM DE AUSÊNCIA
+            SEÇÃO 2: CANAIS DE COMUNICAÇÃO & PERMISSÕES DE ENVIO
+        ══════════════════════════════════════════════════════════════════════ */}
+        <div style={{ background: '#ffffff', borderRadius: 16, border: '1.5px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.02)' }}>
+          {/* Header */}
+          <div style={{ padding: '18px 22px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div style={{ width: 38, height: 38, borderRadius: 10, background: '#ecfdf5', color: '#059669', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Users size={20} />
+              </div>
+              <div>
+                <h4 style={{ fontSize: 15, fontWeight: 800, margin: '0 0 2px 0', color: '#0f172a' }}>
+                  Canais de Comunicação & Permissões de Envio
+                </h4>
+                <p style={{ fontSize: 12, margin: 0, color: '#64748b' }}>
+                  Controle permissões de conversas diretas com colaboradores e publicações nos grupos de turma da escola.
+                </p>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f8fafc', padding: '4px 10px', borderRadius: 20, border: '1px solid #e2e8f0', color: '#475569', fontSize: 11.5, fontWeight: 700 }}>
+              <ShieldCheck size={14} color="#059669" />
+              Governança Escolar
+            </div>
+          </div>
+
+          <div style={{ padding: 22, display: 'flex', flexDirection: 'column', gap: 18 }}>
+            {/* Opção 1: Ativar / Desativar conversas com colaborador */}
+            <div style={{ border: '1.5px solid #e2e8f0', borderRadius: 14, padding: '16px 18px', background: '#fcfcfd', transition: 'all 0.2s ease' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, marginBottom: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                  <div style={{ width: 34, height: 34, borderRadius: 8, background: '#eff6ff', color: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 2 }}>
+                    <UserCheck size={18} />
+                  </div>
+                  <div>
+                    <h5 style={{ fontSize: 14, fontWeight: 800, margin: '0 0 3px 0', color: '#0f172a' }}>
+                      Permitir Conversas Diretas com Colaboradores
+                    </h5>
+                    <p style={{ fontSize: 12, color: '#64748b', margin: 0, lineHeight: 1.45 }}>
+                      Quando ativado, familiares, responsáveis e alunos podem enviar mensagens e conversar diretamente com professores e equipe escolar. Quando desativado, o envio é bloqueado para as famílias.
+                    </p>
+                  </div>
+                </div>
+
+                <label style={{ position: 'relative', display: 'inline-block', width: 46, height: 26, flexShrink: 0 }}>
+                  <input
+                    type="checkbox"
+                    style={{ opacity: 0, width: 0, height: 0 }}
+                    checked={chatConfig.recursos.permitirConversaColaborador !== false}
+                    onChange={e => updateChatConfig(p => ({ ...p, recursos: { ...p.recursos, permitirConversaColaborador: e.target.checked } }))}
+                  />
+                  <span style={{ position: 'absolute', cursor: 'pointer', inset: 0, background: chatConfig.recursos.permitirConversaColaborador !== false ? '#10b981' : '#cbd5e1', borderRadius: 24, transition: '.3s' }}>
+                    <span style={{ position: 'absolute', content: '""', height: 20, width: 20, left: 3, bottom: 3, background: 'white', transition: '.3s', borderRadius: '50%', transform: chatConfig.recursos.permitirConversaColaborador !== false ? 'translateX(20px)' : 'none' }}></span>
+                  </span>
+                </label>
+              </div>
+
+              {/* Status Badge */}
+              <div style={{
+                padding: '8px 12px',
+                borderRadius: 8,
+                fontSize: 12,
+                fontWeight: 600,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                background: chatConfig.recursos.permitirConversaColaborador !== false ? '#f0fdf4' : '#fef2f2',
+                border: chatConfig.recursos.permitirConversaColaborador !== false ? '1px solid #bbf7d0' : '1px solid #fecaca',
+                color: chatConfig.recursos.permitirConversaColaborador !== false ? '#166534' : '#991b1b'
+              }}>
+                <span style={{ width: 7, height: 7, borderRadius: '50%', background: chatConfig.recursos.permitirConversaColaborador !== false ? '#16a34a' : '#dc2626' }} />
+                <span>
+                  {chatConfig.recursos.permitirConversaColaborador !== false
+                    ? 'Conversas com colaboradores liberadas para famílias e alunos.'
+                    : 'Conversas com colaboradores desativadas. O campo de digitação das famílias é substituído por um aviso informativo.'}
+                </span>
+              </div>
+            </div>
+
+            {/* Opção 2: Colaborador enviar mensagens nos grupos da turma */}
+            <div style={{ border: '1.5px solid #e2e8f0', borderRadius: 14, padding: '16px 18px', background: '#fcfcfd', transition: 'all 0.2s ease' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, marginBottom: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                  <div style={{ width: 34, height: 34, borderRadius: 8, background: '#f5f3ff', color: '#7c3aed', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 2 }}>
+                    <GraduationCap size={18} />
+                  </div>
+                  <div>
+                    <h5 style={{ fontSize: 14, fontWeight: 800, margin: '0 0 3px 0', color: '#0f172a' }}>
+                      Colaboradores Enviarem Mensagens nos Grupos da Turma
+                    </h5>
+                    <p style={{ fontSize: 12, color: '#64748b', margin: 0, lineHeight: 1.45 }}>
+                      Quando ativado, professores e educadores vinculados à turma podem postar mensagens e avisos no mural oficial da turma. Quando desativado, o envio nos murais é restrito à administração.
+                    </p>
+                  </div>
+                </div>
+
+                <label style={{ position: 'relative', display: 'inline-block', width: 46, height: 26, flexShrink: 0 }}>
+                  <input
+                    type="checkbox"
+                    style={{ opacity: 0, width: 0, height: 0 }}
+                    checked={chatConfig.recursos.permitirColaboradorEnviarGrupoTurma !== false}
+                    onChange={e => updateChatConfig(p => ({ ...p, recursos: { ...p.recursos, permitirColaboradorEnviarGrupoTurma: e.target.checked } }))}
+                  />
+                  <span style={{ position: 'absolute', cursor: 'pointer', inset: 0, background: chatConfig.recursos.permitirColaboradorEnviarGrupoTurma !== false ? '#10b981' : '#cbd5e1', borderRadius: 24, transition: '.3s' }}>
+                    <span style={{ position: 'absolute', content: '""', height: 20, width: 20, left: 3, bottom: 3, background: 'white', transition: '.3s', borderRadius: '50%', transform: chatConfig.recursos.permitirColaboradorEnviarGrupoTurma !== false ? 'translateX(20px)' : 'none' }}></span>
+                  </span>
+                </label>
+              </div>
+
+              {/* Status Badge */}
+              <div style={{
+                padding: '8px 12px',
+                borderRadius: 8,
+                fontSize: 12,
+                fontWeight: 600,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                background: chatConfig.recursos.permitirColaboradorEnviarGrupoTurma !== false ? '#f0fdf4' : '#fffbeb',
+                border: chatConfig.recursos.permitirColaboradorEnviarGrupoTurma !== false ? '1px solid #bbf7d0' : '1px solid #fde68a',
+                color: chatConfig.recursos.permitirColaboradorEnviarGrupoTurma !== false ? '#166534' : '#92400e'
+              }}>
+                <span style={{ width: 7, height: 7, borderRadius: '50%', background: chatConfig.recursos.permitirColaboradorEnviarGrupoTurma !== false ? '#16a34a' : '#d97706' }} />
+                <span>
+                  {chatConfig.recursos.permitirColaboradorEnviarGrupoTurma !== false
+                    ? 'Professores e colaboradores vinculados podem postar mensagens e avisos nos grupos da turma.'
+                    : 'Envio restrito nos grupos: Colaboradores apenas visualizam o histórico (somente administradores podem postar).'}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ══════════════════════════════════════════════════════════════════════
+            SEÇÃO 3: HORÁRIO DE EXPEDIENTE & MENSAGEM DE AUSÊNCIA
         ══════════════════════════════════════════════════════════════════════ */}
         <div style={{ background: '#ffffff', borderRadius: 16, border: '1.5px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.02)' }}>
           {/* Header with Main Toggle */}
@@ -679,7 +815,7 @@ export function AdminChatSettingsManager({
         </div>
 
         {/* ══════════════════════════════════════════════════════════════════════
-            SEÇÃO 3: RECURSOS, PERMISSÕES DE MÍDIA & TEMPO DE RESPOSTA
+            SEÇÃO 4: RECURSOS, PERMISSÕES DE MÍDIA & TEMPO DE RESPOSTA
         ══════════════════════════════════════════════════════════════════════ */}
         <div style={{ background: '#ffffff', borderRadius: 16, border: '1.5px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.02)' }}>
           <div style={{ padding: '18px 22px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: 12 }}>

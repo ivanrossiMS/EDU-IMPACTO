@@ -39,6 +39,8 @@ import { useSelectedStudent } from '@/lib/selectedStudentContext'
 import { getWhatsAppShareUrl } from '@/lib/whatsapp'
 import { getInitials } from '@/lib/utils'
 import { checkIsCollaboratorOrTeacher, checkIsEquipeEscolar, sortTurmasByName } from '@/lib/chatPermissions'
+import { toast } from 'sonner'
+import { ColabChatNoticeModal } from './ColabChatNoticeModal'
 
 function getSectorMeta(setor?: string) {
   const s = (setor || '').toLowerCase()
@@ -146,6 +148,15 @@ export function FloatingChat() {
       setChatViewMode('familia')
     }
   }, [pathname, activeAlunoId, isSchoolStaff])
+
+  const [colabNoticeModal, setColabNoticeModal] = useState<{
+    isOpen: boolean
+    colaboradorNome?: string
+    alunoNome?: string
+    whatsappUrl?: string
+    whatsappLabel?: string
+    onOpenTurmaGroup?: () => void
+  }>({ isOpen: false })
 
   const [activeTab, setActiveTab] = useState<'conversas' | 'contatos'>('conversas')
   const [searchQuery, setSearchQuery] = useState('')
@@ -588,6 +599,39 @@ export function FloatingChat() {
     const uniqueKey = (item.alunoId ? `${item.alunoId}_` : '') + (item.targetUserId || item.grupoId || item.turmaId || 'chat')
     setStartingChatId(uniqueKey)
 
+    if (
+      item.type === 'direct' &&
+      chatViewMode === 'familia' &&
+      adConfig?.chatAuto?.recursos?.permitirConversaColaborador === false
+    ) {
+      const primaryWhatsapp = (adConfig?.contatosWhatsapp || []).find((c: any) => c.ativo)
+      const whatsappUrl = primaryWhatsapp?.telefone ? getWhatsAppShareUrl(primaryWhatsapp.telefone, 'Olá, gostaria de informações sobre o atendimento escolar.') : undefined
+
+      const studentObj = (contactsData?.alunos || []).find((a: any) => String(a.id) === String(item.alunoId || activeAlunoId))
+      const turmaGrupoObj = studentObj?.turmaGrupos?.[0] || studentObj?.turmaGrupo
+      const onOpenTurmaGroup = turmaGrupoObj ? () => {
+        handleStartChat({
+          type: 'group',
+          grupoId: turmaGrupoObj.id,
+          turmaId: turmaGrupoObj.turma_id,
+          title: turmaGrupoObj.nome,
+          subtitle: 'Grupo da Turma',
+          ano_letivo: turmaGrupoObj.ano_letivo || '2026'
+        })
+      } : undefined
+
+      setColabNoticeModal({
+        isOpen: true,
+        colaboradorNome: item.targetUserName,
+        alunoNome: item.alunoNome,
+        whatsappUrl,
+        whatsappLabel: primaryWhatsapp?.nome ? `Falar com ${primaryWhatsapp.nome} no WhatsApp` : undefined,
+        onOpenTurmaGroup
+      })
+      setStartingChatId(null)
+      return
+    }
+
     const isColabOrAdmin = checkIsEquipeEscolar(currentUser?.perfil, currentUser?.cargo, currentUser)
 
     try {
@@ -627,9 +671,25 @@ export function FloatingChat() {
           ano_letivo: conv.ano_letivo || item.ano_letivo || '2026',
           context: chatViewMode
         })
+      } else {
+        const errJson = await res.json().catch(() => ({}))
+        if (errJson.error?.includes('colaborador') && errJson.error?.includes('desativad')) {
+          const primaryWhatsapp = (adConfig?.contatosWhatsapp || []).find((c: any) => c.ativo)
+          const whatsappUrl = primaryWhatsapp?.telefone ? getWhatsAppShareUrl(primaryWhatsapp.telefone, 'Olá, gostaria de informações sobre o atendimento escolar.') : undefined
+
+          setColabNoticeModal({
+            isOpen: true,
+            colaboradorNome: item.targetUserName,
+            alunoNome: item.alunoNome,
+            whatsappUrl,
+            whatsappLabel: primaryWhatsapp?.nome ? `Falar com ${primaryWhatsapp.nome} no WhatsApp` : undefined
+          })
+        } else {
+          toast.error(errJson.error || 'Erro ao abrir conversa')
+        }
       }
     } catch (err: any) {
-      alert('Erro ao abrir conversa: ' + err.message)
+      toast.error('Erro ao abrir conversa: ' + (err?.message || 'Falha de comunicação'))
     } finally {
       setStartingChatId(null)
     }
@@ -881,7 +941,7 @@ export function FloatingChat() {
                         Chat Institucional
                       </div>
                       <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.85)', marginTop: 2 }}>
-                        {chatViewMode === 'familia' ? 'Modo Família • Atendimento Direto' : 'Modo Colaborador • Atendimento Direto'}
+                        {chatViewMode === 'familia' ? 'Modo Família • Atendimento & Turma' : 'Modo Colaborador • Turmas & Alunos'}
                       </div>
                     </div>
                   </div>
@@ -1659,9 +1719,91 @@ export function FloatingChat() {
                                     </span>
                                   </div>
 
-                                  {/* Itens do Aluno - Atendimento Direto com Educadores */}
+                                  {/* Itens do Aluno */}
                                   <div style={{ padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 6 }}>
-                                    {/* Professores e Educadores Vinculados ao Aluno */}
+                                    {/* Turmas do Aluno (Regular, Integral/Intermediário, etc.) */}
+                                    {alunoTurmas.map((tg: any) => {
+                                      const isStarting = startingChatId === `${aluno.id}_${tg.id}`
+                                      return (
+                                        <button
+                                          key={tg.id}
+                                          type="button"
+                                          disabled={isStarting}
+                                          onClick={() => handleStartChat({
+                                            type: 'group',
+                                            grupoId: tg.id,
+                                            turmaId: tg.turma_id,
+                                            title: tg.nome,
+                                            subtitle: 'Grupo da Turma',
+                                            ano_letivo: tg.ano_letivo || '2026'
+                                          })}
+                                          style={{
+                                            width: '100%',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'space-between',
+                                            padding: '8px 12px',
+                                            background: '#f8fafc',
+                                            border: '1px solid #e2e8f0',
+                                            borderRadius: 12,
+                                            cursor: 'pointer',
+                                            textAlign: 'left',
+                                            transition: 'all 0.15s'
+                                          }}
+                                          onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'}
+                                          onMouseLeave={e => e.currentTarget.style.background = '#f8fafc'}
+                                        >
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                                            <div style={{
+                                              width: 32,
+                                              height: 32,
+                                              borderRadius: '50%',
+                                              background: tg.cor || '#2563eb',
+                                              color: '#ffffff',
+                                              display: 'flex',
+                                              alignItems: 'center',
+                                              justifyContent: 'center',
+                                              flexShrink: 0
+                                            }}>
+                                              <GraduationCap size={16} />
+                                            </div>
+                                            <div style={{ minWidth: 0 }}>
+                                              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                                <span style={{ fontSize: 12.5, fontWeight: 700, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                                  {tg.nome}
+                                                </span>
+                                                {tg.ano_letivo && (
+                                                  <span style={{
+                                                    fontSize: 9,
+                                                    fontWeight: 700,
+                                                    color: '#0369a1',
+                                                    background: '#e0f2fe',
+                                                    padding: '1px 5px',
+                                                    borderRadius: 5,
+                                                    border: '1px solid #bae6fd',
+                                                    whiteSpace: 'nowrap',
+                                                    flexShrink: 0
+                                                  }}>
+                                                    {tg.ano_letivo}
+                                                  </span>
+                                                )}
+                                              </div>
+                                              <div style={{ fontSize: 10.5, color: '#64748b' }}>
+                                                Grupo da Turma • {aluno.nome.split(' ')[0]}
+                                              </div>
+                                            </div>
+                                          </div>
+
+                                          {isStarting ? (
+                                            <Loader2 size={16} className="animate-spin" color="#2563eb" />
+                                          ) : (
+                                            <ChevronRight size={16} color="#94a3b8" />
+                                          )}
+                                        </button>
+                                      )
+                                    })}
+
+                                    {/* Professores e Educadores */}
                                     {matchingColabs.length > 0 ? (
                                       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                                         <div style={{ fontSize: 10, fontWeight: 800, color: '#64748b', letterSpacing: '0.04em', textTransform: 'uppercase', padding: '2px 4px' }}>
@@ -2148,8 +2290,70 @@ export function FloatingChat() {
                                                 gap: 8
                                               }}
                                             >
-                                              {/* Lista de Alunos e seus Responsáveis para Atendimento Direto */}
-                                              <div style={{ marginTop: 2 }}>
+                                              {/* Opção 1: Chat Oficial da Turma (Mural) */}
+                                              <button
+                                                type="button"
+                                                disabled={startingChatId === turma.id}
+                                                onClick={() => handleStartChat({
+                                                  type: 'group',
+                                                  grupoId: turma.id,
+                                                  turmaId: turma.turma_id,
+                                                  title: turma.nome,
+                                                  subtitle: 'Grupo da Turma',
+                                                  ano_letivo: turma.ano_letivo || '2026'
+                                                })}
+                                                style={{
+                                                  width: '100%',
+                                                  display: 'flex',
+                                                  alignItems: 'center',
+                                                  justifyContent: 'space-between',
+                                                  padding: '9px 12px',
+                                                  background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)',
+                                                  border: '1.5px solid #bfdbfe',
+                                                  borderRadius: 12,
+                                                  cursor: 'pointer',
+                                                  textAlign: 'left',
+                                                  transition: 'transform 0.1s'
+                                                }}
+                                                onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-1px)'}
+                                                onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
+                                              >
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                                                  <div style={{
+                                                    width: 32,
+                                                    height: 32,
+                                                    borderRadius: '50%',
+                                                    background: '#2563eb',
+                                                    color: '#ffffff',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    flexShrink: 0
+                                                  }}>
+                                                    <MessageSquare size={16} />
+                                                  </div>
+                                                  <div style={{ minWidth: 0 }}>
+                                                    <div style={{ fontSize: 12.5, fontWeight: 700, color: '#1e3a8a', display: 'flex', alignItems: 'center', gap: 6 }}>
+                                                      <span>Chat da Turma</span>
+                                                      <span style={{ fontSize: 9.5, fontWeight: 800, background: '#2563eb', color: 'white', padding: '1px 6px', borderRadius: 999 }}>
+                                                        Mural Oficial
+                                                      </span>
+                                                    </div>
+                                                    <div style={{ fontSize: 10.5, color: '#3b82f6', marginTop: 1 }}>
+                                                      Somente educadores enviam • Todos visualizam
+                                                    </div>
+                                                  </div>
+                                                </div>
+
+                                                {startingChatId === turma.id ? (
+                                                  <Loader2 size={16} className="animate-spin" color="#2563eb" />
+                                                ) : (
+                                                  <ChevronRight size={16} color="#2563eb" />
+                                                )}
+                                              </button>
+
+                                              {/* Opção 2: Lista de Alunos e seus Responsáveis */}
+                                              <div style={{ marginTop: 4 }}>
                                                 <div style={{
                                                   fontSize: 10.5,
                                                   fontWeight: 800,
@@ -2591,6 +2795,17 @@ export function FloatingChat() {
 
       {/* Modal da Conversa Ativa */}
       <ChatConversationModal />
+
+      {/* Modal Centrado de Aviso: Conversas com Colaboradores Desativadas */}
+      <ColabChatNoticeModal
+        isOpen={colabNoticeModal.isOpen}
+        onClose={() => setColabNoticeModal(prev => ({ ...prev, isOpen: false }))}
+        colaboradorNome={colabNoticeModal.colaboradorNome}
+        alunoNome={colabNoticeModal.alunoNome}
+        whatsappUrl={colabNoticeModal.whatsappUrl}
+        whatsappLabel={colabNoticeModal.whatsappLabel}
+        onOpenTurmaGroup={colabNoticeModal.onOpenTurmaGroup}
+      />
     </>
   )
 }

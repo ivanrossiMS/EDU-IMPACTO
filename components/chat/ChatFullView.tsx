@@ -50,6 +50,7 @@ import { useApp } from '@/lib/context'
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 import { checkChatBusinessHours, ChatBlockedNoticeCard } from './ChatBlockedNotice'
 import { checkIsAdmin, checkIsCollaboratorOrTeacher, checkIsStaffManagement, sortTurmasByName } from '@/lib/chatPermissions'
+import { ColabChatNoticeModal } from './ColabChatNoticeModal'
 import { getWhatsAppShareUrl } from '@/lib/whatsapp'
 import { getInitials } from '@/lib/utils'
 import { uploadFileToSupabase } from '@/lib/upload/uploadClient'
@@ -245,6 +246,15 @@ export function ChatFullView({ alunoId }: { alunoId?: string }) {
   const userCargo = (currentUser?.cargo || '').trim()
   const isAdmin = checkIsAdmin(userPerfil, userCargo)
   const isSchoolStaff = checkIsCollaboratorOrTeacher(userCargo, userPerfil, currentUser)
+
+  const [colabNoticeModal, setColabNoticeModal] = useState<{
+    isOpen: boolean
+    colaboradorNome?: string
+    alunoNome?: string
+    whatsappUrl?: string
+    whatsappLabel?: string
+    onOpenTurmaGroup?: () => void
+  }>({ isOpen: false })
 
   const isFamilyOrStudent = 
     userPerfil.toLowerCase().includes('família') || 
@@ -811,6 +821,19 @@ export function ChatFullView({ alunoId }: { alunoId?: string }) {
 
     const isGroupConv = !!selectedConv?.isGroup || selectedConv?.type === 'group'
     const isColabOrTeacher = checkIsCollaboratorOrTeacher(userCargo, userPerfil, currentUser)
+    const isColabGroupDisabled = isGroupConv && isColabOrTeacher && !isAdmin && (adConfig?.chatAuto?.recursos?.permitirColaboradorEnviarGrupoTurma === false)
+    const isDirectColabDisabled = !isGroupConv && (!isColaboradorView || isFamilyOrStudent) && (adConfig?.chatAuto?.recursos?.permitirConversaColaborador === false)
+
+    if (isDirectColabDisabled) {
+      toast.error('O envio de mensagens para colaboradores está temporariamente desativado pela administração escolar.')
+      return
+    }
+
+    if (isColabGroupDisabled) {
+      toast.error('O envio de mensagens nos grupos da turma por colaboradores foi temporariamente pausado pela administração escolar.')
+      return
+    }
+
     const isReadOnlyConv = isGroupConv && (!isColaboradorView || !isColabOrTeacher)
     if (isReadOnlyConv) {
       toast.error(!isColaboradorView
@@ -1091,19 +1114,56 @@ export function ChatFullView({ alunoId }: { alunoId?: string }) {
       currentUser?.cargo !== 'Aluno' && 
       currentUser?.cargo !== 'Responsável'
 
-    const chatKey = item.alunoId && item.targetUserId !== item.alunoId ? `${item.alunoId}_${item.targetUserId}` : item.targetUserId
+    const chatKey = item.type === 'group' 
+      ? (item.grupoId || item.turmaId)
+      : (item.alunoId && item.targetUserId !== item.alunoId ? `${item.alunoId}_${item.targetUserId}` : item.targetUserId)
 
     setStartingChatId(chatKey)
+
+    if (
+      item.type === 'direct' &&
+      (!isColaboradorView || isFamilyOrStudent) &&
+      adConfig?.chatAuto?.recursos?.permitirConversaColaborador === false
+    ) {
+      const primaryWhatsapp = (adConfig?.contatosWhatsapp || []).find((c: any) => c.ativo)
+      const whatsappUrl = primaryWhatsapp?.telefone ? getWhatsAppShareUrl(primaryWhatsapp.telefone, 'Olá, gostaria de informações sobre o atendimento escolar.') : undefined
+
+      const studentObj = (contactsData?.alunos || []).find((a: any) => String(a.id) === String(item.alunoId || alunoId))
+      const turmaGrupoObj = studentObj?.turmaGrupos?.[0] || studentObj?.turmaGrupo
+      const onOpenTurmaGroup = turmaGrupoObj ? () => {
+        handleStartChatFromContact({
+          type: 'group',
+          grupoId: turmaGrupoObj.id,
+          turmaId: turmaGrupoObj.turma_id,
+          title: turmaGrupoObj.nome,
+          subtitle: 'Grupo da Turma',
+          ano_letivo: turmaGrupoObj.ano_letivo || '2026'
+        })
+      } : undefined
+
+      setColabNoticeModal({
+        isOpen: true,
+        colaboradorNome: item.targetUserName,
+        alunoNome: item.alunoNome,
+        whatsappUrl,
+        whatsappLabel: primaryWhatsapp?.nome ? `Falar com ${primaryWhatsapp.nome} no WhatsApp` : undefined,
+        onOpenTurmaGroup
+      })
+      setStartingChatId(null)
+      return
+    }
 
     try {
       const res = await fetch('/api/chat/conversations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          type: item.type || 'direct',
+          type: item.type,
           targetUserId: item.targetUserId,
           targetUserName: item.targetUserName,
           targetUserPerfil: item.targetUserPerfil,
+          grupoId: item.grupoId,
+          turmaId: item.turmaId,
           title: item.title,
           alunoId: item.alunoId || alunoId || undefined,
           colaboradorId: isColabOrAdmin ? currentUser?.id : undefined
@@ -1115,10 +1175,10 @@ export function ChatFullView({ alunoId }: { alunoId?: string }) {
         const conv = data.conversation
         const convMeta: ChatConversationMeta = {
           id: conv.id,
-          type: 'direct',
+          type: conv.type,
           title: item.title || conv.title || 'Chat',
-          subtitle: item.subtitle || 'online',
-          isGroup: false,
+          subtitle: item.subtitle || (conv.type === 'group' ? 'Canal Escolar' : 'online'),
+          isGroup: conv.type === 'group',
           turma_id: conv.turma_id,
           grupo_id: conv.grupo_id,
           aluno_id: conv.aluno_id || item.alunoId || null,
@@ -1128,9 +1188,25 @@ export function ChatFullView({ alunoId }: { alunoId?: string }) {
         }
         handleSelectConv(convMeta)
         setActiveTab('conversas')
+      } else {
+        const errJson = await res.json().catch(() => ({}))
+        if (errJson.error?.includes('colaborador') && errJson.error?.includes('desativad')) {
+          const primaryWhatsapp = (adConfig?.contatosWhatsapp || []).find((c: any) => c.ativo)
+          const whatsappUrl = primaryWhatsapp?.telefone ? getWhatsAppShareUrl(primaryWhatsapp.telefone, 'Olá, gostaria de informações sobre o atendimento escolar.') : undefined
+
+          setColabNoticeModal({
+            isOpen: true,
+            colaboradorNome: item.targetUserName,
+            alunoNome: item.alunoNome,
+            whatsappUrl,
+            whatsappLabel: primaryWhatsapp?.nome ? `Falar com ${primaryWhatsapp.nome} no WhatsApp` : undefined
+          })
+        } else {
+          toast.error(errJson.error || 'Erro ao iniciar conversa')
+        }
       }
-    } catch (e) {
-      alert('Erro ao iniciar conversa')
+    } catch (e: any) {
+      toast.error('Erro ao iniciar conversa: ' + (e?.message || 'Falha de comunicação'))
     } finally {
       setStartingChatId(null)
     }
@@ -1222,7 +1298,7 @@ export function ChatFullView({ alunoId }: { alunoId?: string }) {
               </div>
               <div>
                 <h3 style={{ fontSize: 16, fontWeight: 800, margin: 0, color: '#0f172a' }}>Mensagens</h3>
-                <span style={{ fontSize: 11, color: '#64748b' }}>Atendimento Direto • Impacto EDU</span>
+                <span style={{ fontSize: 11, color: '#64748b' }}>Chat Integrado Impacto EDU</span>
               </div>
             </div>
 
@@ -1744,9 +1820,68 @@ export function ChatFullView({ alunoId }: { alunoId?: string }) {
                           </span>
                         </div>
 
-                        {/* Itens do Aluno - Atendimento Direto com Educadores */}
+                        {/* Itens do Aluno */}
                         <div style={{ padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 6 }}>
-                          {/* Professores e Educadores Vinculados ao Aluno */}
+                          {/* Turmas do Aluno (Regular, Integral/Intermediário, etc.) */}
+                          {alunoTurmas.map((tg: any) => (
+                            <div
+                              key={tg.id}
+                              onClick={() => handleStartChatFromContact({
+                                type: 'group',
+                                grupoId: tg.id,
+                                turmaId: tg.turma_id,
+                                title: tg.nome,
+                                subtitle: 'Grupo da Turma',
+                                ano_letivo: tg.ano_letivo || '2026'
+                              })}
+                              style={{
+                                padding: '8px 10px',
+                                borderRadius: 10,
+                                background: '#f8fafc',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                border: '1px solid #e2e8f0',
+                                transition: 'all 0.15s'
+                              }}
+                              onMouseEnter={e => e.currentTarget.style.background = '#eff6ff'}
+                              onMouseLeave={e => e.currentTarget.style.background = '#f8fafc'}
+                            >
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 9, minWidth: 0 }}>
+                                <div style={{
+                                  width: 30,
+                                  height: 30,
+                                  borderRadius: '50%',
+                                  background: tg.cor || '#2563eb',
+                                  color: 'white',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  flexShrink: 0
+                                }}>
+                                  <GraduationCap size={15} />
+                                </div>
+                                <div style={{ minWidth: 0 }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                                    <span style={{ fontSize: 12.5, fontWeight: 700, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                      {tg.nome}
+                                    </span>
+                                    {tg.ano_letivo && (
+                                      <span style={{ fontSize: 8.5, fontWeight: 700, color: '#0369a1', background: '#e0f2fe', padding: '0.5px 5px', borderRadius: 4, border: '1px solid #bae6fd' }}>
+                                        {tg.ano_letivo}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div style={{ fontSize: 10, color: '#64748b', marginTop: 1 }}>
+                                    Grupo da Turma • {aluno.nome.split(' ')[0]}
+                                  </div>
+                                </div>
+                              </div>
+                              <ChevronRight size={15} color="#94a3b8" />
+                            </div>
+                          ))}
+
                           {matchingColabs.length > 0 ? (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                               <div style={{ fontSize: 10, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', padding: '2px 4px' }}>
@@ -2190,11 +2325,54 @@ export function ChatFullView({ alunoId }: { alunoId?: string }) {
                                 </div>
                               </button>
 
-                              {/* Conteúdo Expandido da Turma - Atendimento Direto */}
+                              {/* Conteúdo Expandido da Turma */}
                               {isExpanded && (
                                 <div style={{ padding: '8px 10px 12px 10px', background: '#ffffff', borderTop: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', gap: 8 }}>
-                                  {/* Lista de Alunos e seus Responsáveis */}
-                                  <div>
+                                  {/* Opção 1: Chat Oficial da Turma (Mural) */}
+                                  <button
+                                    type="button"
+                                    onClick={() => handleStartChatFromContact({
+                                      type: 'group',
+                                      grupoId: t.id,
+                                      turmaId: t.turma_id,
+                                      title: t.nome,
+                                      subtitle: 'Grupo da Turma',
+                                      ano_letivo: t.ano_letivo || '2026'
+                                    })}
+                                    style={{
+                                      width: '100%',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'space-between',
+                                      padding: '9px 12px',
+                                      background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)',
+                                      border: '1.5px solid #bfdbfe',
+                                      borderRadius: 10,
+                                      cursor: 'pointer',
+                                      textAlign: 'left'
+                                    }}
+                                  >
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                                      <div style={{ width: 30, height: 30, borderRadius: '50%', background: '#2563eb', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                        <MessageSquare size={15} />
+                                      </div>
+                                      <div style={{ minWidth: 0 }}>
+                                        <div style={{ fontSize: 12.5, fontWeight: 700, color: '#1e3a8a', display: 'flex', alignItems: 'center', gap: 6 }}>
+                                          <span>Chat da Turma</span>
+                                          <span style={{ fontSize: 9.5, fontWeight: 800, background: '#2563eb', color: 'white', padding: '1px 6px', borderRadius: 999 }}>
+                                            Mural Oficial
+                                          </span>
+                                        </div>
+                                        <div style={{ fontSize: 10.5, color: '#3b82f6', marginTop: 1 }}>
+                                          Somente educadores enviam • Todos visualizam
+                                        </div>
+                                      </div>
+                                    </div>
+                                    <ChevronRight size={16} color="#2563eb" />
+                                  </button>
+
+                                  {/* Opção 2: Lista de Alunos e seus Responsáveis */}
+                                  <div style={{ marginTop: 4 }}>
                                     <div style={{ fontSize: 10.5, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 6, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                                       <span>Alunos da Turma ({alunosList.length})</span>
                                       <span style={{ fontSize: 10, fontWeight: 600, color: '#94a3b8' }}>Clique no aluno para conversar</span>
@@ -3116,9 +3294,13 @@ export function ChatFullView({ alunoId }: { alunoId?: string }) {
               const isGroup = !!selectedConv.isGroup || selectedConv.type === 'group'
               const isColabOrTeacher = checkIsCollaboratorOrTeacher(userCargo, userPerfil, currentUser)
               const hasLeftConv = Boolean(isColabOrTeacher && isColaboradorView && selectedConv.hasLeft)
+              const isColabGroupDisabled = isGroup && isColabOrTeacher && !isAdmin && (adConfig?.chatAuto?.recursos?.permitirColaboradorEnviarGrupoTurma === false)
+              const isDirectColabDisabled = !isGroup && (!isColaboradorView || isFamilyOrStudent) && (adConfig?.chatAuto?.recursos?.permitirConversaColaborador === false)
+
               const isReadOnlyForMe = hasLeftConv || (isGroup && (
                 !isColaboradorView ||
-                !isColabOrTeacher
+                !isColabOrTeacher ||
+                isColabGroupDisabled
               ))
 
               if (isReadOnlyForMe) {
@@ -3151,6 +3333,8 @@ export function ChatFullView({ alunoId }: { alunoId?: string }) {
                     <span>
                       {hasLeftConv
                         ? 'Você não participa mais deste grupo. O histórico anterior permanece disponível apenas para consulta.'
+                        : isColabGroupDisabled
+                        ? 'O envio de mensagens nos grupos da turma por colaboradores foi temporariamente pausado pela administração escolar.'
                         : !isColaboradorView
                         ? (isColabOrTeacher
                             ? 'Mural da turma: no Modo Família o envio de mensagens é desativado. Acesse pelo Modo Colaborador para enviar.'
@@ -3260,7 +3444,61 @@ export function ChatFullView({ alunoId }: { alunoId?: string }) {
                     </div>
                   )}
 
-                  {isBlocked ? (
+                  {isDirectColabDisabled ? (
+                    <div
+                      onClick={() => {
+                        const primaryWhatsapp = (adConfig?.contatosWhatsapp || []).find((c: any) => c.ativo)
+                        const whatsappUrl = primaryWhatsapp?.telefone ? getWhatsAppShareUrl(primaryWhatsapp.telefone, 'Olá, gostaria de informações sobre o atendimento escolar.') : undefined
+                        setColabNoticeModal({
+                          isOpen: true,
+                          colaboradorNome: selectedConv?.title,
+                          whatsappUrl,
+                          whatsappLabel: primaryWhatsapp?.nome ? `Falar com ${primaryWhatsapp.nome} no WhatsApp` : undefined
+                        })
+                      }}
+                      style={{
+                        padding: '14px 18px',
+                        background: '#fef2f2',
+                        border: '1px solid #fee2e2',
+                        borderRadius: 14,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: 12,
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease'
+                      }}
+                      onMouseEnter={e => e.currentTarget.style.background = '#fee2e2'}
+                      onMouseLeave={e => e.currentTarget.style.background = '#fef2f2'}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                        <div style={{
+                          width: 32,
+                          height: 32,
+                          borderRadius: '50%',
+                          background: '#fee2e2',
+                          color: '#dc2626',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexShrink: 0
+                        }}>
+                          <Lock size={16} />
+                        </div>
+                        <div style={{ textAlign: 'left' }}>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: '#991b1b', marginBottom: 2 }}>
+                            Conversas com Colaboradores Desativadas
+                          </div>
+                          <div style={{ fontSize: 12, color: '#b91c1c', lineHeight: 1.4 }}>
+                            O envio de mensagens diretas para colaboradores foi temporariamente pausado. Toque para ver detalhes.
+                          </div>
+                        </div>
+                      </div>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: '#dc2626', textDecoration: 'underline', whiteSpace: 'nowrap' }}>
+                        Ver Detalhes
+                      </span>
+                    </div>
+                  ) : isBlocked ? (
                     <ChatBlockedNoticeCard status={businessHoursStatus} />
                   ) : (
                     <>
@@ -3482,6 +3720,17 @@ export function ChatFullView({ alunoId }: { alunoId?: string }) {
       <ChatMediaViewerModal
         media={activeMediaViewer}
         onClose={() => setActiveMediaViewer(null)}
+      />
+
+      {/* Modal Centrado de Aviso: Conversas com Colaboradores Desativadas */}
+      <ColabChatNoticeModal
+        isOpen={colabNoticeModal.isOpen}
+        onClose={() => setColabNoticeModal(prev => ({ ...prev, isOpen: false }))}
+        colaboradorNome={colabNoticeModal.colaboradorNome}
+        alunoNome={colabNoticeModal.alunoNome}
+        whatsappUrl={colabNoticeModal.whatsappUrl}
+        whatsappLabel={colabNoticeModal.whatsappLabel}
+        onOpenTurmaGroup={colabNoticeModal.onOpenTurmaGroup}
       />
     </div>
   )

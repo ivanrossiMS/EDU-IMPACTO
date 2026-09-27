@@ -51,11 +51,10 @@ export async function GET(request: Request) {
       turmasMap.set(`sync-${t.id}`, t.nome)
     })
 
-    // 3. Montar query base de conversas diretas
+    // 3. Montar query base de conversas (diretas e em grupo)
     let convQuery = supabase
       .from('chat_conversations')
       .select('id, type, title, turma_id, aluno_id, last_message_text, last_message_at, last_message_by, message_count, created_at')
-      .eq('type', 'direct')
       .is('deleted_at', null)
       .order('last_message_at', { ascending: false, nullsFirst: false })
 
@@ -145,7 +144,7 @@ export async function GET(request: Request) {
 
       return {
         id: conv.id,
-        type: 'direct',
+        type: conv.type,
         title: conv.title,
         created_at: conv.created_at,
         last_message_at: conv.last_message_at || conv.created_at,

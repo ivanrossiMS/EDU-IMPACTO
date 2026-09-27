@@ -15,6 +15,7 @@
 
 import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 import { sendPushNotification } from '@/lib/server/pushService'
+import { getResponsavelIdsForTargets, getColaboradorIds } from '@/lib/server/notificationHelper'
 import { checkIsCollaboratorOrTeacher } from '@/lib/chatPermissions'
 
 export interface DispatchChatPushParams {
@@ -75,13 +76,7 @@ export async function dispatchChatPushNotification({
       return { success: false, reason: 'conversation_not_found' }
     }
 
-    // 2.1 Grupos de turma foram descontinuados no chat
-    if (conv.type === 'group') {
-      console.log(`[ChatPush][${conversationId}] Grupos de turma foram descontinuados no chat. Push abortado.`)
-      return { success: true, reason: 'group_chats_deprecated' }
-    }
-
-    // 2.2 Respeitar silenciamento global da conversa
+    // 2.1 Respeitar silenciamento global da conversa
     if (conv.is_muted_global) {
       console.log(`[ChatPush][${conversationId}] Conversa está silenciada globalmente. Abortando envio de push.`)
       return { success: true, reason: 'conversation_muted_global' }
@@ -180,48 +175,138 @@ export async function dispatchChatPushNotification({
       }
     }
 
-    // 5. Formatar Título e Mensagem Humanizados para Conversa Direta
+    // 5. Formatar Título e Mensagem Humanizados
     const cleanSenderName = senderName || 'Novo recado'
-    const senderRoleSuffix = senderPerfil && !['aluno', 'responsável', 'responsavel', 'família', 'familia'].includes(senderPerfil.toLowerCase())
-      ? ` • ${senderPerfil}`
-      : ''
-    const pushTitle = `💬 ${cleanSenderName}${senderRoleSuffix}`
-
+    let pushTitle = ''
     let pushBody = ''
-    switch (contentType) {
-      case 'image':
-        pushBody = `📷 Foto recebida`
-        break
-      case 'video':
-        pushBody = `🎥 Vídeo recebido`
-        break
-      case 'file':
-        pushBody = `📄 Arquivo recebido${metadata?.file_name ? `: ${metadata.file_name}` : ''}`
-        break
-      case 'audio':
-        pushBody = `🎤 Mensagem de voz recebida`
-        break
-      default:
-        pushBody = (content || '').trim().slice(0, 120)
-        break
+
+    if (conv.type === 'group') {
+      pushTitle = `💬 ${conv.title || 'Mural da Turma'}`
+
+      switch (contentType) {
+        case 'image':
+          pushBody = `📷 ${cleanSenderName} enviou uma foto`
+          break
+        case 'video':
+          pushBody = `🎥 ${cleanSenderName} enviou um vídeo`
+          break
+        case 'file':
+          pushBody = `📄 ${cleanSenderName} enviou um arquivo${metadata?.file_name ? `: ${metadata.file_name}` : ''}`
+          break
+        case 'audio':
+          pushBody = `🎤 ${cleanSenderName} enviou uma mensagem de voz`
+          break
+        default:
+          pushBody = `${cleanSenderName}: ${(content || '').trim().slice(0, 110)}`
+          break
+      }
+    } else {
+      // Conversa Direta
+      const senderRoleSuffix = senderPerfil && !['aluno', 'responsável', 'responsavel', 'família', 'familia'].includes(senderPerfil.toLowerCase())
+        ? ` • ${senderPerfil}`
+        : ''
+      pushTitle = `💬 ${cleanSenderName}${senderRoleSuffix}`
+
+      switch (contentType) {
+        case 'image':
+          pushBody = `📷 Foto recebida`
+          break
+        case 'video':
+          pushBody = `🎥 Vídeo recebido`
+          break
+        case 'file':
+          pushBody = `📄 Arquivo recebido${metadata?.file_name ? `: ${metadata.file_name}` : ''}`
+          break
+        case 'audio':
+          pushBody = `🎤 Mensagem de voz recebida`
+          break
+        default:
+          pushBody = (content || '').trim().slice(0, 120)
+          break
+      }
     }
 
-    // 6. Resolução dos Destinatários Segmentados (Conversa Direta 1 a 1)
-    // Estritamente e exclusivamente o participante selecionado!
-    // NUNCA buscar outros responsáveis da tabela aluno_responsavel e NUNCA adicionar outros parentes!
+    // 6. Resolução dos Destinatários Segmentados
     const familyTargetIds = new Set<string>()
     const colabTargetIds = new Set<string>()
 
-    if (participants && participants.length > 0) {
-      for (const p of participants) {
-        const uid = String(p.user_id)
-        if (senderCandidateIds.has(uid) || mutedOrBlockedUserIds.has(uid)) continue
+    if (conv.type === 'group') {
+      // A) Obter Turma e Grupo correspondentes
+      const targetTurmas: string[] = []
+      if (conv.turma_id) targetTurmas.push(String(conv.turma_id))
 
-        const isStaff = checkIsCollaboratorOrTeacher(p.user_perfil || '', p.user_perfil || '')
-        if (isStaff) {
-          colabTargetIds.add(uid)
-        } else {
-          familyTargetIds.add(uid)
+      let grupoColabIds: string[] = []
+      if (conv.grupo_id) {
+        const { data: grp } = await supabase
+          .from('agenda_grupos')
+          .select('id, dados')
+          .eq('id', conv.grupo_id)
+          .maybeSingle()
+
+        if (grp?.dados?.turma_id) targetTurmas.push(String(grp.dados.turma_id))
+        if (grp?.dados?.syncId) targetTurmas.push(String(grp.dados.syncId))
+        if (grp?.dados?.nome) targetTurmas.push(String(grp.dados.nome))
+
+        if (Array.isArray(grp?.dados?.colaboradoresIds)) {
+          grupoColabIds = grp.dados.colaboradoresIds.map(String)
+        }
+      }
+
+      // B) Mural da Turma: Buscar TODOS os responsáveis e TODOS os alunos da turma
+      if (targetTurmas.length > 0) {
+        const respIds = await getResponsavelIdsForTargets({ turmas: targetTurmas })
+        respIds.forEach(id => {
+          if (id && !senderCandidateIds.has(String(id)) && !mutedOrBlockedUserIds.has(String(id))) {
+            familyTargetIds.add(String(id))
+          }
+        })
+      }
+
+      // C) Buscar colaboradores vinculados à turma
+      if (grupoColabIds.length > 0) {
+        const resolvedColabIds = await getColaboradorIds(grupoColabIds)
+        resolvedColabIds.forEach(id => {
+          if (
+            id &&
+            !senderCandidateIds.has(String(id)) &&
+            !mutedOrBlockedUserIds.has(String(id)) &&
+            !leftColabUserIds.has(String(id))
+          ) {
+            colabTargetIds.add(String(id))
+          }
+        })
+      }
+
+      // D) Incluir participantes já registrados em chat_participants para este grupo
+      if (participants && participants.length > 0) {
+        for (const p of participants) {
+          const uid = String(p.user_id)
+          if (senderCandidateIds.has(uid) || mutedOrBlockedUserIds.has(uid)) continue
+
+          const isStaff = checkIsCollaboratorOrTeacher(p.user_perfil || '', p.user_perfil || '')
+          if (isStaff) {
+            if (!leftColabUserIds.has(uid)) {
+              colabTargetIds.add(uid)
+            }
+          } else {
+            familyTargetIds.add(uid)
+          }
+        }
+      }
+    } else {
+      // Conversa Direta (1 a 1): estritamente e exclusivamente o participante selecionado!
+      // NUNCA buscar outros responsáveis da tabela aluno_responsavel e NUNCA adicionar outros parentes!
+      if (participants && participants.length > 0) {
+        for (const p of participants) {
+          const uid = String(p.user_id)
+          if (senderCandidateIds.has(uid) || mutedOrBlockedUserIds.has(uid)) continue
+
+          const isStaff = checkIsCollaboratorOrTeacher(p.user_perfil || '', p.user_perfil || '')
+          if (isStaff) {
+            colabTargetIds.add(uid)
+          } else {
+            familyTargetIds.add(uid)
+          }
         }
       }
     }
@@ -309,7 +394,9 @@ export async function dispatchChatPushNotification({
         ? `${appBaseUrl}/agenda-digital/${conv.aluno_id}/chat?conversation_id=${conversationId}`
         : `${appBaseUrl}/agenda-digital/selecionar-aluno?redirect=chat&conversation_id=${conversationId}${turmaParam}`
 
-      const targetTag = `resp_${finalFamilyIds[0] || 'direto'}`
+      const targetTag = conv.type === 'group'
+        ? `turma_${conv.turma_id || 'geral'}`
+        : `resp_${finalFamilyIds[0] || 'direto'}`
       const familyItemId = `chat_${conversationId}_${targetTag}_msg_${messageId}_familia`
 
       const familyPromise = (async () => {
@@ -343,11 +430,11 @@ export async function dispatchChatPushNotification({
               _metadata: {
                 conversation_id: conversationId,
                 message_id: messageId,
-                conversation_type: 'direct',
+                conversation_type: conv.type,
                 aluno_id: conv.aluno_id || null,
                 turma_id: conv.turma_id || null,
                 conversation_title: conv.title || directRecipientName || null,
-                recipient_name: directRecipientName || conv.title || 'Destinatário',
+                recipient_name: conv.type === 'group' ? (conv.title || 'Mural da Turma') : (directRecipientName || conv.title || 'Destinatário'),
                 sender_id: senderId,
                 sender_name: cleanSenderName,
                 sender_perfil: senderPerfil || null,
@@ -423,10 +510,10 @@ export async function dispatchChatPushNotification({
               _metadata: {
                 conversation_id: conversationId,
                 message_id: messageId,
-                conversation_type: 'direct',
+                conversation_type: conv.type,
                 turma_id: conv.turma_id || null,
                 conversation_title: conv.title || directRecipientName || null,
-                recipient_name: directRecipientName || 'Equipe Escolar',
+                recipient_name: conv.type === 'group' ? (conv.title || 'Mural da Turma') : (directRecipientName || 'Equipe Escolar'),
                 sender_id: senderId,
                 sender_name: cleanSenderName,
                 sender_perfil: senderPerfil || null,

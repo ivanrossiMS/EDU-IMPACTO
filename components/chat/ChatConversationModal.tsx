@@ -43,6 +43,8 @@ import { checkChatBusinessHours, ChatBlockedNoticeCard } from './ChatBlockedNoti
 import { uploadFileToSupabase } from '@/lib/upload/uploadClient'
 import { playWhatsAppSendSound } from '@/lib/chatAudio'
 import { checkIsAdmin, checkIsCollaboratorOrTeacher } from '@/lib/chatPermissions'
+import { getWhatsAppShareUrl } from '@/lib/whatsapp'
+import { ColabChatNoticeModal } from './ColabChatNoticeModal'
 import { triggerHaptic } from '@/lib/utils/haptics'
 import { getInitials } from '@/lib/utils'
 import { HeicSafeImage } from './HeicSafeImage'
@@ -192,6 +194,18 @@ export function ChatConversationModal() {
   const isFamilyContext = activeConversation?.context === 'familia' || isFamilyOrStudent || !isColabOrTeacher
   const canHaveLeft = isColabOrTeacher && !isFamilyContext
 
+  // Regras de Governança Escolar configuradas pelo Admin:
+  // 1. Bloqueio de colaboradores enviarem em grupos de turma (apenas Admins enviam quando desativado)
+  const isColabGroupDisabled = isGroup && isColabOrTeacher && !isAdmin && (adConfig?.chatAuto?.recursos?.permitirColaboradorEnviarGrupoTurma === false)
+
+  // 2. Bloqueio de conversas diretas com colaborador para famílias
+  const isDirectColabDisabled = !isGroup && isFamilyContext && (adConfig?.chatAuto?.recursos?.permitirConversaColaborador === false)
+
+  const [showColabNoticeModal, setShowColabNoticeModal] = useState(false)
+  const primaryWhatsapp = (adConfig?.contatosWhatsapp || []).find((c: any) => c.ativo)
+  const whatsappUrl = primaryWhatsapp?.telefone
+    ? getWhatsAppShareUrl(primaryWhatsapp.telefone, 'Olá, gostaria de informações sobre o atendimento escolar.')
+    : undefined
   const [hasLeft, setHasLeft] = useState(false)
   const [isArchived, setIsArchived] = useState(false)
   const [isArchiving, setIsArchiving] = useState(false)
@@ -231,12 +245,14 @@ export function ChatConversationModal() {
 
   // Regra de Permissão de Envio em Grupos/Turmas:
   // - Se saiu do grupo: apenas leitura do histórico anterior
+  // - Se envio de colaboradores em grupos estiver desativado pela escola: apenas leitura
   // - No Modo Família: NENHUM colaborador ou familiar pode enviar mensagens em grupos de turma (somente visualização).
   // - No Modo Colaborador: Professores vinculados e equipe escolar podem enviar mensagens.
   // - Alunos ou familiares puros nunca podem enviar em grupos.
   const isReadOnlyForMe = hasLeft || (isGroup && (
     isFamilyContext ||
-    !isColabOrTeacher
+    !isColabOrTeacher ||
+    isColabGroupDisabled
   ))
 
   const [messageToDelete, setMessageToDelete] = useState<string | null>(null)
@@ -564,10 +580,17 @@ export function ChatConversationModal() {
     if (!activeConversation?.id) return
     if (isReadOnlyForMe) {
       toast.error(
-        isColabOrTeacher
+        isColabGroupDisabled
+          ? 'O envio de mensagens nos grupos da turma por colaboradores foi temporariamente pausado pela administração escolar.'
+          : isColabOrTeacher
           ? 'No Modo Família, o envio de mensagens em grupos da turma é desativado. Alterne para o Modo Colaborador para enviar.'
           : 'No Modo Família, o envio de mensagens em grupos da turma é desativado.'
       )
+      return
+    }
+
+    if (isDirectColabDisabled) {
+      setShowColabNoticeModal(true)
       return
     }
 
@@ -650,7 +673,16 @@ export function ChatConversationModal() {
     const rawFile = e.target.files?.[0]
     if (!rawFile || !activeConversation?.id) return
     if (isReadOnlyForMe) {
-      toast.error('No Modo Família, o envio em grupos da turma é desativado.')
+      toast.error(
+        isColabGroupDisabled
+          ? 'O envio de mensagens nos grupos da turma por colaboradores foi temporariamente pausado pela administração escolar.'
+          : 'No Modo Família, o envio em grupos da turma é desativado.'
+      )
+      return
+    }
+
+    if (isDirectColabDisabled) {
+      setShowColabNoticeModal(true)
       return
     }
 
@@ -1742,12 +1774,60 @@ export function ChatConversationModal() {
               <div style={{ fontSize: 13, color: hasLeft ? '#92400e' : '#475569', fontWeight: 600 }}>
                 {hasLeft
                   ? 'Você não participa mais deste grupo. O histórico anterior permanece disponível apenas para consulta.'
+                  : isColabGroupDisabled
+                  ? 'O envio de mensagens nos grupos da turma por colaboradores foi temporariamente pausado pela administração escolar.'
                   : isFamilyContext
                   ? (isColabOrTeacher
                       ? 'Mural da turma: no Modo Família o envio de mensagens é desativado. Alterne para o Modo Colaborador para enviar.'
                       : 'Mural da turma: no Modo Família o envio de mensagens é desativado.')
                   : 'Apenas membros da equipe escolar podem enviar mensagens neste chat. Alunos e familiares apenas visualizam.'}
               </div>
+            </div>
+          ) : isDirectColabDisabled ? (
+            <div
+              onClick={() => setShowColabNoticeModal(true)}
+              style={{
+                padding: '12px 18px',
+                background: '#fef2f2',
+                borderTop: '1px solid #fee2e2',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 12,
+                cursor: 'pointer',
+                transition: 'all 0.15s ease'
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = '#fee2e2'}
+              onMouseLeave={e => e.currentTarget.style.background = '#fef2f2'}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div
+                  style={{
+                    width: 32,
+                    height: 32,
+                    borderRadius: '50%',
+                    background: '#fee2e2',
+                    color: '#dc2626',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0
+                  }}
+                >
+                  <Lock size={16} />
+                </div>
+                <div style={{ textAlign: 'left' }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: '#991b1b', marginBottom: 1 }}>
+                    Conversas com Colaboradores Desativadas
+                  </div>
+                  <div style={{ fontSize: 11.5, color: '#b91c1c', lineHeight: 1.35 }}>
+                    O envio de mensagens foi temporariamente pausado. Toque para ver detalhes.
+                  </div>
+                </div>
+              </div>
+              <span style={{ fontSize: 12, fontWeight: 700, color: '#dc2626', textDecoration: 'underline', whiteSpace: 'nowrap' }}>
+                Ver Detalhes
+              </span>
             </div>
           ) : isBlocked ? (
             <div
@@ -2170,6 +2250,16 @@ export function ChatConversationModal() {
             </div>
           </div>
         )}
+
+        {/* Modal Centrado de Aviso: Conversas com Colaboradores Desativadas */}
+        <ColabChatNoticeModal
+          isOpen={showColabNoticeModal}
+          onClose={() => setShowColabNoticeModal(false)}
+          colaboradorNome={activeConversation?.title}
+          alunoNome={activeConversation?.aluno_nome || undefined}
+          whatsappUrl={whatsappUrl}
+          whatsappLabel={primaryWhatsapp?.nome ? `Falar com ${primaryWhatsapp.nome} no WhatsApp` : undefined}
+        />
       </div>
     </AnimatePresence>
   )
