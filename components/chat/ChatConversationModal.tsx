@@ -43,7 +43,7 @@ import { checkChatBusinessHours, ChatBlockedNoticeCard } from './ChatBlockedNoti
 import { uploadFileToSupabase } from '@/lib/upload/uploadClient'
 import { playWhatsAppSendSound } from '@/lib/chatAudio'
 import { checkIsAdmin, checkIsCollaboratorOrTeacher } from '@/lib/chatPermissions'
-import { getWhatsAppShareUrl } from '@/lib/whatsapp'
+import { getWhatsAppShareUrl, getSecretariaWhatsApp } from '@/lib/whatsapp'
 import { ColabChatNoticeModal } from './ColabChatNoticeModal'
 import { triggerHaptic } from '@/lib/utils/haptics'
 import { getInitials } from '@/lib/utils'
@@ -202,10 +202,7 @@ export function ChatConversationModal() {
   const isDirectColabDisabled = !isGroup && isFamilyContext && (adConfig?.chatAuto?.recursos?.permitirConversaColaborador === false)
 
   const [showColabNoticeModal, setShowColabNoticeModal] = useState(false)
-  const primaryWhatsapp = (adConfig?.contatosWhatsapp || []).find((c: any) => c.ativo)
-  const whatsappUrl = primaryWhatsapp?.telefone
-    ? getWhatsAppShareUrl(primaryWhatsapp.telefone, 'Olá, gostaria de informações sobre o atendimento escolar.')
-    : undefined
+  const secWa = getSecretariaWhatsApp(adConfig?.contatosWhatsapp)
   const [hasLeft, setHasLeft] = useState(false)
   const [isArchived, setIsArchived] = useState(false)
   const [isArchiving, setIsArchiving] = useState(false)
@@ -2257,8 +2254,8 @@ export function ChatConversationModal() {
           onClose={() => setShowColabNoticeModal(false)}
           colaboradorNome={activeConversation?.title}
           alunoNome={activeConversation?.aluno_nome || undefined}
-          whatsappUrl={whatsappUrl}
-          whatsappLabel={primaryWhatsapp?.nome ? `Falar com ${primaryWhatsapp.nome} no WhatsApp` : undefined}
+          whatsappUrl={secWa?.url}
+          whatsappLabel={secWa?.label}
         />
       </div>
     </AnimatePresence>

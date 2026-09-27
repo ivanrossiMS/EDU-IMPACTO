@@ -36,7 +36,7 @@ import { ChatBadge } from './ChatBadge'
 import { useApp } from '@/lib/context'
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 import { useSelectedStudent } from '@/lib/selectedStudentContext'
-import { getWhatsAppShareUrl } from '@/lib/whatsapp'
+import { getWhatsAppShareUrl, getSecretariaWhatsApp } from '@/lib/whatsapp'
 import { getInitials } from '@/lib/utils'
 import { checkIsCollaboratorOrTeacher, checkIsEquipeEscolar, sortTurmasByName } from '@/lib/chatPermissions'
 import { toast } from 'sonner'
@@ -604,8 +604,7 @@ export function FloatingChat() {
       chatViewMode === 'familia' &&
       adConfig?.chatAuto?.recursos?.permitirConversaColaborador === false
     ) {
-      const primaryWhatsapp = (adConfig?.contatosWhatsapp || []).find((c: any) => c.ativo)
-      const whatsappUrl = primaryWhatsapp?.telefone ? getWhatsAppShareUrl(primaryWhatsapp.telefone, 'Olá, gostaria de informações sobre o atendimento escolar.') : undefined
+      const secWa = getSecretariaWhatsApp(adConfig?.contatosWhatsapp)
 
       const studentObj = (contactsData?.alunos || []).find((a: any) => String(a.id) === String(item.alunoId || activeAlunoId))
       const turmaGrupoObj = studentObj?.turmaGrupos?.[0] || studentObj?.turmaGrupo
@@ -624,8 +623,8 @@ export function FloatingChat() {
         isOpen: true,
         colaboradorNome: item.targetUserName,
         alunoNome: item.alunoNome,
-        whatsappUrl,
-        whatsappLabel: primaryWhatsapp?.nome ? `Falar com ${primaryWhatsapp.nome} no WhatsApp` : undefined,
+        whatsappUrl: secWa?.url,
+        whatsappLabel: secWa?.label,
         onOpenTurmaGroup
       })
       setStartingChatId(null)
@@ -674,15 +673,14 @@ export function FloatingChat() {
       } else {
         const errJson = await res.json().catch(() => ({}))
         if (errJson.error?.includes('colaborador') && errJson.error?.includes('desativad')) {
-          const primaryWhatsapp = (adConfig?.contatosWhatsapp || []).find((c: any) => c.ativo)
-          const whatsappUrl = primaryWhatsapp?.telefone ? getWhatsAppShareUrl(primaryWhatsapp.telefone, 'Olá, gostaria de informações sobre o atendimento escolar.') : undefined
+          const secWa = getSecretariaWhatsApp(adConfig?.contatosWhatsapp)
 
           setColabNoticeModal({
             isOpen: true,
             colaboradorNome: item.targetUserName,
             alunoNome: item.alunoNome,
-            whatsappUrl,
-            whatsappLabel: primaryWhatsapp?.nome ? `Falar com ${primaryWhatsapp.nome} no WhatsApp` : undefined
+            whatsappUrl: secWa?.url,
+            whatsappLabel: secWa?.label
           })
         } else {
           toast.error(errJson.error || 'Erro ao abrir conversa')

@@ -11,6 +11,8 @@ import {
   Phone,
   ArrowRight
 } from 'lucide-react'
+import { useAgendaDigital } from '@/lib/agendaDigitalContext'
+import { getSecretariaWhatsApp } from '@/lib/whatsapp'
 
 export interface ColabChatNoticeModalProps {
   isOpen: boolean
@@ -31,6 +33,12 @@ export function ColabChatNoticeModal({
   whatsappLabel,
   onOpenTurmaGroup
 }: ColabChatNoticeModalProps) {
+  const { adConfig } = useAgendaDigital()
+  const secWa = getSecretariaWhatsApp(adConfig?.contatosWhatsapp)
+
+  const effectiveWhatsappUrl = whatsappUrl || secWa?.url
+  const effectiveWhatsappLabel = whatsappLabel || secWa?.label || 'Falar com a Secretaria (Auxiliadora) no WhatsApp'
+
   if (!isOpen) return null
 
   return (
@@ -293,9 +301,9 @@ export function ColabChatNoticeModal({
             {/* Botões de Ação */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {/* Botão Secundário WhatsApp (se disponível) */}
-              {whatsappUrl && (
+              {effectiveWhatsappUrl && (
                 <a
-                  href={whatsappUrl}
+                  href={effectiveWhatsappUrl}
                   target="_blank"
                   rel="noopener noreferrer"
                   style={{
@@ -304,7 +312,9 @@ export function ColabChatNoticeModal({
                     justifyContent: 'center',
                     gap: 8,
                     width: '100%',
-                    height: 42,
+                    minHeight: 42,
+                    height: 'auto',
+                    padding: '10px 14px',
                     borderRadius: 12,
                     background: '#ecfdf5',
                     border: '1.5px solid #a7f3d0',
@@ -312,12 +322,14 @@ export function ColabChatNoticeModal({
                     fontSize: 13,
                     fontWeight: 700,
                     textDecoration: 'none',
+                    textAlign: 'center',
                     cursor: 'pointer',
-                    transition: 'all 0.15s ease'
+                    transition: 'all 0.15s ease',
+                    boxSizing: 'border-box'
                   }}
                 >
-                  <Phone size={15} color="#059669" />
-                  <span>{whatsappLabel || 'Falar com a Secretaria no WhatsApp'}</span>
+                  <Phone size={15} color="#059669" style={{ flexShrink: 0 }} />
+                  <span>{effectiveWhatsappLabel}</span>
                 </a>
               )}
 

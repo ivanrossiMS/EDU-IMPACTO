@@ -126,3 +126,52 @@ export function formatarMensagemWhatsApp(
     .trim()
 }
 
+/**
+ * Localiza especificamente o canal de WhatsApp da Secretaria (ex: Auxiliadora) para suporte à família
+ */
+export function getSecretariaWhatsApp(contacts?: any[]) {
+  const activeList = (contacts || []).filter((c: any) => c && c.ativo)
+  if (activeList.length === 0) return null
+
+  // 1. Procura primeiro por Auxiliadora ou Secretaria (prioridade absoluta do atendimento escolar)
+  const foundSecretaria = activeList.find((c: any) => 
+    (c.nome && /auxiliadora/i.test(c.nome)) || 
+    (c.setor && /secretaria/i.test(c.setor))
+  )
+
+  // 2. Fallback para Recepção ou Atendimento
+  const foundRecepcao = activeList.find((c: any) => 
+    (c.setor && /recepç|recepc|atendimento/i.test(c.setor)) ||
+    (c.nome && /recepç|recepc|atendimento/i.test(c.nome))
+  )
+
+  const selected = foundSecretaria || foundRecepcao || activeList[0]
+  if (!selected || !selected.telefone) return null
+
+  // Determina rótulo legível
+  let label = 'Falar com a Secretaria (Auxiliadora) no WhatsApp'
+  if (selected.nome && /auxiliadora/i.test(selected.nome)) {
+    label = 'Falar com a Secretaria (Auxiliadora) no WhatsApp'
+  } else if (selected.setor && /secretaria/i.test(selected.setor)) {
+    label = selected.nome 
+      ? `Falar com a Secretaria (${selected.nome}) no WhatsApp`
+      : 'Falar com a Secretaria no WhatsApp'
+  } else if (selected.nome) {
+    label = `Falar com ${selected.nome} no WhatsApp`
+  }
+
+  const url = getWhatsAppShareUrl(
+    selected.telefone,
+    'Olá! Gostaria de informações com a Secretaria sobre o atendimento escolar.'
+  )
+
+  return {
+    contact: selected,
+    telefone: selected.telefone,
+    nome: selected.nome,
+    setor: selected.setor,
+    label,
+    url
+  }
+}
+
