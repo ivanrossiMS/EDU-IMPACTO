@@ -1278,6 +1278,25 @@ function SelecionarAlunoContent() {
               window.location.replace(fixedDest)
               return
             }
+            // Se não encontrou o aluno correspondente nesta conta
+            if (typeof window !== 'undefined') {
+              (window as any).__EDU_PENDING_PUSH_ROUTE__ = null
+              localStorage.removeItem(PENDING_PUSH_ROUTE_KEY)
+            }
+            try {
+              const { Preferences } = await import('@capacitor/preferences')
+              await Preferences.remove({ key: PENDING_PUSH_ROUTE_KEY })
+            } catch {}
+          } else {
+            // targetSlug === 'selecionar-aluno': usuário já está na tela de seleção de alunos
+            if (typeof window !== 'undefined') {
+              (window as any).__EDU_PENDING_PUSH_ROUTE__ = null
+              localStorage.removeItem(PENDING_PUSH_ROUTE_KEY)
+            }
+            try {
+              const { Preferences } = await import('@capacitor/preferences')
+              await Preferences.remove({ key: PENDING_PUSH_ROUTE_KEY })
+            } catch {}
           }
         }
       }
@@ -1286,6 +1305,34 @@ function SelecionarAlunoContent() {
       const isManual = searchParams.get('manual') === 'true' || searchParams.get('trocar') === 'true'
       const isColab = currentUser && currentUser.perfil !== 'Família' && currentUser.perfil !== 'Responsável' && currentUser.cargo !== 'Aluno'
       if (!isManual && !isColab && meusAlunos.length > 0) {
+        // Se houver parâmetro de conversa (push de chat direto ou grupo), direcionar para o aluno correto
+        const paramConvId = searchParams.get('conversation_id')
+        if (paramConvId && meusAlunos.length > 1) {
+          try {
+            const convRes = await fetch(`/api/chat/conversations?conversation_id=${encodeURIComponent(paramConvId)}`)
+            if (convRes.ok) {
+              const convData = await convRes.json()
+              const matchedConv = (convData.conversations || []).find((c: any) => c.id === paramConvId)
+              if (matchedConv) {
+                let targetStudent = null
+                if (matchedConv.aluno_id) {
+                  targetStudent = meusAlunos.find((a: any) => String(a.id) === String(matchedConv.aluno_id))
+                } else if (matchedConv.turma_id) {
+                  targetStudent = meusAlunos.find((a: any) => String(a.turma) === String(matchedConv.turma_id) || String(a.turma_id) === String(matchedConv.turma_id))
+                } else {
+                  targetStudent = meusAlunos[0]
+                }
+                if (targetStudent) {
+                  const matchDest = `/agenda-digital/${targetStudent.id}/${redirectTarget}${getForwardParams()}`
+                  console.log(`[SelecionarAluno] Aluno resolvido via conversa (${targetStudent.nome}). Redirecionando direto para ${matchDest}...`)
+                  window.location.replace(matchDest)
+                  return
+                }
+              }
+            }
+          } catch (_) {}
+        }
+
         // Se houver parâmetro de turma (ex: push do mural da turma) e mais de 1 aluno, tentar selecionar o aluno daquela turma
         const paramTurmaId = searchParams.get('turma_id')
         if (paramTurmaId && meusAlunos.length > 1) {

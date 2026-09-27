@@ -60,8 +60,24 @@ function AgendaDigitalIndexContent() {
 
         if (!cleanDest.startsWith('/')) cleanDest = '/' + cleanDest;
 
-        if (cleanDest && cleanDest !== '/' && cleanDest !== '/agenda-digital' && cleanDest !== '/agenda-digital/selecionar-aluno') {
+        if (cleanDest.startsWith('/agenda-digital/selecionar-aluno') || cleanDest === '/agenda-digital' || cleanDest === '/') {
+          if (typeof window !== 'undefined') {
+            delete (window as any).__EDU_PENDING_PUSH_ROUTE__;
+            try {
+              localStorage.removeItem(PENDING_PUSH_ROUTE_KEY);
+            } catch (_) {}
+          }
+          return false;
+        }
+
+        if (cleanDest) {
           console.log(`🚀 [AgendaDigitalIndex] Rota pendente identificada: ${cleanDest}. Redirecionando...`);
+          if (typeof window !== 'undefined') {
+            delete (window as any).__EDU_PENDING_PUSH_ROUTE__;
+            try {
+              localStorage.removeItem(PENDING_PUSH_ROUTE_KEY);
+            } catch (_) {}
+          }
           window.location.replace(cleanDest);
           return true;
         }

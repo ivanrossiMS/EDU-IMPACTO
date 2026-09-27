@@ -134,6 +134,18 @@ export function resolveDestinationFromPayload(data: any, currentUser?: any): str
       cleanUrl = `/agenda-digital/colaborador/${moduleName}${existingQuery}`
     }
 
+    // Se a rota for para selecionar-aluno mas tivermos o aluno do destinatário (e não for colaborador)
+    if (cleanUrl.includes('/selecionar-aluno') && candidateAlunoId && !isColab) {
+      const qIndex = cleanUrl.indexOf('?')
+      const queryString = qIndex !== -1 ? cleanUrl.substring(qIndex + 1) : ''
+      const sp = new URLSearchParams(queryString)
+      const redirect = sp.get('redirect') || 'comunicados'
+      sp.delete('redirect')
+      const targetModule = redirect === 'chat' ? 'comunicados' : redirect
+      const queryStr = sp.toString() ? `?${sp.toString()}` : ''
+      cleanUrl = `/agenda-digital/${candidateAlunoId}/${targetModule}${queryStr}`
+    }
+
     if (rawItemId && !cleanUrl.includes('id=')) {
       cleanUrl += (cleanUrl.includes('?') ? '&' : '?') + `id=${encodeURIComponent(String(rawItemId))}`
     }
@@ -219,6 +231,7 @@ export function GlobalNotificationProvider() {
   const currentUserRef = useRef(currentUser)
   const hydratedRef = useRef(hydrated)
   const wasLoggedInRef = useRef(false)
+  const lastNavigatedDestRef = useRef<{ url: string; timestamp: number } | null>(null)
 
   // ── Estado do Banner Flutuante de Notificação Push em Primeiro Plano (In-App Push) ──
   const [activeBanner, setActiveBanner] = useState<ForegroundPushBanner | null>(null)
@@ -349,14 +362,48 @@ export function GlobalNotificationProvider() {
         } catch {}
         if (!dest.startsWith('/')) dest = '/' + dest
 
-        if (
-          pathname === dest ||
-          (pathname && dest.startsWith(pathname) && pathname !== '/agenda-digital/selecionar-aluno')
-        ) {
+        // Limpeza imediata da rota pendente em memória e storage para que NUNCA execute em loop
+        if (typeof window !== 'undefined') {
+          delete (window as any).__EDU_PENDING_PUSH_ROUTE__
+        }
+        try {
+          localStorage.removeItem(PENDING_PUSH_ROUTE_KEY)
+          if (Capacitor.isNativePlatform()) {
+            Preferences.remove({ key: PENDING_PUSH_ROUTE_KEY }).catch(() => {})
+          }
+        } catch {}
+
+        const curPath = typeof window !== 'undefined' ? window.location.pathname : (pathname || '')
+        const curFull = typeof window !== 'undefined' ? (window.location.pathname + window.location.search) : (pathname || '')
+
+        // Se já estivermos exatamente no destino, não faz nada
+        if (curFull === dest || curPath === dest || pathname === dest) {
           return
         }
 
-        console.log(`🚀 [GlobalPush] Sessão hidratada! Navegando diretamente para rota pendente: ${dest}`)
+        // Se o usuário estiver na tela de seleção de aluno e o destino for selecionar-aluno, não redireciona
+        if (curPath.includes('/selecionar-aluno') && dest.includes('/selecionar-aluno')) {
+          return
+        }
+
+        // Se estiver na tela de selecionar-perfil-admin e o destino for selecionar-perfil-admin
+        if (curPath.includes('/selecionar-perfil-admin') && dest.includes('/selecionar-perfil-admin')) {
+          return
+        }
+
+        // Prevenção de loop: não re-navegar para a mesma rota repetidamente dentro de 4 segundos
+        const now = Date.now()
+        if (
+          lastNavigatedDestRef.current &&
+          lastNavigatedDestRef.current.url === dest &&
+          (now - lastNavigatedDestRef.current.timestamp) < 4000
+        ) {
+          console.warn(`[GlobalPush] Navegação repetida bloqueada por segurança contra loop: ${dest}`)
+          return
+        }
+        lastNavigatedDestRef.current = { url: dest, timestamp: now }
+
+        console.log(`🚀 [GlobalPush] Sessão hidratada! Navegando de forma segura para rota pendente: ${dest}`)
 
         if (dest.includes('id=')) {
           const comId = dest.split('id=')[1]?.split('&')[0]
@@ -371,12 +418,17 @@ export function GlobalNotificationProvider() {
           }
         }
 
-        if (typeof window !== 'undefined') {
-          const curPath = window.location.pathname
-          if (curPath === '/' || curPath.includes('/selecionar-aluno') || curPath === '/agenda-digital') {
-            console.log(`🚀 [GlobalPush] Forçando navegação imediata via window.location: ${dest}`)
-            window.location.href = dest
-            return
+        // Se for notificação de chat e tiver conversation_id na URL, disparar evento para abrir o modal de conversa
+        if (dest.includes('conversation_id=')) {
+          const convMatch = dest.match(/conversation_id=([0-9a-f-]+)/i)
+          if (convMatch && convMatch[1]) {
+            setTimeout(() => {
+              try {
+                window.dispatchEvent(
+                  new CustomEvent('ad:open-chat', { detail: { conversationId: convMatch[1] } })
+                )
+              } catch {}
+            }, 350)
           }
         }
 
@@ -430,7 +482,14 @@ export function GlobalNotificationProvider() {
     }
 
     // 5. Se for notificação de chat, dispara evento para o FloatingChat abrir instantaneamente
-    const convId = data.conversation_id || (data.type === 'chat' ? (data.item_id || data.id) : null)
+    let convId = data.conversation_id || data.metadata?.conversation_id
+    if (!convId && (data.type === 'chat' || data.rota === 'comunicados')) {
+      const raw = data.item_id || data.id
+      if (typeof raw === 'string') {
+        const uuidMatch = raw.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i)
+        if (uuidMatch) convId = uuidMatch[0]
+      }
+    }
     if (convId) {
       try {
         window.dispatchEvent(
@@ -446,9 +505,11 @@ export function GlobalNotificationProvider() {
       console.log(`[GlobalPush] Usuário autenticado. Navegando para ${destination}`)
       if (typeof window !== 'undefined') {
         const curPath = window.location.pathname
-        if (curPath === '/' || curPath.includes('/selecionar-aluno') || curPath === '/agenda-digital') {
-          console.log(`[GlobalPush] Tela de seleção ou splash detectada. Forçando carregamento imediato: ${destination}`)
-          window.location.href = destination
+        const curFull = window.location.pathname + window.location.search
+        if (curFull === destination || curPath === destination) {
+          return
+        }
+        if (curPath.includes('/selecionar-aluno') && destination.includes('/selecionar-aluno')) {
           return
         }
       }

@@ -389,9 +389,30 @@ export async function dispatchChatPushNotification({
     // Envio para Famílias (abre no modo família com a conversa e o aluno)
     const finalFamilyIds = Array.from(familyTargetIds)
     if (finalFamilyIds.length > 0) {
+      let resolvedFamilyAlunoId = conv.aluno_id
+      if (!resolvedFamilyAlunoId) {
+        try {
+          const numericRespIds = finalFamilyIds.filter(id => /^\d+$/.test(id))
+          if (numericRespIds.length > 0) {
+            const { data: vincRows } = await supabase
+              .from('aluno_responsavel')
+              .select('aluno_id')
+              .in('responsavel_id', numericRespIds)
+              .order('created_at', { ascending: true })
+              .limit(1)
+
+            if (vincRows && vincRows.length > 0 && vincRows[0].aluno_id) {
+              resolvedFamilyAlunoId = String(vincRows[0].aluno_id)
+            }
+          }
+        } catch (e) {
+          console.warn('[ChatPush] Aviso ao resolver aluno para URL familiar:', e)
+        }
+      }
+
       const turmaParam = conv.turma_id ? `&turma_id=${encodeURIComponent(conv.turma_id)}` : ''
-      const familyUrl = conv.aluno_id
-        ? `${appBaseUrl}/agenda-digital/${conv.aluno_id}/comunicados?conversation_id=${conversationId}`
+      const familyUrl = resolvedFamilyAlunoId
+        ? `${appBaseUrl}/agenda-digital/${resolvedFamilyAlunoId}/comunicados?conversation_id=${conversationId}`
         : `${appBaseUrl}/agenda-digital/selecionar-aluno?redirect=comunicados&conversation_id=${conversationId}${turmaParam}`
 
       const targetTag = conv.type === 'group'
@@ -412,7 +433,7 @@ export async function dispatchChatPushNotification({
               rota: 'comunicados',
               conversation_id: conversationId,
               message_id: messageId,
-              aluno_id: conv.aluno_id || null,
+              aluno_id: resolvedFamilyAlunoId || null,
               turma_id: conv.turma_id || null,
               context: 'familia'
             }

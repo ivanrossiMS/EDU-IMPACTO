@@ -99,6 +99,13 @@ function RootInner() {
         if (currentUser) {
           setTargetRoute(cleanDest)
           if (typeof window !== 'undefined') {
+            delete (window as any).__EDU_PENDING_PUSH_ROUTE__
+            try {
+              localStorage.removeItem(PENDING_PUSH_ROUTE_KEY)
+              if (Capacitor.isNativePlatform()) {
+                Preferences.remove({ key: PENDING_PUSH_ROUTE_KEY }).catch(() => {})
+              }
+            } catch {}
             window.location.href = cleanDest
           }
           return

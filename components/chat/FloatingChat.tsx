@@ -464,6 +464,15 @@ export function FloatingChat() {
               cleanUrl.searchParams.delete('openChat')
               window.history.replaceState({}, '', cleanUrl.pathname + (cleanUrl.search ? cleanUrl.search : ''))
             } catch {}
+          } else {
+            // Target não encontrado ou sem permissão: marca como processado e limpa params da URL para evitar loops
+            openedDeepLinkRef.current = deepLinkId
+            try {
+              const cleanUrl = new URL(window.location.href)
+              cleanUrl.searchParams.delete('conversation_id')
+              cleanUrl.searchParams.delete('openChat')
+              window.history.replaceState({}, '', cleanUrl.pathname + (cleanUrl.search ? cleanUrl.search : ''))
+            } catch {}
           }
         }
       }
@@ -477,6 +486,15 @@ export function FloatingChat() {
   // Ouvir deep links via URL no mount e evento personalizado ad:open-chat
   useEffect(() => {
     if (typeof window === 'undefined') return
+
+    // NUNCA abre a gaveta de chat por deep link enquanto o usuário estiver nas telas de seleção
+    const isSelectionPage = 
+      pathname?.includes('/selecionar-aluno') || 
+      pathname?.includes('/selecionar-perfil-admin') || 
+      pathname === '/agenda-digital'
+
+    if (isSelectionPage) return
+
     const urlParams = new URLSearchParams(window.location.search)
     const deepLinkId = urlParams.get('conversation_id') || urlParams.get('openChat')
     const hasChatFlag = urlParams.get('chat') === 'true' || urlParams.get('open') === 'chat'
@@ -489,6 +507,13 @@ export function FloatingChat() {
     }
 
     const handleCustomOpenChat = (e: any) => {
+      if (
+        window.location.pathname.includes('/selecionar-aluno') ||
+        window.location.pathname.includes('/selecionar-perfil-admin') ||
+        window.location.pathname === '/agenda-digital'
+      ) {
+        return
+      }
       const convId = e?.detail?.conversationId
       openDrawer()
       setActiveTab('conversas')
@@ -502,9 +527,15 @@ export function FloatingChat() {
     return () => {
       window.removeEventListener('ad:open-chat', handleCustomOpenChat)
     }
-  }, [chatViewMode, activeAlunoId, openDrawer])
+  }, [chatViewMode, activeAlunoId, openDrawer, pathname])
 
   useEffect(() => {
+    const isSelectionPage = 
+      pathname?.includes('/selecionar-aluno') || 
+      pathname?.includes('/selecionar-perfil-admin') || 
+      pathname === '/agenda-digital'
+    if (isSelectionPage) return
+
     const deepLinkId = getTargetConvId()
     if (deepLinkId && conversations.length > 0 && openedDeepLinkRef.current !== deepLinkId) {
       const target = conversations.find(c => c.id === deepLinkId)
