@@ -47,6 +47,9 @@ function mapTypeToRoute(type?: string): string {
   const map: Record<string, string> = {
     comunicados: 'comunicados',
     comunicado: 'comunicados',
+    chat: 'comunicados',
+    conversa: 'comunicados',
+    conversas: 'comunicados',
     momentos: 'momentos',
     momento: 'momentos',
     calendario: 'calendario',
@@ -113,15 +116,20 @@ export function resolveDestinationFromPayload(data: any, currentUser?: any): str
       cleanUrl = '/' + cleanUrl
     }
 
+    // Regra mandatória: Nunca abrir a página /chat; sempre direciona para /comunicados
+    cleanUrl = cleanUrl.replace(/\/chat(\?|$)/, '/comunicados$1')
+
     // Se a URL direta for genérica sem aluno_id (ex: /agenda-digital/frequencia, /agenda-digital/comunicados)
     // e tivermos candidateAlunoId (e não for colaborador), REESCREVE diretamente para a rota do aluno!
-    const genericMatch = cleanUrl.match(/^\/agenda-digital\/(comunicados|momentos|calendario|frequencia|ocorrencias|notas|financeiro|portaria)(\?.*)?$/)
+    const genericMatch = cleanUrl.match(/^\/agenda-digital\/(comunicados|chat|momentos|calendario|frequencia|ocorrencias|notas|financeiro|portaria)(\?.*)?$/)
     if (genericMatch && candidateAlunoId && !isColab) {
-      const moduleName = genericMatch[1]
+      const rawModuleName = genericMatch[1]
+      const moduleName = rawModuleName === 'chat' ? 'comunicados' : rawModuleName
       const existingQuery = genericMatch[2] || ''
       cleanUrl = `/agenda-digital/${candidateAlunoId}/${moduleName}${existingQuery}`
     } else if (genericMatch && isColab) {
-      const moduleName = genericMatch[1]
+      const rawModuleName = genericMatch[1]
+      const moduleName = rawModuleName === 'chat' ? 'comunicados' : rawModuleName
       const existingQuery = genericMatch[2] || ''
       cleanUrl = `/agenda-digital/colaborador/${moduleName}${existingQuery}`
     }
@@ -417,6 +425,16 @@ export function GlobalNotificationProvider() {
       try {
         window.dispatchEvent(
           new CustomEvent('ad:open-comunicado', { detail: { id: String(data.item_id) } })
+        )
+      } catch {}
+    }
+
+    // 5. Se for notificação de chat, dispara evento para o FloatingChat abrir instantaneamente
+    const convId = data.conversation_id || (data.type === 'chat' ? (data.item_id || data.id) : null)
+    if (convId) {
+      try {
+        window.dispatchEvent(
+          new CustomEvent('ad:open-chat', { detail: { conversationId: String(convId) } })
         )
       } catch {}
     }

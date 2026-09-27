@@ -999,7 +999,8 @@ function SelecionarAlunoContent() {
   const { currentUser, setCurrentUser, hydrated, setLoadingPath } = useApp()
   const router = useRouter()
   const searchParams = useSearchParams()
-  const redirectTarget = searchParams.get('redirect') || (searchParams.get('conversation_id') ? 'chat' : 'comunicados')
+  const rawRedirect = searchParams.get('redirect')
+  const redirectTarget = (rawRedirect && rawRedirect !== 'chat') ? rawRedirect : 'comunicados'
 
   const getForwardParams = useCallback(() => {
     if (typeof window === 'undefined') return ''
@@ -1263,7 +1264,8 @@ function SelecionarAlunoContent() {
             const knownModules = ['comunicados', 'momentos', 'ocorrencias', 'notas', 'frequencia', 'cardapio', 'calendario', 'financeiro', 'carteirinha', 'horarios', 'mensagens', 'chat']
             if (knownModules.includes(targetSlug) && meusAlunos.length > 0) {
               const targetStudent = meusAlunos[0]
-              const fixedDest = dest.replace(`/agenda-digital/${targetSlug}`, `/agenda-digital/${targetStudent.id}/${targetSlug}`)
+              const finalSlug = targetSlug === 'chat' ? 'comunicados' : targetSlug
+              const fixedDest = dest.replace(`/agenda-digital/${targetSlug}`, `/agenda-digital/${targetStudent.id}/${finalSlug}`)
               console.log(`[SelecionarAluno] Rota sem aluno reescrita para ${targetStudent.nome} (${fixedDest}). Redirecionando...`)
               if (typeof window !== 'undefined') {
                 (window as any).__EDU_PENDING_PUSH_ROUTE__ = null

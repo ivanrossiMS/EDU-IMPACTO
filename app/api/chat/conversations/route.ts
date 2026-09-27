@@ -140,6 +140,10 @@ export async function GET(request: Request) {
     }
 
     const allConvIds = Array.from(new Set([...convIds, ...Array.from(groupConvIds)]))
+    const requestedConvId = searchParams.get('conversation_id') || searchParams.get('openChat')
+    if (requestedConvId && !allConvIds.includes(requestedConvId)) {
+      allConvIds.push(requestedConvId)
+    }
 
     // Se o usuário não tiver conversas registradas, retornar lista vazia
     if (allConvIds.length === 0) {

@@ -389,7 +389,7 @@ export function FloatingChat() {
   const getTargetConvId = () => {
     if (typeof window !== 'undefined') {
       const urlParams = new URLSearchParams(window.location.search)
-      return urlParams.get('conversation_id') || urlParams.get('openChat') || urlParams.get('id')
+      return urlParams.get('conversation_id') || urlParams.get('openChat')
     }
     return null
   }
@@ -410,6 +410,10 @@ export function FloatingChat() {
       } else {
         qp.set('context', 'colaborador')
       }
+      const deepId = getTargetConvId()
+      if (deepId) {
+        qp.set('conversation_id', deepId)
+      }
       const res = await fetch(`/api/chat/conversations?${qp.toString()}`)
       if (res.ok) {
         const data = await res.json()
@@ -418,9 +422,20 @@ export function FloatingChat() {
 
         const deepLinkId = getTargetConvId()
         if (deepLinkId && openedDeepLinkRef.current !== deepLinkId) {
-          const target = convList.find((c: any) => c.id === deepLinkId)
+          let target = convList.find((c: any) => c.id === deepLinkId)
+          if (!target) {
+            try {
+              const singleRes = await fetch(`/api/chat/conversations?conversation_id=${encodeURIComponent(deepLinkId)}`)
+              if (singleRes.ok) {
+                const singleData = await singleRes.json()
+                target = (singleData.conversations || []).find((c: any) => c.id === deepLinkId)
+              }
+            } catch {}
+          }
           if (target) {
             openedDeepLinkRef.current = deepLinkId
+            openDrawer()
+            setActiveTab('conversas')
             openConversationModal({
               id: target.id,
               type: target.type,
@@ -442,6 +457,13 @@ export function FloatingChat() {
               lastMessageAt: target.lastMessageAt,
               lastMessageBy: target.lastMessageBy
             })
+
+            try {
+              const cleanUrl = new URL(window.location.href)
+              cleanUrl.searchParams.delete('conversation_id')
+              cleanUrl.searchParams.delete('openChat')
+              window.history.replaceState({}, '', cleanUrl.pathname + (cleanUrl.search ? cleanUrl.search : ''))
+            } catch {}
           }
         }
       }
@@ -452,12 +474,44 @@ export function FloatingChat() {
     }
   }
 
+  // Ouvir deep links via URL no mount e evento personalizado ad:open-chat
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const urlParams = new URLSearchParams(window.location.search)
+    const deepLinkId = urlParams.get('conversation_id') || urlParams.get('openChat')
+    const hasChatFlag = urlParams.get('chat') === 'true' || urlParams.get('open') === 'chat'
+
+    if (deepLinkId || hasChatFlag) {
+      openDrawer()
+      setActiveTab('conversas')
+      loadConversations(false, chatViewMode)
+      loadContacts(false, chatViewMode)
+    }
+
+    const handleCustomOpenChat = (e: any) => {
+      const convId = e?.detail?.conversationId
+      openDrawer()
+      setActiveTab('conversas')
+      if (convId) {
+        openedDeepLinkRef.current = null
+      }
+      loadConversations(false, chatViewMode)
+    }
+
+    window.addEventListener('ad:open-chat', handleCustomOpenChat)
+    return () => {
+      window.removeEventListener('ad:open-chat', handleCustomOpenChat)
+    }
+  }, [chatViewMode, activeAlunoId, openDrawer])
+
   useEffect(() => {
     const deepLinkId = getTargetConvId()
     if (deepLinkId && conversations.length > 0 && openedDeepLinkRef.current !== deepLinkId) {
       const target = conversations.find(c => c.id === deepLinkId)
       if (target) {
         openedDeepLinkRef.current = deepLinkId
+        openDrawer()
+        setActiveTab('conversas')
         openConversationModal({
           id: target.id,
           type: target.type,
@@ -479,6 +533,13 @@ export function FloatingChat() {
           lastMessageAt: target.lastMessageAt,
           lastMessageBy: target.lastMessageBy
         })
+
+        try {
+          const cleanUrl = new URL(window.location.href)
+          cleanUrl.searchParams.delete('conversation_id')
+          cleanUrl.searchParams.delete('openChat')
+          window.history.replaceState({}, '', cleanUrl.pathname + (cleanUrl.search ? cleanUrl.search : ''))
+        } catch {}
       }
     }
   }, [conversations, chatViewMode, isSchoolStaff, activeAlunoId, openConversationModal])

@@ -391,8 +391,8 @@ export async function dispatchChatPushNotification({
     if (finalFamilyIds.length > 0) {
       const turmaParam = conv.turma_id ? `&turma_id=${encodeURIComponent(conv.turma_id)}` : ''
       const familyUrl = conv.aluno_id
-        ? `${appBaseUrl}/agenda-digital/${conv.aluno_id}/chat?conversation_id=${conversationId}`
-        : `${appBaseUrl}/agenda-digital/selecionar-aluno?redirect=chat&conversation_id=${conversationId}${turmaParam}`
+        ? `${appBaseUrl}/agenda-digital/${conv.aluno_id}/comunicados?conversation_id=${conversationId}`
+        : `${appBaseUrl}/agenda-digital/selecionar-aluno?redirect=comunicados&conversation_id=${conversationId}${turmaParam}`
 
       const targetTag = conv.type === 'group'
         ? `turma_${conv.turma_id || 'geral'}`
@@ -409,6 +409,7 @@ export async function dispatchChatPushNotification({
             url: familyUrl,
             data: {
               type: 'chat',
+              rota: 'comunicados',
               conversation_id: conversationId,
               message_id: messageId,
               aluno_id: conv.aluno_id || null,
@@ -477,7 +478,7 @@ export async function dispatchChatPushNotification({
     // Envio para Colaboradores (abre no modo colaborador)
     const finalColabIds = Array.from(colabTargetIds)
     if (finalColabIds.length > 0) {
-      const colabUrl = `${appBaseUrl}/agenda-digital/colaborador/chat?conversation_id=${conversationId}`
+      const colabUrl = `${appBaseUrl}/agenda-digital/colaborador/comunicados?conversation_id=${conversationId}`
       const colabItemId = `chat_${conversationId}_msg_${messageId}_colaborador`
 
       const colabPromise = (async () => {
@@ -490,6 +491,7 @@ export async function dispatchChatPushNotification({
             url: colabUrl,
             data: {
               type: 'chat',
+              rota: 'comunicados',
               conversation_id: conversationId,
               message_id: messageId,
               turma_id: conv.turma_id || null,

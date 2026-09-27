@@ -1,21 +1,17 @@
 'use client'
 
-import React from 'react'
-import { ChatFullView } from '@/components/chat/ChatFullView'
+import { useEffect } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 
 export default function ColaboradorChatPage() {
-  return (
-    <div style={{ maxWidth: 1200, margin: '0 auto', padding: '16px 20px' }}>
-      <div style={{ marginBottom: 16 }}>
-        <h1 style={{ fontSize: 24, fontWeight: 900, color: '#0f172a', margin: '0 0 4px 0', letterSpacing: '-0.02em' }}>
-          Chat dos Educadores e Turmas
-        </h1>
-        <p style={{ fontSize: 13, color: '#64748b', margin: 0 }}>
-          Atendimento institucional aos alunos e interação com a equipe escolar.
-        </p>
-      </div>
+  const router = useRouter()
+  const searchParams = useSearchParams()
 
-      <ChatFullView />
-    </div>
-  )
+  useEffect(() => {
+    const qp = searchParams?.toString() || ''
+    const target = `/agenda-digital/colaborador/comunicados${qp ? `?${qp}` : ''}`
+    router.replace(target)
+  }, [router, searchParams])
+
+  return null
 }
