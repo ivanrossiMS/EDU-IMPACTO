@@ -7,7 +7,7 @@ import { getLoggedUserAccessStartDate } from '@/lib/server/visibility'
 import { sendAgendaPushNotification } from '@/lib/server/agendaNotifications'
 import { getResponsavelIdsForTargets, getStudentTargetsForComunicados, checkResponsavelRelationship } from '@/lib/server/notificationHelper'
 import { deleteStorageFilesByUrls } from '@/lib/upload/storageServer'
-import { getAlunoTodasTurmasEGrupos, canStudentViewMomento, isAlunoCursandoTurma } from '@/lib/studentTurmaUtils'
+import { getAlunoTodasTurmasEGruposComHistorico, getAlunoVinculosComPeriodo, canStudentViewMomento, isAlunoCursandoTurma } from '@/lib/studentTurmaUtils'
 import { formatFriendlyStudentName } from '@/lib/studentNameHelper'
 
 export const dynamic = 'force-dynamic'
@@ -108,6 +108,8 @@ export async function GET(request: Request) {
     const studentTurmaIds = new Set<string>();
     const studentGroupNames = new Set<string>();
     const studentGroupIds = new Set<string>();
+    let scopedAlunoData: any = null;
+    let scopedAllTurmas: any[] = [];
 
     if (alunoId) {
       let resolvedTargets: string[] = [];
@@ -120,9 +122,18 @@ export async function GET(request: Request) {
       const alunoData = alunoRes.data;
       const allTurmas = turmasRes.data || [];
       const allGrupos = gruposRes.data || [];
+      scopedAlunoData = alunoData;
+      scopedAllTurmas = allTurmas;
 
       if (alunoData) {
-        resolvedTargets = getAlunoTodasTurmasEGrupos(alunoData, allTurmas, allGrupos);
+        resolvedTargets = getAlunoTodasTurmasEGruposComHistorico(alunoData, allTurmas, allGrupos);
+
+        // Mapear todas as turmas (cursando e históricas) com seus períodos de vigência
+        const vinculos = getAlunoVinculosComPeriodo(alunoData, undefined, allTurmas);
+        vinculos.forEach(v => {
+          if (v.turmaNome) studentTurmaNames.add(String(v.turmaNome).trim());
+          if (v.turmaId) studentTurmaIds.add(String(v.turmaId).trim());
+        });
 
         // Mapear turmas cursando do aluno
         allTurmas.forEach((t: any) => {
@@ -142,7 +153,7 @@ export async function GET(request: Request) {
           studentTurmaNames.add(String(alunoTurmaNome).trim());
         }
 
-        // Mapear grupos do aluno
+        // Mapear grupos do aluno (incluindo grupos de turmas ativas e turmas históricas)
         const cleanId = String(alunoId).replace(/^(a_|_ALU)/, '');
         allGrupos.forEach((g: any) => {
           let aIds = g.dados?.alunosIds || g.alunosIds || [];
@@ -156,8 +167,13 @@ export async function GET(request: Request) {
           const gNome = g.dados?.nome || g.nome;
           const gTurmaRef = allTurmas.find((t: any) => (gSyncId && (gSyncId === `sync-${t.id}` || g.id === `sync-${t.id}`)) || t.nome === gNome);
           const isCursando = gTurmaRef ? isAlunoCursandoTurma(alunoData, gTurmaRef, gTurmaRef.ano, allTurmas) : false;
+          const isHistoricalGroup = vinculos.some(v => 
+            (gSyncId && (gSyncId === `sync-${v.turmaId}` || g.id === `sync-${v.turmaId}`)) ||
+            (v.turmaNome && v.turmaNome === gNome) ||
+            (v.turmaId && v.turmaId === String(gTurmaRef?.id))
+          );
 
-          if (isMember || isCursando) {
+          if (isMember || isCursando || isHistoricalGroup) {
             if (gNome) studentGroupNames.add(String(gNome).trim());
             if (g.id != null) studentGroupIds.add(String(g.id).replace(/^[tg]_?/, '').trim());
           }
@@ -408,7 +424,9 @@ export async function GET(request: Request) {
           studentTurmaNames,
           studentTurmaIds,
           studentGroupNames,
-          studentGroupIds
+          studentGroupIds,
+          scopedAlunoData,
+          scopedAllTurmas
         );
       });
     }

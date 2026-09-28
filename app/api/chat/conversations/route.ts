@@ -308,14 +308,32 @@ export async function GET(request: Request) {
         const partInfo = participationsMap.get(conv.id)
         const groupStatus = colabGroupStatus.get(conv.id)
         const isColabOrTeacherUser = checkIsCollaboratorOrTeacher(cargo, perfil)
-        const hasLeft = Boolean(isColabMode && isColabOrTeacherUser && (groupStatus?.hasLeft || (partInfo?.left_at && !isAdmin)))
-        const leftAt = hasLeft ? (groupStatus?.leftAt || partInfo?.left_at || null) : null
+        
+        // 1. Identificar se o usuário saiu ou se é uma turma anterior (histórico)
+        let hasLeft = Boolean(isColabMode && isColabOrTeacherUser && (groupStatus?.hasLeft || (partInfo?.left_at && !isAdmin)))
+        let leftAt = hasLeft ? (groupStatus?.leftAt || partInfo?.left_at || null) : null
+
+        // Para familiares e alunos: verifica se a conversa pertence a uma turma anterior
+        if (!isColabMode && conv.type === 'group' && familyScope?.historicalGroupIds) {
+          const histInfo = 
+            (conv.grupo_id ? familyScope.historicalGroupIds.get(String(conv.grupo_id)) : null) ||
+            (conv.turma_id ? familyScope.historicalGroupIds.get(String(conv.turma_id)) : null) ||
+            (conv.turma_id ? familyScope.historicalGroupIds.get(String(conv.turma_id).replace(/^sync-/, '')) : null) ||
+            (partInfo?.left_at ? { dataSaida: partInfo.left_at } : null)
+
+          if (histInfo) {
+            hasLeft = true
+            leftAt = histInfo.dataSaida || partInfo?.left_at || null
+          }
+        }
 
         const convParticipants = participantsByConv.get(conv.id) || []
         const otherPart = convParticipants.find(p => !userIds.includes(p.user_id)) || convParticipants[0]
 
         let displayName = conv.title
-        let displayRole = conv.type === 'group' ? 'Grupo' : 'Contato'
+        let displayRole = conv.type === 'group' 
+          ? (hasLeft && !isColabMode ? 'Turma Anterior' : 'Grupo') 
+          : 'Contato'
         let isGroup = conv.type === 'group'
 
         if (conv.type === 'direct' && otherPart) {
@@ -334,6 +352,16 @@ export async function GET(request: Request) {
           anoLetivo = anoByGroupOrTurma.get(String(conv.turma_id).replace(/^sync-/, ''))!
         } else if (studentInfo?.turmaAno) {
           anoLetivo = studentInfo.turmaAno
+        }
+
+        // Se o aluno saiu da turma, proteger preview para não mostrar mensagens enviadas após a saída
+        let effectiveLastMessageText = conv.last_message_text || null
+        let effectiveLastMessageAt = conv.last_message_at || conv.created_at
+        if (hasLeft && leftAt && effectiveLastMessageAt) {
+          if (new Date(effectiveLastMessageAt).getTime() > new Date(leftAt).getTime()) {
+            effectiveLastMessageText = 'Histórico da turma anterior'
+            effectiveLastMessageAt = leftAt
+          }
         }
 
         return {
@@ -355,8 +383,8 @@ export async function GET(request: Request) {
           unreadCount: hasLeft ? 0 : (partInfo?.unread_count || 0),
           context: contextParam || (isColabMode ? 'colaborador' : 'familia'),
           isPinned: partInfo?.is_pinned || false,
-          lastMessageText: conv.last_message_text || null,
-          lastMessageAt: conv.last_message_at || conv.created_at,
+          lastMessageText: effectiveLastMessageText,
+          lastMessageAt: effectiveLastMessageAt,
           lastMessageBy: conv.last_message_by || null,
           otherParticipant: otherPart ? {
             id: otherPart.user_id,

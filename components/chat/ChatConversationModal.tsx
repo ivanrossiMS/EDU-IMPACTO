@@ -192,7 +192,7 @@ export function ChatConversationModal() {
 
   const isGroup = !!activeConversation?.isGroup || activeConversation?.type === 'group'
   const isFamilyContext = activeConversation?.context === 'familia' || isFamilyOrStudent || !isColabOrTeacher
-  const canHaveLeft = isColabOrTeacher && !isFamilyContext
+  const canHaveLeft = isColabOrTeacher || isFamilyContext || Boolean(activeConversation?.hasLeft)
 
   // Regras de Governança Escolar configuradas pelo Admin:
   // 1. Bloqueio de colaboradores enviarem em grupos de turma (apenas Admins enviam quando desativado)
@@ -209,10 +209,10 @@ export function ChatConversationModal() {
 
   useEffect(() => {
     if (activeConversation) {
-      setHasLeft(Boolean(canHaveLeft && activeConversation.hasLeft))
+      setHasLeft(Boolean(activeConversation.hasLeft))
       setIsArchived(Boolean(activeConversation.isArchived))
     }
-  }, [activeConversation, canHaveLeft])
+  }, [activeConversation])
 
   const handleToggleArchive = async () => {
     if (!activeConversation?.id || isArchiving) return
@@ -1770,7 +1770,9 @@ export function ChatConversationModal() {
               </div>
               <div style={{ fontSize: 13, color: hasLeft ? '#92400e' : '#475569', fontWeight: 600 }}>
                 {hasLeft
-                  ? 'Você não participa mais deste grupo. O histórico anterior permanece disponível apenas para consulta.'
+                  ? (isFamilyContext
+                      ? 'Histórico da turma anterior: você pode consultar todas as mensagens enviadas enquanto o aluno esteve nesta turma.'
+                      : 'Você não participa mais deste grupo. O histórico anterior permanece disponível apenas para consulta.')
                   : isColabGroupDisabled
                   ? 'O envio de mensagens nos grupos da turma por colaboradores foi temporariamente pausado pela administração escolar.'
                   : isFamilyContext

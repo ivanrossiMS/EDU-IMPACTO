@@ -1495,8 +1495,8 @@ export function FloatingChat() {
                                 aluno_turma: conv.aluno_turma,
                                 ano_letivo: conv.ano_letivo || '2026',
                                 unreadCount: convUnread,
-                                hasLeft: isSchoolStaff && chatViewMode === 'colaborador' ? Boolean(conv.hasLeft) : false,
-                                leftAt: isSchoolStaff && chatViewMode === 'colaborador' ? conv.leftAt : null,
+                                hasLeft: Boolean(conv.hasLeft),
+                                leftAt: conv.leftAt || null,
                                 isArchived: !!conv.isArchived,
                                 context: chatViewMode,
                                 lastMessageText: conv.lastMessageText,
@@ -1569,7 +1569,7 @@ export function FloatingChat() {
                                       {conv.ano_letivo}
                                     </span>
                                   )}
-                                  {conv.hasLeft && isSchoolStaff && chatViewMode === 'colaborador' && (
+                                  {conv.hasLeft && (
                                     <span style={{
                                       fontSize: 9.5,
                                       fontWeight: 700,
@@ -1581,7 +1581,7 @@ export function FloatingChat() {
                                       whiteSpace: 'nowrap',
                                       flexShrink: 0
                                     }}>
-                                      Saiu da turma
+                                      {chatViewMode === 'familia' ? 'Turma Anterior' : 'Saiu da turma'}
                                     </span>
                                   )}
                                   {conv.isArchived && (

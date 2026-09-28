@@ -1107,6 +1107,110 @@ export async function PUT(request: Request) {
       }
     }
 
+    // 0.1 Buscar dados prévios do aluno para garantir preservação do histórico de turmas
+    const { data: existingStudent } = await supabase
+      .from('alunos')
+      .select('id, turma, serie, turno, created_at, dados')
+      .eq('id', id)
+      .maybeSingle()
+
+    const prevTurma = existingStudent?.turma || existingStudent?.dados?.turma
+    const newTurma = row.turma
+    let currentHist: any[] = Array.isArray(row.dados?.historicoTurmas)
+      ? [...row.dados.historicoTurmas]
+      : (Array.isArray(existingStudent?.dados?.historicoTurmas) ? [...existingStudent.dados.historicoTurmas] : [])
+
+    const nowIso = new Date().toISOString()
+
+    if (prevTurma && newTurma && String(prevTurma).trim() !== String(newTurma).trim()) {
+      // Verificar se a turma anterior já está no histórico
+      const hasPrevInHist = currentHist.some((h: any) => 
+        String(h.serieTurma || h.turma || h.turmaId || '').trim() === String(prevTurma).trim()
+      )
+
+      if (!hasPrevInHist) {
+        // Preserva a turma anterior com status Anterior e dataSaida
+        const prevVinculo = {
+          id: `HIST-${Date.now() - 1000}`,
+          serieTurma: String(prevTurma).trim(),
+          turmaId: String(prevTurma).trim(),
+          serie: existingStudent?.serie || existingStudent?.dados?.serie || '',
+          segmento: existingStudent?.dados?.segmento || '',
+          anoLetivo: existingStudent?.dados?.anoLetivo || row.dados?.anoLetivo || new Date().getFullYear().toString(),
+          status: 'Anterior',
+          dataInicio: existingStudent?.dados?.data_matricula || existingStudent?.created_at || nowIso,
+          dataSaida: nowIso,
+          dataFim: nowIso,
+          isIntegralIntermediario: Boolean(existingStudent?.dados?.isIntegralIntermediario)
+        }
+        currentHist = [prevVinculo, ...currentHist]
+      } else {
+        // Garante que a turma anterior tenha dataSaida e status Anterior
+        currentHist = currentHist.map((h: any) => {
+          const isPrev = String(h.serieTurma || h.turma || '').trim() === String(prevTurma).trim()
+          if (isPrev) {
+            return {
+              ...h,
+              status: 'Anterior',
+              dataSaida: h.dataSaida || h.dataFim || nowIso,
+              dataFim: h.dataFim || h.dataSaida || nowIso
+            }
+          }
+          return h
+        })
+      }
+
+      // Garante que a nova turma está no histórico como Cursando
+      const lastEntry = currentHist[currentHist.length - 1]
+      if (!lastEntry || String(lastEntry.serieTurma || lastEntry.turma || '').trim() !== String(newTurma).trim()) {
+        currentHist.push({
+          id: `HIST-${Date.now()}`,
+          serieTurma: String(newTurma).trim(),
+          turmaId: String(newTurma).trim(),
+          serie: row.serie || row.dados?.serie || '',
+          segmento: row.dados?.segmento || '',
+          anoLetivo: row.dados?.anoLetivo || new Date().getFullYear().toString(),
+          status: 'Cursando',
+          dataInicio: nowIso,
+          dataEntrada: nowIso,
+          dataFim: null,
+          dataSaida: null,
+          isIntegralIntermediario: Boolean(row.dados?.isIntegralIntermediario)
+        })
+      } else {
+        currentHist[currentHist.length - 1] = {
+          ...lastEntry,
+          status: 'Cursando',
+          dataInicio: lastEntry.dataInicio || nowIso,
+          dataFim: null,
+          dataSaida: null
+        }
+      }
+    } else if (currentHist.length > 0) {
+      // Normaliza histórico garantindo status Cursando para o último e Anterior para os demais
+      currentHist = currentHist.map((h: any, idx: number) => {
+        const isLast = idx === currentHist.length - 1
+        if (isLast) {
+          return {
+            ...h,
+            status: 'Cursando',
+            dataFim: null,
+            dataSaida: null
+          }
+        } else {
+          return {
+            ...h,
+            status: 'Anterior',
+            dataSaida: h.dataSaida || h.dataFim || (currentHist[idx + 1]?.dataInicio || nowIso),
+            dataFim: h.dataFim || h.dataSaida || (currentHist[idx + 1]?.dataInicio || nowIso)
+          }
+        }
+      })
+    }
+
+    if (!row.dados) row.dados = {}
+    row.dados.historicoTurmas = currentHist
+
     // 1. Atualizar o aluno
     const { data: studentData, error: studentError } = await supabase
       .from('alunos')
@@ -1382,6 +1486,35 @@ export async function PUT(request: Request) {
               if (updatedIds.includes(studentId)) {
                 updatedIds = updatedIds.filter(id => id !== studentId)
                 changed = true
+
+                // Registrar left_at na conversa de grupo da turma anterior para os participantes da família/aluno
+                try {
+                  const nowLeftIso = new Date().toISOString()
+                  const { data: convGroup } = await supabase
+                    .from('chat_conversations')
+                    .select('id')
+                    .eq('type', 'group')
+                    .or(`grupo_id.eq."${group.id}",turma_id.eq."sync-${gSyncId}",turma_id.eq."${gSyncId}"`)
+                    .maybeSingle()
+
+                  if (convGroup?.id) {
+                    const candidateFamilyIds = Array.from(new Set([
+                      studentId,
+                      savedStudent.responsavel_id,
+                      savedStudent.responsavel,
+                      ...(savedRespIds || [])
+                    ].filter(Boolean))).map(String)
+
+                    await supabase
+                      .from('chat_participants')
+                      .update({ left_at: nowLeftIso })
+                      .eq('conversation_id', convGroup.id)
+                      .in('user_id', candidateFamilyIds)
+                      .is('left_at', null)
+                  }
+                } catch (errLeft) {
+                  console.error('[Chat Part Sync Left Error]', errLeft)
+                }
               }
             }
 

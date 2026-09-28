@@ -3353,6 +3353,34 @@ export default function AlunosPage() {
                             onChange={e => {
                               const newHist = [...formData.historicoTurmas];
                               const val = e.target.value;
+                              const oldVal = newHist[index]?.serieTurma;
+                              if (editingAlunoId && oldVal && oldVal !== val && val && newHist.length === 1) {
+                                const oldEntry = {
+                                  ...newHist[index],
+                                  status: 'Anterior',
+                                  dataSaida: new Date().toISOString()
+                                };
+                                const newEntry = {
+                                  ...newHist[index],
+                                  id: `HIST-${Date.now()}`,
+                                  serieTurma: val,
+                                  status: 'Cursando',
+                                  dataInicio: new Date().toISOString(),
+                                  dataSaida: undefined
+                                };
+                                const tObj = todasTurmas.find((t: any) => String(t.id) === String(val));
+                                if (tObj) {
+                                  if (tObj.segmento || tObj.dados?.segmento) {
+                                    newEntry.segmento = tObj.segmento || tObj.dados?.segmento;
+                                  }
+                                  if (tObj.serie || tObj.dados?.serie) {
+                                    newEntry.serie = tObj.serie || tObj.dados?.serie;
+                                  }
+                                }
+                                setFormData(prev => ({ ...prev, historicoTurmas: [oldEntry, newEntry] }));
+                                if (hasError(`hist_${index}_serieTurma`)) setValidationErrors(prev => prev.filter(err => err.field !== `hist_${index}_serieTurma`));
+                                return;
+                              }
                               newHist[index].serieTurma = val;
                               if (val) {
                                 const tObj = todasTurmas.find((t: any) => String(t.id) === String(val));

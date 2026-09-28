@@ -56,6 +56,210 @@ export function getAlunoVinculosAtivos(aluno: any, anoLetivo?: string | number):
   }]
 }
 
+export interface AlunoVinculoPeriodo {
+  turmaId: string
+  turmaNome?: string
+  serie?: string
+  segmento?: string
+  anoLetivo?: string | number
+  dataInicio: string | null
+  dataFim: string | null // null indica matrícula ativa (cursando)
+  isCursando: boolean
+  isIntegralIntermediario: boolean
+  modalidade?: string
+  raw: any
+}
+
+/**
+ * Retorna todos os vínculos do aluno (atuais e históricos) com seus respectivos períodos de vigência.
+ * Permite identificar exatamente em quais turmas o aluno esteve matriculado e até quando.
+ */
+export function getAlunoVinculosComPeriodo(aluno: any, anoLetivo?: string | number, turmasList?: any[]): AlunoVinculoPeriodo[] {
+  if (!aluno) return []
+  const hist = aluno.historicoTurmas || aluno.dados?.historicoTurmas
+  const results: AlunoVinculoPeriodo[] = []
+
+  const parseTs = (val: any): number | null => {
+    if (!val) return null
+    if (typeof val === 'number' && val > 1600000000000) return val
+    if (typeof val === 'string' && val.startsWith('HIST-')) {
+      const num = parseInt(val.replace('HIST-', '').split('-')[0], 10)
+      if (!isNaN(num) && num > 1600000000000) return num
+    }
+    const t = new Date(val).getTime()
+    return isNaN(t) ? null : t
+  }
+
+  if (Array.isArray(hist) && hist.length > 0) {
+    const list = (anoLetivo !== undefined && anoLetivo !== null && String(anoLetivo).trim() !== '')
+      ? hist.filter((h: any) => !h.anoLetivo || String(h.anoLetivo).trim() === String(anoLetivo).trim())
+      : hist
+
+    const activeList = list.length > 0 ? list : hist
+
+    for (let i = 0; i < activeList.length; i++) {
+      const entry = activeList[i]
+      if (!entry) continue
+      const isLast = i === activeList.length - 1
+      const isCursando = isLast && entry.status !== 'Inativo' && entry.status !== 'Anterior' && entry.status !== 'Transferido'
+
+      let tStart: number | null = parseTs(entry.dataInicio || entry.dataEntrada || entry.data || entry.created_at || entry.id)
+      let tEnd: number | null = parseTs(entry.dataFim || entry.dataSaida || entry.dataTransferencia)
+
+      if (!isCursando && !tEnd) {
+        // Se é turma anterior mas não tem dataFim explícita:
+        // A data de término é o início da próxima turma ou ID da próxima turma
+        if (i + 1 < activeList.length) {
+          const nextEntry = activeList[i + 1]
+          tEnd = parseTs(nextEntry.dataInicio || nextEntry.dataEntrada || nextEntry.created_at || nextEntry.id)
+        }
+        if (!tEnd && aluno.updated_at) {
+          tEnd = parseTs(aluno.updated_at)
+        }
+      }
+
+      if (isCursando) {
+        tEnd = null // Cursando não tem dataFim
+        if (!tStart) {
+          tStart = parseTs(entry.id) || parseTs(aluno.dados?.data_matricula) || parseTs(aluno.created_at)
+        }
+      }
+
+      const rawTurma = String(entry.serieTurma || entry.turma || entry.turmaId || entry.turma_id || '').trim()
+      let turmaNome = rawTurma
+      if (Array.isArray(turmasList) && turmasList.length > 0 && rawTurma) {
+        const found = turmasList.find(t => t && (String(t.id) === rawTurma || String(t.codigo) === rawTurma || t.nome === rawTurma))
+        if (found?.nome) turmaNome = found.nome
+      }
+
+      results.push({
+        turmaId: rawTurma,
+        turmaNome,
+        serie: entry.serie,
+        segmento: entry.segmento,
+        anoLetivo: entry.anoLetivo || aluno.anoLetivo,
+        dataInicio: tStart ? new Date(tStart).toISOString() : null,
+        dataFim: tEnd ? new Date(tEnd).toISOString() : null,
+        isCursando,
+        isIntegralIntermediario: Boolean(entry.isIntegralIntermediario || entry.modalidade === 'INTEGRAL/INTERMEDIÁRIO'),
+        modalidade: entry.modalidade,
+        raw: entry
+      })
+    }
+  }
+
+  // Se não tiver histórico ou turma direta não estiver no resultado
+  if (results.length === 0 && aluno.turma) {
+    const rawTurma = String(aluno.turma).trim()
+    let turmaNome = aluno.turma_nome || rawTurma
+    if (Array.isArray(turmasList) && turmasList.length > 0) {
+      const found = turmasList.find(t => t && (String(t.id) === rawTurma || String(t.codigo) === rawTurma || t.nome === rawTurma))
+      if (found?.nome) turmaNome = found.nome
+    }
+    const tStart = parseTs(aluno.dados?.data_matricula) || parseTs(aluno.created_at)
+    results.push({
+      turmaId: rawTurma,
+      turmaNome,
+      serie: aluno.serie || aluno.dados?.serie,
+      segmento: aluno.segmento || aluno.dados?.segmento,
+      anoLetivo: anoLetivo || aluno.anoLetivo,
+      dataInicio: tStart ? new Date(tStart).toISOString() : null,
+      dataFim: null,
+      isCursando: true,
+      isIntegralIntermediario: Boolean(aluno.isIntegralIntermediario || aluno.dados?.isIntegralIntermediario),
+      modalidade: aluno.modalidade || aluno.dados?.modalidade,
+      raw: aluno
+    })
+  }
+
+  return results
+}
+
+/**
+ * Verifica rigorosamente se o aluno era membro da turma na data de publicação do conteúdo.
+ * - Turma anterior: O aluno deve ver comunicados/momentos enviados ATÉ a data de sua saída.
+ * - Turma nova: O aluno recebe o que for enviado A PARTIR de sua data de entrada.
+ */
+export function canStudentReceiveTurmaContent(
+  aluno: any,
+  turmaRef: any,
+  contentDate: string | Date | null | undefined,
+  turmasList?: any[]
+): boolean {
+  if (!aluno || !turmaRef) return false
+
+  // Se não foi informada data do conteúdo, avalia apenas vínculo cursando atual
+  if (!contentDate) {
+    return isAlunoCursandoTurma(aluno, turmaRef, undefined, turmasList)
+  }
+
+  const cTime = typeof contentDate === 'string' ? new Date(contentDate).getTime() : (contentDate instanceof Date ? contentDate.getTime() : Number(contentDate))
+  if (isNaN(cTime)) {
+    return isAlunoCursandoTurma(aluno, turmaRef, undefined, turmasList)
+  }
+
+  const vinculos = getAlunoVinculosComPeriodo(aluno, undefined, turmasList)
+  if (vinculos.length === 0) return false
+
+  const norm = (str: any) => String(str || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '')
+  
+  let tNome = typeof turmaRef === 'string' ? turmaRef.trim() : String(turmaRef.nome || '').trim()
+  let tId = typeof turmaRef === 'string' ? turmaRef.trim() : String(turmaRef.id || '').trim()
+  let tCod = typeof turmaRef === 'object' && turmaRef ? String(turmaRef.codigo || '').trim() : ''
+
+  if (typeof turmaRef === 'string' && Array.isArray(turmasList)) {
+    const found = turmasList.find(t => t && (String(t.id) === turmaRef || String(t.codigo) === turmaRef || t.nome === turmaRef))
+    if (found) {
+      tNome = found.nome || tNome
+      tId = String(found.id || tId)
+      tCod = String(found.codigo || tCod)
+    }
+  }
+
+  const normTNome = norm(tNome)
+  const normTId = norm(tId)
+  const normTCod = tCod ? norm(tCod) : ''
+
+  for (const v of vinculos) {
+    const vIdNorm = norm(v.turmaId)
+    const vNomeNorm = norm(v.turmaNome)
+
+    const matchesThisVinculo = 
+      (normTId && (vIdNorm === normTId || vNomeNorm === normTId)) ||
+      (normTNome && (vIdNorm === normTNome || vNomeNorm === normTNome)) ||
+      (normTCod && (vIdNorm === normTCod || vNomeNorm === normTCod))
+
+    if (!matchesThisVinculo) {
+      if (v.isIntegralIntermediario && (normTNome.includes('integral') || normTNome.includes('intermediario'))) {
+        // Compatível por modalidade integral
+      } else {
+        continue
+      }
+    }
+
+    if (v.isCursando) {
+      // Turma atual/cursando: tudo enviado a partir da data de ingresso
+      if (!v.dataInicio) return true
+      const startDay = new Date(v.dataInicio)
+      startDay.setHours(0, 0, 0, 0)
+      if (cTime >= startDay.getTime()) {
+        return true
+      }
+    } else {
+      // Turma anterior (histórico): o que o aluno recebeu enquanto esteve na turma permanece!
+      if (v.dataFim) {
+        const endGrace = new Date(v.dataFim).getTime() + (5 * 60 * 1000) // 5 min tolerância
+        const startDay = v.dataInicio ? new Date(v.dataInicio).setHours(0, 0, 0, 0) : 0
+        if (cTime <= endGrace && (startDay === 0 || cTime >= startDay)) {
+          return true
+        }
+      }
+    }
+  }
+
+  return false
+}
+
 export function getSegmentoKey(str: any): string {
   if (!str) return ''
   const s = String(str).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim()
@@ -329,6 +533,77 @@ export function getAlunoTodasTurmasEGrupos(aluno: any, turmas: any[] = [], grupo
         if (sub.serieTurma) result.add(String(sub.serieTurma).trim())
         if (sub.turma) result.add(String(sub.turma).trim())
         if (sub.nome) result.add(String(sub.nome).trim())
+      }
+    })
+  }
+
+  return Array.from(result).filter(Boolean)
+}
+
+/**
+ * Retorna array de TODAS as turmas e grupos (IDs, códigos e nomes) aos quais o aluno pertenceu,
+ * incluindo turmas ATIVAS e turmas ANTERIORES (históricas).
+ * Essencial para buscar no banco todos os conteúdos (comunicados/momentos) que o aluno tem direito de ver.
+ */
+export function getAlunoTodasTurmasEGruposComHistorico(
+  aluno: any,
+  turmas: any[] = [],
+  grupos: any[] = [],
+  anoLetivo?: string | number
+): string[] {
+  if (!aluno) return []
+  const result = new Set<string>()
+
+  // 1. Todas as turmas e grupos ativos
+  const ativas = getAlunoTodasTurmasEGrupos(aluno, turmas, grupos, anoLetivo)
+  ativas.forEach(t => result.add(t))
+
+  // 2. Todas as turmas históricas do historicoTurmas
+  const hist = aluno.historicoTurmas || aluno.dados?.historicoTurmas
+  if (Array.isArray(hist)) {
+    hist.forEach((ht: any) => {
+      if (!ht) return
+      if (ht.serieTurma) result.add(String(ht.serieTurma).trim())
+      if (ht.turma) result.add(String(ht.turma).trim())
+      if (ht.turmaId) result.add(String(ht.turmaId).trim())
+      if (ht.turma_id) result.add(String(ht.turma_id).trim())
+      if (ht.nome) result.add(String(ht.nome).trim())
+
+      const rawId = ht.serieTurma || ht.turma || ht.turmaId || ht.turma_id
+      if (rawId && Array.isArray(turmas)) {
+        const found = turmas.find(t => t && (
+          String(t.id) === String(rawId) || 
+          String(t.codigo) === String(rawId) || 
+          t.nome === rawId
+        ))
+        if (found) {
+          if (found.id != null) result.add(String(found.id).trim())
+          if (found.nome) result.add(String(found.nome).trim())
+          if (found.codigo) result.add(String(found.codigo).trim())
+        }
+      }
+
+      if (Array.isArray(ht.turmasAdicionais)) {
+        ht.turmasAdicionais.forEach((sub: any) => {
+          if (!sub) return
+          if (sub.serieTurma) result.add(String(sub.serieTurma).trim())
+          if (sub.turma) result.add(String(sub.turma).trim())
+          if (sub.nome) result.add(String(sub.nome).trim())
+        })
+      }
+    })
+  }
+
+  // 3. Grupos vinculados às turmas históricas
+  if (Array.isArray(grupos) && grupos.length > 0) {
+    const rawIds = Array.from(result)
+    grupos.forEach(g => {
+      if (!g) return
+      const gSyncId = String(g.dados?.syncId || g.syncId || '').replace(/^sync-/, '')
+      const gNome = g.dados?.nome || g.nome
+      if ((gSyncId && rawIds.includes(gSyncId)) || (gNome && rawIds.includes(gNome))) {
+        if (g.id != null) result.add(String(g.id).trim())
+        if (gNome) result.add(String(gNome).trim())
       }
     })
   }
@@ -935,7 +1210,9 @@ export function canStudentViewMomento(
   studentTurmaNames: Set<string> | string[],
   studentTurmaIds: Set<string> | string[],
   studentGroupNames: Set<string> | string[] = [],
-  studentGroupIds: Set<string> | string[] = []
+  studentGroupIds: Set<string> | string[] = [],
+  aluno?: any,
+  turmasList?: any[]
 ): boolean {
   if (!momento) return false;
   const d = momento.dados || momento;
@@ -994,7 +1271,19 @@ export function canStudentViewMomento(
   if (alunosIds.length > 0) {
     const classIncluded = Array.from(tClassesSet).some(stn => targetClasses.includes(stn)) ||
                           Array.from(tIdsSet).some(sti => targetClassesIds.includes(sti));
-    if (classIncluded) return true;
+    if (classIncluded) {
+      if (aluno) {
+        const mDate = momento.data || momento.created_at || d.date || d.created_at;
+        if (mDate) {
+          const matchingTargets = [...targetClasses, ...targetClassesIds];
+          if (matchingTargets.length > 0) {
+            const anyValid = matchingTargets.some(tc => canStudentReceiveTurmaContent(aluno, tc, mDate, turmasList));
+            if (!anyValid) return false;
+          }
+        }
+      }
+      return true;
+    }
     return false; // Alunos específicos marcados e o aluno não é um deles!
   }
 
@@ -1009,7 +1298,6 @@ export function canStudentViewMomento(
   ) || Array.from(tIdsSet).some(sti => 
     targetClassesIds.some(tId => tId === sti || tId.includes(sti) || sti.includes(tId))
   );
-  if (matchesClass) return true;
 
   // 6. Grupo de aluno corresponde?
   const matchesGroup = Array.from(gNamesSet).some(sgn => 
@@ -1019,7 +1307,20 @@ export function canStudentViewMomento(
     gruposIds.some(gid => gid === sgi || gid.includes(sgi) || sgi.includes(gid)) ||
     targetClassesIds.some(tId => tId === sgi || tId.includes(sgi) || sgi.includes(tId))
   );
-  if (matchesGroup) return true;
+
+  if (matchesClass || matchesGroup) {
+    if (aluno) {
+      const mDate = momento.data || momento.created_at || d.date || d.created_at;
+      if (mDate) {
+        const matchingTargets = [...targetClasses, ...targetClassesIds];
+        if (matchingTargets.length > 0) {
+          const anyValid = matchingTargets.some(tc => canStudentReceiveTurmaContent(aluno, tc, mDate, turmasList));
+          if (!anyValid) return false;
+        }
+      }
+    }
+    return true;
+  }
 
   // 7. Momentos exclusivos de equipe escolar / funcionários (sem nenhuma turma nem grupo do aluno)
   const isStaffOnlyTarget = (targetClasses.length > 0 && targetClasses.every(tc => 

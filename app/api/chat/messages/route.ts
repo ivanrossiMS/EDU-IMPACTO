@@ -142,14 +142,54 @@ export async function GET(request: Request) {
         finalMessages = finalMessages.filter((m: any) => new Date(m.created_at).getTime() <= leftTimestamp)
       }
     } else if (isFamilyUser && convInfo?.type === 'group') {
-      // Se for usuário de família/aluno, garante que qualquer left_at gravado por equívoco seja limpo
-      const userCandidateIds = Array.from(new Set([user.id, dbUser?.id].filter(Boolean))) as string[]
-      await supabase
+      const userCandidateIds = Array.from(new Set([
+        user.id,
+        dbUser?.id,
+        searchParams.get('espelhar_responsavel'),
+        searchParams.get('aluno_id')
+      ].filter(Boolean))) as string[]
+
+      // 1. Checa se o participante tem left_at gravado
+      const { data: myPart } = await supabase
         .from('chat_participants')
-        .update({ left_at: null })
+        .select('left_at')
         .eq('conversation_id', conversationId)
         .in('user_id', userCandidateIds)
         .not('left_at', 'is', null)
+        .order('left_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (myPart?.left_at) {
+        hasLeft = true
+        effectiveLeftAt = myPart.left_at
+      } else {
+        // 2. Ou checa via resolveFamilyScope se a turma/grupo é histórica para o aluno
+        try {
+          const { resolveFamilyScope } = await import('@/lib/server/chatFamilyHelper')
+          const familyScope = await resolveFamilyScope(user, {
+            alunoIdParam: searchParams.get('aluno_id'),
+            context: 'familia',
+            dbUser
+          })
+          const histInfo = 
+            (convInfo.grupo_id ? familyScope.historicalGroupIds.get(String(convInfo.grupo_id)) : null) ||
+            (convInfo.turma_id ? familyScope.historicalGroupIds.get(String(convInfo.turma_id)) : null) ||
+            (convInfo.turma_id ? familyScope.historicalGroupIds.get(String(convInfo.turma_id).replace(/^sync-/, '')) : null)
+
+          if (histInfo) {
+            hasLeft = true
+            effectiveLeftAt = histInfo.dataSaida || null
+          }
+        } catch (e) {
+          console.error('[Chat Messages] Error resolving historical group for family:', e)
+        }
+      }
+
+      if (hasLeft && effectiveLeftAt) {
+        const leftTimestamp = new Date(effectiveLeftAt).getTime()
+        finalMessages = finalMessages.filter((m: any) => new Date(m.created_at).getTime() <= leftTimestamp)
+      }
     }
 
     return NextResponse.json({ 

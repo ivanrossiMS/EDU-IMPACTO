@@ -1,7 +1,7 @@
 import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 import { resolveCollaboratorUsers } from '@/lib/server/collaboratorLookup'
-
 import { checkIsAdmin, sortTurmasByName } from '@/lib/chatPermissions'
+import { getAlunoVinculosComPeriodo } from '@/lib/studentTurmaUtils'
 
 export interface LinkedStudentTurmaGrupo {
   id: string
@@ -13,6 +13,9 @@ export interface LinkedStudentTurmaGrupo {
   membrosCount: number
   colaboradoresIds: string[]
   descricao?: string
+  isHistorico?: boolean
+  dataSaida?: string | null
+  dataInicio?: string | null
 }
 
 export interface LinkedStudent {
@@ -47,6 +50,7 @@ export interface FamilyScope {
   allTurmaIds: Set<string>
   allGroupIds: Set<string>
   allColabIds: Set<string>
+  historicalGroupIds: Map<string, { dataSaida: string | null }>
   equipeEscolarGroups: Array<{
     id: string
     nome: string
@@ -108,6 +112,7 @@ export async function resolveFamilyScope(
       allTurmaIds: new Set(),
       allGroupIds: new Set(),
       allColabIds: new Set(),
+      historicalGroupIds: new Map(),
       equipeEscolarGroups: [],
       candidateUserIds: [user.id, dbUser?.id, espelharColabId].filter(Boolean) as string[]
     }
@@ -164,6 +169,7 @@ export async function resolveFamilyScope(
       allTurmaIds: new Set(),
       allGroupIds: new Set(),
       allColabIds: new Set(),
+      historicalGroupIds: new Map(),
       equipeEscolarGroups: [],
       candidateUserIds: [user.id, dbUser?.id, espelharColabId].filter(Boolean) as string[]
     }
@@ -245,6 +251,7 @@ export async function resolveFamilyScope(
       allTurmaIds: new Set(),
       allGroupIds: new Set(),
       allColabIds: new Set(),
+      historicalGroupIds: new Map(),
       equipeEscolarGroups: [],
       candidateUserIds
     }
@@ -267,6 +274,7 @@ export async function resolveFamilyScope(
       if (ht.serieTurma) candidateTurmaIds.add(String(ht.serieTurma))
       if (ht.turmaId) candidateTurmaIds.add(String(ht.turmaId))
       if (ht.turma_id) candidateTurmaIds.add(String(ht.turma_id))
+      if (ht.turma) candidateTurmaIds.add(String(ht.turma))
     })
   })
 
@@ -282,15 +290,19 @@ export async function resolveFamilyScope(
     }
   })
 
-  let turmasMap: Record<string, { nome: string; ano: number }> = {}
+  let turmasMap: Record<string, { id: string; nome: string; ano: number; codigo?: string }> = {}
   if (candidateTurmaIds.size > 0) {
+    const idList = Array.from(candidateTurmaIds).filter(Boolean)
     const { data: turmasData } = await supabase
       .from('turmas')
-      .select('id, nome, ano')
-      .in('id', Array.from(candidateTurmaIds))
+      .select('id, codigo, nome, ano')
+      .or(idList.map(id => `id.eq."${id}",codigo.eq."${id}",nome.eq."${id}"`).join(','))
     if (turmasData) {
       turmasData.forEach((t: any) => {
-        turmasMap[t.id] = { nome: t.nome, ano: t.ano || new Date().getFullYear() }
+        const obj = { id: String(t.id), nome: t.nome, ano: t.ano || new Date().getFullYear(), codigo: t.codigo ? String(t.codigo) : undefined }
+        turmasMap[String(t.id)] = obj
+        if (t.codigo) turmasMap[String(t.codigo)] = obj
+        if (t.nome) turmasMap[String(t.nome)] = obj
       })
     }
   }
@@ -303,12 +315,30 @@ export async function resolveFamilyScope(
       const aIds = (g.alunosIds || []).map(String)
       if (a.id && aIds.includes(String(a.id))) return true
       if (a.dados?.codigo && aIds.includes(String(a.dados.codigo))) return true
-      if (a.turma && (
-        g.turma_id === a.turma ||
-        g.turma_id === `sync-${a.turma}` ||
-        g.id === a.turma ||
-        g.id === `sync-${a.turma}`
-      )) return true
+
+      const allStudentTurmaRefs = new Set<string>()
+      if (a.turma) {
+        allStudentTurmaRefs.add(String(a.turma))
+        allStudentTurmaRefs.add(`sync-${a.turma}`)
+        const tInfo = turmasMap[String(a.turma)]
+        if (tInfo?.nome) allStudentTurmaRefs.add(tInfo.nome)
+        if (tInfo?.id) allStudentTurmaRefs.add(tInfo.id)
+      }
+      const htList = Array.isArray(a.dados?.historicoTurmas) ? a.dados.historicoTurmas : []
+      htList.forEach((ht: any) => {
+        const ref = String(ht.serieTurma || ht.turma || ht.turmaId || ht.turma_id || '').trim()
+        if (ref) {
+          allStudentTurmaRefs.add(ref)
+          allStudentTurmaRefs.add(`sync-${ref}`)
+          const tInfo = turmasMap[ref]
+          if (tInfo?.nome) allStudentTurmaRefs.add(tInfo.nome)
+          if (tInfo?.id) allStudentTurmaRefs.add(tInfo.id)
+        }
+      })
+
+      if (g.turma_id && allStudentTurmaRefs.has(String(g.turma_id))) return true
+      if (g.id && allStudentTurmaRefs.has(String(g.id))) return true
+      if (g.nome && allStudentTurmaRefs.has(String(g.nome))) return true
       return false
     })
   })
@@ -334,37 +364,34 @@ export async function resolveFamilyScope(
   const allGroupIds = new Set<string>()
   const allColabIds = new Set<string>()
   const allTurmaIds = new Set<string>()
+  const historicalGroupIds = new Map<string, { dataSaida: string | null }>()
 
   alunos.forEach(aluno => {
-    const tInfo = turmasMap[aluno.turma]
+    const tInfo = turmasMap[String(aluno.turma)]
     const turmaNome = tInfo?.nome || aluno.turma || aluno.serie || 'Turma Oficial'
     if (aluno.turma) {
       allTurmaIds.add(String(aluno.turma))
       allTurmaIds.add(`sync-${aluno.turma}`)
     }
 
+    const vinculos = getAlunoVinculosComPeriodo(aluno, undefined, Object.values(turmasMap))
+
     const studentCandidateTurmaIds = new Set<string>()
     if (aluno.turma) {
       studentCandidateTurmaIds.add(String(aluno.turma))
       studentCandidateTurmaIds.add(`sync-${aluno.turma}`)
     }
-    const htList = Array.isArray(aluno.dados?.historicoTurmas) ? aluno.dados.historicoTurmas : []
-    htList.forEach((ht: any) => {
-      if (ht.serieTurma) {
-        studentCandidateTurmaIds.add(String(ht.serieTurma))
-        studentCandidateTurmaIds.add(`sync-${ht.serieTurma}`)
+    vinculos.forEach(v => {
+      if (v.turmaId) {
+        studentCandidateTurmaIds.add(String(v.turmaId))
+        studentCandidateTurmaIds.add(`sync-${v.turmaId}`)
       }
-      if (ht.turmaId) {
-        studentCandidateTurmaIds.add(String(ht.turmaId))
-        studentCandidateTurmaIds.add(`sync-${ht.turmaId}`)
-      }
-      if (ht.turma_id) {
-        studentCandidateTurmaIds.add(String(ht.turma_id))
-        studentCandidateTurmaIds.add(`sync-${ht.turma_id}`)
+      if (v.turmaNome) {
+        studentCandidateTurmaIds.add(String(v.turmaNome))
       }
     })
 
-    // Achar TODOS os grupos correspondentes à(s) turma(s) do aluno (ex: regular matutino + integral/intermediário)
+    // Achar TODOS os grupos correspondentes à(s) turma(s) do aluno (ex: regular matutino + integral/intermediário + turmas históricas)
     const matchedGrupos = sortTurmasByName(
       allGrupos.filter(g => {
         if (g.isEquipeEscolar) return false
@@ -373,6 +400,9 @@ export async function resolveFamilyScope(
         if (aluno.dados?.codigo && aIds.includes(String(aluno.dados.codigo))) return true
         if (g.turma_id && studentCandidateTurmaIds.has(String(g.turma_id))) return true
         if (g.id && studentCandidateTurmaIds.has(String(g.id))) return true
+        if (g.nome && studentCandidateTurmaIds.has(String(g.nome))) return true
+        const rawId = String(g.id || '').replace(/^sync-/, '')
+        if (rawId && studentCandidateTurmaIds.has(rawId)) return true
         return false
       })
     )
@@ -390,6 +420,25 @@ export async function resolveFamilyScope(
 
       const groupTInfo = turmasMap[rawTurmaId] || (mg.turma_id ? turmasMap[mg.turma_id] : null)
       const groupTurmaNome = mg.nome || groupTInfo?.nome || turmaNome
+
+      // Determinar se o grupo é histórico vs ativo
+      const activeVinculo = vinculos.find(v => v.isCursando && (
+        String(v.turmaId) === rawTurmaId || v.turmaNome === groupTurmaNome || (mg.turma_id && String(v.turmaId) === String(mg.turma_id))
+      ))
+      const histVinculo = vinculos.find(v => !v.isCursando && (
+        String(v.turmaId) === rawTurmaId || v.turmaNome === groupTurmaNome || (mg.turma_id && String(v.turmaId) === String(mg.turma_id))
+      ))
+
+      const isHistorico = !activeVinculo && Boolean(histVinculo)
+      const dataSaida = isHistorico ? (histVinculo?.dataFim || null) : null
+      const dataInicio = activeVinculo ? activeVinculo.dataInicio : (histVinculo?.dataInicio || null)
+
+      if (isHistorico) {
+        historicalGroupIds.set(String(mg.id), { dataSaida })
+        if (mg.turma_id) historicalGroupIds.set(String(mg.turma_id), { dataSaida })
+        if (rawTurmaId) historicalGroupIds.set(rawTurmaId, { dataSaida })
+      }
+
       return {
         id: mg.id,
         nome: groupTurmaNome,
@@ -399,11 +448,21 @@ export async function resolveFamilyScope(
         ano_letivo: mg.dados?.ano || mg.dados?.ano_letivo || groupTInfo?.ano || tInfo?.ano || '2026',
         membrosCount: mg.colaboradoresIds.length,
         colaboradoresIds: mg.colaboradoresIds,
-        descricao: `Turma oficial: ${groupTurmaNome}`
+        descricao: isHistorico ? `Turma anterior: ${groupTurmaNome}` : `Turma oficial: ${groupTurmaNome}`,
+        isHistorico,
+        dataSaida,
+        dataInicio
       }
     })
 
-    const turmaGrupo = turmaGrupos[0] || null
+    // Ordenar turmaGrupos para que os ativos fiquem na frente
+    turmaGrupos.sort((a, b) => {
+      if (a.isHistorico && !b.isHistorico) return 1
+      if (!a.isHistorico && b.isHistorico) return -1
+      return 0
+    })
+
+    const turmaGrupo = turmaGrupos.find(g => !g.isHistorico) || turmaGrupos[0] || null
 
     // Mapear todas as turmas que cada colaborador leciona para este aluno
     const colabTurmasMap = new Map<string, string[]>()
@@ -484,6 +543,7 @@ export async function resolveFamilyScope(
     allTurmaIds,
     allGroupIds,
     allColabIds,
+    historicalGroupIds,
     equipeEscolarGroups,
     candidateUserIds
   }

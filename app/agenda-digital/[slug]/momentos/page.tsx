@@ -3,7 +3,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useRouter, useSearchParams, useParams } from 'next/navigation'
 import { useQueryMomentos } from '@/lib/hooks/useAgendaQueries';
 import { useSupabaseArray } from '@/lib/useSupabaseCollection';
-import { getAlunoTurmaCursando, getAlunoTodasTurmasEGrupos, getAlunoNomesTurmasEGrupos, canStudentViewMomento, isAlunoCursandoTurma } from '@/lib/studentTurmaUtils';
+import { getAlunoTurmaCursando, getAlunoTodasTurmasEGrupos, getAlunoNomesTurmasEGrupos, canStudentViewMomento, isAlunoCursandoTurma, getAlunoVinculosComPeriodo } from '@/lib/studentTurmaUtils';
 
 
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
@@ -264,6 +264,12 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
       if (aluno.turma) studentTurmaIds.add(String(aluno.turma).trim());
       if (aluno.turma_nome) studentTurmaNames.add(String(aluno.turma_nome).trim());
 
+      const vinculos = getAlunoVinculosComPeriodo(aluno, undefined, turmas);
+      vinculos.forEach(v => {
+        if (v.turmaNome) studentTurmaNames.add(String(v.turmaNome).trim());
+        if (v.turmaId) studentTurmaIds.add(String(v.turmaId).trim());
+      });
+
       turmas.forEach((t: any) => {
         if (isAlunoCursandoTurma(aluno, t, t.ano, turmas)) {
           if (t.nome) studentTurmaNames.add(String(t.nome).trim());
@@ -282,8 +288,13 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
         );
         const gTurmaRef = turmas.find((t: any) => (g.syncId && (g.syncId === `sync-${t.id}` || g.id === `sync-${t.id}`)) || t.nome === g.nome || t.nome === g.dados?.nome);
         const isCursando = gTurmaRef ? isAlunoCursandoTurma(aluno, gTurmaRef, gTurmaRef.ano, turmas) : false;
+        const isHistoricalGroup = vinculos.some(v => 
+          (g.syncId && (g.syncId === `sync-${v.turmaId}` || g.id === `sync-${v.turmaId}`)) ||
+          (v.turmaNome && v.turmaNome === g.nome) ||
+          (v.turmaId && v.turmaId === String(gTurmaRef?.id))
+        );
 
-        if (isMember || isCursando) {
+        if (isMember || isCursando || isHistoricalGroup) {
           const gNome = g.nome || g.dados?.nome;
           if (gNome) studentGroupNames.add(String(gNome).trim());
           if (g.id != null) studentGroupIds.add(String(g.id).replace(/^[tg]_?/, '').trim());
@@ -293,7 +304,7 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
 
     const filtered = fetchMomentos.filter(m => {
       if (!cleanId) return true;
-      return canStudentViewMomento(m, cleanId, studentTurmaNames, studentTurmaIds, studentGroupNames, studentGroupIds);
+      return canStudentViewMomento(m, cleanId, studentTurmaNames, studentTurmaIds, studentGroupNames, studentGroupIds, aluno, turmas);
     });
 
     return [...filtered].sort((a, b) => {

@@ -7,7 +7,7 @@ import { requireAuth } from '@/lib/server/authGuard'
 import { sendAgendaPushNotification } from '@/lib/server/agendaNotifications'
 import { getResponsavelIdsForTargets, getStudentTargetsForComunicados, checkResponsavelRelationship, cleanEntityPrefix } from '@/lib/server/notificationHelper'
 import { deleteStorageFilesByUrls } from '@/lib/upload/storageServer'
-import { isAlunoCursandoTurma } from '@/lib/studentTurmaUtils'
+import { isAlunoCursandoTurma, getAlunoTodasTurmasEGruposComHistorico, canStudentReceiveTurmaContent } from '@/lib/studentTurmaUtils'
 import { formatFriendlyStudentName } from '@/lib/studentNameHelper'
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -128,6 +128,8 @@ export async function GET(request: Request) {
   if (turmaId) resolvedTurmas.push(turmaId);
   let studentGroups: string[] = [];
   let accessStartDate = await getLoggedUserAccessStartDate();
+  let alunoDataForFilter: any = null;
+  let allTurmasForFilter: any[] = [];
 
   if (alunoId) {
     // Batch 1: busca dados do aluno, todas as turmas e todos os grupos ao mesmo tempo
@@ -140,14 +142,23 @@ export async function GET(request: Request) {
     const alunoData = alunoRes.data;
     const allTurmas = turmasRes.data || [];
     const allGrupos = gruposRes.data || [];
+    alunoDataForFilter = alunoData;
+    allTurmasForFilter = allTurmas;
 
     if (alunoData) {
-      // 1. Resolver todas as turmas que o aluno está cursando (incluindo turmas regulares e Integral/Intermediário)
+      // 1. Resolver todas as turmas que o aluno está cursando ou já cursou (histórico completo)
+      const todasTurmasEGrupos = getAlunoTodasTurmasEGruposComHistorico(alunoData, allTurmas, allGrupos);
+      todasTurmasEGrupos.forEach(item => {
+        if (!resolvedTurmas.includes(item)) {
+          resolvedTurmas.push(item);
+        }
+      });
+
       allTurmas.forEach((t: any) => {
         if (isAlunoCursandoTurma(alunoData, t, t.ano)) {
-          if (t.nome) resolvedTurmas.push(t.nome);
-          if (t.id) resolvedTurmas.push(String(t.id));
-          if (t.codigo) resolvedTurmas.push(String(t.codigo));
+          if (t.nome && !resolvedTurmas.includes(t.nome)) resolvedTurmas.push(t.nome);
+          if (t.id && !resolvedTurmas.includes(String(t.id))) resolvedTurmas.push(String(t.id));
+          if (t.codigo && !resolvedTurmas.includes(String(t.codigo))) resolvedTurmas.push(String(t.codigo));
         }
       });
 
@@ -155,12 +166,25 @@ export async function GET(request: Request) {
         resolvedTurmas.push(alunoData.turma);
       }
 
-      // 2. Resolver data de acesso
-      const dateStr = alunoData.dados?.data_matricula || alunoData.dados?.data_inicio || alunoData.dados?.data_ingresso || alunoData.created_at;
-      if (dateStr) {
-        const studentEntryDate = new Date(dateStr);
-        if (accessStartDate === null || studentEntryDate > accessStartDate) {
-          accessStartDate = studentEntryDate;
+      // 2. Resolver data de acesso inicial do aluno na instituição (o mais antigo entre matrícula, criação e vínculos)
+      let earliestDateStr = alunoData.dados?.data_matricula || alunoData.dados?.data_ingresso || alunoData.created_at;
+      const hist = (alunoData as any).historicoTurmas || alunoData.dados?.historicoTurmas;
+      if (Array.isArray(hist) && hist.length > 0) {
+        hist.forEach((h: any) => {
+          const hStart = h.dataInicio || h.dataEntrada || h.created_at;
+          if (hStart) {
+            if (!earliestDateStr || new Date(hStart).getTime() < new Date(earliestDateStr).getTime()) {
+              earliestDateStr = hStart;
+            }
+          }
+        });
+      }
+      if (earliestDateStr) {
+        const studentEntryDate = new Date(earliestDateStr);
+        if (!isNaN(studentEntryDate.getTime())) {
+          if (accessStartDate === null || studentEntryDate > accessStartDate) {
+            accessStartDate = studentEntryDate;
+          }
         }
       }
 
@@ -374,19 +398,53 @@ export async function GET(request: Request) {
   let { data, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  // Blindagem rigorosa para relatórios individuais: se alunoId foi informado,
-  // nunca retornar relatórios individuais (AD-COM-REL-STU-) de outros alunos
+  // Blindagem rigorosa para comunicados do aluno:
+  // 1. Relatórios individuais (AD-COM-REL-STU-): apenas do próprio aluno
+  // 2. Comunicados direcionados a turmas/grupos: respeitar o período de matrícula (canStudentReceiveTurmaContent)
+  //    - Da turma anterior: o que o aluno recebeu enquanto esteve lá permanece visível.
+  //    - Da turma nova: apenas comunicados enviados a partir da entrada do aluno.
   if (alunoId && data) {
     const cleanCurrentAlunoId = String(alunoId).replace(/^(a_|_ALU)/, '');
     data = data.filter((c: any) => {
       const cId = String(c.id || '');
+      const cAlunos = [
+        ...(c.alunosIds || []),
+        ...(c.dados?.alunosIds || [])
+      ].map((id: any) => String(id).replace(/^(a_|_ALU)/, ''));
+
+      // Se for relatório individual, só exibe se for do próprio aluno
       if (cId.startsWith('AD-COM-REL-STU-')) {
-        const cAlunos = [
-          ...(c.alunosIds || []),
-          ...(c.dados?.alunosIds || [])
-        ].map((id: any) => String(id).replace(/^(a_|_ALU)/, ''));
         return cAlunos.includes(cleanCurrentAlunoId);
       }
+
+      // Se o aluno foi marcado diretamente como destinatário do comunicado
+      if (cAlunos.includes(cleanCurrentAlunoId)) {
+        return true;
+      }
+
+      // Se for comunicado universal para toda a escola
+      if (c.destino === 'todos' || c.dados?.destino === 'todos') {
+        return true;
+      }
+
+      // Se foi enviado para turmas ou grupos específicos e temos os dados do aluno para validar período
+      if (alunoDataForFilter) {
+        const targetTurmasAndGroups = [
+          ...(c.turmas || []),
+          ...(c.dados?.turmas || []),
+          ...(c.grupos || []),
+          ...(c.dados?.grupos || [])
+        ].filter(Boolean);
+
+        if (targetTurmasAndGroups.length > 0) {
+          const cDate = c.data || c.dataEnvio || c.created_at || c.dados?.dataEnvio;
+          const canViewAny = targetTurmasAndGroups.some((tRef: any) => 
+            canStudentReceiveTurmaContent(alunoDataForFilter, tRef, cDate, allTurmasForFilter)
+          );
+          return canViewAny;
+        }
+      }
+
       return true;
     });
   }
