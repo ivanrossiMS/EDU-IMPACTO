@@ -1298,19 +1298,25 @@ export function ChatConversationModal() {
                     const senderPerfilMsg = ((msg as any).sender_perfil || '').toLowerCase()
                     const isMsgSentByColab = 
                       senderPerfilMsg.includes('professor') ||
+                      senderPerfilMsg.includes('professora') ||
                       senderPerfilMsg.includes('educador') ||
+                      senderPerfilMsg.includes('educadora') ||
+                      senderPerfilMsg.includes('docente') ||
                       senderPerfilMsg.includes('colaborador') ||
+                      senderPerfilMsg.includes('colaboradora') ||
                       senderPerfilMsg.includes('admin') ||
                       senderPerfilMsg.includes('master') ||
                       senderPerfilMsg.includes('diretor') ||
+                      senderPerfilMsg.includes('diretora') ||
                       senderPerfilMsg.includes('direção') ||
+                      senderPerfilMsg.includes('direcao') ||
                       senderPerfilMsg.includes('gestor') ||
+                      senderPerfilMsg.includes('gestora') ||
                       (!senderPerfilMsg.includes('aluno') && !senderPerfilMsg.includes('família') && !senderPerfilMsg.includes('familia') && !senderPerfilMsg.includes('responsável') && !senderPerfilMsg.includes('responsavel'))
 
                     const canDeleteMsg = 
                       isColabOrTeacher && 
-                      isMsgSentByColab && 
-                      (isMe || isAdmin) &&
+                      (isMe || (isAdmin && isMsgSentByColab)) &&
                       !isPending
 
                     const reactionsList: any[] = Array.isArray(msg.metadata?.reactions) ? msg.metadata.reactions : []
@@ -1660,19 +1666,21 @@ export function ChatConversationModal() {
                                   padding: '0 2px',
                                   marginRight: 2,
                                   cursor: 'pointer',
-                                  color: activeReactionMsgId === msg.id ? '#0284c7' : '#94a3b8',
+                                  color: activeReactionMsgId === msg.id ? '#d97706' : '#eab308',
                                   display: 'inline-flex',
                                   alignItems: 'center',
-                                  opacity: 0.75,
+                                  opacity: 0.9,
                                   transition: 'all 0.15s'
                                 }}
                                 onMouseEnter={(e) => {
                                   e.currentTarget.style.opacity = '1'
-                                  e.currentTarget.style.color = '#0284c7'
+                                  e.currentTarget.style.color = '#ca8a04'
+                                  e.currentTarget.style.transform = 'scale(1.15)'
                                 }}
                                 onMouseLeave={(e) => {
-                                  e.currentTarget.style.opacity = '0.75'
-                                  e.currentTarget.style.color = activeReactionMsgId === msg.id ? '#0284c7' : '#94a3b8'
+                                  e.currentTarget.style.opacity = '0.9'
+                                  e.currentTarget.style.color = activeReactionMsgId === msg.id ? '#d97706' : '#eab308'
+                                  e.currentTarget.style.transform = 'scale(1)'
                                 }}
                               >
                                 <Smile size={12} />
@@ -1693,19 +1701,21 @@ export function ChatConversationModal() {
                                   padding: '0 2px',
                                   marginRight: 2,
                                   cursor: 'pointer',
-                                  color: '#94a3b8',
+                                  color: '#ef4444',
                                   display: 'inline-flex',
                                   alignItems: 'center',
-                                  opacity: 0.75,
+                                  opacity: 0.85,
                                   transition: 'all 0.15s'
                                 }}
                                 onMouseEnter={(e) => {
                                   e.currentTarget.style.opacity = '1'
-                                  e.currentTarget.style.color = '#ef4444'
+                                  e.currentTarget.style.color = '#dc2626'
+                                  e.currentTarget.style.transform = 'scale(1.15)'
                                 }}
                                 onMouseLeave={(e) => {
-                                  e.currentTarget.style.opacity = '0.75'
-                                  e.currentTarget.style.color = '#94a3b8'
+                                  e.currentTarget.style.opacity = '0.85'
+                                  e.currentTarget.style.color = '#ef4444'
+                                  e.currentTarget.style.transform = 'scale(1)'
                                 }}
                               >
                                 <Trash2 size={12} />
@@ -2035,14 +2045,22 @@ export function ChatConversationModal() {
                   style={{
                     background: 'none',
                     border: 'none',
-                    color: showEmojiPicker ? '#008069' : '#54656f',
+                    color: showEmojiPicker ? '#d97706' : '#eab308',
                     cursor: 'pointer',
                     padding: 8,
                     borderRadius: '50%',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    transition: 'color 0.15s'
+                    transition: 'all 0.15s'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.color = '#ca8a04'
+                    e.currentTarget.style.transform = 'scale(1.1)'
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.color = showEmojiPicker ? '#d97706' : '#eab308'
+                    e.currentTarget.style.transform = 'scale(1)'
                   }}
                   title="Emojis"
                 >

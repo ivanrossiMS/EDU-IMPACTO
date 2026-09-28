@@ -2895,19 +2895,25 @@ export function ChatFullView({ alunoId }: { alunoId?: string }) {
                   const senderPerfilMsg = ((m as any).sender_perfil || '').toLowerCase()
                   const isMsgSentByColab = 
                     senderPerfilMsg.includes('professor') ||
+                    senderPerfilMsg.includes('professora') ||
                     senderPerfilMsg.includes('educador') ||
+                    senderPerfilMsg.includes('educadora') ||
+                    senderPerfilMsg.includes('docente') ||
                     senderPerfilMsg.includes('colaborador') ||
+                    senderPerfilMsg.includes('colaboradora') ||
                     senderPerfilMsg.includes('admin') ||
                     senderPerfilMsg.includes('master') ||
                     senderPerfilMsg.includes('diretor') ||
+                    senderPerfilMsg.includes('diretora') ||
                     senderPerfilMsg.includes('direção') ||
+                    senderPerfilMsg.includes('direcao') ||
                     senderPerfilMsg.includes('gestor') ||
+                    senderPerfilMsg.includes('gestora') ||
                     (!senderPerfilMsg.includes('aluno') && !senderPerfilMsg.includes('família') && !senderPerfilMsg.includes('familia') && !senderPerfilMsg.includes('responsável') && !senderPerfilMsg.includes('responsavel'))
 
                   const canDeleteMsg = 
                     isCollaboratorOrAdmin && 
-                    isMsgSentByColab && 
-                    (isMe || isAdmin)
+                    (isMe || (isAdmin && isMsgSentByColab))
 
                   const reactionsList: any[] = Array.isArray(m.metadata?.reactions) ? m.metadata.reactions : []
                   const groupedReactions = reactionsList.reduce((acc: Record<string, { count: number; users: string[]; hasReacted: boolean }>, r: any) => {
@@ -3209,19 +3215,21 @@ export function ChatFullView({ alunoId }: { alunoId?: string }) {
                               padding: '0 2px',
                               marginRight: 2,
                               cursor: 'pointer',
-                              color: activeReactionMsgId === m.id ? '#0284c7' : '#94a3b8',
+                              color: activeReactionMsgId === m.id ? '#d97706' : '#eab308',
                               display: 'inline-flex',
                               alignItems: 'center',
-                              opacity: 0.75,
+                              opacity: 0.9,
                               transition: 'all 0.15s'
                             }}
                             onMouseEnter={(e) => {
                               e.currentTarget.style.opacity = '1'
-                              e.currentTarget.style.color = '#0284c7'
+                              e.currentTarget.style.color = '#ca8a04'
+                              e.currentTarget.style.transform = 'scale(1.15)'
                             }}
                             onMouseLeave={(e) => {
-                              e.currentTarget.style.opacity = '0.75'
-                              e.currentTarget.style.color = activeReactionMsgId === m.id ? '#0284c7' : '#94a3b8'
+                              e.currentTarget.style.opacity = '0.9'
+                              e.currentTarget.style.color = activeReactionMsgId === m.id ? '#d97706' : '#eab308'
+                              e.currentTarget.style.transform = 'scale(1)'
                             }}
                           >
                             <Smile size={12} />
@@ -3241,19 +3249,21 @@ export function ChatFullView({ alunoId }: { alunoId?: string }) {
                                 padding: '0 2px',
                                 marginRight: 2,
                                 cursor: 'pointer',
-                                color: '#94a3b8',
+                                color: '#ef4444',
                                 display: 'inline-flex',
                                 alignItems: 'center',
-                                opacity: 0.75,
+                                opacity: 0.85,
                                 transition: 'all 0.15s'
                               }}
                               onMouseEnter={(e) => {
                                 e.currentTarget.style.opacity = '1'
-                                e.currentTarget.style.color = '#ef4444'
+                                e.currentTarget.style.color = '#dc2626'
+                                e.currentTarget.style.transform = 'scale(1.15)'
                               }}
                               onMouseLeave={(e) => {
-                                e.currentTarget.style.opacity = '0.75'
-                                e.currentTarget.style.color = '#94a3b8'
+                                e.currentTarget.style.opacity = '0.85'
+                                e.currentTarget.style.color = '#ef4444'
+                                e.currentTarget.style.transform = 'scale(1)'
                               }}
                             >
                               <Trash2 size={12} />

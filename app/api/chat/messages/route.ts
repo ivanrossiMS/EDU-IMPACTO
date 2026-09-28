@@ -559,36 +559,19 @@ export async function DELETE(request: Request) {
     // 1. Obter usuário do banco para verificar cargo/perfil
     const { data: dbUser } = await supabase
       .from('system_users')
-      .select('id, nome, cargo, perfil')
+      .select('id, auth_id, nome, cargo, perfil, dados')
       .or(`id.eq."${user.id}",auth_id.eq."${user.id}"${user.email ? `,email.ilike."${user.email}"` : ''}`)
       .maybeSingle()
 
     const perfilUser = (dbUser?.perfil || user.user_metadata?.perfil || '').trim()
     const cargoUser = (dbUser?.cargo || user.user_metadata?.cargo || '').trim()
     const isAdmin = checkIsAdmin(perfilUser, cargoUser)
+    const isColabOrTeacher = checkIsCollaboratorOrTeacher(cargoUser, perfilUser, dbUser || user)
 
-    const isColabRole = 
-      isAdmin ||
-      perfilUser.includes('professor') || 
-      perfilUser.includes('educador') || 
-      perfilUser.includes('colaborador') || 
-      cargoUser.includes('professor') || 
-      cargoUser.includes('educador') || 
-      cargoUser.includes('colaborador')
-
-    const isFamilyOrStudent = 
-      perfilUser.includes('família') || 
-      perfilUser.includes('familia') || 
-      perfilUser.includes('responsável') || 
-      perfilUser.includes('responsavel') || 
-      cargoUser.includes('aluno') || 
-      cargoUser.includes('responsável') || 
-      cargoUser.includes('responsavel')
-
-    // Regra: Família e alunos NUNCA podem excluir mensagens
-    if (!isColabRole || (isFamilyOrStudent && !isAdmin)) {
+    // Regra: Apenas colaboradores, professores e administradores podem excluir mensagens. Famílias e alunos não podem.
+    if (!isColabOrTeacher && !isAdmin) {
       return NextResponse.json(
-        { error: 'Apenas colaboradores podem excluir mensagens.' },
+        { error: 'Apenas colaboradores e professores podem excluir mensagens.' },
         { status: 403 }
       )
     }
@@ -604,30 +587,20 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: 'Mensagem não encontrada.' }, { status: 404 })
     }
 
-    // 3. Regra: Excluir a mensagem enviada do colaborador apenas
-    const senderPerfil = (targetMsg.sender_perfil || '').toLowerCase()
-    const isSenderColab =
-      senderPerfil.includes('professor') ||
-      senderPerfil.includes('educador') ||
-      senderPerfil.includes('colaborador') ||
-      senderPerfil.includes('admin') ||
-      senderPerfil.includes('master') ||
-      senderPerfil.includes('diretor') ||
-      senderPerfil.includes('direção') ||
-      senderPerfil.includes('gestor') ||
-      (!senderPerfil.includes('aluno') && !senderPerfil.includes('família') && !senderPerfil.includes('familia') && !senderPerfil.includes('responsável') && !senderPerfil.includes('responsavel'))
+    // 3. Regra de autorização para exclusão:
+    // Candidatos de ID do usuário autenticado para comparar com sender_id
+    const myCandidateIds = Array.from(new Set([
+      String(user.id),
+      dbUser?.id ? String(dbUser.id) : null,
+      dbUser?.auth_id ? String(dbUser.auth_id) : null,
+      dbUser?.dados?.colaborador_id ? String(dbUser.dados.colaborador_id) : null,
+      (user as any)?.user_metadata?.colaborador_id ? String((user as any).user_metadata.colaborador_id) : null,
+      searchParams.get('espelhar_colaborador')
+    ].filter(Boolean))) as string[]
 
-    if (!isSenderColab && !isAdmin) {
-      return NextResponse.json(
-        { error: 'Apenas mensagens enviadas por colaboradores podem ser excluídas.' },
-        { status: 403 }
-      )
-    }
-
-    // 4. Se não for master admin, o colaborador só pode excluir a sua própria mensagem
-    const myCandidateIds = [String(user.id), String(dbUser?.id)].filter(Boolean)
     const isMyMessage = myCandidateIds.includes(String(targetMsg.sender_id))
 
+    // Se não for master admin, o professor/colaborador só pode excluir a sua própria mensagem
     if (!isMyMessage && !isAdmin) {
       return NextResponse.json(
         { error: 'Você só pode excluir mensagens enviadas por você.' },

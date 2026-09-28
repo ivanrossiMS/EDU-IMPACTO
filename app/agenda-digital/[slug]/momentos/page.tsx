@@ -3,7 +3,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useRouter, useSearchParams, useParams } from 'next/navigation'
 import { useQueryMomentos } from '@/lib/hooks/useAgendaQueries';
 import { useSupabaseArray } from '@/lib/useSupabaseCollection';
-import { getAlunoTurmaCursando, getAlunoTodasTurmasEGrupos, getAlunoNomesTurmasEGrupos, canStudentViewMomento, isAlunoCursandoTurma, getAlunoVinculosComPeriodo } from '@/lib/studentTurmaUtils';
+import { getAlunoTodasTurmasEGrupos, canStudentViewMomento, isAlunoCursandoTurma, getAlunoVinculosComPeriodo } from '@/lib/studentTurmaUtils';
 
 
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
@@ -40,13 +40,7 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
     handleDragStart
   } = useScreenshotProtection({ enabled: true, autoEnablePrivacyScreen: true })
   
-  const nomeTurmaDoAluno = (() => {
-    if (!aluno) return 'Sem Turma'
-    if (aluno.turma_nome && aluno.turma_nome !== aluno.turma) {
-      return String(aluno.turma_nome).split('-')[0].trim()
-    }
-    return String(aluno.turma || 'Sem Turma').split('-')[0].trim()
-  })()
+
   
   const searchParams = useSearchParams()
   const espelharRespId = searchParams?.get('espelhar_responsavel');
@@ -241,14 +235,6 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
     return getAlunoTodasTurmasEGrupos(aluno, turmas, grupos).map((x: string) => x.toLowerCase())
   }, [aluno, turmas, grupos])
 
-  const nomesTurmasEGruposDoAluno = useMemo<string>(() => {
-    if (!aluno) return 'Sem Turma'
-    const namesList = getAlunoNomesTurmasEGrupos(aluno, turmas, grupos)
-    if (namesList.length === 0) return String(aluno.turma || 'Sem Turma').split('-')[0].trim()
-    if (namesList.length === 1) return namesList[0]
-    if (namesList.length === 2) return `${namesList[0]} e ${namesList[1]}`
-    return `${namesList.slice(0, -1).join(', ')} e ${namesList[namesList.length - 1]}`
-  }, [aluno, turmas, grupos])
 
   // Momentos filtrados e autorizados com segurança pelo backend e checagem defensiva para este aluno
   const meusMomentos = React.useMemo(() => {
@@ -682,7 +668,7 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
               </button>
             </div>
             <p className="ad-familiar-momentos-desc">
-              Acompanhe o dia a dia, sorrisos e as atividades incríveis de <strong style={{ color: '#4f46e5', fontWeight: 700 }}>{nomesTurmasEGruposDoAluno}</strong>.
+              Acompanhe o dia a dia, sorrisos e as atividades incríveis.
             </p>
           </div>
         </div>
@@ -765,7 +751,7 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
                   transition={{ delay: 0.4, duration: 0.5 }}
                   style={{ fontSize: 15, color: '#64748b', lineHeight: 1.6, margin: 0, maxWidth: 400, position: 'relative', zIndex: 1 }}
                 >
-                  Ainda não há fotos publicadas para a turma <strong style={{ color: '#0f172a' }}>{nomesTurmasEGruposDoAluno}</strong> hoje. Fique de olho, em breve novidades aparecerão por aqui!
+                  Ainda não há fotos publicadas hoje. Fique de olho, em breve novidades aparecerão por aqui!
                 </motion.p>
               </motion.div>
             )}
