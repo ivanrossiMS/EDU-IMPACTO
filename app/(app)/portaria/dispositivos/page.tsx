@@ -350,16 +350,18 @@ export default function DispositivosPage() {
                       {isOnline ? '● ONLINE' : '● OFFLINE'}
                     </span>
                     {(() => {
-                      const isSaida = d.configuracao?.sentido === 'saida' || /sa[ií]da/i.test(d.nome || '') || d.ip === '192.168.1.154'
+                      const sentido = d.configuracao?.sentido || (/sa[ií]da/i.test(d.nome || '') || d.ip === '192.168.1.154' ? 'saida' : (d.ip === '192.168.1.150' ? 'ambos' : 'entrada'))
+                      const isAmbos = sentido === 'ambos'
+                      const isSaida = sentido === 'saida'
                       return (
                         <span style={{
                           fontSize: 9, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.05em',
                           padding: '3px 8px', borderRadius: 6,
-                          background: isSaida ? 'rgba(168,85,247,0.1)' : 'rgba(6,182,212,0.1)',
-                          color: isSaida ? '#a855f7' : '#0891b2',
-                          border: `1px solid ${isSaida ? 'rgba(168,85,247,0.25)' : 'rgba(6,182,212,0.25)'}`
+                          background: isAmbos ? 'rgba(59,130,246,0.1)' : isSaida ? 'rgba(168,85,247,0.1)' : 'rgba(6,182,212,0.1)',
+                          color: isAmbos ? '#3b82f6' : isSaida ? '#a855f7' : '#0891b2',
+                          border: `1px solid ${isAmbos ? 'rgba(59,130,246,0.25)' : isSaida ? 'rgba(168,85,247,0.25)' : 'rgba(6,182,212,0.25)'}`
                         }}>
-                          {isSaida ? '🚪 SAÍDA' : '🟢 ENTRADA'}
+                          {isAmbos ? '🔄 ENTRADA & SAÍDA' : isSaida ? '🚪 SAÍDA' : '🟢 ENTRADA'}
                         </span>
                       )
                     })()}
@@ -637,7 +639,7 @@ export default function DispositivosPage() {
                 </label>
                 <select
                   className="form-input"
-                  value={editDevice.configuracao?.sentido || (/sa[ií]da/i.test(editDevice.nome || '') || editDevice.ip === '192.168.1.154' ? 'saida' : 'entrada')}
+                  value={editDevice.configuracao?.sentido || (/sa[ií]da/i.test(editDevice.nome || '') || editDevice.ip === '192.168.1.154' ? 'saida' : (editDevice.ip === '192.168.1.150' ? 'ambos' : 'entrada'))}
                   onChange={e => setEditDevice({
                     ...editDevice,
                     configuracao: { ...editDevice.configuracao, sentido: e.target.value }
@@ -646,6 +648,7 @@ export default function DispositivosPage() {
                 >
                   <option value="entrada">🟢 Entrada (Presença e acesso à escola)</option>
                   <option value="saida">🚪 Saída (Saída de Alunos - Saiu Sozinho)</option>
+                  <option value="ambos">🔄 Entrada e Saída (Catraca Mestre com Leitor Remoto)</option>
                 </select>
               </div>
 

@@ -3596,7 +3596,7 @@ export default function ValoresPage() {
                               fontWeight={800}
                               padding="4px 10px"
                             >
-                              Economia: -{fmt(calculations.seriesCalc[0]?.descMensal || 0)}/mês ({descontoPercent}% OFF)
+                              Economia: -{fmt(calculations.seriesCalc[0]?.descMensal || 0)}/mês
                             </PropostaBadge>
                           </div>
                         )}
@@ -3835,19 +3835,6 @@ export default function ValoresPage() {
                                     <DollarSign size={14} color="#2563eb" />
                                     Investimento Mensal ({anoLetivo}):
                                   </span>
-                                  {descontoPercent > 0 && (
-                                    <PropostaBadge
-                                      bg="#dcfce7"
-                                      border="#86efac"
-                                      color="#047857"
-                                      fontSize={10.5}
-                                      fontWeight={800}
-                                      minHeight={22}
-                                      padding="2.5px 8px"
-                                    >
-                                      {descontoPercent}% OFF
-                                    </PropostaBadge>
-                                  )}
                                 </div>
 
                                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>

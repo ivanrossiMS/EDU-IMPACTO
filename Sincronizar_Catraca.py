@@ -55,10 +55,10 @@ CATRACA_LOGIN = "admin"
 # Porta 443 → HTTPS
 # Porta 88  → tenta HTTP primeiro, depois HTTPS
 CATRACAS = [
-    {"nome": "Portaria Médio - PRINCIPAL", "ip": "192.168.1.150", "id": "0M0200/02638E", "porta": 80, "tipo": "entrada"},
+    {"nome": "Portaria Médio - PRINCIPAL", "ip": "192.168.1.150", "id": "0M0200/02638E", "porta": 80, "tipo": "ambos", "senha": "Pass1081$"},
     {"nome": "Portaria FUND1- PRINCIPAL",  "ip": "192.168.1.155", "id": "0M0200/02639C", "porta": 80, "tipo": "entrada"},
     {"nome": "Portaria PRINCIPAL -INF",   "ip": "192.168.1.105", "id": "0M0200/0262CE", "porta": 80, "tipo": "entrada"},
-    {"nome": "Saida - Rua das Garças",    "ip": "192.168.1.154", "id": "0M0200/0263A6", "porta": 80, "tipo": "saida", "senha": "Pass1081"},
+    {"nome": "Saida - Rua das Garças",    "ip": "192.168.1.154", "id": "0M0200/0263A6", "porta": 80, "tipo": "remoto", "mestre_ip": "192.168.1.150", "senha": "Pass1081"},
 ]
 # ══════════════════════════════════════════════════════════════
 
@@ -274,18 +274,32 @@ def configurar_monitor(base_url, session, cat=None):
         return False
 
 
-def enviar_para_webhook(log_entry, cat):
+def enviar_para_webhook(log_entry, cat, tipo_override=None):
     """
     Envia o evento de acesso ao webhook do ERP.
     Inclui o device_id (serial da catraca) e o user_id numérico para que o servidor
-    consiga identificar corretamente o dispositivo e o aluno, além do tipo (entrada/saida).
+    consiga identificar corretamente o dispositivo e o aluno, além do tipo (entrada/saida)
+    e o portal_id (1 = Entrada, 2 = Saída / Terminal Remoto).
     """
-    user_id = log_entry.get("user_id", 0)
-    log_id  = log_entry.get("id", 0)
-    tipo    = cat.get("tipo") or ("saida" if "saida" in cat.get("nome", "").lower() or cat.get("ip") == "192.168.1.154" else "entrada")
+    user_id   = log_entry.get("user_id", 0)
+    log_id    = log_entry.get("id", 0)
+    portal_id = log_entry.get("portal_id") or log_entry.get("portal") or 0
+    reader_id = log_entry.get("reader_id") or 0
+    direction = log_entry.get("direction")
+
+    if tipo_override:
+        tipo = tipo_override
+    elif portal_id in (2, 102) or reader_id == 2 or direction == 1:
+        tipo = "saida"
+    elif portal_id in (1, 101) or reader_id == 1 or direction == 0:
+        tipo = "entrada"
+    else:
+        tipo = cat.get("tipo") or ("saida" if "saida" in cat.get("nome", "").lower() or cat.get("ip") == "192.168.1.154" else "entrada")
+
     payload = {
         # device_id = serial ou IP da catraca (o webhook tenta as duas formas)
         "device_id": cat.get("id") or cat["ip"],
+        "portal_id": portal_id,
         "tipo": tipo,
         "sentido": tipo,
         "event_type": tipo,
@@ -293,10 +307,12 @@ def enviar_para_webhook(log_entry, cat):
             "object": "access_logs",
             "type":   "inserted",
             "values": {
-                "id":      log_id,
-                "user_id": user_id,
-                "time":    log_entry.get("time", 0),
-                "tipo":    tipo,
+                "id":        log_id,
+                "user_id":   user_id,
+                "time":      log_entry.get("time", 0),
+                "portal_id": portal_id,
+                "tipo":      tipo,
+                "sentido":   tipo,
             }
         }],
     }
@@ -513,10 +529,18 @@ def rodar_um_ciclo():
     cats_conectadas = []
 
     for cat in CATRACAS:
-        is_saida = cat.get("tipo") == "saida" or "saida" in cat.get("nome", "").lower() or cat.get("ip") == "192.168.1.154"
-        cat_tipo_label = "SAÍDA" if is_saida else "ENTRADA"
-        ja_sincronizados = ja_sincronizados_saida if is_saida else ja_sincronizados_entrada
-        cache_file = cache_file_saida if is_saida else cache_file_entrada
+        is_remoto = cat.get("tipo") == "remoto"
+        is_saida_padrao = cat.get("tipo") == "saida" or "saida" in cat.get("nome", "").lower() or cat.get("ip") == "192.168.1.154"
+        is_misto = cat.get("tipo") == "ambos" or cat.get("ip") == "192.168.1.150"
+
+        if is_misto:
+            cat_tipo_label = "ENTRADA & SAÍDA (MESTRE)"
+        elif is_remoto:
+            cat_tipo_label = "SAÍDA (TERMINAL REMOTO)"
+        elif is_saida_padrao:
+            cat_tipo_label = "SAÍDA"
+        else:
+            cat_tipo_label = "ENTRADA"
 
         cat_key = cat.get("id") or cat["ip"]
         last_id = estado.get(cat_key, 0)
@@ -537,20 +561,8 @@ def rodar_um_ciclo():
         if relogio_ok:
             print(f"     🕒 Relógio calibrado: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}")
 
-        # Se for catraca de saída, verifica se a aluna 4697 está cadastrada
-        if is_saida:
-            try:
-                r_usr = post_json(f"{base_url}/load_objects.fcgi",
-                                  {"object": "users", "where": {"users": {"id": 4697}}},
-                                  cookie=session)
-                usuarios = r_usr.get("users", [])
-                if usuarios:
-                    u = usuarios[0]
-                    print(f"     👤 Aluna Cecília (ID 4697) confirmada nesta catraca: '{u.get('name')}'")
-                else:
-                    print(f"     ℹ️  Aluna ID 4697 não encontrada no cadastro desta catraca (pode ter sido cadastrada com outro ID).")
-            except Exception:
-                pass
+        if is_remoto:
+            print(f"     ℹ️  Terminal Remoto Control iD. Os registros de passagem são gerenciados e centralizados no Mestre ({cat.get('mestre_ip', '192.168.1.150')}).")
 
         # Configura o monitor automaticamente com os parâmetros da catraca
         ok_monitor = configurar_monitor(base_url, session, cat)
@@ -565,31 +577,50 @@ def rodar_um_ciclo():
 
         reconhecidos = [l for l in logs_hoje if l.get("user_id", 0) > 0]
 
-        novos_para_enviar = []
-        if is_saida:
-            # Na saída: se um aluno já passou e saiu, ele pode sair novamente e marcar um novo horário!
-            # Deduplicação feita pelo ID do log na catraca para enviar apenas logs que ainda não foram transmitidos
-            for log in reconhecidos:
-                lid = str(log.get("id", ""))
-                if lid not in logs_saida_enviados:
-                    novos_para_enviar.append(log)
-            pulados = len(reconhecidos) - len(novos_para_enviar)
-            print(f"     📋 {len(logs_hoje)} eventos lidos / {len(novos_para_enviar)} saídas para enviar ({pulados} já transmitidas)")
-        else:
-            # Na entrada: mantém apenas 1 registro por aluno por dia (o primeiro da manhã)
-            unicos = {}
-            for l in reconhecidos:
-                uid = str(l.get("user_id", ""))
-                if uid not in unicos or l.get("time", 0) < unicos[uid].get("time", 0):
-                    unicos[uid] = l
-            for log in unicos.values():
-                uid = str(log.get("user_id", ""))
-                if uid not in ja_sincronizados_entrada:
-                    novos_para_enviar.append(log)
-            pulados = len(unicos) - len(novos_para_enviar)
-            print(f"     📋 {len(logs_hoje)} eventos lidos / {len(unicos)} alunos únicos / {len(novos_para_enviar)} para enviar ({pulados} já sincronizados hoje)")
+        # ── SEPARAÇÃO INTELIGENTE DE ENTRADA E SAÍDA POR PORTAL_ID (CONTROL ID) ──
+        # Na Control iD:
+        # • portal_id = 1 (ou 101): Entrada (Leitor Local da Catraca / Giro Entrada)
+        # • portal_id = 2 (ou 102): Saída (Terminal Remoto / Giro Saída)
+        logs_entrada = []
+        logs_saida = []
 
-        if not novos_para_enviar:
+        for l in reconhecidos:
+            p_id = l.get("portal_id") or l.get("portal") or 0
+            r_id = l.get("reader_id") or 0
+            d_id = l.get("direction")
+
+            if p_id in (2, 102) or r_id == 2 or d_id == 1:
+                logs_saida.append(l)
+            elif p_id in (1, 101) or r_id == 1 or d_id == 0:
+                logs_entrada.append(l)
+            elif is_saida_padrao:
+                logs_saida.append(l)
+            else:
+                logs_entrada.append(l)
+
+        # 1. Processar SAÍDAS (deduplicação por ID do log físico, permitindo saídas com novos horários)
+        saidas_novas = []
+        for log in logs_saida:
+            lid = str(log.get("id", ""))
+            if lid not in logs_saida_enviados:
+                saidas_novas.append(log)
+
+        # 2. Processar ENTRADAS (mantém 1 por aluno por dia - primeiro horário da manhã)
+        entradas_novas = []
+        unicos_entrada = {}
+        for l in logs_entrada:
+            uid = str(l.get("user_id", ""))
+            if uid not in unicos_entrada or l.get("time", 0) < unicos_entrada[uid].get("time", 0):
+                unicos_entrada[uid] = l
+        for log in unicos_entrada.values():
+            uid = str(log.get("user_id", ""))
+            if uid not in ja_sincronizados_entrada:
+                entradas_novas.append(log)
+
+        total_para_enviar = len(entradas_novas) + len(saidas_novas)
+        print(f"     📋 {len(logs_hoje)} eventos lidos: {len(logs_entrada)} entradas ({len(entradas_novas)} novas) / {len(logs_saida)} saídas ({len(saidas_novas)} novas)")
+
+        if total_para_enviar == 0:
             if logs_hoje:
                 max_log_id = max([l.get("id", 0) for l in logs_hoje], default=last_id)
                 if max_log_id > last_id:
@@ -598,46 +629,55 @@ def rodar_um_ciclo():
             print(f"     ℹ️  Nenhum novo registro pendente para esta catraca.")
             continue
 
-        cache_f = None
-        try:
-            cache_f = open(cache_file, "a")
-        except Exception as e:
-            print(f"     ⚠️  Aviso: Não foi possível abrir cache ({e}).")
-
         ok = 0
         falhas = 0
-        for log in novos_para_enviar:
+
+        # Enviar ENTRADAS
+        for log in entradas_novas:
+            uid  = str(log.get("user_id", "?"))
+            hora = formatar_hora(log.get("time", 0))
+            try:
+                result = enviar_para_webhook(log, cat, tipo_override="entrada")
+                status = result.get("evento", result.get("status", "?"))
+                if status in ("sucesso", "ok", "ignorado (já registrado)", "inconsistencia", "?") or "actions" in result:
+                    print(f"     ✅ Aluno {uid:<6} às {hora}  [ENTRADA - sucesso]")
+                    ok += 1
+                    try:
+                        with open(cache_file_entrada, "a") as f_c:
+                            f_c.write(uid + "\n")
+                    except Exception:
+                        pass
+                    ja_sincronizados_entrada.add(uid)
+                else:
+                    print(f"     ⚠️  Aluno {uid:<6} às {hora}  [ENTRADA - {status}]")
+                    ok += 1
+            except Exception as e:
+                print(f"     ❌ Aluno {uid:<6} às {hora} [ENTRADA]: {e}")
+                falhas += 1
+
+        # Enviar SAÍDAS
+        for log in saidas_novas:
             uid  = str(log.get("user_id", "?"))
             lid  = str(log.get("id", ""))
             hora = formatar_hora(log.get("time", 0))
             try:
-                result = enviar_para_webhook(log, cat)
+                result = enviar_para_webhook(log, cat, tipo_override="saida")
                 status = result.get("evento", result.get("status", "?"))
                 if status in ("sucesso", "ok", "ignorado (já registrado)", "inconsistencia", "?") or "actions" in result:
-                    print(f"     ✅ Aluno {uid:<6} às {hora}  [{cat_tipo_label} - sucesso]")
+                    print(f"     ✅ Aluno {uid:<6} às {hora}  [SAÍDA - sucesso]")
                     ok += 1
-                    if cache_f:
-                        try:
-                            cache_f.write((lid if is_saida else uid) + "\n")
-                            cache_f.flush()
-                        except Exception:
-                            pass
-                    if is_saida:
-                        logs_saida_enviados.add(lid)
-                    else:
-                        ja_sincronizados_entrada.add(uid)
+                    try:
+                        with open(cache_file_saida, "a") as f_c:
+                            f_c.write(lid + "\n")
+                    except Exception:
+                        pass
+                    logs_saida_enviados.add(lid)
                 else:
-                    print(f"     ⚠️  Aluno {uid:<6} às {hora}  [{cat_tipo_label} - {status}]")
+                    print(f"     ⚠️  Aluno {uid:<6} às {hora}  [SAÍDA - {status}]")
                     ok += 1
             except Exception as e:
-                print(f"     ❌ Aluno {uid:<6} às {hora}: {e}")
+                print(f"     ❌ Aluno {uid:<6} às {hora} [SAÍDA]: {e}")
                 falhas += 1
-
-        if cache_f:
-            try:
-                cache_f.close()
-            except:
-                pass
 
         if logs_hoje:
             max_log_id = max([l.get("id", 0) for l in logs_hoje], default=last_id)

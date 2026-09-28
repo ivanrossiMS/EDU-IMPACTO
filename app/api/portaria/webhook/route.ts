@@ -317,11 +317,57 @@ export async function POST(req: Request) {
     const explicitTipo = searchParams.get('tipo') || searchParams.get('sentido') || payload?.tipo || payload?.sentido || payload?.event_type
     if (explicitTipo && String(explicitTipo).toLowerCase() === 'saida') {
       dispositivoSentido = 'saida'
+    } else if (explicitTipo && String(explicitTipo).toLowerCase() === 'entrada') {
+      dispositivoSentido = 'entrada'
     } else if (
       (deviceSerial && (deviceSerial === '0M0200/0263A6' || deviceSerial.includes('0263A6') || deviceSerial === '192.168.1.154')) ||
       (dispositivoNome && /sa[ií]da/i.test(dispositivoNome))
     ) {
       dispositivoSentido = 'saida'
+    }
+
+    // ── IDENTIFICAÇÃO DE SENTIDO VIA PORTAL CONTROL ID (CRUCIAL PARA MESTRE COM TERMINAL REMOTO) ──
+    // No ecossistema Control iD com catraca Mestre (.150) e leitor secundário de Saída (.154),
+    // todos os logs são centralizados no Mestre e discriminados por 'portal_id':
+    // • portal_id = 1 (ou 101): Portal 1 (Giro de Entrada / Leitor Local)
+    // • portal_id = 2 (ou 102): Portal 2 (Giro de Saída / Terminal Remoto)
+    const portalIdRaw =
+      payload.portal_id ??
+      payload.portalId ??
+      payload.portal ??
+      payload.door_id ??
+      payload.doorId ??
+      payload.reader_id ??
+      payload.readerId ??
+      payload.direction ??
+      payload.object_changes?.[0]?.values?.portal_id ??
+      payload.object_changes?.[0]?.values?.portalId ??
+      payload.object_changes?.[0]?.values?.portal ??
+      payload.object_changes?.[0]?.values?.door_id ??
+      payload.object_changes?.[0]?.values?.doorId ??
+      payload.object_changes?.[0]?.values?.reader_id ??
+      payload.object_changes?.[0]?.values?.readerId ??
+      payload.object_changes?.[0]?.values?.direction ??
+      payload.access_logs?.portal_id ??
+      payload.access_logs?.portal ??
+      payload.event?.portal_id ??
+      payload.event?.portal ??
+      searchParams.get('portal_id') ??
+      searchParams.get('portal')
+
+    if (portalIdRaw !== undefined && portalIdRaw !== null && portalIdRaw !== '') {
+      const pId = Number(portalIdRaw)
+      if (pId === 2 || pId === 102) {
+        dispositivoSentido = 'saida'
+      } else if (pId === 1 || pId === 101) {
+        dispositivoSentido = 'entrada'
+      }
+    }
+
+    // Se o sentido for saída e o nome do dispositivo for o Mestre (ex: Portaria Médio - PRINCIPAL),
+    // ajusta o rótulo de exibição para refletir claramente que o evento ocorreu no leitor de Saída
+    if (dispositivoSentido === 'saida' && dispositivoNome && !/sa[ií]da/i.test(dispositivoNome)) {
+      dispositivoNome = `${dispositivoNome} (Saída)`
     }
 
     // Se o dispositivo não foi identificado, usar o primeiro disponível

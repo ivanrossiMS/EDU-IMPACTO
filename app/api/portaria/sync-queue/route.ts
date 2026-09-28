@@ -106,7 +106,7 @@ export async function GET(req: NextRequest) {
       nome: d.nome,
       ip: d.ip,
       porta: d.porta || 80,
-      tipo: (d.configuracao as any)?.sentido || (/sa[ií]da/i.test(d.nome || '') || d.ip === '192.168.1.154' ? 'saida' : 'entrada'),
+      tipo: (d.configuracao as any)?.sentido || (/sa[ií]da/i.test(d.nome || '') || d.ip === '192.168.1.154' ? 'saida' : (d.ip === '192.168.1.150' ? 'ambos' : 'entrada')),
       senha: (d.configuracao as any)?.password || 'Pass1081$'
     }))
 

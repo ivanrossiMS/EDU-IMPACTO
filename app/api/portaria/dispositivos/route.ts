@@ -66,7 +66,7 @@ export async function POST(req: NextRequest) {
       configuracao: {
         ...(body.configuracao || {}),
         ...(id && !id.includes('-') ? { serial: id } : {}),
-        sentido: body.sentido || body.configuracao?.sentido || (/sa[ií]da/i.test(body.nome || '') || ipOnly === '192.168.1.154' ? 'saida' : 'entrada'),
+        sentido: body.sentido || body.configuracao?.sentido || (/sa[ií]da/i.test(body.nome || '') || ipOnly === '192.168.1.154' ? 'saida' : (ipOnly === '192.168.1.150' ? 'ambos' : 'entrada')),
       },
       updated_at: new Date().toISOString(),
     }

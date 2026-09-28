@@ -254,6 +254,8 @@ export async function POST(req: NextRequest) {
         // ── ETAPA 4: Inserir apenas os registros novos via webhook ───────────────
         let newInserted = 0
         for (const { log } of newLogs) {
+          const pId = log.portal_id ?? log.portal ?? 0
+          const direction = (pId === 2 || pId === 102 || log.reader_id === 2 || log.direction === 1) ? 'saida' : (pId === 1 || pId === 101 ? 'entrada' : undefined)
           const webhookPayload = {
             object_changes: [
               {
@@ -262,7 +264,10 @@ export async function POST(req: NextRequest) {
                 values: log
               }
             ],
-            device_id: log.device_id
+            device_id: log.device_id,
+            portal_id: pId || undefined,
+            tipo: direction,
+            sentido: direction
           }
 
           const localReq = new NextRequest(webhookUrl, {
