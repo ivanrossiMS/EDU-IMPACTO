@@ -15,7 +15,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useFormularios, FormTemplate } from '@/lib/formulariosContext'
 import { useSupabaseArray } from '@/lib/useSupabaseCollection'
 import { useApp } from '@/lib/context'
-import { Plus, RotateCw, ChevronRight, ChevronLeft, HelpCircle, Users, ArrowRight, Send, Send as SendIcon, Clock, Bold, Italic, Link as LinkIcon, List, Underline, Smile, BadgeDollarSign, ClipboardList, Vote, FileCheck2 } from 'lucide-react'
+import { Plus, RotateCw, ChevronRight, ChevronLeft, HelpCircle, Users, ArrowRight, Send, Send as SendIcon, Clock, Bold, Italic, Link as LinkIcon, List, Underline, Smile, BadgeDollarSign, ClipboardList, Vote, FileCheck2, MessageSquare } from 'lucide-react'
 import { useData } from '@/lib/dataContext'
 import Portal from '@/components/Portal'
 import { ComunicadoChat } from '@/components/ComunicadoChat'
@@ -770,12 +770,23 @@ function ColaboradorComunicadosContent() {
         ...(comunicadoItem.leituras || {}),
         [userSlug]: nowIso,
         ...(effectiveUser?.id ? { [effectiveUser.id]: nowIso } : {})
-      }
+      },
+      conversas_info: {
+        ...(comunicadoItem.conversas_info || {}),
+        has_unread: false,
+        nao_lidas: 0
+      },
+      _has_unread_reply: false
     };
 
     setSelectedComunicado((curr: any) => {
       if (curr && String(curr.id) === cId) {
-        return { ...curr, leituras: updated.leituras };
+        return { 
+          ...curr, 
+          leituras: updated.leituras,
+          conversas_info: updated.conversas_info,
+          _has_unread_reply: false
+        };
       }
       return curr;
     });
@@ -1639,10 +1650,13 @@ function ColaboradorComunicadosContent() {
             const month = parsedDate.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '').toUpperCase();
             const time = parsedDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
             
-            const isRead = locallyReadIds.has(String(c.id)) || !!(
+            const hasUnreadConversation = Boolean(c.conversas_info?.has_unread || c._has_unread_reply);
+            const hasConversas = Boolean(c.conversas_info?.tem_conversas || (c.conversas_info?.total && c.conversas_info.total > 0));
+
+            const isRead = !hasUnreadConversation && (locallyReadIds.has(String(c.id)) || !!(
               (c.leituras || {})[userSlug] ||
               (effectiveUser?.id && (c.leituras || {})[effectiveUser.id])
-            );
+            ));
             const isCiencia = !!(
               (c.ciencias || {})[userSlug] ||
               (effectiveUser?.id && (c.ciencias || {})[effectiveUser.id])
@@ -1784,9 +1798,93 @@ function ColaboradorComunicadosContent() {
                          
                          {/* Status Badge */}
                          {!isRead ? (
-                           <span className="badge badge-status" style={{ background: 'linear-gradient(135deg, #00d2ff, #ff0080)', color: '#fff', border: 'none', boxShadow: '0 2px 8px rgba(0,210,255,0.25)', padding: '2px 6px', fontSize: '8px', fontWeight: 800, letterSpacing: 0.4, lineHeight: 1.2 }}>NOVO</span>
+                           <span 
+                             className="badge badge-status" 
+                             style={{ 
+                               background: 'linear-gradient(135deg, #00d2ff, #ff0080)', 
+                               color: '#fff', 
+                               border: 'none', 
+                               boxShadow: '0 2px 8px rgba(0,210,255,0.25)', 
+                               padding: '2px 7px', 
+                               fontSize: '8px', 
+                               fontWeight: 800, 
+                               letterSpacing: 0.4, 
+                               lineHeight: 1.2,
+                               borderRadius: 6 
+                             }}
+                           >
+                             {hasUnreadConversation ? 'NÃO LIDO' : 'NOVO'}
+                           </span>
                          ) : (
-                           <span className="badge badge-neutral badge-status" style={{ background: 'transparent', color: '#64748b', border: '1px solid rgba(0,0,0,0.12)', padding: '2px 6px', fontSize: '8px', fontWeight: 600, letterSpacing: 0.4, lineHeight: 1.2 }}>LIDO</span>
+                           <span 
+                             className="badge badge-neutral badge-status" 
+                             style={{ 
+                               background: 'transparent', 
+                               color: '#64748b', 
+                               border: '1px solid rgba(0,0,0,0.12)', 
+                               padding: '2px 7px', 
+                               fontSize: '8px', 
+                               fontWeight: 600, 
+                               letterSpacing: 0.4, 
+                               lineHeight: 1.2,
+                               borderRadius: 6 
+                             }}
+                           >
+                             LIDO
+                           </span>
+                         )}
+
+                         {/* Ícone de Conversa Privada ao lado do Badge de Lido / Não Lido */}
+                         {hasConversas && (
+                           hasUnreadConversation ? (
+                             <div 
+                               title={c.conversas_info?.nao_lidas ? `${c.conversas_info.nao_lidas} nova(s) conversa(s) privada(s)` : 'Novas mensagens privadas neste comunicado'}
+                               style={{
+                                 display: 'inline-flex',
+                                 alignItems: 'center',
+                                 justifyContent: 'center',
+                                 gap: 3.5,
+                                 padding: '2px 6px',
+                                 borderRadius: 6,
+                                 background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.16) 0%, rgba(168, 85, 247, 0.22) 100%)',
+                                 border: '1px solid rgba(139, 92, 246, 0.45)',
+                                 boxShadow: '0 2px 8px rgba(124, 58, 237, 0.22)',
+                                 cursor: 'pointer',
+                                 transition: 'all 0.25s ease'
+                               }}
+                               onClick={(e) => {
+                                 e.stopPropagation();
+                                 markComunicadoAsReadColab(c);
+                                 setSelectedComunicado(c);
+                               }}
+                             >
+                               <MessageSquare size={11} color="#7c3aed" style={{ fill: '#8b5cf6', filter: 'drop-shadow(0 1px 2px rgba(124, 58, 237, 0.35))' }} />
+                               <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#ec4899', boxShadow: '0 0 6px #ec4899', display: 'inline-block' }} />
+                             </div>
+                           ) : (
+                             <div 
+                               title="Conversas privadas neste comunicado (abertas / lidas)"
+                               style={{
+                                 display: 'inline-flex',
+                                 alignItems: 'center',
+                                 justifyContent: 'center',
+                                 padding: '2px 5px',
+                                 borderRadius: 6,
+                                 background: 'rgba(241, 245, 249, 0.75)',
+                                 border: '1px solid rgba(203, 213, 225, 0.7)',
+                                 color: '#94a3b8',
+                                 cursor: 'pointer',
+                                 transition: 'all 0.25s ease'
+                               }}
+                               onClick={(e) => {
+                                 e.stopPropagation();
+                                 markComunicadoAsReadColab(c);
+                                 setSelectedComunicado(c);
+                               }}
+                             >
+                               <MessageSquare size={11} color="#94a3b8" strokeWidth={2} />
+                             </div>
+                           )
                          )}
                        </div>
 
@@ -2023,25 +2121,39 @@ function ColaboradorComunicadosContent() {
           const effNameClean = String(effectiveUser?.nome || '').trim().toLowerCase();
           const curNameClean = String(currentUser?.nome || '').trim().toLowerCase();
 
-          const perfilStr = String(effectiveUser?.perfil || currentUser?.perfil || '').toLowerCase();
-          const cargoStr = String(effectiveUser?.cargo || currentUser?.cargo || '').toLowerCase();
-          const perfisAdminOrCoord = [
-            'diretor geral', 'diretoria', 'administrador', 'admin', 'master',
-            'coordenador', 'coordenação', 'coordenador pedagógico', 'auxiliar administrativo', 'secretaria'
+          // Identificar se o usuário atual é Administrador institucional
+          const adminRoles = [
+            'administrador master',
+            'master',
+            'administrador',
+            'admin',
+            'diretor geral',
+            'diretora geral',
+            'diretor',
+            'diretora',
+            'direcao',
+            'diretoria'
           ];
-          const isAdminOrCoord = perfisAdminOrCoord.some(p => perfilStr.includes(p) || cargoStr.includes(p));
+          const checkAdmin = (u: any) => {
+            if (!u) return false;
+            const p = String(u.perfil || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+            const c = String(u.cargo || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+            return adminRoles.some(r => p === r || c === r || p.includes('administrador') || c.includes('administrador master') || p.includes('diretor geral') || c.includes('diretor geral'));
+          };
 
-          const canDeleteSelected = Boolean(
-            isMasterAdmin ||
-            isAdminOrCoord ||
+          const isUserAdmin = checkAdmin(currentUser) || checkAdmin(effectiveUser);
+
+          // Identificar se o usuário atual é quem enviou o comunicado (autor)
+          const isAuthor = Boolean(
             (authorIdClean && candidateColabIds.includes(authorIdClean)) ||
             (authorIdClean && allUserIds.includes(authorIdClean)) ||
             (authorNameClean && effNameClean && (authorNameClean === effNameClean || effNameClean.includes(authorNameClean) || authorNameClean.includes(effNameClean))) ||
-            (authorNameClean && curNameClean && (authorNameClean === curNameClean || curNameClean.includes(authorNameClean) || authorNameClean.includes(curNameClean))) ||
-            selectedComunicado.id?.startsWith('AD-COM-REL-')
+            (authorNameClean && curNameClean && (authorNameClean === curNameClean || curNameClean.includes(authorNameClean) || authorNameClean.includes(curNameClean)))
           );
 
-          const canEditSelected = canDeleteSelected && !selectedComunicado.id?.startsWith('AD-COM-REL-');
+          // Os botões de editar e excluir só devem aparecer para quem enviou o comunicado, e para o administrador
+          const canDeleteSelected = Boolean(isUserAdmin || isAuthor);
+          const canEditSelected = Boolean((isUserAdmin || isAuthor) && !selectedComunicado.id?.startsWith('AD-COM-REL-'));
 
           return (
             <ComunicadoViewModal

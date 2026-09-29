@@ -6,6 +6,109 @@ import { getColaboradorIds, getInstitutionalMasterAdminIds } from '@/lib/server/
 
 export const dynamic = 'force-dynamic'
 
+function normalizeRole(str?: string | null): string {
+  if (!str) return '';
+  return str
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+}
+
+const STAFF_KEYWORDS = [
+  'diretor', 'diretora', 'direcao', 'administrador', 'admin', 'master',
+  'coordenador', 'coordenadora', 'coordenacao', 'professor', 'professora',
+  'docente', 'secretaria', 'secretario', 'auxiliar administrativo',
+  'assistente', 'auxiliar', 'financeiro', 'tesouraria', 'portaria',
+  'seguranca', 'inspetoria', 'inspetor', 'colaborador', 'funcionario'
+];
+
+async function checkIsStaffOrAuthor({
+  user,
+  supabase,
+  comunicadoId,
+  groupedAutorId,
+  espelharColabId
+}: {
+  user: any;
+  supabase: any;
+  comunicadoId?: string | null;
+  groupedAutorId?: string | null;
+  espelharColabId?: string | null;
+}): Promise<{ isStaff: boolean; isAuthor: boolean; canViewAllThreads: boolean }> {
+  const perfil = user.user_metadata?.perfil || '';
+  const cargo = user.user_metadata?.cargo || '';
+  const pNorm = normalizeRole(perfil);
+  const cNorm = normalizeRole(cargo);
+
+  const hasStaffKeyword = STAFF_KEYWORDS.some(kw => pNorm.includes(kw) || cNorm.includes(kw));
+
+  const isFamilyOrStudent = 
+    (pNorm === 'familia' || pNorm === 'responsavel' || pNorm === 'aluno' || cNorm === 'responsavel' || cNorm === 'aluno') &&
+    !user.user_metadata?.colaborador_id &&
+    !user.user_metadata?.system_user_id &&
+    !hasStaffKeyword;
+
+  let isStaff = !isFamilyOrStudent && (
+    hasStaffKeyword || 
+    Boolean(user.user_metadata?.colaborador_id || user.user_metadata?.system_user_id || user.user_metadata?.uid_legacy)
+  );
+
+  if (!isStaff && !isFamilyOrStudent) {
+    try {
+      const { data: dbUser } = await supabase
+        .from('system_users')
+        .select('id, perfil, cargo, status')
+        .or(`id.eq."${user.id}",auth_id.eq."${user.id}",email.ilike."${user.email || ''}"`)
+        .eq('status', 'ativo')
+        .maybeSingle();
+
+      if (dbUser) isStaff = true;
+    } catch (e) {
+      console.warn('Erro ao checar system_users:', e);
+    }
+  }
+
+  let isAuthor = false;
+  const userCandidateIds = new Set<string>([
+    String(user.id),
+    String(user.user_metadata?.colaborador_id || ''),
+    String(user.user_metadata?.system_user_id || ''),
+    String(user.user_metadata?.uid_legacy || ''),
+    String(espelharColabId || '')
+  ].filter(Boolean));
+
+  if (groupedAutorId && userCandidateIds.has(String(groupedAutorId))) {
+    isAuthor = true;
+  }
+
+  if (comunicadoId && !isAuthor) {
+    try {
+      const { data: comData } = await supabase
+        .from('comunicados')
+        .select('autor, dados')
+        .eq('id', comunicadoId)
+        .maybeSingle();
+
+      if (comData) {
+        const comAutorId = String(comData.dados?.autorId || '');
+        if (comAutorId && userCandidateIds.has(comAutorId)) {
+          isAuthor = true;
+        }
+        const comAutorNome = normalizeRole(comData.autor || comData.dados?.autorNome);
+        const userNome = normalizeRole(user.user_metadata?.nome || user.user_metadata?.name);
+        if (comAutorNome && userNome && (comAutorNome === userNome || userNome.includes(comAutorNome) || comAutorNome.includes(userNome))) {
+          isAuthor = true;
+        }
+      }
+    } catch (e) {
+      console.warn('Erro ao checar autor do comunicado:', e);
+    }
+  }
+
+  return { isStaff, isAuthor, canViewAllThreads: isStaff || isAuthor };
+}
+
 export async function GET(request: Request) {
   const { user, errorResponse } = await requireAuth()
   if (errorResponse) return errorResponse
@@ -15,14 +118,8 @@ export async function GET(request: Request) {
   const comunicadoId = searchParams.get('comunicado_id');
   const comunicadoIds = searchParams.get('comunicado_ids');
   const remetenteId = searchParams.get('remetente_id'); // If parent is viewing, they pass their ID to only see their chat
-  
-  // SECURITY FIX: Verificar no servidor se o usuário é admin (não confiar no ?admin=true do cliente)
-  const perfil = user.user_metadata?.perfil || ''
-  const cargo = user.user_metadata?.cargo || ''
-  const adminPerfis = ['Diretor Geral', 'Administrador', 'Admin', 'Colaborador', 'Professor', 'Coordenador']
-  const familyPerfis = ['Família', 'Responsável', 'Aluno']
-  const isFamilyOrStudent = familyPerfis.includes(perfil) || familyPerfis.includes(cargo)
-  const isAdmin = !isFamilyOrStudent && (adminPerfis.includes(perfil) || adminPerfis.includes(cargo) || (!perfil && !cargo))
+  const espelharColabId = searchParams.get('espelhar_colaborador');
+  const adminParam = searchParams.get('admin') === 'true';
 
   const groupedAutorId = searchParams.get('grouped_autor_id');
   const groupedTime = searchParams.get('grouped_time');
@@ -30,6 +127,15 @@ export async function GET(request: Request) {
   if (!comunicadoId && !comunicadoIds && !groupedAutorId) {
     return NextResponse.json({ error: 'comunicado_id or comunicado_ids is required' }, { status: 400 });
   }
+
+  // Verifica permissão institucional (staff) ou autoria do comunicado
+  const { canViewAllThreads } = await checkIsStaffOrAuthor({
+    user,
+    supabase,
+    comunicadoId,
+    groupedAutorId,
+    espelharColabId
+  });
 
   let query = supabase
     .from('comunicados_respostas')
@@ -63,13 +169,18 @@ export async function GET(request: Request) {
     query = query.eq('comunicado_id', comunicadoId);
   }
 
-  // Privacy rule: se não é admin, filtrar apenas mensagens do próprio usuário
-  if (!isAdmin && remetenteId) {
-    query = query.eq('remetente_id', remetenteId);
-  } else if (!isAdmin && !remetenteId) {
-    // Sem remetente_id e sem admin: filtrar pelo ID do usuário autenticado
-    const userSlug = user.user_metadata?.aluno_id || user.user_metadata?.responsavel_id || user.id
-    query = query.eq('remetente_id', String(userSlug));
+  // Regra de privacidade:
+  // Se o usuário pode ver todas as threads (staff ou autor) e solicitou admin=true (ou não passou remetente_id):
+  // -> Ele vê todas as threads (adminThreads).
+  // Se for Família/Aluno ou se um colaborador com perfil duplo passou remetente_id sem admin=true:
+  // -> Filtra apenas a conversa pertencente ao remetente.
+  if (!canViewAllThreads || (!adminParam && remetenteId)) {
+    if (remetenteId) {
+      query = query.eq('remetente_id', remetenteId);
+    } else {
+      const userSlug = user.user_metadata?.aluno_id || user.user_metadata?.responsavel_id || user.id;
+      query = query.eq('remetente_id', String(userSlug));
+    }
   }
 
   const { data, error } = await query;
@@ -88,17 +199,22 @@ export async function POST(request: Request) {
   const supabase = await createProtectedClient();
   try {
     const body = await request.json();
+    const { searchParams } = new URL(request.url);
+    const espelharColabId = body.espelhar_colaborador || searchParams.get('espelhar_colaborador');
     
     // Validate required fields
     if (!body.comunicado_id || !body.remetente_id || !body.conteudo) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
-    // SECURITY FIX: Determinar is_admin via perfil do servidor, não pelo body do cliente
-    const senderPerfil = user.user_metadata?.perfil || ''
-    const senderCargo = user.user_metadata?.cargo || ''
-    const familyPerfisPost = ['Família', 'Responsável', 'Aluno']
-    const serverIsAdmin = !familyPerfisPost.includes(senderPerfil) && !familyPerfisPost.includes(senderCargo)
+    // Identifica se o remetente atua como autoridade escolar / staff
+    const { canViewAllThreads } = await checkIsStaffOrAuthor({
+      user,
+      supabase,
+      comunicadoId: body.comunicado_id,
+      espelharColabId
+    });
+    const serverIsAdmin = canViewAllThreads;
 
     let finalComunicadoId = body.comunicado_id;
 
@@ -293,50 +409,69 @@ export async function POST(request: Request) {
       // Nao damos throw para nao quebrar a insercao original da mensagem
     }
 
-    // --- LÓGICA DE RESET DE LEITURA (NOVO/LIDO) ---
+    // --- LÓGICA DE RESET DE LEITURA (NOVO/NÃO LIDO) ---
     try {
-      const { data: comData } = await supabase.from('comunicados').select('id, created_at, dados, leituras').eq('id', finalComunicadoId).single();
+      const { data: comData } = await supabase.from('comunicados').select('id, created_at, dados').eq('id', finalComunicadoId).single();
       if (comData) {
-        let leituras = comData.leituras || {};
-        let usersToReset = [];
+        const comDados = comData.dados || {};
+        let leituras = { ...(comDados.leituras || {}) };
+        let usersToReset: string[] = [];
 
         if (!serverIsAdmin) {
-           // Familia respondeu. O admin (autor) precisa ver como NOVO.
-           const autorId = comData.dados?.autorId;
-           if (autorId) usersToReset.push(autorId);
+           // Família respondeu. O autor e a equipe escolar devem ver como NÃO LIDO.
+           const autorId = comDados.autorId;
+           if (autorId) usersToReset.push(String(autorId));
+           if (autorId && leituras[autorId]) delete leituras[autorId];
+           // Remove todas as leituras da equipe/autor para garantir status Não Lido
+           Object.keys(leituras).forEach(k => {
+             if (k === autorId || k.startsWith('colab_') || k.startsWith('admin_')) {
+               delete leituras[k];
+             }
+           });
         } else {
-           // Admin respondeu. A familia/aluno (remetente_id da conversa) precisa ver como NOVO.
-           if (body.remetente_id) usersToReset.push(body.remetente_id);
+           // Equipe/Admin respondeu. A família/aluno precisa ver como NÃO LIDO.
+           if (body.remetente_id) {
+             const rId = String(body.remetente_id);
+             usersToReset.push(rId);
+             delete leituras[rId];
+             Object.keys(leituras).forEach(k => {
+               if (k === rId || k.includes(rId)) {
+                 delete leituras[k];
+               }
+             });
+           }
         }
 
         if (usersToReset.length > 0) {
-          // Removemos o 'if (changed)' para FORÇAR um update na tabela comunicados
-          // Isso é essencial para engatilhar o evento do Supabase Realtime e fazer 
-          // a tela do outro usuário atualizar instantaneamente, já que a deleção
-          // real do status de leitura ocorreu na tabela agenda_notification_reads.
+          // Atualiza a coluna 'dados' de comunicados com o novo timestamp _last_reply e leituras atualizadas
           await supabase.from('comunicados').update({ 
-            leituras: { ...leituras, _last_reply: new Date().toISOString() } 
+            dados: { 
+              ...comDados, 
+              leituras, 
+              _last_reply: new Date().toISOString() 
+            } 
           }).eq('id', finalComunicadoId);
           
-          // Deleta a leitura da nova tabela também
+          // Deleta a leitura da tabela agenda_notification_reads também
           for (const uid of usersToReset) {
             if (!serverIsAdmin) {
-               // Familia respondeu, reseta para o admin (autor)
+               // Família respondeu, reseta para o admin / autor
                await supabase.from('agenda_notification_reads')
                  .delete()
                  .eq('content_id', finalComunicadoId)
                  .eq('usuario_id', uid);
             } else {
-               // Admin respondeu, reseta para a familia/aluno
+               // Admin respondeu, reseta para a família / aluno
                await supabase.from('agenda_notification_reads')
                  .delete()
                  .eq('content_id', finalComunicadoId)
-                 .eq('aluno_id', uid);
+                 .or(`usuario_id.eq.${uid},aluno_id.eq.${uid}`);
             }
           }
-          // Se a resposta foi feita por uma familia num child report, temos que resetar o lido do PAI tambem pro Admin!
+
+          // Se a resposta foi feita por uma família num child report, reseta o lido do PAI também pro Admin!
           if (!serverIsAdmin && finalComunicadoId.startsWith('AD-COM-REL-STU-')) {
-             const autorId = comData.dados?.autorId;
+             const autorId = comDados.autorId;
              if (autorId) {
                const timeNum = new Date(comData.created_at).getTime();
                if (timeNum > 0) {
@@ -344,7 +479,7 @@ export async function POST(request: Request) {
                  const maxTime = new Date(timeNum + 15000).toISOString();
                  // Busca o pai
                  const { data: parentCom } = await supabase.from('comunicados')
-                   .select('id, leituras')
+                   .select('id, dados')
                    .eq('dados->>autorId', String(autorId))
                    .not('id', 'like', 'AD-COM-REL-STU-%')
                    .like('id', 'AD-COM-REL-%')
@@ -353,11 +488,16 @@ export async function POST(request: Request) {
                    .limit(1)
                    .single();
                    
-                 if (parentCom && parentCom.leituras) {
-                   let parentLeituras = parentCom.leituras;
+                 if (parentCom && parentCom.dados) {
+                   let parentLeituras = { ...(parentCom.dados.leituras || {}) };
                    if (parentLeituras[autorId]) delete parentLeituras[autorId];
-                   parentLeituras._last_reply = new Date().toISOString();
-                   await supabase.from('comunicados').update({ leituras: parentLeituras }).eq('id', parentCom.id);
+                   await supabase.from('comunicados').update({ 
+                     dados: {
+                       ...parentCom.dados,
+                       leituras: parentLeituras,
+                       _last_reply: new Date().toISOString()
+                     }
+                   }).eq('id', parentCom.id);
                    
                    // Deleta do pai na nova tabela também
                    await supabase.from('agenda_notification_reads')
@@ -388,18 +528,11 @@ export async function DELETE(request: Request) {
     const supabase = await createProtectedClient();
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
+    const espelharColabId = searchParams.get('espelhar_colaborador');
 
     if (!id) {
       return NextResponse.json({ error: 'Message ID is required' }, { status: 400 });
     }
-
-    // Identificar perfil
-    const perfil = user.user_metadata?.perfil || '';
-    const cargo = user.user_metadata?.cargo || '';
-    const adminPerfis = ['Diretor Geral', 'Administrador', 'Admin', 'Colaborador', 'Professor', 'Coordenador'];
-    const familyPerfis = ['Família', 'Responsável', 'Aluno'];
-    const isFamilyOrStudent = familyPerfis.includes(perfil) || familyPerfis.includes(cargo);
-    const isAdmin = !isFamilyOrStudent && (adminPerfis.includes(perfil) || adminPerfis.includes(cargo) || (!perfil && !cargo));
 
     // Buscar a mensagem atual
     const { data: msg, error: fetchErr } = await supabase.from('comunicados_respostas').select('*').eq('id', id).single();
@@ -408,13 +541,29 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: 'Mensagem não encontrada' }, { status: 404 });
     }
 
+    // Identificar permissão institucional (staff) ou autoria do comunicado
+    const { canViewAllThreads } = await checkIsStaffOrAuthor({
+      user,
+      supabase,
+      comunicadoId: msg.comunicado_id,
+      espelharColabId
+    });
+    const isAdmin = canViewAllThreads;
+
     const currentUserId = user.id;
 
     // Regras de exclusão:
-    // 1. O admin pode excluir qualquer mensagem (ou talvez apenas as dele? Vamos permitir admin excluir qualquer uma para moderação)
+    // 1. Staff / Admin / Autor pode excluir qualquer mensagem para moderação
     // 2. O aluno/família só pode excluir a PRÓPRIA mensagem.
     if (!isAdmin) {
-      if (msg.remetente_id !== currentUserId && msg.remetente_id !== user.user_metadata?.slug) {
+      const allowedIds = [
+        currentUserId,
+        user.user_metadata?.aluno_id,
+        user.user_metadata?.responsavel_id,
+        user.user_metadata?.slug
+      ].filter(Boolean).map(String);
+
+      if (!allowedIds.includes(String(msg.remetente_id))) {
          return NextResponse.json({ error: 'Sem permissão para excluir esta mensagem' }, { status: 403 });
       }
     }

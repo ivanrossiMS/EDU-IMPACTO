@@ -61,24 +61,56 @@ export async function POST(request: Request) {
     const now = new Date().toISOString()
     
     try {
-      const readRecords = ids.map((id: string) => ({
-        usuario_id: alunoId ? `${readerId}#${alunoId}` : readerId, 
-        perfil: isFamily ? 'aluno' : 'admin', 
-        content_type: tipo,
-        content_id: String(id),
-        read_at: now,
-        aluno_id: alunoId ? String(alunoId) : null
-      }));
+      const readRecords: any[] = [];
+      ids.forEach((id: string) => {
+        readRecords.push({
+          usuario_id: readerId,
+          perfil: isFamily ? 'aluno' : 'admin',
+          content_type: tipo,
+          content_id: String(id),
+          read_at: now,
+          aluno_id: alunoId ? String(alunoId) : null
+        });
+        if (alunoId && `${readerId}#${alunoId}` !== readerId) {
+          readRecords.push({
+            usuario_id: `${readerId}#${alunoId}`,
+            perfil: isFamily ? 'aluno' : 'admin',
+            content_type: tipo,
+            content_id: String(id),
+            read_at: now,
+            aluno_id: String(alunoId)
+          });
+        }
+      });
 
-      // Utiliza insert em vez de upsert para não depender de UNIQUE CONSTRAINT nomeada no PostgREST
-      const { error: insertError } = await supabase
+      // Upsert para garantir que read_at seja atualizado para 'now', refletindo abertura recente de conversas
+      const { error: upsertError } = await supabase
         .from('agenda_notification_reads')
-        .insert(readRecords);
+        .upsert(readRecords, { onConflict: 'usuario_id,content_type,content_id' });
         
-      if (insertError) {
-        // Código 23505 é Duplicate Key (ou seja, a pessoa já leu/deu ciência). Podemos ignorar com segurança.
-        if (insertError.code !== '23505') {
-          throw new Error(`Erro ao inserir read record: ${insertError.message}`);
+      if (upsertError) {
+        console.warn('Aviso no upsert de agenda_notification_reads:', upsertError.message);
+      }
+
+      // Sincronizar dados.leituras no comunicado caso o tipo seja comunicado
+      if (tipo === 'comunicado') {
+        for (const id of ids) {
+          try {
+            const { data: com } = await supabase.from('comunicados').select('id, dados').eq('id', id).maybeSingle();
+            if (com && com.dados) {
+              const curLeituras = { ...(com.dados.leituras || {}) };
+              curLeituras[readerId] = now;
+              if (alunoId) {
+                curLeituras[String(alunoId)] = now;
+                curLeituras[`${readerId}_${alunoId}`] = now;
+              }
+              await supabase.from('comunicados').update({
+                dados: { ...com.dados, leituras: curLeituras }
+              }).eq('id', id);
+            }
+          } catch (syncErr) {
+            console.warn('Aviso ao sincronizar leituras em comunicados:', syncErr);
+          }
         }
       }
     } catch (e: any) {

@@ -452,16 +452,19 @@ export async function GET(request: Request) {
   const itemIds = data ? data.map((d: any) => String(d.id)) : [];
   let allReads: any[] = [];
   let allCiencias: any[] = [];
+  let allRespostas: any[] = [];
 
   if (itemIds.length > 0) {
-     const [readsRes, cienciasRes] = await Promise.all([
+     const [readsRes, cienciasRes, respostasRes] = await Promise.all([
         supabaseServer.from('agenda_notification_reads').select('content_id, usuario_id, read_at, aluno_id').in('content_id', itemIds),
-        supabaseServer.from('agenda_ciencias').select('content_id, usuario_id, ciente_em, aluno_id').in('content_id', itemIds)
+        supabaseServer.from('agenda_ciencias').select('content_id, usuario_id, ciente_em, aluno_id').in('content_id', itemIds),
+        supabaseServer.from('comunicados_respostas').select('id, comunicado_id, remetente_id, is_admin, created_at').in('comunicado_id', itemIds).order('created_at', { ascending: true })
      ]);
      allReads = readsRes.data || [];
      allCiencias = cienciasRes.data || [];
+     allRespostas = respostasRes.data || [];
 
-     // Fetch reads for dynamic STU reports related to COLAB reports
+     // Fetch reads and responses for dynamic STU reports related to COLAB reports
      const colabs = (data || []).filter((d: any) => d.id && String(d.id).startsWith('AD-COM-REL-COLAB-'));
      if (colabs.length > 0) {
        const colabReadsPromises = colabs.map(async (colab: any) => {
@@ -485,13 +488,24 @@ export async function GET(request: Request) {
            const filteredStus = (stus || []).filter((s: any) => s.dados && s.dados.autorId === autorId);
            if (filteredStus.length === 0) return null;
            
-           const { data: stuReads } = await supabaseServer.from('agenda_notification_reads')
-             .select('content_id, usuario_id, read_at, aluno_id')
-             .in('content_id', filteredStus.map((s: any) => s.id));
+           const stuIds = filteredStus.map((s: any) => s.id);
+           const [stuReadsRes, stuRespostasRes] = await Promise.all([
+             supabaseServer.from('agenda_notification_reads')
+               .select('content_id, usuario_id, read_at, aluno_id')
+               .in('content_id', stuIds),
+             supabaseServer.from('comunicados_respostas')
+               .select('id, comunicado_id, remetente_id, is_admin, created_at')
+               .in('comunicado_id', stuIds)
+               .order('created_at', { ascending: true })
+           ]);
              
-           return { colabId: colab.id, reads: stuReads || [] };
+           return { 
+             colabId: colab.id, 
+             reads: stuReadsRes.data || [],
+             respostas: stuRespostasRes.data || []
+           };
          } catch(e) {
-           console.error('Error fetching dynamic reads:', e);
+           console.error('Error fetching dynamic reads/respostas:', e);
            return null;
          }
        });
@@ -507,9 +521,22 @@ export async function GET(request: Request) {
              aluno_id: r.aluno_id
            });
          }
+         for (const resp of res.respostas) {
+           allRespostas.push({
+             ...resp,
+             comunicado_id: res.colabId
+           });
+         }
        }
      }
   }
+
+  const currentUserId = String(user.id);
+  const studentParamId = alunoId ? String(alunoId) : '';
+  const responsavelParamId = user.user_metadata?.responsavel_id ? String(user.user_metadata.responsavel_id) : '';
+  const alunoMetaId = user.user_metadata?.aluno_id ? String(user.user_metadata.aluno_id) : '';
+  const colabMetaId = colaboradorId ? String(colaboradorId) : (user.user_metadata?.colaborador_id ? String(user.user_metadata.colaborador_id) : '');
+  const userSlugMeta = user.user_metadata?.slug ? String(user.user_metadata.slug) : '';
 
   const normalized = (data || []).map((row: any) => {
      const merged = normalizeRow(row);
@@ -532,6 +559,79 @@ export async function GET(request: Request) {
          if (cleanUsuarioId) merged.ciencias[cleanUsuarioId] = c.ciente_em;
          if (c.aluno_id) merged.ciencias[c.aluno_id] = c.ciente_em;
       });
+
+      // Cálculo de conversas privadas e novas mensagens (status de leitura e indicador de chat)
+      const comRespostas = allRespostas.filter(r => String(r.comunicado_id) === String(row.id));
+      let temConversas = false;
+      let hasUnread = false;
+      let unreadCount = 0;
+      let totalConversas = 0;
+      let ultimaRespostaAt: string | null = null;
+
+      if (isFamilyOrStudent) {
+        const studentKeys = new Set([studentParamId, alunoMetaId, responsavelParamId, currentUserId, userSlugMeta].filter(Boolean));
+        const myThreadMessages = comRespostas.filter(r => studentKeys.has(String(r.remetente_id)));
+        totalConversas = myThreadMessages.length;
+        temConversas = totalConversas > 0;
+
+        if (temConversas) {
+          ultimaRespostaAt = myThreadMessages[myThreadMessages.length - 1].created_at;
+          let readTime = 0;
+          studentKeys.forEach(k => {
+            if (merged.leituras[k]) {
+              const t = new Date(merged.leituras[k]).getTime();
+              if (t > readTime) readTime = t;
+            }
+          });
+
+          const incomingMessages = myThreadMessages.filter(r => r.is_admin || !studentKeys.has(String(r.remetente_id)));
+          const unreads = incomingMessages.filter(r => new Date(r.created_at).getTime() > readTime);
+          unreadCount = unreads.length;
+          hasUnread = unreadCount > 0;
+
+          if (hasUnread) {
+            studentKeys.forEach(k => {
+              delete merged.leituras[k];
+            });
+            merged._has_unread_reply = true;
+          }
+        }
+      } else {
+        const staffKeys = new Set([colabMetaId, userSlugMeta, currentUserId].filter(Boolean));
+        totalConversas = comRespostas.length;
+        temConversas = totalConversas > 0;
+
+        if (temConversas) {
+          ultimaRespostaAt = comRespostas[comRespostas.length - 1].created_at;
+          let readTime = 0;
+          staffKeys.forEach(k => {
+            if (merged.leituras[k]) {
+              const t = new Date(merged.leituras[k]).getTime();
+              if (t > readTime) readTime = t;
+            }
+          });
+
+          const incomingMessages = comRespostas.filter(r => !r.is_admin);
+          const unreads = incomingMessages.filter(r => new Date(r.created_at).getTime() > readTime);
+          unreadCount = unreads.length;
+          hasUnread = unreadCount > 0;
+
+          if (hasUnread) {
+            staffKeys.forEach(k => {
+              delete merged.leituras[k];
+            });
+            merged._has_unread_reply = true;
+          }
+        }
+      }
+
+      merged.conversas_info = {
+        tem_conversas: temConversas,
+        has_unread: hasUnread,
+        nao_lidas: unreadCount,
+        total: totalConversas,
+        ultima_resposta_at: ultimaRespostaAt
+      };
 
      return merged;
   });
@@ -873,6 +973,48 @@ export async function PUT(request: Request) {
     const { id, dados } = await request.json()
     if (!id || !dados) return NextResponse.json({ error: 'id and dados required' }, { status: 400 })
 
+    const normalize = (s?: string) =>
+      (s || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const pNorm = normalize(perfil);
+    const cNorm = normalize(cargo);
+    const adminRoles = [
+      'administrador', 'admin', 'administrador master', 'master',
+      'diretor geral', 'diretora geral', 'diretor', 'diretora', 'direcao', 'diretoria'
+    ];
+    const isAdmin = adminRoles.some(r => 
+      pNorm === r || cNorm === r || 
+      pNorm.includes('administrador') || cNorm.includes('administrador master') || 
+      pNorm.includes('diretor geral') || cNorm.includes('diretor geral')
+    );
+
+    if (!isAdmin) {
+      const { data: existingCom } = await supabase
+        .from('comunicados')
+        .select('autor, dados')
+        .eq('id', id)
+        .maybeSingle();
+
+      const userCandidateIds = new Set<string>([
+        String(user.id),
+        String(user.user_metadata?.colaborador_id || ''),
+        String(user.user_metadata?.system_user_id || ''),
+        String(user.user_metadata?.uid_legacy || '')
+      ].filter(Boolean).map(s => s.replace(/^f_?/, '').trim().toLowerCase()));
+
+      const comAutorId = String(existingCom?.dados?.autorId || (existingCom as any)?.autor_id || '').replace(/^f_?/, '').trim().toLowerCase();
+      const comAutorNome = normalize(existingCom?.autor || existingCom?.dados?.autorNome);
+      const userNome = normalize(user.user_metadata?.nome || user.user_metadata?.name);
+
+      const isAuthor = Boolean(
+        (comAutorId && userCandidateIds.has(comAutorId)) ||
+        (comAutorNome && userNome && (comAutorNome === userNome || userNome.includes(comAutorNome) || comAutorNome.includes(userNome)))
+      );
+
+      if (!isAuthor) {
+        return NextResponse.json({ error: 'Acesso negado: Apenas quem enviou o comunicado ou um administrador pode editá-lo.' }, { status: 403 });
+      }
+    }
+
     if (id && String(id).startsWith('AD-COM-REL-STU-') && dados) {
       if (Array.isArray(dados.turmas) && dados.turmas.length > 0) {
         if (!dados.turma_nome) dados.turma_nome = dados.turmas[0];
@@ -924,6 +1066,45 @@ export async function DELETE(request: Request) {
 
   if (fetchError) {
     console.error('Erro ao buscar comunicados para exclusão:', fetchError)
+  }
+
+  const normalize = (s?: string) =>
+    (s || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const pNorm = normalize(perfil);
+  const cNorm = normalize(cargo);
+  const adminRoles = [
+    'administrador', 'admin', 'administrador master', 'master',
+    'diretor geral', 'diretora geral', 'diretor', 'diretora', 'direcao', 'diretoria'
+  ];
+  const isAdmin = adminRoles.some(r => 
+    pNorm === r || cNorm === r || 
+    pNorm.includes('administrador') || cNorm.includes('administrador master') || 
+    pNorm.includes('diretor geral') || cNorm.includes('diretor geral')
+  );
+
+  if (!isAdmin && comunicados && comunicados.length > 0) {
+    const userCandidateIds = new Set<string>([
+      String(user.id),
+      String(user.user_metadata?.colaborador_id || ''),
+      String(user.user_metadata?.system_user_id || ''),
+      String(user.user_metadata?.uid_legacy || '')
+    ].filter(Boolean).map(s => s.replace(/^f_?/, '').trim().toLowerCase()));
+
+    const userNome = normalize(user.user_metadata?.nome || user.user_metadata?.name);
+
+    for (const com of comunicados) {
+      const comAutorId = String(com.dados?.autorId || (com as any)?.autor_id || '').replace(/^f_?/, '').trim().toLowerCase();
+      const comAutorNome = normalize(com.autor || com.dados?.autorNome);
+
+      const isAuthor = Boolean(
+        (comAutorId && userCandidateIds.has(comAutorId)) ||
+        (comAutorNome && userNome && (comAutorNome === userNome || userNome.includes(comAutorNome) || comAutorNome.includes(userNome)))
+      );
+
+      if (!isAuthor) {
+        return NextResponse.json({ error: 'Acesso negado: Apenas quem enviou o comunicado ou um administrador pode excluí-lo.' }, { status: 403 });
+      }
+    }
   }
 
   const urlsToDelete: string[] = []

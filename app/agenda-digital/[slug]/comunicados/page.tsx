@@ -4,7 +4,7 @@ import { useSearchParams, useRouter, useParams } from 'next/navigation';
 import Image from 'next/image'
 
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
-import { Bell, Search, Filter, Pin, CheckCircle2, X, Paperclip, FileText, FileBarChart, DollarSign, Image as ImageIcon, Video, ShieldAlert, Calendar, Loader2, ChevronDown, RotateCw, Vote, FileCheck2 } from 'lucide-react'
+import { Bell, Search, Filter, Pin, CheckCircle2, X, Paperclip, FileText, FileBarChart, DollarSign, Image as ImageIcon, Video, ShieldAlert, Calendar, Loader2, ChevronDown, RotateCw, Vote, FileCheck2, MessageSquare } from 'lucide-react'
 import { EmptyStateCard } from '../../components/EmptyStateCard'
 import { UserAvatar } from '@/components/UserAvatar'
 
@@ -165,9 +165,20 @@ export default function ADComunicadosPage({ params }: { params: any }) {
       ...(currentUser?.id ? { [currentUser.id]: nowIso, [`${currentUser.id}_${resolvedParams.slug}`]: nowIso } : {})
     };
 
+    const updatedConversasInfo = {
+      ...(comunicadoItem.conversas_info || {}),
+      has_unread: false,
+      nao_lidas: 0
+    };
+
     setSelectedComunicado((curr: any) => {
       if (curr && String(curr.id) === cId) {
-        return { ...curr, leituras: updatedLeituras };
+        return { 
+          ...curr, 
+          leituras: updatedLeituras,
+          conversas_info: updatedConversasInfo,
+          _has_unread_reply: false
+        };
       }
       return curr;
     });
@@ -178,7 +189,12 @@ export default function ADComunicadosPage({ params }: { params: any }) {
       return {
         ...old,
         pages: old.pages.map((page: any[]) =>
-          page.map((x: any) => String(x.id) === cId ? { ...x, leituras: updatedLeituras } : x)
+          page.map((x: any) => String(x.id) === cId ? { 
+            ...x, 
+            leituras: updatedLeituras,
+            conversas_info: updatedConversasInfo,
+            _has_unread_reply: false
+          } : x)
         )
       };
     });
@@ -1005,7 +1021,10 @@ export default function ADComunicadosPage({ params }: { params: any }) {
             const readerIdWithSlug = legacyResponsavelId ? `${legacyResponsavelId}_${resolvedParams.slug}` : '';
             const currentReaderWithSlug = `${currentReaderId}_${resolvedParams.slug}`;
 
-            const isRead = locallyReadIds.has(String(c.id)) || !!(
+            const hasUnreadConversation = Boolean(c.conversas_info?.has_unread || c._has_unread_reply);
+            const hasConversas = Boolean(c.conversas_info?.tem_conversas || (c.conversas_info?.total && c.conversas_info.total > 0));
+
+            const isRead = !hasUnreadConversation && (locallyReadIds.has(String(c.id)) || !!(
               (c.leituras || {})[currentReaderId] || 
               (c.leituras || {})[resolvedParams?.slug] || 
               (legacyResponsavelId && (c.leituras || {})[legacyResponsavelId]) || 
@@ -1017,7 +1036,7 @@ export default function ADComunicadosPage({ params }: { params: any }) {
                 (currentUser?.id && (k === currentUser.id || k.startsWith(`${currentUser.id}_`) || k.endsWith(`_${currentUser.id}`))) ||
                 (legacyResponsavelId && (k === legacyResponsavelId || k.startsWith(`${legacyResponsavelId}_`) || k.endsWith(`_${legacyResponsavelId}`)))
               ))
-            );
+            ));
 
             const isCiencia = locallyCienteIds.has(String(c.id)) || !!(
               (c.ciencias || {})[currentReaderId] || 
@@ -1175,10 +1194,95 @@ export default function ADComunicadosPage({ params }: { params: any }) {
                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                          {/* Status Badge */}
                          {!isRead ? (
-                           <span className="badge" style={{ background: 'linear-gradient(135deg, #00d2ff, #ff0080)', color: '#fff', border: 'none', boxShadow: '0 2px 8px rgba(0,210,255,0.25)', padding: '2px 6px', fontSize: '8px', fontWeight: 800, letterSpacing: 0.4, lineHeight: 1.2 }}>NOVO</span>
+                           <span 
+                             className="badge" 
+                             style={{ 
+                               background: 'linear-gradient(135deg, #00d2ff, #ff0080)', 
+                               color: '#fff', 
+                               border: 'none', 
+                               boxShadow: '0 2px 8px rgba(0,210,255,0.25)', 
+                               padding: '2px 7px', 
+                               fontSize: '8px', 
+                               fontWeight: 800, 
+                               letterSpacing: 0.4, 
+                               lineHeight: 1.2,
+                               borderRadius: 6 
+                             }}
+                           >
+                             {hasUnreadConversation ? 'NÃO LIDO' : 'NOVO'}
+                           </span>
                          ) : (
-                           <span className="badge badge-neutral" style={{ background: 'transparent', color: '#64748b', border: '1px solid rgba(0,0,0,0.12)', padding: '2px 6px', fontSize: '8px', fontWeight: 600, letterSpacing: 0.4, lineHeight: 1.2 }}>Lido</span>
+                           <span 
+                             className="badge badge-neutral" 
+                             style={{ 
+                               background: 'transparent', 
+                               color: '#64748b', 
+                               border: '1px solid rgba(0,0,0,0.12)', 
+                               padding: '2px 7px', 
+                               fontSize: '8px', 
+                               fontWeight: 600, 
+                               letterSpacing: 0.4, 
+                               lineHeight: 1.2,
+                               borderRadius: 6 
+                             }}
+                           >
+                             LIDO
+                           </span>
                          )}
+
+                         {/* Ícone de Conversa Privada ao lado do Badge de Lido / Não Lido */}
+                         {hasConversas && (
+                           hasUnreadConversation ? (
+                             <div 
+                               title={c.conversas_info?.nao_lidas ? `${c.conversas_info.nao_lidas} nova(s) conversa(s) privada(s)` : 'Novas mensagens privadas neste comunicado'}
+                               style={{
+                                 display: 'inline-flex',
+                                 alignItems: 'center',
+                                 justifyContent: 'center',
+                                 gap: 3.5,
+                                 padding: '2px 6px',
+                                 borderRadius: 6,
+                                 background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.16) 0%, rgba(168, 85, 247, 0.22) 100%)',
+                                 border: '1px solid rgba(139, 92, 246, 0.45)',
+                                 boxShadow: '0 2px 8px rgba(124, 58, 237, 0.22)',
+                                 cursor: 'pointer',
+                                 transition: 'all 0.25s ease'
+                               }}
+                               onClick={(e) => {
+                                 e.stopPropagation();
+                                 markComunicadoAsRead(c);
+                                 setSelectedComunicado(c);
+                               }}
+                             >
+                               <MessageSquare size={11} color="#7c3aed" style={{ fill: '#8b5cf6', filter: 'drop-shadow(0 1px 2px rgba(124, 58, 237, 0.35))' }} />
+                               <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#ec4899', boxShadow: '0 0 6px #ec4899', display: 'inline-block' }} />
+                             </div>
+                           ) : (
+                             <div 
+                               title="Conversas privadas neste comunicado (abertas / lidas)"
+                               style={{
+                                 display: 'inline-flex',
+                                 alignItems: 'center',
+                                 justifyContent: 'center',
+                                 padding: '2px 5px',
+                                 borderRadius: 6,
+                                 background: 'rgba(241, 245, 249, 0.75)',
+                                 border: '1px solid rgba(203, 213, 225, 0.7)',
+                                 color: '#94a3b8',
+                                 cursor: 'pointer',
+                                 transition: 'all 0.25s ease'
+                               }}
+                               onClick={(e) => {
+                                 e.stopPropagation();
+                                 markComunicadoAsRead(c);
+                                 setSelectedComunicado(c);
+                               }}
+                             >
+                               <MessageSquare size={11} color="#94a3b8" strokeWidth={2} />
+                             </div>
+                           )
+                         )}
+
                          {/* Priority badges */}
                          {c.prioridade === 'alta' && <span className="badge" style={{ background: 'rgba(239,68,68,0.1)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.2)', padding: '2px 6px', fontSize: '8px' }}>Alta Prioridade</span>}
                          {c.prioridade === 'urgente' && <span className="badge" style={{ background: 'rgba(249,115,22,0.1)', color: '#f97316', border: '1px solid rgba(249,115,22,0.2)', padding: '2px 6px', fontSize: '8px' }}>Urgente</span>}

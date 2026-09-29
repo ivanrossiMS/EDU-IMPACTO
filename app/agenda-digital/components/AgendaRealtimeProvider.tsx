@@ -773,6 +773,16 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
       }
     })
 
+    // ── RESPOSTAS / CONVERSAS DE COMUNICADOS ─────────────────────────────
+    createBinding('comunicados_respostas', { event: '*', schema: 'public', table: 'comunicados_respostas' }, payload => {
+      console.log('⚡ [Realtime] Nova resposta/conversa em comunicado:', payload.eventType, payload.new?.comunicado_id);
+      queryClient.invalidateQueries({ queryKey: ['agenda', 'comunicados'], refetchType: 'all' });
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('agenda-digital:unread-updated'));
+        window.dispatchEvent(new CustomEvent('agenda-digital:conversas-updated', { detail: payload }));
+      }
+    })
+
     // ── CALENDÁRIO ───────────────────────────────────────────────────────
     createBinding('eventos_agenda', { event: '*', schema: 'public', table: 'eventos_agenda' }, payload => {
       const { eventType, old, new: newRow } = payload

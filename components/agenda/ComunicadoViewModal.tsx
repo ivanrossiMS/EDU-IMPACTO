@@ -438,16 +438,25 @@ export function ComunicadoViewModal({
 
   const fetchMessages = async () => {
     try {
+      let espelharParam = '';
+      if (typeof window !== 'undefined') {
+        const urlParams = new URLSearchParams(window.location.search);
+        const espColab = urlParams.get('espelhar_colaborador');
+        if (espColab) {
+          espelharParam = `&espelhar_colaborador=${encodeURIComponent(espColab)}`;
+        }
+      }
+
       let url = '';
       if (isAdminMode) {
         if (isGroupedReport) {
           const gDate = new Date(comunicado.dataEnvio || comunicado.created_at || 0).getTime();
-          url = `/api/comunicados_respostas?grouped_autor_id=${comunicado.autorId}&grouped_time=${gDate}&admin=true`;
+          url = `/api/comunicados_respostas?grouped_autor_id=${comunicado.autorId}&grouped_time=${gDate}&admin=true${espelharParam}`;
         } else {
-          url = `/api/comunicados_respostas?comunicado_id=${comunicado.id}&admin=true`;
+          url = `/api/comunicados_respostas?comunicado_id=${comunicado.id}&admin=true${espelharParam}`;
         }
       } else {
-        url = `/api/comunicados_respostas?comunicado_id=${comunicado.id}&remetente_id=${currentUserSlug}`;
+        url = `/api/comunicados_respostas?comunicado_id=${comunicado.id}&remetente_id=${currentUserSlug}${espelharParam}`;
       }
       
       const res = await fetch(url)
@@ -484,13 +493,21 @@ export function ComunicadoViewModal({
       const studentId = isAdminMode ? (selectedThreadId || currentUserSlug) : currentUserSlug;
       const targetComunicadoId = isAdminMode ? getComunicadoIdForStudent(studentId) : comunicado.id;
 
-      const payload = {
+      const payload: any = {
         comunicado_id: targetComunicadoId,
         remetente_id: studentId,
         remetente_nome: currentUserName,
         conteudo: newMessage.trim(),
         anexos: pendingAnexos,
         is_admin: isAdminMode
+      };
+
+      if (typeof window !== 'undefined') {
+        const urlParams = new URLSearchParams(window.location.search);
+        const espColab = urlParams.get('espelhar_colaborador');
+        if (espColab) {
+          payload.espelhar_colaborador = espColab;
+        }
       }
 
       const res = await fetch('/api/comunicados_respostas', {
@@ -517,7 +534,16 @@ export function ComunicadoViewModal({
     if (!confirm('Tem certeza que deseja excluir esta mensagem?')) return;
     setDeletingId(msgId);
     try {
-      const res = await fetch(`/api/comunicados_respostas?id=${msgId}`, { method: 'DELETE' });
+      let delUrl = `/api/comunicados_respostas?id=${msgId}`;
+      if (typeof window !== 'undefined') {
+        const urlParams = new URLSearchParams(window.location.search);
+        const espColab = urlParams.get('espelhar_colaborador');
+        if (espColab) {
+          delUrl += `&espelhar_colaborador=${encodeURIComponent(espColab)}`;
+        }
+      }
+
+      const res = await fetch(delUrl, { method: 'DELETE' });
       if (res.ok) {
         setMessages(prev => prev.filter(m => m.id !== msgId));
       } else {
