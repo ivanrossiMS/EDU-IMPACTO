@@ -118,7 +118,7 @@ def main():
         logs_res = post_json(f"{base_url}/load_objects.fcgi", {
             "object": "access_logs",
             "limit": 10,
-            "order": "time DESC"
+            "order": ["id", "descending"]
         }, cookie=session)
         logs = logs_res.get("access_logs", [])
 
@@ -131,11 +131,12 @@ def main():
                 ts = l.get("time", 0)
                 dt = datetime.fromtimestamp(ts).strftime("%d/%m/%Y %H:%M:%S") if ts else "?"
                 pid = l.get("portal_id", l.get("portal", 0))
+                cid = l.get("component_id", 0)
 
-                if pid in (2, 102) or l.get("reader_id") == 2 or l.get("direction") == 1:
-                    sentido = "🚪 SAÍDA (Terminal Remoto)"
-                elif pid in (1, 101) or l.get("reader_id") == 1 or l.get("direction") == 0:
-                    sentido = "🟢 ENTRADA (Leitor Local)"
+                if pid in (2, 102) or cid == 810373889 or l.get("reader_id") == 2 or l.get("direction") == 1:
+                    sentido = "🚪 SAÍDA (Rua das Garças / .154)"
+                elif pid in (1, 101) or cid == 810373890 or l.get("reader_id") == 1 or l.get("direction") == 0:
+                    sentido = "🟢 ENTRADA (Portaria Principal / .150)"
                 else:
                     sentido = f"ℹ️ Portal {pid}"
 

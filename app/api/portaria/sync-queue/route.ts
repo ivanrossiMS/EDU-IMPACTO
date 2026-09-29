@@ -14,36 +14,16 @@ async function getRegistradosHoje(sentido: 'entrada' | 'saida' = 'entrada') {
   try {
     const formatter = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' })
     const todayStr = formatter.format(new Date())
-    const startOfTodayIso = `${todayStr}T00:00:00.000Z`
 
-    let evQuery = supabase
-      .from('portaria_eventos')
-      .select('user_id_equipamento, aluno_id, tipo')
-      .gte('data_hora', startOfTodayIso)
-
-    if (sentido === 'saida') {
-      evQuery = evQuery.eq('tipo', 'saida')
-    } else {
-      evQuery = evQuery.or('tipo.eq.entrada,tipo.is.null')
-    }
-
-    const { data: eventosHoje } = await evQuery
-
+    // ── OTIMIZAÇÃO DE ALTA PERFORMANCE ──
+    // Busca direta na tabela 'frequencias' indexada por 'data', evitando full table scan
+    // na tabela 'portaria_eventos' que contém centenas de milhares de linhas e causava 522.
     const { data: freqHoje } = await supabase
       .from('frequencias')
       .select('aluno_id, dados')
       .eq('data', todayStr)
 
-    const registeredSet = new Set<string>()
-
-    for (const e of eventosHoje || []) {
-      if (e.user_id_equipamento) registeredSet.add(String(e.user_id_equipamento).trim())
-    }
-
     const alunoUuids = new Set<string>()
-    for (const e of eventosHoje || []) {
-      if (e.aluno_id) alunoUuids.add(String(e.aluno_id))
-    }
     for (const f of freqHoje || []) {
       if (sentido === 'saida') {
         if (f.dados?.saidaHorario && f.aluno_id) alunoUuids.add(String(f.aluno_id))
@@ -51,6 +31,8 @@ async function getRegistradosHoje(sentido: 'entrada' | 'saida' = 'entrada') {
         if (f.aluno_id) alunoUuids.add(String(f.aluno_id))
       }
     }
+
+    const registeredSet = new Set<string>()
 
     if (alunoUuids.size > 0) {
       const { data: alunosMatch } = await supabase
