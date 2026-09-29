@@ -415,13 +415,15 @@ def enviar_para_webhook(log_entry, cat, tipo_override=None):
     cat_ip = cat.get("ip", "")
     cat_id = cat.get("id", "")
 
+    rule_id   = log_entry.get("identification_rule_id") or 0
+
     # ── REGRA DE OURO DA ESCOLA (CONTROL ID ID NEXT) ──
     # A catraca .150 registra tanto entrada quanto saída dependendo da rota física:
-    # • Rota Primária (Portal 1 / Componente 810373890): Entrada (.150)
-    # • Outra Rota (Portal 2 / Componente 810373889): Saída (.154 - Rua das Garças)
+    # • Rota de Saída Rua das Garças (.154): Portal 1 / Componente 810373890 / Regra 4 (Usuário Identificado)
+    # • Rota de Entrada Portaria Médio (.150): Portal 2 / Componente 810373889 / Regra 1 (Face Local)
     is_outra_rota_150 = (
         (cat_ip == "192.168.1.150" or cat_id == "0M0200/02638E") and
-        (portal_id in (2, 102) or comp_id == 810373889 or reader_id == 2 or direction == 1 or door_id == 2)
+        (portal_id in (1, 101) or comp_id == 810373890 or reader_id == 1 or rule_id == 4)
     )
     is_catraca_154 = (cat_ip == "192.168.1.154" or cat_id == "0M0200/0263A6" or cat.get("tipo") == "saida")
 
@@ -432,7 +434,7 @@ def enviar_para_webhook(log_entry, cat, tipo_override=None):
     else:
         tipo = "entrada"
 
-    # Se for saída na outra rota do Mestre .150, atribuir ao dispositivo da saída
+    # Se for saída na rota do Terminal Remoto .154, atribuir ao dispositivo da saída
     disp_id = "0M0200/0263A6" if tipo == "saida" and (cat_ip == "192.168.1.150" or cat_id == "0M0200/02638E") else (cat.get("id") or cat["ip"])
 
     payload = {
@@ -661,14 +663,16 @@ def processar_eventos_detectados(eventos_por_catraca, estado):
             d_id = l.get("direction")
             door_id = l.get("door_id") or l.get("door") or 0
 
+            rule_id = l.get("identification_rule_id") or 0
+
             # ── IDENTIFICAÇÃO DE ROTA NA CATRACA .150 (CONTROL ID ID NEXT) ──
             # A catraca .150 registra tanto entrada quanto saída dependendo da rota física:
-            # • Rota Primária (Portal 1 / Componente 810373890): Entrada (.150)
-            # • Outra Rota (Portal 2 / Componente 810373889): Saída (.154 - Rua das Garças)
+            # • Rota de Saída Rua das Garças (.154): Portal 1 / Componente 810373890 / Regra 4 (Usuário Identificado)
+            # • Rota de Entrada Portaria Médio (.150): Portal 2 / Componente 810373889 / Regra 1 (Face Local)
             # As catracas .155 (FUND1) e .105 (INF) são SEMPRE ENTRADA!
             is_outra_rota_150 = (
                 (cat_ip == "192.168.1.150" or cat_id == "0M0200/02638E") and
-                (p_id in (2, 102) or c_id == 810373889 or r_id == 2 or d_id == 1 or door_id == 2)
+                (p_id in (1, 101) or c_id == 810373890 or r_id == 1 or rule_id == 4)
             )
             is_catraca_154_direto = (cat_ip == "192.168.1.154" or cat_id == "0M0200/0263A6" or cat.get("tipo") == "saida")
 

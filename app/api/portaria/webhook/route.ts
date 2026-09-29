@@ -441,17 +441,24 @@ export async function POST(req: Request) {
 
     const explicitTipo = searchParams.get('tipo') || searchParams.get('sentido') || payload?.tipo || payload?.sentido || payload?.event_type
 
-    const isExplicitExitRoute150 = pId === 2 || pId === 102 || compId === 810373889 || rId === 2 || dId === 1 || doorId === 2
-    const isExplicitEntryRoute150 = pId === 1 || pId === 101 || compId === 810373890 || rId === 1 || dId === 0 || doorId === 1
+    const ruleIdRaw =
+      payload.identification_rule_id ??
+      payload.rule_id ??
+      payload.object_changes?.[0]?.values?.identification_rule_id ??
+      searchParams.get('identification_rule_id')
+    const ruleId = ruleIdRaw ? Number(ruleIdRaw) : 0
+
+    // ── MESTRE .150 (CONTROL ID ID NEXT): Duas rotas físicas distintas ──
+    // Portal 1 (Component 810373890 / Rule 4 - Terminal Remoto .154): SEMPRE SAÍDA (Rua das Garças)
+    // Portal 2 (Component 810373889 / Rule 1 - Leitor Facial Local): SEMPRE ENTRADA (Portaria Principal)
+    const isExplicitExitRoute150 = pId === 1 || pId === 101 || compId === 810373890 || rId === 1 || ruleId === 4
+    const isExplicitEntryRoute150 = pId === 2 || pId === 102 || compId === 810373889 || rId === 2 || ruleId === 1
 
     if (isDevice154) {
       dispositivoSentido = 'saida'
       dispositivoNome = 'Saida - Rua das Garças'
       dispositivoId = '0M0200/0263A6'
     } else if (isMaster150) {
-      // ── MESTRE .150 (CONTROL ID ID NEXT): Duas rotas físicas distintas ──
-      // Portal 1 (Component 810373890 / Leitor Local): SEMPRE ENTRADA
-      // Portal 2 (Component 810373889 / Terminal Remoto .154): SEMPRE SAÍDA
       if (isExplicitExitRoute150) {
         dispositivoSentido = 'saida'
         dispositivoNome = 'Saida - Rua das Garças'
