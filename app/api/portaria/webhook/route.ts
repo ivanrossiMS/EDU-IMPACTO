@@ -149,50 +149,107 @@ export async function POST(req: Request) {
 
     // Só tenta resolver aluno se houver user_id válido (> 0)
     if (userIdNum !== null && userIdNum > 0) {
-      const fetchAllPages = async (table: string, selectFields: string, orFilter?: string) => {
-        let allData: any[] = []
-        let from = 0
-        const step = 1000
-        while (true) {
-          let q = supabase.from(table).select(selectFields)
-          if (orFilter) q = q.or(orFilter)
-          const { data, error } = await q.range(from, from + step - 1)
-          if (error || !data || data.length === 0) break
-          allData = allData.concat(data)
-          if (data.length < step) break
-          from += step
-        }
-        return allData
+      const rawUserIdStr = String(userIdNum).trim()
+      const cleanUserIdZero = rawUserIdStr.replace(/^0+/, '')
+
+      // ── 1. FAST PATH (INDEXED POSTGRES): busca direta em 'alunos' por ID ou Matrícula (< 20ms) ──
+      const candidateFilters = [
+        `id.eq.${rawUserIdStr}`,
+        `matricula.eq.${rawUserIdStr}`
+      ]
+      if (cleanUserIdZero && cleanUserIdZero !== rawUserIdStr) {
+        candidateFilters.push(`matricula.eq.${cleanUserIdZero}`)
+        candidateFilters.push(`id.eq.${cleanUserIdZero}`)
       }
 
-      const [ativos, responsaveis, links] = await Promise.all([
-        fetchAllPages('alunos', 'id, nome, matricula, turma, turno, status, dados', 'status.neq.inativo,status.is.null'),
-        fetchAllPages('responsaveis', 'id, nome, codigo, rfid, dados'),
-        fetchAllPages('aluno_responsavel', 'aluno_id, responsavel_id, parentesco'),
-      ])
+      let match: any = null
 
-      if (ativos && ativos.length > 0) {
-        const rawUserIdStr = String(userIdNum).trim()
-        const cleanUserIdZero = rawUserIdStr.replace(/^0+/, '')
+      const { data: directAluno } = await supabase
+        .from('alunos')
+        .select('id, nome, matricula, turma, turno, status, dados')
+        .or(candidateFilters.join(','))
+        .neq('status', 'inativo')
+        .limit(1)
+        .maybeSingle()
 
-        let match = ativos.find(a => {
-          const candidates = [
-            a.id, a.matricula,
-            a.dados?.codigo, a.dados?.matricula, a.dados?.codigoAluno, a.dados?.id
-          ].filter(Boolean).map(x => String(x).trim())
+      if (directAluno) {
+        match = directAluno
+      }
 
-          return candidates.some(c => {
-            if (c === rawUserIdStr || c.toLowerCase() === rawUserIdStr.toLowerCase()) return true
-            if (cleanUserIdZero && c.replace(/^0+/, '') === cleanUserIdZero) return true
-            const num = parseInt(c.replace(/\D/g, ''), 10)
-            return !isNaN(num) && num === userIdNum
-          })
-        })
+      // ── 2. FAST PATH SECUNDÁRIO: Se não achou na coluna principal, busca por dados->>codigo ou dados->>matricula ──
+      if (!match) {
+        const { data: jsonAluno } = await supabase
+          .from('alunos')
+          .select('id, nome, matricula, turma, turno, status, dados')
+          .or(`dados->>codigo.eq.${rawUserIdStr},dados->>matricula.eq.${rawUserIdStr},dados->>codigoAluno.eq.${rawUserIdStr}`)
+          .neq('status', 'inativo')
+          .limit(1)
+          .maybeSingle()
 
-        // Se não achou em alunos, buscar em responsáveis vinculados a um aluno
-        if (!match && responsaveis.length > 0 && links.length > 0) {
-          const respMatch = responsaveis.find(r => {
-            const candidates = [r.id, r.codigo, r.rfid, r.dados?.codigo, r.dados?.id].filter(Boolean).map(x => String(x).trim())
+        if (jsonAluno) {
+          match = jsonAluno
+        }
+      }
+
+      // ── 3. FAST PATH TERCIÁRIO: Se não for aluno, pode ser responsável com crachá ──
+      if (!match) {
+        const { data: respFound } = await supabase
+          .from('responsaveis')
+          .select('id, nome, codigo, rfid')
+          .or(`id.eq.${rawUserIdStr},codigo.eq.${rawUserIdStr},rfid.eq.${rawUserIdStr}`)
+          .limit(1)
+          .maybeSingle()
+
+        if (respFound) {
+          const { data: link } = await supabase
+            .from('aluno_responsavel')
+            .select('aluno_id')
+            .eq('responsavel_id', respFound.id)
+            .limit(1)
+            .maybeSingle()
+
+          if (link?.aluno_id) {
+            const { data: linkedStudent } = await supabase
+              .from('alunos')
+              .select('id, nome, matricula, turma, turno, status, dados')
+              .eq('id', link.aluno_id)
+              .maybeSingle()
+            if (linkedStudent) match = linkedStudent
+          }
+        }
+      }
+
+      // ── 4. SLOW PATH (Fallback de contingência): Somente se NADA acima encontrar ──
+      if (!match) {
+        const fetchAllPages = async (table: string, selectFields: string, orFilter?: string) => {
+          let allData: any[] = []
+          let from = 0
+          const step = 1000
+          while (true) {
+            let q = supabase.from(table).select(selectFields)
+            if (orFilter) q = q.or(orFilter)
+            const { data, error } = await q.range(from, from + step - 1)
+            if (error || !data || data.length === 0) break
+            allData = allData.concat(data)
+            if (data.length < step) break
+            from += step
+          }
+          return allData
+        }
+
+        const [ativos, responsaveis, links] = await Promise.all([
+          fetchAllPages('alunos', 'id, nome, matricula, turma, turno, status, dados', 'status.neq.inativo,status.is.null'),
+          fetchAllPages('responsaveis', 'id, nome, codigo, rfid, dados'),
+          fetchAllPages('aluno_responsavel', 'aluno_id, responsavel_id, parentesco'),
+        ])
+
+        if (ativos && ativos.length > 0) {
+          match = ativos.find(a => {
+            const candidates = [
+              a.id, a.matricula,
+              a.dados?.codigo, a.dados?.matricula, a.dados?.codigoAluno, a.dados?.id
+            ].filter(Boolean).map(x => String(x).trim())
+
             return candidates.some(c => {
               if (c === rawUserIdStr || c.toLowerCase() === rawUserIdStr.toLowerCase()) return true
               if (cleanUserIdZero && c.replace(/^0+/, '') === cleanUserIdZero) return true
@@ -201,50 +258,54 @@ export async function POST(req: Request) {
             })
           })
 
-          if (respMatch) {
-            const link = links.find(l => String(l.responsavel_id).trim() === String(respMatch.id).trim())
-            if (link) {
-              match = ativos.find(a => String(a.id).trim() === String(link.aluno_id).trim())
+          if (!match && responsaveis.length > 0 && links.length > 0) {
+            const respMatch = responsaveis.find(r => {
+              const candidates = [r.id, r.codigo, r.rfid, r.dados?.codigo, r.dados?.id].filter(Boolean).map(x => String(x).trim())
+              return candidates.some(c => {
+                if (c === rawUserIdStr || c.toLowerCase() === rawUserIdStr.toLowerCase()) return true
+                if (cleanUserIdZero && c.replace(/^0+/, '') === cleanUserIdZero) return true
+                const num = parseInt(c.replace(/\D/g, ''), 10)
+                return !isNaN(num) && num === userIdNum
+              })
+            })
+
+            if (respMatch) {
+              const link = links.find(l => String(l.responsavel_id).trim() === String(respMatch.id).trim())
+              if (link) {
+                match = ativos.find(a => String(a.id).trim() === String(link.aluno_id).trim())
+              }
             }
           }
         }
+      }
 
-        if (match) {
-          alunoId = match.id
-          alunoNome = match.nome
-          alunoTurno = match.turno || match.dados?.turno || null
-          alunoResponsaveis = [{ id: `parent_of_${match.id}` }]
+      if (match) {
+        alunoId = match.id
+        alunoNome = match.nome
+        alunoTurno = match.turno || match.dados?.turno || null
+        alunoResponsaveis = [{ id: `parent_of_${match.id}` }]
 
-          // Resolver a Turma do Aluno com resiliência total
-          const rawTurma = match.turma || match.dados?.turma || match.dados?.turmaId || match.dados?.serieTurma || match.dados?.historicoTurmas?.[0]?.serieTurma || match.dados?.historicoTurmas?.[0]?.turma || null
-          
-          const { data: allTurmas } = await supabase.from('turmas').select('id, nome, codigo, serie, segmento, turno, dados')
-          if (allTurmas && allTurmas.length > 0) {
-            let foundT = null
-            if (rawTurma) {
-              foundT = allTurmas.find(t =>
-                String(t.id) === String(rawTurma) ||
-                String(t.nome).trim().toLowerCase() === String(rawTurma).trim().toLowerCase() ||
-                (t.codigo && String(t.codigo).trim().toLowerCase() === String(rawTurma).trim().toLowerCase())
-              )
-            }
-            if (!foundT) {
-              const { isAlunoCursandoTurma } = await import('@/lib/studentTurmaUtils')
-              foundT = allTurmas.find(t => isAlunoCursandoTurma(match, t, undefined, allTurmas))
-            }
-            if (foundT) {
-              alunoTurma = foundT.id
-            } else if (rawTurma) {
-              alunoTurma = String(rawTurma)
-            }
-          } else if (rawTurma) {
+        // ── Resolver a Turma do Aluno em alta performance ──
+        const rawTurma = match.turma || match.dados?.turma || match.dados?.turmaId || match.dados?.serieTurma || match.dados?.historicoTurmas?.[0]?.serieTurma || match.dados?.historicoTurmas?.[0]?.turma || null
+        
+        if (rawTurma) {
+          const { data: foundT } = await supabase
+            .from('turmas')
+            .select('id, nome, codigo')
+            .or(`id.eq.${rawTurma},codigo.eq.${rawTurma},nome.eq.${rawTurma}`)
+            .limit(1)
+            .maybeSingle()
+
+          if (foundT) {
+            alunoTurma = foundT.id
+          } else {
             alunoTurma = String(rawTurma)
           }
-
-          console.log(`✅ [Webhook Portaria] Aluno resolvido: ${match.nome} (user_id catraca: ${userIdNum} → matrícula: ${match.matricula || match.codigo}) | Turma: ${alunoTurma || 'Nenhum'})`)
-        } else {
-          console.warn(`⚠️ [Webhook Portaria] user_id ${userIdNum} não corresponde a nenhum aluno. Verifique se os alunos estão sincronizados nas catracas.`)
         }
+
+        console.log(`✅ [Webhook Portaria] Aluno resolvido em alta velocidade: ${match.nome} (user_id catraca: ${userIdNum} → matrícula: ${match.matricula || match.id}) | Turma: ${alunoTurma || 'Nenhum'})`)
+      } else {
+        console.warn(`⚠️ [Webhook Portaria] user_id ${userIdNum} não corresponde a nenhum aluno. Verifique se os alunos estão sincronizados nas catracas.`)
       }
     } else if (userIdNum === 0) {
       console.log(`🚫 [Webhook Portaria] Acesso negado — face não reconhecida pelo equipamento (user_id=0)`)

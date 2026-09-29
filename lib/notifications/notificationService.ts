@@ -35,6 +35,8 @@ class NotificationService {
   private loggedInToOneSignal = false
   /** Prevents overlapping syncUser calls */
   private syncUserPromise: Promise<void> | null = null
+  /** Prevents duplicate concurrent requestNotificationPermission calls */
+  private requestPermissionPromise: Promise<boolean> | null = null
   /** Timestamp of the last clearUser() call, used to reject stale syncs */
   private lastClearAt = 0
 
@@ -368,13 +370,9 @@ class NotificationService {
         const osId = await OneSignalNative.User.getOnesignalId().catch(() => null)
         const extId = await OneSignalNative.User.getExternalId().catch(() => null)
 
-        // Se o SO autorizou mas o OneSignal estiver com optOut, ativa optIn automaticamente
-        if ((permStatus === 'authorized' || permStatus === 'provisional') && !optedIn) {
-          try {
-            console.log('📱 [NotificationService] SO autorizado, garantindo optIn no OneSignal...')
-            await OneSignalNative.User.pushSubscription.optIn()
-          } catch {}
-        }
+        // NOTA: No OneSignal v5 nativo, NUNCA chamar pushSubscription.optIn() aqui.
+        // O OneSignal já ativa o optIn automaticamente ao sincronizar o token APNs/FCM.
+        // Chamar optIn() quando subToken ainda é null aciona fallbackToSettings: true no SDK nativo do iOS.
 
         this.state = {
           ...this.state,
@@ -451,33 +449,41 @@ class NotificationService {
    * ("Open Settings / You currently have notifications turned off...").
    */
   public async requestNotificationPermission(): Promise<boolean> {
-    const isNative = Capacitor.isNativePlatform()
-
-    if (isNative) {
-      try {
-        console.log('📱 [NotificationService] Solicitando permissão nativa (fallbackToSettings: false)...')
-        const { default: OneSignalNative } = await import('@onesignal/capacitor-plugin')
-
-        // Executa com fallbackToSettings = false
-        const accepted = await OneSignalNative.Notifications.requestPermission(false)
-        console.log('📱 [NotificationService] Resultado do prompt do SO:', accepted)
-
-        if (accepted && OneSignalNative.User?.pushSubscription?.optIn) {
-          await OneSignalNative.User.pushSubscription.optIn().catch(() => {})
-        }
-
-        if (accepted && this.cachedUser) {
-          await this.syncUser(this.cachedUser, this.cachedExtraData).catch(() => {})
-        }
-
-        await this.refresh()
-        return accepted
-      } catch (err: any) {
-        console.error('❌ [NotificationService] Erro ao solicitar permissão nativa:', err)
-        await this.refresh()
-        return false
-      }
+    if (this.requestPermissionPromise) {
+      return this.requestPermissionPromise
     }
+
+    this.requestPermissionPromise = (async () => {
+      const isNative = Capacitor.isNativePlatform()
+
+      if (isNative) {
+        try {
+          console.log('📱 [NotificationService] Solicitando permissão nativa (fallbackToSettings: false)...')
+          const { default: OneSignalNative } = await import('@onesignal/capacitor-plugin')
+
+          // Executa com fallbackToSettings = false
+          const accepted = await OneSignalNative.Notifications.requestPermission(false)
+          console.log('📱 [NotificationService] Resultado do prompt do SO:', accepted)
+
+          // REGRA CRÍTICA: NUNCA invocar OneSignalNative.User.pushSubscription.optIn() no iOS nativo.
+          // No SDK do OneSignal v5 iOS, pushSubscription.optIn() chama internamente
+          // requestPermission(nil, fallbackToSettings: true). Se o token APNs ainda não retornou
+          // da Apple (o que leva centenas de ms), o OneSignal dispara o alerta indesejado em inglês:
+          // "Open Settings / You currently have notifications turned off for this application".
+          // O SDK nativo do OneSignal já realiza o optIn automaticamente ao receber o token APNs/FCM.
+
+          if (accepted && this.cachedUser) {
+            await this.syncUser(this.cachedUser, this.cachedExtraData).catch(() => {})
+          }
+
+          await this.refresh()
+          return accepted
+        } catch (err: any) {
+          console.error('❌ [NotificationService] Erro ao solicitar permissão nativa:', err)
+          await this.refresh()
+          return false
+        }
+      }
 
     // Web
     if ('Notification' in window) {
@@ -500,7 +506,12 @@ class NotificationService {
     }
 
     return false
-  }
+  })().finally(() => {
+    this.requestPermissionPromise = null
+  })
+
+  return this.requestPermissionPromise
+}
 
   /**
    * Abre a tela de Ajustes do aplicativo no iPhone ou configurações no Android
@@ -723,10 +734,6 @@ class NotificationService {
         }
 
         const loginOk = await performLogin()
-
-        if (OneSignalNative.User?.pushSubscription?.optIn) {
-          await OneSignalNative.User.pushSubscription.optIn().catch(() => {})
-        }
 
         // Aliases atômicos (external_id e onesignal_id são reservados no OneSignal e definidos via login)
         const aliasMap: Record<string, string> = {}
@@ -1270,9 +1277,6 @@ class NotificationService {
         const { default: OneSignalNative } = await import('@onesignal/capacitor-plugin')
         const accepted = await OneSignalNative.Notifications.requestPermission(false)
         this.logAudit('forceNativePermission', 'ok', { accepted })
-        if (accepted && OneSignalNative.User?.pushSubscription?.optIn) {
-          await OneSignalNative.User.pushSubscription.optIn().catch(() => {})
-        }
         await this.refresh()
         if (this.cachedUser) {
           await this.syncUser(this.cachedUser, this.cachedExtraData).catch(() => {})
