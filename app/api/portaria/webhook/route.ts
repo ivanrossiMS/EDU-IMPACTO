@@ -328,17 +328,6 @@ export async function POST(req: Request) {
       if (dev) {
         dispositivoId = dev.id
         dispositivoNome = dev.nome
-        const devCfg = (dev.configuracao as any) || {}
-        if (
-          devCfg.sentido === 'saida' ||
-          devCfg.tipo === 'saida' ||
-          /sa[ií]da/i.test(dev.nome || '') ||
-          dev.ip === '192.168.1.154' ||
-          (dev.ip && dev.ip.endsWith('.154')) ||
-          dev.id === '0M0200/0263A6'
-        ) {
-          dispositivoSentido = 'saida'
-        }
       }
     }
 
@@ -359,76 +348,8 @@ export async function POST(req: Request) {
         if (devByIp) {
           dispositivoId = devByIp.id
           dispositivoNome = devByIp.nome
-          const devCfg = (devByIp.configuracao as any) || {}
-          if (
-            devCfg.sentido === 'saida' ||
-            devCfg.tipo === 'saida' ||
-            /sa[ií]da/i.test(devByIp.nome || '') ||
-            devByIp.ip === '192.168.1.154' ||
-            (devByIp.ip && devByIp.ip.endsWith('.154')) ||
-            devByIp.id === '0M0200/0263A6'
-          ) {
-            dispositivoSentido = 'saida'
-          }
         }
       }
-    }
-
-    // Se o próprio payload ou o query param indicar o sentido da catraca
-    const explicitTipo = searchParams.get('tipo') || searchParams.get('sentido') || payload?.tipo || payload?.sentido || payload?.event_type
-    if (explicitTipo && String(explicitTipo).toLowerCase() === 'saida') {
-      dispositivoSentido = 'saida'
-    } else if (explicitTipo && String(explicitTipo).toLowerCase() === 'entrada') {
-      dispositivoSentido = 'entrada'
-    } else if (
-      (deviceSerial && (deviceSerial === '0M0200/0263A6' || deviceSerial.includes('0263A6') || deviceSerial === '192.168.1.154')) ||
-      (dispositivoNome && /sa[ií]da/i.test(dispositivoNome))
-    ) {
-      dispositivoSentido = 'saida'
-    }
-
-    // ── IDENTIFICAÇÃO DE SENTIDO VIA PORTAL CONTROL ID (CRUCIAL PARA MESTRE COM TERMINAL REMOTO) ──
-    // No ecossistema Control iD com catraca Mestre (.150) e leitor secundário de Saída (.154),
-    // todos os logs são centralizados no Mestre e discriminados por 'portal_id':
-    // • portal_id = 1 (ou 101): Portal 1 (Giro de Entrada / Leitor Local)
-    // • portal_id = 2 (ou 102): Portal 2 (Giro de Saída / Terminal Remoto)
-    const portalIdRaw =
-      payload.portal_id ??
-      payload.portalId ??
-      payload.portal ??
-      payload.door_id ??
-      payload.doorId ??
-      payload.reader_id ??
-      payload.readerId ??
-      payload.direction ??
-      payload.object_changes?.[0]?.values?.portal_id ??
-      payload.object_changes?.[0]?.values?.portalId ??
-      payload.object_changes?.[0]?.values?.portal ??
-      payload.object_changes?.[0]?.values?.door_id ??
-      payload.object_changes?.[0]?.values?.doorId ??
-      payload.object_changes?.[0]?.values?.reader_id ??
-      payload.object_changes?.[0]?.values?.readerId ??
-      payload.object_changes?.[0]?.values?.direction ??
-      payload.access_logs?.portal_id ??
-      payload.access_logs?.portal ??
-      payload.event?.portal_id ??
-      payload.event?.portal ??
-      searchParams.get('portal_id') ??
-      searchParams.get('portal')
-
-    if (portalIdRaw !== undefined && portalIdRaw !== null && portalIdRaw !== '') {
-      const pId = Number(portalIdRaw)
-      if (pId === 2 || pId === 102) {
-        dispositivoSentido = 'saida'
-      } else if (pId === 1 || pId === 101) {
-        dispositivoSentido = 'entrada'
-      }
-    }
-
-    // Se o sentido for saída e o nome do dispositivo for o Mestre (ex: Portaria Médio - PRINCIPAL),
-    // ajusta o rótulo de exibição para refletir claramente que o evento ocorreu no leitor de Saída
-    if (dispositivoSentido === 'saida' && dispositivoNome && !/sa[ií]da/i.test(dispositivoNome)) {
-      dispositivoNome = `${dispositivoNome} (Saída)`
     }
 
     // Se o dispositivo não foi identificado, usar o primeiro disponível
@@ -441,16 +362,57 @@ export async function POST(req: Request) {
 
       dispositivoId = firstDev?.id || 'unknown'
       dispositivoNome = firstDev?.nome || 'Desconhecido'
-      const devCfg = (firstDev?.configuracao as any) || {}
-      if (
-        devCfg.sentido === 'saida' ||
-        devCfg.tipo === 'saida' ||
-        /sa[ií]da/i.test(firstDev?.nome || '') ||
-        firstDev?.ip === '192.168.1.154' ||
-        firstDev?.id === '0M0200/0263A6'
-      ) {
-        dispositivoSentido = 'saida'
-      }
+    }
+
+    // ── REGRA DE OURO DA ESCOLA (CONTROL ID) ──
+    // A ÚNICA catraca que registra saída é a .154 (Saída - Rua das Garças):
+    // 1. Diretamente na .154 (IP 192.168.1.154 / Serial 0M0200/0263A6 / Nome "Garças")
+    // 2. No Mestre .150 (IP 192.168.1.150 / Serial 0M0200/02638E) quando portal_id == 2 (Terminal Remoto .154)
+    // TODAS as outras catracas (.155 FUND1, .105 INF, e .150 Portal 1) são 100% ENTRADA!
+
+    const portalIdRaw =
+      payload.portal_id ??
+      payload.portalId ??
+      payload.portal ??
+      payload.object_changes?.[0]?.values?.portal_id ??
+      payload.object_changes?.[0]?.values?.portalId ??
+      payload.object_changes?.[0]?.values?.portal ??
+      searchParams.get('portal_id') ??
+      searchParams.get('portal')
+
+    const pId = (portalIdRaw !== undefined && portalIdRaw !== null && portalIdRaw !== '') ? Number(portalIdRaw) : 0
+
+    const devSerialOrIp = String(deviceSerial || '').trim()
+    const devNomeLower = String(dispositivoNome || '').toLowerCase()
+
+    const isDevice154 =
+      devSerialOrIp === '0M0200/0263A6' ||
+      devSerialOrIp.includes('0263A6') ||
+      devSerialOrIp === '192.168.1.154' ||
+      dispositivoId === '0M0200/0263A6' ||
+      devNomeLower.includes('garças') ||
+      devNomeLower.includes('garcas')
+
+    const isMaster150 =
+      devSerialOrIp === '0M0200/02638E' ||
+      devSerialOrIp.includes('02638E') ||
+      devSerialOrIp === '192.168.1.150' ||
+      dispositivoId === '0M0200/02638E' ||
+      devNomeLower.includes('médio') ||
+      devNomeLower.includes('medio')
+
+    if (isDevice154) {
+      dispositivoSentido = 'saida'
+      dispositivoNome = 'Saida - Rua das Garças'
+    } else if (isMaster150 && (pId === 2 || pId === 102)) {
+      // Evento ocorrido no Terminal Remoto .154 (Saída) registrado pelo Mestre .150
+      dispositivoSentido = 'saida'
+      dispositivoNome = 'Saida - Rua das Garças'
+    } else {
+      // Todas as demais (.155 FUND1, .105 INF, .150 Portal 1) são ESTRITAMENTE ENTRADA
+      dispositivoSentido = 'entrada'
+      // Limpa qualquer sufixo "(Saída)" no nome caso existisse
+      dispositivoNome = dispositivoNome.replace(/\s*\([Ss]a[ií]da\)/g, '').trim()
     }
 
     const configVal = config

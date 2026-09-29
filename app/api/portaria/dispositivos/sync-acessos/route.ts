@@ -255,7 +255,19 @@ export async function POST(req: NextRequest) {
         let newInserted = 0
         for (const { log } of newLogs) {
           const pId = log.portal_id ?? log.portal ?? 0
-          const direction = (pId === 2 || pId === 102 || log.reader_id === 2 || log.direction === 1) ? 'saida' : (pId === 1 || pId === 101 ? 'entrada' : undefined)
+          const devIdStr = String(log.device_id || '').trim()
+          const isDev154 = devIdStr === '0M0200/0263A6' || devIdStr === '192.168.1.154'
+          const isDev150 = devIdStr === '0M0200/02638E' || devIdStr === '192.168.1.150'
+          
+          let direction = 'entrada'
+          if (isDev154) {
+            direction = 'saida'
+          } else if (isDev150 && (pId === 2 || pId === 102)) {
+            direction = 'saida'
+          } else {
+            direction = 'entrada'
+          }
+
           const webhookPayload = {
             object_changes: [
               {

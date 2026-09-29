@@ -56,7 +56,7 @@ CATRACA_SENHA = "Pass1081$"
 CATRACA_LOGIN = "admin"
 
 CATRACAS = [
-    {"nome": "Portaria Médio - PRINCIPAL", "ip": "192.168.1.150", "id": "0M0200/02638E", "porta": 80, "tipo": "ambos", "senha": "Pass1081$"},
+    {"nome": "Portaria Médio - PRINCIPAL", "ip": "192.168.1.150", "id": "0M0200/02638E", "porta": 80, "tipo": "mestre", "senha": "Pass1081$"},
     {"nome": "Portaria FUND1- PRINCIPAL",  "ip": "192.168.1.155", "id": "0M0200/02639C", "porta": 80, "tipo": "entrada"},
     {"nome": "Portaria PRINCIPAL -INF",   "ip": "192.168.1.105", "id": "0M0200/0262CE", "porta": 80, "tipo": "entrada"},
     {"nome": "Saida - Rua das Garças",    "ip": "192.168.1.154", "id": "0M0200/0263A6", "porta": 80, "tipo": "saida", "senha": "Pass1081"},
@@ -356,20 +356,29 @@ def enviar_para_webhook(log_entry, cat, tipo_override=None):
     user_id   = log_entry.get("user_id", 0)
     log_id    = log_entry.get("id", 0)
     portal_id = log_entry.get("portal_id") or log_entry.get("portal") or 0
-    reader_id = log_entry.get("reader_id") or 0
-    direction = log_entry.get("direction")
 
+    cat_ip = cat.get("ip", "")
+    cat_id = cat.get("id", "")
+
+    # ── REGRA DE OURO DA ESCOLA (CONTROL ID) ──
+    # A ÚNICA catraca que registra saída é a .154 (Saída - Rua das Garças):
+    # 1. Diretamente na .154 (IP 192.168.1.154 / Serial 0M0200/0263A6)
+    # 2. No Mestre .150 (IP 192.168.1.150 / Serial 0M0200/02638E) quando portal_id == 2 (Terminal Remoto .154)
+    # TODAS as outras (.155 FUND1, .105 INF, e .150 Portal 1) são 100% ENTRADA!
     if tipo_override:
         tipo = tipo_override
-    elif portal_id in (2, 102) or reader_id == 2 or direction == 1:
+    elif cat_ip == "192.168.1.154" or cat_id == "0M0200/0263A6" or cat.get("tipo") == "saida":
         tipo = "saida"
-    elif portal_id in (1, 101) or reader_id == 1 or direction == 0:
-        tipo = "entrada"
+    elif (cat_ip == "192.168.1.150" or cat_id == "0M0200/02638E") and portal_id in (2, 102):
+        tipo = "saida"
     else:
-        tipo = cat.get("tipo") or ("saida" if "saida" in cat.get("nome", "").lower() or cat.get("ip") == "192.168.1.154" else "entrada")
+        tipo = "entrada"
+
+    # Se for saída via Portal 2 no Mestre, atribuir ao dispositivo da saída
+    disp_id = "0M0200/0263A6" if tipo == "saida" and (cat_ip == "192.168.1.150" or cat_id == "0M0200/02638E") else (cat.get("id") or cat["ip"])
 
     payload = {
-        "device_id": cat.get("id") or cat["ip"],
+        "device_id": disp_id,
         "portal_id": portal_id,
         "tipo": tipo,
         "sentido": tipo,
@@ -565,8 +574,8 @@ def processar_eventos_detectados(eventos_por_catraca, estado):
         if not reconhecidos:
             continue
 
-        is_saida_padrao = cat.get("tipo") == "saida" or "saida" in cat.get("nome", "").lower() or cat.get("ip") == "192.168.1.154"
-        is_misto = cat.get("tipo") == "ambos" or cat.get("ip") == "192.168.1.150"
+        cat_ip = cat.get("ip", "")
+        cat_id = cat.get("id", "")
 
         with CACHE_LOCK:
             entradas_atuais = set(MEM_ENTRADAS_HOJE)
@@ -576,17 +585,19 @@ def processar_eventos_detectados(eventos_por_catraca, estado):
         logs_saida   = []
 
         for l in reconhecidos:
-            uid_str = str(l.get("user_id", ""))
             p_id = l.get("portal_id") or l.get("portal") or 0
-            r_id = l.get("reader_id") or 0
 
-            # 1. Hardware indica Saída (Portal 2 / Terminal Remoto .154 / Leitor 2)
-            if p_id in (2, 102) or r_id == 2 or is_saida_padrao:
+            # ── REGRA DE OURO DA ESCOLA (CONTROL ID) ──
+            # A ÚNICA catraca que registra saída é a .154 (Saída - Rua das Garças):
+            # 1. Diretamente na .154 (IP 192.168.1.154 / Serial 0M0200/0263A6)
+            # 2. No Mestre .150 (IP 192.168.1.150 / Serial 0M0200/02638E) quando portal_id == 2 (Terminal Remoto .154)
+            # TODAS as outras catracas (.155 FUND1, .105 INF, e .150 Portal 1) são 100% ENTRADA!
+
+            is_saida_154_direto = (cat_ip == "192.168.1.154" or cat_id == "0M0200/0263A6" or cat.get("tipo") == "saida")
+            is_saida_154_via_mestre = ((cat_ip == "192.168.1.150" or cat_id == "0M0200/02638E") and p_id in (2, 102))
+
+            if is_saida_154_direto or is_saida_154_via_mestre:
                 logs_saida.append(l)
-            # 2. Catraca MESTRE (ambos): se aluno já tem entrada confirmada hoje, passagem subsequente = SAÍDA
-            elif is_misto and uid_str in entradas_atuais:
-                logs_saida.append(l)
-            # 3. Primeira passagem do dia = ENTRADA
             else:
                 logs_entrada.append(l)
 
@@ -599,12 +610,13 @@ def processar_eventos_detectados(eventos_por_catraca, estado):
 
             t_inicio = time.time()
             hora = formatar_hora(log.get("time", 0))
+            nome_disp = "Saida - Rua das Garças" if (cat_ip == "192.168.1.150" or cat_id == "0M0200/02638E") else cat['nome']
             try:
                 res = enviar_para_webhook(log, cat, tipo_override="saida")
                 latencia = time.time() - t_inicio
                 registrar_cache_saida(lid)
                 print(f"\n  ══════════════════════════════════════════════════════")
-                print(f"  🚪 [SAÍDA CONFIRMADA] {cat['nome']}")
+                print(f"  🚪 [SAÍDA CONFIRMADA] {nome_disp}")
                 print(f"     Aluno ID: {uid:<6} | Hora: {hora} | Log #{lid}")
                 print(f"     ⚡ Notificação & ERP sincronizados em {latencia:.2f}s!")
                 print(f"  ══════════════════════════════════════════════════════")
