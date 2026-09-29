@@ -299,50 +299,100 @@ def inicializar_hardware_catracas(catracas):
 # ══════════════════════════════════════════════════════════════
 #  LEITURA ULTRA RÁPIDA DE LOGS (INDEXADO POR ID - ~15ms)
 # ══════════════════════════════════════════════════════════════
+def obter_id_maximo_catraca(cat):
+    """Obtém o ID máximo real de log gravado na memória física da catraca."""
+    for ord_clause in ["id DESC", "time DESC", ["id", "descending"], None]:
+        try:
+            body = {"object": "access_logs", "limit": 1}
+            if ord_clause:
+                body["order"] = ord_clause
+            r = call_catraca_fcgi(cat, "load_objects.fcgi", body, timeout=3)
+            logs = r.get("access_logs", []) if r else []
+            if logs:
+                return logs[0].get("id", 0)
+        except Exception:
+            pass
+
+    # Fallback seguro: lê até 50 registros e acha o max ID
+    try:
+        r = call_catraca_fcgi(cat, "load_objects.fcgi", {"object": "access_logs", "limit": 50}, timeout=3)
+        logs = r.get("access_logs", []) if r else []
+        if logs:
+            return max([l.get("id", 0) for l in logs], default=0)
+    except Exception:
+        pass
+    return 0
+
+
 def buscar_novos_logs_catraca(cat, last_log_id):
     """
-    Busca de altíssimo desempenho:
+    Busca de altíssimo desempenho com auto-recuperação de cursor:
     • Se last_log_id > 0: Faz query direta no SQLite da catraca: WHERE id > last_log_id.
-      Retorna em 15ms com payload mínimo (0 bytes se não houver passagens).
-    • Se last_log_id == 0: Faz varredura inicial para estabelecer o cursor.
+    • Se a catraca retornar vazio e last_log_id > 0:
+      Verifica se o cursor salvo não é superior ao ID máximo real do equipamento (ex: 75722 vs 200).
+      Se for superior, auto-corrige o cursor para o ID máximo real da catraca!
     """
     now_ts = int(datetime.now().timestamp())
     ts_limite = now_ts - 86400  # 24 horas
 
     if last_log_id > 0:
-        # ⚡ CONSULTA INDEXADA DIRETA (SUB-20ms)
-        body = {
-            "object": "access_logs",
-            "where": {"access_logs": {"id": {">": last_log_id}}},
-            "limit": 100,
-            "order": ["id", "ascending"]
-        }
-        try:
-            r = call_catraca_fcgi(cat, "load_objects.fcgi", body, timeout=3)
-            logs = r.get("access_logs", []) if r else []
-            return logs
-        except Exception as e:
-            # Em caso de falha de conexão, ignora suavemente
-            return []
+        for ord_asc in ["id ASC", ["id", "ascending"], None]:
+            body = {
+                "object": "access_logs",
+                "where": {"access_logs": {"id": {">": last_log_id}}},
+                "limit": 100,
+            }
+            if ord_asc:
+                body["order"] = ord_asc
+            try:
+                r = call_catraca_fcgi(cat, "load_objects.fcgi", body, timeout=3)
+                logs = r.get("access_logs", []) if r else []
+                if logs:
+                    return sorted(logs, key=lambda x: x.get("id", 0))
+                # Se respondeu com sucesso mas lista vazia, a query é válida
+                break
+            except Exception:
+                continue
+
+        # Se não retornou nada, checar se o cursor não está à frente do ID máximo do equipamento
+        max_id_real = obter_id_maximo_catraca(cat)
+        if max_id_real > 0 and last_log_id > max_id_real:
+            print(f"  🔄 [Auto-Fix {cat['nome']}] Cursor salvo ({last_log_id}) > ID real da catraca ({max_id_real}). Sincronizando registros recentes!")
+            cursor_corrigido = max(0, max_id_real - 30)
+            try:
+                r_fix = call_catraca_fcgi(cat, "load_objects.fcgi", {
+                    "object": "access_logs",
+                    "where": {"access_logs": {"id": {">": cursor_corrigido}}},
+                    "limit": 50,
+                }, timeout=3)
+                logs_fix = r_fix.get("access_logs", []) if r_fix else []
+                if logs_fix:
+                    return sorted(logs_fix, key=lambda x: x.get("id", 0))
+            except Exception:
+                pass
+        return []
 
     # Se last_log_id == 0 (primeira execução), busca os logs de hoje
     body_init = {
         "object": "access_logs",
         "where": {"access_logs": {"time": {">=": ts_limite}}},
         "limit": 500,
-        "order": ["id", "ascending"]
     }
     try:
         r = call_catraca_fcgi(cat, "load_objects.fcgi", body_init, timeout=5)
         logs = r.get("access_logs", []) if r else []
-        return logs
+        if logs:
+            return sorted(logs, key=lambda x: x.get("id", 0))
     except Exception:
-        # Fallback para os últimos 50 registros
-        try:
-            r_fb = call_catraca_fcgi(cat, "load_objects.fcgi", {"object": "access_logs", "limit": 50}, timeout=4)
-            return r_fb.get("access_logs", []) if r_fb else []
-        except Exception:
-            return []
+        pass
+
+    # Fallback para os últimos 50 registros
+    try:
+        r_fb = call_catraca_fcgi(cat, "load_objects.fcgi", {"object": "access_logs", "limit": 50}, timeout=4)
+        logs_fb = r_fb.get("access_logs", []) if r_fb else []
+        return sorted(logs_fb, key=lambda x: x.get("id", 0))
+    except Exception:
+        return []
 
 
 # ══════════════════════════════════════════════════════════════
@@ -356,30 +406,39 @@ def enviar_para_webhook(log_entry, cat, tipo_override=None):
     user_id   = log_entry.get("user_id", 0)
     log_id    = log_entry.get("id", 0)
     portal_id = log_entry.get("portal_id") or log_entry.get("portal") or 0
+    reader_id = log_entry.get("reader_id") or 0
+    direction = log_entry.get("direction")
+    door_id   = log_entry.get("door_id") or log_entry.get("door") or 0
 
     cat_ip = cat.get("ip", "")
     cat_id = cat.get("id", "")
 
     # ── REGRA DE OURO DA ESCOLA (CONTROL ID) ──
-    # A ÚNICA catraca que registra saída é a .154 (Saída - Rua das Garças):
-    # 1. Diretamente na .154 (IP 192.168.1.154 / Serial 0M0200/0263A6)
-    # 2. No Mestre .150 (IP 192.168.1.150 / Serial 0M0200/02638E) quando portal_id == 2 (Terminal Remoto .154)
-    # TODAS as outras (.155 FUND1, .105 INF, e .150 Portal 1) são 100% ENTRADA!
+    # A catraca .150 registra tanto entrada quanto saída dependendo da rota:
+    # • Rota Primária: Entrada (.150)
+    # • Outra Rota: Saída (.154 - Rua das Garças) via portal_id 2, reader 2, direction 1 ou door 2
+    is_outra_rota_150 = (
+        (cat_ip == "192.168.1.150" or cat_id == "0M0200/02638E") and
+        (portal_id in (2, 102) or reader_id == 2 or direction == 1 or door_id == 2)
+    )
+    is_catraca_154 = (cat_ip == "192.168.1.154" or cat_id == "0M0200/0263A6" or cat.get("tipo") == "saida")
+
     if tipo_override:
         tipo = tipo_override
-    elif cat_ip == "192.168.1.154" or cat_id == "0M0200/0263A6" or cat.get("tipo") == "saida":
-        tipo = "saida"
-    elif (cat_ip == "192.168.1.150" or cat_id == "0M0200/02638E") and portal_id in (2, 102):
+    elif is_outra_rota_150 or is_catraca_154:
         tipo = "saida"
     else:
         tipo = "entrada"
 
-    # Se for saída via Portal 2 no Mestre, atribuir ao dispositivo da saída
+    # Se for saída na outra rota do Mestre .150, atribuir ao dispositivo da saída
     disp_id = "0M0200/0263A6" if tipo == "saida" and (cat_ip == "192.168.1.150" or cat_id == "0M0200/02638E") else (cat.get("id") or cat["ip"])
 
     payload = {
         "device_id": disp_id,
         "portal_id": portal_id,
+        "reader_id": reader_id,
+        "direction": direction,
+        "door_id":   door_id,
         "tipo": tipo,
         "sentido": tipo,
         "event_type": tipo,
@@ -391,6 +450,9 @@ def enviar_para_webhook(log_entry, cat, tipo_override=None):
                 "user_id":   user_id,
                 "time":      log_entry.get("time", 0),
                 "portal_id": portal_id,
+                "reader_id": reader_id,
+                "direction": direction,
+                "door_id":   door_id,
                 "tipo":      tipo,
                 "sentido":   tipo,
             }
@@ -566,8 +628,8 @@ def processar_eventos_detectados(eventos_por_catraca, estado):
         reconhecidos = [l for l in logs if l.get("user_id", 0) > 0]
         max_log_id = max([l.get("id", 0) for l in logs], default=0)
 
-        # Se o last_id salvo for maior que o máximo da catraca, auto-ajusta
-        if max_log_id > 0 and max_log_id > estado.get(cat_key, 0):
+        # Atualiza o cursor para o maior ID do lote atual
+        if max_log_id > 0 and max_log_id != estado.get(cat_key, 0):
             estado[cat_key] = max_log_id
             estado_alterado = True
 
@@ -586,17 +648,22 @@ def processar_eventos_detectados(eventos_por_catraca, estado):
 
         for l in reconhecidos:
             p_id = l.get("portal_id") or l.get("portal") or 0
+            r_id = l.get("reader_id") or 0
+            d_id = l.get("direction")
+            door_id = l.get("door_id") or l.get("door") or 0
 
-            # ── REGRA DE OURO DA ESCOLA (CONTROL ID) ──
-            # A ÚNICA catraca que registra saída é a .154 (Saída - Rua das Garças):
-            # 1. Diretamente na .154 (IP 192.168.1.154 / Serial 0M0200/0263A6)
-            # 2. No Mestre .150 (IP 192.168.1.150 / Serial 0M0200/02638E) quando portal_id == 2 (Terminal Remoto .154)
-            # TODAS as outras catracas (.155 FUND1, .105 INF, e .150 Portal 1) são 100% ENTRADA!
+            # ── IDENTIFICAÇÃO DE ROTA NA CATRACA .150 (MESTRE) ──
+            # A catraca .150 registra tanto entrada quanto saída dependendo da rota:
+            # • Rota Primária: Entrada (.150)
+            # • Outra Rota: Saída (.154 - Rua das Garças) via portal_id 2, reader 2, direction 1 ou door 2
+            # As catracas .155 (FUND1) e .105 (INF) são SEMPRE ENTRADA!
+            is_outra_rota_150 = (
+                (cat_ip == "192.168.1.150" or cat_id == "0M0200/02638E") and
+                (p_id in (2, 102) or r_id == 2 or d_id == 1 or door_id == 2)
+            )
+            is_catraca_154_direto = (cat_ip == "192.168.1.154" or cat_id == "0M0200/0263A6" or cat.get("tipo") == "saida")
 
-            is_saida_154_direto = (cat_ip == "192.168.1.154" or cat_id == "0M0200/0263A6" or cat.get("tipo") == "saida")
-            is_saida_154_via_mestre = ((cat_ip == "192.168.1.150" or cat_id == "0M0200/02638E") and p_id in (2, 102))
-
-            if is_saida_154_direto or is_saida_154_via_mestre:
+            if is_outra_rota_150 or is_catraca_154_direto:
                 logs_saida.append(l)
             else:
                 logs_entrada.append(l)
@@ -754,6 +821,26 @@ def main():
     print("  🚀 Background Worker ativo (fila de fotos/cadastros desacoplada).")
 
     estado = carregar_estado_catracas()
+    print("  ⚙️  Verificando integridade dos cursores das catracas...")
+    estado_corrigido = False
+    for cat in CATRACAS:
+        ck = cat.get("id") or cat["ip"]
+        cur = estado.get(ck, 0)
+        max_real = obter_id_maximo_catraca(cat)
+        if max_real > 0 and cur > max_real:
+            novo_cur = max(0, max_real - 30)
+            print(f"     🔄 {cat['nome']} ({cat['ip']}): Cursor corrigido ({cur} ➔ {novo_cur}) [Max da catraca: #{max_real}]")
+            estado[ck] = novo_cur
+            estado_corrigido = True
+        elif max_real > 0 and cur == 0:
+            novo_cur = max(0, max_real - 30)
+            print(f"     📡 {cat['nome']} ({cat['ip']}): Cursor inicializado -> Log #{novo_cur} (Max: #{max_real})")
+            estado[ck] = novo_cur
+            estado_corrigido = True
+        else:
+            print(f"     📡 {cat['nome']} ({cat['ip']}): Cursor ativo -> Log #{cur} (Max da catraca: #{max_real})")
+    if estado_corrigido:
+        salvar_estado_catracas(estado)
     print(f"\n  👀 Monitorando as 4 catracas em tempo real. Pressione Ctrl+C para parar.\n")
 
     contador_ciclos = 0

@@ -382,6 +382,35 @@ export async function POST(req: Request) {
 
     const pId = (portalIdRaw !== undefined && portalIdRaw !== null && portalIdRaw !== '') ? Number(portalIdRaw) : 0
 
+    const readerIdRaw =
+      payload.reader_id ??
+      payload.readerId ??
+      payload.reader ??
+      payload.object_changes?.[0]?.values?.reader_id ??
+      payload.object_changes?.[0]?.values?.readerId ??
+      payload.object_changes?.[0]?.values?.reader ??
+      searchParams.get('reader_id')
+
+    const rId = (readerIdRaw !== undefined && readerIdRaw !== null && readerIdRaw !== '') ? Number(readerIdRaw) : 0
+
+    const directionRaw =
+      payload.direction ??
+      payload.object_changes?.[0]?.values?.direction ??
+      searchParams.get('direction')
+
+    const dId = (directionRaw !== undefined && directionRaw !== null && directionRaw !== '') ? Number(directionRaw) : null
+
+    const doorIdRaw =
+      payload.door_id ??
+      payload.doorId ??
+      payload.door ??
+      payload.object_changes?.[0]?.values?.door_id ??
+      payload.object_changes?.[0]?.values?.doorId ??
+      payload.object_changes?.[0]?.values?.door ??
+      searchParams.get('door_id')
+
+    const doorId = (doorIdRaw !== undefined && doorIdRaw !== null && doorIdRaw !== '') ? Number(doorIdRaw) : 0
+
     const devSerialOrIp = String(deviceSerial || '').trim()
     const devNomeLower = String(dispositivoNome || '').toLowerCase()
 
@@ -401,15 +430,27 @@ export async function POST(req: Request) {
       devNomeLower.includes('médio') ||
       devNomeLower.includes('medio')
 
+    const explicitTipo = searchParams.get('tipo') || searchParams.get('sentido') || payload?.tipo || payload?.sentido || payload?.event_type
+
     if (isDevice154) {
       dispositivoSentido = 'saida'
       dispositivoNome = 'Saida - Rua das Garças'
-    } else if (isMaster150 && (pId === 2 || pId === 102)) {
-      // Evento ocorrido no Terminal Remoto .154 (Saída) registrado pelo Mestre .150
-      dispositivoSentido = 'saida'
-      dispositivoNome = 'Saida - Rua das Garças'
+      dispositivoId = '0M0200/0263A6'
+    } else if (isMaster150) {
+      // ── MESTRE .150: Duas rotas ──
+      // Rota Primária (portal_id 1 / reader 1 / direction 0): ENTRADA (.150)
+      // Outra Rota (portal_id 2 / reader 2 / direction 1 / tipo 'saida'): SAÍDA (.154 - Rua das Garças)
+      if (pId === 2 || pId === 102 || rId === 2 || dId === 1 || doorId === 2 || explicitTipo === 'saida') {
+        dispositivoSentido = 'saida'
+        dispositivoNome = 'Saida - Rua das Garças'
+        dispositivoId = '0M0200/0263A6'
+      } else {
+        dispositivoSentido = 'entrada'
+        dispositivoNome = 'Portaria Médio - PRINCIPAL'
+        dispositivoId = '0M0200/02638E'
+      }
     } else {
-      // Todas as demais (.155 FUND1, .105 INF, .150 Portal 1) são ESTRITAMENTE ENTRADA
+      // Todas as demais (.155 FUND1 e .105 INF) são ESTRITAMENTE ENTRADA
       dispositivoSentido = 'entrada'
       // Limpa qualquer sufixo "(Saída)" no nome caso existisse
       dispositivoNome = dispositivoNome.replace(/\s*\([Ss]a[ií]da\)/g, '').trim()
