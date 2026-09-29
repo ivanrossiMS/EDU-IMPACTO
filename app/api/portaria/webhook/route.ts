@@ -573,13 +573,12 @@ export async function POST(req: Request) {
           const labelCatraca = dispositivoNome ? `Saiu Sozinho (${dispositivoNome})` : 'Saiu Sozinho (Catraca Rua das Garças)'
 
           // 1. Atualizar ou criar registro de frequência com o horário de saída
-          await supabase.from('frequencias').upsert({
+          const { error: freqUpdErr } = await supabase.from('frequencias').upsert({
             id: freqId,
             aluno_id: alunoId,
             turma_id: alunoTurma || existingFreq?.turma_id || null,
             data: localDate,
             presente: existingFreq?.presente ?? true,
-            tempos: existingFreq?.tempos || null,
             justificativa: existingFreq?.justificativa || '',
             dados: {
               ...(existingFreq?.dados || {}),
@@ -592,6 +591,10 @@ export async function POST(req: Request) {
               horaRegistro: existingFreq?.dados?.horaRegistro || localTimeStr,
             }
           })
+
+          if (freqUpdErr) {
+            console.error('[Portaria Integration Saida Frequencia Error]', freqUpdErr)
+          }
 
           // 2. Registrar na tabela saida_calls para exibição imediata no painel de chamadas, TV monitor e histórico
           const callId = `saida-catraca-${alunoId}-${localDate}`

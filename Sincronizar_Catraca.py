@@ -847,7 +847,14 @@ def main():
             estado[ck] = novo_cur
             estado_corrigido = True
         else:
-            print(f"     📡 {cat['nome']} ({cat['ip']}): Cursor ativo -> Log #{cur} (Max da catraca: #{max_real})")
+            # Em cada inicialização, recua até 30 registros para garantir que nenhuma passagem seja perdida durante reinicializações
+            novo_cur = max(0, min(cur, max_real - 30))
+            if novo_cur < cur:
+                print(f"     📡 {cat['nome']} ({cat['ip']}): Sincronizando registros recentes -> Log #{novo_cur} (Max: #{max_real})")
+                estado[ck] = novo_cur
+                estado_corrigido = True
+            else:
+                print(f"     📡 {cat['nome']} ({cat['ip']}): Cursor ativo -> Log #{cur} (Max da catraca: #{max_real})")
     if estado_corrigido:
         salvar_estado_catracas(estado)
     print(f"\n  👀 Monitorando as 4 catracas em tempo real. Pressione Ctrl+C para parar.\n")
