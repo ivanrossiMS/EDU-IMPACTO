@@ -411,6 +411,15 @@ export async function POST(req: Request) {
 
     const doorId = (doorIdRaw !== undefined && doorIdRaw !== null && doorIdRaw !== '') ? Number(doorIdRaw) : 0
 
+    const compIdRaw =
+      payload.component_id ??
+      payload.componentId ??
+      payload.object_changes?.[0]?.values?.component_id ??
+      payload.object_changes?.[0]?.values?.componentId ??
+      searchParams.get('component_id')
+
+    const compId = compIdRaw ? Number(compIdRaw) : 0
+
     const devSerialOrIp = String(deviceSerial || '').trim()
     const devNomeLower = String(dispositivoNome || '').toLowerCase()
 
@@ -432,15 +441,26 @@ export async function POST(req: Request) {
 
     const explicitTipo = searchParams.get('tipo') || searchParams.get('sentido') || payload?.tipo || payload?.sentido || payload?.event_type
 
+    const isExplicitExitRoute150 = pId === 2 || pId === 102 || compId === 810373889 || rId === 2 || dId === 1 || doorId === 2
+    const isExplicitEntryRoute150 = pId === 1 || pId === 101 || compId === 810373890 || rId === 1 || dId === 0 || doorId === 1
+
     if (isDevice154) {
       dispositivoSentido = 'saida'
       dispositivoNome = 'Saida - Rua das Garças'
       dispositivoId = '0M0200/0263A6'
     } else if (isMaster150) {
-      // ── MESTRE .150: Duas rotas ──
-      // Rota Primária (portal_id 1 / reader 1 / direction 0): ENTRADA (.150)
-      // Outra Rota (portal_id 2 / reader 2 / direction 1 / tipo 'saida'): SAÍDA (.154 - Rua das Garças)
-      if (pId === 2 || pId === 102 || rId === 2 || dId === 1 || doorId === 2 || explicitTipo === 'saida') {
+      // ── MESTRE .150 (CONTROL ID ID NEXT): Duas rotas físicas distintas ──
+      // Portal 1 (Component 810373890 / Leitor Local): SEMPRE ENTRADA
+      // Portal 2 (Component 810373889 / Terminal Remoto .154): SEMPRE SAÍDA
+      if (isExplicitExitRoute150) {
+        dispositivoSentido = 'saida'
+        dispositivoNome = 'Saida - Rua das Garças'
+        dispositivoId = '0M0200/0263A6'
+      } else if (isExplicitEntryRoute150) {
+        dispositivoSentido = 'entrada'
+        dispositivoNome = 'Portaria Médio - PRINCIPAL'
+        dispositivoId = '0M0200/02638E'
+      } else if (explicitTipo === 'saida') {
         dispositivoSentido = 'saida'
         dispositivoNome = 'Saida - Rua das Garças'
         dispositivoId = '0M0200/0263A6'
@@ -706,6 +726,14 @@ export async function POST(req: Request) {
           status: 'online',
           ultima_comunicacao: new Date().toISOString(),
         }).eq('id', dispositivoId)
+
+        // Se for passagem no conjunto Mestre .150 / Saída .154, atualizar o status do mestre físico
+        if (isMaster150 || dispositivoId === '0M0200/0263A6') {
+          await supabase.from('portaria_dispositivos').update({
+            status: 'online',
+            ultima_comunicacao: new Date().toISOString(),
+          }).eq('id', '0M0200/02638E')
+        }
       }
 
       // Buscar a próxima pendência da fila para ESTE dispositivo (1 por ping = protocolo Push)

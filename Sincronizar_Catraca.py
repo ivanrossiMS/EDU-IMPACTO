@@ -56,10 +56,11 @@ CATRACA_SENHA = "Pass1081$"
 CATRACA_LOGIN = "admin"
 
 CATRACAS = [
+    # Mestre iD Next (Centraliza todos os cadastros, biometrias e logs de Entrada [Portal 1] e Saída Rua das Garças [Portal 2])
     {"nome": "Portaria Médio - PRINCIPAL", "ip": "192.168.1.150", "id": "0M0200/02638E", "porta": 80, "tipo": "mestre", "senha": "Pass1081$"},
+    # Catracas Autônomas de Entrada
     {"nome": "Portaria FUND1- PRINCIPAL",  "ip": "192.168.1.155", "id": "0M0200/02639C", "porta": 80, "tipo": "entrada"},
     {"nome": "Portaria PRINCIPAL -INF",   "ip": "192.168.1.105", "id": "0M0200/0262CE", "porta": 80, "tipo": "entrada"},
-    {"nome": "Saida - Rua das Garças",    "ip": "192.168.1.154", "id": "0M0200/0263A6", "porta": 80, "tipo": "saida", "senha": "Pass1081"},
 ]
 
 WEBHOOK_URL = f"{NETLIFY_URL}/api/portaria/webhook"
@@ -301,7 +302,7 @@ def inicializar_hardware_catracas(catracas):
 # ══════════════════════════════════════════════════════════════
 def obter_id_maximo_catraca(cat):
     """Obtém o ID máximo real de log gravado na memória física da catraca."""
-    for ord_clause in ["id DESC", "time DESC", ["id", "descending"], None]:
+    for ord_clause in [["id", "descending"], None]:
         try:
             body = {"object": "access_logs", "limit": 1}
             if ord_clause:
@@ -336,7 +337,7 @@ def buscar_novos_logs_catraca(cat, last_log_id):
     ts_limite = now_ts - 86400  # 24 horas
 
     if last_log_id > 0:
-        for ord_asc in ["id ASC", ["id", "ascending"], None]:
+        for ord_asc in [["id", "ascending"], None]:
             body = {
                 "object": "access_logs",
                 "where": {"access_logs": {"id": {">": last_log_id}}},
@@ -406,6 +407,7 @@ def enviar_para_webhook(log_entry, cat, tipo_override=None):
     user_id   = log_entry.get("user_id", 0)
     log_id    = log_entry.get("id", 0)
     portal_id = log_entry.get("portal_id") or log_entry.get("portal") or 0
+    comp_id   = log_entry.get("component_id") or 0
     reader_id = log_entry.get("reader_id") or 0
     direction = log_entry.get("direction")
     door_id   = log_entry.get("door_id") or log_entry.get("door") or 0
@@ -413,13 +415,13 @@ def enviar_para_webhook(log_entry, cat, tipo_override=None):
     cat_ip = cat.get("ip", "")
     cat_id = cat.get("id", "")
 
-    # ── REGRA DE OURO DA ESCOLA (CONTROL ID) ──
-    # A catraca .150 registra tanto entrada quanto saída dependendo da rota:
-    # • Rota Primária: Entrada (.150)
-    # • Outra Rota: Saída (.154 - Rua das Garças) via portal_id 2, reader 2, direction 1 ou door 2
+    # ── REGRA DE OURO DA ESCOLA (CONTROL ID ID NEXT) ──
+    # A catraca .150 registra tanto entrada quanto saída dependendo da rota física:
+    # • Rota Primária (Portal 1 / Componente 810373890): Entrada (.150)
+    # • Outra Rota (Portal 2 / Componente 810373889): Saída (.154 - Rua das Garças)
     is_outra_rota_150 = (
         (cat_ip == "192.168.1.150" or cat_id == "0M0200/02638E") and
-        (portal_id in (2, 102) or reader_id == 2 or direction == 1 or door_id == 2)
+        (portal_id in (2, 102) or comp_id == 810373889 or reader_id == 2 or direction == 1 or door_id == 2)
     )
     is_catraca_154 = (cat_ip == "192.168.1.154" or cat_id == "0M0200/0263A6" or cat.get("tipo") == "saida")
 
@@ -436,6 +438,7 @@ def enviar_para_webhook(log_entry, cat, tipo_override=None):
     payload = {
         "device_id": disp_id,
         "portal_id": portal_id,
+        "component_id": comp_id,
         "reader_id": reader_id,
         "direction": direction,
         "door_id":   door_id,
@@ -446,15 +449,16 @@ def enviar_para_webhook(log_entry, cat, tipo_override=None):
             "object": "access_logs",
             "type":   "inserted",
             "values": {
-                "id":        log_id,
-                "user_id":   user_id,
-                "time":      log_entry.get("time", 0),
-                "portal_id": portal_id,
-                "reader_id": reader_id,
-                "direction": direction,
-                "door_id":   door_id,
-                "tipo":      tipo,
-                "sentido":   tipo,
+                "id":           log_id,
+                "user_id":      user_id,
+                "time":         log_entry.get("time", 0),
+                "portal_id":    portal_id,
+                "component_id": comp_id,
+                "reader_id":    reader_id,
+                "direction":    direction,
+                "door_id":      door_id,
+                "tipo":         tipo,
+                "sentido":      tipo,
             }
         }],
     }
@@ -510,7 +514,11 @@ def processar_fila_pendencias_erp():
 
             alvos = CATRACAS
             if disp_id:
-                alvos = [c for c in CATRACAS if c["ip"] == disp_id or c.get("id") == disp_id or disp_id in c.get("nome", "")]
+                if disp_id in ("192.168.1.154", "0M0200/0263A6") or "garças" in str(disp_id).lower() or "garcas" in str(disp_id).lower():
+                    # Terminal remoto .154 não possui memória local (iD Next); todo cadastro e biometria deve ser gravado no Mestre .150
+                    alvos = [c for c in CATRACAS if c["ip"] == "192.168.1.150" or c.get("id") == "0M0200/02638E"]
+                else:
+                    alvos = [c for c in CATRACAS if c["ip"] == disp_id or c.get("id") == disp_id or disp_id in c.get("nome", "")]
                 if not alvos:
                     alvos = CATRACAS
 
@@ -648,18 +656,19 @@ def processar_eventos_detectados(eventos_por_catraca, estado):
 
         for l in reconhecidos:
             p_id = l.get("portal_id") or l.get("portal") or 0
+            c_id = l.get("component_id") or 0
             r_id = l.get("reader_id") or 0
             d_id = l.get("direction")
             door_id = l.get("door_id") or l.get("door") or 0
 
-            # ── IDENTIFICAÇÃO DE ROTA NA CATRACA .150 (MESTRE) ──
-            # A catraca .150 registra tanto entrada quanto saída dependendo da rota:
-            # • Rota Primária: Entrada (.150)
-            # • Outra Rota: Saída (.154 - Rua das Garças) via portal_id 2, reader 2, direction 1 ou door 2
+            # ── IDENTIFICAÇÃO DE ROTA NA CATRACA .150 (CONTROL ID ID NEXT) ──
+            # A catraca .150 registra tanto entrada quanto saída dependendo da rota física:
+            # • Rota Primária (Portal 1 / Componente 810373890): Entrada (.150)
+            # • Outra Rota (Portal 2 / Componente 810373889): Saída (.154 - Rua das Garças)
             # As catracas .155 (FUND1) e .105 (INF) são SEMPRE ENTRADA!
             is_outra_rota_150 = (
                 (cat_ip == "192.168.1.150" or cat_id == "0M0200/02638E") and
-                (p_id in (2, 102) or r_id == 2 or d_id == 1 or door_id == 2)
+                (p_id in (2, 102) or c_id == 810373889 or r_id == 2 or d_id == 1 or door_id == 2)
             )
             is_catraca_154_direto = (cat_ip == "192.168.1.154" or cat_id == "0M0200/0263A6" or cat.get("tipo") == "saida")
 

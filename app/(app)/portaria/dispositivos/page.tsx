@@ -350,7 +350,10 @@ export default function DispositivosPage() {
                       {isOnline ? '● ONLINE' : '● OFFLINE'}
                     </span>
                     {(() => {
-                      const sentido = d.configuracao?.sentido || (/sa[ií]da/i.test(d.nome || '') || d.ip === '192.168.1.154' ? 'saida' : (d.ip === '192.168.1.150' ? 'ambos' : 'entrada'))
+                      const rawSentido = d.configuracao?.sentido
+                      const sentido = (rawSentido === 'mestre' || rawSentido === 'ambos' || d.ip === '192.168.1.150')
+                        ? 'ambos'
+                        : (rawSentido === 'saida' || /sa[ií]da/i.test(d.nome || '') || d.ip === '192.168.1.154' ? 'saida' : 'entrada')
                       const isAmbos = sentido === 'ambos'
                       const isSaida = sentido === 'saida'
                       return (
@@ -639,7 +642,12 @@ export default function DispositivosPage() {
                 </label>
                 <select
                   className="form-input"
-                  value={editDevice.configuracao?.sentido || (/sa[ií]da/i.test(editDevice.nome || '') || editDevice.ip === '192.168.1.154' ? 'saida' : (editDevice.ip === '192.168.1.150' ? 'ambos' : 'entrada'))}
+                  value={(() => {
+                    const s = editDevice.configuracao?.sentido
+                    if (s === 'mestre' || s === 'ambos' || editDevice.ip === '192.168.1.150') return 'ambos'
+                    if (s === 'saida' || /sa[ií]da/i.test(editDevice.nome || '') || editDevice.ip === '192.168.1.154') return 'saida'
+                    return 'entrada'
+                  })()}
                   onChange={e => setEditDevice({
                     ...editDevice,
                     configuracao: { ...editDevice.configuracao, sentido: e.target.value }
