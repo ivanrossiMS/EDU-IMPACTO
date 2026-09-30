@@ -690,12 +690,16 @@ export async function GET(request: Request) {
       const hasRestKey = Boolean(process.env.ONESIGNAL_REST_API_KEY && process.env.ONESIGNAL_REST_API_KEY.length > 8)
       const isMockMode = !hasAppId || !hasRestKey
 
+      const { getPushPauseStatus } = await import('@/lib/server/pushPauseService')
+      const pauseStatus = await getPushPauseStatus()
+
       return NextResponse.json({
         hasAppId,
         hasRestKey,
         isMockMode,
         appIdPreview: hasAppId ? `${process.env.ONESIGNAL_APP_ID!.slice(0, 8)}...` : null,
         appUrl: process.env.NEXT_PUBLIC_APP_URL || 'https://resilient-cuchufli-2b4125.netlify.app',
+        pauseStatus,
       })
     }
 
@@ -1564,6 +1568,7 @@ export async function POST(request: Request) {
       metadata = {},
       bypassDedup = true,
       ignoreGlobalConfig = true,
+      bypassPause = false,
     } = body
 
     if (!title || !title.trim()) {
@@ -1840,6 +1845,7 @@ export async function POST(request: Request) {
       targetUserIds: targetSubscriptionId ? undefined : cleanTargetIds,
       targetSubscriptionIds: targetSubscriptionId ? [String(targetSubscriptionId).trim()] : undefined,
       url: finalTargetUrl,
+      bypassPause: Boolean(bypassPause),
       data: {
         type: type as AgendaPushType,
         item_id: uniqueTestId,
@@ -1876,10 +1882,12 @@ export async function POST(request: Request) {
     }
 
     // Gravar log na tabela agenda_push_logs
-    const logStatus = pushResult.success ? 'sent' : 'failed'
-    const logErrorMsg = pushResult.mock
-      ? 'Modo Mock: OneSignal não possui credenciais configuradas neste ambiente (push simulado com sucesso).'
-      : (pushResult.success ? null : (pushResult.error || 'Erro desconhecido ao enviar'))
+    const logStatus = pushResult.paused ? 'paused' : (pushResult.success ? 'sent' : 'failed')
+    const logErrorMsg = pushResult.paused
+      ? 'Notificações push estão pausadas globalmente pelo administrador. Disparo suprimido.'
+      : (pushResult.mock
+        ? 'Modo Mock: OneSignal não possui credenciais configuradas neste ambiente (push simulado com sucesso).'
+        : (pushResult.success ? null : (pushResult.error || 'Erro desconhecido ao enviar')))
 
     let responsePayloadObj: any = {}
     try {
@@ -1888,6 +1896,9 @@ export async function POST(request: Request) {
     } catch {}
     responsePayloadObj._target_user_ids = cleanTargetIds
     responsePayloadObj._metadata = metadata || null
+    if (pushResult.paused) {
+      responsePayloadObj.paused = true
+    }
 
     const { data: savedLog, error: logSaveError } = await supabase
       .from('agenda_push_logs')
@@ -1913,7 +1924,9 @@ export async function POST(request: Request) {
 
     // Avaliação de diagnóstico
     let warning: string | null = null
-    if (pushResult.mock) {
+    if (pushResult.paused) {
+      warning = 'As notificações push estão PAUSADAS globalmente no sistema. O disparo foi cancelado e não foi entregue aos aparelhos. Para testar mesmo pausado, marque a opção "Forçar envio de teste mesmo pausado".'
+    } else if (pushResult.mock) {
       warning = 'O sistema está em Modo Mock (variáveis ONESIGNAL_APP_ID e/ou ONESIGNAL_REST_API_KEY não configuradas no servidor). A notificação foi simulada com sucesso.'
     } else if (finalRecipients === 0) {
       warning = 'A notificação foi aceita pelo OneSignal, porém retornou 0 destinatários inscritos ativos. Isso geralmente ocorre se o responsável ainda não abriu o aplicativo no celular para aceitar as permissões de notificação push.'

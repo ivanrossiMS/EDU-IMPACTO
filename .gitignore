@@ -54,6 +54,7 @@ build_check*.log
 build_output.txt
 build_success.log
 ts_error.log
+catraca_state.json
 
 # Netlify
 .netlify/

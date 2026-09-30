@@ -32,12 +32,15 @@ export interface PushPayload {
   smallIcon?: string
   largeIcon?: string
   imageUrl?: string
+  /** Se true, dispara mesmo com notificações pausadas (para testes manuais no painel) */
+  bypassPause?: boolean
 }
 
 export interface PushResult {
   success: boolean
   mock?: boolean
   skipped?: boolean
+  paused?: boolean
   data?: any
   error?: string
   statusCode?: number
@@ -191,6 +194,32 @@ async function attemptSend(
 export async function sendPushNotification(params: PushPayload): Promise<PushResult> {
   const ONESIGNAL_APP_ID = process.env.ONESIGNAL_APP_ID || ''
   const ONESIGNAL_REST_API_KEY = process.env.ONESIGNAL_REST_API_KEY || ''
+
+  if (!params.bypassPause) {
+    try {
+      const { getPushPauseStatus, isNotificationExemptFromPause } = await import('@/lib/server/pushPauseService')
+      const pauseStatus = await getPushPauseStatus()
+      if (pauseStatus.paused) {
+        const exemption = isNotificationExemptFromPause(pauseStatus, {
+          alunoId: params.data?.aluno_id || params.data?.alunoId || params.data?.student_id,
+          targetUserIds: params.targetUserIds,
+        })
+        if (exemption.exempt && exemption.matchedTargetIds.length > 0) {
+          params.targetUserIds = exemption.matchedTargetIds
+        } else {
+          console.log('⏸️ [PushService] Envio interceptado: Notificações push estão pausadas globalmente no sistema.')
+          return {
+            success: true,
+            skipped: true,
+            paused: true,
+            error: 'Notificações push estão pausadas globalmente pelo administrador.',
+          }
+        }
+      }
+    } catch (pauseErr) {
+      console.warn('⚠️ [PushService] Falha ao verificar status de pausa:', pauseErr)
+    }
+  }
 
   if (!ONESIGNAL_APP_ID || !ONESIGNAL_REST_API_KEY) {
     console.warn('⚠️ [PushService] MODO MOCK: Variáveis ONESIGNAL_APP_ID e/ou ONESIGNAL_REST_API_KEY não configuradas.')

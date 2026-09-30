@@ -12,6 +12,7 @@
  */
 
 import { sendPushNotification } from './pushService'
+import { getPushPauseStatus, isNotificationExemptFromPause } from './pushPauseService'
 
 export type AgendaPushType =
   | 'comunicados'
@@ -168,7 +169,7 @@ export async function sendAgendaPushNotification({
     }
 
     // Filtrar IDs vazios/inválidos e eliminar duplicatas
-    const cleanTargetIds = Array.from(
+    let cleanTargetIds = Array.from(
       new Set(
         targetUserIds
           .filter(id => id && typeof id === 'string' && id.trim().length > 0)
@@ -182,6 +183,74 @@ export async function sendAgendaPushNotification({
 
     // ── Criar cliente Supabase Service Role (uma única vez por request) ─────
     const supabaseService = _createSupabaseService()
+
+    // ── Barreira 0: Pausa Global de Notificações Push ───────────────────────
+    // Se o sistema estiver em modo pausa, o evento escolar continua ocorrendo normalmente,
+    // mas o disparo é suprimido imediatamente e registrado como 'paused' na auditoria.
+    // Alunos e responsáveis incluídos na lista de exceção continuam recebendo normalmente.
+    // Ao despausar, as notificações deste período NÃO serão reenviadas.
+    let isExemptFromPause = false
+    if (type !== 'test') {
+      const pauseStatus = await getPushPauseStatus()
+      if (pauseStatus.paused) {
+        const alunoId = metadata?.aluno_id || metadata?.alunoId || metadata?.student_id
+        const exemption = isNotificationExemptFromPause(pauseStatus, {
+          alunoId,
+          targetUserIds: cleanTargetIds,
+        })
+
+        if (exemption.exempt && exemption.matchedTargetIds.length > 0) {
+          isExemptFromPause = true
+          cleanTargetIds = exemption.matchedTargetIds
+          console.log(
+            `✨ ${logPrefix} EXCEÇÃO DE PAUSA ATIVA: Aluno/Responsável liberado (${cleanTargetIds.length} destinatário(s)). Enviando normalmente.`
+          )
+        } else {
+          console.log(
+            `⏸️ ${logPrefix} MODO PAUSA ATIVO: Notificações push estão silenciadas globalmente. O evento foi registrado normalmente no sistema, mas o envio do push foi cancelado e NÃO será reenviado.`
+          )
+
+          // Marcar em memória para evitar duplicatas imediatas
+          const inProcessKey = `${type}::${dedupKey}`
+          _markInProcess(inProcessKey)
+
+          // Registrar auditoria no banco com status 'paused'
+          try {
+            await supabaseService
+              .from('agenda_push_logs')
+              .insert({
+                user_id: senderUserId || null,
+                type,
+                item_id: dedupKey,
+                title,
+                message,
+                target_url: targetUrl,
+                target_count: cleanTargetIds.length,
+                status: 'paused',
+                error_message: `Envio suprimido: Modo Pausa de Notificações ativado no sistema${pauseStatus.pauseReason ? ` (${pauseStatus.pauseReason})` : ''}. Este push foi cancelado definitivamente e não será reenviado.`,
+                onesignal_response: JSON.stringify({
+                  paused: true,
+                  paused_by: pauseStatus.pausedBy,
+                  paused_at: pauseStatus.pausedAt,
+                  reason: pauseStatus.pauseReason,
+                  _target_user_ids: cleanTargetIds,
+                  _metadata: metadata || null,
+                }),
+                created_at: new Date().toISOString(),
+              })
+          } catch (logErr: any) {
+            console.warn(`${logPrefix} Falha ao gravar log de pausa:`, logErr?.message)
+          }
+
+          return {
+            success: true,
+            skipped: true,
+            reason: 'notifications_paused',
+            data: { paused: true, pausedAt: pauseStatus.pausedAt },
+          }
+        }
+      }
+    }
 
     // ── Checagem de Configuração Global de Notificações Push ───────────────
     try {
@@ -280,6 +349,7 @@ export async function sendAgendaPushNotification({
         ...metadata,
       },
       sendAfter,
+      bypassPause: Boolean(isExemptFromPause || metadata?.is_pause_exception),
     })
 
     // ── Atualizar o log com o resultado final ───────────────────────────────
@@ -295,6 +365,7 @@ export async function sendAgendaPushNotification({
       ...(pushResponse.data && typeof pushResponse.data === 'object' ? pushResponse.data : { raw: pushResponse.data }),
       _target_user_ids: cleanTargetIds,
       _metadata: metadata || null,
+      _is_pause_exception: isExemptFromPause ? true : undefined,
     }
 
     const { error: updateError } = await supabaseService

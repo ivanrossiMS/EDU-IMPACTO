@@ -3,6 +3,7 @@
 import React, { useState, useRef, useEffect } from 'react'
 import Link from 'next/link'
 import { Settings, Shield, Bell, Smartphone, Palette, Save, Clock, CheckCircle2, Upload, MessageCircle, MessageSquare, Radio, ArrowRight, Sparkles } from 'lucide-react'
+import { toast } from 'sonner'
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 import { AdminWhatsAppContactsManager } from '@/components/AdminWhatsAppContactsManager'
 import { AdminChatSettingsManager } from '@/components/AdminChatSettingsManager'
@@ -472,6 +473,132 @@ export default function ADAdminAjustes() {
                  </div>
 
                 <div className="ad-ajustes-card-body" style={{ padding: 32, display: 'flex', flexDirection: 'column', gap: 24 }}>
+                   {/* Master Switch: Pausa Global de Notificações */}
+                   <div style={{
+                     display: 'flex',
+                     justifyContent: 'space-between',
+                     alignItems: 'center',
+                     padding: 22,
+                     background: (localConfig.notificacoes as any).pausarNotificacoes
+                       ? 'linear-gradient(135deg, rgba(245, 158, 11, 0.14) 0%, rgba(239, 68, 68, 0.1) 100%)'
+                       : 'hsl(var(--bg-main))',
+                     border: `1.5px solid ${(localConfig.notificacoes as any).pausarNotificacoes ? '#f59e0b' : 'hsl(var(--border-subtle))'}`,
+                     borderRadius: 14,
+                     boxShadow: (localConfig.notificacoes as any).pausarNotificacoes ? '0 4px 16px rgba(245, 158, 11, 0.2)' : 'none',
+                     transition: 'all .3s ease'
+                   }}>
+                     <div style={{ paddingRight: 16 }}>
+                       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                         <div style={{
+                           width: 34,
+                           height: 34,
+                           borderRadius: 10,
+                           background: (localConfig.notificacoes as any).pausarNotificacoes ? '#f59e0b' : 'rgba(99, 102, 241, 0.12)',
+                           color: (localConfig.notificacoes as any).pausarNotificacoes ? 'white' : '#6366f1',
+                           display: 'flex',
+                           alignItems: 'center',
+                           justifyContent: 'center',
+                           fontWeight: 900,
+                           fontSize: 15,
+                           flexShrink: 0
+                         }}>
+                           ⏸
+                         </div>
+                         <div>
+                           <div className="ad-ajustes-toggle-title" style={{ fontWeight: 800, fontSize: 16, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                             Pausa Global de Notificações Push
+                             {(localConfig.notificacoes as any).pausarNotificacoes && (
+                               <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 10, background: '#f59e0b', color: 'white', fontWeight: 800 }}>
+                                 PAUSA ATIVA
+                               </span>
+                             )}
+                             {(localConfig.notificacoes as any).pausarNotificacoes && Array.isArray((localConfig.notificacoes as any).exemptStudents) && (localConfig.notificacoes as any).exemptStudents.length > 0 && (
+                               <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 10, background: '#059669', color: 'white', fontWeight: 800 }}>
+                                 {(localConfig.notificacoes as any).exemptStudents.length} ALUNOS LIBERADOS
+                               </span>
+                             )}
+                           </div>
+                           <div className="ad-ajustes-toggle-desc" style={{ fontSize: 13, color: 'hsl(var(--text-muted))', marginTop: 3, lineHeight: 1.4 }}>
+                             Quando ativado, suspende o envio de todos os pushes aos celulares enquanto a escola opera normalmente.
+                             <br />
+                             <strong style={{ color: (localConfig.notificacoes as any).pausarNotificacoes ? '#b45309' : 'inherit' }}>
+                               ⚠️ Ao despausar, os avisos gerados durante a pausa NÃO serão acumulados nem reenviados.
+                             </strong>
+                             {(localConfig.notificacoes as any).pausarNotificacoes && (
+                               <div style={{ marginTop: 8 }}>
+                                 <Link
+                                   href="/agenda-digital/admin/push-teste"
+                                   style={{
+                                     fontSize: 12,
+                                     fontWeight: 700,
+                                     color: '#4f46e5',
+                                     textDecoration: 'none',
+                                     display: 'inline-flex',
+                                     alignItems: 'center',
+                                     gap: 4,
+                                     background: 'rgba(99, 102, 241, 0.1)',
+                                     padding: '4px 10px',
+                                     borderRadius: 8,
+                                   }}
+                                 >
+                                   👥 Gerenciar Alunos Liberados ({Array.isArray((localConfig.notificacoes as any).exemptStudents) ? (localConfig.notificacoes as any).exemptStudents.length : 0}) →
+                                 </Link>
+                                </div>
+                             )}
+                           </div>
+                         </div>
+                       </div>
+                     </div>
+                     <label style={{ position: 'relative', display: 'inline-block', width: 50, height: 28, flexShrink: 0 }}>
+                       <input
+                         type="checkbox"
+                         style={{ opacity: 0, width: 0, height: 0 }}
+                         checked={!!(localConfig.notificacoes as any).pausarNotificacoes}
+                         onChange={async e => {
+                           const willPause = e.target.checked
+                           updateNotif('pausarNotificacoes' as any, willPause)
+                           try {
+                             const res = await fetch('/api/agenda/push/pause', {
+                               method: 'POST',
+                               headers: { 'Content-Type': 'application/json' },
+                               body: JSON.stringify({ paused: willPause }),
+                             })
+                             if (res.ok) {
+                               if (willPause) {
+                                 toast.warning('Notificações push foram PAUSADAS globalmente.')
+                               } else {
+                                 toast.success('Notificações push RETOMADAS com sucesso!')
+                               }
+                             }
+                           } catch (err) {
+                             toast.error('Erro ao sincronizar status de pausa.')
+                           }
+                         }}
+                       />
+                       <span style={{
+                         position: 'absolute',
+                         cursor: 'pointer',
+                         inset: 0,
+                         background: (localConfig.notificacoes as any).pausarNotificacoes ? '#f59e0b' : 'hsl(var(--border-subtle))',
+                         borderRadius: 28,
+                         transition: '.4s'
+                       }}>
+                         <span style={{
+                           position: 'absolute',
+                           height: 22,
+                           width: 22,
+                           left: 3,
+                           bottom: 3,
+                           background: 'white',
+                           transition: '.4s',
+                           borderRadius: '50%',
+                           transform: (localConfig.notificacoes as any).pausarNotificacoes ? 'translateX(22px)' : 'none',
+                           boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                         }}></span>
+                       </span>
+                     </label>
+                   </div>
+
                    <div className="ad-ajustes-toggle-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 20, border: '1px solid hsl(var(--border-subtle))', borderRadius: 12 }}>
                      <div>
                        <div className="ad-ajustes-toggle-title" style={{ fontWeight: 600, fontSize: 16 }}>Disparar em Novos Comunicados</div>

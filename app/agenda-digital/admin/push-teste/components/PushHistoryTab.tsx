@@ -111,8 +111,10 @@ export function PushHistoryTab({ onSwitchToTesterWithPayload }: PushHistoryTabPr
 
   // Estatísticas calculadas da página atual
   const successfulCount = logs.filter(l => l.status === 'sent').length
+  const pausedCount = logs.filter(l => l.status === 'paused').length
   const readCount = logs.filter(l => l.isRead).length
-  const successRate = logs.length > 0 ? Math.round((successfulCount / logs.length) * 100) : 100
+  const activeCount = logs.filter(l => l.status !== 'paused').length
+  const successRate = activeCount > 0 ? Math.round((successfulCount / activeCount) * 100) : 100
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -474,6 +476,7 @@ export function PushHistoryTab({ onSwitchToTesterWithPayload }: PushHistoryTabPr
             <option value="all">Todos os Status</option>
             <option value="sent">🟢 Enviados com Sucesso</option>
             <option value="failed">🔴 Falhas / Rejeitados</option>
+            <option value="paused">⏸️ Pausados / Silenciados</option>
           </select>
         </div>
 
@@ -644,26 +647,48 @@ export function PushHistoryTab({ onSwitchToTesterWithPayload }: PushHistoryTabPr
 
                   {/* Coluna 4: Status & Confirmação de Leitura */}
                   <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <span style={{
-                        width: 7,
-                        height: 7,
-                        borderRadius: '50%',
-                        background: isSuccess ? '#10b981' : '#ef4444',
-                      }} />
-                      <span style={{ fontWeight: 700, color: isSuccess ? '#059669' : '#dc2626' }}>
-                        {isSuccess ? 'Entregue' : 'Falha'}
-                      </span>
-                    </div>
-
-                    {log.isRead ? (
-                      <div style={{ fontSize: 10, color: '#059669', marginTop: 3, display: 'flex', alignItems: 'center', gap: 4, fontWeight: 700 }}>
-                        <Eye size={11} /> Lido no app
+                    {log.status === 'paused' ? (
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{
+                            width: 7,
+                            height: 7,
+                            borderRadius: '50%',
+                            background: '#f59e0b',
+                            boxShadow: '0 0 6px #f59e0b',
+                          }} />
+                          <span style={{ fontWeight: 700, color: '#d97706' }}>
+                            Pausado
+                          </span>
+                        </div>
+                        <div style={{ fontSize: 10, color: '#b45309', marginTop: 3, fontWeight: 500 }}>
+                          Silenciado (Não reenviado)
+                        </div>
                       </div>
                     ) : (
-                      <div style={{ fontSize: 10, color: 'hsl(var(--text-muted))', marginTop: 3 }}>
-                        Aguardando leitura
-                      </div>
+                      <>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{
+                            width: 7,
+                            height: 7,
+                            borderRadius: '50%',
+                            background: isSuccess ? '#10b981' : '#ef4444',
+                          }} />
+                          <span style={{ fontWeight: 700, color: isSuccess ? '#059669' : '#dc2626' }}>
+                            {isSuccess ? 'Entregue' : 'Falha'}
+                          </span>
+                        </div>
+
+                        {log.isRead ? (
+                          <div style={{ fontSize: 10, color: '#059669', marginTop: 3, display: 'flex', alignItems: 'center', gap: 4, fontWeight: 700 }}>
+                            <Eye size={11} /> Lido no app
+                          </div>
+                        ) : (
+                          <div style={{ fontSize: 10, color: 'hsl(var(--text-muted))', marginTop: 3 }}>
+                            Aguardando leitura
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
 

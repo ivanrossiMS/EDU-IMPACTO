@@ -42,6 +42,17 @@ export async function dispatchChatPushNotification({
   try {
     const supabase = getAdminClient()
 
+    // 0. Verificar se as notificações estão pausadas globalmente no sistema
+    try {
+      const { isPushNotificationsPaused } = await import('@/lib/server/pushPauseService')
+      if (await isPushNotificationsPaused()) {
+        console.log(`[ChatPush][${conversationId}] ⏸️ Notificações push estão pausadas globalmente. Push de chat cancelado e não será reenviado.`)
+        return { success: true, reason: 'notifications_paused' }
+      }
+    } catch (e) {
+      console.warn(`[ChatPush][${conversationId}] Aviso ao verificar pausa:`, e)
+    }
+
     // 1. Verificar configuração global do sistema (ad_config)
     try {
       const { data: configRow } = await supabase

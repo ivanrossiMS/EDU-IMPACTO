@@ -10,7 +10,7 @@ import {
   Info, Check, Calendar, Camera, Clock, DollarSign, Award,
   Car, FileText, ChevronRight, ChevronDown, ChevronUp, Search, X, Copy, Terminal,
   Radio, CheckCheck, Eye, Zap, Shield, Laptop, Trash2, RotateCcw,
-  GraduationCap, Briefcase, Crown
+  GraduationCap, Briefcase, Crown, PauseCircle, Play, BellOff
 } from 'lucide-react'
 import { useSupabaseArray } from '@/lib/useSupabaseCollection'
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
@@ -274,6 +274,15 @@ const CATEGORY_DEFINITIONS: Record<
   },
 }
 
+export interface PushPauseExceptionStudent {
+  id: string
+  nome: string
+  turma?: string
+  foto?: string | null
+  matricula?: string | null
+  responsaveisCount?: number
+}
+
 export default function ADAdminPushTestPage() {
   const [alunos, setAlunos, { loading: isAlunosLoading }] = useSupabaseArray<any>('alunos/lightweight?limit=2000')
   const { adAlert } = useAgendaDigital()
@@ -407,21 +416,142 @@ export default function ADAdminPushTestPage() {
   const [lastResult, setLastResult] = useState<any | null>(null)
   const [configStatus, setConfigStatus] = useState<any | null>(null)
 
+  // ── Estados de Pausa Global de Notificações ──
+  const [pauseStatus, setPauseStatus] = useState<{
+    paused: boolean
+    pausedAt: string | null
+    pausedBy: string | null
+    pauseReason: string | null
+    unpausedAt?: string | null
+    unpausedBy?: string | null
+    exemptStudents?: PushPauseExceptionStudent[]
+    exemptUserIds?: string[]
+  } | null>(null)
+  const [exemptStudents, setExemptStudents] = useState<PushPauseExceptionStudent[]>([])
+  const [modalStudentSearch, setModalStudentSearch] = useState('')
+  const [isModalStudentSearchOpen, setIsModalStudentSearchOpen] = useState(false)
+  const modalSearchRef = useRef<HTMLDivElement>(null)
+  const [isTogglingPause, setIsTogglingPause] = useState(false)
+  const [isPauseModalOpen, setIsPauseModalOpen] = useState(false)
+  const [pauseReasonInput, setPauseReasonInput] = useState('')
+  const [forceSendEvenIfPaused, setForceSendEvenIfPaused] = useState(false)
+
+  // Filtro de alunos para o modal de exceções da pausa
+  const modalFilteredStudents = useMemo(() => {
+    const term = modalStudentSearch.toLowerCase().trim()
+    if (!term || term.length < 1) return []
+    const selectedIds = new Set(exemptStudents.map(s => String(s.id)))
+    return (alunos || [])
+      .filter((a: any) => {
+        if (selectedIds.has(String(a.id))) return false
+        const n = String(a.nome || '').toLowerCase()
+        const m = String(a.matricula || a.id || '').toLowerCase()
+        const t = String(a.turma || '').toLowerCase()
+        return n.includes(term) || m.includes(term) || t.includes(term)
+      })
+      .slice(0, 10)
+  }, [alunos, modalStudentSearch, exemptStudents])
+
+  const handleAddExemptStudent = (aluno: any) => {
+    const studentItem: PushPauseExceptionStudent = {
+      id: String(aluno.id),
+      nome: formatFriendlyStudentName(aluno.nome || 'Aluno'),
+      turma: aluno.turma || undefined,
+      matricula: aluno.matricula || undefined,
+      foto: aluno.foto || null,
+    }
+    setExemptStudents(prev => {
+      if (prev.some(s => String(s.id) === String(studentItem.id))) return prev
+      return [...prev, studentItem]
+    })
+    setModalStudentSearch('')
+    setIsModalStudentSearchOpen(false)
+  }
+
+  const handleRemoveExemptStudent = (studentId: string) => {
+    setExemptStudents(prev => prev.filter(s => String(s.id) !== String(studentId)))
+  }
+
+  useEffect(() => {
+    function handleModalClickOutside(e: MouseEvent) {
+      if (modalSearchRef.current && !modalSearchRef.current.contains(e.target as Node)) {
+        setIsModalStudentSearchOpen(false)
+      }
+    }
+    if (isPauseModalOpen) {
+      document.addEventListener('mousedown', handleModalClickOutside)
+    }
+    return () => document.removeEventListener('mousedown', handleModalClickOutside)
+  }, [isPauseModalOpen])
+
   // ── Logs de Histórico ──
   const [recentLogs, setRecentLogs] = useState<any[]>([])
   const [isLoadingLogs, setIsLoadingLogs] = useState(false)
   const [viewLogDetail, setViewLogDetail] = useState<any | null>(null)
 
-  // 1. Carregar Config do OneSignal
+  // 1. Carregar Config do OneSignal e Status de Pausa
   const loadConfig = async () => {
     try {
       const res = await fetch('/api/agenda/push/test?config=true')
       if (res.ok) {
         const data = await res.json()
         setConfigStatus(data)
+        if (data.pauseStatus) {
+          setPauseStatus(data.pauseStatus)
+          if (Array.isArray(data.pauseStatus.exemptStudents)) {
+            setExemptStudents(data.pauseStatus.exemptStudents)
+          }
+        }
       }
     } catch (e) {
       console.error('Erro ao verificar config do OneSignal:', e)
+    }
+  }
+
+  // 1.1 Alternar Pausa Global de Notificações
+  const handleTogglePause = async (
+    paused: boolean,
+    motivo?: string,
+    customExempts?: PushPauseExceptionStudent[]
+  ) => {
+    setIsTogglingPause(true)
+    const targetExempts = customExempts !== undefined ? customExempts : exemptStudents
+    try {
+      const res = await fetch('/api/agenda/push/pause', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          paused,
+          motivo,
+          exemptStudents: targetExempts,
+        }),
+      })
+      const data = await res.json()
+      if (res.ok && data.success) {
+        setPauseStatus(data.status)
+        if (Array.isArray(data.status?.exemptStudents)) {
+          setExemptStudents(data.status.exemptStudents)
+        }
+        if (paused) {
+          const count = (data.status?.exemptStudents || []).length
+          const countText = count > 0 ? ` (${count} aluno(s) e seus respectivos responsáveis liberados)` : ''
+          toast.warning(`Notificações push foram PAUSADAS globalmente${countText}. O sistema operará normalmente sem disparos e não reenviará ao despausar.`, {
+            duration: 6000,
+          })
+        } else {
+          toast.success('Notificações push RETOMADAS com sucesso! Novos eventos serão entregues normalmente.', {
+            duration: 6000,
+          })
+        }
+        setIsPauseModalOpen(false)
+        loadRecentLogs()
+      } else {
+        toast.error(data.error || 'Erro ao alterar status de pausa.')
+      }
+    } catch (err: any) {
+      toast.error('Erro de conexão ao alterar status de pausa.')
+    } finally {
+      setIsTogglingPause(false)
     }
   }
 
@@ -873,6 +1003,7 @@ export default function ADAdminPushTestPage() {
         message,
         targetUrl: previewTargetUrl,
         bypassDedup,
+        bypassPause: forceSendEvenIfPaused,
         metadata: {
           presetId: selectedPresetId,
           source: 'admin_push_tester',
@@ -939,8 +1070,33 @@ export default function ADAdminPushTestPage() {
           </p>
         </div>
 
-        {/* Status OneSignal Badge */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        {/* Status OneSignal Badge & Controles de Pausa */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          {/* Badge de Status da Pausa */}
+          {pauseStatus?.paused ? (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 8, padding: '6px 14px',
+              borderRadius: 20, fontSize: 12, fontWeight: 800,
+              background: 'rgba(245, 158, 11, 0.16)',
+              color: '#d97706',
+              border: '1.5px solid #f59e0b',
+              boxShadow: '0 0 12px rgba(245, 158, 11, 0.3)'
+            }}>
+              <span style={{
+                width: 8, height: 8, borderRadius: '50%',
+                background: '#f59e0b',
+                boxShadow: '0 0 8px #f59e0b'
+              }} />
+              <span>
+                ⏸️ Pausado
+                {pauseStatus.exemptStudents && pauseStatus.exemptStudents.length > 0
+                  ? ` (${pauseStatus.exemptStudents.length} exceções)`
+                  : ''}
+              </span>
+            </div>
+          ) : null}
+
+          {/* Status OneSignal Badge */}
           {configStatus ? (
             <div style={{
               display: 'flex', alignItems: 'center', gap: 8, padding: '6px 14px',
@@ -960,6 +1116,87 @@ export default function ADAdminPushTestPage() {
             <div style={{ fontSize: 12, color: 'hsl(var(--text-muted))' }}>Verificando conexão...</div>
           )}
 
+          {/* Botão de Pausar / Despausar Notificações */}
+          {pauseStatus?.paused ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <button
+                onClick={() => {
+                  setPauseReasonInput(pauseStatus.pauseReason || '')
+                  setIsPauseModalOpen(true)
+                }}
+                disabled={isTogglingPause}
+                className="btn btn-sm"
+                style={{
+                  borderRadius: 20,
+                  padding: '6px 14px',
+                  fontSize: 12,
+                  fontWeight: 800,
+                  background: 'rgba(245, 158, 11, 0.15)',
+                  color: '#b45309',
+                  border: '1.5px solid rgba(245, 158, 11, 0.5)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  cursor: 'pointer',
+                }}
+                title="Adicionar ou remover alunos da lista de exceção (não pausados)"
+              >
+                <Users size={13} />
+                Exceções ({pauseStatus.exemptStudents?.length || 0})
+              </button>
+
+              <button
+                onClick={() => handleTogglePause(false)}
+                disabled={isTogglingPause}
+                className="btn btn-sm"
+                style={{
+                  borderRadius: 20,
+                  padding: '6px 16px',
+                  fontSize: 12,
+                  fontWeight: 800,
+                  background: '#10b981',
+                  color: 'white',
+                  border: 'none',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  cursor: 'pointer',
+                  boxShadow: '0 2px 10px rgba(16, 185, 129, 0.35)'
+                }}
+                title="Retomar o envio normal de notificações push"
+              >
+                <Play size={13} fill="white" />
+                Retomar Notificações
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => {
+                setPauseReasonInput('')
+                setIsPauseModalOpen(true)
+              }}
+              disabled={isTogglingPause}
+              className="btn btn-sm"
+              style={{
+                borderRadius: 20,
+                padding: '6px 14px',
+                fontSize: 12,
+                fontWeight: 700,
+                background: 'rgba(245, 158, 11, 0.12)',
+                color: '#d97706',
+                border: '1px solid #f59e0b60',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                cursor: 'pointer'
+              }}
+              title="Pausar o envio global de notificações push"
+            >
+              <PauseCircle size={14} />
+              Pausar Notificações
+            </button>
+          )}
+
           <button
             onClick={() => { loadConfig(); loadRecentLogs(); checkCurrentDevicePush(); }}
             className="btn btn-ghost btn-sm"
@@ -970,6 +1207,170 @@ export default function ADAdminPushTestPage() {
           </button>
         </div>
       </div>
+
+      {/* ── BANNER DE ALERTA: MODO PAUSA ATIVO ── */}
+      {pauseStatus?.paused && (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 16,
+          padding: '16px 20px',
+          background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.16) 0%, rgba(239, 68, 68, 0.12) 100%)',
+          border: '1.5px solid rgba(245, 158, 11, 0.5)',
+          borderRadius: 14,
+          boxShadow: '0 4px 20px -4px rgba(245, 158, 11, 0.25)',
+          flexWrap: 'wrap'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, flex: 1, minWidth: 280 }}>
+            <div style={{
+              width: 44,
+              height: 44,
+              borderRadius: 12,
+              background: '#f59e0b',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'white',
+              flexShrink: 0,
+              boxShadow: '0 4px 12px rgba(245, 158, 11, 0.4)',
+              marginTop: 2,
+            }}>
+              <PauseCircle size={26} />
+            </div>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                <span style={{ fontWeight: 900, fontSize: 15, color: '#b45309', fontFamily: 'Outfit, sans-serif' }}>
+                  MODO PAUSA DE NOTIFICAÇÕES ATIVO
+                </span>
+                <span style={{ fontSize: 11, padding: '3px 9px', borderRadius: 12, background: 'rgba(245, 158, 11, 0.25)', color: '#92400e', fontWeight: 800 }}>
+                  Escola Operando Sem Disparo de Pushes
+                </span>
+                {pauseStatus.exemptStudents && pauseStatus.exemptStudents.length > 0 && (
+                  <span style={{
+                    fontSize: 11,
+                    padding: '3px 9px',
+                    borderRadius: 12,
+                    background: 'rgba(16, 185, 129, 0.2)',
+                    color: '#065f46',
+                    fontWeight: 800,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 4
+                  }}>
+                    <Sparkles size={12} />
+                    {pauseStatus.exemptStudents.length} aluno(s) liberados (com responsáveis)
+                  </span>
+                )}
+              </div>
+              <p style={{ margin: '4px 0 0', fontSize: 13, color: 'hsl(var(--text-main))', maxWidth: 840, lineHeight: 1.5 }}>
+                O sistema escolar continua funcionando normalmente (chamadas, catraca, notas, comunicados e chat são gravados no banco de dados), porém <strong>nenhuma notificação push é enviada aos celulares pausados</strong>.
+                <br />
+                <span style={{ color: '#b45309', fontWeight: 700 }}>
+                  ⚠️ Regra de Segurança: Ao despausar, as notificações geradas durante a pausa NÃO serão reenviadas.
+                </span>
+                {pauseStatus.pausedBy && (
+                  <span style={{ marginLeft: 8, fontSize: 12, color: 'hsl(var(--text-muted))' }}>
+                    • Pausado por: <strong>{pauseStatus.pausedBy}</strong>
+                  </span>
+                )}
+                {pauseStatus.pauseReason && (
+                  <span style={{ marginLeft: 8, fontSize: 12, color: 'hsl(var(--text-muted))' }}>
+                    • Motivo: &quot;{pauseStatus.pauseReason}&quot;
+                  </span>
+                )}
+              </p>
+
+              {/* Lista visual dos alunos liberados no banner */}
+              {pauseStatus.exemptStudents && pauseStatus.exemptStudents.length > 0 ? (
+                <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 12, fontWeight: 800, color: '#065f46' }}>
+                    Alunos com pushes ativos:
+                  </span>
+                  {pauseStatus.exemptStudents.slice(0, 5).map(s => (
+                    <span
+                      key={s.id}
+                      style={{
+                        fontSize: 11,
+                        fontWeight: 700,
+                        padding: '3px 8px',
+                        borderRadius: 8,
+                        background: 'rgba(255, 255, 255, 0.85)',
+                        border: '1px solid rgba(16, 185, 129, 0.4)',
+                        color: '#065f46',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 4,
+                      }}
+                    >
+                      🎓 {s.nome} {s.turma ? `(${s.turma})` : ''}
+                    </span>
+                  ))}
+                  {pauseStatus.exemptStudents.length > 5 && (
+                    <span style={{ fontSize: 11, fontWeight: 800, color: '#065f46' }}>
+                      +{pauseStatus.exemptStudents.length - 5} outros
+                    </span>
+                  )}
+                </div>
+              ) : (
+                <div style={{ marginTop: 6, fontSize: 12, color: 'hsl(var(--text-muted))', fontStyle: 'italic' }}>
+                  Nenhum aluno cadastrado como exceção (todos os alunos e responsáveis silenciados).
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <button
+              onClick={() => {
+                setPauseReasonInput(pauseStatus.pauseReason || '')
+                setIsPauseModalOpen(true)
+              }}
+              disabled={isTogglingPause}
+              className="btn btn-sm"
+              style={{
+                background: 'rgba(255, 255, 255, 0.9)',
+                color: '#b45309',
+                border: '1.5px solid #f59e0b',
+                fontWeight: 800,
+                fontSize: 12,
+                borderRadius: 10,
+                padding: '9px 15px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                cursor: 'pointer',
+              }}
+            >
+              <Users size={14} />
+              Gerenciar Exceções ({pauseStatus.exemptStudents?.length || 0})
+            </button>
+
+            <button
+              onClick={() => handleTogglePause(false)}
+              disabled={isTogglingPause}
+              className="btn btn-sm"
+              style={{
+                background: '#10b981',
+                color: 'white',
+                border: 'none',
+                fontWeight: 800,
+                fontSize: 13,
+                borderRadius: 10,
+                padding: '10px 20px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                boxShadow: '0 4px 14px rgba(16, 185, 129, 0.4)',
+                cursor: 'pointer'
+              }}
+            >
+              <Play size={15} fill="white" />
+              Retomar Notificações (Despausar)
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ── NAVEGAÇÃO DE ABAS: SIMULADOR vs HISTÓRICO ── */}
       <div style={{
@@ -2090,18 +2491,50 @@ export default function ADAdminPushTestPage() {
               </div>
 
               {/* Opções Avançadas */}
-              <div style={{ padding: 12, borderRadius: 10, background: 'hsl(var(--bg-main))', border: '1px solid hsl(var(--border-subtle))' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12, cursor: 'pointer' }}>
-                  <input
-                    type="checkbox"
-                    checked={bypassDedup}
-                    onChange={e => setBypassDedup(e.target.checked)}
-                    style={{ accentColor: '#4f46e5' }}
-                  />
-                  <span>
-                    <b>Bypass de Deduplicação:</b> Gera um identificador único de teste para permitir disparos repetidos sem bloqueio de 5 minutos.
-                  </span>
-                </label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div style={{ padding: 12, borderRadius: 10, background: 'hsl(var(--bg-main))', border: '1px solid hsl(var(--border-subtle))' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12, cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={bypassDedup}
+                      onChange={e => setBypassDedup(e.target.checked)}
+                      style={{ accentColor: '#4f46e5' }}
+                    />
+                    <span>
+                      <b>Bypass de Deduplicação:</b> Gera um identificador único de teste para permitir disparos repetidos sem bloqueio de 5 minutos.
+                    </span>
+                  </label>
+                </div>
+
+                {pauseStatus?.paused && (
+                  <div style={{
+                    padding: '12px 14px',
+                    borderRadius: 10,
+                    background: 'rgba(245, 158, 11, 0.12)',
+                    border: '1.5px solid rgba(245, 158, 11, 0.4)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 6,
+                    fontSize: 12,
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 800, color: '#b45309' }}>
+                      <PauseCircle size={15} />
+                      Notificações Push estão PAUSADAS globalmente no sistema
+                    </div>
+                    <div style={{ color: 'hsl(var(--text-main))', lineHeight: 1.4 }}>
+                      Como o sistema está pausado, o servidor cancelará este teste e não enviará ao aparelho, exceto se você marcar a opção abaixo:
+                    </div>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontWeight: 700, color: '#b45309', marginTop: 2 }}>
+                      <input
+                        type="checkbox"
+                        checked={forceSendEvenIfPaused}
+                        onChange={e => setForceSendEvenIfPaused(e.target.checked)}
+                        style={{ accentColor: '#f59e0b' }}
+                      />
+                      <span>Forçar envio de teste no smartphone (Bypass da Pausa Global)</span>
+                    </label>
+                  </div>
+                )}
               </div>
 
               {/* Botão de Disparo */}
@@ -2434,6 +2867,489 @@ export default function ADAdminPushTestPage() {
                   </pre>
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL DE PAUSA E GESTÃO DE EXCEÇÕES DE ALUNOS ── */}
+      {isPauseModalOpen && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(0, 0, 0, 0.7)',
+          backdropFilter: 'blur(5px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999,
+          padding: 16,
+        }}>
+          <div style={{
+            background: 'hsl(var(--bg-surface))',
+            border: '1px solid hsl(var(--border-subtle))',
+            borderRadius: 20,
+            maxWidth: 620,
+            width: '100%',
+            maxHeight: '92vh',
+            display: 'flex',
+            flexDirection: 'column',
+            boxShadow: '0 24px 60px rgba(0, 0, 0, 0.35)',
+            overflow: 'hidden',
+          }}>
+            {/* Cabeçalho do Modal */}
+            <div style={{
+              padding: '18px 24px',
+              borderBottom: '1px solid hsl(var(--border-subtle))',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              background: 'hsl(var(--bg-surface))',
+              flexShrink: 0,
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{
+                  width: 38,
+                  height: 38,
+                  borderRadius: 12,
+                  background: pauseStatus?.paused ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: pauseStatus?.paused ? '#059669' : '#d97706',
+                }}>
+                  {pauseStatus?.paused ? <Users size={22} /> : <PauseCircle size={22} />}
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: 17, fontWeight: 900, fontFamily: 'Outfit, sans-serif' }}>
+                    {pauseStatus?.paused ? 'Gerenciar Pausa & Alunos Liberados' : 'Pausar Notificações Push'}
+                  </h3>
+                  <p style={{ margin: '2px 0 0', fontSize: 12, color: 'hsl(var(--text-muted))' }}>
+                    {pauseStatus?.paused
+                      ? 'Adicione ou remova alunos que não devem ser pausados'
+                      : 'Suspenda o envio global mantendo alunos específicos liberados'}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsPauseModalOpen(false)}
+                className="btn btn-ghost btn-sm"
+                style={{ padding: 6, borderRadius: 8 }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Corpo com Scroll */}
+            <div style={{
+              padding: 24,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 20,
+              overflowY: 'auto',
+              flex: 1,
+            }}>
+              {/* Box explicativo das regras */}
+              <div style={{
+                background: 'rgba(245, 158, 11, 0.08)',
+                border: '1px solid rgba(245, 158, 11, 0.25)',
+                borderRadius: 12,
+                padding: '12px 16px',
+                fontSize: 12.5,
+                lineHeight: 1.5,
+              }}>
+                <div style={{ fontWeight: 800, color: '#b45309', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <Info size={15} />
+                  Regras de Operação da Pausa:
+                </div>
+                <ul style={{ margin: 0, paddingLeft: 18, color: 'hsl(var(--text-main))', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <li>
+                    <strong>Operação Normal:</strong> Professores realizam chamada, catraca registra portaria e notas continuam sendo salvas no banco normalmente.
+                  </li>
+                  <li>
+                    <strong>Sem Reenvio:</strong> Ao despausar, os pushes deste período <strong>NÃO serão reenviados</strong> (evita acúmulo de notificações tardias).
+                  </li>
+                </ul>
+              </div>
+
+              {/* SEÇÃO: Alunos Liberados (Exceções da Pausa) */}
+              <div style={{
+                background: 'hsl(var(--bg-main))',
+                border: '1.5px solid hsl(var(--border-subtle))',
+                borderRadius: 14,
+                padding: 16,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 12,
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div style={{
+                      width: 28,
+                      height: 28,
+                      borderRadius: 8,
+                      background: 'rgba(99, 102, 241, 0.15)',
+                      color: '#6366f1',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}>
+                      <GraduationCap size={16} />
+                    </div>
+                    <div>
+                      <div style={{ fontWeight: 800, fontSize: 14, fontFamily: 'Outfit, sans-serif' }}>
+                        Alunos Liberados (Não Pausar)
+                      </div>
+                      <div style={{ fontSize: 11.5, color: 'hsl(var(--text-muted))' }}>
+                        Pushes para os alunos e todos os seus responsáveis vinculados continuarão normalmente.
+                      </div>
+                    </div>
+                  </div>
+
+                  {exemptStudents.length > 0 && (
+                    <span style={{
+                      fontSize: 11,
+                      fontWeight: 800,
+                      padding: '3px 10px',
+                      borderRadius: 12,
+                      background: 'rgba(16, 185, 129, 0.18)',
+                      color: '#065f46',
+                    }}>
+                      {exemptStudents.length} selecionado(s)
+                    </span>
+                  )}
+                </div>
+
+                {/* Input de Busca de Alunos com Dropdown Autocomplete */}
+                <div ref={modalSearchRef} style={{ position: 'relative' }}>
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    background: 'hsl(var(--bg-surface))',
+                    border: '1px solid hsl(var(--border-subtle))',
+                    borderRadius: 10,
+                    padding: '8px 12px',
+                  }}>
+                    <Search size={16} color="hsl(var(--text-muted))" />
+                    <input
+                      type="text"
+                      placeholder="Pesquisar aluno por nome, turma ou matrícula para liberar..."
+                      value={modalStudentSearch}
+                      onChange={e => {
+                        setModalStudentSearch(e.target.value)
+                        setIsModalStudentSearchOpen(true)
+                      }}
+                      onFocus={() => setIsModalStudentSearchOpen(true)}
+                      style={{
+                        flex: 1,
+                        background: 'transparent',
+                        border: 'none',
+                        outline: 'none',
+                        fontSize: 13,
+                        color: 'hsl(var(--text-main))',
+                      }}
+                    />
+                    {modalStudentSearch && (
+                      <button
+                        onClick={() => {
+                          setModalStudentSearch('')
+                          setIsModalStudentSearchOpen(false)
+                        }}
+                        style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'hsl(var(--text-muted))', padding: 0 }}
+                      >
+                        <X size={15} />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Dropdown de Resultados da Busca de Alunos */}
+                  {isModalStudentSearchOpen && modalStudentSearch.trim().length > 0 && (
+                    <div style={{
+                      position: 'absolute',
+                      top: '100%',
+                      left: 0,
+                      right: 0,
+                      marginTop: 4,
+                      background: 'hsl(var(--bg-surface))',
+                      border: '1px solid hsl(var(--border-subtle))',
+                      borderRadius: 12,
+                      boxShadow: '0 12px 30px rgba(0,0,0,0.2)',
+                      maxHeight: 220,
+                      overflowY: 'auto',
+                      zIndex: 10000,
+                    }}>
+                      {modalFilteredStudents.length === 0 ? (
+                        <div style={{ padding: '12px 16px', fontSize: 12, color: 'hsl(var(--text-muted))', textAlign: 'center' }}>
+                          Nenhum aluno encontrado para &quot;{modalStudentSearch}&quot;.
+                        </div>
+                      ) : (
+                        modalFilteredStudents.map((aluno: any) => (
+                          <div
+                            key={aluno.id}
+                            onClick={() => handleAddExemptStudent(aluno)}
+                            style={{
+                              padding: '10px 14px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              gap: 10,
+                              cursor: 'pointer',
+                              borderBottom: '1px solid hsl(var(--border-subtle))',
+                              transition: 'background 0.15s',
+                            }}
+                            onMouseEnter={e => (e.currentTarget.style.background = 'hsl(var(--bg-main))')}
+                            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                              <UserAvatar
+                                fotoUrl={aluno.foto}
+                                name={aluno.nome || 'Aluno'}
+                                size={32}
+                              />
+                              <div>
+                                <div style={{ fontSize: 13, fontWeight: 700, color: 'hsl(var(--text-main))' }}>
+                                  {formatFriendlyStudentName(aluno.nome || 'Aluno')}
+                                </div>
+                                <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>
+                                  {aluno.turma ? `Turma: ${aluno.turma}` : ''}
+                                  {aluno.matricula ? ` • Matrícula: ${aluno.matricula}` : ''}
+                                </div>
+                              </div>
+                            </div>
+                            <span style={{
+                              fontSize: 10.5,
+                              fontWeight: 800,
+                              padding: '3px 8px',
+                              borderRadius: 10,
+                              background: 'rgba(99, 102, 241, 0.12)',
+                              color: '#6366f1',
+                              whiteSpace: 'nowrap',
+                            }}>
+                              + Responsáveis
+                            </span>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Lista de Alunos Selecionados (Cards com foto, nome e botão remover) */}
+                {exemptStudents.length === 0 ? (
+                  <div style={{
+                    padding: '14px 16px',
+                    borderRadius: 10,
+                    background: 'hsl(var(--bg-surface))',
+                    border: '1px dashed hsl(var(--border-subtle))',
+                    textAlign: 'center',
+                    fontSize: 12,
+                    color: 'hsl(var(--text-muted))',
+                  }}>
+                    Nenhum aluno liberado selecionado. Todas as notificações push da escola serão silenciadas.
+                  </div>
+                ) : (
+                  <div style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 8,
+                    maxHeight: 200,
+                    overflowY: 'auto',
+                    paddingRight: 4,
+                  }}>
+                    {exemptStudents.map((student) => (
+                      <div
+                        key={student.id}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          gap: 10,
+                          padding: '8px 12px',
+                          borderRadius: 10,
+                          background: 'hsl(var(--bg-surface))',
+                          border: '1px solid rgba(16, 185, 129, 0.35)',
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                          <UserAvatar
+                            fotoUrl={student.foto}
+                            name={student.nome}
+                            size={28}
+                          />
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{
+                              fontSize: 13,
+                              fontWeight: 700,
+                              color: 'hsl(var(--text-main))',
+                              whiteSpace: 'nowrap',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                            }}>
+                              {student.nome}
+                            </div>
+                            <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>
+                              {student.turma ? `Turma ${student.turma}` : 'Sem turma'}
+                              {student.matricula ? ` • Matr. ${student.matricula}` : ''}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                          <span style={{
+                            fontSize: 10.5,
+                            fontWeight: 800,
+                            padding: '2px 8px',
+                            borderRadius: 10,
+                            background: 'rgba(16, 185, 129, 0.15)',
+                            color: '#065f46',
+                          }}>
+                            Aluno + Responsáveis
+                          </span>
+
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveExemptStudent(student.id)}
+                            style={{
+                              background: 'transparent',
+                              border: 'none',
+                              color: '#ef4444',
+                              cursor: 'pointer',
+                              padding: 4,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              borderRadius: 6,
+                            }}
+                            title="Remover este aluno das exceções"
+                          >
+                            <X size={15} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Input opcional de Motivo */}
+              <div>
+                <label style={{ display: 'block', fontSize: 12.5, fontWeight: 700, marginBottom: 6 }}>
+                  Motivo da pausa (opcional):
+                </label>
+                <input
+                  type="text"
+                  placeholder="Ex: Manutenção, Feriado, Testes com alunos específicos..."
+                  value={pauseReasonInput}
+                  onChange={e => setPauseReasonInput(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '10px 14px',
+                    borderRadius: 10,
+                    border: '1px solid hsl(var(--border-subtle))',
+                    background: 'hsl(var(--bg-main))',
+                    color: 'hsl(var(--text-main))',
+                    fontSize: 13,
+                    outline: 'none',
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Rodapé com Ações */}
+            <div style={{
+              padding: '16px 24px',
+              borderTop: '1px solid hsl(var(--border-subtle))',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              background: 'hsl(var(--bg-surface))',
+              flexShrink: 0,
+              gap: 12,
+              flexWrap: 'wrap',
+            }}>
+              <button
+                onClick={() => setIsPauseModalOpen(false)}
+                disabled={isTogglingPause}
+                className="btn btn-ghost btn-sm"
+                style={{ borderRadius: 10, fontWeight: 600, fontSize: 13 }}
+              >
+                Cancelar
+              </button>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                {pauseStatus?.paused ? (
+                  <>
+                    <button
+                      onClick={() => handleTogglePause(false)}
+                      disabled={isTogglingPause}
+                      className="btn btn-sm"
+                      style={{
+                        background: 'transparent',
+                        border: '1.5px solid #10b981',
+                        color: '#10b981',
+                        fontWeight: 800,
+                        fontSize: 13,
+                        borderRadius: 10,
+                        padding: '8px 16px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <Play size={14} fill="#10b981" />
+                      Retomar (Despausar)
+                    </button>
+
+                    <button
+                      onClick={() => handleTogglePause(true, pauseReasonInput, exemptStudents)}
+                      disabled={isTogglingPause}
+                      className="btn btn-sm"
+                      style={{
+                        background: '#d97706',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: 10,
+                        fontWeight: 800,
+                        fontSize: 13,
+                        padding: '8px 18px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <Check size={15} />
+                      Salvar Exceções ({exemptStudents.length})
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    onClick={() => handleTogglePause(true, pauseReasonInput, exemptStudents)}
+                    disabled={isTogglingPause}
+                    className="btn btn-sm"
+                    style={{
+                      background: '#d97706',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: 10,
+                      fontWeight: 800,
+                      fontSize: 13,
+                      padding: '9px 20px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <PauseCircle size={16} />
+                    {exemptStudents.length > 0
+                      ? `Confirmar Pausa com ${exemptStudents.length} Exceção(ões)`
+                      : 'Confirmar e Pausar Notificações'}
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>

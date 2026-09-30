@@ -449,20 +449,20 @@ export async function POST(req: Request) {
     const ruleId = ruleIdRaw ? Number(ruleIdRaw) : 0
 
     // ── MESTRE .150 (CONTROL ID ID NEXT): Duas rotas físicas distintas ──
-    // Portal 1 (Rota Principal Local .150): ENTRADA (Portaria Principal / Médio)
-    // Portal 2 (Outra Rota / Terminal Remoto .154): SAÍDA (Rua das Garças)
+    // Portal 2 (Rota Principal Local .150 / Comp 810373889): ENTRADA (Portaria Principal / Médio)
+    // Portal 1 (Outra Rota / Terminal Remoto .154 / Comp 810373890): SAÍDA (Rua das Garças)
     // As catracas .155 (FUND1) e .105 (INF) são 100% ENTRADA SEMPRE!
-    const isExplicitExitRoute150 = pId === 2 || pId === 102 || doorId === 2
-    const isExplicitEntryRoute150 = pId === 1 || pId === 101 || doorId === 1
+    const isExplicitExitRoute150 = pId === 1 || pId === 101 || compId === 810373890 || doorId === 1
+    const isExplicitEntryRoute150 = pId === 2 || pId === 102 || compId === 810373889 || doorId === 2
 
     if (isMaster150 || isDevice154) {
       if (isExplicitExitRoute150) {
-        // SAÍDA FÍSICA NA .154 (RUA DAS GARÇAS) - OUTRA ROTA
+        // SAÍDA FÍSICA NA .154 (RUA DAS GARÇAS) - PORTAL 1
         dispositivoSentido = 'saida'
         dispositivoNome = 'Saida - Rua das Garças'
         dispositivoId = '0M0200/0263A6'
       } else if (isExplicitEntryRoute150) {
-        // ENTRADA FÍSICA NA .150 (PORTARIA MÉDIO) - ROTA PRINCIPAL
+        // ENTRADA FÍSICA NA .150 (PORTARIA MÉDIO) - PORTAL 2
         dispositivoSentido = 'entrada'
         dispositivoNome = 'Portaria Médio - PRINCIPAL'
         dispositivoId = '0M0200/02638E'

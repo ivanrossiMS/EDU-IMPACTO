@@ -207,11 +207,11 @@ export function PushHistoryDetailModal({
                   textTransform: 'uppercase',
                   padding: '2px 8px',
                   borderRadius: 6,
-                  background: isSuccess ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
-                  color: isSuccess ? '#059669' : '#dc2626',
-                  border: `1px solid ${isSuccess ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`,
+                  background: log.status === 'paused' ? 'rgba(245, 158, 11, 0.15)' : (isSuccess ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)'),
+                  color: log.status === 'paused' ? '#d97706' : (isSuccess ? '#059669' : '#dc2626'),
+                  border: `1px solid ${log.status === 'paused' ? 'rgba(245, 158, 11, 0.3)' : (isSuccess ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)')}`,
                 }}>
-                  {isSuccess ? 'Enviado' : 'Falha'}
+                  {log.status === 'paused' ? 'Pausado' : (isSuccess ? 'Enviado' : 'Falha')}
                 </span>
               </div>
               <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', marginTop: 2, display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -254,6 +254,44 @@ export function PushHistoryDetailModal({
           flexDirection: 'column',
           gap: 18,
         }}>
+          {/* Banner de Notificação Pausada */}
+          {log.status === 'paused' && (
+            <div style={{
+              background: 'rgba(245, 158, 11, 0.12)',
+              border: '1.5px solid rgba(245, 158, 11, 0.4)',
+              borderRadius: 14,
+              padding: 16,
+              display: 'flex',
+              gap: 12,
+              alignItems: 'flex-start',
+            }}>
+              <div style={{
+                background: '#f59e0b',
+                color: 'white',
+                borderRadius: '50%',
+                width: 24,
+                height: 24,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: 12,
+                fontWeight: 900,
+                flexShrink: 0,
+              }}>
+                ⏸
+              </div>
+              <div style={{ fontSize: 13 }}>
+                <div style={{ fontWeight: 800, color: '#b45309' }}>
+                  Notificação Silenciada pelo Modo Pausa
+                </div>
+                <div style={{ color: 'hsl(var(--text-main))', marginTop: 4, lineHeight: 1.5 }}>
+                  Esta notificação foi acionada pela rotina do sistema, porém o envio para os smartphones foi suprimido porque as notificações estavam pausadas globalmente pelo administrador.
+                  <br />
+                  <strong>Importante:</strong> Esta notificação foi cancelada e <strong>não será reenviada</strong> mesmo após a retomada das notificações.
+                </div>
+              </div>
+            </div>
+          )}
           {/* Card de Notificação Exibida */}
           <div style={{
             background: 'hsl(var(--bg-main))',

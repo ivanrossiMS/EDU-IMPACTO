@@ -514,18 +514,18 @@ def enviar_para_webhook(log_entry, cat, tipo_override=None):
 
     # ── REGRA DE OURO DA ESCOLA (CONTROL ID ID NEXT) ──
     # A catraca .150 registra tanto entrada quanto saída dependendo da rota física:
-    # • Rota Principal (Portal 1): ENTRADA (Portaria Principal / Médio - .150)
-    # • Outra Rota (Portal 2 / Terminal Remoto .154): SAÍDA (Rua das Garças)
+    # • Rota Principal (Portal 2 / Comp 810373889): ENTRADA (Portaria Principal / Médio - .150)
+    # • Outra Rota (Portal 1 / Comp 810373890): SAÍDA (Rua das Garças / Terminal Remoto .154)
     # As catracas .155 (FUND1) e .105 (INF) são SEMPRE ENTRADA!
-    is_outra_rota_150 = (
+    is_saida_150 = (
         (cat_ip == "192.168.1.150" or cat_id == "0M0200/02638E") and
-        (portal_id in (2, 102) or door_id == 2)
+        (portal_id in (1, 101) or comp_id == 810373890 or door_id == 1)
     )
     is_catraca_154 = (cat_ip == "192.168.1.154" or cat_id == "0M0200/0263A6" or cat.get("tipo") == "saida")
 
     if tipo_override:
         tipo = tipo_override
-    elif is_outra_rota_150 or is_catraca_154:
+    elif is_saida_150 or is_catraca_154:
         tipo = "saida"
     else:
         tipo = "entrada"
@@ -766,16 +766,16 @@ def processar_eventos_detectados(eventos_por_catraca, estado):
 
             # ── IDENTIFICAÇÃO DE ROTA NA CATRACA .150 (CONTROL ID ID NEXT) ──
             # A catraca .150 registra tanto entrada quanto saída dependendo da rota física:
-            # • Rota Principal (Portal 1): ENTRADA (Portaria Principal / Médio - .150)
-            # • Outra Rota (Portal 2 / Terminal Remoto .154): SAÍDA (Rua das Garças)
+            # • Rota Principal (Portal 2 / Comp 810373889): ENTRADA (Portaria Principal / Médio - .150)
+            # • Outra Rota (Portal 1 / Comp 810373890): SAÍDA (Rua das Garças / Terminal Remoto .154)
             # As catracas .155 (FUND1) e .105 (INF) são SEMPRE ENTRADA!
-            is_outra_rota_150 = (
+            is_saida_150 = (
                 (cat_ip == "192.168.1.150" or cat_id == "0M0200/02638E") and
-                (p_id in (2, 102) or door_id == 2)
+                (p_id in (1, 101) or c_id == 810373890 or door_id == 1)
             )
             is_catraca_154_direto = (cat_ip == "192.168.1.154" or cat_id == "0M0200/0263A6" or cat.get("tipo") == "saida")
 
-            if is_outra_rota_150 or is_catraca_154_direto:
+            if is_saida_150 or is_catraca_154_direto:
                 logs_saida.append(l)
             else:
                 logs_entrada.append(l)
