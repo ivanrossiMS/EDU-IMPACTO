@@ -115,6 +115,33 @@ export default function ADNotasPage({ params }: { params: any }) {
 
   const [selectedTurma, setSelectedTurma] = useState<string>('');
 
+  // Informações da turma atual decompostas e elegantes para layout ultra-moderno sem quebra de linha
+  const turmaFormatada = useMemo(() => {
+    const rawTurma = (selectedTurma || '').trim();
+    if (!rawTurma) {
+      return { nome: 'Turma', turno: '', ano: selectedYear || '' };
+    }
+
+    // Separa partes como "4º ANO A - MATUTINO - 2026" ou "9º ANO B - VESPERTINO"
+    const rawParts = rawTurma.split(/\s*[-/|•·]\s*/).map(p => p.trim()).filter(Boolean);
+    let nome = rawParts[0] || rawTurma;
+    let turno = '';
+    let ano = selectedYear || '';
+
+    for (let i = 1; i < rawParts.length; i++) {
+      const p = rawParts[i];
+      if (/^\d{4}$/.test(p)) {
+        if (!ano) ano = p;
+      } else if (/^(matutino|vespertino|noturno|integral|manhã|manha|tarde|noite)$/i.test(p)) {
+        turno = p.charAt(0).toUpperCase() + p.slice(1).toLowerCase();
+      } else if (!turno) {
+        turno = p.charAt(0).toUpperCase() + p.slice(1).toLowerCase();
+      }
+    }
+
+    return { nome, turno, ano };
+  }, [selectedTurma, selectedYear]);
+
   useEffect(() => {
     if (turmasDisponiveis.length > 0 && !selectedTurma) {
       setSelectedTurma(turmasDisponiveis[0] as string);
@@ -468,23 +495,25 @@ export default function ADNotasPage({ params }: { params: any }) {
 
   return (
     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
-          <div className="no-print" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, flexWrap: 'wrap', gap: 16 }}>
-        <h2 style={{ fontSize: 24, fontWeight: 800, fontFamily: 'Outfit, sans-serif', margin: 0, color: '#0f172a' }}>Boletim e Notas</h2>
+          <div className="no-print" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 16 }}>
+        <h2 style={{ fontSize: 24, fontWeight: 800, fontFamily: 'Outfit, sans-serif', margin: 0, color: '#0f172a', letterSpacing: '-0.02em' }}>Boletim e Notas</h2>
       </div>
 
-      {/* Filters Glassmorphism Card */}
+      {/* Filters Glassmorphism Card Ultra Modern */}
       <div className="no-print" style={{ 
-        background: 'rgba(255, 255, 255, 0.7)', 
-        backdropFilter: 'blur(10px)', 
-        border: '1px solid rgba(255, 255, 255, 0.5)', 
-        borderRadius: 24, 
-        padding: 20, 
-        marginBottom: 24,
-        boxShadow: '0 4px 24px -6px rgba(0, 0, 0, 0.05)'
+        background: 'linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(248, 250, 252, 0.92) 100%)', 
+        backdropFilter: 'blur(16px)', 
+        WebkitBackdropFilter: 'blur(16px)',
+        border: '1.5px solid rgba(226, 232, 240, 0.85)', 
+        borderRadius: 22, 
+        padding: '14px', 
+        marginBottom: 20,
+        boxShadow: '0 10px 30px -6px rgba(15, 23, 42, 0.07), 0 4px 12px rgba(0, 0, 0, 0.02), inset 0 1.5px 1px #ffffff',
+        position: 'relative'
       }}>
-        {/* Ano & Turma */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-          <div style={{ position: 'relative', flex: 1, marginRight: 16 }}>
+        {/* Top Row: Turma Selector + Download PDF Button */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+          <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
             <select 
               value={`${selectedYear}|${selectedTurma}`}
               onChange={(e) => {
@@ -492,101 +521,233 @@ export default function ADNotasPage({ params }: { params: any }) {
                 setSelectedYear(ano);
                 setSelectedTurma(turma);
               }}
-              style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer', zIndex: 2 }}
+              style={{ 
+                position: 'absolute', 
+                top: 0, 
+                left: 0, 
+                width: '100%', 
+                height: '100%', 
+                opacity: 0, 
+                cursor: 'pointer', 
+                zIndex: 10,
+                WebkitAppearance: 'none'
+              }}
+              title="Trocar Turma / Ano Letivo"
             >
               {anosDisponiveis.map((ano: string) => (
-                 <optgroup key={ano} label={`Ano: ${ano}`}>
+                 <optgroup key={ano} label={`Ano Letivo: ${ano}`}>
                    {Array.from(new Set(todosBoletins.filter((b:any)=>b.anoStr === ano).map((b:any)=>b.nomeTurma))).sort().map((turma: any) => (
                       <option key={`${ano}|${turma}`} value={`${ano}|${turma}`}>
-                        {turma} - {ano}
+                        {turma.includes(ano) ? turma : `${turma} • ${ano}`}
                       </option>
                    ))}
                  </optgroup>
               ))}
             </select>
+
             <div style={{ 
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between', 
-              background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, 
-              padding: '12px 16px', fontSize: 15, fontWeight: 700, color: '#0f172a',
-              boxShadow: '0 2px 4px rgba(0,0,0,0.02)'
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'space-between', 
+              background: '#ffffff', 
+              border: '1.5px solid #e2e8f0', 
+              borderRadius: 16, 
+              padding: '6px 10px 6px 8px', 
+              boxShadow: '0 2px 8px rgba(15, 23, 42, 0.04), inset 0 1px 0 rgba(255,255,255,0.9)',
+              height: 46,
+              boxSizing: 'border-box',
+              minWidth: 0,
+              gap: 8,
+              transition: 'all 0.2s ease'
             }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                 <GraduationCap size={18} color="#3b82f6" />
-                 <span>{selectedTurma} - {selectedYear}</span>
+              {/* Left: Icon + Content */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: 1, overflow: 'hidden' }}>
+                <div style={{ 
+                  width: 32, 
+                  height: 32, 
+                  borderRadius: 10, 
+                  background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)', 
+                  border: '1px solid #bfdbfe',
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'center', 
+                  color: '#2563eb', 
+                  flexShrink: 0,
+                  boxShadow: '0 2px 4px rgba(37,99,235,0.08)'
+                }}>
+                  <GraduationCap size={16} strokeWidth={2.4} />
+                </div>
+                
+                <div style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: 6, 
+                  minWidth: 0, 
+                  flex: 1, 
+                  whiteSpace: 'nowrap', 
+                  overflow: 'hidden' 
+                }}>
+                  <span style={{ 
+                    fontSize: 13.5, 
+                    fontWeight: 800, 
+                    color: '#0f172a', 
+                    fontFamily: 'Outfit, sans-serif',
+                    whiteSpace: 'nowrap', 
+                    overflow: 'hidden', 
+                    textOverflow: 'ellipsis',
+                    letterSpacing: '-0.01em',
+                    minWidth: 0
+                  }} title={turmaFormatada.nome}>
+                    {turmaFormatada.nome}
+                  </span>
+
+                  {turmaFormatada.turno && (
+                    <span className="ad-turno-badge" style={{ 
+                      fontSize: 10.5, 
+                      fontWeight: 700, 
+                      color: '#475569', 
+                      background: '#f1f5f9', 
+                      border: '1px solid #e2e8f0', 
+                      padding: '2px 7px', 
+                      borderRadius: 6, 
+                      whiteSpace: 'nowrap', 
+                      flexShrink: 0,
+                      letterSpacing: '0.01em'
+                    }}>
+                      {turmaFormatada.turno}
+                    </span>
+                  )}
+
+                  {turmaFormatada.ano && (
+                    <span style={{ 
+                      fontSize: 10.5, 
+                      fontWeight: 800, 
+                      color: '#2563eb', 
+                      background: '#eff6ff', 
+                      border: '1px solid #bfdbfe', 
+                      padding: '2px 7px', 
+                      borderRadius: 6, 
+                      whiteSpace: 'nowrap', 
+                      flexShrink: 0,
+                      letterSpacing: '0.02em'
+                    }}>
+                      {turmaFormatada.ano}
+                    </span>
+                  )}
+                </div>
               </div>
-              <ChevronDown size={18} color="#94a3b8" />
+
+              {/* Right: Chevron */}
+              <div style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center', 
+                color: '#94a3b8', 
+                flexShrink: 0 
+              }}>
+                <ChevronDown size={15} strokeWidth={2.5} />
+              </div>
             </div>
           </div>
           
-          <button onClick={() => window.print()} className="btn btn-secondary" style={{ 
-            display: 'flex', alignItems: 'center', gap: 8, 
-            background: '#fff', border: '1px solid #e2e8f0', color: '#0f172a', 
-            fontWeight: 600, padding: '12px', borderRadius: 16,
-            boxShadow: '0 2px 4px rgba(0,0,0,0.02)'
-          }} title="Baixar PDF">
-            <Download size={18} color="#3b82f6" /> 
-            <span className="hide-on-mobile">Baixar PDF</span>
+          {/* Action Download / Imprimir PDF */}
+          <button 
+            onClick={() => window.print()} 
+            style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center',
+              gap: 6, 
+              height: 46,
+              padding: '0 14px',
+              background: '#ffffff', 
+              border: '1.5px solid #e2e8f0', 
+              color: '#0f172a', 
+              fontWeight: 700, 
+              fontSize: 13,
+              borderRadius: 16,
+              boxShadow: '0 2px 8px rgba(15, 23, 42, 0.04), inset 0 1px 0 rgba(255,255,255,0.9)',
+              cursor: 'pointer',
+              flexShrink: 0,
+              boxSizing: 'border-box',
+              transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)'
+            }} 
+            title="Baixar ou Imprimir Boletim em PDF"
+          >
+            <Download size={16} color="#2563eb" strokeWidth={2.4} /> 
+            <span className="hide-on-mobile" style={{ whiteSpace: 'nowrap' }}>PDF</span>
           </button>
         </div>
 
         {/* Bimestres Segmented Control */}
         {bimestresDisponiveis.length > 0 && (
           <div style={{ 
-            display: 'flex', gap: 6, background: '#f1f5f9', padding: 6, borderRadius: 18,
-            overflowX: 'auto', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch',
-            alignItems: 'center'
+            display: 'flex', 
+            gap: 4, 
+            background: 'rgba(241, 245, 249, 0.85)', 
+            border: '1px solid rgba(226, 232, 240, 0.8)',
+            padding: 4, 
+            borderRadius: 14,
+            overflowX: 'auto', 
+            scrollbarWidth: 'none', 
+            WebkitOverflowScrolling: 'touch',
+            alignItems: 'center',
+            boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.03)'
           }}>
             {/* Botão Média Anual - Antes dos bimestres */}
             <button
               onClick={() => setSelectedBimestreId('media_anual')}
               style={{
                 flex: 1,
-                minWidth: 100,
-                padding: '10px 8px',
-                borderRadius: 14,
+                minWidth: 104,
+                padding: '9px 10px',
+                borderRadius: 10,
                 border: 'none',
                 fontWeight: 700,
-                fontSize: 13,
+                fontSize: 12.5,
                 whiteSpace: 'nowrap',
-                transition: 'all 0.3s ease',
+                transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                gap: 6,
+                gap: 5,
                 background: isMediaAnual ? 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)' : 'transparent',
                 color: isMediaAnual ? '#ffffff' : '#64748b',
-                boxShadow: isMediaAnual ? '0 4px 12px rgba(37,99,235,0.25)' : 'none'
+                boxShadow: isMediaAnual ? '0 4px 12px rgba(37, 99, 235, 0.28), 0 1px 3px rgba(37, 99, 235, 0.16)' : 'none'
               }}
               title="Calcular e visualizar a média anual das disciplinas com base nos bimestres lançados"
             >
-              <Calculator size={14} />
+              <Calculator size={13.5} strokeWidth={2.4} />
               <span>Média Anual</span>
             </button>
 
-            {bimestresDisponiveis.map((b: any) => (
-              <button
-                key={b.id}
-                onClick={() => setSelectedBimestreId(b.id)}
-                style={{
-                  flex: 1,
-                  minWidth: 80,
-                  padding: '10px 4px',
-                  borderRadius: 14,
-                  border: 'none',
-                  fontWeight: 700,
-                  fontSize: 13,
-                  whiteSpace: 'nowrap',
-                  transition: 'all 0.3s ease',
-                  cursor: 'pointer',
-                  background: selectedBimestreId === b.id ? 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)' : 'transparent',
-                  color: selectedBimestreId === b.id ? '#ffffff' : '#64748b',
-                  boxShadow: selectedBimestreId === b.id ? '0 4px 12px rgba(37,99,235,0.25)' : 'none'
-                }}
-              >
-                {b.nome.replace('Bimestre', 'Bim')}
-              </button>
-            ))}
+            {bimestresDisponiveis.map((b: any) => {
+              const isSelected = selectedBimestreId === b.id;
+              return (
+                <button
+                  key={b.id}
+                  onClick={() => setSelectedBimestreId(b.id)}
+                  style={{
+                    flex: 1,
+                    minWidth: 72,
+                    padding: '9px 8px',
+                    borderRadius: 10,
+                    border: 'none',
+                    fontWeight: 700,
+                    fontSize: 12.5,
+                    whiteSpace: 'nowrap',
+                    transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+                    cursor: 'pointer',
+                    background: isSelected ? 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)' : 'transparent',
+                    color: isSelected ? '#ffffff' : '#64748b',
+                    boxShadow: isSelected ? '0 4px 12px rgba(37, 99, 235, 0.28), 0 1px 3px rgba(37, 99, 235, 0.16)' : 'none'
+                  }}
+                >
+                  {b.nome.replace('Bimestre', 'Bim')}
+                </button>
+              );
+            })}
           </div>
         )}
       </div>
@@ -1053,6 +1214,9 @@ export default function ADNotasPage({ params }: { params: any }) {
       <style dangerouslySetInnerHTML={{__html:`
         @media (max-width: 480px) {
           .hide-on-mobile { display: none; }
+        }
+        @media (max-width: 360px) {
+          .ad-turno-badge { display: none !important; }
         }
         @media print {
           @page {

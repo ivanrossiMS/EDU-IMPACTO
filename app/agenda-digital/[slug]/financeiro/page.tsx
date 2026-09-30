@@ -1511,157 +1511,185 @@ export default function ADFinanceiroPage() {
         @keyframes spin {
           to { transform: rotate(360deg); }
         }
+        @media (max-width: 480px) {
+          .hide-on-mobile { display: none !important; }
+        }
       `}</style>
 
       {/* ── HEADER CARD UNIFICADO & ULTRA MODERNO ─────────────────────────────── */}
       <div
+        className="no-print"
         style={{
-          background: '#ffffff',
+          background: 'linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(248, 250, 252, 0.92) 100%)',
+          backdropFilter: 'blur(16px)',
+          WebkitBackdropFilter: 'blur(16px)',
           borderRadius: 22,
-          border: '1.5px solid #edf2f7',
-          padding: '16px 18px',
+          border: '1.5px solid rgba(226, 232, 240, 0.85)',
+          padding: '16px',
           marginBottom: 16,
-          boxShadow: '0 4px 18px rgba(0, 0, 0, 0.03)',
+          boxShadow: '0 10px 30px -6px rgba(15, 23, 42, 0.07), 0 4px 12px rgba(0, 0, 0, 0.02), inset 0 1.5px 1px #ffffff',
           display: 'flex',
           flexDirection: 'column',
           gap: 12,
+          position: 'relative',
         }}
       >
-        {/* Linha Superior: Título + Sincronização + Seletor de Ano + Refresh */}
+        {/* Linha 1: Título / Identidade + Ação IRPF */}
         <div
           style={{
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            gap: 12,
-            flexWrap: 'wrap',
+            gap: 10,
           }}
         >
-          {/* Lado Esquerdo: Ícone + Título + Tag */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          {/* Lado Esquerdo: Ícone + Título + Tag isaac */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
             <div
               style={{
-                width: 44,
-                height: 44,
-                borderRadius: 14,
+                width: 38,
+                height: 38,
+                borderRadius: 12,
                 background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                boxShadow: '0 6px 14px rgba(79, 70, 229, 0.22)',
+                boxShadow: '0 4px 12px rgba(79, 70, 229, 0.22)',
                 color: '#ffffff',
                 flexShrink: 0,
               }}
             >
-              <Wallet size={22} />
+              <Wallet size={20} />
             </div>
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+
+            <div style={{ minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'nowrap' }}>
                 <h1
                   style={{
                     margin: 0,
-                    fontSize: 20,
+                    fontSize: 18,
                     fontWeight: 900,
                     color: '#0f172a',
+                    fontFamily: 'Outfit, sans-serif',
                     letterSpacing: '-0.02em',
                     lineHeight: 1.2,
+                    whiteSpace: 'nowrap',
                   }}
                 >
                   Financeiro
                 </h1>
                 <span
                   style={{
-                    fontSize: 11,
+                    fontSize: 10,
                     fontWeight: 800,
                     color: '#4f46e5',
                     background: '#eef2ff',
                     border: '1px solid #c7d2fe',
-                    padding: '2px 8px',
+                    padding: '1px 6px',
                     borderRadius: 6,
                     letterSpacing: 0.2,
+                    whiteSpace: 'nowrap',
+                    flexShrink: 0,
                   }}
                 >
                   isaac
                 </span>
               </div>
-              <p style={{ margin: '2px 0 0', fontSize: 12, color: '#64748b', fontWeight: 500 }}>
+              <p
+                style={{
+                  margin: '2px 0 0',
+                  fontSize: 11.5,
+                  color: '#64748b',
+                  fontWeight: 500,
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                }}
+              >
                 Gestão de faturas e mensalidades escolares
               </p>
             </div>
           </div>
 
-          {/* Lado Direito: Declaração IRPF + Seletor de Ano + Botão Atualizar */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            {/* Botão Declaração IRPF */}
-            <motion.button
-              whileTap={{ scale: 0.96 }}
-              onClick={() => setIrpfModalOpen(true)}
-              title="Gerar Declaração Anual de IRPF / Quitação de Débitos"
+          {/* Lado Direito: Botão Declaração IRPF */}
+          <motion.button
+            whileTap={{ scale: 0.96 }}
+            onClick={() => setIrpfModalOpen(true)}
+            title="Gerar Declaração Anual de IRPF / Quitação de Débitos"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              height: 36,
+              padding: '0 10px',
+              borderRadius: 11,
+              border: '1.5px solid #c7d2fe',
+              background: 'linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%)',
+              color: '#4338ca',
+              fontWeight: 800,
+              fontSize: 11.5,
+              cursor: 'pointer',
+              boxShadow: '0 2px 6px rgba(79, 70, 229, 0.1)',
+              transition: 'all 0.2s',
+              whiteSpace: 'nowrap',
+              flexShrink: 0,
+            }}
+          >
+            <FileText size={14} color="#4f46e5" strokeWidth={2.4} />
+            <span><span className="hide-on-mobile">Declaração </span>IRPF</span>
+            <span
+              style={{
+                fontSize: 9,
+                fontWeight: 900,
+                background: '#4f46e5',
+                color: '#ffffff',
+                padding: '1px 5px',
+                borderRadius: 4,
+                letterSpacing: 0.3,
+              }}
+            >
+              PDF
+            </span>
+          </motion.button>
+        </div>
+
+        {/* Linha 2: Seletor de Ano (Full Width) + Botão Atualizar */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {/* Seletor de Ano */}
+          <div ref={yearDropdownRef} style={{ position: 'relative', flex: 1, minWidth: 0 }}>
+            <div
+              onClick={() => setIsYearDropdownOpen((prev) => !prev)}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  setIsYearDropdownOpen((prev) => !prev)
+                }
+              }}
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: 6,
-                padding: '6px 12px',
-                borderRadius: 11,
-                border: '1.5px solid #c7d2fe',
-                background: 'linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%)',
-                color: '#4338ca',
-                fontWeight: 800,
-                fontSize: 12,
+                justifyContent: 'space-between',
+                height: 44,
+                padding: '0 12px',
+                borderRadius: 14,
+                border: isYearDropdownOpen ? '1.5px solid #4f46e5' : '1.5px solid #e2e8f0',
+                background: '#ffffff',
                 cursor: 'pointer',
-                boxShadow: '0 2px 6px rgba(79, 70, 229, 0.12)',
-                transition: 'all 0.2s',
+                boxShadow: isYearDropdownOpen
+                  ? '0 4px 14px rgba(79, 70, 229, 0.15)'
+                  : '0 2px 6px rgba(15, 23, 42, 0.03)',
+                transition: 'all 0.18s cubic-bezier(0.4, 0, 0.2, 1)',
+                userSelect: 'none',
+                boxSizing: 'border-box',
               }}
             >
-              <FileText size={14} color="#4f46e5" />
-              <span>Declaração IRPF</span>
-              <span
-                style={{
-                  fontSize: 9,
-                  fontWeight: 900,
-                  background: '#4f46e5',
-                  color: '#ffffff',
-                  padding: '1px 5px',
-                  borderRadius: 4,
-                  letterSpacing: 0.3,
-                }}
-              >
-                PDF
-              </span>
-            </motion.button>
-
-            {/* Seletor de Ano em Lista Ultra Moderna */}
-            <div ref={yearDropdownRef} style={{ position: 'relative' }}>
-              <div
-                onClick={() => setIsYearDropdownOpen((prev) => !prev)}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault()
-                    setIsYearDropdownOpen((prev) => !prev)
-                  }
-                }}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  padding: '6px 12px',
-                  borderRadius: 12,
-                  border: isYearDropdownOpen ? '1.5px solid #4f46e5' : '1.5px solid #e2e8f0',
-                  background: '#ffffff',
-                  cursor: 'pointer',
-                  boxShadow: isYearDropdownOpen
-                    ? '0 4px 14px rgba(79, 70, 229, 0.15)'
-                    : '0 1px 3px rgba(0, 0, 0, 0.04)',
-                  transition: 'all 0.18s cubic-bezier(0.4, 0, 0.2, 1)',
-                  userSelect: 'none',
-                }}
-              >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: 1 }}>
                 <div
                   style={{
-                    width: 26,
-                    height: 26,
+                    width: 28,
+                    height: 28,
                     borderRadius: 8,
                     background: 'linear-gradient(135deg, #e0e7ff 0%, #c7d2fe 100%)',
                     color: '#4338ca',
@@ -1674,7 +1702,7 @@ export default function ADFinanceiroPage() {
                   <CalendarDays size={14} strokeWidth={2.3} />
                 </div>
 
-                <span style={{ fontSize: 13, fontWeight: 800, color: '#0f172a' }}>
+                <span style={{ fontSize: 13, fontWeight: 800, color: '#0f172a', whiteSpace: 'nowrap' }}>
                   Ano {selectedAno}
                 </span>
 
@@ -1688,178 +1716,185 @@ export default function ADFinanceiroPage() {
                       border: '1px solid #a7f3d0',
                       padding: '1px 6px',
                       borderRadius: 6,
+                      whiteSpace: 'nowrap',
+                      flexShrink: 0,
                     }}
                   >
                     Vigente
                   </span>
                 )}
-
-                <ChevronDown
-                  size={14}
-                  color={isYearDropdownOpen ? '#4f46e5' : '#64748b'}
-                  style={{
-                    transform: isYearDropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)',
-                    transition: 'transform 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-                  }}
-                />
               </div>
 
-              {/* Menu Suspenso da Lista Ultra Moderna */}
-              <AnimatePresence>
-                {isYearDropdownOpen && (
-                  <motion.div
-                    initial={{ opacity: 0, y: -6, scale: 0.97 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: -6, scale: 0.97 }}
-                    transition={{ duration: 0.15, ease: 'easeOut' }}
-                    style={{
-                      position: 'absolute',
-                      top: '100%',
-                      right: 0,
-                      marginTop: 6,
-                      minWidth: 195,
-                      background: '#ffffff',
-                      border: '1.5px solid #e2e8f0',
-                      borderRadius: 14,
-                      padding: 6,
-                      boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.12), 0 4px 10px rgba(0, 0, 0, 0.04)',
-                      zIndex: 60,
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: 4,
-                    }}
-                  >
-                    {ANOS.map((ano) => {
-                      const isSelected = selectedAno === ano
-                      const isCurrent = ano === '2026'
-
-                      return (
-                        <div
-                          key={ano}
-                          onClick={() => {
-                            setSelectedAno(ano)
-                            setIsYearDropdownOpen(false)
-                          }}
-                          style={{
-                            padding: '8px 12px',
-                            borderRadius: 10,
-                            border: isSelected ? '1.5px solid #c7d2fe' : '1.5px solid transparent',
-                            background: isSelected ? '#f5f3ff' : '#ffffff',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
-                            gap: 10,
-                            transition: 'all 0.15s ease',
-                          }}
-                          onMouseEnter={(e) => {
-                            if (!isSelected) e.currentTarget.style.background = '#f8fafc'
-                          }}
-                          onMouseLeave={(e) => {
-                            if (!isSelected) e.currentTarget.style.background = '#ffffff'
-                          }}
-                        >
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <div
-                              style={{
-                                width: 28,
-                                height: 28,
-                                borderRadius: 8,
-                                background: isSelected ? '#4f46e5' : '#f1f5f9',
-                                color: isSelected ? '#ffffff' : '#475569',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                fontSize: 11,
-                                fontWeight: 800,
-                              }}
-                            >
-                              {ano.slice(-2)}
-                            </div>
-
-                            <div>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                <span
-                                  style={{
-                                    fontSize: 13,
-                                    fontWeight: 800,
-                                    color: isSelected ? '#4338ca' : '#0f172a',
-                                  }}
-                                >
-                                  Ano Letivo {ano}
-                                </span>
-                                {isCurrent && (
-                                  <span
-                                    style={{
-                                      fontSize: 9.5,
-                                      fontWeight: 800,
-                                      color: '#059669',
-                                      background: '#ecfdf5',
-                                      border: '1px solid #a7f3d0',
-                                      padding: '1px 5px',
-                                      borderRadius: 5,
-                                    }}
-                                  >
-                                    Vigente
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-
-                          {isSelected && <CheckCircle2 size={16} color="#4f46e5" />}
-                        </div>
-                      )
-                    })}
-                  </motion.div>
-                )}
-              </AnimatePresence>
+              <ChevronDown
+                size={15}
+                color={isYearDropdownOpen ? '#4f46e5' : '#94a3b8'}
+                strokeWidth={2.5}
+                style={{
+                  transform: isYearDropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+                  transition: 'transform 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                  flexShrink: 0,
+                }}
+              />
             </div>
 
-            <button
-              onClick={() => fetchFinanceiro(selectedAno, true)}
-              disabled={loading}
-              title="Atualizar dados em tempo real"
-              style={{
-                width: 36,
-                height: 36,
-                borderRadius: 11,
-                background: '#ffffff',
-                border: '1.5px solid #e2e8f0',
-                color: '#475569',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                cursor: loading ? 'not-allowed' : 'pointer',
-                boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
-                transition: 'all 0.2s',
-              }}
-            >
-              <RefreshCw size={14} style={{ animation: loading ? 'spin 0.8s linear infinite' : 'none' }} />
-            </button>
+            {/* Menu Suspenso da Lista Ultra Moderna */}
+            <AnimatePresence>
+              {isYearDropdownOpen && (
+                <motion.div
+                  initial={{ opacity: 0, y: -6, scale: 0.97 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: -6, scale: 0.97 }}
+                  transition={{ duration: 0.15, ease: 'easeOut' }}
+                  style={{
+                    position: 'absolute',
+                    top: '100%',
+                    left: 0,
+                    right: 0,
+                    marginTop: 6,
+                    background: '#ffffff',
+                    border: '1.5px solid #e2e8f0',
+                    borderRadius: 14,
+                    padding: 6,
+                    boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.12), 0 4px 10px rgba(0, 0, 0, 0.04)',
+                    zIndex: 60,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 4,
+                  }}
+                >
+                  {ANOS.map((ano) => {
+                    const isSelected = selectedAno === ano
+                    const isCurrent = ano === '2026'
+
+                    return (
+                      <div
+                        key={ano}
+                        onClick={() => {
+                          setSelectedAno(ano)
+                          setIsYearDropdownOpen(false)
+                        }}
+                        style={{
+                          padding: '8px 12px',
+                          borderRadius: 10,
+                          border: isSelected ? '1.5px solid #c7d2fe' : '1.5px solid transparent',
+                          background: isSelected ? '#f5f3ff' : '#ffffff',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          gap: 10,
+                          transition: 'all 0.15s ease',
+                        }}
+                        onMouseEnter={(e) => {
+                          if (!isSelected) e.currentTarget.style.background = '#f8fafc'
+                        }}
+                        onMouseLeave={(e) => {
+                          if (!isSelected) e.currentTarget.style.background = '#ffffff'
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <div
+                            style={{
+                              width: 28,
+                              height: 28,
+                              borderRadius: 8,
+                              background: isSelected ? '#4f46e5' : '#f1f5f9',
+                              color: isSelected ? '#ffffff' : '#475569',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: 11,
+                              fontWeight: 800,
+                            }}
+                          >
+                            {ano.slice(-2)}
+                          </div>
+
+                          <div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                              <span
+                                style={{
+                                  fontSize: 13,
+                                  fontWeight: 800,
+                                  color: isSelected ? '#4338ca' : '#0f172a',
+                                }}
+                              >
+                                Ano Letivo {ano}
+                              </span>
+                              {isCurrent && (
+                                <span
+                                  style={{
+                                    fontSize: 9.5,
+                                    fontWeight: 800,
+                                    color: '#059669',
+                                    background: '#ecfdf5',
+                                    border: '1px solid #a7f3d0',
+                                    padding: '1px 5px',
+                                    borderRadius: 5,
+                                  }}
+                                >
+                                  Vigente
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {isSelected && <CheckCircle2 size={16} color="#4f46e5" />}
+                      </div>
+                    )
+                  })}
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
+
+          {/* Botão Atualizar */}
+          <button
+            onClick={() => fetchFinanceiro(selectedAno, true)}
+            disabled={loading}
+            title="Atualizar dados em tempo real"
+            style={{
+              width: 44,
+              height: 44,
+              borderRadius: 14,
+              background: '#ffffff',
+              border: '1.5px solid #e2e8f0',
+              color: '#475569',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: loading ? 'not-allowed' : 'pointer',
+              boxShadow: '0 2px 6px rgba(15, 23, 42, 0.03)',
+              transition: 'all 0.2s',
+              flexShrink: 0,
+              boxSizing: 'border-box',
+            }}
+          >
+            <RefreshCw size={15} style={{ animation: loading ? 'spin 0.8s linear infinite' : 'none' }} />
+          </button>
         </div>
 
-        {/* Linha Inferior Integrada: Status de Saúde Financeira */}
+        {/* Linha 3: Status de Saúde Financeira */}
         {!loading && data && (
           <div
             style={{
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
-              padding: '9px 13px',
+              padding: '9px 12px',
               borderRadius: 12,
               background: data.summary.isAdimplente ? '#f0fdf4' : '#fef2f2',
-              border: `1px solid ${data.summary.isAdimplente ? '#bbf7d0' : '#fecaca'}`,
+              border: `1.5px solid ${data.summary.isAdimplente ? '#bbf7d0' : '#fecaca'}`,
               gap: 8,
-              flexWrap: 'wrap',
+              flexWrap: 'nowrap',
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0, overflow: 'hidden' }}>
               <div
                 style={{
-                  width: 20,
-                  height: 20,
+                  width: 22,
+                  height: 22,
                   borderRadius: '50%',
                   background: data.summary.isAdimplente ? '#10b981' : '#ef4444',
                   display: 'flex',
@@ -1867,12 +1902,13 @@ export default function ADFinanceiroPage() {
                   justifyContent: 'center',
                   color: '#ffffff',
                   flexShrink: 0,
+                  boxShadow: `0 2px 6px ${data.summary.isAdimplente ? 'rgba(16, 185, 129, 0.25)' : 'rgba(239, 68, 68, 0.25)'}`,
                 }}
               >
                 {data.summary.isAdimplente ? (
-                  <CheckCircle2 size={12} strokeWidth={3} />
+                  <CheckCircle2 size={13} strokeWidth={3} />
                 ) : (
-                  <AlertTriangle size={12} strokeWidth={3} />
+                  <AlertTriangle size={13} strokeWidth={3} />
                 )}
               </div>
               <span
@@ -1880,11 +1916,14 @@ export default function ADFinanceiroPage() {
                   fontSize: 12,
                   fontWeight: 800,
                   color: data.summary.isAdimplente ? '#15803d' : '#b91c1c',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
                 }}
               >
                 {data.summary.isAdimplente
                   ? `Situação Regularizada em ${selectedAno}`
-                  : `Atenção: ${data.summary.quantidadeVencidas} fatura(s) vencida(s) no exercício`}
+                  : `Atenção: ${data.summary.quantidadeVencidas} fatura(s) vencida(s)`}
               </span>
             </div>
 
@@ -1894,9 +1933,12 @@ export default function ADFinanceiroPage() {
                 fontWeight: 800,
                 color: data.summary.isAdimplente ? '#15803d' : '#b91c1c',
                 background: '#ffffff',
-                padding: '2px 8px',
+                padding: '2.5px 8px',
                 borderRadius: 100,
                 border: `1px solid ${data.summary.isAdimplente ? '#bbf7d0' : '#fecaca'}`,
+                whiteSpace: 'nowrap',
+                flexShrink: 0,
+                boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
               }}
             >
               {data.summary.isAdimplente ? '✓ Contas em Dia' : '! Pendências'}

@@ -1603,7 +1603,7 @@ export default function LoginPage() {
     <div className="login-wrapper" style={{ display:'flex', minHeight:'100vh', fontFamily:"'Inter',sans-serif", overflow:'hidden' }}>
       
       {/* Top Bar with Glassmorphism */}
-      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, padding: '16px 32px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', borderBottom: '1px solid rgba(255,255,255,0.05)', zIndex: 50 }}>
+      <div className="login-top-bar" style={{ position: 'absolute', top: 0, left: 0, right: 0, padding: '16px 32px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', borderBottom: '1px solid rgba(255,255,255,0.05)', zIndex: 50 }}>
         <div style={{ display:'flex', alignItems:'center', gap:14 }}>
           <div style={{ width:40, height:40, borderRadius:12, background:'linear-gradient(135deg, #3b82f6, #8b5cf6)', display:'flex', alignItems:'center', justifyContent:'center', boxShadow:'0 4px 16px rgba(59,130,246,0.3)', overflow: 'hidden' }}>
             <img src="/logo-impacto.png" alt="Logo Impacto" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
@@ -1750,27 +1750,54 @@ export default function LoginPage() {
           .login-left-panel {
             display: none !important;
           }
+          .login-top-bar {
+            position: relative !important;
+            top: auto !important;
+            left: auto !important;
+            right: auto !important;
+            width: 100% !important;
+            padding-top: max(calc(env(safe-area-inset-top, 0px) + 12px), 52px) !important;
+            padding-bottom: 12px !important;
+            padding-left: 16px !important;
+            padding-right: 16px !important;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
+            background: rgba(15, 23, 42, 0.5) !important;
+            backdrop-filter: blur(20px) !important;
+            -webkit-backdrop-filter: blur(20px) !important;
+            flex-shrink: 0 !important;
+            z-index: 50 !important;
+          }
           .login-right-panel {
-            padding: 100px 20px 48px 20px !important;
+            padding: 14px 20px max(calc(env(safe-area-inset-bottom, 0px) + 24px), 32px) 20px !important;
             justify-content: flex-start !important;
             background: transparent !important;
             align-items: stretch !important;
+            overflow-y: visible !important;
           }
           .hide-on-mobile {
             display: none !important;
           }
           .mobile-only {
             display: flex !important;
+            margin-top: 20px !important;
           }
           .login-card {
             padding: 24px 20px !important;
             border-radius: 24px !important;
           }
           .login-header-group {
-            margin-bottom: 24px !important;
+            margin-top: 4px !important;
+            margin-bottom: 18px !important;
           }
           .login-h2 {
-            font-size: 28px !important;
+            font-size: 26px !important;
+            margin-bottom: 6px !important;
+            min-height: auto !important;
+          }
+          .login-p {
+            font-size: 13.5px !important;
+            line-height: 1.4 !important;
+            max-width: 290px !important;
           }
         }
       `}</style>

@@ -327,6 +327,9 @@ export default function ADFrequenciaPage({ params }: { params: any }) {
     <div style={{ maxWidth: 1000, margin: '0 auto', paddingBottom: 100, fontFamily: 'Outfit, Inter, sans-serif' }}>
       
       <style dangerouslySetInnerHTML={{__html: `
+        .ad-freq-calendar-card {
+          padding: 26px 28px;
+        }
         @media (max-width: 768px) {
           .ad-freq-header-bar {
             flex-direction: column !important;
@@ -336,11 +339,33 @@ export default function ADFrequenciaPage({ params }: { params: any }) {
           .ad-freq-summary-grid {
             grid-template-columns: 1fr !important;
           }
+          .ad-freq-calendar-card {
+            padding: 16px 14px !important;
+            border-radius: 20px !important;
+            margin-bottom: 20px !important;
+          }
+          .ad-freq-cal-header-row {
+            margin-bottom: 18px !important;
+          }
+          .ad-freq-month-title {
+            font-size: 17px !important;
+          }
+          .ad-freq-btn-hoje {
+            height: 32px !important;
+            padding: 0 10px !important;
+            font-size: 11.5px !important;
+          }
+          .ad-freq-nav-btn {
+            width: 32px !important;
+            height: 32px !important;
+          }
           .ad-freq-cal-grid {
             gap: 4px !important;
           }
           .ad-freq-cal-cell {
+            height: 52px !important;
             min-height: 50px !important;
+            border-radius: 14px !important;
           }
           .ad-freq-info-card {
             padding: 14px 16px !important;
@@ -351,21 +376,115 @@ export default function ADFrequenciaPage({ params }: { params: any }) {
 
 
       {/* Calendário Dinâmico Interativo */}
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} style={{ background: '#fff', borderRadius: 24, boxShadow: '0 10px 40px rgba(0,0,0,0.05)', overflow: 'hidden', padding: '32px', marginBottom: 32 }}>
+      <motion.div 
+        initial={{ opacity: 0, y: 20 }} 
+        animate={{ opacity: 1, y: 0 }} 
+        transition={{ delay: 0.2 }} 
+        className="ad-freq-calendar-card"
+        style={{ 
+          background: 'linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 250, 252, 0.94) 100%)', 
+          backdropFilter: 'blur(16px)',
+          WebkitBackdropFilter: 'blur(16px)',
+          borderRadius: 22, 
+          border: '1.5px solid rgba(226, 232, 240, 0.85)',
+          boxShadow: '0 10px 30px -6px rgba(15, 23, 42, 0.06), 0 4px 12px rgba(0, 0, 0, 0.02), inset 0 1.5px 1px #ffffff', 
+          overflow: 'hidden', 
+          marginBottom: 24,
+          position: 'relative'
+        }}
+      >
         
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 32 }}>
-          <h3 style={{ fontSize: 24, fontWeight: 900, margin: 0, color: '#0f172a', textTransform: 'capitalize', letterSpacing: '-0.02em' }}>
-            {format(currentMonth, 'MMMM yyyy', { locale: ptBR })}
-          </h3>
-          <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-            <button onClick={() => setCurrentMonth(new Date())} style={{ padding: '10px 20px', borderRadius: 16, background: '#f3e8ff', color: '#6d28d9', fontWeight: 800, fontSize: 15, border: 'none', cursor: 'pointer', transition: 'all 0.2s' }}>
+        <div className="ad-freq-cal-header-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, gap: 8 }}>
+          {/* Mês e Ano - Nunca quebra linha */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, overflow: 'hidden' }}>
+            <h3 
+              className="ad-freq-month-title"
+              style={{ 
+                fontSize: 20, 
+                fontWeight: 900, 
+                margin: 0, 
+                color: '#0f172a', 
+                textTransform: 'capitalize', 
+                letterSpacing: '-0.02em',
+                fontFamily: 'Outfit, sans-serif',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis'
+              }}
+            >
+              {format(currentMonth, 'MMMM', { locale: ptBR })} <span style={{ color: '#4f46e5', fontWeight: 800 }}>{format(currentMonth, 'yyyy')}</span>
+            </h3>
+          </div>
+
+          {/* Controles de Navegação (Hoje + Prev + Next) */}
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
+            <button 
+              onClick={() => setCurrentMonth(new Date())} 
+              className="ad-freq-btn-hoje"
+              style={{ 
+                height: 34,
+                padding: '0 12px', 
+                borderRadius: 10, 
+                background: 'linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%)', 
+                color: '#6d28d9', 
+                border: '1px solid #ddd6fe',
+                fontWeight: 800, 
+                fontSize: 12.5, 
+                cursor: 'pointer', 
+                transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                whiteSpace: 'nowrap',
+                boxShadow: '0 1px 3px rgba(109, 40, 217, 0.08)'
+              }}
+              title="Ir para o mês atual"
+            >
               Hoje
             </button>
-            <button onClick={prevMonth} style={{ width: 44, height: 44, borderRadius: '50%', border: '1px solid #f1f5f9', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#0f172a', transition: 'all 0.2s', boxShadow: '0 4px 10px rgba(0,0,0,0.02)' }}>
-              <ChevronLeft size={20} strokeWidth={2.5} />
+            <button 
+              onClick={prevMonth} 
+              className="ad-freq-nav-btn"
+              style={{ 
+                width: 34, 
+                height: 34, 
+                borderRadius: 10, 
+                border: '1.5px solid #e2e8f0', 
+                background: '#ffffff', 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center', 
+                cursor: 'pointer', 
+                color: '#1e293b', 
+                transition: 'all 0.2s', 
+                boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+                boxSizing: 'border-box'
+              }}
+              title="Mês anterior"
+            >
+              <ChevronLeft size={16} strokeWidth={2.5} />
             </button>
-            <button onClick={nextMonth} style={{ width: 44, height: 44, borderRadius: '50%', border: '1px solid #f1f5f9', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#0f172a', transition: 'all 0.2s', boxShadow: '0 4px 10px rgba(0,0,0,0.02)' }}>
-              <ChevronRight size={20} strokeWidth={2.5} />
+            <button 
+              onClick={nextMonth} 
+              className="ad-freq-nav-btn"
+              style={{ 
+                width: 34, 
+                height: 34, 
+                borderRadius: 10, 
+                border: '1.5px solid #e2e8f0', 
+                background: '#ffffff', 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center', 
+                cursor: 'pointer', 
+                color: '#1e293b', 
+                transition: 'all 0.2s', 
+                boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+                boxSizing: 'border-box'
+              }}
+              title="Próximo mês"
+            >
+              <ChevronRight size={16} strokeWidth={2.5} />
             </button>
           </div>
         </div>
