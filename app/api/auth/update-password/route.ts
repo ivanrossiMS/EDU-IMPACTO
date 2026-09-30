@@ -22,13 +22,27 @@ const isSamePasswordError = (err: any): boolean => {
 
 export async function POST(request: Request) {
   try {
-    const { userIdLegacy, newPass, registeredEmail } = await request.json()
+    const { userIdLegacy, newPass, registeredEmail, isRecovery } = await request.json()
 
     if (!userIdLegacy || !newPass) {
       return NextResponse.json({ error: 'Usuário e nova senha são obrigatórios' }, { status: 400 })
     }
 
     const supabaseAdmin = getAdminClient()
+
+    // Helper: busca usuário no Auth de forma completa e paginada
+    const findAuthUserByEmail = async (em: string) => {
+      let page = 1
+      while (page <= 5) {
+        const { data: list } = await supabaseAdmin.auth.admin.listUsers({ page, perPage: 1000 }).catch(() => ({ data: { users: [] } }))
+        if (!list || !list.users || list.users.length === 0) break
+        const found = list.users.find((u: any) => u.email?.toLowerCase() === em.toLowerCase())
+        if (found) return found
+        if (list.users.length < 1000) break
+        page++
+      }
+      return null
+    }
 
     // ── Detect user type from prefixed ID ───────────────────────────
     const isAluno       = userIdLegacy.startsWith('aluno-')
@@ -55,26 +69,8 @@ export async function POST(request: Request) {
       // Virtual email used as Supabase Auth identifier for students
       const virtualEmail = `aluno.${matricula}@impactoedu.local`
 
-      // Busca usuário por email virtual — mais eficiente que listUsers
-      const findByEmail = async (em: string) => {
-        const { data: foundRows } = await supabaseAdmin
-          .from('system_users')
-          .select('id')
-          .eq('email', em)
-          .limit(1)
-        const found = foundRows?.[0]
-        if (found?.id) {
-          // Tenta buscar direto pelo ID no Auth
-          const { data: { user } } = await supabaseAdmin.auth.admin.getUserById(found.id).catch(() => ({ data: { user: null } }))
-          if (user) return user
-        }
-        // Fallback: busca por email com página pequena
-        const { data: list } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 50 })
-        return list?.users?.find((u: any) => u.email?.toLowerCase() === em.toLowerCase()) || null
-      }
-
-      const existingByVirtual   = await findByEmail(virtualEmail)
-      const existingByRealEmail = alunoRealEmail ? await findByEmail(alunoRealEmail) : null
+      const existingByVirtual   = await findAuthUserByEmail(virtualEmail)
+      const existingByRealEmail = alunoRealEmail ? await findAuthUserByEmail(alunoRealEmail) : null
       const targetUser = existingByVirtual || existingByRealEmail
 
       const targetEmail = (registeredEmail || alunoRealEmail || '').trim().toLowerCase()
@@ -82,7 +78,7 @@ export async function POST(request: Request) {
 
       if (targetUser) {
         if (targetUser.last_sign_in_at) {
-          return NextResponse.json({ error: 'Senha já definida. Use Login normal.' }, { status: 409 })
+          return NextResponse.json({ error: "Sua senha já foi configurada. Use o Login normal ou 'Esqueci minha senha' para receber um link por e-mail." }, { status: 409 })
         }
         
         // Update password and ensure email matches what user registered
@@ -95,8 +91,6 @@ export async function POST(request: Request) {
         const { error: upErr } = await supabaseAdmin.auth.admin.updateUserById(targetUser.id, updatePayload)
         if (upErr) {
           if (isSamePasswordError(upErr)) {
-            // A senha já é a mesma cadastrada anteriormente.
-            // Se houver alteração de e-mail no payload, aplica sem enviar o password
             if (updatePayload.email) {
               const { error: emailErr } = await supabaseAdmin.auth.admin.updateUserById(targetUser.id, {
                 email: updatePayload.email,
@@ -156,27 +150,11 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'E-mail válido é obrigatório para criar acesso do responsável.' }, { status: 400 })
       }
 
-      // Busca usuário por email diretamente (sem carregar 1000 usuários)
-      const { data: sysUserByEmailRows } = await supabaseAdmin
-        .from('system_users')
-        .select('id')
-        .eq('email', targetEmail)
-        .limit(1)
-      const sysUserByEmail = sysUserByEmailRows?.[0]
-      let existing: any = null
-      if (sysUserByEmail?.id) {
-        const { data: { user } } = await supabaseAdmin.auth.admin.getUserById(sysUserByEmail.id).catch(() => ({ data: { user: null } }))
-        existing = user
-      }
-      if (!existing) {
-        // Fallback pequeno caso o ID do system_user não bata com o auth.id
-        const { data: list } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 50 })
-        existing = list?.users?.find((u: any) => u.email?.toLowerCase() === targetEmail) || null
-      }
+      const existing = await findAuthUserByEmail(targetEmail)
 
       if (existing) {
         if (existing.last_sign_in_at) {
-          return NextResponse.json({ error: 'Senha já definida. Use Login normal.' }, { status: 409 })
+          return NextResponse.json({ error: "Sua senha já foi configurada. Use o Login normal ou 'Esqueci minha senha' para receber um link por e-mail." }, { status: 409 })
         }
         const { error: upErr } = await supabaseAdmin.auth.admin.updateUserById(existing.id, { password: newPass })
         if (upErr && !isSamePasswordError(upErr)) throw upErr
@@ -220,28 +198,24 @@ export async function POST(request: Request) {
 
     if (dbUser?.senha_definida === true) {
       return NextResponse.json({ 
-        error: 'Senha já definida anteriormente. Use Login normal ou recuperação de senha.' 
+        error: "Sua senha já foi configurada. Use o Login normal ou 'Esqueci minha senha' para receber um link por e-mail." 
       }, { status: 409 })
     }
 
-      // Busca por email direto no Auth (sem carregar 1000 usuários)
-      let existingAuthUser: any = null
-      // Primeiro tenta via ID do banco (rápido)
-      const { data: { user: byId } } = await supabaseAdmin.auth.admin.getUserById(userIdLegacy).catch(() => ({ data: { user: null } }))
-      if (byId) {
-        existingAuthUser = byId
-      } else {
-        // Fallback por email com página pequena
-        const { data: list } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 50 })
-        existingAuthUser = list?.users?.find((u: any) => u.email?.toLowerCase() === email) || null
-      }
+    let existingAuthUser: any = null
+    const { data: { user: byId } } = await supabaseAdmin.auth.admin.getUserById(userIdLegacy).catch(() => ({ data: { user: null } }))
+    if (byId) {
+      existingAuthUser = byId
+    } else {
+      existingAuthUser = await findAuthUserByEmail(email)
+    }
 
     if (existingAuthUser) {
       const { error: upErr } = await supabaseAdmin.auth.admin.updateUserById(existingAuthUser.id, { password: newPass })
       if (upErr && !isSamePasswordError(upErr)) throw upErr
       if (existingAuthUser.id !== userIdLegacy) {
         await supabaseAdmin.from('system_users')
-          .update({ auth_id: existingAuthUser.id })
+          .update({ auth_id: existingAuthUser.id, senha_definida: true })
           .eq('id', userIdLegacy)
       }
     } else {
@@ -253,7 +227,7 @@ export async function POST(request: Request) {
       if (authErr) throw authErr
       if (authData?.user?.id) {
         await supabaseAdmin.from('system_users')
-          .update({ auth_id: authData.user.id })
+          .update({ auth_id: authData.user.id, senha_definida: true })
           .eq('id', userIdLegacy)
       }
     }

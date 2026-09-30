@@ -367,7 +367,7 @@ export default function ADNotasPage({ params }: { params: any }) {
   const disciplinas = useMemo(() => {
     if (!boletimAtual || !boletimAtual.dados || !boletimAtual.dados.disciplinas) return []
     return boletimAtual.dados.disciplinas.map((d: any) => {
-      const val = String(d.mediaG && d.mediaG !== '---' ? d.mediaG : (d.mediaF || '')).trim()
+      const val = String(d.mediaF && d.mediaF !== '---' ? d.mediaF : (d.mediaG || '')).trim()
       const num = parseNotaValor(val)
       return {
         ...d,
@@ -1210,13 +1210,8 @@ export default function ADNotasPage({ params }: { params: any }) {
                             color: isPassed ? '#059669' : '#dc2626',
                             lineHeight: 1
                           }}>
-                            {d.mediaG && d.mediaG !== '---' ? d.mediaG : (d.mediaF || '---')}
+                            {d.mediaF && d.mediaF !== '---' ? d.mediaF : (d.mediaG || '---')}
                           </div>
-                          {d.mediaG && d.mediaG !== '---' && d.mediaF && d.mediaF !== d.mediaG && (
-                            <div style={{ fontSize: 10, color: '#64748b', fontWeight: 600 }}>
-                              Final: {d.mediaF}
-                            </div>
-                          )}
                         </div>
                       </motion.div>
                     )

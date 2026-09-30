@@ -33,12 +33,24 @@ export async function POST(request: Request) {
     const sysUser = sysUserRows?.[0]
     
     if (sysUser) {
+      const userPayload = {
+        id: sysUser.id,
+        realId: sysUser.id,
+        nome: sysUser.nome,
+        email: sysUser.email,
+        cargo: sysUser.cargo,
+        perfil: sysUser.perfil,
+        userType: 'system_user'
+      }
+
       if (sysUser.senha_definida === true) {
         return NextResponse.json({ 
-          error: 'Sua senha já foi configurada. Use Login normal ou recuperação de senha.' 
+          error: "Sua senha já foi configurada. Use o Login normal ou 'Esqueci minha senha' para receber um link por e-mail.",
+          alreadyConfigured: true,
+          user: userPayload
         }, { status: 409 })
       }
-      return NextResponse.json({ user: sysUser })
+      return NextResponse.json({ user: userPayload })
     }
 
     // Helper: busca auth user por email
@@ -98,23 +110,27 @@ export async function POST(request: Request) {
         existingAuth = await findAuthByEmail(storedAlunoEmail)
       }
       
+      const userPayload = {
+        id: `aluno-${aluno.id}`,
+        realId: aluno.id,
+        nome: aluno.nome,
+        email: isValidEmail(storedAlunoEmail) ? storedAlunoEmail : '',
+        cargo: 'Aluno',
+        perfil: 'Família',
+        matricula: aluno.matricula || aluno.dados?.codigo || '',
+        userType: 'aluno'
+      }
+
       if (existingAuth) {
         return NextResponse.json({ 
-          error: 'Sua senha já foi configurada. Use Login normal ou recuperação de senha.' 
+          error: "Sua senha já foi configurada. Use o Login normal ou 'Esqueci minha senha' para receber um link por e-mail.",
+          alreadyConfigured: true,
+          user: userPayload
         }, { status: 409 })
       }
 
       return NextResponse.json({ 
-        user: {
-          id: `aluno-${aluno.id}`,
-          realId: aluno.id,
-          nome: aluno.nome,
-          email: isValidEmail(storedAlunoEmail) ? storedAlunoEmail : '',
-          cargo: 'Aluno',
-          perfil: 'Família',
-          matricula: aluno.matricula || aluno.dados?.codigo || '',
-          userType: 'aluno'
-        }
+        user: userPayload
       })
     }
 
@@ -163,24 +179,28 @@ export async function POST(request: Request) {
         }, { status: 403 })
       }
 
+      const userPayload = {
+        id: `responsavel-${responsavel.id}`,
+        realId: responsavel.id,
+        nome: responsavel.nome,
+        email: responsavel.email || '',
+        cargo: 'Responsável',
+        perfil: 'Família',
+        userType: 'responsavel'
+      }
+
       if (responsavel.email) {
         const existingAuthResp = await findAuthByEmail((responsavel.email || '').trim())
         if (existingAuthResp) {
           return NextResponse.json({ 
-            error: 'Sua senha já foi configurada. Use Login normal ou recuperação de senha.' 
+            error: "Sua senha já foi configurada. Use o Login normal ou 'Esqueci minha senha' para receber um link por e-mail.",
+            alreadyConfigured: true,
+            user: userPayload
           }, { status: 409 })
         }
       }
       return NextResponse.json({ 
-        user: {
-          id: `responsavel-${responsavel.id}`,
-          realId: responsavel.id,
-          nome: responsavel.nome,
-          email: responsavel.email || '',
-          cargo: 'Responsável',
-          perfil: 'Família',
-          userType: 'responsavel'
-        }
+        user: userPayload
       })
     }
 

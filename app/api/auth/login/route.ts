@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
 
       let respQuery = `codigo.eq.${loginInput}`
       if (loginDigits.length >= 11) respQuery += `,dados->>cpf.eq.${loginDigits}`
-      if (loginDigits.length >= 10) respQuery += `,celular.eq.${loginDigits},telefone.eq.${loginDigits}`
+      if (loginDigits.length >= 10) respQuery += `,celular.ilike.%${loginDigits}%,telefone.ilike.%${loginDigits}%`
 
       const alunoPromise = supabaseAdmin
         .from('alunos')
@@ -146,11 +146,24 @@ export async function POST(request: NextRequest) {
       }
     )
 
-    const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({ email: resolvedEmail, password })
-    
-    let user = signInData?.user
-    let session = signInData?.session
-    let error = signInError
+    let signInResult: any = null
+    try {
+      signInResult = await Promise.race([
+        supabase.auth.signInWithPassword({ email: resolvedEmail, password }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT_SUPABASE')), 18000))
+      ])
+    } catch (e: any) {
+      if (e?.message === 'TIMEOUT_SUPABASE') {
+        return NextResponse.json({ 
+          error: 'O banco de dados do Supabase está temporariamente indisponível ou reiniciando (Timeout 522). Se o projeto estiver pausado, acesse o painel do Supabase para restaurá-lo.' 
+        }, { status: 504 })
+      }
+      throw e
+    }
+
+    let user = signInResult?.data?.user
+    let session = signInResult?.data?.session
+    let error = signInResult?.error
 
     // FALLBACK for students: If login failed and they have a real email, their Auth user might still be on their virtual email
     if (error && userType === 'aluno' && alunoRecord) {
@@ -158,8 +171,12 @@ export async function POST(request: NextRequest) {
       const virtualEmail = `aluno.${matricula}@impactoedu.local`
       
       if (resolvedEmail !== virtualEmail) {
-        const fallbackAttempt = await supabase.auth.signInWithPassword({ email: virtualEmail, password })
-        if (!fallbackAttempt.error && fallbackAttempt.data?.user) {
+        const fallbackAttempt: any = await Promise.race([
+          supabase.auth.signInWithPassword({ email: virtualEmail, password }),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT_SUPABASE')), 8000))
+        ]).catch(() => null)
+
+        if (fallbackAttempt && !fallbackAttempt.error && fallbackAttempt.data?.user) {
           user = fallbackAttempt.data.user
           session = fallbackAttempt.data.session
           error = null
@@ -169,12 +186,12 @@ export async function POST(request: NextRequest) {
     }
 
     if (error || !user) {
-
-      const isNetworkError = error?.message?.toLowerCase().includes('fetch') || error?.message?.toLowerCase().includes('timed out') || error?.status === 522;
+      const errMsg = (error?.message || '').toLowerCase()
+      const isNetworkError = errMsg.includes('fetch') || errMsg.includes('timed out') || errMsg.includes('522') || error?.status === 522;
       const isHtmlError = error?.message?.includes('Unexpected token') || error?.message?.includes('is not valid JSON');
       
       if (isNetworkError || isHtmlError) {
-        return NextResponse.json({ error: 'Erro de conexão: O banco de dados está indisponível ou "dormindo" (Timeout). Se você usa o plano gratuito, ele pode estar acordando. Tente novamente em 1 minuto.' }, { status: 504 })
+        return NextResponse.json({ error: 'Erro de conexão com o banco de dados (Timeout 522). O projeto no Supabase pode estar acordando ou em pausa. Verifique o painel do Supabase.' }, { status: 504 })
       }
 
       // Friendly messages per user type
@@ -374,7 +391,13 @@ export async function POST(request: NextRequest) {
       userMetadataUpdate.system_user_id = dbSystemUser.id
     }
     userMetadataUpdate.hasDualRole = Boolean(hasDualRole)
-    if (resolvedFoto) userMetadataUpdate.foto = resolvedFoto
+    // Only store short/hosted URLs in user_metadata to avoid overflowing JWT headers and cookies (>16KB)
+    if (resolvedFoto && !resolvedFoto.startsWith('data:') && resolvedFoto.length <= 500) {
+      userMetadataUpdate.foto = resolvedFoto
+    } else if (user?.user_metadata?.foto && (user.user_metadata.foto.startsWith('data:') || user.user_metadata.foto.length > 500)) {
+      // Remove any legacy massive base64 image from user_metadata to fix cookie header overflow
+      userMetadataUpdate.foto = null
+    }
 
     if (user) {
       const currentMeta = user.user_metadata || {}

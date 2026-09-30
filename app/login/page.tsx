@@ -22,7 +22,7 @@ import {
 } from '@/lib/auth/moduleRouting'
 import { notificationService } from '@/lib/notifications/notificationService'
 
-type Step = 'login' | 'first_access_verify' | 'first_access_create' | 'setup_master' | 'choose_system' | 'choose_agenda_role' | 'forgot_password' | 'forgot_password_create'
+type Step = 'login' | 'first_access_verify' | 'first_access_create' | 'setup_master' | 'choose_system' | 'choose_agenda_role'
 const FEATURES = [
   { icon: '🎓', label: 'Gestão Acadêmica', desc: 'Turmas, notas, frequência e ocorrências em tempo real' },
   { icon: '💰', label: 'Financeiro Completo', desc: 'Mensalidades, inadimplência e fluxo de caixa' },
@@ -134,6 +134,7 @@ export default function LoginPage() {
   const [loadingSystem, setLoadingSystem] = useState<string | null>(null)
   const [faError, setFaError]     = useState('')
   const [faUser, setFaUser]       = useState<FoundUser | null>(null)
+  const [faAlreadyConfiguredUser, setFaAlreadyConfiguredUser] = useState<FoundUser | null>(null)
 
   // ── primeiro acesso — criar senha
   const [newPass, setNewPass]       = useState('')
@@ -516,7 +517,7 @@ export default function LoginPage() {
     markExplicitLogin()
 
     const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 45000)
+    const timeoutId = setTimeout(() => controller.abort(), 55000)
 
     let authData: any = null
 
@@ -552,7 +553,7 @@ export default function LoginPage() {
       clearTimeout(timeoutId)
       setLoginLoading(false)
       if (fetchErr.name === 'AbortError') {
-        setLoginError('Tempo limite de conexão excedido. Verifique sua internet e tente novamente.')
+        setLoginError('Tempo limite de conexão excedido. O banco de dados (Supabase) não respondeu a tempo.')
       } else {
         setLoginError(fetchErr.message || 'Credenciais inválidas.')
       }
@@ -753,8 +754,8 @@ export default function LoginPage() {
   const handleVerify = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!faQuery.trim()) { setFaError('Informe seu e-mail ou código.'); return }
-    setFaLoading(true); setFaError('')
-    await new Promise(r => setTimeout(r, 900))
+    setFaLoading(true); setFaError(''); setFaAlreadyConfiguredUser(null)
+    await new Promise(r => setTimeout(r, 600))
     const q = faQuery.trim().toLowerCase()
     
     try {
@@ -764,13 +765,20 @@ export default function LoginPage() {
         body: JSON.stringify({ query: q })
       })
 
+      const data = await res.json().catch(() => ({}))
+
       if (!res.ok) {
-        const errData = await res.json().catch(() => ({}))
-        throw new Error(errData.error || 'Nenhum cadastro encontrado. Verifique com a administração.')
+        if (data.alreadyConfigured && data.user) {
+          setFaAlreadyConfiguredUser(data.user)
+          setFaError(data.error || 'Sua senha já foi configurada para este cadastro.')
+          return
+        }
+        throw new Error(data.error || 'Nenhum cadastro encontrado. Verifique com a administração.')
       }
 
-      const { user } = await res.json()
-      setFaUser(user); setStep(step === 'forgot_password' ? 'forgot_password_create' : 'first_access_create'); setFaRegEmail(user.email || '') 
+      setFaUser(data.user)
+      setStep('first_access_create')
+      setFaRegEmail(data.user.email || '') 
     } catch (err: any) {
       setFaError(err.message)
     } finally {
@@ -802,12 +810,12 @@ export default function LoginPage() {
         }
 
         setCreateLoading(false); setCreateSuccess(true)
-       await new Promise(r => setTimeout(r, 2200))
+       await new Promise(r => setTimeout(r, 2000))
        setStep('login')
        // Preenche com o e-mail cadastrado ou a matrícula
        const loginHint = faRegEmail ? faRegEmail : (faUser?.matricula || '')
        setEmail(loginHint)
-       setFaQuery(''); setFaUser(null); setNewPass(''); setConfirmPass(''); setCreateSuccess(false)
+       setFaQuery(''); setFaUser(null); setNewPass(''); setConfirmPass(''); setCreateSuccess(false); setFaAlreadyConfiguredUser(null)
     } catch (err: any) {
        console.error("Setup erro:", err)
        setCreateLoading(false)
@@ -815,7 +823,18 @@ export default function LoginPage() {
     }
   }
 
-  const goLogin = () => { setStep('login'); setFaError(''); setFaQuery(''); setFaUser(null); setNewPass(''); setConfirmPass(''); setCreateError(''); setCreateSuccess(false); setFaRegEmail('') }
+  const goLogin = () => { 
+    setStep('login'); 
+    setFaError(''); 
+    setFaQuery(''); 
+    setFaUser(null); 
+    setNewPass(''); 
+    setConfirmPass(''); 
+    setCreateError(''); 
+    setCreateSuccess(false); 
+    setFaRegEmail(''); 
+    setFaAlreadyConfiguredUser(null);
+  }
 
   const handleSetupMaster = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -955,10 +974,26 @@ export default function LoginPage() {
               </button>
             </div>
             <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-              <button type="button" onClick={() => window.location.href = '/esqueci-senha'} style={{ fontSize:13, color:'#fbbf24', background:'none', border:'none', cursor:'pointer', fontWeight:600, position:'relative', zIndex:50, padding: 0, transition:'color 0.2s', letterSpacing:'0.02em' }} onMouseEnter={e=>e.currentTarget.style.color='#fcd34d'} onMouseLeave={e=>e.currentTarget.style.color='#fbbf24'}>🤔 Esqueci minha senha</button>
+              <button 
+                type="button" 
+                onClick={() => {
+                  const q = email.trim()
+                  router.push(q ? `/esqueci-senha?email=${encodeURIComponent(q)}` : '/esqueci-senha')
+                }} 
+                style={{ fontSize:13, color:'#fbbf24', background:'none', border:'none', cursor:'pointer', fontWeight:600, position:'relative', zIndex:50, padding: 0, transition:'color 0.2s', letterSpacing:'0.02em' }} 
+                onMouseEnter={e=>e.currentTarget.style.color='#fcd34d'} 
+                onMouseLeave={e=>e.currentTarget.style.color='#fbbf24'}
+              >
+                🤔 Esqueci minha senha
+              </button>
             </div>
           </div>
-          <ErrorBox msg={loginError} />
+          {loginError ? (
+            <div style={{ padding: '12px 14px', borderRadius: 12, background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', fontSize: 13, color: '#f87171', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span>⚠</span>
+              <span>{loginError}</span>
+            </div>
+          ) : null}
           
           <div style={{ display:'flex', alignItems:'center', gap:12 }}>
             <input type="checkbox" id="remember" checked={keepConnected} onChange={(e) => setKeepConnected(e.target.checked)} style={{ width:20, height:20, accentColor:'#2563eb', cursor:'pointer', borderRadius: 4 }} />
@@ -1052,10 +1087,10 @@ export default function LoginPage() {
       </motion.button>
       <style dangerouslySetInnerHTML={{__html: `button:hover .back-arrow { transform: translateX(-3px); }`}} />
       <div style={{ marginBottom:32 }}>
-        <div style={{ display:'inline-flex', alignItems:'center', gap:8, padding:'5px 14px', borderRadius:100, background: step === 'forgot_password' ? 'rgba(245,158,11,0.1)' : 'rgba(139,92,246,0.1)', border: step === 'forgot_password' ? '1px solid rgba(245,158,11,0.25)' : '1px solid rgba(139,92,246,0.25)', marginBottom:20 }}>
-          <span>{step === 'forgot_password' ? '🔐' : '🔑'}</span><span style={{ fontSize:11, fontWeight:700, color: step === 'forgot_password' ? '#fbbf24' : '#a78bfa', letterSpacing:'0.06em' }}>{step === 'forgot_password' ? 'RECUPERAÇÃO DE SENHA' : 'PRIMEIRO ACESSO'}</span>
+        <div style={{ display:'inline-flex', alignItems:'center', gap:8, padding:'5px 14px', borderRadius:100, background: 'rgba(139,92,246,0.1)', border: '1px solid rgba(139,92,246,0.25)', marginBottom:20 }}>
+          <span>🔑</span><span style={{ fontSize:11, fontWeight:700, color: '#a78bfa', letterSpacing:'0.06em' }}>PRIMEIRO ACESSO</span>
         </div>
-        <h2 style={{ fontFamily:"'Outfit',sans-serif", fontSize:30, fontWeight:900, color:'#fff', letterSpacing:'-0.02em', marginBottom:8 }}>{step === 'forgot_password' ? 'Esqueceu a senha?' : 'Identificação'}</h2>
+        <h2 style={{ fontFamily:"'Outfit',sans-serif", fontSize:30, fontWeight:900, color:'#fff', letterSpacing:'-0.02em', marginBottom:8 }}>Identificação</h2>
         <p style={{ fontSize:14, color:'rgba(255,255,255,0.35)', lineHeight:1.6 }}>Informe o <strong style={{ color:'rgba(255,255,255,0.6)' }}>e-mail cadastrado</strong>, <strong style={{ color:'rgba(255,255,255,0.6)' }}>código do aluno</strong> ou <strong style={{ color:'rgba(255,255,255,0.6)' }}>celular do usuário</strong> para verificar seu acesso.</p>
       </div>
       <div className="login-card" style={cardStyle}>
@@ -1064,13 +1099,55 @@ export default function LoginPage() {
             <Label text="E-mail, Celular ou Código" />
             <div style={{ position:'relative' }} suppressHydrationWarning>
               <span style={{ position:'absolute', left:14, top:'50%', transform:'translateY(-50%)', fontSize:15, opacity:0.4, pointerEvents:'none' }}>👤</span>
-              <input type="text" value={faQuery} onChange={e=>{setFaQuery(e.target.value);setFaError('')}} placeholder="E-mail, Celular, ou Código do Aluno" autoFocus suppressHydrationWarning
+              <input type="text" value={faQuery} onChange={e=>{setFaQuery(e.target.value);setFaError('');setFaAlreadyConfiguredUser(null)}} placeholder="E-mail, Celular, ou Código do Aluno" autoFocus suppressHydrationWarning
                 className="login-input"
                 style={baseInputStyle} onFocus={focusOn} onBlur={focusOff} />
             </div>
             <p style={{ fontSize:11, color:'rgba(255,255,255,0.2)', marginTop:8 }}>Use o e-mail ou código/login vinculado ao seu cadastro escolar.</p>
           </div>
-          <ErrorBox msg={faError} />
+          {faAlreadyConfiguredUser ? (
+            <div style={{ padding: '14px 16px', borderRadius: 14, background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, fontSize: 13, color: '#f87171', lineHeight: 1.5 }}>
+                <span style={{ fontSize: 18 }}>⚠️</span>
+                <div>
+                  <strong>Sua senha já foi configurada para este cadastro.</strong>
+                  <p style={{ margin: '4px 0 0', fontSize: 12, color: 'rgba(255,255,255,0.7)' }}>
+                    {faAlreadyConfiguredUser.nome ? `${faAlreadyConfiguredUser.nome} (${faAlreadyConfiguredUser.cargo || 'Usuário'}): ` : ''}
+                    Você pode acessar pelo Login normal com sua senha ou solicitar a redefinição por e-mail em &quot;Esqueci minha senha&quot;.
+                  </p>
+                </div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 4 }}>
+                <button 
+                  type="button" 
+                  onClick={() => {
+                    setEmail(faAlreadyConfiguredUser.email || faQuery.trim())
+                    goLogin()
+                  }}
+                  style={{ padding: '10px 14px', borderRadius: 10, background: 'rgba(59,130,246,0.15)', border: '1px solid rgba(59,130,246,0.3)', color: '#93c5fd', fontSize: 12, fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s' }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'rgba(59,130,246,0.25)'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'rgba(59,130,246,0.15)'}
+                >
+                  🔑 Fazer Login
+                </button>
+                <button 
+                  type="button" 
+                  onClick={() => {
+                    const targetEmail = faAlreadyConfiguredUser.email || (faQuery.includes('@') ? faQuery.trim() : '')
+                    const url = targetEmail ? `/esqueci-senha?email=${encodeURIComponent(targetEmail)}` : '/esqueci-senha'
+                    router.push(url)
+                  }}
+                  style={{ padding: '10px 14px', borderRadius: 10, background: 'rgba(245,158,11,0.15)', border: '1px solid rgba(245,158,11,0.3)', color: '#fbbf24', fontSize: 12, fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s' }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'rgba(245,158,11,0.25)'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'rgba(245,158,11,0.15)'}
+                >
+                  ✉️ Esqueci Minha Senha
+                </button>
+              </div>
+            </div>
+          ) : (
+            <ErrorBox msg={faError} />
+          )}
           <button type="submit" disabled={faLoading||!faQuery.trim()} style={btnBase(faLoading||!faQuery.trim())}
             onMouseEnter={e=>{if(!faLoading){e.currentTarget.style.transform='translateY(-2px)'}}}
             onMouseLeave={e=>{e.currentTarget.style.transform=''}}>
@@ -1082,9 +1159,9 @@ export default function LoginPage() {
         </form>
         {/* Hint para admin */}
         <div style={{ marginTop:20, padding:'12px 16px', borderRadius:12, background:'rgba(59,130,246,0.05)', border:'1px solid rgba(59,130,246,0.15)' }}>
-          <div style={{ fontSize:11, fontWeight:700, color:'rgba(59,130,246,0.7)', marginBottom:4, letterSpacing:'0.06em' }}>ℹ {step === 'forgot_password' ? 'RECUPERAÇÃO' : 'PRIMEIRO ACESSO'}</div>
+          <div style={{ fontSize:11, fontWeight:700, color:'rgba(59,130,246,0.7)', marginBottom:4, letterSpacing:'0.06em' }}>ℹ PRIMEIRO ACESSO</div>
           <div style={{ fontSize:12, color:'rgba(255,255,255,0.3)' }}>
-            {step === 'forgot_password' ? 'Este fluxo irá redefinir a sua senha para voltar a acessar o app.' : 'Este fluxo é destinado para criação da primeira senha no app.'}
+            Este fluxo é destinado para criação da primeira senha no app.
           </div>
         </div>
       </div>
@@ -1102,8 +1179,8 @@ export default function LoginPage() {
       <button type="button" onClick={()=>setStep('first_access_verify')} style={{ display:'inline-flex', alignItems:'center', gap:6, fontSize:13, color:'rgba(255,255,255,0.4)', background:'none', border:'none', cursor:'pointer', marginBottom:32, fontWeight:600 }}
         onMouseEnter={e=>(e.currentTarget.style.color='rgba(255,255,255,0.75)')} onMouseLeave={e=>(e.currentTarget.style.color='rgba(255,255,255,0.4)')}>← Voltar</button>
       <div style={{ marginBottom:28 }}>
-        <div style={{ display:'inline-flex', alignItems:'center', gap:8, padding:'5px 14px', borderRadius:100, background:'rgba(16,185,129,0.1)', border:'1px solid rgba(16,185,129,0.25)', marginBottom:20 }}>
-          <span>✅</span><span style={{ fontSize:11, fontWeight:700, color:'#34d399', letterSpacing:'0.06em' }}>CADASTRO ENCONTRADO</span>
+        <div style={{ display:'inline-flex', alignItems:'center', gap:8, padding:'5px 14px', borderRadius:100, background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.25)', marginBottom:20 }}>
+          <span>✅</span><span style={{ fontSize:11, fontWeight:700, color: '#34d399', letterSpacing:'0.06em' }}>CADASTRO ENCONTRADO</span>
         </div>
         {/* Usuário encontrado */}
         <div style={{ display:'flex', alignItems:'center', gap:14, padding:'16px 18px', borderRadius:14, background:'rgba(16,185,129,0.05)', border:'1px solid rgba(16,185,129,0.15)', marginBottom:20 }}>
@@ -1114,7 +1191,7 @@ export default function LoginPage() {
           </div>
           <span style={{ marginLeft:'auto', fontSize:20 }}>👍</span>
         </div>
-        <h2 style={{ fontFamily:"'Outfit',sans-serif", fontSize:28, fontWeight:900, color:'#fff', marginBottom:6 }}>{step === 'forgot_password_create' ? 'Crie uma nova senha' : 'Crie sua senha'}</h2>
+        <h2 style={{ fontFamily:"'Outfit',sans-serif", fontSize:28, fontWeight:900, color:'#fff', marginBottom:6 }}>Crie sua senha</h2>
         <p style={{ fontSize:14, color:'rgba(255,255,255,0.35)' }}>Defina uma senha segura para acessar a plataforma.</p>
       </div>
 
@@ -1122,7 +1199,7 @@ export default function LoginPage() {
         {createSuccess ? (
           <div style={{ textAlign:'center', padding:'20px 0' }}>
             <div style={{ fontSize:52, marginBottom:16 }}>🎉</div>
-            <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:22, fontWeight:900, color:'#fff', marginBottom:8 }}>{step === 'forgot_password_create' ? 'Senha redefinida com sucesso!' : 'Senha criada com sucesso!'}</div>
+            <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:22, fontWeight:900, color:'#fff', marginBottom:8 }}>Senha criada com sucesso!</div>
             <p style={{ fontSize:14, color:'rgba(255,255,255,0.4)' }}>Pode demorar alguns minutinhos para o e-mail chegar. Redirecionando...</p>
             <div style={{ marginTop:20, height:3, borderRadius:2, background:'rgba(255,255,255,0.1)', overflow:'hidden' }}>
               <div style={{ height:'100%', borderRadius:2, background:'linear-gradient(90deg,#10b981,#3b82f6)', width:'100%', animation:'progressFill 2.2s linear forwards' }} />
@@ -1262,7 +1339,11 @@ export default function LoginPage() {
               onMouseLeave={e=>{e.currentTarget.style.transform=''}}>
               {!(createLoading||newPass.length<6||newPass!==confirmPass||!faRegEmail) && <ShimmerOverlay />}
               <div style={{ position:'relative', display:'flex', alignItems:'center', justifyContent:'center', gap:10 }}>
-                {createLoading ? <><Spinner /><span>Criando acesso...</span></> : <><span>🚀 Criar Minha Senha</span></>}
+                {createLoading ? (
+                  <><Spinner /><span>Criando acesso...</span></>
+                ) : (
+                  <><span>🚀 Criar Minha Senha</span></>
+                )}
               </div>
             </button>
           </form>
@@ -1621,8 +1702,8 @@ export default function LoginPage() {
         {/* Enterprise SaaS Background Overlay */}
         <BackgroundEffects />
         {step === 'login' && LoginContent}
-        {(step === 'first_access_verify' || step === 'forgot_password') && FirstAccessVerify}
-        {(step === 'first_access_create' || step === 'forgot_password_create') && FirstAccessCreate}
+        {step === 'first_access_verify' && FirstAccessVerify}
+        {step === 'first_access_create' && FirstAccessCreate}
         {step === 'setup_master' && SetupMasterContent}
         {step === 'choose_system' && ChooseSystemContent}
         {step === 'choose_agenda_role' && ChooseAgendaRoleContent}

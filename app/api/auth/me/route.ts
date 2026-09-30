@@ -169,10 +169,16 @@ export async function GET(request: Request) {
     dbUser?.foto || 
     null;
 
-  // Auto-sync between user_metadata and database tables
-  if (resolvedPhoto && !user.user_metadata?.foto) {
+  // Auto-sync between user_metadata and database tables (only short/hosted URLs to prevent JWT overflow)
+  const isShortUrl = resolvedPhoto && !resolvedPhoto.startsWith('data:') && resolvedPhoto.length <= 500;
+  if (isShortUrl && !user.user_metadata?.foto) {
     void supabaseAdmin.auth.admin
       .updateUserById(user.id, { user_metadata: { ...(user.user_metadata || {}), foto: resolvedPhoto } })
+      .catch(() => {});
+  } else if (user.user_metadata?.foto && (user.user_metadata.foto.startsWith('data:') || user.user_metadata.foto.length > 500)) {
+    // Purge bloated base64 from auth user metadata to maintain healthy headers
+    void supabaseAdmin.auth.admin
+      .updateUserById(user.id, { user_metadata: { ...(user.user_metadata || {}), foto: null } })
       .catch(() => {});
   }
 
