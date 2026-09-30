@@ -68,6 +68,55 @@ export default function PortariaConfigPage() {
 
   const pendingQueueCount = queueData?.total ?? 0
 
+  const [processingQueue, setProcessingQueue] = useState(false)
+  const [queueProgress, setQueueProgress] = useState({ processed: 0, total: 0 })
+
+  const handleProcessQueueDirectly = async () => {
+    setProcessingQueue(true)
+    setQueueProgress({ processed: 0, total: 0 })
+    try {
+      const res = await fetch('/api/portaria/processar-fila', { method: 'POST' })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.error || 'Erro ao processar fila diretamente')
+      }
+
+      if (res.body) {
+        const reader = res.body.getReader()
+        const decoder = new TextDecoder()
+        let buffer = ''
+
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          buffer += decoder.decode(value, { stream: true })
+          const lines = buffer.split('\n')
+          buffer = lines.pop() || ''
+
+          for (const line of lines) {
+            if (!line.trim()) continue
+            try {
+              const data = JSON.parse(line)
+              if (data.status === 'started' || data.status === 'progress') {
+                setQueueProgress({ processed: data.processed || 0, total: data.total || 0 })
+              } else if (data.status === 'completed') {
+                setToast({ msg: `✅ ${data.message || 'Transmissão direta para as catracas concluída com sucesso!'}`, type: 'success' })
+              }
+            } catch {}
+          }
+        }
+      }
+
+      refetchQueue()
+      refetchQueueDetails()
+    } catch (err: any) {
+      setToast({ msg: err.message, type: 'error' })
+    } finally {
+      setProcessingQueue(false)
+      setTimeout(() => setToast(null), 4500)
+    }
+  }
+
   const handleEnqueueAllStudents = async () => {
     setSyncingQueueAll(true)
     try {
@@ -76,13 +125,14 @@ export default function PortariaConfigPage() {
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Erro ao agendar sincronização global')
-      setToast({ msg: data.message || 'Todos os alunos ativos foram enfileirados para as catracas com sucesso!', type: 'success' })
+      setToast({ msg: '⚡ Alunos enfileirados! Transmitindo diretamente para as catracas...', type: 'success' })
       refetchQueue()
+      await handleProcessQueueDirectly()
     } catch (err: any) {
       setToast({ msg: err.message, type: 'error' })
     } finally {
       setSyncingQueueAll(false)
-      setTimeout(() => setToast(null), 4000)
+      setTimeout(() => setToast(null), 4500)
     }
   }
 
@@ -96,13 +146,14 @@ export default function PortariaConfigPage() {
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Erro ao agendar exclusão de inativos')
-      setToast({ msg: `🗑️ ${data.message || 'Alunos inativos e removidos enfileirados para exclusão das catracas!'}`, type: 'success' })
+      setToast({ msg: '🗑️ Inativos identificados! Transmitindo exclusão direta nas catracas...', type: 'success' })
       refetchQueue()
+      await handleProcessQueueDirectly()
     } catch (err: any) {
       setToast({ msg: err.message, type: 'error' })
     } finally {
       setPurgingInactives(false)
-      setTimeout(() => setToast(null), 4000)
+      setTimeout(() => setToast(null), 4500)
     }
   }
 
@@ -1176,6 +1227,21 @@ export default function PortariaConfigPage() {
                   }}
                 />
               </div>
+
+              <button
+                onClick={handleProcessQueueDirectly}
+                disabled={processingQueue || !pendingQueueCount}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 6,
+                  padding: '8px 16px', borderRadius: 10, fontSize: 12, fontWeight: 800,
+                  background: `linear-gradient(135deg, ${ACCENT}, #0891b2)`, border: 'none',
+                  color: '#fff', cursor: 'pointer', boxShadow: `0 2px 10px ${ACCENT}30`,
+                  opacity: processingQueue || !pendingQueueCount ? 0.5 : 1
+                }}
+              >
+                {processingQueue ? <Activity size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <RefreshCw size={13} />}
+                {processingQueue ? `Transmitindo (${queueProgress.processed}/${queueProgress.total})...` : '⚡ Enviar para as Catracas Agora'}
+              </button>
 
               <button
                 onClick={handleClearQueue}
