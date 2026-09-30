@@ -12,11 +12,23 @@ Uso:
 """
 
 import sys
+import os
 import json
 import urllib.request
 import urllib.error
 import ssl
 from datetime import datetime
+
+if sys.platform == "win32":
+    try:
+        os.system("chcp 65001 >nul 2>&1")
+    except Exception:
+        pass
+    if hasattr(sys.stdout, "reconfigure"):
+        try:
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
 
 IP_MESTRE = "192.168.1.150"
 for arg in sys.argv:

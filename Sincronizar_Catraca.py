@@ -26,11 +26,43 @@ import threading
 from datetime import datetime, timezone, date
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+# ══════════════════════════════════════════════════════════════
+#  BLINDAGEM DE CONSOLE E ENCODING WINDOWS (UTF-8 TOTAL)
+# ══════════════════════════════════════════════════════════════
+if sys.platform == "win32":
+    try:
+        os.system("chcp 65001 >nul 2>&1")
+    except Exception:
+        pass
+    if hasattr(sys.stdout, "reconfigure"):
+        try:
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+    if hasattr(sys.stderr, "reconfigure"):
+        try:
+            sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+
 LOG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "catraca_sync.log")
 _raw_print = print
 
 def log_print(*args, **kwargs):
-    _raw_print(*args, **kwargs)
+    """Print blindado: nunca encerra o script por erro de encoding de caracteres ou console nulo."""
+    if sys.stdout is not None:
+        try:
+            _raw_print(*args, **kwargs)
+        except (UnicodeEncodeError, OSError):
+            try:
+                enc = getattr(sys.stdout, "encoding", None) or "ascii"
+                safe_args = [str(a).encode(enc, errors="replace").decode(enc, errors="replace") for a in args]
+                _raw_print(*safe_args, **kwargs)
+            except Exception:
+                pass
+        except Exception:
+            pass
+
     try:
         msg = " ".join(str(a) for a in args)
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -77,7 +109,12 @@ def encerrar_outras_instancias():
     meu_pid = os.getpid()
     if sys.platform == "win32":
         try:
-            # Encerra processos python/pythonw que rodem este script (exceto o processo atual)
+            # 1. Finaliza processos em segundo plano (pythonw.exe) instantaneamente
+            subprocess.run(["taskkill", "/F", "/IM", "pythonw.exe"], capture_output=True)
+        except Exception:
+            pass
+        try:
+            # 2. Finaliza outros processos python que rodem este script (exceto o processo atual)
             ps_cmd = (
                 f"$currentPid = {meu_pid}; "
                 f"Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | "
@@ -112,17 +149,17 @@ def adquirir_lock_instancia_unica():
         LOCK_SOCKET.bind(('127.0.0.1', 49152))
         return True
     except socket.error:
-        print("\n  ⚠️ Outra instância do Sincronizar_Catraca.py detectada (porta 49152 ativa). Finalizando zumbis...")
+        print("\n  ⚠️ Outra instância ativa detectada na porta 49152. Assumindo controle nesta janela...")
         encerrar_outras_instancias()
-        time.sleep(1)
+        time.sleep(0.5)
         try:
             LOCK_SOCKET = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             LOCK_SOCKET.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             LOCK_SOCKET.bind(('127.0.0.1', 49152))
             return True
         except Exception:
-            print("  ℹ️ Já existe uma instância ativa monitorando as catracas em segundo plano.")
-            return False
+            print("  ℹ️ Executando com monitoramento ativo nesta janela.")
+            return True
     except Exception as ex:
         # Em caso de qualquer outra restrição de ambiente, não aborta a sincronização
         print(f"  ℹ️ Aviso na verificação de instância: {ex}. Prosseguindo normalmente...")
@@ -852,13 +889,6 @@ def main():
         desinstalar_no_windows()
         sys.exit(0)
 
-    # 0. Garantir processo ÚNICO e eliminar instâncias zumbis anteriores
-    if not adquirir_lock_instancia_unica():
-        print("  ⚠️ Uma instância do Sincronizar_Catraca já está em execução no sistema.")
-        print("  ℹ️ Esta janela será fechada para não haver conflito de portas.")
-        time.sleep(3)
-        sys.exit(0)
-
     loop_mode = "--once" not in sys.argv
     intervalo = 2  # PADRÃO ULTRA RÁPIDO: 2 segundos
 
@@ -881,6 +911,9 @@ def main():
     print(f"   Data: {hoje_str} | Servidor: {NETLIFY_URL}")
     print(f"   Polling Paralelo Ativo: {intervalo}s entre varreduras")
     print("  ══════════════════════════════════════════════════════════════")
+
+    # 0. Garantir processo ÚNICO e assumir controle eliminando instâncias anteriores
+    adquirir_lock_instancia_unica()
 
     # 1. Carregar caches locais do dia
     carregar_caches_locais()
@@ -948,8 +981,12 @@ def main():
                 if agora - t_ultimo_status > 30:
                     t_ultimo_status = agora
                     hora_agora = datetime.now().strftime("%H:%M:%S")
-                    sys.stdout.write(f"\r  ⚡ [{hora_agora}] 4 catracas online | Monitoramento ativo a cada {intervalo}s...")
-                    sys.stdout.flush()
+                    if sys.stdout is not None:
+                        try:
+                            sys.stdout.write(f"\r  ⚡ [{hora_agora}] Catracas online | Monitoramento ativo a cada {intervalo}s...")
+                            sys.stdout.flush()
+                        except Exception:
+                            pass
 
         except Exception as e:
             print(f"\n  ⚠️ Alerta no ciclo: {e}")
@@ -964,4 +1001,22 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("\n  🛑 Monitoramento encerrado pelo usuário.")
+    except Exception as e:
+        import traceback
+        err_str = traceback.format_exc()
+        print(f"\n❌ ERRO FATAL: {e}")
+        print(err_str)
+        try:
+            with open("catraca_crash.log", "a", encoding="utf-8") as f:
+                f.write(f"[{datetime.now()}] CRASH:\n{err_str}\n")
+        except Exception:
+            pass
+        if sys.stdout is not None:
+            try:
+                input("\nPressione Enter para sair...")
+            except Exception:
+                pass
