@@ -71,7 +71,7 @@ async function resolveAlunos(filters: Record<string, string>): Promise<Record<st
     supabase.from('alunos').select('id, nome, matricula, turma, status, unidade, email, data_nascimento, telefone, dados, serie, turno'),
     supabase.from('matriculas').select('aluno_id, turma, serie, turno, ano_letivo, status, turma_id'),
     supabase.from('aluno_responsavel').select('aluno_id, responsavel_id, resp_financeiro'),
-    supabase.from('responsaveis').select('id, nome, cpf'),
+    supabase.from('responsaveis').select('id, nome, dados'),
     supabase.from('turmas').select('id, nome, serie, turno, dados')
   ])
 
@@ -133,7 +133,7 @@ async function resolveAlunos(filters: Record<string, string>): Promise<Record<st
       email: dados.email || a.email || '',
       telefone: dados.celular || a.telefone || '',
       responsavelFinanceiro: resp?.nome || '',
-      cpfResponsavel: resp?.cpf || '',
+      cpfResponsavel: resp?.dados?.cpf || resp?.cpf || '',
       anoLetivo: mat?.ano_letivo || new Date().getFullYear(),
       mesAniversario: dataNasc ? String(new Date(parseDateForFilter(dataNasc) + 'T12:00').getMonth() + 1) : '',
       sexo: dados.sexo || '',
@@ -163,7 +163,7 @@ async function resolveFinanceiro(filters: Record<string, string>, source: string
   ] = await Promise.all([
     supabase.from('alunos').select('id, nome, turma, serie, turno, unidade, dados, matricula'),
     supabase.from('aluno_responsavel').select('aluno_id, responsavel_id, parentesco, resp_financeiro'),
-    supabase.from('responsaveis').select('id, nome, cpf, rg, email, telefone, celular, dados, profissao, empresa'),
+    supabase.from('responsaveis').select('id, nome, email, telefone, celular, dados, profissao'),
     supabase.from('matriculas').select('aluno_id, turma, serie, turma_id, ano_letivo, status, unidade'),
     supabase.from('turmas').select('id, nome, unidade')
   ])
@@ -420,7 +420,7 @@ async function resolveAlunosCompleto(filters: Record<string, string>): Promise<R
     supabase.from('alunos').select('id, nome, matricula, turma, status, unidade, email, data_nascimento, telefone, dados, sexo, serie, turno'),
     supabase.from('matriculas').select('id, aluno_id, responsavel_financeiro_id, turma, serie, turno, ano_letivo, status, dados_contrato, created_at, updated_at, data_matricula, bolsista, grupo_alunos, turma_id, responsavel_pedagogico_id, situacao, padrao_pagamento_id, data_resultado'),
     supabase.from('aluno_responsavel').select('id, aluno_id, responsavel_id, parentesco, resp_financeiro, resp_pedagogico, created_at, tipo, updated_at, prioridade, autorizacao_retirada, resp_outro'),
-    supabase.from('responsaveis').select('id, nome, cpf, rg, email, telefone, celular, dados, profissao, empresa'),
+    supabase.from('responsaveis').select('id, nome, email, telefone, celular, dados, profissao'),
     supabase.from('turmas').select('id, nome, professor, sala, capacidade, matriculados, unidade, codigo, dados')
   ])
 

@@ -26,7 +26,7 @@ export async function GET(request: Request) {
   query = query.order('vencimento').limit(1000)
 
   if (status && status !== 'Todos') query = query.eq('status', status)
-  if (alunoId) query = query.eq('aluno_id', alunoId)
+  if (alunoId) query = query.or(`aluno.eq.${alunoId},dados->>alunoId.eq.${alunoId},dados->>aluno_id.eq.${alunoId}`)
   if (q) query = query.or(`aluno.ilike.%${q}%,descricao.ilike.%${q}%,codigo.ilike.%${q}%`)
 
   const { data, error } = await query

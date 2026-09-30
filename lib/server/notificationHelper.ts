@@ -1177,12 +1177,12 @@ export async function checkResponsavelRelationship(authUserId: string, alunoId: 
       
     if (!error && data) return true;
 
-    // 2. Se authUserId for um Auth UUID, buscar na tabela responsaveis por user_id ou dados->auth_id
+    // 2. Se authUserId for um Auth UUID, buscar na tabela responsaveis por dados->auth_id ou dados->user_id
     const candidateRespIds = new Set<string>();
     const { data: respRows } = await supabase
       .from('responsaveis')
       .select('id, dados')
-      .or(`user_id.eq."${authUserId}",dados->>auth_id.eq."${authUserId}",dados->>user_id.eq."${authUserId}"`)
+      .or(`dados->>auth_id.eq."${authUserId}",dados->>user_id.eq."${authUserId}"`)
       .limit(10);
 
     if (respRows && respRows.length > 0) {

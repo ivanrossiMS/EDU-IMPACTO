@@ -6,9 +6,21 @@ CREATE TABLE comunicados_respostas (
   remetente_nome text NOT NULL,
   conteudo text NOT NULL,
   anexos jsonb DEFAULT '[]'::jsonb,
+  reacoes jsonb DEFAULT '[]'::jsonb,
   is_admin boolean DEFAULT false,
   created_at timestamp with time zone DEFAULT now()
 );
+
+-- Adiciona coluna reacoes se tabela ja existir
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'comunicados_respostas' AND column_name = 'reacoes'
+  ) THEN
+    ALTER TABLE comunicados_respostas ADD COLUMN reacoes jsonb DEFAULT '[]'::jsonb;
+  END IF;
+END $$;
 
 -- Índices para buscas ultra rápidas
 CREATE INDEX idx_comunicados_respostas_comunicado ON comunicados_respostas(comunicado_id);

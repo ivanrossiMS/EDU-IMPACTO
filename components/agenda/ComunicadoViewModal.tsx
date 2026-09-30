@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Paperclip, FileText, CheckCircle2, ShieldAlert, Calendar, Mic, Send, Share, Bookmark, MoreHorizontal, Edit2, Trash2, Loader2, CreditCard, Info, ExternalLink, Vote } from 'lucide-react'
+import { X, Paperclip, FileText, CheckCircle2, ShieldAlert, Calendar, Mic, Send, Share, Bookmark, MoreHorizontal, Edit2, Trash2, Loader2, CreditCard, Info, ExternalLink, Vote, Smile } from 'lucide-react'
 import Image from 'next/image'
 import Portal from '@/components/Portal'
 import { UserAvatar } from '@/components/UserAvatar'
@@ -10,6 +10,7 @@ import { uploadFileToSupabase } from '@/lib/upload/uploadClient'
 import { getCachedStudentPhoto, setCachedStudentPhoto, fetchStudentPhotos } from '@/lib/studentPhotoCache'
 import { EnqueteWidget } from '@/components/agenda/enquetes/EnqueteWidget'
 import { AutorizacaoWidget } from '@/components/agenda/autorizacoes/AutorizacaoWidget'
+import { triggerHaptic } from '@/lib/utils/haptics'
 
 // Helpers
 const parseAnexo = (anexoData: any) => {
@@ -89,6 +90,13 @@ function timeAgoShort(dateString: string) {
   return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
 }
 
+export interface ChatMessageReaction {
+  emoji: string
+  user_id: string
+  user_name: string
+  created_at?: string
+}
+
 interface ChatMessage {
   id: string
   comunicado_id: string
@@ -99,6 +107,7 @@ interface ChatMessage {
   anexos: string[]
   is_admin: boolean
   created_at: string
+  reacoes?: ChatMessageReaction[]
 }
 
 interface ComunicadoViewModalProps {
@@ -259,6 +268,7 @@ export function ComunicadoViewModal({
   const [pendingAnexos, setPendingAnexos] = useState<string[]>([])
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null)
   const [showDestinatariosModal, setShowDestinatariosModal] = useState(false)
+  const [activeReactionMsgId, setActiveReactionMsgId] = useState<string | null>(null)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const bodyRef = useRef<HTMLDivElement>(null)
@@ -558,6 +568,77 @@ export function ComunicadoViewModal({
     }
   }
 
+  useEffect(() => {
+    if (!activeReactionMsgId) return;
+    const handleClickOutside = () => setActiveReactionMsgId(null);
+    window.addEventListener('click', handleClickOutside);
+    return () => window.removeEventListener('click', handleClickOutside);
+  }, [activeReactionMsgId]);
+
+  const handleToggleReaction = async (messageId: string, emoji: string) => {
+    const myId = currentUserSlug;
+    const myName = currentUserName || 'Você';
+
+    // Atualização otimista imediata na UI (estilo WhatsApp)
+    setMessages(prev => prev.map(m => {
+      if (m.id !== messageId) return m;
+      let reactions: any[] = Array.isArray(m.reacoes) ? [...m.reacoes] : [];
+      const existingIdx = reactions.findIndex(r => String(r.user_id) === String(myId) && r.emoji === emoji);
+
+      if (existingIdx >= 0) {
+        reactions.splice(existingIdx, 1);
+      } else {
+        reactions = reactions.filter(r => String(r.user_id) !== String(myId));
+        reactions.push({
+          emoji,
+          user_id: String(myId),
+          user_name: myName,
+          created_at: new Date().toISOString()
+        });
+      }
+
+      return {
+        ...m,
+        reacoes: reactions
+      };
+    }));
+
+    triggerHaptic('selection');
+
+    try {
+      let espelharParam = '';
+      if (typeof window !== 'undefined') {
+        const urlParams = new URLSearchParams(window.location.search);
+        const espColab = urlParams.get('espelhar_colaborador');
+        if (espColab) espelharParam = espColab;
+      }
+
+      const res = await fetch('/api/comunicados_respostas/react', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message_id: messageId,
+          emoji,
+          user_id: myId,
+          user_name: myName,
+          espelhar_colaborador: espelharParam || undefined
+        })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.reacoes) {
+          setMessages(prev => prev.map(m => m.id === messageId ? { ...m, reacoes: data.reacoes } : m));
+        }
+      } else {
+        fetchMessages();
+      }
+    } catch (err) {
+      console.error('Erro ao registrar reação:', err);
+      fetchMessages();
+    }
+  };
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files?.length) return
     setIsUploading(true)
@@ -674,6 +755,11 @@ export function ComunicadoViewModal({
         }} 
       >
         <style dangerouslySetInnerHTML={{__html: `
+          @keyframes cvmReactionPop {
+            0% { transform: scale(0.6); opacity: 0; }
+            70% { transform: scale(1.05); opacity: 1; }
+            100% { transform: scale(1); opacity: 1; }
+          }
           .cvm-modal-container {
             width: 100%;
             height: 100%;
@@ -1438,6 +1524,17 @@ export function ComunicadoViewModal({
                       
                       const msgDate = new Date(msg.created_at);
                       const msgTimeStr = msgDate.toLocaleDateString('pt-BR', {day:'2-digit', month:'2-digit'}) + ' às ' + msgDate.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
+
+                      const reactionsList: any[] = Array.isArray(msg.reacoes) ? msg.reacoes : [];
+                      const groupedReactions = reactionsList.reduce((acc: Record<string, { count: number; users: string[]; hasReacted: boolean }>, r: any) => {
+                        if (!r?.emoji) return acc;
+                        if (!acc[r.emoji]) acc[r.emoji] = { count: 0, users: [], hasReacted: false };
+                        acc[r.emoji].count += 1;
+                        acc[r.emoji].users.push(r.user_name || 'Usuário');
+                        if (String(r.user_id) === String(currentUserSlug)) acc[r.emoji].hasReacted = true;
+                        return acc;
+                      }, {});
+                      const reactionEntries = Object.entries(groupedReactions);
                       
                       return (
                         <div key={`${msg.id}-${idx}`} style={{ display: 'flex', gap: 12 }}>
@@ -1461,30 +1558,172 @@ export function ComunicadoViewModal({
                                 <span style={{ fontSize: 12, color: '#94a3b8' }}>{msgTimeStr}</span>
                               </div>
                             </div>
-                            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8 }}>
-                              <div style={{ fontSize: 14, color: '#334155', lineHeight: 1.5, background: isMe ? '#f1f5f9' : '#ffffff', padding: '8px 16px', borderRadius: '0 16px 16px 16px', border: isMe ? 'none' : '1px solid #e2e8f0', display: 'inline-block' }}>
-                                {msg.conteudo}
-                                {msg.anexos && msg.anexos.length > 0 && (
-                                  <div style={{ marginTop: 8, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                                    {msg.anexos.map((url, i) => (
-                                      <a key={i} href={url} target="_blank" rel="noreferrer" style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '6px 10px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, textDecoration: 'none', color: '#3b82f6', fontSize: 12, fontWeight: 600 }}>
-                                        <FileText size={14} /> Anexo {i + 1}
-                                      </a>
-                                    ))}
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', maxWidth: '100%' }}>
+                              <div style={{ position: 'relative', display: 'flex', alignItems: 'flex-end', gap: 6 }}>
+                                {/* Floating Reaction Bar (WhatsApp style) */}
+                                {activeReactionMsgId === msg.id && (
+                                  <div
+                                    onClick={(e) => e.stopPropagation()}
+                                    style={{
+                                      position: 'absolute',
+                                      bottom: 'calc(100% + 6px)',
+                                      left: 0,
+                                      background: '#ffffff',
+                                      borderRadius: 9999,
+                                      boxShadow: '0 4px 20px rgba(0,0,0,0.18), 0 1px 4px rgba(0,0,0,0.08)',
+                                      border: '1px solid #e2e8f0',
+                                      padding: '4px 6px',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: 2,
+                                      zIndex: 60,
+                                      animation: 'cvmReactionPop 0.16s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
+                                    }}
+                                  >
+                                    {['👍', '❤️', '😂', '😮', '😢', '🙏', '👏', '🎉'].map((emoji) => {
+                                      const isSelected = reactionsList.some(r => String(r.user_id) === String(currentUserSlug) && r.emoji === emoji);
+                                      return (
+                                        <button
+                                          key={emoji}
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleToggleReaction(msg.id, emoji);
+                                            setActiveReactionMsgId(null);
+                                          }}
+                                          style={{
+                                            background: isSelected ? '#dcfce7' : 'transparent',
+                                            border: isSelected ? '1px solid #86efac' : '1px solid transparent',
+                                            borderRadius: '50%',
+                                            width: 30,
+                                            height: 30,
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            fontSize: 18,
+                                            cursor: 'pointer',
+                                            padding: 0,
+                                            transition: 'transform 0.12s ease'
+                                          }}
+                                          onMouseEnter={(e) => {
+                                            e.currentTarget.style.transform = 'scale(1.28)';
+                                          }}
+                                          onMouseLeave={(e) => {
+                                            e.currentTarget.style.transform = 'scale(1)';
+                                          }}
+                                        >
+                                          {emoji}
+                                        </button>
+                                      );
+                                    })}
                                   </div>
                                 )}
-                              </div>
-                              {(isMe || isAdminMode) && (
+
+                                {/* Message bubble */}
+                                <div style={{ fontSize: 14, color: '#334155', lineHeight: 1.5, background: isMe ? '#f1f5f9' : '#ffffff', padding: '8px 16px', borderRadius: '0 16px 16px 16px', border: isMe ? 'none' : '1px solid #e2e8f0', display: 'inline-block' }}>
+                                  {msg.conteudo}
+                                  {msg.anexos && msg.anexos.length > 0 && (
+                                    <div style={{ marginTop: 8, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                                      {msg.anexos.map((url, i) => (
+                                        <a key={i} href={url} target="_blank" rel="noreferrer" style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '6px 10px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, textDecoration: 'none', color: '#3b82f6', fontSize: 12, fontWeight: 600 }}>
+                                          <FileText size={14} /> Anexo {i + 1}
+                                        </a>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* Reagir com emoji (WhatsApp Smile trigger) */}
                                 <button
-                                  onClick={() => handleDeleteMessage(msg.id)}
-                                  disabled={deletingId === msg.id}
-                                  style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.5, transition: 'opacity 0.2s', marginBottom: 4 }}
-                                  onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
-                                  onMouseLeave={(e) => e.currentTarget.style.opacity = '0.5'}
-                                  title="Excluir mensagem"
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setActiveReactionMsgId(activeReactionMsgId === msg.id ? null : msg.id);
+                                  }}
+                                  title="Reagir com emoji"
+                                  style={{
+                                    background: 'none',
+                                    border: 'none',
+                                    cursor: 'pointer',
+                                    padding: 4,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    opacity: activeReactionMsgId === msg.id ? 1 : 0.6,
+                                    color: activeReactionMsgId === msg.id ? '#d97706' : '#64748b',
+                                    transition: 'all 0.15s',
+                                    marginBottom: 4
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    e.currentTarget.style.opacity = '1';
+                                    e.currentTarget.style.color = '#d97706';
+                                    e.currentTarget.style.transform = 'scale(1.15)';
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    e.currentTarget.style.opacity = activeReactionMsgId === msg.id ? '1' : '0.6';
+                                    e.currentTarget.style.color = activeReactionMsgId === msg.id ? '#d97706' : '#64748b';
+                                    e.currentTarget.style.transform = 'scale(1)';
+                                  }}
                                 >
-                                  {deletingId === msg.id ? <Loader2 size={14} className="animate-spin" color="#ef4444" /> : <Trash2 size={14} color="#ef4444" />}
+                                  <Smile size={16} />
                                 </button>
+
+                                {/* Excluir mensagem */}
+                                {(isMe || isAdminMode) && (
+                                  <button
+                                    onClick={() => handleDeleteMessage(msg.id)}
+                                    disabled={deletingId === msg.id}
+                                    style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.5, transition: 'opacity 0.2s', marginBottom: 4 }}
+                                    onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
+                                    onMouseLeave={(e) => e.currentTarget.style.opacity = '0.5'}
+                                    title="Excluir mensagem"
+                                  >
+                                    {deletingId === msg.id ? <Loader2 size={14} className="animate-spin" color="#ef4444" /> : <Trash2 size={14} color="#ef4444" />}
+                                  </button>
+                                )}
+                              </div>
+
+                              {/* Pílulas de Reações com Emojis agrupadas */}
+                              {reactionEntries.length > 0 && (
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4, paddingLeft: 4 }}>
+                                  {reactionEntries.map(([emoji, data]) => (
+                                    <button
+                                      key={emoji}
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleToggleReaction(msg.id, emoji);
+                                      }}
+                                      title={`${emoji} • ${data.users.join(', ')}`}
+                                      style={{
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: 4,
+                                        padding: '2px 8px',
+                                        borderRadius: 9999,
+                                        background: data.hasReacted ? '#e0f2fe' : '#ffffff',
+                                        border: data.hasReacted ? '1px solid #7dd3fc' : '1px solid #e2e8f0',
+                                        boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+                                        fontSize: 12,
+                                        cursor: 'pointer',
+                                        transition: 'all 0.15s ease'
+                                      }}
+                                      onMouseEnter={(e) => {
+                                        e.currentTarget.style.transform = 'scale(1.08)';
+                                      }}
+                                      onMouseLeave={(e) => {
+                                        e.currentTarget.style.transform = 'scale(1)';
+                                      }}
+                                    >
+                                      <span>{emoji}</span>
+                                      {data.count > 1 && (
+                                        <span style={{ fontSize: 11, fontWeight: 700, color: data.hasReacted ? '#0369a1' : '#64748b' }}>
+                                          {data.count}
+                                        </span>
+                                      )}
+                                    </button>
+                                  ))}
+                                </div>
                               )}
                             </div>
                           </div>

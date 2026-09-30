@@ -191,12 +191,12 @@ export async function GET(request: Request) {
     if (guardianIds.size > 0) {
       const { data: respRecords } = await supabase
         .from('responsaveis')
-        .select('id, cpf, dados')
+        .select('id, dados')
         .in('id', Array.from(guardianIds))
 
       if (respRecords) {
         for (const r of respRecords) {
-          const cpf = r.cpf || r.dados?.cpf
+          const cpf = (r as any).cpf || r.dados?.cpf
           if (cpf) guardianTaxIds.add(cpf)
         }
       }

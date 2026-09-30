@@ -189,7 +189,27 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json(data || []);
+  const formattedData = (data || []).map((row: any) => {
+    let reacoes = Array.isArray(row.reacoes) ? row.reacoes : [];
+    let anexos = Array.isArray(row.anexos) ? row.anexos : [];
+
+    if (reacoes.length === 0 && anexos.length > 0) {
+      const rxItem = anexos.find((a: any) => typeof a === 'object' && a !== null && a.__reactions__);
+      if (rxItem && Array.isArray(rxItem.__reactions__)) {
+        reacoes = rxItem.__reactions__;
+      }
+    }
+
+    const cleanAnexos = anexos.filter((a: any) => !(typeof a === 'object' && a !== null && a.__reactions__));
+
+    return {
+      ...row,
+      anexos: cleanAnexos,
+      reacoes
+    };
+  });
+
+  return NextResponse.json(formattedData);
 }
 
 export async function POST(request: Request) {
@@ -514,7 +534,7 @@ export async function POST(request: Request) {
       console.error("Erro ao resetar status LIDO:", resetErr);
     }
 
-    return NextResponse.json(data, { status: 201 });
+    return NextResponse.json({ ...data, reacoes: [] }, { status: 201 });
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 400 });
   }

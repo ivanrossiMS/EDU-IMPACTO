@@ -99,13 +99,14 @@ function buildTurma(m: Record<string, string>) {
 }
 
 function buildResponsavel(m: Record<string, string>) {
+  const cpfNorm = m.cpf ? String(m.cpf).replace(/\D/g, '') : null
+  const rgNorm = m.rg || null
+  const sexoNorm = m.sexo || null
   return {
     id: m.id || crypto.randomUUID(),
     nome: m.nome || '',
-    cpf: m.cpf ? String(m.cpf).replace(/\D/g, '') : null,
-    rg: m.rg || null,
+    cpf: cpfNorm,
     org_emissor: m.orgEmissor || null,
-    sexo: m.sexo || null,
     data_nasc: normDate(m.dataNasc || '') || null,
     email: m.email || null,
     telefone: m.telefone || null,
@@ -126,7 +127,11 @@ function buildResponsavel(m: Record<string, string>) {
       estado: m.estado || '',
       cep: m.cep || '',
     },
-    dados: {}
+    dados: {
+      cpf: cpfNorm,
+      rg: rgNorm,
+      sexo: sexoNorm,
+    }
   }
 }
 
@@ -311,12 +316,13 @@ export async function POST(request: Request) {
         // Checar por CPF ou nome
         let existeId: string | null = null
         if (respRow.cpf) {
-          const { data: ex } = await supabase.from('responsaveis').select('id').eq('cpf', respRow.cpf).maybeSingle()
+          const { data: ex } = await supabase.from('responsaveis').select('id').eq('dados->>cpf', respRow.cpf).maybeSingle()
           if (ex) { existeId = ex.id; atualizados++ } else { inseridos++ }
         } else { inseridos++ }
         if (existeId) respRow.id = existeId
 
-        await supabase.from('responsaveis').upsert(respRow)
+        const { cpf: _cpf, ...cleanRespRow } = respRow
+        await supabase.from('responsaveis').upsert(cleanRespRow)
 
         // Vincular ao aluno se codigoAluno informado
         if (m.codigoAluno) {

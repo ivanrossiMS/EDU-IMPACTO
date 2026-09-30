@@ -70,10 +70,9 @@ export async function GET(request: Request) {
     if (user.user_metadata?.responsavel_id) candidateRespIds.add(String(user.user_metadata.responsavel_id))
     if (user.id) candidateRespIds.add(String(user.id))
 
-    // 2. Busca na tabela responsaveis por user.id, auth_id, email ou nome
+    // 2. Busca na tabela responsaveis por auth_id, user_id (dentro de dados), email ou nome
     const respOrConds: string[] = []
     if (user.id) {
-      respOrConds.push(`user_id.eq.${user.id}`)
       respOrConds.push(`dados->>auth_id.eq.${user.id}`)
       respOrConds.push(`dados->>user_id.eq.${user.id}`)
     }
@@ -132,11 +131,11 @@ export async function GET(request: Request) {
       }
     }
 
-    // 4. Fallback: aluno com user_id = user.id (perfil Aluno com login direto)
+    // 4. Fallback: aluno com dados->auth_id ou dados->user_id = user.id (perfil Aluno com login direto)
     const { data: alunoRow } = await supabase
       .from('alunos')
       .select('id')
-      .or(`user_id.eq.${user.id},dados->>auth_id.eq.${user.id}`)
+      .or(`dados->>auth_id.eq.${user.id},dados->>user_id.eq.${user.id}`)
       .maybeSingle()
     if (alunoRow?.id) linkedAlunoIds.add(String(alunoRow.id))
 
@@ -162,9 +161,14 @@ export async function GET(request: Request) {
     const turmaIds        = [...new Set(alunos.map((a: any) => a.turma).filter(Boolean))]
 
     const orConditions: string[] = []
-    if (ativosIds.length > 0) orConditions.push(`alunoId.in.(${ativosIds.join(',')})`)
+    if (ativosIds.length > 0) {
+      orConditions.push(`dados->>alunoId.in.(${ativosIds.join(',')})`)
+      orConditions.push(`dados->>aluno_id.in.(${ativosIds.join(',')})`)
+      const safeIds = ativosIds.map((id: any) => `"${String(id).replace(/"/g, '')}"`).join(',')
+      if (safeIds) orConditions.push(`aluno.in.(${safeIds})`)
+    }
     if (ativosMatriculas.length > 0) {
-      orConditions.push(`alunoId.in.(${ativosMatriculas.join(',')})`)
+      orConditions.push(`dados->>matricula.in.(${ativosMatriculas.join(',')})`)
       const safeMats = ativosMatriculas.map((m: any) => `"${String(m).replace(/"/g, '')}"`).join(',')
       if (safeMats) orConditions.push(`aluno.in.(${safeMats})`)
     }
@@ -174,7 +178,7 @@ export async function GET(request: Request) {
     }
 
     const fetchTitulos = (orConditions.length > 0 && ativosIds.length <= 50)
-      ? supabase.from('titulos').select('id,status,aluno,alunoId').eq('status', 'atrasado').or(orConditions.join(','))
+      ? supabase.from('titulos').select('id,status,aluno,dados').eq('status', 'atrasado').or(orConditions.join(','))
       : Promise.resolve({ data: [] })
 
     const fetchTurmas = turmaIds.length > 0
@@ -192,9 +196,14 @@ export async function GET(request: Request) {
     })
 
     const result = alunos.map((a: any) => {
-      const pendentesAluno = pendingTitulos.filter((t: any) =>
-        t.alunoId === a.id || t.aluno === a.nome || (a.matricula && (t.alunoId === a.matricula || t.aluno === a.matricula))
-      )
+      const pendentesAluno = pendingTitulos.filter((t: any) => {
+        const tAlunoId = t.dados?.alunoId || t.dados?.aluno_id || t.alunoId || t.aluno
+        return (
+          tAlunoId === a.id ||
+          t.aluno === a.nome ||
+          (a.matricula && (tAlunoId === a.matricula || t.aluno === a.matricula))
+        )
+      })
       const turmaInfo = turmasMap[a.turma] || { nome: a.turma || 'S/T', ano: new Date().getFullYear() }
       const isIntegral = isAlunoIntegralIntermediario(a, turmasData || [])
 
