@@ -664,12 +664,18 @@ export function GlobalNotificationProvider() {
         }).catch(() => {})
       }
 
-      // Retry de segurança após 3 segundos para garantir que tokens assíncronos do APNs sejam vinculados
-      const retryTimer = setTimeout(() => {
-        notificationService.syncUser(currentUser).catch(() => {})
-      }, 3000)
+      // Retry de segurança após 3 segundos exclusivamente em ambiente nativo (iOS/Android)
+      // para aguardar geração assíncrona do token APNs/FCM sem gerar chamadas duplicadas no Web SDK
+      let retryTimer: ReturnType<typeof setTimeout> | null = null
+      if (Capacitor.isNativePlatform()) {
+        retryTimer = setTimeout(() => {
+          notificationService.syncUser(currentUser).catch(() => {})
+        }, 3000)
+      }
 
-      return () => clearTimeout(retryTimer)
+      return () => {
+        if (retryTimer) clearTimeout(retryTimer)
+      }
     } else if (wasLoggedInRef.current) {
       // Apenas executa clearUser se o usuário estava anteriormente logado nesta sessão e deslogou.
       // Isso evita que visitantes ou usuários recém-abertos no /login fiquem limpando em loop.

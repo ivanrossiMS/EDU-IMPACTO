@@ -802,13 +802,39 @@ class NotificationService {
         const performWebSync = async (OS: any) => {
           if (!OS || typeof OS.login !== 'function' || !(window as any).__OS_INIT__) return
 
-          try {
-            await OS.login(userId)
+          // Evita chamadas repetidas ao OS.login se o usuário já estiver ativo e identificado com este ID
+          const currentExtId = OS.User?.externalId
+          if (currentExtId === userId && this.loggedInToOneSignal) {
+            this.currentUserId = userId
+          } else {
+            try {
+              await OS.login(userId)
+            } catch (webLoginErr: any) {
+              console.warn('[NotificationService] Conflito/aviso no OS.login web:', webLoginErr)
+            }
+
+            // Verificação pós-login: se o externalId não foi vinculado (devido a operação pausada na fila
+            // ou conflito 409 com ID órfão), força OS.logout() para purgar a fila e refaz a identificação
+            await new Promise(r => setTimeout(r, 250))
+            const verifiedExtId = OS.User?.externalId
+            if (verifiedExtId !== userId) {
+              console.warn(`⚠️ [NotificationService] OneSignal Web externalId (${verifiedExtId}) diverge do usuário atual (${userId}). Purgando fila órfã com OS.logout()...`)
+              try {
+                if (typeof OS.logout === 'function') {
+                  await OS.logout()
+                  await new Promise(r => setTimeout(r, 250))
+                  await OS.login(userId)
+                  console.log(`✅ [NotificationService] Usuário recuperado e associado ao OneSignal Web (External ID: ${userId})`)
+                }
+              } catch (recoverErr) {
+                console.warn('[NotificationService] Falha na recuperação limpa do login web:', recoverErr)
+              }
+            } else {
+              console.log(`✅ [NotificationService] Usuário associado ao OneSignal Web (External ID: ${userId})`)
+            }
+
             this.currentUserId = userId
             this.loggedInToOneSignal = true
-            console.log(`✅ [NotificationService] Usuário associado ao OneSignal Web (External ID: ${userId})`)
-          } catch (webLoginErr) {
-            console.warn('[NotificationService] Aviso no OS.login web:', webLoginErr)
           }
 
           // Apenas tenta optIn se o navegador já concedeu permissão (granted).
