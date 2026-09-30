@@ -317,7 +317,7 @@ export default function ADFrequenciaPage({ params }: { params: any }) {
 
   const selectedSaidaCalls = useMemo(() => {
     if (!selectedDate) return []
-    return saidaCalls.filter(c => {
+    const calls = saidaCalls.filter(c => {
       if (c.status?.toLowerCase() !== 'confirmed') return false
       // Usa confirmedAt se existir, se não usa calledAt
       const dateStr = c.confirmedAt || c.calledAt
@@ -327,6 +327,11 @@ export default function ADFrequenciaPage({ params }: { params: any }) {
       } catch (e) {
         return false
       }
+    })
+    return calls.sort((a, b) => {
+      const ta = a.confirmedAt || a.calledAt || ''
+      const tb = b.confirmedAt || b.calledAt || ''
+      return ta.localeCompare(tb)
     })
   }, [selectedDate, saidaCalls])
 
@@ -881,7 +886,7 @@ export default function ADFrequenciaPage({ params }: { params: any }) {
                                    <LogOut size={20} strokeWidth={2.5} />
                                  </div>
                                  <div style={{ fontWeight: 900, fontSize: 15, color: '#0f172a' }}>
-                                   Saída Confirmada
+                                   {selectedSaidaCalls.length > 1 ? `${i + 1}ª Saída Confirmada` : 'Saída Confirmada'}
                                  </div>
                               </div>
 

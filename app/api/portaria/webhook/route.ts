@@ -595,33 +595,43 @@ export async function POST(req: Request) {
           // FLUXO DE SAÍDA DE ALUNOS (CATRACA DE SAÍDA - .154)
           // ══════════════════════════════════════════════════════════════
 
-          // 🛡️ PROTEÇÃO ANTI-FLAPPING E COMBATE A DUPLICAÇÃO DE ENTRADA/SAÍDA SIMULTÂNEA:
-          // Se o aluno registrou entrada hoje e o evento de saída ocorreu no mesmo minuto,
-          // ou a menos de 5 minutos da entrada, trata-se de duplicação por processos concorrentes.
-          // O evento físico é registrado em portaria_eventos, mas a saída no ERP e o push aos pais são bloqueados!
-          const horaEntradaHoje = existingFreq?.dados?.ultimaEntrada || existingFreq?.dados?.horaEntrada
-          if (horaEntradaHoje) {
-            const [entH, entM] = horaEntradaHoje.split(':').map(Number)
-            const [saiH, saiM] = localTimeStr.split(':').map(Number)
-            const minEntrada = (!isNaN(entH) && !isNaN(entM)) ? (entH * 60 + entM) : -1
-            const minSaida = (!isNaN(saiH) && !isNaN(saiM)) ? (saiH * 60 + saiM) : -1
-            const diffMinutos = (minEntrada >= 0 && minSaida >= 0) ? (minSaida - minEntrada) : 999
+          const labelCatraca = dispositivoNome ? `Saiu Sozinho (${dispositivoNome})` : 'Saiu Sozinho (Saida - Rua das Garças)'
 
-            if (diffMinutos >= 0 && diffMinutos < 5) {
-              console.warn(`🛡️ [Portaria Anti-Flap] Saída de ${alunoNome} às ${localTimeStr} BLOQUEADA: aluno registrou entrada às ${horaEntradaHoje} (diferença de apenas ${diffMinutos} min). Frequência de saída preservada sem erro.`)
-              return NextResponse.json({
-                ok: true,
-                status: 'ignored_antiflap',
-                message: `Saída bloqueada por proximidade imediata com a entrada (${horaEntradaHoje})`
-              })
-            }
+          // Lista de todas as saídas do aluno no dia
+          const saidasExistentes: any[] = Array.isArray(existingFreq?.dados?.saidas)
+            ? [...existingFreq.dados.saidas]
+            : (existingFreq?.dados?.saidaHorario ? [{
+                hora: existingFreq.dados.saidaHorario,
+                dispositivo: existingFreq.dados.saidaResponsavel || labelCatraca,
+                data_hora: existingFreq.dados?.horaRegistro ? `${localDate}T${existingFreq.dados.horaRegistro}:00.000Z` : eventTime,
+                tipo: 'saida'
+              }] : [])
+
+          // 🛡️ Anti-bounce na própria catraca de saída:
+          // Se já houve uma saída registrada para este mesmo aluno no exato mesmo minuto (ex: dupla leitura em 15s),
+          // não duplicamos o card nem o push notification.
+          const ultimaSaidaRegistrada = saidasExistentes.length > 0 ? saidasExistentes[saidasExistentes.length - 1] : null
+          const isMesmoMinutoSaida = ultimaSaidaRegistrada && ultimaSaidaRegistrada.hora === localTimeStr
+
+          if (isMesmoMinutoSaida) {
+            console.log(`ℹ️ [Portaria Webhook] Saída de ${alunoNome} às ${localTimeStr} já processada neste mesmo minuto. Evitando disparo duplicado.`)
+            return NextResponse.json({
+              ok: true,
+              status: 'already_processed_minute',
+              message: `Saída às ${localTimeStr} já processada neste minuto.`
+            })
           }
 
-          console.log(`🚪 [Portaria Webhook] Registrando SAÍDA para ${alunoNome} às ${localTimeStr} via ${dispositivoNome}`)
+          saidasExistentes.push({
+            hora: localTimeStr,
+            dispositivo: labelCatraca,
+            data_hora: eventTime,
+            tipo: 'saida'
+          })
 
-          const labelCatraca = dispositivoNome ? `Saiu Sozinho (${dispositivoNome})` : 'Saiu Sozinho (Catraca Rua das Garças)'
+          console.log(`🚪 [Portaria Webhook] Registrando SAÍDA para ${alunoNome} às ${localTimeStr} via ${dispositivoNome} (Total saídas hoje: ${saidasExistentes.length})`)
 
-          // 1. Atualizar ou criar registro de frequência com o horário de saída
+          // 1. Atualizar ou criar registro de frequência com o histórico de saídas
           const { error: freqUpdErr } = await supabase.from('frequencias').upsert({
             id: freqId,
             aluno_id: alunoId,
@@ -631,6 +641,9 @@ export async function POST(req: Request) {
             justificativa: existingFreq?.justificativa || '',
             dados: {
               ...(existingFreq?.dados || {}),
+              saidas: saidasExistentes,
+              totalSaidas: saidasExistentes.length,
+              ultimaSaida: localTimeStr,
               saidaHorario: localTimeStr,
               saidaResponsavel: labelCatraca,
               saidaOrigem: 'catraca',
@@ -645,24 +658,34 @@ export async function POST(req: Request) {
             console.error('[Portaria Integration Saida Frequencia Error]', freqUpdErr)
           }
 
-          // 2. Registrar na tabela saida_calls para exibição imediata no painel de chamadas, TV monitor e histórico
-          const callId = `saida-catraca-${alunoId}-${localDate}`
+          // 2. Registrar na tabela saida_calls com timestamp único para cada saída do dia
+          const timeToken = localTimeStr.replace(':', '')
+          const callId = `saida-catraca-${alunoId}-${localDate}-${timeToken}`
+          const callDados = {
+            studentId: String(alunoId),
+            studentName: alunoNome,
+            studentClass: alunoTurma || '',
+            guardianId: 'catraca-saida',
+            guardianName: labelCatraca,
+            calledAt: `${localDate}T${localTimeStr}:00-04:00`,
+            confirmedAt: `${localDate}T${localTimeStr}:00-04:00`,
+            status: 'confirmed',
+            tipo: 'sozinho',
+            origem: 'catraca_idface',
+            dispositivoNome: dispositivoNome || 'Saida - Rua das Garças',
+            horaSaida: localTimeStr,
+          }
+
           await supabase.from('saida_calls').upsert({
             id: callId,
-            dados: {
-              studentId: String(alunoId),
-              studentName: alunoNome,
-              studentClass: alunoTurma || '',
-              guardianId: 'catraca-saida',
-              guardianName: labelCatraca,
-              calledAt: `${localDate}T${localTimeStr}:00-04:00`,
-              confirmedAt: `${localDate}T${localTimeStr}:00-04:00`,
-              status: 'confirmed',
-              tipo: 'sozinho',
-              origem: 'catraca_idface',
-              dispositivoNome: dispositivoNome || 'Saida - Rua das Garças',
-              horaSaida: localTimeStr,
-            },
+            dados: callDados,
+            created_at: new Date().toISOString()
+          }, { onConflict: 'id' })
+
+          // Atualiza também o ID geral do dia para retrocompatibilidade
+          await supabase.from('saida_calls').upsert({
+            id: `saida-catraca-${alunoId}-${localDate}`,
+            dados: callDados,
             created_at: new Date().toISOString()
           }, { onConflict: 'id' })
 

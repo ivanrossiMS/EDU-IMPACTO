@@ -5,7 +5,7 @@ import { useApiQuery } from '@/hooks/useApi'
 import {
   Settings, Save, RefreshCw, CheckCircle, XCircle, Clock, Shield, Users,
   Camera, Activity, Lock, Key, ShieldAlert, Check, Trash2,
-  Eye, Search, X, User, LogIn, CheckCircle2, ArrowRightLeft, Sparkles
+  Eye, Search, X, User, LogIn, CheckCircle2, ArrowRightLeft, Sparkles, UserPlus
 } from 'lucide-react'
 import { SyncAcessosModal } from '@/components/portaria/SyncAcessosModal'
 
@@ -49,6 +49,56 @@ export default function PortariaConfigPage() {
   const [syncPreviewMissing, setSyncPreviewMissing] = useState(0)
   const [syncPreviewAllList, setSyncPreviewAllList] = useState<any[]>([])
   const [syncPreviewMissingList, setSyncPreviewMissingList] = useState<any[]>([])
+
+  // Estados para Sincronização de Alunos Novos
+  const [showNovosModal, setShowNovosModal] = useState(false)
+  const [loadingNovosPreview, setLoadingNovosPreview] = useState(false)
+  const [syncingNovos, setSyncingNovos] = useState(false)
+  const [novosData, setNovosData] = useState<{
+    novosAlunos: any[]
+    totalNovos: number
+    totalOperacoes: number
+    totalAtivosErp: number
+    dispositivosVerificados: any[]
+  } | null>(null)
+
+  const handleOpenSyncNovosModal = async () => {
+    setLoadingNovosPreview(true)
+    try {
+      const res = await fetch('/api/portaria/sync-novos')
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Erro ao analisar catracas')
+      setNovosData(data)
+      setShowNovosModal(true)
+    } catch (err: any) {
+      setToast({ msg: err.message || 'Erro ao analisar catracas', type: 'error' })
+      setTimeout(() => setToast(null), 4500)
+    } finally {
+      setLoadingNovosPreview(false)
+    }
+  }
+
+  const handleExecuteSyncNovos = async () => {
+    setSyncingNovos(true)
+    try {
+      const res = await fetch('/api/portaria/sync-novos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Erro ao sincronizar alunos novos')
+      setToast({ msg: `🎉 ${data.message || 'Alunos novos cadastrados com sucesso nas catracas!'}`, type: 'success' })
+      setShowNovosModal(false)
+      refetchQueue()
+      refetchQueueDetails()
+    } catch (err: any) {
+      setToast({ msg: err.message, type: 'error' })
+    } finally {
+      setSyncingNovos(false)
+      setTimeout(() => setToast(null), 4500)
+    }
+  }
 
   // Fetch config from the configuracoes table
   const { data: configRes, isLoading } = useApiQuery<any>(
@@ -679,6 +729,28 @@ export default function PortariaConfigPage() {
                   {pendingQueueCount > 0 ? `${pendingQueueCount} aguardando envio (Clique para ver)` : '✅ 100% Sincronizado'}
                 </span>
               </div>
+
+              <button
+                onClick={handleOpenSyncNovosModal}
+                disabled={loadingNovosPreview || syncingNovos}
+                style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                  padding: '13px 20px', borderRadius: 12, fontSize: 13.5, fontWeight: 800,
+                  background: 'linear-gradient(135deg, #10b981, #059669)',
+                  border: 'none',
+                  color: '#fff', cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  boxShadow: '0 4px 15px rgba(16,185,129,0.25)',
+                  opacity: loadingNovosPreview || syncingNovos ? 0.6 : 1,
+                }}
+              >
+                {loadingNovosPreview ? (
+                  <Activity size={16} style={{ animation: 'spin 1s linear infinite' }} />
+                ) : (
+                  <UserPlus size={16} />
+                )}
+                ✨ Sincronizar Apenas Alunos Novos com as Catracas
+              </button>
 
               <button
                 onClick={handleEnqueueAllStudents}
@@ -1341,6 +1413,172 @@ export default function PortariaConfigPage() {
               >
                 Fechar
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Sincronização de Alunos Novos */}
+      {showNovosModal && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)',
+          zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
+          animation: 'fadeIn 0.2s ease-out'
+        }}>
+          <div style={{
+            background: 'hsl(var(--bg-card))', border: '1px solid hsl(var(--border-subtle))',
+            borderRadius: 24, width: '100%', maxWidth: 540, maxHeight: '85vh',
+            display: 'flex', flexDirection: 'column', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
+            overflow: 'hidden', animation: 'slideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1)'
+          }}>
+            {/* Header */}
+            <div style={{
+              padding: '20px 24px', borderBottom: '1px solid hsl(var(--border-subtle))',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              background: 'hsl(var(--bg-elevated))'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{
+                  width: 42, height: 42, borderRadius: 12,
+                  background: (novosData?.totalNovos ?? 0) > 0 ? 'rgba(16,185,129,0.15)' : 'rgba(6,182,212,0.15)',
+                  border: `1px solid ${(novosData?.totalNovos ?? 0) > 0 ? 'rgba(16,185,129,0.3)' : 'rgba(6,182,212,0.3)'}`,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  color: (novosData?.totalNovos ?? 0) > 0 ? '#10b981' : ACCENT
+                }}>
+                  {(novosData?.totalNovos ?? 0) > 0 ? <UserPlus size={22} /> : <CheckCircle2 size={22} />}
+                </div>
+                <div>
+                  <h3 style={{ fontSize: 16, fontWeight: 900, margin: 0, color: 'hsl(var(--text-primary))' }}>
+                    {(novosData?.totalNovos ?? 0) > 0
+                      ? `Alunos Novos Detectados (${novosData?.totalNovos})`
+                      : 'Tudo em Dia nas Catracas!'}
+                  </h3>
+                  <p style={{ fontSize: 11, color: 'hsl(var(--text-muted))', margin: '2px 0 0 0' }}>
+                    {(novosData?.totalNovos ?? 0) > 0
+                      ? 'Alunos ativos no ERP que ainda não existem na memória física das catracas'
+                      : `${novosData?.totalAtivosErp || 0} alunos ativos já estão cadastrados nos leitores iDFace`}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowNovosModal(false)}
+                disabled={syncingNovos}
+                style={{
+                  background: 'none', border: 'none', color: 'hsl(var(--text-muted))',
+                  cursor: 'pointer', padding: 6, borderRadius: 8
+                }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div style={{ padding: '20px 24px', flex: 1, overflowY: 'auto' }}>
+              {(novosData?.totalNovos ?? 0) === 0 ? (
+                <div style={{ textAlign: 'center', padding: '30px 10px' }}>
+                  <div style={{
+                    width: 54, height: 54, borderRadius: '50%',
+                    background: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.25)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    margin: '0 auto 16px', color: '#10b981'
+                  }}>
+                    <Check size={28} strokeWidth={2.5} />
+                  </div>
+                  <h4 style={{ margin: '0 0 8px', fontSize: 16, fontWeight: 800 }}>
+                    Nenhum Aluno Novo Pendente!
+                  </h4>
+                  <p style={{ fontSize: 12.5, color: 'hsl(var(--text-muted))', lineHeight: 1.5, margin: 0 }}>
+                    Todas as <strong>{novosData?.dispositivosVerificados?.length || 3} catracas físicas</strong> foram analisadas em tempo real e já possuem 100% dos alunos ativos cadastrados.
+                  </p>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <div style={{ fontSize: 11, fontWeight: 800, color: 'hsl(var(--text-muted))', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 }}>
+                    Alunos a serem transmitidos para as catracas:
+                  </div>
+
+                  {novosData?.novosAlunos.map((aluno: any, idx: number) => (
+                    <div
+                      key={idx}
+                      style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        padding: '10px 14px', borderRadius: 12, background: 'hsl(var(--bg-base))',
+                        border: '1px solid hsl(var(--border-subtle))', gap: 12
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <div style={{
+                          width: 36, height: 36, borderRadius: '50%', background: 'hsl(var(--bg-elevated))',
+                          border: '1px solid hsl(var(--border-subtle))', display: 'flex', alignItems: 'center',
+                          justifyContent: 'center', color: 'hsl(var(--text-muted))'
+                        }}>
+                          <User size={16} />
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 13, fontWeight: 800, color: 'hsl(var(--text-primary))' }}>
+                            {aluno.nome}
+                          </div>
+                          <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>
+                            Matrícula: <strong style={{ color: '#10b981' }}>{aluno.matricula || aluno.numeric_id}</strong>
+                            {aluno.tem_foto && <span style={{ marginLeft: 6, fontSize: 10, color: '#0891b2' }}>• Foto Facial Pronta</span>}
+                          </div>
+                        </div>
+                      </div>
+
+                      <span style={{
+                        fontSize: 10.5, fontWeight: 800, padding: '3px 8px', borderRadius: 6,
+                        background: 'rgba(16,185,129,0.1)', color: '#10b981', border: '1px solid rgba(16,185,129,0.3)'
+                      }}>
+                        {aluno.missingDevices?.length === 1 ? '1 catraca' : `${aluno.missingDevices?.length || 3} catracas`}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div style={{
+              padding: '16px 24px', borderTop: '1px solid hsl(var(--border-subtle))',
+              display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 10,
+              background: 'hsl(var(--bg-elevated))'
+            }}>
+              <button
+                onClick={() => setShowNovosModal(false)}
+                disabled={syncingNovos}
+                style={{
+                  padding: '10px 16px', borderRadius: 10,
+                  background: 'transparent', border: '1px solid hsl(var(--border-subtle))',
+                  color: 'hsl(var(--text-muted))', fontSize: 12.5, fontWeight: 700, cursor: 'pointer'
+                }}
+              >
+                {(novosData?.totalNovos ?? 0) === 0 ? 'Fechar' : 'Cancelar'}
+              </button>
+
+              {(novosData?.totalNovos ?? 0) > 0 && (
+                <button
+                  onClick={handleExecuteSyncNovos}
+                  disabled={syncingNovos}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 8,
+                    padding: '10px 20px', borderRadius: 10,
+                    background: 'linear-gradient(135deg, #10b981, #059669)',
+                    border: 'none', color: '#fff', fontSize: 13, fontWeight: 800, cursor: 'pointer',
+                    boxShadow: '0 4px 15px rgba(16,185,129,0.3)',
+                    opacity: syncingNovos ? 0.6 : 1
+                  }}
+                >
+                  {syncingNovos ? (
+                    <Activity size={15} style={{ animation: 'spin 1s linear infinite' }} />
+                  ) : (
+                    <Sparkles size={15} />
+                  )}
+                  {syncingNovos
+                    ? 'Transmitindo para as catracas...'
+                    : `Cadastrar ${novosData?.totalNovos} Aluno(s) nas Catracas`}
+                </button>
+              )}
             </div>
           </div>
         </div>
