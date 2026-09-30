@@ -454,20 +454,18 @@ export async function POST(req: Request) {
     const isExplicitExitRoute150 = pId === 1 || pId === 101 || compId === 810373890 || rId === 1 || ruleId === 4
     const isExplicitEntryRoute150 = pId === 2 || pId === 102 || compId === 810373889 || rId === 2 || ruleId === 1
 
-    if (isDevice154) {
-      dispositivoSentido = 'saida'
-      dispositivoNome = 'Saida - Rua das Garças'
-      dispositivoId = '0M0200/0263A6'
-    } else if (isMaster150) {
-      if (isExplicitExitRoute150) {
-        dispositivoSentido = 'saida'
-        dispositivoNome = 'Saida - Rua das Garças'
-        dispositivoId = '0M0200/0263A6'
-      } else if (isExplicitEntryRoute150) {
+    if (isMaster150 || isDevice154) {
+      if (isExplicitEntryRoute150) {
+        // ENTRADA FÍSICA NA .150 (PORTARIA MÉDIO) - ROTA TEM PRIORIDADE MÁXIMA
         dispositivoSentido = 'entrada'
         dispositivoNome = 'Portaria Médio - PRINCIPAL'
         dispositivoId = '0M0200/02638E'
-      } else if (explicitTipo === 'saida') {
+      } else if (isExplicitExitRoute150) {
+        // SAÍDA FÍSICA NA .154 (RUA DAS GARÇAS)
+        dispositivoSentido = 'saida'
+        dispositivoNome = 'Saida - Rua das Garças'
+        dispositivoId = '0M0200/0263A6'
+      } else if (isDevice154 || explicitTipo === 'saida') {
         dispositivoSentido = 'saida'
         dispositivoNome = 'Saida - Rua das Garças'
         dispositivoId = '0M0200/0263A6'
@@ -507,19 +505,28 @@ export async function POST(req: Request) {
       eventStatus = 'falha'
     }
 
-    // ID determinístico para evitar duplicações:
+    // ID determinístico para evitar duplicações e conflito entre processos concorrentes:
     // Prioridade: (1) object_changes.id → enviado pelo Sincronizar_Catraca.py
     //             (2) payload.id       → alguns firmwares enviam diretamente
     //             (3) device+user+minuto → Push Protocol em tempo real (granularidade 1 min evita dupl)
     let eventId: string
-    if (payload.object_changes && payload.object_changes[0]?.values?.id) {
-      eventId = `idface-${dispositivoId}-${payload.object_changes[0].values.id}`
-    } else if (payload.id && payload.id !== 0) {
-      eventId = `idface-${dispositivoId}-${payload.id}`
+    const logRawId = payload.object_changes?.[0]?.values?.id ?? (payload.id && payload.id !== 0 ? payload.id : null)
+
+    if (logRawId) {
+      if (isMaster150 || isDevice154) {
+        // As catracas .150 e .154 compartilham a mesma sequência de logs no mestre .150.
+        // O ID único 'idface-mestre-${logRawId}' garante IDEMPOTÊNCIA ABSOLUTA:
+        // Mesmo se múltiplos scripts ou requisições concorrentes enviarem o mesmo log,
+        // o Supabase fará upsert no MESMO registro em vez de criar um evento fantasma duplo.
+        eventId = `idface-mestre-${logRawId}`
+      } else {
+        eventId = `idface-${dispositivoId}-${logRawId}`
+      }
     } else {
       // Granularidade de 1 minuto: evita duplicação se a catraca enviar o mesmo evento 2x no mesmo minuto
       const minuteBucket = Math.floor(new Date(eventTime).getTime() / 60000)
-      eventId = `idface-${dispositivoId}-${userIdNum ?? 'anon'}-${minuteBucket}`
+      const prefix = (isMaster150 || isDevice154) ? 'idface-mestre' : `idface-${dispositivoId}`
+      eventId = `${prefix}-${userIdNum ?? 'anon'}-${minuteBucket}`
     }
 
     // Salvar evento — upsert garante idempotência ao re-processar ou receber push duplicado
@@ -575,6 +582,29 @@ export async function POST(req: Request) {
           // ══════════════════════════════════════════════════════════════
           // FLUXO DE SAÍDA DE ALUNOS (CATRACA DE SAÍDA - .154)
           // ══════════════════════════════════════════════════════════════
+
+          // 🛡️ PROTEÇÃO ANTI-FLAPPING E COMBATE A DUPLICAÇÃO DE ENTRADA/SAÍDA SIMULTÂNEA:
+          // Se o aluno registrou entrada hoje e o evento de saída ocorreu no mesmo minuto,
+          // ou a menos de 5 minutos da entrada, trata-se de duplicação por processos concorrentes.
+          // O evento físico é registrado em portaria_eventos, mas a saída no ERP e o push aos pais são bloqueados!
+          const horaEntradaHoje = existingFreq?.dados?.horaEntrada
+          if (horaEntradaHoje) {
+            const [entH, entM] = horaEntradaHoje.split(':').map(Number)
+            const [saiH, saiM] = localTimeStr.split(':').map(Number)
+            const minEntrada = (!isNaN(entH) && !isNaN(entM)) ? (entH * 60 + entM) : -1
+            const minSaida = (!isNaN(saiH) && !isNaN(saiM)) ? (saiH * 60 + saiM) : -1
+            const diffMinutos = (minEntrada >= 0 && minSaida >= 0) ? (minSaida - minEntrada) : 999
+
+            if (diffMinutos >= 0 && diffMinutos < 5) {
+              console.warn(`🛡️ [Portaria Anti-Flap] Saída de ${alunoNome} às ${localTimeStr} BLOQUEADA: aluno registrou entrada às ${horaEntradaHoje} (diferença de apenas ${diffMinutos} min). Frequência de saída preservada sem erro.`)
+              return NextResponse.json({
+                ok: true,
+                status: 'ignored_antiflap',
+                message: `Saída bloqueada por proximidade imediata com a entrada (${horaEntradaHoje})`
+              })
+            }
+          }
+
           console.log(`🚪 [Portaria Webhook] Registrando SAÍDA para ${alunoNome} às ${localTimeStr} via ${dispositivoNome}`)
 
           const labelCatraca = dispositivoNome ? `Saiu Sozinho (${dispositivoNome})` : 'Saiu Sozinho (Catraca Rua das Garças)'

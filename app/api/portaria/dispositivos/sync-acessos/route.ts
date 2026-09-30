@@ -258,6 +258,8 @@ export async function POST(req: NextRequest) {
           const rId = log.reader_id ?? 0
           const dId = log.direction
           const doorId = log.door_id ?? log.door ?? 0
+          const compId = log.component_id ?? 0
+          const ruleId = log.identification_rule_id ?? log.rule_id ?? 0
           const devIdStr = String(log.device_id || '').trim()
           const isDev154 = devIdStr === '0M0200/0263A6' || devIdStr === '192.168.1.154'
           const isDev150 = devIdStr === '0M0200/02638E' || devIdStr === '192.168.1.150'
@@ -265,7 +267,7 @@ export async function POST(req: NextRequest) {
           let direction = 'entrada'
           if (isDev154) {
             direction = 'saida'
-          } else if (isDev150 && (pId === 2 || pId === 102 || rId === 2 || dId === 1 || doorId === 2)) {
+          } else if (isDev150 && (pId === 1 || pId === 101 || compId === 810373890 || rId === 1 || ruleId === 4)) {
             direction = 'saida'
           } else {
             direction = 'entrada'

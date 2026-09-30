@@ -56,7 +56,7 @@ CATRACA_SENHA = "Pass1081$"
 CATRACA_LOGIN = "admin"
 
 CATRACAS = [
-    # Mestre iD Next (Centraliza todos os cadastros, biometrias e logs de Entrada [Portal 1] e Saída Rua das Garças [Portal 2])
+    # Mestre iD Next (Centraliza todos os cadastros, biometrias e logs de Entrada [Portal 2 / Comp 810373889] e Saída Rua das Garças [Portal 1 / Comp 810373890])
     {"nome": "Portaria Médio - PRINCIPAL", "ip": "192.168.1.150", "id": "0M0200/02638E", "porta": 80, "tipo": "mestre", "senha": "Pass1081$"},
     # Catracas Autônomas de Entrada
     {"nome": "Portaria FUND1- PRINCIPAL",  "ip": "192.168.1.155", "id": "0M0200/02639C", "porta": 80, "tipo": "entrada"},
@@ -70,6 +70,52 @@ SSL_CTX.check_hostname = False
 SSL_CTX.verify_mode = ssl.CERT_NONE
 
 STATE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "catraca_state.json")
+LOCK_FILE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "sincronizar_catraca.lock")
+LOCK_FILE_HANDLE = None
+
+def encerrar_outras_instancias():
+    """Finaliza instâncias zumbis ou processos anteriores do Sincronizar_Catraca para eliminar duplicações."""
+    meu_pid = os.getpid()
+    if sys.platform == "win32":
+        try:
+            ps_cmd = (
+                f"Get-CimInstance Win32_Process | Where-Object {{ "
+                f"($_.Name -like 'python*' ) -and ($_.CommandLine -like '*Sincronizar_Catraca*') -and ($_.ProcessId -ne {meu_pid}) "
+                f"}} | ForEach-Object {{ Stop-Process -Id $_.ProcessId -Force }}"
+            )
+            subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_cmd],
+                           capture_output=True, timeout=8)
+        except Exception:
+            pass
+    else:
+        try:
+            cmd = f"pgrep -f Sincronizar_Catraca | grep -v {meu_pid} | xargs kill -9 2>/dev/null"
+            subprocess.run(cmd, shell=True, capture_output=True)
+        except Exception:
+            pass
+
+def adquirir_lock_instancia_unica():
+    """Garante que apenas UMA instância do script rode na máquina ao mesmo tempo."""
+    global LOCK_FILE_HANDLE
+    encerrar_outras_instancias()
+    time.sleep(0.5)
+    try:
+        LOCK_FILE_HANDLE = open(LOCK_FILE_PATH, "w")
+        if sys.platform == "win32":
+            import msvcrt
+            msvcrt.locking(LOCK_FILE_HANDLE.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(LOCK_FILE_HANDLE.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        LOCK_FILE_HANDLE.write(f"{os.getpid()}\n")
+        LOCK_FILE_HANDLE.flush()
+        return True
+    except Exception:
+        print("\n❌ [ERRO CRÍTICO] Outra instância do Sincronizar_Catraca.py já está em execução!")
+        print("   Para evitar duplicação simultânea de entrada e saída, esta instância foi abortada.")
+        print("   Se necessário, encerre 'python.exe' / 'pythonw.exe' no Gerenciador de Tarefas do Windows.")
+        return False
+
 
 # Pool de sessões em memória para reaproveitamento (evita login toda hora)
 # Chave: IP da catraca -> {"url": base_url, "session": session_token, "lock": Lock}
@@ -439,9 +485,11 @@ def enviar_para_webhook(log_entry, cat, tipo_override=None):
 
     payload = {
         "device_id": disp_id,
+        "master_device_id": cat_id,
         "portal_id": portal_id,
         "component_id": comp_id,
         "reader_id": reader_id,
+        "identification_rule_id": rule_id,
         "direction": direction,
         "door_id":   door_id,
         "tipo": tipo,
@@ -457,6 +505,7 @@ def enviar_para_webhook(log_entry, cat, tipo_override=None):
                 "portal_id":    portal_id,
                 "component_id": comp_id,
                 "reader_id":    reader_id,
+                "identification_rule_id": rule_id,
                 "direction":    direction,
                 "door_id":      door_id,
                 "tipo":         tipo,
@@ -789,6 +838,10 @@ def main():
     elif "--uninstall" in sys.argv:
         desinstalar_no_windows()
         sys.exit(0)
+
+    # 0. Garantir processo ÚNICO e eliminar instâncias zumbis anteriores
+    if not adquirir_lock_instancia_unica():
+        sys.exit(1)
 
     loop_mode = "--once" not in sys.argv
     intervalo = 2  # PADRÃO ULTRA RÁPIDO: 2 segundos
