@@ -14,6 +14,7 @@ import { ImpactoLoader } from '@/components/ui/ImpactoLoader'
 import { hideSplashScreen } from '@/lib/capacitor/splash'
 import { useAgendaNotifications } from '../hooks/useAgendaNotifications'
 import { apiFetch } from '@/lib/api/apiClient'
+import { getMeusAlunosDedup } from '@/lib/api/meusAlunosClient'
 import { PENDING_PUSH_ROUTE_KEY } from '@/components/providers/GlobalNotificationProvider'
 
 // Helper function to abbreviate Portuguese surnames to fit single line
@@ -1144,21 +1145,10 @@ function SelecionarAlunoContent() {
       } catch (_) {}
     }
 
-    // Step 2: Always fire a fresh network request with apiFetch (Bearer + proactive refresh + 401 retry)
-    const url = `/api/agenda/meus-alunos?respId=${encodeURIComponent(respId)}&email=${encodeURIComponent(emailBusca)}&nome=${encodeURIComponent(nomeBusca)}`;
-
-    apiFetch(url)
-      .then(async (r) => {
-        // Respostas de erro (401, 403, 500) NUNCA podem sobrescrever o cache com lista vazia!
-        if (!r.ok) {
-          console.warn('[selecionar-aluno] Falha na requisição de alunos:', r.status);
-          return null;
-        }
-        return r.json();
-      })
+    // Step 2: Fire deduplicated request (shares active in-flight request if already loading)
+    getMeusAlunosDedup()
       .then((data) => {
-        // Se a requisição falhou, data é null: NÃO altera o estado nem apaga o cache
-        if (data === null || !Array.isArray(data)) return;
+        if (!Array.isArray(data)) return;
 
         // Resposta 200 OK válida: atualiza estado e cache da conta específica (mesmo se data for [] vazio de fato)
         setMeusAlunos(data);

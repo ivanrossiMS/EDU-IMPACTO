@@ -34,6 +34,7 @@ import { useAgendaNotifications } from '../hooks/useAgendaNotifications'
 import { PushPermissionBanner } from '@/components/agenda/PushPermissionBanner'
 import { isAlunoCursandoTurma } from '@/lib/studentTurmaUtils'
 import { Capacitor } from '@capacitor/core'
+import { getMeusAlunosDedup } from '@/lib/api/meusAlunosClient'
 
 interface RealtimeProviderProps {
   children?: React.ReactNode
@@ -117,8 +118,7 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
       } catch (_) {}
     }
 
-    fetch('/api/agenda/meus-alunos', { credentials: 'include' })
-      .then(r => r.ok ? r.json() : [])
+    getMeusAlunosDedup()
       .then(data => {
         if (Array.isArray(data)) {
           setMeusAlunos(data)

@@ -8,6 +8,7 @@ import { supabase } from '@/lib/supabase'
 import { BookOpen, Sparkles } from 'lucide-react'
 
 import { PENDING_PUSH_ROUTE_KEY } from '@/components/providers/GlobalNotificationProvider'
+import { getMeusAlunosDedup } from '@/lib/api/meusAlunosClient'
 
 const ADMIN_ROLES = ['Direção', 'Administrador', 'Diretor Geral', 'Administrador Master']
 
@@ -131,19 +132,41 @@ function AgendaDigitalIndexContent() {
              }
           }
 
-          // Slow path seguro via API do backend (checa user_id ou vínculos)
-          const url = `/api/agenda/meus-alunos`;
-          const res = await fetch(url, { credentials: 'include', cache: 'no-store' });
-          if (res.ok) {
-            const data = await res.json();
-            if (Array.isArray(data) && data.length === 1 && data[0].id) {
-              window.location.replace(`/agenda-digital/${data[0].id}/${redirect}${paramStr}`);
-              return;
+          // Cache instantâneo do localStorage: redireciona imediatamente sem travar na tela de loading
+          const userCacheKey = `edu-meus-alunos-${currentUser.id}`;
+          try {
+            const cached = localStorage.getItem(userCacheKey);
+            if (cached) {
+              const parsed = JSON.parse(cached);
+              const list = Array.isArray(parsed) ? parsed : (Array.isArray(parsed?.data) ? parsed.data : null);
+              if (list && list.length === 1 && list[0]?.id) {
+                window.location.replace(`/agenda-digital/${list[0].id}/${redirect}${paramStr}`);
+                return;
+              }
+              if (list && list.length > 1) {
+                router.replace(`/agenda-digital/selecionar-aluno${paramStr}`);
+                return;
+              }
             }
-            if (Array.isArray(data) && data.length === 0 && isStaff) {
-              window.location.replace(`/agenda-digital/colaborador/${redirect}${paramStr}`);
-              return;
-            }
+          } catch (_) {}
+
+          // Chamada otimizada e deduplicada ao backend
+          const data = await getMeusAlunosDedup();
+          if (Array.isArray(data) && data.length === 1 && data[0].id) {
+            try {
+              localStorage.setItem(userCacheKey, JSON.stringify(data));
+            } catch (_) {}
+            window.location.replace(`/agenda-digital/${data[0].id}/${redirect}${paramStr}`);
+            return;
+          }
+          if (Array.isArray(data) && data.length === 0 && isStaff) {
+            window.location.replace(`/agenda-digital/colaborador/${redirect}${paramStr}`);
+            return;
+          }
+          if (Array.isArray(data) && data.length > 1) {
+            try {
+              localStorage.setItem(userCacheKey, JSON.stringify(data));
+            } catch (_) {}
           }
           router.replace(`/agenda-digital/selecionar-aluno${paramStr}`);
         } catch (e) {
