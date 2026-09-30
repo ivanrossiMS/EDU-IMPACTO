@@ -1,5 +1,6 @@
 import { useInfiniteQuery } from '@tanstack/react-query'
 import { useApp } from '@/lib/context'
+import { apiFetch } from '@/lib/api/apiClient'
 
 // --- COMUNICADOS ---
 export function useQueryComunicados(
@@ -18,8 +19,11 @@ export function useQueryComunicados(
       url.searchParams.set('limit', String(pageSize))
       url.searchParams.set('offset', String(pageParam * pageSize))
       
-      const res = await fetch(url.toString(), { credentials: 'include' })
-      if (!res.ok) throw new Error('Falha ao buscar comunicados')
+      const res = await apiFetch(url.toString(), { credentials: 'include' })
+      if (!res.ok) {
+        console.warn('[useQueryComunicados] Falha ao buscar comunicados:', res.status)
+        throw new Error(`Falha ao buscar comunicados (${res.status})`)
+      }
       const data = await res.json()
       return Array.isArray(data) ? data : []
     },
@@ -53,8 +57,11 @@ export function useQueryMomentos(
       url.searchParams.set('limit', String(pageSize))
       url.searchParams.set('offset', String(pageParam * pageSize))
       
-      const res = await fetch(url.toString(), { credentials: 'include' })
-      if (!res.ok) throw new Error('Falha ao buscar momentos')
+      const res = await apiFetch(url.toString(), { credentials: 'include' })
+      if (!res.ok) {
+        console.warn('[useQueryMomentos] Falha ao buscar momentos:', res.status)
+        throw new Error(`Falha ao buscar momentos (${res.status})`)
+      }
       const data = await res.json()
       return Array.isArray(data) ? data : []
     },

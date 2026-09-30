@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/server/authGuard'
-import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
+import { createProtectedClient } from '@/lib/server/supabaseServerFactory'
 import { isAlunoIntegralIntermediario } from '@/lib/studentTurmaUtils'
 
 export const dynamic = 'force-dynamic'
@@ -10,11 +10,13 @@ const memCache = new Map<string, { value: any, timestamp: number }>();
 const CACHE_TTL = 300_000; // 5 minutos
 
 export async function GET(request: Request) {
-  const { user, errorResponse } = await requireAuth()
+  const { user, errorResponse } = await requireAuth(request)
   if (errorResponse) return errorResponse
 
   try {
-    const supabase = await createProtectedClient()
+    const authHeader = request.headers.get('authorization') || ''
+    const bearerToken = authHeader.toLowerCase().startsWith('bearer ') ? authHeader.substring(7).trim() : undefined
+    const supabase = await createProtectedClient(bearerToken)
     const { searchParams } = new URL(request.url)
     const slug = searchParams.get('slug')
     const responsavel_id = searchParams.get('responsavel_id')

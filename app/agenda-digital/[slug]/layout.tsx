@@ -20,6 +20,8 @@ import { performLogout } from '@/lib/auth/logout'
 import { hideSplashScreen } from '@/lib/capacitor/splash'
 import { LoadingGlass } from '@/components/LoadingGlass'
 
+import { apiFetch } from '@/lib/api/apiClient'
+
 import { StudentHeaderCard } from './components/StudentHeaderCard'
 import { StudentCallController } from './components/StudentCallController'
 import { AgendaNavigationTabBar } from './components/AgendaNavigationTabBar'
@@ -106,7 +108,7 @@ export default function ADInnerLayout({
     setIsLoading(true)
     const loadProfile = async () => {
       try {
-        const res = await fetch(`/api/agenda/perfil-acesso?slug=${resolvedParams.slug}&responsavel_id=${respId}&is_aluno_profile=${isAlunoLogado}`)
+        const res = await apiFetch(`/api/agenda/perfil-acesso?slug=${resolvedParams.slug}&responsavel_id=${respId}&is_aluno_profile=${isAlunoLogado}`)
         
         const contentType = res.headers.get("content-type")
         if (!contentType || !contentType.includes("application/json")) {

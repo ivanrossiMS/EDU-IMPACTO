@@ -1156,7 +1156,7 @@ export async function getStudentTargetsForComunicados(dados: TargetParams | null
  * dados sensíveis de um aluno específico (alunoId).
  * Garante proteção contra IDOR (Insecure Direct Object Reference).
  */
-export async function checkResponsavelRelationship(authUserId: string, alunoId: string): Promise<boolean> {
+export async function checkResponsavelRelationship(authUserId: string, alunoId: string, userEmail?: string): Promise<boolean> {
   if (!authUserId || !alunoId) return false;
   try {
     const supabase = supabaseServer;
@@ -1168,41 +1168,64 @@ export async function checkResponsavelRelationship(authUserId: string, alunoId: 
     if (cleanAuthId === cleanAlunoId) return true;
     
     // 1. Verifica na tabela aluno_responsavel por match direto de responsavel_id
+    const orMatches = [`responsavel_id.eq.${cleanAuthId}`, `responsavel_id.eq.${authUserId}`];
     const { data, error } = await supabase
       .from('aluno_responsavel')
       .select('id')
       .eq('aluno_id', cleanAlunoId)
-      .or(`responsavel_id.eq."${cleanAuthId}",responsavel_id.eq."${authUserId}"`)
+      .or(orMatches.join(','))
       .maybeSingle();
       
     if (!error && data) return true;
 
-    // 2. Se authUserId for um Auth UUID, buscar na tabela responsaveis por dados->auth_id ou dados->user_id
+    // 2. Se authUserId for um Auth UUID ou se temos email, buscar na tabela responsaveis
     const candidateRespIds = new Set<string>();
-    const { data: respRows } = await supabase
-      .from('responsaveis')
-      .select('id, dados')
-      .or(`dados->>auth_id.eq."${authUserId}",dados->>user_id.eq."${authUserId}"`)
-      .limit(10);
+    const respOrConds: string[] = [];
+    if (authUserId) {
+      respOrConds.push(`dados->>auth_id.eq.${authUserId}`);
+      respOrConds.push(`dados->>user_id.eq.${authUserId}`);
+    }
+    if (userEmail) {
+      const em = userEmail.toLowerCase().trim();
+      respOrConds.push(`email.ilike.${em}`);
+    }
 
-    if (respRows && respRows.length > 0) {
-      respRows.forEach((r: any) => {
-        if (r.id) candidateRespIds.add(String(r.id));
-      });
+    if (respOrConds.length > 0) {
+      const { data: respRows } = await supabase
+        .from('responsaveis')
+        .select('id, dados')
+        .or(respOrConds.join(','))
+        .limit(10);
+
+      if (respRows && respRows.length > 0) {
+        respRows.forEach((r: any) => {
+          if (r.id) candidateRespIds.add(String(r.id));
+        });
+      }
     }
 
     // 3. Checar em system_users se existe vínculo com responsavel_id
-    const { data: sysRows } = await supabase
-      .from('system_users')
-      .select('id, dados')
-      .or(`id.eq."${authUserId}",auth_id.eq."${authUserId}"`)
-      .limit(5);
+    const sysConds: string[] = [];
+    if (authUserId) {
+      sysConds.push(`id.eq.${authUserId}`, `auth_id.eq.${authUserId}`);
+    }
+    if (userEmail) {
+      sysConds.push(`email.ilike.${userEmail.toLowerCase().trim()}`);
+    }
 
-    if (sysRows && sysRows.length > 0) {
-      sysRows.forEach((s: any) => {
-        const rId = s.dados?.responsavel_id || s.dados?.responsavelId;
-        if (rId) candidateRespIds.add(String(rId));
-      });
+    if (sysConds.length > 0) {
+      const { data: sysRows } = await supabase
+        .from('system_users')
+        .select('id, dados')
+        .or(sysConds.join(','))
+        .limit(5);
+
+      if (sysRows && sysRows.length > 0) {
+        sysRows.forEach((s: any) => {
+          const rId = s.dados?.responsavel_id || s.dados?.responsavelId;
+          if (rId) candidateRespIds.add(String(rId));
+        });
+      }
     }
 
     if (candidateRespIds.size > 0) {

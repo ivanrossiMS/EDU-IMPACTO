@@ -1,5 +1,5 @@
 import { NextResponse, after } from 'next/server'
-import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
+import { createProtectedClient } from '@/lib/server/supabaseServerFactory'
 import { supabaseServer } from '@/lib/supabaseServer'
 import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 import { getLoggedUserAccessStartDate } from '@/lib/server/visibility'
@@ -12,6 +12,33 @@ import { formatFriendlyStudentName } from '@/lib/studentNameHelper'
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 export const maxDuration = 30
+
+// Cache de memória para turmas e grupos da agenda (TTL 60s) para evitar consultas pesadas repetidas
+let turmasCache: { data: any[]; timestamp: number } | null = null
+let gruposCache: { data: any[]; timestamp: number } | null = null
+
+async function getCachedTurmasAndGrupos() {
+  const now = Date.now()
+  const fetchTurmas = (!turmasCache || now - turmasCache.timestamp > 60000)
+    ? Promise.resolve(supabaseServer.from('turmas').select('id, nome, codigo, ano, turno, dados'))
+    : Promise.resolve({ data: turmasCache.data })
+
+  const fetchGrupos = (!gruposCache || now - gruposCache.timestamp > 60000)
+    ? Promise.resolve(supabaseServer.from('agenda_grupos').select('id, dados'))
+    : Promise.resolve({ data: gruposCache.data })
+
+  const [tRes, gRes] = await Promise.all([fetchTurmas, fetchGrupos])
+  if (tRes.data && (!turmasCache || now - turmasCache.timestamp > 60000)) {
+    turmasCache = { data: tRes.data, timestamp: now }
+  }
+  if (gRes.data && (!gruposCache || now - gruposCache.timestamp > 60000)) {
+    gruposCache = { data: gRes.data, timestamp: now }
+  }
+  return {
+    allTurmas: turmasCache?.data || [],
+    allGrupos: gruposCache?.data || []
+  }
+}
 
 function normalizeRow(row: any) {
   const merged = { ...row, ...(row.dados || {}) }
@@ -36,10 +63,12 @@ function normalizeRow(row: any) {
   return merged
 }
 export async function GET(request: Request) {
-  const { user, errorResponse } = await requireAuth()
+  const { user, errorResponse } = await requireAuth(request)
   if (errorResponse) return errorResponse
 
-  const authClient = await createProtectedClient();
+  const authHeader = request.headers.get('authorization') || ''
+  const bearerToken = authHeader.toLowerCase().startsWith('bearer ') ? authHeader.substring(7).trim() : undefined
+  const authClient = await createProtectedClient(bearerToken)
   const supabase = authClient;
   const { searchParams } = new URL(request.url);
   const limitParam = searchParams.get('limit');
@@ -116,14 +145,13 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Acesso negado: ID do aluno não informado.' }, { status: 403 });
     }
     const checkId = user.user_metadata?.responsavel_id || user.user_metadata?.aluno_id || user.id;
-    const isOwner = await checkResponsavelRelationship(checkId, alunoId);
+    const isOwner = await checkResponsavelRelationship(checkId, alunoId, user.email);
     if (!isOwner) {
       return NextResponse.json({ error: 'Acesso negado: Você não tem permissão para visualizar dados deste aluno.' }, { status: 403 });
     }
   }
 
   // ── Resolução paralela de turma, grupos e data de acesso ──────────────────
-  // Antes: 4 queries sequenciais. Agora: 2 batches paralelos.
   let resolvedTurmas: string[] = [];
   if (turmaId) resolvedTurmas.push(turmaId);
   let studentGroups: string[] = [];
@@ -132,16 +160,13 @@ export async function GET(request: Request) {
   let allTurmasForFilter: any[] = [];
 
   if (alunoId) {
-    // Batch 1: busca dados do aluno, todas as turmas e todos os grupos ao mesmo tempo
-    const [alunoRes, turmasRes, gruposRes] = await Promise.all([
+    // Busca dados do aluno e turmas/grupos com cache de memória (0ms nas próximas chamadas)
+    const [alunoRes, { allTurmas, allGrupos }] = await Promise.all([
       supabase.from('alunos').select('id, turma, created_at, dados').eq('id', alunoId).maybeSingle(),
-      supabase.from('turmas').select('id, nome, codigo, ano, turno, dados'),
-      supabase.from('agenda_grupos').select('id, dados'),
+      getCachedTurmasAndGrupos()
     ]);
 
     const alunoData = alunoRes.data;
-    const allTurmas = turmasRes.data || [];
-    const allGrupos = gruposRes.data || [];
     alunoDataForFilter = alunoData;
     allTurmasForFilter = allTurmas;
 

@@ -21,6 +21,7 @@ import { ComunicadoChat } from '@/components/ComunicadoChat'
 import { ComunicadoViewModal } from '@/components/agenda/ComunicadoViewModal'
 import { ComunicadoSkeleton } from '../../components/ComunicadoSkeleton'
 import { ReportPayloadView } from '@/components/DynamicReports/ReportPayloadView'
+import { apiFetch } from '@/lib/api/apiClient'
 
 
 // Helper to abbreviate names for mobile (e.g., "Maria Auxiliadora de Araújo Honório" -> "Maria A. de A. Honório")
@@ -201,7 +202,7 @@ export default function ADComunicadosPage({ params }: { params: any }) {
 
     // 3. Persist to server (if not mirroring)
     if (!isMirroring) {
-      fetch('/api/agenda/notificacoes/marcar-lido', {
+      apiFetch('/api/agenda/notificacoes/marcar-lido', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -247,7 +248,7 @@ export default function ADComunicadosPage({ params }: { params: any }) {
 
     if (!loading) {
       const slugParam = resolvedParams?.slug ? `&aluno_id=${encodeURIComponent(resolvedParams.slug)}` : '';
-      fetch(`/api/comunicados?id=${encodeURIComponent(queryId)}${slugParam}`)
+      apiFetch(`/api/comunicados?id=${encodeURIComponent(queryId)}${slugParam}`)
         .then(res => res.json())
         .then(data => {
           const item = Array.isArray(data) ? data[0] : (data?.data?.[0] || data);
@@ -275,7 +276,7 @@ export default function ADComunicadosPage({ params }: { params: any }) {
         setSelectedComunicado(target);
       } else {
         const slugParam = resolvedParams?.slug ? `&aluno_id=${encodeURIComponent(resolvedParams.slug)}` : '';
-        fetch(`/api/comunicados?id=${encodeURIComponent(comId)}${slugParam}`)
+        apiFetch(`/api/comunicados?id=${encodeURIComponent(comId)}${slugParam}`)
           .then(res => res.json())
           .then(data => {
             const item = Array.isArray(data) ? data[0] : (data?.data?.[0] || data);
@@ -451,7 +452,7 @@ export default function ADComunicadosPage({ params }: { params: any }) {
     })
 
     try {
-      const res = await fetch('/api/agenda/notificacoes/marcar-ciencia', {
+      const res = await apiFetch('/api/agenda/notificacoes/marcar-ciencia', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
