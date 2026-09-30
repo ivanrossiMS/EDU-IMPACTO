@@ -15,7 +15,7 @@ import { useApiQuery } from '@/hooks/useApi'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useQueryClient } from '@tanstack/react-query'
 import { useAgendaRealtime } from '@/hooks/useAgendaRealtime'
-import { parseNotaValor, calcularDiagnosticoPedagogico, arredondarMediaImpacto } from '@/lib/notasEngine'
+import { parseNotaValor, calcularDiagnosticoPedagogico, arredondarMediaImpacto, calcularMediaAnualDisciplina } from '@/lib/notasEngine'
 
 export default function ADNotasPage({ params }: { params: any }) {
   const { adConfig } = useAgendaDigital();
@@ -256,7 +256,8 @@ export default function ADNotasPage({ params }: { params: any }) {
         }
 
         const entry = discMap.get(normKey)!
-        const rawVal = d.mediaG && d.mediaG !== '---' ? d.mediaG : (d.mediaF || '')
+        // Prioriza a média final do bimestre (mediaF) com fallback para mediaG
+        const rawVal = d.mediaF && d.mediaF !== '---' ? d.mediaF : (d.mediaG || '')
         const strVal = String(rawVal).trim()
         const isLancado = strVal !== '' && strVal !== '---' && strVal !== '-'
         const num = parseNotaValor(strVal)
@@ -281,24 +282,21 @@ export default function ADNotasPage({ params }: { params: any }) {
       const sortedBims = [...entry.bimesters].sort((a, b) => a.bimNum - b.bimNum)
       const lancados = sortedBims.filter(b => b.lancado)
 
-      let mediaAnualNum = 0
-      if (lancados.length > 0) {
-        const sum = lancados.reduce((acc, b) => acc + b.valorNum, 0)
-        mediaAnualNum = sum / lancados.length
-      }
-
-      // Arredondamento acadêmico oficial (Imagem 2 / Colégio IMPACTO):
-      // >= 0.00 e <= 0.25 -> 0.00 | > 0.25 e <= 0.75 -> 0.50 | > 0.75 e <= 1.00 -> 1.00
-      const mediaFNum = arredondarMediaImpacto(mediaAnualNum)
+      // Regra oficial de Média Anual com recuperação semestral (2º e 4º bimestres):
+      // 1º Semestre = (B1 + B2) / 2 -> Com rec: (MS1 + Rec1) / 2
+      // 2º Semestre = (B3 + B4) / 2 -> Com rec: (MS2 + Rec2) / 2
+      // Média Anual = Média dos semestres ponderada pelos bimestres cursados
+      const calculo = calcularMediaAnualDisciplina(sortedBims)
 
       list.push({
         nome: entry.nome,
         bimesters: sortedBims,
         lancadosCount: lancados.length,
         totalBims: uniqueBims.length,
-        mediaFNum,
-        mediaAnualFormatada: mediaFNum.toFixed(1).replace('.', ','),
-        isPassed: mediaFNum >= 7.0
+        mediaFNum: calculo.mediaFNum,
+        mediaAnualFormatada: calculo.mediaAnualFormatada,
+        isPassed: calculo.mediaFNum >= 7.0,
+        calculoDetalhes: calculo
       })
     })
 
@@ -938,12 +936,32 @@ export default function ADNotasPage({ params }: { params: any }) {
                           </div>
 
                           <div style={{ fontSize: 11, color: '#64748b', display: 'flex', alignItems: 'center', gap: 6, fontWeight: 500, flexWrap: 'wrap' }}>
-                            {d.bimesters.map((b: any, bIdx: number) => (
-                              <span key={b.bimNum} style={{ color: b.lancado ? '#334155' : '#94a3b8' }}>
-                                {bIdx > 0 && <span style={{ marginRight: 6, color: '#cbd5e1' }}>•</span>}
-                                {b.bimNum}º Bim: <strong style={{ color: b.lancado ? (b.valorNum >= 7.0 ? '#1e293b' : '#dc2626') : '#94a3b8' }}>{b.valorStr}</strong>
-                              </span>
-                            ))}
+                            {d.bimesters.map((b: any, bIdx: number) => {
+                              const hasRec = b.rec && b.rec !== '---' && b.rec !== '-' && String(b.rec).trim() !== ''
+                              return (
+                                <span key={b.bimNum} style={{ color: b.lancado ? '#334155' : '#94a3b8', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                                  {bIdx > 0 && <span style={{ marginRight: 3, color: '#cbd5e1' }}>•</span>}
+                                  <span>{b.bimNum}º Bim:</span>
+                                  <strong style={{ color: b.lancado ? (b.valorNum >= 7.0 ? '#1e293b' : '#dc2626') : '#94a3b8' }}>{b.valorStr}</strong>
+                                  {hasRec && (
+                                    <span 
+                                      style={{ 
+                                        fontSize: 10, 
+                                        fontWeight: 700, 
+                                        color: '#b45309', 
+                                        background: '#fef3c7', 
+                                        padding: '1px 5px', 
+                                        borderRadius: 4,
+                                        marginLeft: 2
+                                      }}
+                                      title={b.bimNum === 2 ? `Recuperação do 1º Semestre: ${b.rec}` : b.bimNum === 4 ? `Recuperação do 2º Semestre: ${b.rec}` : `Recuperação: ${b.rec}`}
+                                    >
+                                      Rec: {b.rec}
+                                    </span>
+                                  )}
+                                </span>
+                              )
+                            })}
                           </div>
 
                           <div style={{ marginTop: 4, height: 4, background: '#e2e8f0', borderRadius: 2, overflow: 'hidden', width: '85%' }}>

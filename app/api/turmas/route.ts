@@ -11,7 +11,7 @@ export async function GET(request: Request) {
   if (errorResponse) return errorResponse
 
   try {
-    const supabase = await createProtectedClient()
+    const supabase = supabaseServer
     const url = new URL(request.url)
     const pageParam = url.searchParams.get('page')
     const limitParam = url.searchParams.get('limit')

@@ -1156,3 +1156,150 @@ export function arredondarMediaImpacto(valor: number): number {
   return Math.min(10, parseFloat(finalVal.toFixed(1)))
 }
 
+export interface BimestreNotaInfo {
+  bimNum: number
+  bimNome?: string
+  valorStr: string
+  valorNum: number
+  lancado: boolean
+  avm?: any
+  avb?: any
+  simulado?: any
+  bonus?: any
+  rec?: any
+}
+
+export interface ResultadoCalculoMediaAnual {
+  mediaAnualNum: number       // Média anual calculada (bruta)
+  mediaFNum: number           // Média anual final arredondada pelo critério oficial Impacto
+  mediaAnualFormatada: string // Formatada com vírgula (ex: "7,0")
+  ms1Base: number | null      // Média semestral do 1º Semestre antes da recuperação
+  ms1Final: number | null     // Média do 1º Semestre após recuperação (se houver)
+  rec1: number | null         // Nota da recuperação do 1º Semestre
+  temRec1: boolean
+  ms2Base: number | null      // Média semestral do 2º Semestre antes da recuperação
+  ms2Final: number | null     // Média do 2º Semestre após recuperação (se houver)
+  rec2: number | null         // Nota da recuperação do 2º Semestre
+  temRec2: boolean
+}
+
+/**
+ * Cálculo da Média Anual com Recuperação Semestral:
+ *
+ * Estrutura bimestral / semestral:
+ * - 4 bimestres divididos em 2 semestres.
+ * - Recuperação do 1º Semestre: registrada no 2º Bimestre.
+ * - Recuperação do 2º Semestre: registrada no 4º Bimestre.
+ *
+ * Fórmula Semestral com Recuperação:
+ *  MS = (Bim_A + Bim_B) / 2
+ *  Se houver Recuperação Semestral (AR):
+ *    MS_com_rec = (MS + AR) / 2
+ *    MS_final = Math.max(MS, MS_com_rec) // Prevalece a maior nota (Regimento Interno Art. 238)
+ *
+ * A Média Anual é a média dos semestres ponderada pelos bimestres cursados:
+ * - 4 bimestres lançados: (MS1_final + MS2_final) / 2
+ * - 2 bimestres lançados (1º Semestre completo): MS1_final
+ * - 3 bimestres lançados: (MS1_final * 2 + MS2_final * 1) / 3
+ * - 1 bimestre lançado: MS1_final
+ */
+export function calcularMediaAnualDisciplina(bimesters: BimestreNotaInfo[]): ResultadoCalculoMediaAnual {
+  const b1 = bimesters.find(b => b.bimNum === 1 && b.lancado)
+  const b2 = bimesters.find(b => b.bimNum === 2 && b.lancado)
+  const b3 = bimesters.find(b => b.bimNum === 3 && b.lancado)
+  const b4 = bimesters.find(b => b.bimNum === 4 && b.lancado)
+
+  // ── 1º SEMESTRE (1º e 2º Bimestres) ──
+  let ms1Base: number | null = null
+  let countSem1 = 0
+  if (b1 && b2) {
+    ms1Base = (b1.valorNum + b2.valorNum) / 2
+    countSem1 = 2
+  } else if (b1) {
+    ms1Base = b1.valorNum
+    countSem1 = 1
+  } else if (b2) {
+    ms1Base = b2.valorNum
+    countSem1 = 1
+  }
+
+  // Recuperação do 1º Semestre (registrada preferencialmente no 2º Bimestre, com fallback no 1º se houver)
+  const rawRec1 = b2?.rec !== undefined && b2?.rec !== null && b2?.rec !== '' && b2?.rec !== '---' && b2?.rec !== '-'
+    ? b2.rec
+    : (b1?.rec !== undefined && b1?.rec !== null && b1?.rec !== '' && b1?.rec !== '---' && b1?.rec !== '-' ? b1.rec : null)
+
+  const temRec1 = rawRec1 !== null && String(rawRec1).toLowerCase() !== 'falta'
+  const rec1 = temRec1 ? parseNotaValor(rawRec1) : null
+
+  let ms1Final = ms1Base
+  if (ms1Base !== null && rec1 !== null) {
+    const ms1ComRec = (ms1Base + rec1) / 2
+    // Prevalece a maior nota entre a média semestral e a média pós-recuperação (Regimento Art. 238)
+    ms1Final = Math.max(ms1Base, ms1ComRec)
+  }
+
+  // ── 2º SEMESTRE (3º e 4º Bimestres) ──
+  let ms2Base: number | null = null
+  let countSem2 = 0
+  if (b3 && b4) {
+    ms2Base = (b3.valorNum + b4.valorNum) / 2
+    countSem2 = 2
+  } else if (b3) {
+    ms2Base = b3.valorNum
+    countSem2 = 1
+  } else if (b4) {
+    ms2Base = b4.valorNum
+    countSem2 = 1
+  }
+
+  // Recuperação do 2º Semestre (registrada preferencialmente no 4º Bimestre, com fallback no 3º se houver)
+  const rawRec2 = b4?.rec !== undefined && b4?.rec !== null && b4?.rec !== '' && b4?.rec !== '---' && b4?.rec !== '-'
+    ? b4.rec
+    : (b3?.rec !== undefined && b3?.rec !== null && b3?.rec !== '' && b3?.rec !== '---' && b3?.rec !== '-' ? b3.rec : null)
+
+  const temRec2 = rawRec2 !== null && String(rawRec2).toLowerCase() !== 'falta'
+  const rec2 = temRec2 ? parseNotaValor(rawRec2) : null
+
+  let ms2Final = ms2Base
+  if (ms2Base !== null && rec2 !== null) {
+    const ms2ComRec = (ms2Base + rec2) / 2
+    ms2Final = Math.max(ms2Base, ms2ComRec)
+  }
+
+  // ── MÉDIA ANUAL ──
+  let mediaAnualNum = 0
+  const totalCount = countSem1 + countSem2
+
+  if (totalCount > 0) {
+    if (ms1Final !== null && ms2Final !== null) {
+      mediaAnualNum = (ms1Final * countSem1 + ms2Final * countSem2) / totalCount
+    } else if (ms1Final !== null) {
+      mediaAnualNum = ms1Final
+    } else if (ms2Final !== null) {
+      mediaAnualNum = ms2Final
+    }
+  } else {
+    // Fallback para bimestres sem mapeamento explícito 1..4
+    const lancados = bimesters.filter(b => b.lancado)
+    if (lancados.length > 0) {
+      mediaAnualNum = lancados.reduce((acc, b) => acc + b.valorNum, 0) / lancados.length
+    }
+  }
+
+  const mediaFNum = arredondarMediaImpacto(mediaAnualNum)
+
+  return {
+    mediaAnualNum,
+    mediaFNum,
+    mediaAnualFormatada: mediaFNum.toFixed(1).replace('.', ','),
+    ms1Base,
+    ms1Final,
+    rec1,
+    temRec1,
+    ms2Base,
+    ms2Final,
+    rec2,
+    temRec2
+  }
+}
+

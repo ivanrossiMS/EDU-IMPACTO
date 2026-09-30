@@ -1,7 +1,7 @@
 'use client'
 
-import { useData, newId } from '@/lib/dataContext'
-import { useState, useMemo, useCallback, useEffect } from 'react'
+import { useData, newId, Turma } from '@/lib/dataContext'
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import { getInitials } from '@/lib/utils'
 import { useApiQuery } from '@/hooks/useApi'
 import { useEnsalamento } from '@/lib/useEnsalamento'
@@ -9,7 +9,8 @@ import {
   ArrowLeft, Save, Download, CheckCircle, BookOpen, ChevronRight, ChevronDown,
   AlertTriangle, Search, Calendar, BarChart2, Users, Printer, FileText, Check, X, Info,
   Filter, School, TrendingUp, AlertCircle, Shield, Tag, XCircle, MoreHorizontal, Sparkles, RefreshCw, User,
-  QrCode, Edit3, Clock, ShieldCheck, Cpu, ScanFace, LogOut, UserCheck, Plus, CheckCircle2, FileSpreadsheet, Loader2
+  QrCode, Edit3, Clock, ShieldCheck, Cpu, ScanFace, LogOut, UserCheck, Plus, CheckCircle2, FileSpreadsheet, Loader2,
+  Menu
 } from 'lucide-react'
 import { TableSkeleton } from '@/components/skeletons/TableSkeleton'
 import { PresStatus, getTurmaSchedule, calcularFrequenciaDia, getFirstPresentTempoIndex } from '@/lib/frequenciaEngine'
@@ -146,18 +147,25 @@ function getOrigemFrequenciaCompleta(
     const origem = String(freqRecord.origem || freqRecord.dados?.origem || '')
     const isSaidaOnlyRecord = registradoPor.toLowerCase().includes('saída') || registradoPor.toLowerCase().includes('saida')
 
-    const horaEntradaExplicit = horarioEntradaState ||
-                                freqRecord.dados?.horaEntrada || 
-                                (!isSaidaOnlyRecord && (freqRecord.horaRegistro || freqRecord.dados?.horaRegistro) ? (freqRecord.horaRegistro || freqRecord.dados?.horaRegistro) : null) || 
-                                horaCatracaEntrada
+    const isIndefinido = horarioEntradaState === 'indefinido' ||
+                         Boolean(freqRecord?.dados?.horarioIndefinido) ||
+                         Boolean(freqRecord?.horarioIndefinido)
+
+    const horaEntradaExplicit = isIndefinido ? null : (
+      horarioEntradaState ||
+      freqRecord.dados?.horaEntrada || 
+      (!isSaidaOnlyRecord && (freqRecord.horaRegistro || freqRecord.dados?.horaRegistro) ? (freqRecord.horaRegistro || freqRecord.dados?.horaRegistro) : null) || 
+      horaCatracaEntrada
+    )
 
     const isCatraca =
-      (origem === 'catraca' && !isSaidaOnlyRecord) ||
+      !isIndefinido &&
+      ((origem === 'catraca' && !isSaidaOnlyRecord) ||
       (registradoPor.toLowerCase().includes('catraca') && !isSaidaOnlyRecord) ||
       (registradoPor.toLowerCase().includes('idface') && !isSaidaOnlyRecord) ||
-      !!portariaEvEntrada
+      !!portariaEvEntrada)
 
-    const isTotem = origem === 'totem' || registradoPor.toLowerCase().includes('totem')
+    const isTotem = !isIndefinido && (origem === 'totem' || registradoPor.toLowerCase().includes('totem'))
 
     const temposArray = freqRecord?.tempos ? Object.values(freqRecord.tempos) : []
     const hasActiveTempos = temposArray.length > 0
@@ -166,6 +174,7 @@ function getOrigemFrequenciaCompleta(
 
     const hasEntradaExplicit = !!horarioEntradaState ||
                                (!!freqRecord.dados?.horaEntrada && hasActiveTempos) ||
+                               (isIndefinido && hasActiveTempos) ||
                                (freqRecord.origem === 'manual' && !isSaidaOnlyRecord && hasActiveTempos && (freqRecord.horaRegistro || freqRecord.presente))
 
     if (isCatraca) {
@@ -198,22 +207,22 @@ function getOrigemFrequenciaCompleta(
         horario: horaEntradaExplicit || undefined,
         detalhes: 'Entrada registrada via Totem'
       }
-    } else if (hasEntradaExplicit && horaEntradaExplicit) {
+    } else if (hasEntradaExplicit && (horaEntradaExplicit || isIndefinido)) {
       let quem = freqRecord?.dados?.usuarioNome || freqRecord?.dados?.registradoPor || registradoPor
       if (quem && typeof quem === 'string' && quem.startsWith('Manual (') && quem.endsWith(')')) {
         quem = quem.slice(8, -1)
       }
-      const detalhesText = quem && quem !== 'Manual' && quem !== 'Manual (Auto)'
-        ? `Entrada lançada por ${quem}`
-        : 'Entrada lançada manualmente'
+      const detalhesText = isIndefinido
+        ? (quem && quem !== 'Manual' && quem !== 'Manual (Auto)' ? `Presença confirmada por ${quem} (Sem horário)` : 'Presença confirmada (Sem horário)')
+        : (quem && quem !== 'Manual' && quem !== 'Manual (Auto)' ? `Entrada lançada por ${quem}` : 'Entrada lançada manualmente')
       entrada = {
         tipo: 'manual',
         label: 'Manual',
-        horario: horaEntradaExplicit || undefined,
+        horario: isIndefinido ? undefined : (horaEntradaExplicit || undefined),
         detalhes: detalhesText
       }
     }
-  } else if (portariaEvEntrada) {
+  } else if (portariaEvEntrada && horarioEntradaState !== 'indefinido') {
     entrada = {
       tipo: 'catraca',
       label: 'iDFace',
@@ -222,11 +231,12 @@ function getOrigemFrequenciaCompleta(
       detalhes: 'Entrada registrada no equipamento iDFace'
     }
   } else if (horarioEntradaState) {
+    const isIndef = horarioEntradaState === 'indefinido'
     entrada = {
       tipo: 'manual',
       label: 'Manual',
-      horario: horarioEntradaState,
-      detalhes: 'Entrada registrada manualmente'
+      horario: isIndef ? undefined : horarioEntradaState,
+      detalhes: isIndef ? 'Presença confirmada (Sem horário)' : 'Entrada registrada manualmente'
     }
   }
 
@@ -747,9 +757,25 @@ const MESES_ANO = [
   { value: '11', label: 'Novembro' },
   { value: '12', label: 'Dezembro' }
 ]
-
 export default function FrequenciaPage() {
-  const { turmas = [], frequencias: contextFreqs = [], setFrequencias, cfgCalendarioLetivo = [], cfgNiveisEnsino = [] } = useData()
+  const { turmas: contextTurmas = [], frequencias: contextFreqs = [], setFrequencias, cfgCalendarioLetivo = [], cfgNiveisEnsino = [] } = useData()
+
+  // Buscar turmas diretamente via API com cache regional para máxima robustez e velocidade
+  const { data: apiTurmasResp } = useApiQuery<any>(
+    ['turmas-all-frequencia'],
+    '/api/turmas?all=true',
+    {},
+    { noCache: false }
+  )
+
+  const turmas = useMemo<Turma[]>(() => {
+    const list = Array.isArray(apiTurmasResp?.data)
+      ? apiTurmasResp.data
+      : (Array.isArray(apiTurmasResp) ? apiTurmasResp : [])
+    if (list.length > 0) return list
+    if (Array.isArray(contextTurmas) && contextTurmas.length > 0) return contextTurmas
+    return []
+  }, [apiTurmasResp, contextTurmas])
   
   const { data: apiResponse, isLoading: loadingAlunos, isFetching: fetchingAlunos } = useApiQuery<{data: any[], meta: any}>(
     ['alunos-core-frequencia'], 
@@ -908,6 +934,34 @@ export default function FrequenciaPage() {
   const [buscaAlunoRelatorio, setBuscaAlunoRelatorio] = useState('')
   const [relatorioOrdenacao, setRelatorioOrdenacao] = useState<'nome_asc' | 'nome_desc' | 'turma_asc' | 'frequencia_asc' | 'frequencia_desc' | 'faltas_desc' | 'id_asc'>('nome_asc')
   const [alunosExpandidosRelatorio, setAlunosExpandidosRelatorio] = useState<Record<string, boolean>>({})
+  const [relatorioConsultado, setRelatorioConsultado] = useState(false)
+  const [relatorioCarregando, setRelatorioCarregando] = useState(false)
+  const [turmasMenuOpen, setTurmasMenuOpen] = useState(false)
+  const [buscaTurmaMenu, setBuscaTurmaMenu] = useState('')
+  const turmasMenuRef = useRef<HTMLDivElement>(null)
+
+  // Fecha menu sanduíche de turmas ao clicar fora
+  useEffect(() => {
+    const handleClickOutsideTurmasMenu = (event: MouseEvent) => {
+      if (turmasMenuRef.current && !turmasMenuRef.current.contains(event.target as Node)) {
+        setTurmasMenuOpen(false)
+      }
+    }
+    if (turmasMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutsideTurmasMenu)
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutsideTurmasMenu)
+    }
+  }, [turmasMenuOpen])
+
+  const handleBuscarRelatorio = useCallback(() => {
+    setRelatorioCarregando(true)
+    setTimeout(() => {
+      setRelatorioConsultado(true)
+      setRelatorioCarregando(false)
+    }, 120)
+  }, [])
 
   // Modal Registro Manual
   const [showRegistroManualModal, setShowRegistroManualModal] = useState(false)
@@ -917,6 +971,7 @@ export default function FrequenciaPage() {
   const [buscaRegistroManual, setBuscaRegistroManual] = useState('')
   const [absencesManual, setAbsencesManual] = useState<Record<string, Record<string, PresStatus>>>({})
   const [salvandoManual, setSalvandoManual] = useState(false)
+  const [padraoHorarioIndefinido, setPadraoHorarioIndefinido] = useState(false)
 
   // Estados específicos para Educação Infantil (Horários de Entrada, Saída e Responsáveis)
   const [horariosEntrada, setHorariosEntrada] = useState<Record<string, Record<string, string>>>({})
@@ -938,16 +993,63 @@ export default function FrequenciaPage() {
   const [filtroBusca, setFiltroBusca] = useState('')
   
   const anosDisponiveis = useMemo(() => {
-    const fromConfig = (cfgCalendarioLetivo || []).map((c: any) => c.ano.toString())
-    const fromTurmas = (turmas || []).map(t => t.ano.toString())
-    return [...new Set([...fromConfig, ...fromTurmas])].sort().reverse()
-  }, [cfgCalendarioLetivo, turmas])
+    const anosSet = new Set<string>()
 
-  // Sincronizar ano vigente inicial
+    // 1. Dos calendários letivos configurados
+    if (Array.isArray(cfgCalendarioLetivo)) {
+      cfgCalendarioLetivo.forEach((c: any) => {
+        if (c?.ano) anosSet.add(String(c.ano).trim())
+      })
+    }
+
+    // 2. Das turmas
+    if (Array.isArray(turmas)) {
+      turmas.forEach((t: any) => {
+        if (t?.ano) anosSet.add(String(t.ano).trim())
+        if (t?.anoLetivo) anosSet.add(String(t.anoLetivo).trim())
+      })
+    }
+
+    // 3. Dos alunos
+    if (Array.isArray(alunos)) {
+      alunos.forEach((a: any) => {
+        if (a?.anoLetivo) anosSet.add(String(a.anoLetivo).trim())
+        if (a?.dados?.anoLetivo) anosSet.add(String(a.dados.anoLetivo).trim())
+      })
+    }
+
+    // 4. Das frequências registradas
+    if (Array.isArray(allFreqs)) {
+      allFreqs.forEach((f: any) => {
+        if (f?.data) {
+          const yr = String(f.data).slice(0, 4)
+          if (/^\d{4}$/.test(yr)) anosSet.add(yr)
+        }
+      })
+    }
+
+    // 5. Garantir o ano corrente e anos vizinhos como base essencial
+    const currentYear = new Date().getFullYear()
+    anosSet.add(String(currentYear))
+    anosSet.add(String(currentYear - 1))
+    anosSet.add(String(currentYear + 1))
+
+    return Array.from(anosSet)
+      .filter(a => Boolean(a) && /^\d{4}$/.test(a))
+      .sort((a, b) => b.localeCompare(a))
+  }, [cfgCalendarioLetivo, turmas, alunos, allFreqs])
+
+  // Sincronizar ano vigente inicial tanto na página quanto no relatório
   useEffect(() => {
     const vigente = (cfgCalendarioLetivo || []).find((c: any) => c.isVigente)?.ano?.toString()
-    if (vigente) setFiltroAno(vigente)
-  }, [cfgCalendarioLetivo])
+    const targetAno = vigente || (anosDisponiveis && anosDisponiveis[0]) || new Date().getFullYear().toString()
+    if (vigente && (!filtroAno || filtroAno === 'todos')) {
+      setFiltroAno(vigente)
+    }
+    if (!relatorioAno && targetAno) {
+      setRelatorioAno(targetAno)
+    }
+  }, [cfgCalendarioLetivo, anosDisponiveis, filtroAno, relatorioAno])
 
   // Estado chamada
   const [dataSel, setDataSel] = useState(todayStr())
@@ -1345,6 +1447,9 @@ export default function FrequenciaPage() {
         const customSaida = horariosSaida[String(a.id)]?.[dia]
         const customRespSaida = responsaveisSaida[String(a.id)]?.[dia]
 
+        const isHorarioIndefinido = customEntrada === 'indefinido' || (customEntrada === undefined && Boolean(existing?.dados?.horarioIndefinido || existing?.horarioIndefinido))
+        const finalHoraEntrada = isHorarioIndefinido ? null : (customEntrada || horaCatraca || existing?.horaRegistro || nowTime)
+
         // Verificar se houve alteração real em relação ao registro existente no banco
         const existingTempos = (existing?.tempos || existing?.dados?.tempos || {}) as Record<string, string>
         const calcTempos = calc.temposEfetivos || {}
@@ -1365,12 +1470,15 @@ export default function FrequenciaPage() {
           justificativa: calc.justificativa,
           tempos: calc.temposEfetivos,
           notifyPush: hasChanged,
-          registradoPor: isCatraca ? (existing?.registradoPor || 'Catraca iDFace') : 'Manual',
-          origem: isCatraca ? 'catraca' : 'manual',
-          horaRegistro: customEntrada || horaCatraca || existing?.horaRegistro || nowTime,
+          registradoPor: isCatraca && !isHorarioIndefinido ? (existing?.registradoPor || 'Catraca iDFace') : 'Manual',
+          origem: isCatraca && !isHorarioIndefinido ? 'catraca' : 'manual',
+          horaRegistro: finalHoraEntrada,
+          horarioIndefinido: isHorarioIndefinido,
           dados: {
             ...(existing?.dados || {}),
-            horaEntrada: customEntrada || horaCatraca || existing?.horaRegistro || nowTime,
+            horarioIndefinido: isHorarioIndefinido,
+            horaEntrada: finalHoraEntrada,
+            horaRegistro: finalHoraEntrada,
             saidaHorario: customSaida || existing?.dados?.saidaHorario || null,
             saidaResponsavel: customRespSaida || existing?.dados?.saidaResponsavel || null,
           }
@@ -1469,6 +1577,22 @@ export default function FrequenciaPage() {
       const isCatraca = !!portariaEv || existingFreq?.origem === 'catraca' || String(existingFreq?.registradoPor || '').toLowerCase().includes('catraca') || String(existingFreq?.registradoPor || '').toLowerCase().includes('idface')
       const nowTime = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
 
+      const manualHora = horariosEntrada[aluno.id]?.[registroManualData]
+      const isHorarioIndefinido = manualHora === 'indefinido' || (manualHora === undefined && Boolean(existingFreq?.dados?.horarioIndefinido || existingFreq?.horarioIndefinido))
+
+      let finalHoraRegistro: string | null = null
+      if (!isHorarioIndefinido) {
+        if (manualHora && manualHora !== 'indefinido') {
+          finalHoraRegistro = manualHora
+        } else if (horaCatraca) {
+          finalHoraRegistro = horaCatraca
+        } else if (existingFreq?.horaRegistro || existingFreq?.dados?.horaRegistro || existingFreq?.dados?.horaEntrada) {
+          finalHoraRegistro = existingFreq?.horaRegistro || existingFreq?.dados?.horaRegistro || existingFreq?.dados?.horaEntrada
+        } else {
+          finalHoraRegistro = nowTime
+        }
+      }
+
       recordsToSave.push({
         id: existingFreq?.id,
         alunoId: aluno.id,
@@ -1478,9 +1602,16 @@ export default function FrequenciaPage() {
         presente: calc.presente,
         justificativa: calc.justificativa,
         tempos: calc.temposEfetivos,
-        registradoPor: isCatraca ? (existingFreq?.registradoPor || 'Catraca iDFace') : 'Manual',
-        origem: isCatraca ? 'catraca' : 'manual',
-        horaRegistro: horaCatraca || existingFreq?.horaRegistro || nowTime
+        registradoPor: isCatraca && !isHorarioIndefinido ? (existingFreq?.registradoPor || 'Catraca iDFace') : 'Manual',
+        origem: isCatraca && !isHorarioIndefinido ? 'catraca' : 'manual',
+        horaRegistro: finalHoraRegistro,
+        horarioIndefinido: isHorarioIndefinido,
+        dados: {
+          ...(existingFreq?.dados || {}),
+          horarioIndefinido: isHorarioIndefinido,
+          horaEntrada: finalHoraRegistro,
+          horaRegistro: finalHoraRegistro,
+        }
       })
     }
 
@@ -1980,6 +2111,8 @@ export default function FrequenciaPage() {
 
   // Cálculo e agregação de relatórios 100% focado em DIAS (Sem tempos)
   const reportDataFiltered = useMemo(() => {
+    if (!relatorioConsultado) return []
+
     const targetDates = relatorioTipoData === 'intervalo'
       ? getDatesInRange(relatorioDataInicio, relatorioDataFim)
       : [relatorioDataInicio]
@@ -1990,9 +2123,22 @@ export default function FrequenciaPage() {
 
     // Alunos filtrados por segmento, ano e turno
     let candidateStudents = alunos.filter((aluno: any) => {
-      const matchAno = !relatorioAno || relatorioAno === 'todos' || String(aluno.anoLetivo || aluno.dados?.anoLetivo || '') === relatorioAno || turmas.some(t => String(t.ano) === relatorioAno && isAlunoCursandoTurma(aluno, t, relatorioAno, turmas))
-      const matchSegmento = !relatorioSegmento || (aluno.segmento === relatorioSegmento || aluno.dados?.segmento === relatorioSegmento || turmas.some(t => (t as any).dados?.segmento === relatorioSegmento && isAlunoCursandoTurma(aluno, t, undefined, turmas)))
-      const matchTurno = !relatorioTurno || (aluno.turno === relatorioTurno || aluno.dados?.turno === relatorioTurno || (relatorioTurno === 'Integral/Intermediário' && (isAlunoIntegralIntermediario(aluno, turmas) || String(aluno.turno || '').toLowerCase().includes('integral') || String(aluno.turno || '').toLowerCase().includes('intermediario'))) || turmas.some(t => (t.turno === relatorioTurno || (relatorioTurno === 'Integral/Intermediário' && (t.turno === 'Integral' || String(t.turno || '').toLowerCase().includes('integral')))) && isAlunoCursandoTurma(aluno, t, undefined, turmas)))
+      const matchAno = !relatorioAno || relatorioAno === 'todos' || 
+        String(aluno.anoLetivo || aluno.dados?.anoLetivo || '') === relatorioAno || 
+        turmas.some(t => String(t.ano) === relatorioAno && (String(t.id) === String(aluno.turma) || t.nome === aluno.turma || isAlunoCursandoTurma(aluno, t, relatorioAno, turmas)))
+      
+      const matchSegmento = !relatorioSegmento || (
+        aluno.segmento === relatorioSegmento || 
+        aluno.dados?.segmento === relatorioSegmento || 
+        turmas.some(t => ((t as any).dados?.segmento === relatorioSegmento || (t as any).segmento === relatorioSegmento) && (String(t.id) === String(aluno.turma) || isAlunoCursandoTurma(aluno, t, undefined, turmas)))
+      )
+      
+      const matchTurno = !relatorioTurno || (
+        aluno.turno === relatorioTurno || 
+        aluno.dados?.turno === relatorioTurno || 
+        (relatorioTurno === 'Integral/Intermediário' && (isAlunoIntegralIntermediario(aluno, turmas) || String(aluno.turno || '').toLowerCase().includes('integral') || String(aluno.turno || '').toLowerCase().includes('intermediario'))) || 
+        turmas.some(t => (t.turno === relatorioTurno || (relatorioTurno === 'Integral/Intermediário' && (t.turno === 'Integral' || String(t.turno || '').toLowerCase().includes('integral')))) && (String(t.id) === String(aluno.turma) || isAlunoCursandoTurma(aluno, t, undefined, turmas)))
+      )
       
       return matchAno && matchSegmento && matchTurno
     })
@@ -2030,9 +2176,14 @@ export default function FrequenciaPage() {
 
     candidateStudents.forEach((aluno: any) => {
       const targetTurmaForStudent = selTurmasObjs.find(t => isAlunoCursandoTurma(aluno, t, relatorioAno, turmas)) ||
-        turmas.find(t => String(t.id) === String(aluno.turma) || t.nome === aluno.turma || t.codigo === aluno.turma)
-      
-      if (!targetTurmaForStudent) return
+        turmas.find(t => String(t.id) === String(aluno.turma) || t.nome === aluno.turma || t.codigo === aluno.turma) ||
+        {
+          id: String(aluno.turma || 'default'),
+          nome: aluno.turma_nome || aluno.turma || 'Turma não informada',
+          serie: aluno.serie || aluno.dados?.serie || '',
+          turno: aluno.turno || aluno.dados?.turno || '',
+          ano: parseInt(relatorioAno || String(new Date().getFullYear()), 10)
+        }
       
       const schedule = getTurmaSchedule(targetTurmaForStudent)
       let diasPresentes = 0
@@ -2208,16 +2359,18 @@ export default function FrequenciaPage() {
 
     return result
   }, [
-    alunos, turmas, combinedFreqs, portariaEventsList, relatorioTipoData, relatorioDataInicio, relatorioDataFim,
+    relatorioConsultado, alunos, turmas, combinedFreqs, portariaEventsList, relatorioTipoData, relatorioDataInicio, relatorioDataFim,
     relatorioAno, relatorioSegmento, relatorioTurno, relatorioStatus, relatorioModo,
     relatorioTurmasSel, relatorioAlunoId, buscaRelatorio, relatorioOrdenacao, freqMinima, getDatesInRange, isSameDay
   ])
 
   // Estatísticas calculadas do relatório ativo (Focado em Dias)
   const reportStats = useMemo(() => {
-    const totalAlunos = reportDataFiltered.length
-    if (totalAlunos === 0) return { totalAlunos: 0, mediaPresenca: null, totalFaltas: 0, totalJustificadas: 0, totalPresencas: 0, alunosCriticos: 0 }
+    if (!relatorioConsultado || reportDataFiltered.length === 0) {
+      return { totalAlunos: 0, mediaPresenca: null, totalFaltas: 0, totalJustificadas: 0, totalPresencas: 0, alunosCriticos: 0 }
+    }
 
+    const totalAlunos = reportDataFiltered.length
     const alunosComChamada = reportDataFiltered.filter(a => a.hasChamadas)
     const somaPct = alunosComChamada.reduce((acc, a) => acc + (a.pctFrequencia || 0), 0)
     const mediaPresenca = alunosComChamada.length > 0 ? Math.round(somaPct / alunosComChamada.length) : null
@@ -2227,10 +2380,14 @@ export default function FrequenciaPage() {
     const alunosCriticos = reportDataFiltered.filter(a => a.isCritico).length
 
     return { totalAlunos, mediaPresenca, totalFaltas, totalJustificadas, totalPresencas, alunosCriticos }
-  }, [reportDataFiltered])
+  }, [relatorioConsultado, reportDataFiltered])
 
   // Impressão Avançada (PDF) com histórico de datas completas (Focado em Dias)
   const handlePrintRelatorioAvancado = () => {
+    if (!relatorioConsultado) {
+      alert('Por favor, clique no botão "Buscar e Carregar" antes de imprimir o relatório.')
+      return
+    }
     const printWindow = window.open('', '_blank')
     if (!printWindow) return
     const periodoText = relatorioTipoData === 'intervalo'
@@ -2420,6 +2577,10 @@ export default function FrequenciaPage() {
 
   // Exportação Excel / CSV Avançada com Datas Completas (Sem Tempos)
   const handleExportCSVAvancado = () => {
+    if (!relatorioConsultado) {
+      alert('Por favor, clique no botão "Buscar e Carregar" antes de exportar o relatório.')
+      return
+    }
     const headers = ['Matrícula', 'Nome do Aluno', 'Turma', 'Segmento', 'Turno', 'Data', 'Dia da Semana', 'Status no Dia', 'Horário Catraca', 'Dias Presentes', 'Dias com Falta', 'Ausências Justificadas', 'Frequência Acumulada (%)', 'Telefone Responsável']
     
     const rows: any[] = []
@@ -2465,6 +2626,22 @@ export default function FrequenciaPage() {
   // Render do Modal de Relatórios Avançados (Foco 100% em Dias e Assiduidade)
   const renderRelatorioModal = () => {
     if (!showRelatorioModal) return null
+
+    const turmasFiltradas = turmas.filter(t => !relatorioAno || String(t.ano) === relatorioAno)
+    const totalTurmas = turmasFiltradas.length
+    const todasSelecionadas = totalTurmas > 0 && turmasFiltradas.every(t => relatorioTurmasSel.includes(String(t.id)))
+    const nenhumaSelecionada = relatorioTurmasSel.length === 0
+
+    const turmasFiltradasParaMenu = turmasFiltradas.filter(t => {
+      if (!buscaTurmaMenu) return true
+      const term = buscaTurmaMenu.toLowerCase()
+      return (
+        t.nome.toLowerCase().includes(term) ||
+        String(t.id).includes(term) ||
+        (t.turno && t.turno.toLowerCase().includes(term)) ||
+        ((t as any).segmento && (t as any).segmento.toLowerCase().includes(term))
+      )
+    })
 
     let alunosParaBuscaIndividual = alunos.filter((aluno: any) => {
       const tObj = turmas.find(t => String(t.id) === String(aluno.turma) || t.nome === aluno.turma)
@@ -2546,6 +2723,8 @@ export default function FrequenciaPage() {
               <button
                 onClick={() => {
                   setShowRelatorioModal(false)
+                  setRelatorioConsultado(false)
+                  setTurmasMenuOpen(false)
                   setBuscaRelatorio('')
                 }}
                 style={{ background: 'rgba(255,255,255,0.08)', border: 'none', cursor: 'pointer', padding: '7px', borderRadius: '8px', color: '#cbd5e1', transition: 'all 0.2s' }}
@@ -2622,7 +2801,8 @@ export default function FrequenciaPage() {
                     setRelatorioMes(m)
                     if (m) {
                       setRelatorioTipoData('intervalo')
-                      const yr = relatorioAno || new Date().getFullYear().toString()
+                      const yr = relatorioAno || filtroAno || (anosDisponiveis && anosDisponiveis[0]) || new Date().getFullYear().toString()
+                      if (!relatorioAno) setRelatorioAno(yr)
                       const lastDay = new Date(parseInt(yr, 10), parseInt(m, 10), 0).getDate()
                       setRelatorioDataInicio(`${yr}-${m}-01`)
                       setRelatorioDataFim(`${yr}-${m}-${String(lastDay).padStart(2, '0')}`)
@@ -2638,19 +2818,28 @@ export default function FrequenciaPage() {
                 <span style={{ fontSize: '9px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Ano</span>
                 <select
                   className="form-input"
-                  style={{ width: '95px', height: '34px', borderRadius: '8px', background: '#f8fafc', border: '1px solid #cbd5e1', fontSize: '12px', fontWeight: 700, color: '#0f172a' }}
+                  style={{ width: '110px', height: '34px', borderRadius: '8px', background: '#f8fafc', border: '1px solid #cbd5e1', fontSize: '12px', fontWeight: 700, color: '#0f172a' }}
                   value={relatorioAno}
                   onChange={e => {
                     const a = e.target.value
                     setRelatorioAno(a)
-                    if (relatorioMes && a) {
-                      const lastDay = new Date(parseInt(a, 10), parseInt(relatorioMes, 10), 0).getDate()
-                      setRelatorioDataInicio(`${a}-${relatorioMes}-01`)
-                      setRelatorioDataFim(`${a}-${relatorioMes}-${String(lastDay).padStart(2, '0')}`)
+                    if (a) {
+                      if (relatorioMes) {
+                        const lastDay = new Date(parseInt(a, 10), parseInt(relatorioMes, 10), 0).getDate()
+                        setRelatorioDataInicio(`${a}-${relatorioMes}-01`)
+                        setRelatorioDataFim(`${a}-${relatorioMes}-${String(lastDay).padStart(2, '0')}`)
+                      } else if (relatorioDataInicio && relatorioDataFim) {
+                        const pIni = relatorioDataInicio.split('-')
+                        const pFim = relatorioDataFim.split('-')
+                        if (pIni.length === 3 && pFim.length === 3) {
+                          setRelatorioDataInicio(`${a}-${pIni[1]}-${pIni[2]}`)
+                          setRelatorioDataFim(`${a}-${pFim[1]}-${pFim[2]}`)
+                        }
+                      }
                     }
                   }}
                 >
-                  <option value="">Ano</option>
+                  <option value="">Ano (Todos)</option>
                   {anosDisponiveis.map(ano => <option key={ano} value={ano}>{ano}</option>)}
                 </select>
               </div>
@@ -2765,120 +2954,370 @@ export default function FrequenciaPage() {
 
             </div>
 
-            {/* Linha 2: Filtros por Turma, Segmento, Turno, Status, Ordenação e Busca */}
+            {/* Linha 2: Filtros por Turma (Menu Sanduíche), Segmento, Turno, Status, Ordenação, Busca e Botão Buscar */}
             {relatorioModo !== 'aluno_individual' && (
-              <>
-                <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-                  
-                  <select
-                    className="form-input"
-                    style={{ width: '150px', height: '34px', borderRadius: '8px', background: '#f8fafc', border: '1px solid #cbd5e1', fontSize: '11px', fontWeight: 600 }}
-                    value={relatorioSegmento}
-                    onChange={e => setRelatorioSegmento(e.target.value)}
-                  >
-                    <option value="">Todos Segmentos</option>
-                    <option value="Educação Infantil">Educação Infantil</option>
-                    <option value="Ensino Fundamental I">Ensino Fundamental I</option>
-                    <option value="Ensino Fundamental II">Ensino Fundamental II</option>
-                    <option value="Ensino Médio">Ensino Médio</option>
-                  </select>
-
-                  <select
-                    className="form-input"
-                    style={{ width: '150px', height: '34px', borderRadius: '8px', background: '#f8fafc', border: '1px solid #cbd5e1', fontSize: '11px', fontWeight: 600 }}
-                    value={relatorioTurno}
-                    onChange={e => setRelatorioTurno(e.target.value)}
-                  >
-                    <option value="">Todos Turnos</option>
-                    <option value="Matutino">Matutino</option>
-                    <option value="Vespertino">Vespertino</option>
-                    <option value="Integral/Intermediário">Integral/Intermediário</option>
-                  </select>
-
-                  <select
-                    className="form-input"
-                    style={{ width: '175px', height: '34px', borderRadius: '8px', background: '#f8fafc', border: '1px solid #cbd5e1', fontSize: '11px', fontWeight: 700, color: '#1e293b' }}
-                    value={relatorioStatus}
-                    onChange={e => setRelatorioStatus(e.target.value)}
-                  >
-                    <option value="">Todos os Status</option>
-                    <option value="criticos">⚠️ Risco Assiduidade (&lt;75%)</option>
-                    <option value="assiduos">🌟 Assíduos (100% Presença)</option>
-                    <option value="faltantes">❌ Alunos com Faltas</option>
-                    <option value="presentes">✅ Apenas Presentes</option>
-                    <option value="justificados">📄 Ausências Justificadas</option>
-                  </select>
-
-                  <select
-                    className="form-input"
-                    style={{ width: '165px', height: '34px', borderRadius: '8px', background: '#f8fafc', border: '1px solid #cbd5e1', fontSize: '11px', fontWeight: 700, color: '#1e293b' }}
-                    value={relatorioOrdenacao}
-                    onChange={e => setRelatorioOrdenacao(e.target.value as any)}
-                  >
-                    <option value="nome_asc">Ordenar: Nome (A - Z)</option>
-                    <option value="nome_desc">Ordenar: Nome (Z - A)</option>
-                    <option value="turma_asc">Ordenar: Turma (A - Z)</option>
-                    <option value="frequencia_asc">Ordenar: % Frequência (Menor)</option>
-                    <option value="frequencia_desc">Ordenar: % Frequência (Maior)</option>
-                    <option value="faltas_desc">Ordenar: Mais Faltas</option>
-                    <option value="id_asc">Ordenar: Matrícula / ID</option>
-                  </select>
-
-                  <div style={{ position: 'relative', flex: 1, minWidth: '180px' }}>
-                    <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
-                    <input
-                      className="form-input"
-                      style={{ paddingLeft: '32px', height: '34px', borderRadius: '8px', background: '#f8fafc', border: '1px solid #cbd5e1', fontSize: '11px', width: '100%' }}
-                      placeholder="Filtrar por aluno ou turma..."
-                      value={buscaRelatorio}
-                      onChange={e => setBuscaRelatorio(e.target.value)}
-                    />
-                  </div>
-                </div>
-
-                {/* Seleção de Turmas em Pills */}
-                <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '8px 14px', display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: '11px', fontWeight: 800, color: '#334155' }}>Turmas ({relatorioTurmasSel.length === 0 ? 'Todas' : relatorioTurmasSel.length}):</span>
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+                
+                {/* Menu Sanduíche de Seleção de Turmas */}
+                <div ref={turmasMenuRef} style={{ position: 'relative' }}>
                   <button
-                    onClick={() => {
-                      if (relatorioTurmasSel.length === turmas.length) {
-                        setRelatorioTurmasSel([])
-                      } else {
-                        setRelatorioTurmasSel(turmas.map(t => String(t.id)))
-                      }
+                    type="button"
+                    onClick={() => setTurmasMenuOpen(prev => !prev)}
+                    style={{
+                      height: '34px',
+                      padding: '0 12px',
+                      borderRadius: '8px',
+                      background: relatorioTurmasSel.length > 0 ? '#eff6ff' : '#f8fafc',
+                      border: relatorioTurmasSel.length > 0 ? '1.5px solid #2563eb' : '1px solid #cbd5e1',
+                      color: relatorioTurmasSel.length > 0 ? '#1d4ed8' : '#334155',
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      cursor: 'pointer',
+                      boxShadow: relatorioTurmasSel.length > 0 ? '0 1px 3px rgba(37,99,235,0.12)' : 'none',
+                      transition: 'all 0.15s ease'
                     }}
-                    style={{ fontSize: '10px', fontWeight: 700, padding: '3px 8px', background: '#e0f2fe', color: '#0369a1', border: '1px solid #bae6fd', borderRadius: '6px', cursor: 'pointer' }}
+                    title="Clique para abrir o menu sanduíche de seleção de turmas"
                   >
-                    {relatorioTurmasSel.length === turmas.length ? 'Desmarcar Todas' : 'Selecionar Todas'}
+                    <Menu size={16} style={{ color: relatorioTurmasSel.length > 0 ? '#2563eb' : '#64748b' }} />
+                    <span>
+                      {nenhumaSelecionada
+                        ? `Turmas: Todas (${totalTurmas})`
+                        : relatorioTurmasSel.length === 1
+                        ? `1 Turma Selecionada`
+                        : `${relatorioTurmasSel.length} Turmas Selecionadas`}
+                    </span>
+                    <ChevronDown
+                      size={14}
+                      style={{
+                        color: '#94a3b8',
+                        transform: turmasMenuOpen ? 'rotate(180deg)' : 'none',
+                        transition: 'transform 0.2s ease'
+                      }}
+                    />
                   </button>
-                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', maxHeight: '55px', overflowY: 'auto', flex: 1 }}>
-                    {turmas.filter(t => !relatorioAno || String(t.ano) === relatorioAno).map(t => {
-                      const isSelected = relatorioTurmasSel.includes(String(t.id))
-                      return (
+
+                  {/* Dropdown Popover do Menu Sanduíche */}
+                  {turmasMenuOpen && (
+                    <div style={{
+                      position: 'absolute',
+                      top: 'calc(100% + 6px)',
+                      left: 0,
+                      width: '320px',
+                      maxHeight: '400px',
+                      background: '#fff',
+                      borderRadius: '14px',
+                      boxShadow: '0 16px 36px -4px rgba(15, 23, 42, 0.25), 0 0 0 1px rgba(0, 0, 0, 0.08)',
+                      zIndex: 999999,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      overflow: 'hidden',
+                      animation: 'fadeIn 0.15s ease-out'
+                    }}>
+                      {/* Topo do Menu Sanduíche */}
+                      <div style={{
+                        padding: '12px 14px',
+                        borderBottom: '1px solid #f1f5f9',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        background: '#f8fafc'
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <div style={{ width: '26px', height: '26px', borderRadius: '6px', background: '#e0f2fe', color: '#0369a1', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <Menu size={14} />
+                          </div>
+                          <span style={{ fontSize: '12px', fontWeight: 800, color: '#0f172a' }}>
+                            Menu de Turmas
+                          </span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span style={{ fontSize: '10px', fontWeight: 800, color: '#64748b', background: '#e2e8f0', padding: '2px 6px', borderRadius: '4px' }}>
+                            {relatorioTurmasSel.length === 0 ? `Todas (${totalTurmas})` : `${relatorioTurmasSel.length} de ${totalTurmas}`}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setTurmasMenuOpen(false)}
+                            style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: '2px', color: '#94a3b8' }}
+                          >
+                            <X size={16} />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Ações Rápidas: Selecionar Todas / Desmarcar */}
+                      <div style={{ padding: '8px 14px', borderBottom: '1px solid #f1f5f9', display: 'flex', gap: '8px', background: '#fff' }}>
                         <button
-                          key={t.id}
+                          type="button"
+                          onClick={() => setRelatorioTurmasSel([])}
+                          style={{
+                            flex: 1,
+                            padding: '5px 10px',
+                            fontSize: '11px',
+                            fontWeight: 700,
+                            borderRadius: '6px',
+                            border: '1px solid #cbd5e1',
+                            background: relatorioTurmasSel.length === 0 ? '#2563eb' : '#fff',
+                            color: relatorioTurmasSel.length === 0 ? '#fff' : '#475569',
+                            cursor: 'pointer',
+                            transition: 'all 0.15s'
+                          }}
+                        >
+                          Todas
+                        </button>
+                        <button
+                          type="button"
                           onClick={() => {
-                            const tIdStr = String(t.id)
-                            if (isSelected) {
-                              setRelatorioTurmasSel(prev => prev.filter(id => id !== tIdStr))
+                            if (todasSelecionadas) {
+                              setRelatorioTurmasSel([])
                             } else {
-                              setRelatorioTurmasSel(prev => [...prev, tIdStr])
+                              setRelatorioTurmasSel(turmasFiltradas.map(t => String(t.id)))
                             }
                           }}
                           style={{
-                            fontSize: '10px', fontWeight: 700, padding: '3px 8px', borderRadius: '6px', cursor: 'pointer',
-                            background: isSelected ? '#2563eb' : '#fff',
-                            color: isSelected ? '#fff' : '#475569',
-                            border: isSelected ? '1px solid #1d4ed8' : '1px solid #cbd5e1'
+                            flex: 1,
+                            padding: '5px 10px',
+                            fontSize: '11px',
+                            fontWeight: 700,
+                            borderRadius: '6px',
+                            border: '1px solid #bae6fd',
+                            background: '#e0f2fe',
+                            color: '#0369a1',
+                            cursor: 'pointer',
+                            transition: 'all 0.15s'
                           }}
                         >
-                          {t.nome}
+                          {todasSelecionadas ? 'Desmarcar' : 'Marcar Todas'}
                         </button>
-                      )
-                    })}
-                  </div>
+                      </div>
+
+                      {/* Busca Rápida Dentro do Menu */}
+                      <div style={{ padding: '8px 14px', borderBottom: '1px solid #f1f5f9' }}>
+                        <div style={{ position: 'relative' }}>
+                          <Search size={13} style={{ position: 'absolute', left: '8px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                          <input
+                            type="text"
+                            placeholder="Filtrar turmas pelo nome..."
+                            value={buscaTurmaMenu}
+                            onChange={e => setBuscaTurmaMenu(e.target.value)}
+                            style={{
+                              width: '100%',
+                              height: '30px',
+                              paddingLeft: '28px',
+                              paddingRight: '8px',
+                              fontSize: '11px',
+                              borderRadius: '6px',
+                              border: '1px solid #cbd5e1',
+                              background: '#f8fafc',
+                              outline: 'none'
+                            }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Lista com Scroll de Turmas */}
+                      <div style={{ maxHeight: '200px', overflowY: 'auto', padding: '4px 0' }}>
+                        {turmasFiltradasParaMenu.length === 0 ? (
+                          <div style={{ padding: '24px 14px', textAlign: 'center', fontSize: '11px', color: '#94a3b8' }}>
+                            Nenhuma turma encontrada.
+                          </div>
+                        ) : (
+                          turmasFiltradasParaMenu.map(t => {
+                            const isSelected = relatorioTurmasSel.includes(String(t.id))
+                            return (
+                              <label
+                                key={t.id}
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                }}
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '10px',
+                                  padding: '7px 14px',
+                                  cursor: 'pointer',
+                                  background: isSelected ? '#eff6ff' : 'transparent',
+                                  borderBottom: '1px solid #f8fafc',
+                                  transition: 'background 0.15s'
+                                }}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  onChange={() => {
+                                    const tIdStr = String(t.id)
+                                    if (isSelected) {
+                                      setRelatorioTurmasSel(prev => prev.filter(id => id !== tIdStr))
+                                    } else {
+                                      setRelatorioTurmasSel(prev => [...prev, tIdStr])
+                                    }
+                                  }}
+                                  style={{
+                                    cursor: 'pointer',
+                                    width: '15px',
+                                    height: '15px',
+                                    accentColor: '#2563eb'
+                                  }}
+                                />
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                  <div style={{ fontSize: '11px', fontWeight: 700, color: isSelected ? '#1d4ed8' : '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                    {t.nome}
+                                  </div>
+                                  <div style={{ fontSize: '9px', color: '#64748b' }}>
+                                    {t.turno || 'Geral'} {t.ano ? `• ${t.ano}` : ''}
+                                  </div>
+                                </div>
+                              </label>
+                            )
+                          })
+                        )}
+                      </div>
+
+                      {/* Rodapé do Menu Sanduíche */}
+                      <div style={{
+                        padding: '8px 14px',
+                        borderTop: '1px solid #f1f5f9',
+                        background: '#f8fafc',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center'
+                      }}>
+                        {relatorioTurmasSel.length > 0 ? (
+                          <button
+                            type="button"
+                            onClick={() => setRelatorioTurmasSel([])}
+                            style={{ fontSize: '10px', fontWeight: 700, color: '#dc2626', background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}
+                          >
+                            Limpar Seleção
+                          </button>
+                        ) : (
+                          <span style={{ fontSize: '10px', color: '#64748b' }}>Todas incluídas</span>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => setTurmasMenuOpen(false)}
+                          style={{
+                            padding: '5px 12px',
+                            background: '#2563eb',
+                            color: '#fff',
+                            borderRadius: '6px',
+                            fontSize: '11px',
+                            fontWeight: 700,
+                            border: 'none',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          OK
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
-              </>
+
+                <select
+                  className="form-input"
+                  style={{ width: '140px', height: '34px', borderRadius: '8px', background: '#f8fafc', border: '1px solid #cbd5e1', fontSize: '11px', fontWeight: 600 }}
+                  value={relatorioSegmento}
+                  onChange={e => setRelatorioSegmento(e.target.value)}
+                >
+                  <option value="">Todos Segmentos</option>
+                  <option value="Educação Infantil">Educação Infantil</option>
+                  <option value="Ensino Fundamental I">Ensino Fundamental I</option>
+                  <option value="Ensino Fundamental II">Ensino Fundamental II</option>
+                  <option value="Ensino Médio">Ensino Médio</option>
+                </select>
+
+                <select
+                  className="form-input"
+                  style={{ width: '130px', height: '34px', borderRadius: '8px', background: '#f8fafc', border: '1px solid #cbd5e1', fontSize: '11px', fontWeight: 600 }}
+                  value={relatorioTurno}
+                  onChange={e => setRelatorioTurno(e.target.value)}
+                >
+                  <option value="">Todos Turnos</option>
+                  <option value="Matutino">Matutino</option>
+                  <option value="Vespertino">Vespertino</option>
+                  <option value="Integral/Intermediário">Integral/Intermediário</option>
+                </select>
+
+                <select
+                  className="form-input"
+                  style={{ width: '160px', height: '34px', borderRadius: '8px', background: '#f8fafc', border: '1px solid #cbd5e1', fontSize: '11px', fontWeight: 700, color: '#1e293b' }}
+                  value={relatorioStatus}
+                  onChange={e => setRelatorioStatus(e.target.value)}
+                >
+                  <option value="">Todos os Status</option>
+                  <option value="criticos">⚠️ Risco Assiduidade (&lt;75%)</option>
+                  <option value="assiduos">🌟 Assíduos (100% Presença)</option>
+                  <option value="faltantes">❌ Alunos com Faltas</option>
+                  <option value="presentes">✅ Apenas Presentes</option>
+                  <option value="justificados">📄 Ausências Justificadas</option>
+                </select>
+
+                <select
+                  className="form-input"
+                  style={{ width: '155px', height: '34px', borderRadius: '8px', background: '#f8fafc', border: '1px solid #cbd5e1', fontSize: '11px', fontWeight: 700, color: '#1e293b' }}
+                  value={relatorioOrdenacao}
+                  onChange={e => setRelatorioOrdenacao(e.target.value as any)}
+                >
+                  <option value="nome_asc">Ordenar: Nome (A - Z)</option>
+                  <option value="nome_desc">Ordenar: Nome (Z - A)</option>
+                  <option value="turma_asc">Ordenar: Turma (A - Z)</option>
+                  <option value="frequencia_asc">Ordenar: % Frequência (Menor)</option>
+                  <option value="frequencia_desc">Ordenar: % Frequência (Maior)</option>
+                  <option value="faltas_desc">Ordenar: Mais Faltas</option>
+                  <option value="id_asc">Ordenar: Matrícula / ID</option>
+                </select>
+
+                <div style={{ position: 'relative', flex: 1, minWidth: '150px' }}>
+                  <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                  <input
+                    className="form-input"
+                    style={{ paddingLeft: '32px', height: '34px', borderRadius: '8px', background: '#f8fafc', border: '1px solid #cbd5e1', fontSize: '11px', width: '100%' }}
+                    placeholder="Filtrar por aluno ou turma..."
+                    value={buscaRelatorio}
+                    onChange={e => setBuscaRelatorio(e.target.value)}
+                  />
+                </div>
+
+                {/* Botão Buscar e Carregar */}
+                <button
+                  type="button"
+                  onClick={handleBuscarRelatorio}
+                  disabled={relatorioCarregando}
+                  style={{
+                    height: '34px',
+                    padding: '0 18px',
+                    background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: '8px',
+                    fontSize: '12px',
+                    fontWeight: 800,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    boxShadow: '0 2px 6px rgba(37, 99, 235, 0.3)',
+                    transition: 'all 0.2s',
+                    whiteSpace: 'nowrap'
+                  }}
+                >
+                  {relatorioCarregando ? (
+                    <>
+                      <Loader2 size={15} className="animate-spin" />
+                      <span>Carregando...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Search size={15} />
+                      <span>Buscar e Carregar</span>
+                    </>
+                  )}
+                </button>
+
+              </div>
             )}
 
             {/* Controles do Modo: Ficha do Aluno */}
@@ -2926,6 +3365,42 @@ export default function FrequenciaPage() {
                     </div>
                   </div>
                 )}
+
+                {/* Botão Buscar e Carregar para Ficha do Aluno */}
+                <button
+                  type="button"
+                  onClick={handleBuscarRelatorio}
+                  disabled={relatorioCarregando}
+                  style={{
+                    height: '34px',
+                    padding: '0 18px',
+                    background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: '8px',
+                    fontSize: '12px',
+                    fontWeight: 800,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    boxShadow: '0 2px 6px rgba(37, 99, 235, 0.3)',
+                    alignSelf: 'flex-end',
+                    whiteSpace: 'nowrap'
+                  }}
+                >
+                  {relatorioCarregando ? (
+                    <>
+                      <Loader2 size={15} className="animate-spin" />
+                      <span>Carregando...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Search size={15} />
+                      <span>Buscar e Carregar</span>
+                    </>
+                  )}
+                </button>
               </div>
             )}
 
@@ -2933,9 +3408,84 @@ export default function FrequenciaPage() {
 
           {/* Conteúdo Principal do Relatório */}
           <div style={{ padding: '20px 28px', overflowY: 'auto', flex: 1, background: '#f8fafc' }}>
-            
-            {/* Cards de KPIs em Linha (Resumo do Escopo) */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '12px', marginBottom: '18px' }}>
+            {!relatorioConsultado ? (
+              <div style={{
+                textAlign: 'center',
+                padding: '48px 24px',
+                background: '#fff',
+                borderRadius: '20px',
+                border: '2px dashed #cbd5e1',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                margin: '24px auto',
+                maxWidth: '560px',
+                boxShadow: '0 4px 16px rgba(0,0,0,0.02)'
+              }}>
+                <div style={{
+                  width: '60px',
+                  height: '60px',
+                  borderRadius: '18px',
+                  background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)',
+                  color: '#2563eb',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  marginBottom: '16px',
+                  boxShadow: '0 4px 12px rgba(37, 99, 235, 0.15)'
+                }}>
+                  <Search size={28} />
+                </div>
+                <h3 style={{ margin: '0 0 8px 0', fontSize: '18px', fontWeight: 800, color: '#0f172a', fontFamily: 'Outfit, sans-serif' }}>
+                  Pronto para Gerar Relatório
+                </h3>
+                <p style={{ margin: '0 0 20px 0', fontSize: '13px', color: '#64748b', lineHeight: '1.5', maxWidth: '420px' }}>
+                  Configure os filtros acima (Mês, Ano, Período e Turmas no menu sanduíche ☰) e clique no botão abaixo para processar os registros.
+                </p>
+                <button
+                  type="button"
+                  onClick={handleBuscarRelatorio}
+                  disabled={relatorioCarregando}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    padding: '11px 24px',
+                    borderRadius: '10px',
+                    background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
+                    color: '#fff',
+                    fontSize: '13px',
+                    fontWeight: 800,
+                    border: 'none',
+                    cursor: 'pointer',
+                    boxShadow: '0 4px 14px rgba(37, 99, 235, 0.35)',
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  {relatorioCarregando ? (
+                    <>
+                      <Loader2 size={16} className="animate-spin" />
+                      <span>Processando dados...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Search size={16} />
+                      <span>Buscar e Carregar Relatório</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            ) : relatorioCarregando ? (
+              <div style={{ textAlign: 'center', padding: '80px 20px' }}>
+                <Loader2 size={40} className="animate-spin" style={{ color: '#2563eb', margin: '0 auto 16px' }} />
+                <div style={{ fontSize: '16px', fontWeight: 800, color: '#0f172a' }}>Processando registros de frequência...</div>
+                <div style={{ fontSize: '12px', color: '#64748b', marginTop: '4px' }}>Cruzando presenças, catracas e alertas</div>
+              </div>
+            ) : (
+              <>
+                {/* Cards de KPIs em Linha (Resumo do Escopo) */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '12px', marginBottom: '18px' }}>
               <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '14px', padding: '12px 16px', display: 'flex', alignItems: 'center', gap: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.03)' }}>
                 <div style={{ background: '#e0f2fe', color: '#0369a1', width: '38px', height: '38px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   <Users size={18} />
@@ -3315,6 +3865,8 @@ export default function FrequenciaPage() {
                 })}
               </div>
             )}
+              </>
+            )}
           </div>
 
           {/* Footer do Modal com Botões de Ação */}
@@ -3350,6 +3902,8 @@ export default function FrequenciaPage() {
             <button
               onClick={() => {
                 setShowRelatorioModal(false)
+                setRelatorioConsultado(false)
+                setTurmasMenuOpen(false)
                 setBuscaRelatorio('')
               }}
               style={{
@@ -3777,6 +4331,33 @@ export default function FrequenciaPage() {
               />
             </div>
             
+            <button
+              type="button"
+              onClick={() => setPadraoHorarioIndefinido(p => !p)}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                height: '38px',
+                padding: '0 12px',
+                borderRadius: '10px',
+                fontSize: '12px',
+                fontWeight: 700,
+                cursor: 'pointer',
+                border: padraoHorarioIndefinido ? '1.5px solid #16a34a' : '1px solid #cbd5e1',
+                background: padraoHorarioIndefinido ? '#dcfce7' : '#fff',
+                color: padraoHorarioIndefinido ? '#15803d' : '#475569',
+                boxShadow: padraoHorarioIndefinido ? '0 1px 3px rgba(22, 163, 74, 0.15)' : 'none',
+                transition: 'all 0.2s',
+                whiteSpace: 'nowrap'
+              }}
+              title="Ativar para definir presenças sem registrar horário de entrada"
+            >
+              <Clock size={15} style={{ color: padraoHorarioIndefinido ? '#16a34a' : '#64748b' }} />
+              <span>Horário Indefinido</span>
+              {padraoHorarioIndefinido && <CheckCircle size={14} style={{ color: '#16a34a' }} />}
+            </button>
+
             <span style={{ fontSize: '12px', color: '#64748b', fontWeight: 700, padding: '6px 12px', background: '#e2e8f0', borderRadius: '20px' }}>
               Exibindo {filteredAbsentees.length} alunos
             </span>
@@ -3811,7 +4392,7 @@ export default function FrequenciaPage() {
                       </div>
 
                       {/* Botões de Ação em Lote por Turma */}
-                      <div style={{ display: 'flex', gap: '8px' }}>
+                      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                         <button
                           type="button"
                           onClick={() => {
@@ -3825,7 +4406,7 @@ export default function FrequenciaPage() {
                                   const nowT = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
                                   setHorariosEntrada(p => ({
                                     ...p,
-                                    [aluno.id]: { ...(p[aluno.id] || {}), [registroManualData]: nowT }
+                                    [aluno.id]: { ...(p[aluno.id] || {}), [registroManualData]: padraoHorarioIndefinido ? 'indefinido' : nowT }
                                   }))
                                 }
                               })
@@ -3837,6 +4418,30 @@ export default function FrequenciaPage() {
                           onMouseLeave={e => e.currentTarget.style.background = '#dcfce7'}
                         >
                           + Presença Geral (Turma)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAbsencesManual(prev => {
+                              const copy = { ...prev }
+                              turmaStudents.forEach(aluno => {
+                                const newStudentTempos: Record<string, PresStatus> = {}
+                                schedule.tempos.forEach((t: any) => { newStudentTempos[t.id] = 'P' })
+                                copy[aluno.id] = newStudentTempos
+                                setHorariosEntrada(p => ({
+                                  ...p,
+                                  [aluno.id]: { ...(p[aluno.id] || {}), [registroManualData]: 'indefinido' }
+                                }))
+                              })
+                              return copy
+                            })
+                          }}
+                          style={{ padding: '5px 12px', fontSize: '11px', fontWeight: 800, background: '#f0fdf4', color: '#15803d', border: '1px solid #86efac', borderRadius: '8px', cursor: 'pointer', transition: 'all 0.15s' }}
+                          onMouseEnter={e => e.currentTarget.style.background = '#dcfce7'}
+                          onMouseLeave={e => e.currentTarget.style.background = '#f0fdf4'}
+                          title="Marca presença para todos da turma sem horário específico"
+                        >
+                          + Presença (Horário Indefinido)
                         </button>
                         <button
                           type="button"
@@ -3877,7 +4482,9 @@ export default function FrequenciaPage() {
                           currentStatus = 'P' // Aluno com entrada iDFace/Catraca é padrão PRESENTE
                         }
 
-                        const currentEntrada = horariosEntrada[aluno.id]?.[registroManualData] || (infoOrigem.entrada?.horario ? infoOrigem.entrada.horario : '')
+                        const rawEntrada = horariosEntrada[aluno.id]?.[registroManualData]
+                        const isIndefinido = rawEntrada === 'indefinido' || (rawEntrada === undefined && Boolean(existingFreq?.dados?.horarioIndefinido || existingFreq?.horarioIndefinido))
+                        const currentEntrada = isIndefinido ? '' : (rawEntrada || (infoOrigem.entrada?.horario ? infoOrigem.entrada.horario : ''))
                         const isEditingThisEntrada = editingEntrada?.alunoId === aluno.id && editingEntrada?.dia === registroManualData
                         const hSaida = horariosSaida[aluno.id]?.[registroManualData] || infoOrigem.saida?.horario
                         const rSaida = responsaveisSaida[aluno.id]?.[registroManualData] || infoOrigem.saida?.responsavel
@@ -3919,7 +4526,7 @@ export default function FrequenciaPage() {
                                       const nowT = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
                                       setHorariosEntrada(prev => ({
                                         ...prev,
-                                        [aluno.id]: { ...(prev[aluno.id] || {}), [registroManualData]: infoOrigem.entrada?.horario || nowT }
+                                        [aluno.id]: { ...(prev[aluno.id] || {}), [registroManualData]: padraoHorarioIndefinido ? 'indefinido' : (infoOrigem.entrada?.horario || nowT) }
                                       }))
                                     }
                                   }}
@@ -3941,36 +4548,96 @@ export default function FrequenciaPage() {
                                 </button>
 
                                 {currentStatus === 'P' && (
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                    {isEditingThisEntrada ? (
-                                      <input
-                                        type="time"
-                                        autoFocus
-                                        value={currentEntrada || '07:30'}
-                                        onBlur={() => setEditingEntrada(null)}
-                                        onChange={e => {
-                                          const v = e.target.value
-                                          setHorariosEntrada(prev => ({
-                                            ...prev,
-                                            [aluno.id]: { ...(prev[aluno.id] || {}), [registroManualData]: v }
-                                          }))
-                                        }}
-                                        style={{ padding: '2px 6px', borderRadius: '6px', border: '1px solid #2563eb', fontSize: '11px', fontWeight: 800, width: '90px' }}
-                                      />
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                    {isIndefinido ? (
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                        <span
+                                          style={{
+                                            fontSize: '11px', fontWeight: 800, color: '#15803d',
+                                            background: '#dcfce7', padding: '3px 8px', borderRadius: '6px', border: '1px solid #86efac',
+                                            display: 'inline-flex', alignItems: 'center', gap: '4px'
+                                          }}
+                                          title="Presença registrada sem marcação de horário"
+                                        >
+                                          <CheckCircle size={12} />
+                                          <span>Horário Indefinido</span>
+                                        </span>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            const nowT = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+                                            setHorariosEntrada(prev => ({
+                                              ...prev,
+                                              [aluno.id]: { ...(prev[aluno.id] || {}), [registroManualData]: nowT }
+                                            }))
+                                            setEditingEntrada({ alunoId: aluno.id, dia: registroManualData })
+                                          }}
+                                          style={{
+                                            background: '#fff', border: '1px solid #cbd5e1', borderRadius: '6px',
+                                            padding: '3px 7px', fontSize: '10px', fontWeight: 700, color: '#475569',
+                                            cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '3px'
+                                          }}
+                                          title="Definir horário específico para este aluno"
+                                        >
+                                          <Clock size={10} />
+                                          Inserir Horário
+                                        </button>
+                                      </div>
                                     ) : (
-                                      <span
-                                        onClick={() => setEditingEntrada({ alunoId: aluno.id, dia: registroManualData })}
-                                        title="Clique para editar o horário de entrada"
-                                        style={{
-                                          cursor: 'pointer', fontSize: '11px', fontWeight: 800, color: '#0369a1',
-                                          background: '#e0f2fe', padding: '2px 8px', borderRadius: '6px', border: '1px solid #7dd3fc',
-                                          display: 'inline-flex', alignItems: 'center', gap: '4px'
-                                        }}
-                                      >
-                                        <Clock size={12} />
-                                        <span>Entrou: {currentEntrada || '07:30'}h</span>
-                                        <Edit3 size={10} style={{ opacity: 0.7 }} />
-                                      </span>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                        {isEditingThisEntrada ? (
+                                          <input
+                                            type="time"
+                                            autoFocus
+                                            value={currentEntrada || '07:30'}
+                                            onBlur={() => setEditingEntrada(null)}
+                                            onChange={e => {
+                                              const v = e.target.value
+                                              setHorariosEntrada(prev => ({
+                                                ...prev,
+                                                [aluno.id]: { ...(prev[aluno.id] || {}), [registroManualData]: v }
+                                              }))
+                                            }}
+                                            style={{ padding: '2px 6px', borderRadius: '6px', border: '1px solid #2563eb', fontSize: '11px', fontWeight: 800, width: '90px' }}
+                                          />
+                                        ) : (
+                                          <span
+                                            onClick={() => setEditingEntrada({ alunoId: aluno.id, dia: registroManualData })}
+                                            title="Clique para editar o horário de entrada"
+                                            style={{
+                                              cursor: 'pointer', fontSize: '11px', fontWeight: 800, color: '#0369a1',
+                                              background: '#e0f2fe', padding: '2px 8px', borderRadius: '6px', border: '1px solid #7dd3fc',
+                                              display: 'inline-flex', alignItems: 'center', gap: '4px'
+                                            }}
+                                          >
+                                            <Clock size={12} />
+                                            <span>Entrou: {currentEntrada || '07:30'}h</span>
+                                            <Edit3 size={10} style={{ opacity: 0.7 }} />
+                                          </span>
+                                        )}
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setHorariosEntrada(prev => ({
+                                              ...prev,
+                                              [aluno.id]: { ...(prev[aluno.id] || {}), [registroManualData]: 'indefinido' }
+                                            }))
+                                            setEditingEntrada(null)
+                                          }}
+                                          style={{
+                                            background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: '6px',
+                                            padding: '3px 7px', fontSize: '10px', fontWeight: 700, color: '#64748b',
+                                            cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '3px',
+                                            transition: 'all 0.15s'
+                                          }}
+                                          onMouseEnter={e => { e.currentTarget.style.background = '#e2e8f0'; e.currentTarget.style.color = '#0f172a' }}
+                                          onMouseLeave={e => { e.currentTarget.style.background = '#f8fafc'; e.currentTarget.style.color = '#64748b' }}
+                                          title="Deixar sem horário de entrada (apenas presença marcada)"
+                                        >
+                                          <Clock size={10} />
+                                          Horário Indefinido
+                                        </button>
+                                      </div>
                                     )}
                                   </div>
                                 )}
@@ -4303,7 +4970,20 @@ export default function FrequenciaPage() {
           
           <div className="freq-header-actions" style={{ display: 'flex', gap: '12px' }}>
             <button
-              onClick={() => setShowRelatorioModal(true)}
+              onClick={() => {
+                if (!relatorioAno) {
+                  const targetAno = (cfgCalendarioLetivo || []).find((c: any) => c.isVigente)?.ano?.toString() ||
+                    (filtroAno && filtroAno !== 'todos' ? filtroAno : '') ||
+                    (anosDisponiveis && anosDisponiveis[0]) ||
+                    new Date().getFullYear().toString()
+                  setRelatorioAno(targetAno)
+                }
+                setRelatorioConsultado(false)
+                setRelatorioCarregando(false)
+                setTurmasMenuOpen(false)
+                setBuscaTurmaMenu('')
+                setShowRelatorioModal(true)
+              }}
               style={{
                 height: '42px',
                 padding: '0 18px',
@@ -5092,7 +5772,9 @@ export default function FrequenciaPage() {
                     <td style={{ padding: '10px 6px', textAlign: 'center', borderTop: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9' }}>
                       {diasPeriodo.map(dia => {
                         const status1 = getStatus(aluno.id, dia, '1')
-                        const currentEntrada = horariosEntrada[aluno.id]?.[dia] || (origemInfoCompleta.entrada?.horario ? origemInfoCompleta.entrada.horario : '')
+                        const rawEntrada = horariosEntrada[aluno.id]?.[dia]
+                        const isIndefinido = rawEntrada === 'indefinido' || (rawEntrada === undefined && Boolean(freqRecordDia?.dados?.horarioIndefinido || freqRecordDia?.horarioIndefinido))
+                        const currentEntrada = isIndefinido ? '' : (rawEntrada || (origemInfoCompleta.entrada?.horario ? origemInfoCompleta.entrada.horario : ''))
                         const isEditingThisEntrada = editingEntrada?.alunoId === aluno.id && editingEntrada?.dia === dia
 
                         return (
@@ -5107,7 +5789,7 @@ export default function FrequenciaPage() {
                                 let newEntrada = horariosEntrada[aluno.id]?.[dia]
                                 if (nextStatus === 'P' && !newEntrada) {
                                   const nowT = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
-                                  newEntrada = origemInfoCompleta.entrada?.horario || nowT
+                                  newEntrada = padraoHorarioIndefinido ? 'indefinido' : (origemInfoCompleta.entrada?.horario || nowT)
                                   setHorariosEntrada(prev => ({
                                     ...prev,
                                     [aluno.id]: { ...(prev[aluno.id] || {}), [dia]: newEntrada! }
@@ -5157,36 +5839,93 @@ export default function FrequenciaPage() {
                             </button>
 
                             {status1 === 'P' && (
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                {isEditingThisEntrada ? (
-                                  <input
-                                    type="time"
-                                    autoFocus
-                                    value={currentEntrada || '07:30'}
-                                    onBlur={() => setEditingEntrada(null)}
-                                    onChange={e => {
-                                      const v = e.target.value
-                                      setHorariosEntrada(prev => ({
-                                        ...prev,
-                                        [aluno.id]: { ...(prev[aluno.id] || {}), [dia]: v }
-                                      }))
-                                    }}
-                                    style={{ padding: '2px 6px', borderRadius: '6px', border: '1px solid #2563eb', fontSize: '11px', fontWeight: 800, width: '90px' }}
-                                  />
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap', justifyContent: 'center' }}>
+                                {isIndefinido ? (
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                                    <span
+                                      style={{
+                                        fontSize: '9px', fontWeight: 800, color: '#15803d',
+                                        background: '#dcfce7', padding: '2px 5px', borderRadius: '4px', border: '1px solid #86efac',
+                                        display: 'inline-flex', alignItems: 'center', gap: '2px'
+                                      }}
+                                      title="Presença registrada sem horário específico"
+                                    >
+                                      <CheckCircle size={10} />
+                                      <span>Indefinido</span>
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const nowT = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+                                        setHorariosEntrada(prev => ({
+                                          ...prev,
+                                          [aluno.id]: { ...(prev[aluno.id] || {}), [dia]: nowT }
+                                        }))
+                                        setEditingEntrada({ alunoId: aluno.id, dia })
+                                      }}
+                                      style={{
+                                        background: '#fff', border: '1px solid #cbd5e1', borderRadius: '4px',
+                                        padding: '2px 4px', fontSize: '9px', fontWeight: 700, color: '#475569',
+                                        cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '2px'
+                                      }}
+                                      title="Definir horário de entrada"
+                                    >
+                                      <Clock size={9} />
+                                      Horário
+                                    </button>
+                                  </div>
                                 ) : (
-                                  <span
-                                    onClick={() => setEditingEntrada({ alunoId: aluno.id, dia })}
-                                    title="Clique para editar o horário de entrada"
-                                    style={{
-                                      cursor: 'pointer', fontSize: '10px', fontWeight: 800, color: '#0369a1',
-                                      background: '#e0f2fe', padding: '2px 6px', borderRadius: '5px', border: '1px solid #7dd3fc',
-                                      display: 'inline-flex', alignItems: 'center', gap: '3px'
-                                    }}
-                                  >
-                                    <Clock size={11} />
-                                    <span>Entrou: {currentEntrada || '07:30'}h</span>
-                                    <Edit3 size={9} style={{ opacity: 0.7 }} />
-                                  </span>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                                    {isEditingThisEntrada ? (
+                                      <input
+                                        type="time"
+                                        autoFocus
+                                        value={currentEntrada || '07:30'}
+                                        onBlur={() => setEditingEntrada(null)}
+                                        onChange={e => {
+                                          const v = e.target.value
+                                          setHorariosEntrada(prev => ({
+                                            ...prev,
+                                            [aluno.id]: { ...(prev[aluno.id] || {}), [dia]: v }
+                                          }))
+                                        }}
+                                        style={{ padding: '2px 6px', borderRadius: '6px', border: '1px solid #2563eb', fontSize: '11px', fontWeight: 800, width: '90px' }}
+                                      />
+                                    ) : (
+                                      <span
+                                        onClick={() => setEditingEntrada({ alunoId: aluno.id, dia })}
+                                        title="Clique para editar o horário de entrada"
+                                        style={{
+                                          cursor: 'pointer', fontSize: '10px', fontWeight: 800, color: '#0369a1',
+                                          background: '#e0f2fe', padding: '2px 6px', borderRadius: '5px', border: '1px solid #7dd3fc',
+                                          display: 'inline-flex', alignItems: 'center', gap: '3px'
+                                        }}
+                                      >
+                                        <Clock size={11} />
+                                        <span>Entrou: {currentEntrada || '07:30'}h</span>
+                                        <Edit3 size={9} style={{ opacity: 0.7 }} />
+                                      </span>
+                                    )}
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setHorariosEntrada(prev => ({
+                                          ...prev,
+                                          [aluno.id]: { ...(prev[aluno.id] || {}), [dia]: 'indefinido' }
+                                        }))
+                                        setEditingEntrada(null)
+                                      }}
+                                      style={{
+                                        background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: '4px',
+                                        padding: '2px 4px', fontSize: '9px', fontWeight: 700, color: '#64748b',
+                                        cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '2px'
+                                      }}
+                                      title="Deixar sem horário de entrada"
+                                    >
+                                      <Clock size={9} />
+                                      Indefinido
+                                    </button>
+                                  </div>
                                 )}
                               </div>
                             )}

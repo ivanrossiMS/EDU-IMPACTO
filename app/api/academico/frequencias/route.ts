@@ -4,6 +4,7 @@ import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 import { sendAgendaPushNotification } from '@/lib/server/agendaNotifications'
 import { getResponsavelIdsForTargets, getStudentTargetsForComunicados } from '@/lib/server/notificationHelper'
 
+import { supabaseServer } from '@/lib/supabaseServer'
 import { isAlunoCursandoTurma } from '@/lib/studentTurmaUtils'
 
 export const dynamic = 'force-dynamic'
@@ -13,7 +14,7 @@ export async function GET(request: Request) {
   const { user, errorResponse } = await requireAuth()
   if (errorResponse) return errorResponse
 
-  const supabase = await createProtectedClient()
+  const supabase = supabaseServer
   const { searchParams } = new URL(request.url)
   const turmaId = searchParams.get('turma_id')
   const turmaIdsParam = searchParams.get('turma_ids')
@@ -366,6 +367,11 @@ function buildRow(f: any, userName?: string, userId?: string) {
     finalRegistradoPor = 'Manual'
   }
 
+  const isHorarioIndefinido = Boolean(f.horarioIndefinido || mergedExtra.horarioIndefinido || horaRegistro === null || horaRegistro === 'indefinido')
+  const finalHoraRegistro = isHorarioIndefinido
+    ? null
+    : (horaRegistro || mergedExtra.horaRegistro || (presente ? new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : null))
+
   const row = {
     id: id || `FREQ-${alunoId || f.aluno_id}-${data}`,
     aluno_id: alunoId || f.aluno_id || '',
@@ -381,7 +387,9 @@ function buildRow(f: any, userName?: string, userId?: string) {
       usuarioNome: userName || mergedExtra.usuarioNome || null,
       usuarioId: userId || mergedExtra.usuarioId || null,
       origem: origem || mergedExtra.origem || 'manual',
-      horaRegistro: horaRegistro || mergedExtra.horaRegistro || new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+      horaRegistro: finalHoraRegistro,
+      horaEntrada: finalHoraRegistro,
+      horarioIndefinido: isHorarioIndefinido
     },
   }
 
