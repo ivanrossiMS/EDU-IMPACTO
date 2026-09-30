@@ -162,7 +162,7 @@ export default function ADFrequenciaPage({ params }: { params: any }) {
   }, [frequenciasDb, resolvedParams.slug]);
 
   const entradaCatracaMap = useMemo(() => {
-    const map: Record<string, { hora: string; dispositivo?: string }> = {}
+    const map: Record<string, { hora: string; dispositivo?: string; todasEntradas: Array<{ hora: string; dispositivo?: string }> }> = {}
     if (!eventosPortaria || !Array.isArray(eventosPortaria)) return map
     
     // Filtra apenas eventos com status de sucesso/liberado (case-insensitive)
@@ -191,10 +191,19 @@ export default function ADFrequenciaPage({ params }: { params: any }) {
         timePart = e.data_hora.slice(11, 16)
       }
 
-      if (datePart && !map[datePart]) {
-        map[datePart] = {
-          hora: timePart,
-          dispositivo: e.dispositivo_nome || 'Portaria iDFace'
+      if (datePart) {
+        const item = { hora: timePart, dispositivo: e.dispositivo_nome || 'Portaria iDFace' }
+        if (!map[datePart]) {
+          map[datePart] = {
+            hora: timePart,
+            dispositivo: e.dispositivo_nome || 'Portaria iDFace',
+            todasEntradas: [item]
+          }
+        } else {
+          const lastEnt = map[datePart].todasEntradas[map[datePart].todasEntradas.length - 1]
+          if (lastEnt?.hora !== timePart) {
+            map[datePart].todasEntradas.push(item)
+          }
         }
       }
     })
@@ -209,6 +218,8 @@ export default function ADFrequenciaPage({ params }: { params: any }) {
       horaRegistro?: string; 
       registradoPor?: string;
       horaCatraca?: string;
+      todasEntradas?: Array<{ hora: string; dispositivo?: string }>;
+      ultimaEntrada?: string;
     }> = []
     
     const datesProcessed = new Set<string>()
@@ -226,6 +237,8 @@ export default function ADFrequenciaPage({ params }: { params: any }) {
       datesProcessed.add(f.data)
 
       const catracaInfo = entradaCatracaMap[f.data]
+      const dbEntradas = Array.isArray(f.dados?.entradas) ? f.dados.entradas : []
+      const todasEntradas = dbEntradas.length > 0 ? dbEntradas : (catracaInfo?.todasEntradas || [])
 
       list.push({
         data: f.data,
@@ -233,7 +246,9 @@ export default function ADFrequenciaPage({ params }: { params: any }) {
         status,
         horaRegistro: f.horaRegistro || f.dados?.horaRegistro,
         registradoPor: f.registradoPor || f.dados?.registradoPor,
-        horaCatraca: catracaInfo?.hora
+        horaCatraca: catracaInfo?.hora,
+        todasEntradas: todasEntradas.length > 0 ? todasEntradas : undefined,
+        ultimaEntrada: f.dados?.ultimaEntrada
       })
     })
 
@@ -249,7 +264,8 @@ export default function ADFrequenciaPage({ params }: { params: any }) {
           status: 'P',
           horaRegistro: catracaInfo.hora,
           registradoPor: 'Catraca iDFace',
-          horaCatraca: catracaInfo.hora
+          horaCatraca: catracaInfo.hora,
+          todasEntradas: catracaInfo.todasEntradas
         })
       }
     })
@@ -798,8 +814,21 @@ export default function ADFrequenciaPage({ params }: { params: any }) {
                               </div>
                             </div>
 
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingLeft: 52 }}>                               
-                              {isIdFace && entradaTime ? (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingLeft: 52, flexWrap: 'wrap' }}>                               
+                              {h.todasEntradas && h.todasEntradas.length > 1 ? (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                                  {h.todasEntradas.map((ent: any, idx: number) => (
+                                    <span key={idx} style={{ 
+                                      display: 'inline-flex', alignItems: 'center', gap: 5, 
+                                      fontSize: 12, fontWeight: 800, color: '#0284c7', 
+                                      background: '#e0f2fe', padding: '4px 12px', borderRadius: 20
+                                    }}>
+                                      <Clock size={14} strokeWidth={2.5} />
+                                      {idx === 0 ? '1ª Entrada' : `${idx + 1}ª Entrada`}: {ent.hora?.slice(0, 5)}h
+                                    </span>
+                                  ))}
+                                </div>
+                              ) : isIdFace && entradaTime ? (
                                 <span style={{ 
                                   display: 'inline-flex', alignItems: 'center', gap: 5, 
                                   fontSize: 12, fontWeight: 800, color: '#0284c7', 

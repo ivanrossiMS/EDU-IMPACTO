@@ -497,14 +497,10 @@ export async function POST(req: Request) {
       }
     }
 
-    const configVal = config
-    const startHour = configVal.horario_entrada_inicio || '06:00'
-    const endHour = configVal.horario_entrada_fim || '22:00'
-
     // Determinar status do evento:
-    // sucesso       → aluno identificado e no horário permitido
+    // sucesso       → aluno identificado
     // negado        → face não reconhecida pelo equipamento (user_id = 0)
-    // inconsistencia → aluno reconhecido mas fora da janela de horário, ou user_id presente mas aluno não encontrado
+    // inconsistencia → user_id presente mas aluno não encontrado
     // falha         → payload sem identificação nenhuma
     let eventStatus: string
     if (userIdNum === 0) {
@@ -603,7 +599,7 @@ export async function POST(req: Request) {
           // Se o aluno registrou entrada hoje e o evento de saída ocorreu no mesmo minuto,
           // ou a menos de 5 minutos da entrada, trata-se de duplicação por processos concorrentes.
           // O evento físico é registrado em portaria_eventos, mas a saída no ERP e o push aos pais são bloqueados!
-          const horaEntradaHoje = existingFreq?.dados?.horaEntrada
+          const horaEntradaHoje = existingFreq?.dados?.ultimaEntrada || existingFreq?.dados?.horaEntrada
           if (horaEntradaHoje) {
             const [entH, entM] = horaEntradaHoje.split(':').map(Number)
             const [saiH, saiM] = localTimeStr.split(':').map(Number)
@@ -708,13 +704,99 @@ export async function POST(req: Request) {
 
         } else {
           // ══════════════════════════════════════════════════════════════
-          // FLUXO DE ENTRADA (COMPORTAMENTO ORIGINAL TOTALMENTE PRESERVADO)
+          // FLUXO DE ENTRADA (SUPORTE A 1ª ENTRADA OU MÚLTIPLAS ENTRADAS)
           // ══════════════════════════════════════════════════════════════
-          // 2. Verificar se já existe lançamento de frequência para este aluno neste dia (NÃO SOBREPOR)
+          const permitirMultiplas = !!config.permitir_multiplas_entradas
+
+          // 2. Verificar se já existe lançamento de frequência para este aluno neste dia
           if (existingFreq) {
-            console.log(`ℹ️ [Portaria Integration] Aluno ${alunoNome} (ID: ${alunoId}) já possui registro de entrada em ${localDate}. Registro preservado sem sobreposição.`)
+            if (!permitirMultiplas) {
+              console.log(`ℹ️ [Portaria Integration] Aluno ${alunoNome} (ID: ${alunoId}) já possui registro de entrada em ${localDate}. Modo 'Apenas 1ª entrada' ativo: registro preservado sem sobreposição.`)
+            } else {
+              // ── MODO MÚLTIPLAS ENTRADAS ATIVADO ──
+              // 🛡️ Proteção anti-duplicação inteligente: não duplicar se a última entrada foi há menos de 3 minutos
+              const ultimaEntradaRegistrada = existingFreq.dados?.ultimaEntrada || existingFreq.dados?.horaEntrada
+              let diffMinutos = 999
+              if (ultimaEntradaRegistrada) {
+                const [uh, um] = String(ultimaEntradaRegistrada).split(':').map(Number)
+                const [eh, em] = localTimeStr.split(':').map(Number)
+                if (!isNaN(uh) && !isNaN(um) && !isNaN(eh) && !isNaN(em)) {
+                  diffMinutos = Math.abs((eh * 60 + em) - (uh * 60 + um))
+                }
+              }
+
+              if (diffMinutos < 3) {
+                console.log(`ℹ️ [Portaria Anti-Bounce] Reentrada de ${alunoNome} às ${localTimeStr} ignorada por proximidade (${diffMinutos} min da última entrada). Evento físico salvo em portaria_eventos.`)
+              } else {
+                console.log(`🔄 [Portaria Integration] Registrando REENTRADA para ${alunoNome} às ${localTimeStr} via ${dispositivoNome}`)
+
+                const entradasExistentes: any[] = Array.isArray(existingFreq.dados?.entradas)
+                  ? [...existingFreq.dados.entradas]
+                  : (existingFreq.dados?.horaEntrada ? [{
+                      hora: existingFreq.dados.horaEntrada,
+                      dispositivo: existingFreq.dados.registradoPor || 'Catraca iDFace',
+                      data_hora: existingFreq.dados?.horaRegistro ? `${localDate}T${existingFreq.dados.horaRegistro}:00.000Z` : eventTime,
+                      tipo: 'primeira_entrada'
+                    }] : [])
+
+                entradasExistentes.push({
+                  hora: localTimeStr,
+                  dispositivo: dispositivoNome || 'Catraca iDFace',
+                  data_hora: eventTime,
+                  tipo: 'reentrada'
+                })
+
+                const { error: freqUpdErr } = await supabase.from('frequencias').update({
+                  presente: true,
+                  dados: {
+                    ...(existingFreq.dados || {}),
+                    entradas: entradasExistentes,
+                    ultimaEntrada: localTimeStr,
+                    totalEntradas: entradasExistentes.length,
+                    horaRegistro: localTimeStr,
+                  }
+                }).eq('id', freqId)
+
+                if (freqUpdErr) {
+                  console.error('[Portaria Integration Multiplas Entradas Error]', freqUpdErr)
+                } else {
+                  console.log(`✅ [Portaria Integration] Nova entrada (${localTimeStr}) registrada com sucesso para ${alunoNome} (Total: ${entradasExistentes.length})`)
+
+                  // Disparo de Push Notification para os Pais na Agenda Digital
+                  if (alunoId) {
+                    try {
+                      const { sendAgendaPushNotification } = await import('@/lib/server/agendaNotifications')
+                      const { getResponsavelIdsForTargets } = await import('@/lib/server/notificationHelper')
+                      const targetIds = await getResponsavelIdsForTargets({ targetStudents: [alunoId] })
+
+                      if (targetIds.length > 0) {
+                        const pushItemId = `reentrada_catraca_${alunoId}_${localDate}_${localTimeStr.replace(':', '')}`
+                        await sendAgendaPushNotification({
+                          type: 'frequencia',
+                          itemId: pushItemId,
+                          title: '🎓 Nova Entrada Confirmada',
+                          message: `Nova entrada de ${alunoNome} foi confirmada na portaria às ${localTimeStr} via ${dispositivoNome || 'Catraca'}.`,
+                          targetUserIds: targetIds,
+                          targetUrl: `/agenda-digital/${alunoId}/frequencia`,
+                          metadata: {
+                            aluno_id: String(alunoId),
+                            data: String(localDate),
+                            hora: localTimeStr,
+                            tipo: 'reentrada',
+                            dispositivo: dispositivoNome || 'Catraca'
+                          }
+                        })
+                        console.log(`✅ [Portaria Webhook] Push de Nova Entrada disparado para ${alunoNome} (${targetIds.length} destinatários)`)
+                      }
+                    } catch (e) {
+                      console.error('[Push Multiplas Entradas Dispatch Error]', e)
+                    }
+                  }
+                }
+              }
+            }
           } else {
-            // 3. Salvar registro de entrada (sem tempos de aula)
+            // 3. Salvar registro de PRIMEIRA entrada (sem tempos de aula)
             const row = {
               id: freqId,
               aluno_id: alunoId,
@@ -727,7 +809,17 @@ export async function POST(req: Request) {
                 anoLetivo: currentYear,
                 registradoPor: 'Catraca iDFace',
                 horaEntrada: localTimeStr,
-                horaRegistro: localTimeStr
+                horaRegistro: localTimeStr,
+                entradas: [
+                  {
+                    hora: localTimeStr,
+                    dispositivo: dispositivoNome || 'Catraca iDFace',
+                    data_hora: eventTime,
+                    tipo: 'primeira_entrada'
+                  }
+                ],
+                totalEntradas: 1,
+                ultimaEntrada: localTimeStr
               }
             }
 

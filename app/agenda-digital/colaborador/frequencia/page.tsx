@@ -430,6 +430,9 @@ export default function ColaboradorFrequenciaPage() {
           responsavelSaida = saidaCall.guardianName || saidaCall.responsavel
         }
 
+        const entradasArr = Array.isArray(freq?.dados?.entradas) ? freq.dados.entradas : []
+        const totalEntradas = entradasArr.length || freq?.dados?.totalEntradas || 1
+
         list.push({
           aluno,
           turma,
@@ -438,7 +441,8 @@ export default function ColaboradorFrequenciaPage() {
           registradoPor,
           isCatraca: !!catracaInfo || (registradoPor && (registradoPor.toLowerCase().includes('idface') || registradoPor.toLowerCase().includes('catraca'))),
           horaSaida,
-          responsavelSaida
+          responsavelSaida,
+          totalEntradas
         })
       })
     })
@@ -1371,7 +1375,9 @@ export default function ColaboradorFrequenciaPage() {
                                 lineHeight: 1.2
                               }}>
                                 <Clock size={12} strokeWidth={2.5} />
-                                {item.isCatraca ? `iDFace: ${item.horaEntrada.slice(0, 5)}h` : `Entrada: ${item.horaEntrada.slice(0, 5)}h`}
+                                {item.isCatraca 
+                                  ? `iDFace: ${item.horaEntrada.slice(0, 5)}h${item.totalEntradas && item.totalEntradas > 1 ? ` (${item.totalEntradas}x)` : ''}` 
+                                  : `Entrada: ${item.horaEntrada.slice(0, 5)}h`}
                               </span>
                             )}
 

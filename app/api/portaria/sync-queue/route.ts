@@ -92,6 +92,14 @@ export async function GET(req: NextRequest) {
       senha: (d.configuracao as any)?.password || 'Pass1081$'
     }))
 
+    const { data: configRow } = await supabase
+      .from('configuracoes')
+      .select('valor')
+      .eq('chave', 'portaria_config')
+      .maybeSingle()
+    const portariaConfig = configRow?.valor || {}
+    const permitir_multiplas_entradas = !!portariaConfig.permitir_multiplas_entradas
+
     if (!pendingRows || pendingRows.length === 0) {
       return NextResponse.json({
         pendentes: [],
@@ -99,29 +107,61 @@ export async function GET(req: NextRequest) {
         registrados_entrada_hoje,
         registrados_saida_hoje,
         dispositivos,
-        total: count || 0
+        total: count || 0,
+        permitir_multiplas_entradas,
+        config: {
+          permitir_multiplas_entradas
+        }
       })
     }
 
-    const alunoIds = Array.from(new Set(pendingRows.map(r => r.aluno_id)))
+    const rawAlunoIds = Array.from(new Set(pendingRows.map(r => String(r.aluno_id || '').trim())))
+    const alunoIds = rawAlunoIds.filter(id => id && id !== '0' && id !== 'null' && id !== 'undefined')
 
-    // Buscar dados dos alunos correspondentes às pendências (procurando por id ou matricula)
-    const filterParts = alunoIds.map(id => `id.eq.${id},matricula.eq.${id}`).join(',')
-    const { data: alunos, error: alunosErr } = await supabase
-      .from('alunos')
-      .select('id, nome, matricula, foto, status, dados')
-      .or(filterParts)
+    const alunosMap = new Map<string, any>()
 
-    if (alunosErr) throw alunosErr
+    if (alunoIds.length > 0) {
+      // Chunking em lotes de 80 para evitar erro de Header Overflow (UND_ERR_HEADERS_OVERFLOW)
+      const CHUNK_SIZE = 80
+      for (let i = 0; i < alunoIds.length; i += CHUNK_SIZE) {
+        const chunk = alunoIds.slice(i, i + CHUNK_SIZE)
+        
+        const uuidChunk = chunk.filter(id => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id))
+        const nonUuidChunk = chunk.filter(id => !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id))
 
-    const alunosMap = new Map()
-    for (const a of alunos || []) {
-      alunosMap.set(String(a.id), a)
-      if (a.matricula) alunosMap.set(String(a.matricula), a)
+        if (uuidChunk.length > 0) {
+          const { data: byId, error: errId } = await supabase
+            .from('alunos')
+            .select('id, nome, matricula, foto, status, dados')
+            .in('id', uuidChunk)
+          if (!errId && byId) {
+            for (const a of byId) {
+              alunosMap.set(String(a.id), a)
+              if (a.matricula) alunosMap.set(String(a.matricula), a)
+            }
+          }
+        }
+
+        if (nonUuidChunk.length > 0) {
+          const { data: byMatricula, error: errMat } = await supabase
+            .from('alunos')
+            .select('id, nome, matricula, foto, status, dados')
+            .in('matricula', nonUuidChunk)
+          if (!errMat && byMatricula) {
+            for (const a of byMatricula) {
+              alunosMap.set(String(a.id), a)
+              if (a.matricula) alunosMap.set(String(a.matricula), a)
+            }
+          }
+        }
+      }
     }
 
-    const result = pendingRows.map(row => {
-      const a = alunosMap.get(row.aluno_id)
+    const invalidIdsToClear: string[] = []
+    const validPendentes: any[] = []
+
+    for (const row of pendingRows) {
+      const a = alunosMap.get(String(row.aluno_id))
       const isActive = a ? ['matriculado', 'cursando', 'ativo', 'Cursando', 'Matriculado', 'Ativo'].includes(a.status) : false
       
       let acao = 'update'
@@ -129,25 +169,68 @@ export async function GET(req: NextRequest) {
         acao = 'delete'
       }
 
-      return {
+      // Resolução inteligente do numeric_id:
+      let numeric_id: number | null = null
+      if (a?.matricula) {
+        const parsed = parseInt(String(a.matricula).replace(/\D/g, ''), 10)
+        if (!isNaN(parsed) && parsed > 0) numeric_id = parsed
+      }
+      if (!numeric_id && a?.dados?.codigo) {
+        const parsed = parseInt(String(a.dados.codigo).replace(/\D/g, ''), 10)
+        if (!isNaN(parsed) && parsed > 0) numeric_id = parsed
+      }
+      if (!numeric_id) {
+        const parsed = parseInt(String(row.aluno_id).replace(/\D/g, ''), 10)
+        if (!isNaN(parsed) && parsed > 0) numeric_id = parsed
+      }
+
+      // Se for ID '0', nulo ou se for deleção sem ID numérico físico viável na catraca,
+      // agenda auto-resolução para não travar a fila de envio indefinidamente
+      if (!row.aluno_id || row.aluno_id === '0' || (!numeric_id && acao === 'delete')) {
+        invalidIdsToClear.push(String(row.aluno_id))
+        continue
+      }
+
+      validPendentes.push({
         id: row.aluno_id,
         aluno_id: row.aluno_id,
         dispositivo_id: row.dispositivo_id,
-        numeric_id: a ? (parseInt(String(a.matricula).replace(/\D/g, ''), 10) || null) : null,
-        nome: a?.nome || 'Aluno Removido',
-        matricula: a?.matricula || '',
+        numeric_id,
+        nome: a?.nome || (numeric_id ? `Aluno ${numeric_id}` : 'Aluno Removido'),
+        matricula: a?.matricula || (numeric_id ? String(numeric_id) : ''),
         foto: (a && isActive) ? a.foto : null,
-        acao
-      }
-    })
+        acao,
+        erro_detalhe: row.erro_detalhe || null
+      })
+    }
+
+    // Dá baixa automática imediata nos IDs inválidos/órfãos
+    if (invalidIdsToClear.length > 0) {
+      const uniqueInvalid = Array.from(new Set(invalidIdsToClear))
+      await supabase
+        .from('portaria_sync')
+        .update({
+          status: 'sincronizado',
+          erro_detalhe: 'Baixa automática: ID inexistente ou sem representação numérica na catraca',
+          updated_at: new Date().toISOString()
+        })
+        .in('aluno_id', uniqueInvalid)
+        .eq('status', 'pendente')
+    }
+
+    const realTotal = Math.max(0, (count ?? pendingRows.length) - invalidIdsToClear.length)
 
     return NextResponse.json({
-      pendentes: result,
+      pendentes: validPendentes,
       registrados_hoje,
       registrados_entrada_hoje,
       registrados_saida_hoje,
       dispositivos,
-      total: count ?? result.length
+      total: realTotal,
+      permitir_multiplas_entradas,
+      config: {
+        permitir_multiplas_entradas
+      }
     })
   } catch (err: any) {
     console.error('[Sync Queue GET Error]', err.message)
@@ -207,7 +290,7 @@ export async function POST(req: NextRequest) {
  * Força o re-enfileiramento de TODOS os alunos ativos para todos os leitores iDFace.
  */
 export async function PUT(req: NextRequest) {
-  const { user, errorResponse } = await requireAuth()
+  const { user, errorResponse } = await requireAuth(req)
   if (errorResponse) return errorResponse
 
   try {
@@ -271,7 +354,7 @@ export async function PUT(req: NextRequest) {
  * Enfileira a exclusão de TODOS os alunos inativos, cancelados ou removidos das catracas.
  */
 export async function DELETE(req: NextRequest) {
-  const { user, errorResponse } = await requireAuth()
+  const { user, errorResponse } = await requireAuth(req)
   if (errorResponse) return errorResponse
 
   try {
@@ -299,6 +382,8 @@ export async function DELETE(req: NextRequest) {
     for (const a of ativos || []) {
       if (a.id) activeIds.add(String(a.id))
       if (a.matricula) activeIds.add(String(a.matricula))
+      const numMat = parseInt(String(a.matricula || '').replace(/\D/g, ''), 10)
+      if (!isNaN(numMat) && numMat > 0) activeIds.add(String(numMat))
     }
 
     // 3. Buscar TODOS os alunos inativos no ERP
@@ -315,23 +400,35 @@ export async function DELETE(req: NextRequest) {
 
     // Adicionar inativos explícitos do ERP
     for (const i of inativos || []) {
-      if (i.id) targetStudentIds.add(String(i.id))
-      if (i.matricula) targetStudentIds.add(String(i.matricula))
-    }
-
-    // Adicionar IDs presentes no sync que não estão ativos no ERP
-    for (const s of syncRows || []) {
-      const idStr = String(s.aluno_id || '').trim()
-      if (idStr && !activeIds.has(idStr)) {
-        targetStudentIds.add(idStr)
+      if (i.matricula) {
+        const num = parseInt(String(i.matricula).replace(/\D/g, ''), 10)
+        if (!isNaN(num) && num > 0) targetStudentIds.add(String(num))
+      } else if (i.id) {
+        targetStudentIds.add(String(i.id))
       }
     }
 
-    // Adicionar IDs presentes nos eventos que não estão ativos no ERP
+    // Adicionar IDs presentes no sync que não estão ativos no ERP (apenas números válidos > 0)
+    for (const s of syncRows || []) {
+      const idStr = String(s.aluno_id || '').trim()
+      if (idStr && idStr !== '0' && idStr !== 'null' && idStr !== 'undefined' && !activeIds.has(idStr)) {
+        const num = parseInt(idStr.replace(/\D/g, ''), 10)
+        if (!isNaN(num) && num > 0) {
+          targetStudentIds.add(String(num))
+        }
+      }
+    }
+
+    // Adicionar IDs presentes nos eventos que não estão ativos no ERP (apenas números válidos > 0)
     for (const e of eventRows || []) {
-      const idStr = String(e.user_id_equipamento || e.aluno_id || '').trim()
-      if (idStr && !activeIds.has(idStr)) {
-        targetStudentIds.add(idStr)
+      const raw = e.user_id_equipamento || e.aluno_id
+      if (!raw || raw === '0' || raw === 0) continue
+      const idStr = String(raw).trim()
+      if (idStr && idStr !== '0' && idStr !== 'null' && idStr !== 'undefined' && !activeIds.has(idStr)) {
+        const num = parseInt(idStr.replace(/\D/g, ''), 10)
+        if (!isNaN(num) && num > 0) {
+          targetStudentIds.add(String(num))
+        }
       }
     }
 

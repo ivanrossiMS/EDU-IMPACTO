@@ -71,6 +71,22 @@ def log_print(*args, **kwargs):
     except Exception:
         pass
 
+def safe_status_write(text):
+    """Escrita segura de status na mesma linha do console, imune a erros de codepage."""
+    if sys.stdout is not None:
+        try:
+            sys.stdout.write(text)
+            sys.stdout.flush()
+        except (UnicodeEncodeError, OSError):
+            try:
+                enc = getattr(sys.stdout, "encoding", None) or "ascii"
+                sys.stdout.write(text.encode(enc, errors="replace").decode(enc, errors="replace"))
+                sys.stdout.flush()
+            except Exception:
+                pass
+        except Exception:
+            pass
+
 print = log_print
 
 # ══════════════════════════════════════════════════════════════
@@ -102,68 +118,17 @@ SSL_CTX.check_hostname = False
 SSL_CTX.verify_mode = ssl.CERT_NONE
 
 STATE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "catraca_state.json")
-LOCK_SOCKET = None
-
-def encerrar_outras_instancias():
-    """Finaliza instâncias zumbis anteriores do Sincronizar_Catraca para eliminar duplicações."""
-    meu_pid = os.getpid()
+def garantir_instancia_unica():
+    """
+    Garante que processos zumbis em segundo plano (pythonw.exe) não fiquem presos em paralelo.
+    Nunca encerra o launcher (python.exe), não utiliza PowerShell e nunca aborta a execução.
+    """
     if sys.platform == "win32":
         try:
-            # 1. Finaliza processos em segundo plano (pythonw.exe) instantaneamente
+            # Encerra apenas instâncias ocultas sem console (pythonw.exe), liberando as catracas para esta janela
             subprocess.run(["taskkill", "/F", "/IM", "pythonw.exe"], capture_output=True)
         except Exception:
             pass
-        try:
-            # 2. Finaliza outros processos python que rodem este script (exceto o processo atual)
-            ps_cmd = (
-                f"$currentPid = {meu_pid}; "
-                f"Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | "
-                f"Where-Object {{ ($_.Name -like 'python*') -and ($_.ProcessId -ne $currentPid) -and ($_.CommandLine -like '*Sincronizar_Catraca*') }} | "
-                f"ForEach-Object {{ Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }}"
-            )
-            subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_cmd],
-                           capture_output=True, timeout=5)
-        except Exception:
-            pass
-    else:
-        try:
-            cmd = f"pgrep -f Sincronizar_Catraca | grep -v {meu_pid} | xargs kill -9 2>/dev/null"
-            subprocess.run(cmd, shell=True, capture_output=True)
-        except Exception:
-            pass
-
-def adquirir_lock_instancia_unica():
-    """
-    Garante que apenas UMA instância do script rode na máquina ao mesmo tempo.
-    Utiliza bind de porta local (127.0.0.1:49152) no kernel do SO:
-    • 100% à prova de falhas de permissão no Windows (sem bloqueio de arquivos em disco)
-    • Liberação instantânea e automática pelo SO assim que o processo encerra
-    """
-    global LOCK_SOCKET
-    import socket
-    encerrar_outras_instancias()
-    time.sleep(0.3)
-    try:
-        LOCK_SOCKET = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        LOCK_SOCKET.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        LOCK_SOCKET.bind(('127.0.0.1', 49152))
-        return True
-    except socket.error:
-        print("\n  ⚠️ Outra instância ativa detectada na porta 49152. Assumindo controle nesta janela...")
-        encerrar_outras_instancias()
-        time.sleep(0.5)
-        try:
-            LOCK_SOCKET = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            LOCK_SOCKET.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            LOCK_SOCKET.bind(('127.0.0.1', 49152))
-            return True
-        except Exception:
-            print("  ℹ️ Executando com monitoramento ativo nesta janela.")
-            return True
-    except Exception as ex:
-        # Em caso de qualquer outra restrição de ambiente, não aborta a sincronização
-        print(f"  ℹ️ Aviso na verificação de instância: {ex}. Prosseguindo normalmente...")
-        return True
 
 
 # Pool de sessões em memória para reaproveitamento (evita login toda hora)
@@ -173,29 +138,41 @@ POOL_LOCK = threading.Lock()
 
 # Cache de presenças do dia para evitar repetição e classificar saídas
 hoje_iso_global = date.today().strftime('%Y_%m_%d')
-CACHE_ENTRADA_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), f"sincronizados_entrada_{hoje_iso_global}.txt")
-CACHE_SAIDA_FILE   = os.path.join(os.path.dirname(os.path.abspath(__file__)), f"sincronizados_saida_{hoje_iso_global}.txt")
+CACHE_ENTRADA_FILE      = os.path.join(os.path.dirname(os.path.abspath(__file__)), f"sincronizados_entrada_{hoje_iso_global}.txt")
+CACHE_ENTRADA_LOGS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), f"sincronizados_entrada_logs_{hoje_iso_global}.txt")
+CACHE_SAIDA_FILE        = os.path.join(os.path.dirname(os.path.abspath(__file__)), f"sincronizados_saida_{hoje_iso_global}.txt")
 
-MEM_ENTRADAS_HOJE = set()
-MEM_SAIDAS_HOJE   = set()
-CACHE_LOCK        = threading.Lock()
+MEM_ENTRADAS_HOJE      = set()
+MEM_ENTRADAS_LOGS_HOJE = set()
+MEM_SAIDAS_HOJE        = set()
+ULTIMA_ENTRADA_ALUNO   = {}
+CONFIG_MULTIPLAS_ENTRADAS = False
+CACHE_LOCK             = threading.Lock()
 
 
 def carregar_caches_locais():
-    global hoje_iso_global, CACHE_ENTRADA_FILE, CACHE_SAIDA_FILE
+    global hoje_iso_global, CACHE_ENTRADA_FILE, CACHE_ENTRADA_LOGS_FILE, CACHE_SAIDA_FILE
     hoje_iso = date.today().strftime('%Y_%m_%d')
     if hoje_iso != hoje_iso_global:
         hoje_iso_global = hoje_iso
-        CACHE_ENTRADA_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), f"sincronizados_entrada_{hoje_iso}.txt")
-        CACHE_SAIDA_FILE   = os.path.join(os.path.dirname(os.path.abspath(__file__)), f"sincronizados_saida_{hoje_iso}.txt")
+        CACHE_ENTRADA_FILE      = os.path.join(os.path.dirname(os.path.abspath(__file__)), f"sincronizados_entrada_{hoje_iso}.txt")
+        CACHE_ENTRADA_LOGS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), f"sincronizados_entrada_logs_{hoje_iso}.txt")
+        CACHE_SAIDA_FILE        = os.path.join(os.path.dirname(os.path.abspath(__file__)), f"sincronizados_saida_{hoje_iso}.txt")
         with CACHE_LOCK:
             MEM_ENTRADAS_HOJE.clear()
+            MEM_ENTRADAS_LOGS_HOJE.clear()
             MEM_SAIDAS_HOJE.clear()
+            ULTIMA_ENTRADA_ALUNO.clear()
 
     legacy_cache_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), f"sincronizados_{hoje_iso}.txt")
 
     with CACHE_LOCK:
-        for cf, target_set in [(CACHE_ENTRADA_FILE, MEM_ENTRADAS_HOJE), (CACHE_SAIDA_FILE, MEM_SAIDAS_HOJE), (legacy_cache_file, MEM_ENTRADAS_HOJE)]:
+        for cf, target_set in [
+            (CACHE_ENTRADA_FILE, MEM_ENTRADAS_HOJE),
+            (CACHE_ENTRADA_LOGS_FILE, MEM_ENTRADAS_LOGS_HOJE),
+            (CACHE_SAIDA_FILE, MEM_SAIDAS_HOJE),
+            (legacy_cache_file, MEM_ENTRADAS_HOJE)
+        ]:
             if os.path.exists(cf):
                 try:
                     with open(cf, "r", encoding="utf-8") as f:
@@ -213,6 +190,16 @@ def registrar_cache_entrada(uid):
         try:
             with open(CACHE_ENTRADA_FILE, "a", encoding="utf-8") as f:
                 f.write(str(uid) + "\n")
+        except Exception:
+            pass
+
+
+def registrar_cache_entrada_log(log_id):
+    with CACHE_LOCK:
+        MEM_ENTRADAS_LOGS_HOJE.add(str(log_id))
+        try:
+            with open(CACHE_ENTRADA_LOGS_FILE, "a", encoding="utf-8") as f:
+                f.write(str(log_id) + "\n")
         except Exception:
             pass
 
@@ -376,20 +363,20 @@ def configurar_monitor(cat):
 
 def inicializar_hardware_catracas(catracas):
     """Executado uma vez na inicialização para calibrar relógio e configurar monitor."""
-    print("  ⚙️  Calibrando relógios e parâmetros de monitoramento nas catracas…")
+    print("  [CONFIG] Calibrando relógios e parâmetros de monitoramento nas catracas...")
     for cat in catracas:
         nome = cat["nome"]
         ip = cat["ip"]
         url, session = obter_sessao_ativa(cat)
         if not url:
-            print(f"     ⚠️  {nome} ({ip}): Não foi possível autenticar neste momento.")
+            print(f"     [AVISO] {nome} ({ip}): Não foi possível autenticar neste momento.")
             continue
 
         relogio_ok = sincronizar_relogio_catraca(cat)
         monitor_ok = configurar_monitor(cat)
         status_rel = "Relógio OK" if relogio_ok else "Relógio falhou"
         status_mon = "Monitor OK" if monitor_ok else "Monitor sem suporte"
-        print(f"     ✅ {nome} ({ip}): Conectado via {url[:5]}! [{status_rel} | {status_mon}]")
+        print(f"     [OK] {nome} ({ip}): Conectado via {url[:5]}! [{status_rel} | {status_mon}]")
 
 
 # ══════════════════════════════════════════════════════════════
@@ -453,7 +440,7 @@ def buscar_novos_logs_catraca(cat, last_log_id):
         # Se não retornou nada, checar se o cursor não está à frente do ID máximo do equipamento
         max_id_real = obter_id_maximo_catraca(cat)
         if max_id_real > 0 and last_log_id > max_id_real:
-            print(f"  🔄 [Auto-Fix {cat['nome']}] Cursor salvo ({last_log_id}) > ID real da catraca ({max_id_real}). Sincronizando registros recentes!")
+            print(f"  [AUTO-FIX] [{cat['nome']}] Cursor salvo ({last_log_id}) > ID real da catraca ({max_id_real}). Sincronizando registros recentes!")
             cursor_corrigido = max(0, max_id_real - 30)
             try:
                 r_fix = call_catraca_fcgi(cat, "load_objects.fcgi", {
@@ -570,6 +557,7 @@ def enviar_para_webhook(log_entry, cat, tipo_override=None):
 #  CONSULTA AO ERP E FILA DE PENDÊNCIAS (BACKGROUND WORKER)
 # ══════════════════════════════════════════════════════════════
 def carregar_registrados_do_erp():
+    global CONFIG_MULTIPLAS_ENTRADAS
     url_queue = f"{NETLIFY_URL}/api/portaria/sync-queue"
     try:
         req = urllib.request.Request(url_queue, method="GET")
@@ -580,6 +568,11 @@ def carregar_registrados_do_erp():
             reg_entrada = set(str(x) for x in data.get("registrados_entrada_hoje", data.get("registrados_hoje", [])) if x)
             reg_saida   = set(str(x) for x in data.get("registrados_saida_hoje", []) if x)
             dispositivos = data.get("dispositivos", [])
+            multiplas_cfg = bool(data.get("permitir_multiplas_entradas") or (data.get("config") or {}).get("permitir_multiplas_entradas"))
+            if multiplas_cfg != CONFIG_MULTIPLAS_ENTRADAS:
+                CONFIG_MULTIPLAS_ENTRADAS = multiplas_cfg
+                status_txt = "ATIVADO (Registrando TODAS as entradas/reentradas)" if multiplas_cfg else "DESATIVADO (Apenas 1ª entrada do dia)"
+                print(f"  [CONFIG ERP] Modo de Multiplas Entradas: {status_txt}")
             return reg_entrada, reg_saida, dispositivos
     except Exception as e:
         return set(), set(), []
@@ -599,7 +592,7 @@ def processar_fila_pendencias_erp():
         if not pendentes:
             return
 
-        print(f"\n  📥 [Background Worker] {len(pendentes)} alteração(ões) de alunos encontrada(s) no ERP.")
+        print(f"\n  [ERP] [Background Worker] {len(pendentes)} alteração(ões) de alunos encontrada(s) no ERP.")
 
         for p in pendentes:
             aluno_id   = p.get("aluno_id")
@@ -610,7 +603,15 @@ def processar_fila_pendencias_erp():
             foto       = p.get("foto")
             acao       = p.get("acao", "update")
 
-            if not numeric_id:
+            if not numeric_id or int(numeric_id) <= 0:
+                # Se não há ID numérico viável para a catraca física, dá baixa para não travar a fila
+                post_json(url_queue, {
+                    "aluno_id": aluno_id,
+                    "dispositivo_id": disp_id,
+                    "status": "sincronizado",
+                    "erro_detalhe": "Baixa automática: ID numérico inexistente para catraca física",
+                    "foto_enviada": False
+                }, timeout=4)
                 continue
 
             alvos = CATRACAS
@@ -628,8 +629,18 @@ def processar_fila_pendencias_erp():
                 dev_ip   = cat["ip"]
                 try:
                     if acao == "delete":
-                        call_catraca_fcgi(cat, "destroy_objects.fcgi", {"object": "users", "where": {"users": {"id": numeric_id}}})
-                        print(f"     🗑️  [{cat_nome}] Aluno '{nome}' (ID {numeric_id}) removido.")
+                        try:
+                            call_catraca_fcgi(cat, "destroy_objects.fcgi", {"object": "users", "where": {"users": {"id": numeric_id}}})
+                            print(f"     [REMOVE] [{cat_nome}] Aluno '{nome}' (ID {numeric_id}) removido.")
+                        except Exception as rem_ex:
+                            print(f"     [REMOVE] [{cat_nome}] Aluno '{nome}' (ID {numeric_id}) já removido ou inexistente ({rem_ex}).")
+                        
+                        post_json(url_queue, {
+                            "aluno_id": aluno_id,
+                            "dispositivo_id": disp_id or dev_ip,
+                            "status": "sincronizado",
+                            "foto_enviada": False
+                        }, timeout=4)
                     else:
                         try:
                             call_catraca_fcgi(cat, "create_objects.fcgi", {
@@ -646,7 +657,7 @@ def processar_fila_pendencias_erp():
                             except Exception:
                                 pass
 
-                        print(f"     👤 [{cat_nome}] Aluno '{nome}' sincronizado.")
+                        print(f"     [ALUNO] [{cat_nome}] Aluno '{nome}' sincronizado.")
 
                         foto_enviada = False
                         if foto and isinstance(foto, str) and len(foto) > 50:
@@ -665,16 +676,16 @@ def processar_fila_pendencias_erp():
                                     with urllib.request.urlopen(req, timeout=8, context=ctx) as r:
                                         pass
                                     foto_enviada = True
-                                    print(f"     📸 [{cat_nome}] Foto de '{nome}' transmitida.")
+                                    print(f"     [FOTO] [{cat_nome}] Foto de '{nome}' transmitida.")
                             except Exception:
                                 pass
 
-                    post_json(url_queue, {
-                        "aluno_id": aluno_id,
-                        "dispositivo_id": disp_id or dev_ip,
-                        "status": "sincronizado",
-                        "foto_enviada": foto_enviada if acao != "delete" else False
-                    }, timeout=4)
+                        post_json(url_queue, {
+                            "aluno_id": aluno_id,
+                            "dispositivo_id": disp_id or dev_ip,
+                            "status": "sincronizado",
+                            "foto_enviada": foto_enviada
+                        }, timeout=4)
                 except Exception as ex:
                     post_json(url_queue, {
                         "aluno_id": aluno_id,
@@ -687,19 +698,19 @@ def processar_fila_pendencias_erp():
 
 
 def thread_background_erp():
-    """Executa a checagem de filas do ERP e atualização de cache a cada 45 segundos."""
+    """Executa a checagem de filas do ERP e atualizacao de cache a cada 20 segundos."""
     while True:
         try:
             # 1. Processar fila de cadastros e fotos do ERP
             processar_fila_pendencias_erp()
-            # 2. Atualizar cache de presenças confirmadas no ERP
+            # 2. Atualizar cache de presencas confirmadas e modo operacional no ERP
             reg_ent, reg_sai, _ = carregar_registrados_do_erp()
             if reg_ent:
                 with CACHE_LOCK:
                     MEM_ENTRADAS_HOJE.update(reg_ent)
         except Exception:
             pass
-        time.sleep(45)
+        time.sleep(20)
 
 
 # ══════════════════════════════════════════════════════════════
@@ -750,7 +761,9 @@ def processar_eventos_detectados(eventos_por_catraca, estado):
 
         with CACHE_LOCK:
             entradas_atuais = set(MEM_ENTRADAS_HOJE)
+            entradas_logs_atuais = set(MEM_ENTRADAS_LOGS_HOJE)
             saidas_enviadas = set(MEM_SAIDAS_HOJE)
+            multiplas_entradas = CONFIG_MULTIPLAS_ENTRADAS
 
         logs_entrada = []
         logs_saida   = []
@@ -794,20 +807,34 @@ def processar_eventos_detectados(eventos_por_catraca, estado):
                 res = enviar_para_webhook(log, cat, tipo_override="saida")
                 latencia = time.time() - t_inicio
                 registrar_cache_saida(lid)
-                print(f"\n  ══════════════════════════════════════════════════════")
-                print(f"  🚪 [SAÍDA CONFIRMADA] {nome_disp}")
+                print(f"\n  ==============================================================")
+                print(f"  [SAIDA CONFIRMADA] {nome_disp}")
                 print(f"     Aluno ID: {uid:<6} | Hora: {hora} | Log #{lid}")
-                print(f"     ⚡ Notificação & ERP sincronizados em {latencia:.2f}s!")
-                print(f"  ══════════════════════════════════════════════════════")
+                print(f"     [SYNC] Notificacao & ERP sincronizados em {latencia:.2f}s!")
+                print(f"  ==============================================================")
             except Exception as e:
-                print(f"  ❌ Erro ao enviar SAÍDA do aluno {uid}: {e}")
+                print(f"  [ERRO] Erro ao enviar SAIDA do aluno {uid}: {e}")
 
         # ── PROCESSAR ENTRADAS ──
         for log in logs_entrada:
             uid = str(log.get("user_id", "?"))
             lid = str(log.get("id", ""))
-            if uid in entradas_atuais:
-                continue
+
+            if not multiplas_entradas:
+                # MODO 1: APENAS PRIMEIRA ENTRADA (Padrão atual - deduplica por uid do aluno)
+                if uid in entradas_atuais:
+                    continue
+            else:
+                # MODO 2: TODAS AS ENTRADAS ATIVAS (Deduplica por lid do log)
+                if lid in entradas_logs_atuais:
+                    continue
+
+                # Proteção anti-duplicação/anti-flap: não reenviar se o mesmo aluno passou há menos de 120 segundos
+                agora_ts = time.time()
+                ultimo_ts = ULTIMA_ENTRADA_ALUNO.get(uid, 0)
+                if ultimo_ts > 0 and (agora_ts - ultimo_ts) < 120:
+                    registrar_cache_entrada_log(lid)
+                    continue
 
             t_inicio = time.time()
             hora = formatar_hora(log.get("time", 0))
@@ -815,13 +842,17 @@ def processar_eventos_detectados(eventos_por_catraca, estado):
                 res = enviar_para_webhook(log, cat, tipo_override="entrada")
                 latencia = time.time() - t_inicio
                 registrar_cache_entrada(uid)
-                print(f"\n  ══════════════════════════════════════════════════════")
-                print(f"  🎓 [ENTRADA CONFIRMADA] {cat['nome']}")
+                registrar_cache_entrada_log(lid)
+                ULTIMA_ENTRADA_ALUNO[uid] = time.time()
+                is_reentrada = multiplas_entradas and (uid in entradas_atuais)
+                tag_tipo = "REENTRADA CONFIRMADA" if is_reentrada else "ENTRADA CONFIRMADA"
+                print(f"\n  ==============================================================")
+                print(f"  [{tag_tipo}] {cat['nome']}")
                 print(f"     Aluno ID: {uid:<6} | Hora: {hora} | Log #{lid}")
-                print(f"     ⚡ Presença registrada no ERP em {latencia:.2f}s!")
-                print(f"  ══════════════════════════════════════════════════════")
+                print(f"     [SYNC] Presenca registrada no ERP em {latencia:.2f}s!")
+                print(f"  ==============================================================")
             except Exception as e:
-                print(f"  ❌ Erro ao enviar ENTRADA do aluno {uid}: {e}")
+                print(f"  [ERRO] Erro ao enviar ENTRADA do aluno {uid}: {e}")
 
     if estado_alterado:
         salvar_estado_catracas(estado)
@@ -832,7 +863,7 @@ def processar_eventos_detectados(eventos_por_catraca, estado):
 # ══════════════════════════════════════════════════════════════
 def instalar_no_windows():
     if sys.platform != "win32":
-        print("❌ Instalação exclusiva para Windows.")
+        print("[ERRO] Instalacao exclusiva para Windows.")
         sys.exit(1)
     try:
         startup_folder = os.path.join(os.environ["APPDATA"], "Microsoft", "Windows", "Start Menu", "Programs", "Startup")
@@ -844,7 +875,7 @@ def instalar_no_windows():
         if not os.path.exists(pythonw_exe):
             pythonw_exe = python_exe
 
-        print(f"🔧 Configurando inicialização de alta performance no Windows...")
+        print(f"[SETUP] Configurando inicializacao de alta performance no Windows...")
         ps_cmd = (
             f"$s = (New-Object -ComObject WScript.Shell).CreateShortcut('{shortcut_path}'); "
             f"$s.TargetPath = '{pythonw_exe}'; "
@@ -854,28 +885,28 @@ def instalar_no_windows():
             f"$s.Save()"
         )
         subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_cmd], check=True)
-        print("✅ Inicialização automática configurada com intervalo de 2s!")
+        print("[OK] Inicializacao automatica configurada com intervalo de 2s!")
         subprocess.Popen([pythonw_exe, script_path, "--intervalo=2"], cwd=script_dir)
-        print("🚀 Processo em segundo plano ativo!")
+        print("[START] Processo em segundo plano ativo!")
     except Exception as e:
-        print(f"❌ Erro ao instalar: {e}")
+        print(f"[ERRO] Erro ao instalar: {e}")
         sys.exit(1)
 
 
 def desinstalar_no_windows():
     if sys.platform != "win32":
-        print("❌ Exclusivo para Windows.")
+        print("[ERRO] Exclusivo para Windows.")
         sys.exit(1)
     try:
         startup_folder = os.path.join(os.environ["APPDATA"], "Microsoft", "Windows", "Start Menu", "Programs", "Startup")
         shortcut_path = os.path.join(startup_folder, "Sincronizacao_Catraca.lnk")
         if os.path.exists(shortcut_path):
             os.remove(shortcut_path)
-            print("✅ Atalho de inicialização removido com sucesso!")
+            print("[OK] Atalho de inicializacao removido com sucesso!")
         else:
-            print("ℹ️ Nenhum atalho encontrado.")
+            print("[INFO] Nenhum atalho encontrado.")
     except Exception as e:
-        print(f"❌ Erro: {e}")
+        print(f"[ERRO] Erro: {e}")
 
 
 # ══════════════════════════════════════════════════════════════
@@ -890,7 +921,7 @@ def main():
         sys.exit(0)
 
     loop_mode = "--once" not in sys.argv
-    intervalo = 2  # PADRÃO ULTRA RÁPIDO: 2 segundos
+    intervalo = 2  # PADRAO ULTRA RAPIDO: 2 segundos
 
     for arg in sys.argv:
         if arg.startswith("--intervalo="):
@@ -906,37 +937,39 @@ def main():
 
     hoje_str = date.today().strftime("%d/%m/%Y")
     print()
-    print("  ══════════════════════════════════════════════════════════════")
-    print("   ⚡ CONTROL ID ULTRA-SYNC DAEMON (LATÊNCIA < 2 SEGUNDOS)")
+    print("  ==============================================================")
+    print("   [SISTEMA] CONTROL ID ULTRA-SYNC DAEMON (LATENCIA < 2s)")
     print(f"   Data: {hoje_str} | Servidor: {NETLIFY_URL}")
     print(f"   Polling Paralelo Ativo: {intervalo}s entre varreduras")
-    print("  ══════════════════════════════════════════════════════════════")
+    print("  ==============================================================")
 
-    # 0. Garantir processo ÚNICO e assumir controle eliminando instâncias anteriores
-    adquirir_lock_instancia_unica()
+    # 0. Garantir processo unico e assumir controle eliminando instancias anteriores
+    garantir_instancia_unica()
 
     # 1. Carregar caches locais do dia
     carregar_caches_locais()
-    print(f"  📂 Cache local: {len(MEM_ENTRADAS_HOJE)} entrada(s) / {len(MEM_SAIDAS_HOJE)} saída(s) carregadas.")
+    print(f"  [Cache local]: {len(MEM_ENTRADAS_HOJE)} aluno(s) com entrada / {len(MEM_ENTRADAS_LOGS_HOJE)} log(s) de entrada / {len(MEM_SAIDAS_HOJE)} saida(s) carregadas.")
 
-    # 2. Inicializar sessões e parâmetros de hardware
+    # 2. Inicializar sessoes e parametros de hardware
     inicializar_hardware_catracas(CATRACAS)
 
-    # 3. Consulta inicial ao ERP para atualizar entradas do dia
-    print("  🌐 Consultando dados iniciais no ERP...")
+    # 3. Consulta inicial ao ERP para atualizar entradas do dia e configuracoes
+    print("  [ERP] Consultando dados iniciais no ERP...")
     reg_ent, reg_sai, disp_erp = carregar_registrados_do_erp()
     if reg_ent:
         with CACHE_LOCK:
             MEM_ENTRADAS_HOJE.update(reg_ent)
-        print(f"     ✅ {len(MEM_ENTRADAS_HOJE)} aluno(s) com entrada confirmada hoje no ERP.")
+        print(f"     [OK] {len(MEM_ENTRADAS_HOJE)} aluno(s) com entrada confirmada hoje no ERP.")
+    status_modo = "ATIVADO (Registrando TODAS as entradas/reentradas)" if CONFIG_MULTIPLAS_ENTRADAS else "DESATIVADO (Apenas 1ª entrada do dia)"
+    print(f"     [CONFIG] Modo de Multiplas Entradas: {status_modo}")
 
     # 4. Iniciar Background Worker para fila de cadastros e fotos do ERP
     bg_thread = threading.Thread(target=thread_background_erp, daemon=True)
     bg_thread.start()
-    print("  🚀 Background Worker ativo (fila de fotos/cadastros desacoplada).")
+    print("  [WORKER] Background Worker ativo (fila de fotos/cadastros desacoplada).")
 
     estado = carregar_estado_catracas()
-    print("  ⚙️  Verificando integridade dos cursores das catracas...")
+    print("  [STATUS] Verificando integridade dos cursores das catracas...")
     estado_corrigido = False
     for cat in CATRACAS:
         ck = cat.get("id") or cat["ip"]
@@ -944,26 +977,26 @@ def main():
         max_real = obter_id_maximo_catraca(cat)
         if max_real > 0 and cur > max_real:
             novo_cur = max(0, max_real - 30)
-            print(f"     🔄 {cat['nome']} ({cat['ip']}): Cursor corrigido ({cur} ➔ {novo_cur}) [Max da catraca: #{max_real}]")
+            print(f"     [CURSOR] {cat['nome']} ({cat['ip']}): Cursor corrigido ({cur} -> {novo_cur}) [Max da catraca: #{max_real}]")
             estado[ck] = novo_cur
             estado_corrigido = True
         elif max_real > 0 and cur == 0:
             novo_cur = max(0, max_real - 30)
-            print(f"     📡 {cat['nome']} ({cat['ip']}): Cursor inicializado -> Log #{novo_cur} (Max: #{max_real})")
+            print(f"     [CONEXAO] {cat['nome']} ({cat['ip']}): Cursor inicializado -> Log #{novo_cur} (Max: #{max_real})")
             estado[ck] = novo_cur
             estado_corrigido = True
         else:
-            # Em cada inicialização, recua até 30 registros para garantir que nenhuma passagem seja perdida durante reinicializações
+            # Em cada inicializacao, recua ate 30 registros para garantir que nenhuma passagem seja perdida durante reinicializacoes
             novo_cur = max(0, min(cur, max_real - 30))
             if novo_cur < cur:
-                print(f"     📡 {cat['nome']} ({cat['ip']}): Sincronizando registros recentes -> Log #{novo_cur} (Max: #{max_real})")
+                print(f"     [SINCRONIA] {cat['nome']} ({cat['ip']}): Sincronizando registros recentes -> Log #{novo_cur} (Max: #{max_real})")
                 estado[ck] = novo_cur
                 estado_corrigido = True
             else:
-                print(f"     📡 {cat['nome']} ({cat['ip']}): Cursor ativo -> Log #{cur} (Max da catraca: #{max_real})")
+                print(f"     [OK] {cat['nome']} ({cat['ip']}): Cursor ativo -> Log #{cur} (Max da catraca: #{max_real})")
     if estado_corrigido:
         salvar_estado_catracas(estado)
-    print(f"\n  👀 Monitorando as 4 catracas em tempo real. Pressione Ctrl+C para parar.\n")
+    print(f"\n  [MONITOR] Monitorando as catracas em tempo real. Pressione Ctrl+C para parar.\n")
 
     contador_ciclos = 0
     t_ultimo_status = 0
@@ -977,19 +1010,14 @@ def main():
                 processar_eventos_detectados(eventos, estado)
             else:
                 agora = time.time()
-                # Imprime batimento cardíaco suave a cada 30 segundos se não houver passagens
+                # Imprime batimento cardiaco suave a cada 30 segundos se nao houver passagens
                 if agora - t_ultimo_status > 30:
                     t_ultimo_status = agora
                     hora_agora = datetime.now().strftime("%H:%M:%S")
-                    if sys.stdout is not None:
-                        try:
-                            sys.stdout.write(f"\r  ⚡ [{hora_agora}] Catracas online | Monitoramento ativo a cada {intervalo}s...")
-                            sys.stdout.flush()
-                        except Exception:
-                            pass
+                    safe_status_write(f"\r  [ONLINE] [{hora_agora}] Catracas online | Monitorando a cada {intervalo}s...")
 
         except Exception as e:
-            print(f"\n  ⚠️ Alerta no ciclo: {e}")
+            print(f"\n  [AVISO] Alerta no ciclo: {e}")
 
         if not loop_mode:
             break
@@ -1004,11 +1032,11 @@ if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        print("\n  🛑 Monitoramento encerrado pelo usuário.")
+        print("\n  [PARADO] Monitoramento encerrado pelo usuario.")
     except Exception as e:
         import traceback
         err_str = traceback.format_exc()
-        print(f"\n❌ ERRO FATAL: {e}")
+        print(f"\n[ERRO FATAL] {e}")
         print(err_str)
         try:
             with open("catraca_crash.log", "a", encoding="utf-8") as f:

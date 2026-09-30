@@ -4,8 +4,8 @@ import { useState, useEffect } from 'react'
 import { useApiQuery } from '@/hooks/useApi'
 import {
   Settings, Save, RefreshCw, CheckCircle, XCircle, Clock, Shield, Users,
-  Camera, Activity, Lock, Key, CalendarRange, ShieldAlert, Check, Trash2,
-  Eye, Search, X, User
+  Camera, Activity, Lock, Key, ShieldAlert, Check, Trash2,
+  Eye, Search, X, User, LogIn, CheckCircle2, ArrowRightLeft, Sparkles
 } from 'lucide-react'
 import { SyncAcessosModal } from '@/components/portaria/SyncAcessosModal'
 
@@ -15,24 +15,20 @@ interface PortariaConfig {
   sync_automatica_novos_alunos: boolean
   remover_inativos_automaticamente: boolean
   reenviar_foto_ao_atualizar: boolean
-  modo_somente_entrada: boolean
+  permitir_multiplas_entradas?: boolean
   intervalo_sync_minutos: number
   fallback_matricula_como_codigo: boolean
   token_seguranca_webhook: string
-  horario_entrada_inicio: string
-  horario_entrada_fim: string
 }
 
 const DEFAULT_CONFIG: PortariaConfig = {
   sync_automatica_novos_alunos: true,
   remover_inativos_automaticamente: true,
   reenviar_foto_ao_atualizar: true,
-  modo_somente_entrada: true,
+  permitir_multiplas_entradas: false,
   intervalo_sync_minutos: 30,
   fallback_matricula_como_codigo: true,
   token_seguranca_webhook: '',
-  horario_entrada_inicio: '06:00',
-  horario_entrada_fim: '22:00',
 }
 
 export default function PortariaConfigPage() {
@@ -192,6 +188,32 @@ export default function PortariaConfigPage() {
     }
     setSaving(false)
     setTimeout(() => setToast(null), 4000)
+  }
+
+  const handleToggleMultiplasEntradas = async (enable: boolean) => {
+    const updatedConfig = { ...config, permitir_multiplas_entradas: enable }
+    setConfig(updatedConfig)
+    setSaving(true)
+    try {
+      const res = await fetch('/api/configuracoes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chave: 'portaria_config', valor: updatedConfig }),
+      })
+      if (!res.ok) throw new Error('Erro ao salvar configuração no servidor')
+      setToast({
+        msg: enable
+          ? '⚡ Modo Ativado: O sistema agora registrará TODAS as entradas dos alunos nas catracas!'
+          : '🔒 Modo Restaurado: O sistema registrará apenas a 1ª entrada do dia (outras serão ignoradas).',
+        type: 'success'
+      })
+    } catch (err: any) {
+      setToast({ msg: err.message || 'Erro ao atualizar configuração', type: 'error' })
+      setConfig(config)
+    } finally {
+      setSaving(false)
+      setTimeout(() => setToast(null), 4500)
+    }
   }
 
   const handleRequestSyncPhotos = async () => {
@@ -412,13 +434,152 @@ export default function PortariaConfigPage() {
             <div>
               <div style={{ fontSize: 11, fontWeight: 800, color: 'hsl(var(--text-muted))', textTransform: 'uppercase', marginBottom: 12, letterSpacing: 1 }}>⚙️ Modo Operacional da Catraca</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                <Toggle
-                  value={config.modo_somente_entrada}
-                  onChange={v => setConfig({ ...config, modo_somente_entrada: v })}
-                  label="Modo portaria de entrada dedicada"
-                  desc="Bloqueia registros e contadores de saídas neste dispositivo, focando estritamente na entrada"
-                  icon={<CheckCircle size={18} />}
-                />
+                {/* Bloco Destaque: Registro de Entradas (Apenas 1ª vs Múltiplas) */}
+                <div style={{
+                  background: config.permitir_multiplas_entradas ? 'rgba(6,182,212,0.04)' : 'hsl(var(--bg-base))',
+                  border: config.permitir_multiplas_entradas ? `1.5px solid ${ACCENT}` : '1px solid hsl(var(--border-subtle))',
+                  borderRadius: 18,
+                  padding: '20px 22px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 16,
+                  transition: 'all 0.25s ease',
+                  boxShadow: config.permitir_multiplas_entradas ? '0 8px 24px rgba(6,182,212,0.08)' : 'none'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <div style={{
+                        width: 38, height: 38, borderRadius: 10,
+                        background: config.permitir_multiplas_entradas ? `${ACCENT}15` : 'hsl(var(--bg-elevated))',
+                        border: `1px solid ${config.permitir_multiplas_entradas ? `${ACCENT}35` : 'hsl(var(--border-subtle))'}`,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        color: config.permitir_multiplas_entradas ? ACCENT : 'hsl(var(--text-muted))'
+                      }}>
+                        <LogIn size={18} />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 13.5, fontWeight: 900, color: 'hsl(var(--text-primary))' }}>
+                          Registro de Entradas na Catraca
+                        </div>
+                        <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>
+                          Defina se o sistema registra apenas a 1ª entrada ou todas as entradas ao longo do dia
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Badge de Status Atual */}
+                    <div style={{
+                      padding: '4px 12px', borderRadius: 20, fontSize: 11, fontWeight: 800,
+                      display: 'inline-flex', alignItems: 'center', gap: 6,
+                      background: config.permitir_multiplas_entradas ? '#ecfdf5' : '#fefce8',
+                      color: config.permitir_multiplas_entradas ? '#059669' : '#ca8a04',
+                      border: `1px solid ${config.permitir_multiplas_entradas ? '#a7f3d0' : '#fde047'}`
+                    }}>
+                      {config.permitir_multiplas_entradas ? (
+                        <>
+                          <CheckCircle2 size={13} strokeWidth={2.5} />
+                          ATIVADO: Todas as Entradas
+                        </>
+                      ) : (
+                        <>
+                          <Lock size={12} strokeWidth={2.5} />
+                          PADRÃO: Apenas 1ª Entrada
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Botões Seletores dos 2 Modos */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                    {/* Opção 1: Apenas 1ª Entrada (Desativado / Padrão) */}
+                    <button
+                      type="button"
+                      onClick={() => handleToggleMultiplasEntradas(false)}
+                      disabled={saving}
+                      style={{
+                        textAlign: 'left',
+                        padding: '14px 16px',
+                        borderRadius: 14,
+                        background: !config.permitir_multiplas_entradas ? 'hsl(var(--bg-elevated))' : 'transparent',
+                        border: !config.permitir_multiplas_entradas 
+                          ? '2px solid #ca8a04' 
+                          : '1px solid hsl(var(--border-subtle))',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s',
+                        position: 'relative',
+                        boxShadow: !config.permitir_multiplas_entradas ? '0 4px 14px rgba(202,138,4,0.1)' : 'none'
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                        <span style={{ fontSize: 12.5, fontWeight: 900, color: !config.permitir_multiplas_entradas ? '#ca8a04' : 'hsl(var(--text-primary))' }}>
+                          🔒 Apenas 1ª Entrada
+                        </span>
+                        {!config.permitir_multiplas_entradas && (
+                          <span style={{ fontSize: 10, fontWeight: 900, background: '#fefce8', color: '#a16207', border: '1px solid #fde047', padding: '2px 8px', borderRadius: 10 }}>
+                            Ativo
+                          </span>
+                        )}
+                      </div>
+                      <p style={{ fontSize: 10.5, color: 'hsl(var(--text-muted))', margin: 0, lineHeight: 1.4 }}>
+                        Registra somente a primeira passagem do dia. Outras entradas posteriores são ignoradas, preservando o horário inicial de chegada e sem push repetido aos pais.
+                      </p>
+                    </button>
+
+                    {/* Opção 2: Todas as Entradas (Ativado / Múltiplas) */}
+                    <button
+                      type="button"
+                      onClick={() => handleToggleMultiplasEntradas(true)}
+                      disabled={saving}
+                      style={{
+                        textAlign: 'left',
+                        padding: '14px 16px',
+                        borderRadius: 14,
+                        background: config.permitir_multiplas_entradas ? 'hsl(var(--bg-elevated))' : 'transparent',
+                        border: config.permitir_multiplas_entradas 
+                          ? `2px solid ${ACCENT}` 
+                          : '1px solid hsl(var(--border-subtle))',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s',
+                        position: 'relative',
+                        boxShadow: config.permitir_multiplas_entradas ? `0 4px 18px ${ACCENT}25` : 'none'
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                        <span style={{ fontSize: 12.5, fontWeight: 900, color: config.permitir_multiplas_entradas ? ACCENT : 'hsl(var(--text-primary))' }}>
+                          ⚡ Registrar Todas as Entradas
+                        </span>
+                        {config.permitir_multiplas_entradas && (
+                          <span style={{ fontSize: 10, fontWeight: 900, background: `${ACCENT}15`, color: ACCENT, border: `1px solid ${ACCENT}35`, padding: '2px 8px', borderRadius: 10 }}>
+                            Ativo
+                          </span>
+                        )}
+                      </div>
+                      <p style={{ fontSize: 10.5, color: 'hsl(var(--text-muted))', margin: 0, lineHeight: 1.4 }}>
+                        Registra qualquer entrada ao longo do dia (ideal para contraturno, almoço ou saídas temporárias). Salva todas as passagens no diário e notifica os pais.
+                      </p>
+                    </button>
+                  </div>
+
+                  {/* Informação adicional / Proteção anti-duplicação */}
+                  <div style={{
+                    background: 'hsl(var(--bg-elevated))',
+                    borderRadius: 10,
+                    padding: '8px 12px',
+                    fontSize: 10.5,
+                    color: 'hsl(var(--text-muted))',
+                    lineHeight: 1.4,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    border: '1px solid hsl(var(--border-subtle))'
+                  }}>
+                    <Sparkles size={14} color={ACCENT} style={{ flexShrink: 0 }} />
+                    <span>
+                      <strong>Proteção Inteligente:</strong> Ao ativar o registro de todas as entradas, o sistema aplica filtro anti-duplicação de 3 minutos para evitar registros repetidos caso o aluno fique em frente à catraca.
+                    </span>
+                  </div>
+                </div>
+
                 <Toggle
                   value={config.fallback_matricula_como_codigo}
                   onChange={v => setConfig({ ...config, fallback_matricula_como_codigo: v })}
@@ -593,44 +754,8 @@ export default function PortariaConfigPage() {
             </div>
           </div>
 
-          {/* Lado Direito: Inputs de Intervalos, Horários e Segurança */}
+          {/* Lado Direito: Inputs de Intervalos e Segurança */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            
-            {/* Bloco de Horários Permitidos */}
-            <div style={{
-              background: 'hsl(var(--bg-elevated))', border: '1px solid hsl(var(--border-subtle))',
-              borderRadius: 22, padding: 24, display: 'flex', flexDirection: 'column', gap: 14
-            }}>
-              <div style={{ fontSize: 11, fontWeight: 800, color: 'hsl(var(--text-muted))', textTransform: 'uppercase', letterSpacing: 1, display: 'flex', alignItems: 'center', gap: 6 }}>
-                <CalendarRange size={14} color={ACCENT} /> Tolerância de Horários de Entrada
-              </div>
-              <p style={{ fontSize: 11, color: 'hsl(var(--text-muted))', margin: 0, lineHeight: 1.5 }}>
-                Acessos detectados na catraca fora destas janelas de horários serão classificados como inconsistências e não acionarão a liberação do relé.
-              </p>
-              
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                <div>
-                  <label style={{ display: 'block', fontSize: 10, fontWeight: 800, color: 'hsl(var(--text-muted))', textTransform: 'uppercase', marginBottom: 6 }}>Horário Início</label>
-                  <input
-                    type="time"
-                    className="form-input"
-                    value={config.horario_entrada_inicio || '06:00'}
-                    onChange={e => setConfig({ ...config, horario_entrada_inicio: e.target.value })}
-                    style={{ width: '100%', height: 38, borderRadius: 10, fontSize: 13, fontWeight: 700, textAlign: 'center' }}
-                  />
-                </div>
-                <div>
-                  <label style={{ display: 'block', fontSize: 10, fontWeight: 800, color: 'hsl(var(--text-muted))', textTransform: 'uppercase', marginBottom: 6 }}>Horário Fim</label>
-                  <input
-                    type="time"
-                    className="form-input"
-                    value={config.horario_entrada_fim || '22:00'}
-                    onChange={e => setConfig({ ...config, horario_entrada_fim: e.target.value })}
-                    style={{ width: '100%', height: 38, borderRadius: 10, fontSize: 13, fontWeight: 700, textAlign: 'center' }}
-                  />
-                </div>
-              </div>
-            </div>
 
             {/* Bloco de Segurança Token */}
             <div style={{

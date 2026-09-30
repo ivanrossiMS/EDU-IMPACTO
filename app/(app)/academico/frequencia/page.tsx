@@ -169,12 +169,27 @@ function getOrigemFrequenciaCompleta(
                                (freqRecord.origem === 'manual' && !isSaidaOnlyRecord && hasActiveTempos && (freqRecord.horaRegistro || freqRecord.presente))
 
     if (isCatraca) {
+      const entradasArr = Array.isArray(freqRecord?.dados?.entradas) ? freqRecord.dados.entradas : []
+      const totalEntr = entradasArr.length || freqRecord?.dados?.totalEntradas || 0
+      const temMultiplas = totalEntr > 1
+      const ultimaEntr = freqRecord?.dados?.ultimaEntrada
+
+      let horarioDisplay = horaEntradaExplicit || horaCatracaEntrada || undefined
+      if (temMultiplas && ultimaEntr && horarioDisplay && !horarioDisplay.includes(ultimaEntr)) {
+        horarioDisplay = `${horarioDisplay} (${totalEntr}x)`
+      }
+
+      const listaHorarios = entradasArr.map((e: any) => e.hora).filter(Boolean).join(', ')
+      const detalhesTexto = temMultiplas 
+        ? `Múltiplas entradas iDFace: ${listaHorarios || `${horaEntradaExplicit} e ${ultimaEntr}`}`
+        : `Entrada por biometria iDFace (${portariaEvEntrada?.dispositivo_nome || 'Catraca'})`
+
       entrada = {
         tipo: 'catraca',
-        label: 'iDFace',
-        horario: horaEntradaExplicit || horaCatracaEntrada || undefined,
+        label: temMultiplas ? `iDFace (${totalEntr}x)` : 'iDFace',
+        horario: horarioDisplay,
         dispositivo: portariaEvEntrada?.dispositivo_nome || 'iDFace',
-        detalhes: `Entrada por biometria iDFace (${portariaEvEntrada?.dispositivo_nome || 'Catraca'})`
+        detalhes: detalhesTexto
       }
     } else if (isTotem) {
       entrada = {
