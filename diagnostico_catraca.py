@@ -133,9 +133,9 @@ def main():
                 pid = l.get("portal_id", l.get("portal", 0))
                 cid = l.get("component_id", 0)
 
-                if pid in (1, 101) or cid == 810373890 or l.get("identification_rule_id") == 4:
+                if pid in (2, 102) or cid == 810373890 or l.get("door_id") == 2:
                     sentido = "🚪 SAÍDA (Rua das Garças / .154)"
-                elif pid in (2, 102) or cid == 810373889 or l.get("identification_rule_id") == 1:
+                elif pid in (1, 101) or cid == 810373889 or l.get("door_id") == 1 or pid == 0:
                     sentido = "🟢 ENTRADA (Portaria Principal / .150)"
                 else:
                     sentido = f"ℹ️ Portal {pid}"

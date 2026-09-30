@@ -267,7 +267,7 @@ export async function POST(req: NextRequest) {
           let direction = 'entrada'
           if (isDev154) {
             direction = 'saida'
-          } else if (isDev150 && (pId === 1 || pId === 101 || compId === 810373890 || rId === 1 || ruleId === 4)) {
+          } else if (isDev150 && (pId === 2 || pId === 102 || doorId === 2)) {
             direction = 'saida'
           } else {
             direction = 'entrada'

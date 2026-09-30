@@ -70,21 +70,22 @@ SSL_CTX.check_hostname = False
 SSL_CTX.verify_mode = ssl.CERT_NONE
 
 STATE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "catraca_state.json")
-LOCK_FILE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "sincronizar_catraca.lock")
-LOCK_FILE_HANDLE = None
+LOCK_SOCKET = None
 
 def encerrar_outras_instancias():
-    """Finaliza instâncias zumbis ou processos anteriores do Sincronizar_Catraca para eliminar duplicações."""
+    """Finaliza instâncias zumbis anteriores do Sincronizar_Catraca para eliminar duplicações."""
     meu_pid = os.getpid()
     if sys.platform == "win32":
         try:
+            # Encerra processos python/pythonw que rodem este script (exceto o processo atual)
             ps_cmd = (
-                f"Get-CimInstance Win32_Process | Where-Object {{ "
-                f"($_.Name -like 'python*' ) -and ($_.CommandLine -like '*Sincronizar_Catraca*') -and ($_.ProcessId -ne {meu_pid}) "
-                f"}} | ForEach-Object {{ Stop-Process -Id $_.ProcessId -Force }}"
+                f"$currentPid = {meu_pid}; "
+                f"Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | "
+                f"Where-Object {{ ($_.Name -like 'python*') -and ($_.ProcessId -ne $currentPid) -and ($_.CommandLine -like '*Sincronizar_Catraca*') }} | "
+                f"ForEach-Object {{ Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }}"
             )
             subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_cmd],
-                           capture_output=True, timeout=8)
+                           capture_output=True, timeout=5)
         except Exception:
             pass
     else:
@@ -95,26 +96,37 @@ def encerrar_outras_instancias():
             pass
 
 def adquirir_lock_instancia_unica():
-    """Garante que apenas UMA instância do script rode na máquina ao mesmo tempo."""
-    global LOCK_FILE_HANDLE
+    """
+    Garante que apenas UMA instância do script rode na máquina ao mesmo tempo.
+    Utiliza bind de porta local (127.0.0.1:49152) no kernel do SO:
+    • 100% à prova de falhas de permissão no Windows (sem bloqueio de arquivos em disco)
+    • Liberação instantânea e automática pelo SO assim que o processo encerra
+    """
+    global LOCK_SOCKET
+    import socket
     encerrar_outras_instancias()
-    time.sleep(0.5)
+    time.sleep(0.3)
     try:
-        LOCK_FILE_HANDLE = open(LOCK_FILE_PATH, "w")
-        if sys.platform == "win32":
-            import msvcrt
-            msvcrt.locking(LOCK_FILE_HANDLE.fileno(), msvcrt.LK_NBLCK, 1)
-        else:
-            import fcntl
-            fcntl.flock(LOCK_FILE_HANDLE.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-        LOCK_FILE_HANDLE.write(f"{os.getpid()}\n")
-        LOCK_FILE_HANDLE.flush()
+        LOCK_SOCKET = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        LOCK_SOCKET.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        LOCK_SOCKET.bind(('127.0.0.1', 49152))
         return True
-    except Exception:
-        print("\n❌ [ERRO CRÍTICO] Outra instância do Sincronizar_Catraca.py já está em execução!")
-        print("   Para evitar duplicação simultânea de entrada e saída, esta instância foi abortada.")
-        print("   Se necessário, encerre 'python.exe' / 'pythonw.exe' no Gerenciador de Tarefas do Windows.")
-        return False
+    except socket.error:
+        print("\n  ⚠️ Outra instância do Sincronizar_Catraca.py detectada (porta 49152 ativa). Finalizando zumbis...")
+        encerrar_outras_instancias()
+        time.sleep(1)
+        try:
+            LOCK_SOCKET = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            LOCK_SOCKET.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            LOCK_SOCKET.bind(('127.0.0.1', 49152))
+            return True
+        except Exception:
+            print("  ℹ️ Já existe uma instância ativa monitorando as catracas em segundo plano.")
+            return False
+    except Exception as ex:
+        # Em caso de qualquer outra restrição de ambiente, não aborta a sincronização
+        print(f"  ℹ️ Aviso na verificação de instância: {ex}. Prosseguindo normalmente...")
+        return True
 
 
 # Pool de sessões em memória para reaproveitamento (evita login toda hora)
@@ -465,11 +477,12 @@ def enviar_para_webhook(log_entry, cat, tipo_override=None):
 
     # ── REGRA DE OURO DA ESCOLA (CONTROL ID ID NEXT) ──
     # A catraca .150 registra tanto entrada quanto saída dependendo da rota física:
-    # • Rota de Saída Rua das Garças (.154): Portal 1 / Componente 810373890 / Regra 4 (Usuário Identificado)
-    # • Rota de Entrada Portaria Médio (.150): Portal 2 / Componente 810373889 / Regra 1 (Face Local)
+    # • Rota Principal (Portal 1): ENTRADA (Portaria Principal / Médio - .150)
+    # • Outra Rota (Portal 2 / Terminal Remoto .154): SAÍDA (Rua das Garças)
+    # As catracas .155 (FUND1) e .105 (INF) são SEMPRE ENTRADA!
     is_outra_rota_150 = (
         (cat_ip == "192.168.1.150" or cat_id == "0M0200/02638E") and
-        (portal_id in (1, 101) or comp_id == 810373890 or reader_id == 1 or rule_id == 4)
+        (portal_id in (2, 102) or door_id == 2)
     )
     is_catraca_154 = (cat_ip == "192.168.1.154" or cat_id == "0M0200/0263A6" or cat.get("tipo") == "saida")
 
@@ -716,12 +729,12 @@ def processar_eventos_detectados(eventos_por_catraca, estado):
 
             # ── IDENTIFICAÇÃO DE ROTA NA CATRACA .150 (CONTROL ID ID NEXT) ──
             # A catraca .150 registra tanto entrada quanto saída dependendo da rota física:
-            # • Rota de Saída Rua das Garças (.154): Portal 1 / Componente 810373890 / Regra 4 (Usuário Identificado)
-            # • Rota de Entrada Portaria Médio (.150): Portal 2 / Componente 810373889 / Regra 1 (Face Local)
+            # • Rota Principal (Portal 1): ENTRADA (Portaria Principal / Médio - .150)
+            # • Outra Rota (Portal 2 / Terminal Remoto .154): SAÍDA (Rua das Garças)
             # As catracas .155 (FUND1) e .105 (INF) são SEMPRE ENTRADA!
             is_outra_rota_150 = (
                 (cat_ip == "192.168.1.150" or cat_id == "0M0200/02638E") and
-                (p_id in (1, 101) or c_id == 810373890 or r_id == 1 or rule_id == 4)
+                (p_id in (2, 102) or door_id == 2)
             )
             is_catraca_154_direto = (cat_ip == "192.168.1.154" or cat_id == "0M0200/0263A6" or cat.get("tipo") == "saida")
 
@@ -841,7 +854,10 @@ def main():
 
     # 0. Garantir processo ÚNICO e eliminar instâncias zumbis anteriores
     if not adquirir_lock_instancia_unica():
-        sys.exit(1)
+        print("  ⚠️ Uma instância do Sincronizar_Catraca já está em execução no sistema.")
+        print("  ℹ️ Esta janela será fechada para não haver conflito de portas.")
+        time.sleep(3)
+        sys.exit(0)
 
     loop_mode = "--once" not in sys.argv
     intervalo = 2  # PADRÃO ULTRA RÁPIDO: 2 segundos

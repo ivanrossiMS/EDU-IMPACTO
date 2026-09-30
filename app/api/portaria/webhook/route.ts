@@ -449,22 +449,23 @@ export async function POST(req: Request) {
     const ruleId = ruleIdRaw ? Number(ruleIdRaw) : 0
 
     // ── MESTRE .150 (CONTROL ID ID NEXT): Duas rotas físicas distintas ──
-    // Portal 1 (Component 810373890 / Rule 4 - Terminal Remoto .154): SEMPRE SAÍDA (Rua das Garças)
-    // Portal 2 (Component 810373889 / Rule 1 - Leitor Facial Local): SEMPRE ENTRADA (Portaria Principal)
-    const isExplicitExitRoute150 = pId === 1 || pId === 101 || compId === 810373890 || rId === 1 || ruleId === 4
-    const isExplicitEntryRoute150 = pId === 2 || pId === 102 || compId === 810373889 || rId === 2 || ruleId === 1
+    // Portal 1 (Rota Principal Local .150): ENTRADA (Portaria Principal / Médio)
+    // Portal 2 (Outra Rota / Terminal Remoto .154): SAÍDA (Rua das Garças)
+    // As catracas .155 (FUND1) e .105 (INF) são 100% ENTRADA SEMPRE!
+    const isExplicitExitRoute150 = pId === 2 || pId === 102 || doorId === 2
+    const isExplicitEntryRoute150 = pId === 1 || pId === 101 || doorId === 1
 
     if (isMaster150 || isDevice154) {
-      if (isExplicitEntryRoute150) {
-        // ENTRADA FÍSICA NA .150 (PORTARIA MÉDIO) - ROTA TEM PRIORIDADE MÁXIMA
-        dispositivoSentido = 'entrada'
-        dispositivoNome = 'Portaria Médio - PRINCIPAL'
-        dispositivoId = '0M0200/02638E'
-      } else if (isExplicitExitRoute150) {
-        // SAÍDA FÍSICA NA .154 (RUA DAS GARÇAS)
+      if (isExplicitExitRoute150) {
+        // SAÍDA FÍSICA NA .154 (RUA DAS GARÇAS) - OUTRA ROTA
         dispositivoSentido = 'saida'
         dispositivoNome = 'Saida - Rua das Garças'
         dispositivoId = '0M0200/0263A6'
+      } else if (isExplicitEntryRoute150) {
+        // ENTRADA FÍSICA NA .150 (PORTARIA MÉDIO) - ROTA PRINCIPAL
+        dispositivoSentido = 'entrada'
+        dispositivoNome = 'Portaria Médio - PRINCIPAL'
+        dispositivoId = '0M0200/02638E'
       } else if (isDevice154 || explicitTipo === 'saida') {
         dispositivoSentido = 'saida'
         dispositivoNome = 'Saida - Rua das Garças'
@@ -475,10 +476,25 @@ export async function POST(req: Request) {
         dispositivoId = '0M0200/02638E'
       }
     } else {
-      // Todas as demais (.155 FUND1 e .105 INF) são ESTRITAMENTE ENTRADA
+      // Todas as demais (.155 FUND1 e .105 INF) são ESTRITAMENTE ENTRADA SEMPRE
       dispositivoSentido = 'entrada'
       // Limpa qualquer sufixo "(Saída)" no nome caso existisse
       dispositivoNome = dispositivoNome.replace(/\s*\([Ss]a[ií]da\)/g, '').trim()
+    }
+
+    // Atualizar status e batimento cardíaco do dispositivo imediatamente no Supabase
+    if (dispositivoId && dispositivoId !== 'unknown') {
+      await supabase.from('portaria_dispositivos').update({
+        status: 'online',
+        ultima_comunicacao: new Date().toISOString(),
+      }).eq('id', dispositivoId)
+
+      if (isMaster150 || dispositivoId === '0M0200/0263A6') {
+        await supabase.from('portaria_dispositivos').update({
+          status: 'online',
+          ultima_comunicacao: new Date().toISOString(),
+        }).eq('id', '0M0200/02638E')
+      }
     }
 
     const configVal = config
