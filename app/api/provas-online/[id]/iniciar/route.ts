@@ -29,15 +29,23 @@ export async function POST(
     return NextResponse.json({ error: 'Prova não encontrada' }, { status: 404 })
   }
 
+  const { searchParams } = new URL(request.url)
+  const body = await request.json().catch(() => ({}))
+
   const adminClient = getAdminClient()
 
   // 1. Resolve student record
-  const targetAlunoId = user.user_metadata?.aluno_id
+  const targetAlunoId = body.alunoId || searchParams.get('aluno_id') || searchParams.get('slug') || user.user_metadata?.aluno_id
   let dbAluno: any = null
   if (targetAlunoId || user.email) {
     const conds: string[] = []
-    if (targetAlunoId) conds.push(`id.eq.${targetAlunoId}`)
-    if (user.email) conds.push(`email.ilike.${user.email.trim()}`)
+    if (targetAlunoId) {
+      conds.push(`id.eq.${targetAlunoId}`)
+      conds.push(`matricula.eq.${targetAlunoId}`)
+    }
+    if (user.email && !targetAlunoId) {
+      conds.push(`email.ilike.${user.email.trim()}`)
+    }
     const { data } = await adminClient
       .from('alunos')
       .select('id, nome, matricula, turma, serie, foto')
@@ -57,20 +65,23 @@ export async function POST(
   const cargo = dbUser?.cargo || user.user_metadata?.cargo || ''
   const perfil = dbUser?.perfil || user.user_metadata?.perfil || ''
 
-  if (cargo === 'Responsável' || perfil === 'Família' || perfil === 'Responsável') {
+  const isCallerStudent = cargo === 'Aluno' || perfil === 'Aluno' || (user.user_metadata?.userType === 'aluno')
+  const isResponsible = cargo === 'Responsável' || perfil === 'Família' || perfil === 'Responsável' || Boolean(user.user_metadata?.responsavel_id)
+
+  if (isResponsible && !isCallerStudent) {
     return NextResponse.json({
-      error: 'Acesso negado: Responsáveis têm acesso exclusivamente para visualizar resultados após a publicação. A realização da prova deve ser feita exclusivamente na conta do próprio aluno.'
+      error: 'Acesso negado: Responsáveis têm acesso exclusivamente para acompanhar o progresso e notas. A realização da avaliação deve ser feita exclusivamente na conta do próprio aluno.'
     }, { status: 403 })
   }
 
-  const alunoId = dbAluno?.id || user.id
+  const alunoId = dbAluno?.id || user.user_metadata?.aluno_id || user.id
   const alunoNome = dbAluno?.nome || user.user_metadata?.nome || user.email?.split('@')[0] || 'Aluno'
   const alunoMatricula = dbAluno?.matricula || user.user_metadata?.matricula || ''
   const turmaId = dbAluno?.turma || prova.turmas[0] || ''
 
   // 2. Fetch existing attempts for this student
   const allTentativas = await dbGetTentativasByProvaId(provaId)
-  const myTentativas = allTentativas.filter(t => t.alunoId === alunoId)
+  const myTentativas = allTentativas.filter(t => t.alunoId === alunoId || (alunoMatricula && t.alunoMatricula === alunoMatricula))
 
   // 3. IDEMPOTENCY CHECK:
   // If student already has an active attempt, return the existing active attempt!
@@ -107,9 +118,8 @@ export async function POST(
   }
 
   // 4. Verify release PIN code if in-person proctoring is enabled
-  const body = await request.json().catch(() => ({}))
   if (prova.codigoLiberacao && String(prova.codigoLiberacao).trim() !== '') {
-    const providedCode = (body.codigoLiberacao || '').trim()
+    const providedCode = String(body.codigoLiberacao || body.codigoAcesso || '').trim()
     if (providedCode !== prova.codigoLiberacao.trim()) {
       return NextResponse.json({
         error: 'Código de liberação presencial incorreto ou não fornecido. Solicite o código ao professor aplicador.'

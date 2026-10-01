@@ -17,6 +17,12 @@ export const maxDuration = 30
 let turmasCache: { data: any[]; timestamp: number } | null = null
 let gruposCache: { data: any[]; timestamp: number } | null = null
 
+// Cache de resolução de relatórios individuais associados a relatórios consolidados (TTL 30 min)
+const colabToStuIdsCache = new Map<string, { stuIds: string[]; timestamp: number }>();
+
+// Cache de system_users por id/email (TTL 60s)
+const sysUsersCache = new Map<string, { users: any[]; timestamp: number }>();
+
 async function getCachedTurmasAndGrupos() {
   const now = Date.now()
   const fetchTurmas = (!turmasCache || now - turmasCache.timestamp > 60000)
@@ -293,13 +299,24 @@ export async function GET(request: Request) {
 
       const userEmail = (user.email || user.user_metadata?.email || '').trim().toLowerCase();
       targetEmail = userEmail;
-      let sysUserQuery = supabaseServer.from('system_users').select('id, email, nome, auth_id, dados');
-      if (userEmail) {
-        sysUserQuery = sysUserQuery.or(`id.eq."${user.id}",email.ilike."${userEmail}"`);
+      
+      let sysUsers: any[] = [];
+      const cacheKey = `${user.id}_${userEmail}`;
+      const cachedSys = sysUsersCache.get(cacheKey);
+      if (cachedSys && Date.now() - cachedSys.timestamp < 60000) {
+        sysUsers = cachedSys.users;
       } else {
-        sysUserQuery = sysUserQuery.eq('id', user.id);
+        let sysUserQuery = supabaseServer.from('system_users').select('id, email, nome, auth_id, dados');
+        if (userEmail) {
+          sysUserQuery = sysUserQuery.or(`id.eq."${user.id}",email.ilike."${userEmail}"`);
+        } else {
+          sysUserQuery = sysUserQuery.eq('id', user.id);
+        }
+        const { data: fetchedSysUsers } = await sysUserQuery.limit(5);
+        sysUsers = fetchedSysUsers || [];
+        sysUsersCache.set(cacheKey, { users: sysUsers, timestamp: Date.now() });
       }
-      const { data: sysUsers } = await sysUserQuery.limit(5);
+
       if (sysUsers && sysUsers.length > 0) {
         sysUsers.forEach((su: any) => {
           if (su.id) candidateUserIds.add(String(su.id));
@@ -326,14 +343,14 @@ export async function GET(request: Request) {
       colaboradorConditions.push(`dados->>autorId.eq.${clean}`);
     });
 
-    // Buscar grupos da agenda e resolver membros em memória para robustez total
-    const { data: allGroups } = await supabaseServer.from('agenda_grupos').select('id, dados');
+    // Buscar grupos da agenda e turmas com cache de memória (TTL 60s) para evitar consultas pesadas repetidas
+    const { allTurmas, allGrupos } = await getCachedTurmasAndGrupos();
     const matchedGroupNames = new Set<string>();
     const matchedTurmaSyncIds = new Set<string>();
     let hasGlobalStaffAccess = false;
 
-    if (allGroups && allGroups.length > 0) {
-      allGroups.forEach((g: any) => {
+    if (allGrupos && allGrupos.length > 0) {
+      allGrupos.forEach((g: any) => {
         const gDados = g.dados || {};
         let colabs = gDados.colaboradoresIds || g.colaboradoresIds || [];
         if (typeof colabs === 'string') {
@@ -373,9 +390,8 @@ export async function GET(request: Request) {
       });
 
       if (matchedTurmaSyncIds.size > 0 || matchedGroupNames.size > 0) {
-        const { data: myTurmas } = await supabaseServer.from('turmas').select('id, nome');
-        if (myTurmas) {
-          myTurmas.forEach((t: any) => {
+        if (allTurmas && allTurmas.length > 0) {
+          allTurmas.forEach((t: any) => {
             const tId = String(t.id);
             const tNomeLower = String(t.nome || '').trim().toLowerCase();
             if (matchedTurmaSyncIds.has(tId) || Array.from(matchedGroupNames).some(gn => gn.trim().toLowerCase() === tNomeLower)) {
@@ -480,16 +496,7 @@ export async function GET(request: Request) {
   let allRespostas: any[] = [];
 
   if (itemIds.length > 0) {
-     const [readsRes, cienciasRes, respostasRes] = await Promise.all([
-        supabaseServer.from('agenda_notification_reads').select('content_id, usuario_id, read_at, aluno_id').in('content_id', itemIds),
-        supabaseServer.from('agenda_ciencias').select('content_id, usuario_id, ciente_em, aluno_id').in('content_id', itemIds),
-        supabaseServer.from('comunicados_respostas').select('id, comunicado_id, remetente_id, remetente_nome, conteudo, anexos, is_admin, created_at').in('comunicado_id', itemIds).order('created_at', { ascending: true })
-     ]);
-     allReads = readsRes.data || [];
-     allCiencias = cienciasRes.data || [];
-     allRespostas = respostasRes.data || [];
-
-     // Fetch reads and responses for dynamic STU reports related to consolidated reports
+     // 1. Identificar relatórios consolidados (COLAB / TURMA) que necessitam de agregação dos relatórios de alunos (STU)
      const colabs = (data || []).filter((d: any) => 
        d.id && (
          String(d.id).startsWith('AD-COM-REL-COLAB-') || 
@@ -497,110 +504,168 @@ export async function GET(request: Request) {
          (String(d.id).startsWith('AD-COM-REL-') && !String(d.id).startsWith('AD-COM-REL-STU-'))
        )
      );
+
+     // Mapeamento em memória: colabId -> Set de stuIds
+     const colabToStuIds = new Map<string, string[]>();
+     const uncachedColabs: any[] = [];
+
      if (colabs.length > 0) {
-       const colabReadsPromises = colabs.map(async (colab: any) => {
+       for (const colab of colabs) {
+         const colabId = String(colab.id);
+         const parseDados = (dados: any) => {
+           if (!dados) return {};
+           if (typeof dados === 'string') {
+             try { return JSON.parse(dados); } catch { return {}; }
+           }
+           return dados;
+         };
+         const colabDados = parseDados(colab.dados);
+         
+         // Se o comunicado já possui stuIds gravados no próprio dados, usa direto sem consulta (0ms)
+         if (Array.isArray(colabDados.stuIds) && colabDados.stuIds.length > 0) {
+           colabToStuIds.set(colabId, colabDados.stuIds);
+           continue;
+         }
+
+         // Se já está no cache em memória do servidor, usa direto (0ms)
+         const cached = colabToStuIdsCache.get(colabId);
+         if (cached && Date.now() - cached.timestamp < 1000 * 60 * 30) {
+           colabToStuIds.set(colabId, cached.stuIds);
+           continue;
+         }
+
+         uncachedColabs.push({ colab, colabDados });
+       }
+
+       // Se há relatórios não cacheados, resolvemos todos em UMA ÚNICA consulta em lote ultrarrápida
+       if (uncachedColabs.length > 0) {
          try {
-           const parseDados = (dados: any) => {
-             if (!dados) return {};
-             if (typeof dados === 'string') {
-               try { return JSON.parse(dados); } catch { return {}; }
+           const prefixes = new Set<string>();
+           let minTimestamp: number | null = null;
+           let maxTimestamp: number | null = null;
+
+           for (const { colab, colabDados } of uncachedColabs) {
+             const idMatch = String(colab.id).match(/AD-COM-REL-[A-Za-z]+-(\d+)/);
+             const colabTs = idMatch ? parseInt(idMatch[1], 10) : null;
+             const dateStr = colab.created_at || colab.data || colab.dataEnvio || colabDados.dataEnvio;
+             const baseTime = colabTs || (dateStr ? new Date(dateStr).getTime() : null);
+
+             if (colabTs) {
+               prefixes.add(String(colabTs).substring(0, 8));
              }
-             return dados;
-           };
-           const colabDados = parseDados(colab.dados);
-           const idMatch = String(colab.id).match(/AD-COM-REL-[A-Za-z]+-(\d+)/);
-           const colabTs = idMatch ? parseInt(idMatch[1], 10) : null;
-
-           const dateStr = colab.created_at || colab.data || colab.dataEnvio || colabDados.dataEnvio;
-           const baseTime = colabTs || (dateStr ? new Date(dateStr).getTime() : Date.now());
-           
-           const minDate = new Date(baseTime - 15 * 60000).toISOString();
-           const maxDate = new Date(baseTime + 15 * 60000).toISOString();
-           const rawAutorId = colab.autorId || colab.autor_id || colabDados.autorId || colabDados.autor_id;
-           const cleanAutorId = rawAutorId ? String(rawAutorId).replace(/^f_?/, '').trim().toLowerCase() : '';
-
-           // Busca candidatos por prefixo de timestamp no ID e por janela de tempo
-           const candidateStusMap = new Map<string, any>();
-
-           if (colabTs) {
-             const tsPrefix = String(colabTs).substring(0, 8);
-             const { data: stusByPrefix } = await supabaseServer.from('comunicados')
-               .select('id, dados, created_at')
-               .ilike('id', `AD-COM-REL-STU-${tsPrefix}%`);
-             (stusByPrefix || []).forEach((s: any) => candidateStusMap.set(s.id, s));
+             if (baseTime) {
+               if (minTimestamp === null || baseTime - 15 * 60000 < minTimestamp) minTimestamp = baseTime - 15 * 60000;
+               if (maxTimestamp === null || baseTime + 15 * 60000 > maxTimestamp) maxTimestamp = baseTime + 15 * 60000;
+             }
            }
 
-           const { data: stusByDate } = await supabaseServer.from('comunicados')
-             .select('id, dados, created_at')
-             .ilike('id', 'AD-COM-REL-STU-%')
-             .gte('created_at', minDate)
-             .lte('created_at', maxDate);
-           (stusByDate || []).forEach((s: any) => candidateStusMap.set(s.id, s));
+           const orFilters: string[] = [];
+           Array.from(prefixes).forEach(p => {
+             orFilters.push(`id.like.AD-COM-REL-STU-${p}%`);
+           });
 
-           const candidateStus = Array.from(candidateStusMap.values());
-           if (candidateStus.length === 0) return null;
+           let stuQuery = supabaseServer
+             .from('comunicados')
+             .select('id, autor, created_at, dados->>autorId');
 
-           const filteredStus = candidateStus.filter((s: any) => {
-             const sDados = parseDados(s.dados);
-             const sRawAutorId = s.autorId || s.autor_id || sDados.autorId || sDados.autor_id;
-             const sCleanAutorId = sRawAutorId ? String(sRawAutorId).replace(/^f_?/, '').trim().toLowerCase() : '';
-             const autorMatches = Boolean(cleanAutorId && sCleanAutorId && cleanAutorId === sCleanAutorId);
+           if (orFilters.length > 0) {
+             stuQuery = stuQuery.or(orFilters.join(','));
+           } else if (minTimestamp && maxTimestamp) {
+             stuQuery = stuQuery
+               .like('id', 'AD-COM-REL-STU-%')
+               .gte('created_at', new Date(minTimestamp).toISOString())
+               .lte('created_at', new Date(maxTimestamp).toISOString());
+           }
 
-             const sMatch = String(s.id).match(/AD-COM-REL-STU-(\d+)/);
-             let tsMatches = false;
-             if (sMatch && colabTs) {
-               const sTs = parseInt(sMatch[1], 10);
-               if (!isNaN(sTs) && Math.abs(sTs - colabTs) < 120000) {
-                 tsMatches = true;
+           const { data: candidateStus } = await stuQuery.limit(500);
+
+           // Associar cada stu ao seu respectivo colab em memória (tempo de CPU < 1ms)
+           for (const { colab, colabDados } of uncachedColabs) {
+             const colabId = String(colab.id);
+             const idMatch = colabId.match(/AD-COM-REL-[A-Za-z]+-(\d+)/);
+             const colabTs = idMatch ? parseInt(idMatch[1], 10) : null;
+             const rawAutorId = colab.autorId || colab.autor_id || colabDados.autorId || colabDados.autor_id;
+             const cleanAutorId = rawAutorId ? String(rawAutorId).replace(/^f_?/, '').trim().toLowerCase() : '';
+
+             const matchedStuIds: string[] = [];
+             (candidateStus || []).forEach((s: any) => {
+               const sRawAutorId = (s as any).autorId || s.autor_id || (s as any)['dados->>autorId'];
+               const sCleanAutorId = sRawAutorId ? String(sRawAutorId).replace(/^f_?/, '').trim().toLowerCase() : '';
+               const autorMatches = Boolean(cleanAutorId && sCleanAutorId && cleanAutorId === sCleanAutorId);
+
+               const sMatch = String(s.id).match(/AD-COM-REL-STU-(\d+)/);
+               let tsMatches = false;
+               if (sMatch && colabTs) {
+                 const sTs = parseInt(sMatch[1], 10);
+                 if (!isNaN(sTs) && Math.abs(sTs - colabTs) < 120000) {
+                   tsMatches = true;
+                 }
                }
-             }
 
-             return tsMatches || autorMatches;
-           });
+               if (tsMatches || autorMatches) {
+                 matchedStuIds.push(String(s.id));
+               }
+             });
 
-           if (filteredStus.length === 0) return null;
-           
-           const stuIds = filteredStus.map((s: any) => s.id);
-           const [stuReadsRes, stuRespostasRes] = await Promise.all([
-             supabaseServer.from('agenda_notification_reads')
-               .select('content_id, usuario_id, read_at, aluno_id')
-               .in('content_id', stuIds),
-             supabaseServer.from('comunicados_respostas')
-               .select('id, comunicado_id, remetente_id, remetente_nome, conteudo, anexos, is_admin, created_at')
-               .in('comunicado_id', stuIds)
-               .order('created_at', { ascending: true })
-           ]);
-             
-           return { 
-             colabId: colab.id, 
-             reads: stuReadsRes.data || [],
-             respostas: stuRespostasRes.data || []
-           };
-         } catch(e) {
-           console.error('Error fetching dynamic reads/respostas:', e);
-           return null;
-         }
-       });
-       
-       const colabReadsResults = await Promise.all(colabReadsPromises);
-       for (const res of colabReadsResults) {
-         if (!res) continue;
-         for (const r of res.reads) {
-           allReads.push({
-             content_id: res.colabId,
-             usuario_id: r.usuario_id,
-             read_at: r.read_at,
-             aluno_id: r.aluno_id
-           });
-         }
-         for (const resp of res.respostas) {
-           allRespostas.push({
-             ...resp,
-             comunicado_id: res.colabId,
-             original_comunicado_id: resp.comunicado_id
-           });
+             colabToStuIds.set(colabId, matchedStuIds);
+             colabToStuIdsCache.set(colabId, { stuIds: matchedStuIds, timestamp: Date.now() });
+           }
+         } catch (e) {
+           console.error('[comunicados:route] Erro na resolução em lote de relatórios individuais:', e);
          }
        }
+     }
+
+     // Coleta todos os stuIds de todos os relatórios consolidados
+     const allStuIdsSet = new Set<string>();
+     colabToStuIds.forEach(ids => ids.forEach(id => allStuIdsSet.add(id)));
+     const allStuIds = Array.from(allStuIdsSet);
+
+     // 2. BUSCA UNIFICADA: Consulta reads, ciencias e respostas para TODOS os comunicados e stus em UM ÚNICO Promise.all
+     const combinedReadsAndRespostasIds = Array.from(new Set([...itemIds, ...allStuIds]));
+
+     const [readsRes, cienciasRes, respostasRes] = await Promise.all([
+        supabaseServer.from('agenda_notification_reads').select('content_id, usuario_id, read_at, aluno_id').in('content_id', combinedReadsAndRespostasIds),
+        supabaseServer.from('agenda_ciencias').select('content_id, usuario_id, ciente_em, aluno_id').in('content_id', itemIds),
+        supabaseServer.from('comunicados_respostas').select('id, comunicado_id, remetente_id, remetente_nome, conteudo, anexos, is_admin, created_at').in('comunicado_id', combinedReadsAndRespostasIds).order('created_at', { ascending: true })
+     ]);
+     allReads = readsRes.data || [];
+     allCiencias = cienciasRes.data || [];
+     allRespostas = respostasRes.data || [];
+
+     // 3. Replicar leituras e respostas dos relatórios individuais (STU) para os seus respectivos consolidados (COLAB)
+     if (colabToStuIds.size > 0) {
+       const extraReads: any[] = [];
+       const extraRespostas: any[] = [];
+
+       colabToStuIds.forEach((stuIds, colabId) => {
+         if (stuIds.length === 0) return;
+         const stuIdSet = new Set(stuIds);
+
+         allReads.forEach(r => {
+           if (stuIdSet.has(String(r.content_id))) {
+             extraReads.push({
+               content_id: colabId,
+               usuario_id: r.usuario_id,
+               read_at: r.read_at,
+               aluno_id: r.aluno_id
+             });
+           }
+         });
+
+         allRespostas.forEach(resp => {
+           if (stuIdSet.has(String(resp.comunicado_id))) {
+             extraRespostas.push({
+               ...resp,
+               comunicado_id: colabId,
+               original_comunicado_id: resp.comunicado_id
+             });
+           }
+         });
+       });
+
+       if (extraReads.length > 0) allReads.push(...extraReads);
+       if (extraRespostas.length > 0) allRespostas.push(...extraRespostas);
      }
   }
 
@@ -1495,6 +1560,7 @@ function buildRow(c: any) {
     alunosIds: Array.isArray(rest.alunosIds) ? rest.alunosIds : [],
     funcionariosIds: Array.isArray(rest.funcionariosIds) ? rest.funcionariosIds : [],
     colaboradoresIds: Array.isArray(rest.colaboradoresIds) ? rest.colaboradoresIds : (Array.isArray(rest.funcionariosIds) ? rest.funcionariosIds : []),
+    stuIds: Array.isArray(rest.stuIds) ? rest.stuIds : (Array.isArray(c.stuIds) ? c.stuIds : []),
     leituras: (rest.leituras && typeof rest.leituras === 'object' && !Array.isArray(rest.leituras)) ? rest.leituras : {},
     ciencias: (rest.ciencias && typeof rest.ciencias === 'object' && !Array.isArray(rest.ciencias)) ? rest.ciencias : {},
     anexos: Array.isArray(rest.anexos) ? rest.anexos : [],

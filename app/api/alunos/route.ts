@@ -99,7 +99,7 @@ export async function GET(request: Request) {
     const isBulk = (limit > 50 || all || (!pageParam && !limitParam)) && !search && !withPhoto
 
     const queryFields = lightweight
-      ? 'id, nome, turma, status, responsavel, responsavel_financeiro, responsavel_pedagogico, dados'
+      ? 'id, nome, matricula, turma, status, email, telefone, responsavel, responsavel_financeiro, responsavel_pedagogico, dados'
       : (isBulk
           ? 'id, nome, matricula, turma, serie, turno, status, email, data_nascimento, responsavel, responsavel_financeiro, responsavel_pedagogico, telefone, inadimplente, risco_evasao, media, frequencia, obs, unidade, dados, updated_at, created_at'
           : 'id, nome, matricula, turma, serie, turno, status, email, data_nascimento, responsavel, responsavel_financeiro, responsavel_pedagogico, telefone, inadimplente, risco_evasao, media, frequencia, obs, unidade, foto, foto_url, dados, updated_at, created_at')
@@ -109,8 +109,8 @@ export async function GET(request: Request) {
       .select(queryFields as any, { count: 'exact' })
 
     if (search) {
-      // Busca por nome, cpf ou ID
-      query = query.or(`nome.ilike.%${search}%,id.ilike.%${search}%`)
+      // Busca por nome, ID, matricula ou e-mail
+      query = query.or(`nome.ilike.%${search}%,id.ilike.%${search}%,matricula.ilike.%${search}%,email.ilike.%${search}%`)
     }
 
     if (status === 'ativo') {
@@ -524,8 +524,16 @@ export async function GET(request: Request) {
           }
         })
 
+        const studentEmail = (student.email || d.email || d.emailAluno || d.email_aluno || '').trim()
+        const studentTelefone = (student.telefone || d.telefone || d.celular || '').trim()
+        const studentMatricula = (student.matricula || d.matricula || d.codigo || student.id || '').trim()
+
         return {
           ...student,
+          email: studentEmail,
+          telefone: studentTelefone,
+          matricula: studentMatricula,
+          codigo: studentMatricula,
           isIntegralIntermediario: student.isIntegralIntermediario ?? d.isIntegralIntermediario,
           integral_tipo: student.integral_tipo || d.integral_tipo,
           modalidade: student.modalidade || d.modalidade,
@@ -553,8 +561,10 @@ export async function GET(request: Request) {
             cpfResponsavel: d.cpfResponsavel,
             emailResponsavel: d.emailResponsavel,
             telResponsavel: d.telResponsavel,
-            codigo: d.codigo,
-            email: d.email
+            codigo: studentMatricula,
+            matricula: studentMatricula,
+            email: studentEmail,
+            telefone: studentTelefone
           }
         }
       })
@@ -767,9 +777,17 @@ export async function GET(request: Request) {
         resolvedFoto = null
       }
 
+      const studentEmail = (student.email || d.email || d.emailAluno || d.email_aluno || '').trim()
+      const studentTelefone = (student.telefone || d.telefone || d.celular || '').trim()
+      const studentMatricula = (student.matricula || d.matricula || d.codigo || student.id || '').trim()
+
       return {
         ...student,
         ...(student.dados || {}), // Spread JSONB data
+        email: studentEmail,
+        telefone: studentTelefone,
+        matricula: studentMatricula,
+        codigo: studentMatricula,
         foto: resolvedFoto, // Garantir que foto resolvida estritamente sobrescreva qualquer dado inconsistente
         created_at: student.created_at, // Restore to ensure it's not overwritten
         responsaveis: finalResponsaveis,
@@ -1107,12 +1125,34 @@ export async function PUT(request: Request) {
       }
     }
 
-    // 0.1 Buscar dados prévios do aluno para garantir preservação do histórico de turmas
+    // 0.1 Buscar dados prévios do aluno para garantir preservação do histórico de turmas e campos existentes
     const { data: existingStudent } = await supabase
       .from('alunos')
-      .select('id, turma, serie, turno, created_at, dados')
+      .select('*')
       .eq('id', id)
       .maybeSingle()
+
+    if (existingStudent) {
+      if (!row.foto && existingStudent.foto) row.foto = existingStudent.foto
+      if (!(row as any).foto_url && (existingStudent as any).foto_url) (row as any).foto_url = (existingStudent as any).foto_url
+      if (!row.data_nascimento && existingStudent.data_nascimento) row.data_nascimento = existingStudent.data_nascimento
+      if (!row.serie && existingStudent.serie) row.serie = existingStudent.serie
+      if (!row.turno && existingStudent.turno) row.turno = existingStudent.turno
+      if (!row.obs && existingStudent.obs) row.obs = existingStudent.obs
+      if ((!row.unidade || row.unidade === 'Unidade Centro') && existingStudent.unidade) row.unidade = existingStudent.unidade
+      if (!('email' in body) && existingStudent.email) row.email = existingStudent.email
+      if (!('telefone' in body || 'celular' in body) && existingStudent.telefone) row.telefone = existingStudent.telefone
+      row.dados = { ...(existingStudent.dados || {}), ...(row.dados || {}) }
+    }
+
+    if (row.email) {
+      if (!row.dados) row.dados = {}
+      row.dados.email = row.email
+    }
+    if (row.telefone) {
+      if (!row.dados) row.dados = {}
+      row.dados.telefone = row.telefone
+    }
 
     const prevTurma = existingStudent?.turma || existingStudent?.dados?.turma
     const newTurma = row.turma
@@ -1838,10 +1878,10 @@ function buildRow(a: any) {
 
   // Map fields from the UI form if they are different
   const mappedNome = nome || a.nomeCompleto || ''
-  const mappedMatricula = matricula?.trim() || a.codigo?.trim() || null
-  const mappedEmail = email || ''
-  const mappedTelefone = telefone || ''
-  const mappedDataNasc = data_nascimento || a.dataNasc || ''
+  const mappedMatricula = matricula?.trim() || a.codigo?.trim() || a.dados?.codigo?.trim() || a.dados?.matricula?.trim() || null
+  const mappedEmail = (email || a.dados?.email || a.dados?.emailAluno || a.dados?.email_aluno || '').trim()
+  const mappedTelefone = (telefone || a.dados?.telefone || a.celular || a.dados?.celular || '').trim()
+  const mappedDataNasc = data_nascimento || a.dataNasc || a.dados?.dataNasc || ''
   
   // Handle status: if 'ativo' boolean is passed, map to 'matriculado' or 'inativo'
   let mappedStatus = status
@@ -1940,7 +1980,12 @@ function buildRow(a: any) {
     obs: obs || '',
     unidade: unidade || 'Unidade Centro',
     foto: foto || null,
-    dados: rest, // Guarda outros campos no JSONB
+    dados: {
+      ...rest,
+      email: mappedEmail,
+      telefone: mappedTelefone,
+      codigo: mappedMatricula
+    }, // Guarda outros campos no JSONB
     updated_at: new Date().toISOString(),
   }
 }

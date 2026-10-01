@@ -1151,6 +1151,7 @@ interface StudentCallControllerProps {
   adConfig: any
   isMirrorModeActive: boolean
   onLogout: () => void
+  isAlunoAccess?: boolean
 }
 
 export const StudentCallController = React.memo(function StudentCallController({
@@ -1161,8 +1162,10 @@ export const StudentCallController = React.memo(function StudentCallController({
   turmas,
   adConfig,
   isMirrorModeActive,
-  onLogout
+  onLogout,
+  isAlunoAccess
 }: StudentCallControllerProps) {
+  const searchParams = useSearchParams()
   const { callStudent, addSpecialAuth, deleteCall, activeCalls } = useSaida()
   
   const [isSpecialAuthModalOpen, setIsSpecialAuthModalOpen] = useState(false)
@@ -1358,6 +1361,20 @@ export const StudentCallController = React.memo(function StudentCallController({
       setSpecialAuthSending(false)
     }
   }, [specialAuthText, specialAuthTime, selectedAlunos, meusAlunos, aluno, turmas, currentUser, addSpecialAuth, isMirrorModeActive])
+
+  const isMirroringAluno = searchParams?.get('espelhar_aluno') === 'true'
+  const isAluno = Boolean(
+    isAlunoAccess ||
+    isMirroringAluno ||
+    currentUser?.cargo === 'Aluno' ||
+    currentUser?.perfil === 'Aluno' ||
+    (currentUser as any)?.userType === 'aluno' ||
+    ((currentUser as any)?.aluno_id && currentUser?.cargo !== 'Responsável' && !(currentUser as any)?.responsavel_id)
+  )
+
+  if (isAluno) {
+    return null
+  }
 
   const isAlunoCargo = currentUser?.cargo === 'Aluno'
 

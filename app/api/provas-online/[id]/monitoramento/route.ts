@@ -83,13 +83,21 @@ export async function GET(
     if (diffActivity > 120) statusConexao = 'sem_sinal'
     else if (diffActivity > 45) statusConexao = 'instavel'
 
-    const respostasList = Object.values(currentTentativa.respostas || {})
-    const respondidas = respostasList.filter((r: any) => 
-      r.respostaOpcaoId || 
-      (r.respostaOpcoesIds && r.respostaOpcoesIds.length > 0) || 
-      (r.respostaVF && Object.keys(r.respostaVF).length > 0) || 
-      (r.respostaDissertativa && r.respostaDissertativa.trim().length > 0)
-    ).length
+    const respostasMap = currentTentativa.respostas || {}
+    let respondidas = 0
+    const examQuestions = prova.questoes || []
+    examQuestions.forEach((q: any, qIdx: number) => {
+      const r = respostasMap[q.id] || respostasMap[String(qIdx)] || Object.values(respostasMap).find((item: any) => item?.questaoId === q.id)
+      if (r) {
+        const hasMC = Boolean(r.alternativaIdSelecionada || r.respostaOpcaoId)
+        const hasMS = Boolean((r.alternativasIdsSelecionadas && r.alternativasIdsSelecionadas.length > 0) || (r.respostaOpcoesIds && r.respostaOpcoesIds.length > 0))
+        const hasVF = Boolean((r.itensVouF && (Array.isArray(r.itensVouF) ? r.itensVouF.length > 0 : Object.keys(r.itensVouF).length > 0)) || (r.respostaVF && Object.keys(r.respostaVF).length > 0))
+        const hasEssay = Boolean((r.textoDissertativo && r.textoDissertativo.trim().length > 0) || (r.respostaTexto && r.respostaTexto.trim().length > 0) || (r.respostaDissertativa && r.respostaDissertativa.trim().length > 0))
+        if (hasMC || hasMS || hasVF || hasEssay) {
+          respondidas++
+        }
+      }
+    })
 
     const percentualConcluido = Math.min(100, Math.round((respondidas / totalQuestoes) * 100))
 

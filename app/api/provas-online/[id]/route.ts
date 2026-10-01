@@ -31,11 +31,18 @@ export async function GET(
   const isStudent = cargo === 'Aluno' || perfil === 'Aluno' || Boolean(user.user_metadata?.aluno_id)
   const isResponsible = cargo === 'Responsável' || perfil === 'Família' || perfil === 'Responsável'
 
+  const { searchParams } = new URL(request.url)
+  const requestedAlunoId = searchParams.get('aluno_id') || searchParams.get('slug')
+
   const tentativas = await dbGetTentativasByProvaId(id)
 
   if (isStudent || isResponsible) {
-    const alunoId = user.user_metadata?.aluno_id || user.id
-    const myTentativa = tentativas.find(t => t.alunoId === alunoId && (t.status === 'em_andamento' || t.status === 'entregue' || t.statusCorrecao === 'corrigida')) || null
+    const alunoId = requestedAlunoId || user.user_metadata?.aluno_id || user.id
+    const matricula = user.user_metadata?.matricula || ''
+    const myTentativa = tentativas.find(t => 
+      (t.alunoId === alunoId || t.alunoMatricula === alunoId || (matricula && t.alunoMatricula === matricula)) && 
+      (t.status === 'em_andamento' || t.status === 'entregue' || t.statusCorrecao === 'corrigida')
+    ) || null
     const canView = shouldPublishResults(prova, tentativas)
     const sanitized = sanitizeExamForParticipant(prova, canView)
     return NextResponse.json({
@@ -99,10 +106,15 @@ export async function DELETE(
   if (errorResponse) return errorResponse
 
   const { id } = await params
+  const { searchParams } = new URL(request.url)
+  const force = searchParams.get('force') === 'true'
+
   const tentativas = await dbGetTentativasByProvaId(id)
-  if (tentativas.length > 0) {
+  if (tentativas.length > 0 && !force) {
     return NextResponse.json({
-      error: 'Não é possível excluir esta prova pois ela já possui tentativas registradas. Em vez de excluir, encerre ou cancele a prova.'
+      error: 'Esta prova possui tentativas registradas. Confirme a exclusão permanente.',
+      hasTentativas: true,
+      totalTentativas: tentativas.length
     }, { status: 400 })
   }
 

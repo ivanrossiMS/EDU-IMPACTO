@@ -235,6 +235,7 @@ export async function sendAgendaPushNotification({
                   reason: pauseStatus.pauseReason,
                   _target_user_ids: cleanTargetIds,
                   _metadata: metadata || null,
+                  _send_after: sendAfter || null,
                 }),
                 created_at: new Date().toISOString(),
               })
@@ -316,6 +317,7 @@ export async function sendAgendaPushNotification({
         onesignal_response: JSON.stringify({
           _target_user_ids: cleanTargetIds,
           _metadata: metadata || null,
+          _send_after: sendAfter || null,
         }),
         created_at: new Date().toISOString(),
       })
@@ -365,6 +367,7 @@ export async function sendAgendaPushNotification({
       ...(pushResponse.data && typeof pushResponse.data === 'object' ? pushResponse.data : { raw: pushResponse.data }),
       _target_user_ids: cleanTargetIds,
       _metadata: metadata || null,
+      _send_after: sendAfter || null,
       _is_pause_exception: isExemptFromPause ? true : undefined,
     }
 

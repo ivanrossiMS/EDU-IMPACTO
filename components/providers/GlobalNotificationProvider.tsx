@@ -121,7 +121,7 @@ export function resolveDestinationFromPayload(data: any, currentUser?: any): str
 
     // Se a URL direta for genérica sem aluno_id (ex: /agenda-digital/frequencia, /agenda-digital/comunicados)
     // e tivermos candidateAlunoId (e não for colaborador), REESCREVE diretamente para a rota do aluno!
-    const genericMatch = cleanUrl.match(/^\/agenda-digital\/(comunicados|chat|momentos|calendario|frequencia|ocorrencias|notas|financeiro|portaria)(\?.*)?$/)
+    const genericMatch = cleanUrl.match(/^\/agenda-digital\/(comunicados|chat|momentos|calendario|frequencia|ocorrencias|notas|provas-online|financeiro|portaria)(\?.*)?$/)
     if (genericMatch && candidateAlunoId && !isColab) {
       const rawModuleName = genericMatch[1]
       const moduleName = rawModuleName === 'chat' ? 'comunicados' : rawModuleName

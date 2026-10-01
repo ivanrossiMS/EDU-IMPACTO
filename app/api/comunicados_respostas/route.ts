@@ -276,7 +276,7 @@ export async function POST(request: Request) {
         const { data: stus } = await supabase
           .from('comunicados')
           .select('id, dados')
-          .ilike('id', 'AD-COM-REL-STU-%')
+          .like('id', 'AD-COM-REL-STU-%')
           .gte('created_at', minDate)
           .lte('created_at', maxDate);
           

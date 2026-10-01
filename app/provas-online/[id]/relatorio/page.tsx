@@ -998,26 +998,70 @@ export default function RelatorioProvaPage() {
                 gap: '16px',
               }}
             >
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-200 shrink-0">
-                  <Database className="w-5 h-5" />
+              {/* Header */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #e2e8f0', paddingBottom: '14px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <div style={{
+                    width: '42px',
+                    height: '42px',
+                    borderRadius: '12px',
+                    background: '#ecfdf5',
+                    color: '#059669',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    border: '1px solid #a7f3d0',
+                    flexShrink: 0
+                  }}>
+                    <Database size={20} />
+                  </div>
+                  <div>
+                    <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 900, color: '#0f172a' }}>
+                      Transferir Notas para o Diário Oficial
+                    </h3>
+                    <p style={{ margin: '2px 0 0 0', fontSize: '12px', color: '#64748b' }}>
+                      Mapeia as notas computadas nas provas diretamente no módulo acadêmico de notas
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="text-base font-bold text-slate-900">Transferir Notas para o Diário Oficial</h3>
-                  <p className="text-xs text-slate-500">
-                    Mapeia as notas computadas nas provas diretamente no módulo acadêmico de notas
-                  </p>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => setIntegrationModalOpen(false)}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: '#94a3b8',
+                    cursor: 'pointer',
+                    fontSize: '13px',
+                    fontWeight: 700,
+                    padding: '4px 8px'
+                  }}
+                >
+                  Fechar
+                </button>
               </div>
 
               {/* Form Configs */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '12px' }}>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Turma Destino:</label>
+                  <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#334155', textTransform: 'uppercase', marginBottom: '6px' }}>
+                    Turma Destino:
+                  </label>
                   <select
                     value={selectedTurma}
                     onChange={e => setSelectedTurma(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-900 focus:outline-none focus:border-sky-500"
+                    style={{
+                      width: '100%',
+                      height: '40px',
+                      borderRadius: '10px',
+                      border: '1px solid #cbd5e1',
+                      background: '#ffffff',
+                      color: '#0f172a',
+                      fontSize: '13px',
+                      fontWeight: 600,
+                      padding: '0 12px',
+                      outline: 'none'
+                    }}
                   >
                     {(prova?.turmas || []).map((t: string) => (
                       <option key={t} value={t}>{t}</option>
@@ -1026,22 +1070,50 @@ export default function RelatorioProvaPage() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Escala Alvo do Diário:</label>
+                  <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#334155', textTransform: 'uppercase', marginBottom: '6px' }}>
+                    Escala Alvo do Diário:
+                  </label>
                   <input
                     type="number"
                     step="0.5"
                     value={escalaAlvo}
                     onChange={e => setEscalaAlvo(parseFloat(e.target.value) || 10)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-900 font-mono text-center focus:outline-none focus:border-sky-500"
+                    style={{
+                      width: '100%',
+                      height: '40px',
+                      borderRadius: '10px',
+                      border: '1px solid #cbd5e1',
+                      background: '#ffffff',
+                      color: '#0f172a',
+                      fontSize: '13px',
+                      fontWeight: 700,
+                      fontFamily: 'monospace',
+                      textAlign: 'center',
+                      padding: '0 12px',
+                      outline: 'none'
+                    }}
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Tratar Ausências:</label>
+                  <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#334155', textTransform: 'uppercase', marginBottom: '6px' }}>
+                    Tratar Ausências:
+                  </label>
                   <select
                     value={tratarAusencias}
                     onChange={e => setTratarAusencias(e.target.value as any)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-900 focus:outline-none focus:border-sky-500"
+                    style={{
+                      width: '100%',
+                      height: '40px',
+                      borderRadius: '10px',
+                      border: '1px solid #cbd5e1',
+                      background: '#ffffff',
+                      color: '#0f172a',
+                      fontSize: '13px',
+                      fontWeight: 600,
+                      padding: '0 12px',
+                      outline: 'none'
+                    }}
                   >
                     <option value="sem_nota">Manter em Branco</option>
                     <option value="zero">Atribuir Zero (0.0)</option>
@@ -1050,38 +1122,100 @@ export default function RelatorioProvaPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Nome da Avaliação no Diário:</label>
+                <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#334155', textTransform: 'uppercase', marginBottom: '6px' }}>
+                  Nome da Avaliação no Diário:
+                </label>
                 <input
                   type="text"
                   value={avaliacaoNome}
                   onChange={e => setAvaliacaoNome(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-900 focus:outline-none focus:border-sky-500 focus:bg-white"
+                  style={{
+                    width: '100%',
+                    height: '40px',
+                    borderRadius: '10px',
+                    border: '1px solid #cbd5e1',
+                    background: '#ffffff',
+                    color: '#0f172a',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    padding: '0 14px',
+                    outline: 'none'
+                  }}
                 />
               </div>
 
-              {/* Preview Button & Table */}
-              <div className="pt-2">
+              {/* Preview Button */}
+              <div>
                 <button
                   type="button"
                   onClick={handleLoadIntegrationPreview}
                   disabled={loadingPreview}
-                  className="w-full py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold flex items-center justify-center gap-1.5 border border-slate-200 transition-colors"
+                  style={{
+                    width: '100%',
+                    height: '40px',
+                    borderRadius: '10px',
+                    background: '#f0f9ff',
+                    border: '1px solid #bae6fd',
+                    color: '#0284c7',
+                    fontSize: '13px',
+                    fontWeight: 700,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                    cursor: loadingPreview ? 'not-allowed' : 'pointer',
+                    transition: 'all 0.15s'
+                  }}
                 >
-                  {loadingPreview ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Calculator className="w-3.5 h-3.5 text-sky-600" />}
-                  Recarregar Prévia de Lançamento
+                  {loadingPreview ? <RefreshCw size={15} className="animate-spin" /> : <Calculator size={15} color="#0284c7" />}
+                  {loadingPreview ? 'Calculando Prévia...' : 'Recarregar Prévia de Lançamento'}
                 </button>
               </div>
 
               {integrationPreview && (
-                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3 max-h-60 overflow-y-auto">
-                  <div className="flex items-center justify-between text-xs text-slate-500 font-medium pb-2 border-b border-slate-200">
+                <div style={{
+                  background: '#f8fafc',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: '14px',
+                  padding: '14px',
+                  maxHeight: '220px',
+                  overflowY: 'auto',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px'
+                }}>
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    fontSize: '11px',
+                    fontWeight: 800,
+                    color: '#64748b',
+                    textTransform: 'uppercase',
+                    paddingBottom: '8px',
+                    borderBottom: '1px solid #cbd5e1'
+                  }}>
                     <span>Aluno</span>
                     <span>Nota Convertida</span>
                   </div>
                   {(integrationPreview.linhas || []).map((row: any) => (
-                    <div key={row.alunoId} className="flex items-center justify-between text-xs">
-                      <span className="text-slate-700 truncate max-w-[280px]">{row.alunoNome}</span>
-                      <span className="font-mono font-bold text-emerald-700">
+                    <div
+                      key={row.alunoId}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        fontSize: '12px',
+                        padding: '6px 0',
+                        borderBottom: '1px solid #f1f5f9'
+                      }}
+                    >
+                      <span style={{ color: '#0f172a', fontWeight: 600 }}>{row.alunoNome}</span>
+                      <span style={{
+                        fontFamily: 'monospace',
+                        fontWeight: 800,
+                        color: row.notaLancada !== null ? '#059669' : '#94a3b8'
+                      }}>
                         {row.notaLancada !== null ? row.notaLancada.toFixed(1) : 'Em Branco'}
                       </span>
                     </div>
@@ -1089,12 +1223,30 @@ export default function RelatorioProvaPage() {
                 </div>
               )}
 
-              {/* Actions */}
-              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              {/* Actions Footer */}
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'flex-end',
+                gap: '12px',
+                paddingTop: '16px',
+                borderTop: '1px solid #e2e8f0'
+              }}>
                 <button
                   type="button"
                   onClick={() => setIntegrationModalOpen(false)}
-                  className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold border border-slate-200"
+                  style={{
+                    height: '40px',
+                    padding: '0 20px',
+                    borderRadius: '10px',
+                    background: '#f1f5f9',
+                    border: '1px solid #cbd5e1',
+                    color: '#334155',
+                    fontSize: '13px',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    transition: 'all 0.15s'
+                  }}
                 >
                   Cancelar
                 </button>
@@ -1102,10 +1254,25 @@ export default function RelatorioProvaPage() {
                   type="button"
                   onClick={handleCommitIntegration}
                   disabled={committingIntegration}
-                  className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition-colors"
+                  style={{
+                    height: '40px',
+                    padding: '0 24px',
+                    borderRadius: '10px',
+                    background: '#059669',
+                    border: 'none',
+                    color: '#ffffff',
+                    fontSize: '13px',
+                    fontWeight: 800,
+                    cursor: committingIntegration ? 'not-allowed' : 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    boxShadow: '0 2px 8px rgba(5, 150, 105, 0.3)',
+                    transition: 'all 0.15s'
+                  }}
                 >
-                  {committingIntegration ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-                  Confirmar Transferência para Diário
+                  {committingIntegration ? <RefreshCw size={15} className="animate-spin" /> : <Check size={16} />}
+                  {committingIntegration ? 'Transferindo...' : 'Confirmar Transferência para Diário'}
                 </button>
               </div>
             </motion.div>

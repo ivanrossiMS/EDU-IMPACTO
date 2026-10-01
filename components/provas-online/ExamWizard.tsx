@@ -8,7 +8,7 @@ import {
   Trash2, Copy, BookOpen, Clock, Calendar, Shield,
   Layers, Users, HelpCircle, CheckCircle2, AlertCircle, X,
   ChevronDown, ChevronUp, GripVertical, FileText, Image as ImageIcon,
-  Calculator, AlertTriangle, RefreshCw, Search, UserCheck
+  Calculator, AlertTriangle, RefreshCw, Search, UserCheck, Link2
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { HtmlContent } from '@/components/HtmlContent'
@@ -52,7 +52,21 @@ export function ExamWizard({ initialExam, isEditing = false }: ExamWizardProps) 
 
   // Main Exam State
   const [exam, setExam] = useState<ProvaOnline>(() => {
-    if (initialExam) return initialExam
+    if (initialExam) {
+      const cleanQuestoes = (initialExam.questoes || []).map(q => {
+        const clean = { ...q }
+        if (clean.tipo === 'dissertativa') {
+          delete clean.alternativas
+          delete clean.itensVF
+        } else if (clean.tipo === 'verdadeiro_falso') {
+          delete clean.alternativas
+        } else if (clean.tipo === 'multipla_escolha' || clean.tipo === 'multipla_selecao') {
+          delete clean.itensVF
+        }
+        return clean
+      })
+      return { ...initialExam, questoes: cleanQuestoes }
+    }
 
     const now = new Date()
     const tomorrow = new Date(now.getTime() + 86400000)
@@ -232,15 +246,25 @@ export function ExamWizard({ initialExam, isEditing = false }: ExamWizardProps) 
 
   // Save / Update question from QuestionEditorModal
   const handleSaveQuestion = (updatedQ: QuestaoProva) => {
+    const cleanQ = { ...updatedQ }
+    if (cleanQ.tipo === 'dissertativa') {
+      delete cleanQ.alternativas
+      delete cleanQ.itensVF
+    } else if (cleanQ.tipo === 'verdadeiro_falso') {
+      delete cleanQ.alternativas
+    } else if (cleanQ.tipo === 'multipla_escolha' || cleanQ.tipo === 'multipla_selecao') {
+      delete cleanQ.itensVF
+    }
+
     setExam(prev => {
       const list = prev.questoes || []
-      const idx = list.findIndex(q => q.id === updatedQ.id)
+      const idx = list.findIndex(q => q.id === cleanQ.id)
       if (idx >= 0) {
         const nextList = [...list]
-        nextList[idx] = updatedQ
+        nextList[idx] = cleanQ
         return { ...prev, questoes: nextList }
       } else {
-        return { ...prev, questoes: [...list, { ...updatedQ, ordem: list.length }] }
+        return { ...prev, questoes: [...list, { ...cleanQ, ordem: list.length }] }
       }
     })
     setEditingQuestionModalOpen(false)
@@ -305,8 +329,21 @@ export function ExamWizard({ initialExam, isEditing = false }: ExamWizardProps) 
 
     try {
       const finalAlunosEspecificos = alunosModo === 'especificos' ? (exam.alunosEspecificos || []) : []
+      const cleanQuestoes = (exam.questoes || []).map(q => {
+        const clean = { ...q }
+        if (clean.tipo === 'dissertativa') {
+          delete clean.alternativas
+          delete clean.itensVF
+        } else if (clean.tipo === 'verdadeiro_falso') {
+          delete clean.alternativas
+        } else if (clean.tipo === 'multipla_escolha' || clean.tipo === 'multipla_selecao') {
+          delete clean.itensVF
+        }
+        return clean
+      })
       const payload: ProvaOnline = {
         ...exam,
+        questoes: cleanQuestoes,
         alunosEspecificos: finalAlunosEspecificos,
         status: publish ? (exam.aprovacaoRequerida ? 'agendada' : 'agendada') : 'rascunho',
         statusAprovacao: exam.aprovacaoRequerida ? 'pendente' : 'aprovada',
@@ -983,8 +1020,8 @@ export function ExamWizard({ initialExam, isEditing = false }: ExamWizardProps) 
                       <HtmlContent html={q.enunciado} />
                     </div>
 
-                    {/* Alternativas preview (Múltipla Escolha e Seleção) */}
-                    {q.alternativas && q.alternativas.length > 0 && (
+                    {/* Alternativas preview (Apenas Múltipla Escolha e Seleção) */}
+                    {(q.tipo === 'multipla_escolha' || q.tipo === 'multipla_selecao') && q.alternativas && q.alternativas.length > 0 && (
                       <div style={{
                         display: 'grid',
                         gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
@@ -1021,7 +1058,9 @@ export function ExamWizard({ initialExam, isEditing = false }: ExamWizardProps) 
                             }}>
                               {a.letra}
                             </span>
-                            <span style={{ flex: 1 }}>{a.texto || '(Em branco)'}</span>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <HtmlContent html={a.texto || '(Em branco)'} />
+                            </div>
                             {a.correta && <Check size={14} color="#16a34a" style={{ flexShrink: 0 }} />}
                           </div>
                         ))}
@@ -1046,7 +1085,9 @@ export function ExamWizard({ initialExam, isEditing = false }: ExamWizardProps) 
                               gap: '12px'
                             }}
                           >
-                            <span style={{ color: '#334155' }}>{it.afirmacao || '(Afirmação pendente)'}</span>
+                            <div style={{ flex: 1, minWidth: 0, color: '#334155' }}>
+                              <HtmlContent html={it.afirmacao || '(Afirmação pendente)'} />
+                            </div>
                             <span style={{
                               padding: '2px 8px',
                               borderRadius: '6px',
@@ -1975,6 +2016,58 @@ export function ExamWizard({ initialExam, isEditing = false }: ExamWizardProps) 
                   Esta prova exige homologação e aprovação da Coordenação antes de ser liberada aos alunos.
                 </div>
               )}
+
+              {exam.id && (
+                <div style={{
+                  padding: '12px 16px',
+                  borderRadius: '12px',
+                  background: '#f0f9ff',
+                  border: '1px dashed #bae6fd',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '12px',
+                  flexWrap: 'wrap'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+                    <Link2 size={16} color="#0284c7" style={{ flexShrink: 0 }} />
+                    <div>
+                      <div style={{ fontSize: '12px', fontWeight: 700, color: '#0369a1' }}>
+                        Link Direto para os Alunos Fazerem a Avaliação
+                      </div>
+                      <div style={{ fontSize: '11px', color: '#0284c7', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {typeof window !== 'undefined' ? `${window.location.origin}/provas-online/fazer/${exam.id}` : `/provas-online/fazer/${exam.id}`}
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const origin = typeof window !== 'undefined' ? window.location.origin : ''
+                      const link = `${origin}/provas-online/fazer/${exam.id}`
+                      navigator?.clipboard?.writeText(link)
+                      toast.success('Link direto copiado para a área de transferência!')
+                    }}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      padding: '6px 12px',
+                      borderRadius: '8px',
+                      background: '#0284c7',
+                      color: '#ffffff',
+                      border: 'none',
+                      fontSize: '12px',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      flexShrink: 0
+                    }}
+                  >
+                    <Copy size={13} color="#ffffff" />
+                    Copiar Link
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -2297,8 +2390,8 @@ export function ExamWizard({ initialExam, isEditing = false }: ExamWizardProps) 
                       <HtmlContent html={q.enunciado} />
                     </div>
 
-                    {/* Alternativas */}
-                    {q.alternativas && (
+                    {/* Alternativas (Apenas múltipla escolha ou múltipla seleção) */}
+                    {(q.tipo === 'multipla_escolha' || q.tipo === 'multipla_selecao') && q.alternativas && q.alternativas.length > 0 && (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                         {q.alternativas.map(a => (
                           <div
@@ -2331,14 +2424,16 @@ export function ExamWizard({ initialExam, isEditing = false }: ExamWizardProps) 
                             }}>
                               {a.letra}
                             </span>
-                            <span>{a.texto}</span>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <HtmlContent html={a.texto || '(Em branco)'} />
+                            </div>
                           </div>
                         ))}
                       </div>
                     )}
 
-                    {/* Verdadeiro ou Falso */}
-                    {q.itensVF && (
+                    {/* Verdadeiro ou Falso (Apenas verdadeiro_falso) */}
+                    {q.tipo === 'verdadeiro_falso' && q.itensVF && q.itensVF.length > 0 && (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                         {q.itensVF.map(item => (
                           <div
@@ -2356,7 +2451,9 @@ export function ExamWizard({ initialExam, isEditing = false }: ExamWizardProps) 
                               gap: '12px'
                             }}
                           >
-                            <span>{item.afirmacao}</span>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <HtmlContent html={item.afirmacao} />
+                            </div>
                             <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
                               <span style={{ padding: '4px 10px', borderRadius: '6px', background: '#ffffff', border: '1px solid #cbd5e1', fontWeight: 800, fontSize: '11px', color: '#475569' }}>V</span>
                               <span style={{ padding: '4px 10px', borderRadius: '6px', background: '#ffffff', border: '1px solid #cbd5e1', fontWeight: 800, fontSize: '11px', color: '#475569' }}>F</span>

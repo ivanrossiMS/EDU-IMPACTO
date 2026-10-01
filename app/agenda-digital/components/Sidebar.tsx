@@ -33,7 +33,8 @@ import {
   Camera,
   Loader2,
   MonitorSmartphone,
-  Radio
+  Radio,
+  FileCheck2
 } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
@@ -104,7 +105,13 @@ export function ADSidebar() {
 
   const baseRespId = (currentUser as any)?.responsavel_id || (currentUser as any)?.dados?.responsavel_id || (currentUser as any)?.user_metadata?.responsavel_id || currentUser?.id || ''
   const respId = espelharRespId || baseRespId
-  const isAlunoLogado = espelharAluno || currentUser?.cargo === 'Aluno'
+  const isAlunoLogado = Boolean(
+    espelharAluno ||
+    currentUser?.cargo === 'Aluno' ||
+    currentUser?.perfil === 'Aluno' ||
+    (currentUser as any)?.userType === 'aluno' ||
+    ((currentUser as any)?.aluno_id && currentUser?.cargo !== 'Responsável' && !(currentUser as any)?.responsavel_id)
+  )
 
   // Extrair ID do aluno ou rota de colaborador (ex: /agenda-digital/4697/... ou /agenda-digital/colaborador/...)
   const segments = pathname.split('/')
@@ -214,6 +221,7 @@ export function ADSidebar() {
         { id: 'frequencia', label: 'Frequência', icon: BarChart2, href: `/agenda-digital/${alunoId}/frequencia` },
         { id: 'ocorrencias', label: 'Ocorrências', icon: AlertTriangle, href: `/agenda-digital/${alunoId}/ocorrencias` },
         { id: 'notas', label: 'Notas', icon: GraduationCap, href: `/agenda-digital/${alunoId}/notas` },
+        { id: 'provas-online', label: 'Provas Online', icon: FileCheck2, href: `/agenda-digital/${alunoId}/provas-online` },
         { id: 'perfil', label: 'Perfil', icon: UserCog, href: `/agenda-digital/${alunoId}/perfil` },
         { id: 'modulos', label: 'Trocar Módulo', icon: Grid, href: '/login?step=choose_system' }
       ].filter(item => {
@@ -237,6 +245,7 @@ export function ADSidebar() {
         if (item.label === 'Frequência' && adConfig?.permissoes?.visualizarFrequencia === false) return false
         if (item.label === 'Ocorrências' && adConfig?.permissoes?.visualizarOcorrencias === false) return false
         if (item.label === 'Notas' && adConfig?.permissoes?.visualizarNotas === false) return false
+        if (item.label === 'Provas Online' && adConfig?.permissoes?.visualizarProvasOnline === false) return false
         return true
       })
     }
@@ -550,6 +559,7 @@ export function ADSidebar() {
                     { label: 'Frequência', href: `/agenda-digital/${alunoId}/frequencia`, icon: BarChart2 },
                     { label: 'Ocorrências', href: `/agenda-digital/${alunoId}/ocorrencias`, icon: AlertTriangle },
                     { label: 'Notas', href: `/agenda-digital/${alunoId}/notas`, icon: GraduationCap },
+                    { label: 'Provas Online', href: `/agenda-digital/${alunoId}/provas-online`, icon: FileCheck2 },
                     { label: 'Meu Perfil', href: `/agenda-digital/${alunoId}/perfil`, icon: UserCog },
                   ].filter(item => {
                     if (alunoId === 'colaborador') {
@@ -569,6 +579,7 @@ export function ADSidebar() {
                     if (item.label === 'Frequência' && adConfig?.permissoes?.visualizarFrequencia === false) return false
                     if (item.label === 'Ocorrências' && adConfig?.permissoes?.visualizarOcorrencias === false) return false
                     if (item.label === 'Notas' && adConfig?.permissoes?.visualizarNotas === false) return false
+                    if (item.label === 'Provas Online' && adConfig?.permissoes?.visualizarProvasOnline === false) return false
                     return true
                   }).map((item, idx) => {
                     const isActive = pathname.startsWith(item.href)
@@ -723,12 +734,20 @@ export function ADSidebar() {
                       setLoadingPath('logout')
                       await performLogout(); 
                     }}
-                    style={{
+                    style={isAlunoLogado ? {
+                      flex: 1, height: 34, borderRadius: 10,
+                      background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.2) 0%, rgba(220, 38, 38, 0.28) 100%)',
+                      border: '1.2px solid rgba(239, 68, 68, 0.45)',
+                      color: '#fca5a5', fontSize: 12, fontWeight: 700,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+                      cursor: 'pointer', transition: 'all 0.2s',
+                      boxShadow: '0 2px 8px rgba(239, 68, 68, 0.15)'
+                    } : {
                       flex: 1, height: 32, borderRadius: 8, background: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.3)',
                       color: '#fca5a5', fontSize: 11, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, cursor: 'pointer', transition: 'all 0.2s'
                     }}
-                    onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239, 68, 68, 0.25)' }}
-                    onMouseLeave={e => { e.currentTarget.style.background = 'rgba(239, 68, 68, 0.15)' }}
+                    onMouseEnter={e => { e.currentTarget.style.background = isAlunoLogado ? 'linear-gradient(135deg, rgba(239, 68, 68, 0.35) 0%, rgba(220, 38, 38, 0.45) 100%)' : 'rgba(239, 68, 68, 0.25)' }}
+                    onMouseLeave={e => { e.currentTarget.style.background = isAlunoLogado ? 'linear-gradient(135deg, rgba(239, 68, 68, 0.2) 0%, rgba(220, 38, 38, 0.28) 100%)' : 'rgba(239, 68, 68, 0.15)' }}
                   >
                     <LogOut size={14} /> Sair
                   </button>

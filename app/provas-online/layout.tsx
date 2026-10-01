@@ -32,10 +32,11 @@ export default function ProvasOnlineLayout({ children }: { children: React.React
     )
   }
 
-  // Na tela de execução da prova pelo aluno (/provas-online/fazer/[id]), suprime a sidebar para foco total e anti-cheat
+  // Na tela de execução da prova (/provas-online/fazer) e de impressão de caderno (/imprimir), suprime a sidebar para foco total e área limpa
   const isExamRoom = pathname?.includes('/provas-online/fazer')
+  const isPrintPage = pathname?.includes('/imprimir')
 
-  if (isExamRoom) {
+  if (isExamRoom || isPrintPage) {
     return (
       <div style={{ minHeight: '100vh', background: '#f8fafc' }}>
         {children}

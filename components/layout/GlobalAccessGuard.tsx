@@ -125,6 +125,10 @@ export function GlobalAccessGuard({ children }: { children: React.ReactNode }) {
   const isAllowedPath =
     pathname === '/' ||
     pathname.startsWith('/agenda-digital') ||
+    pathname.startsWith('/provas-online') ||
+    pathname.startsWith('/assinar') ||
+    pathname.startsWith('/validar-assinatura') ||
+    pathname.startsWith('/recibo') ||
     pathname === '/login' ||
     pathname.startsWith('/api') ||
     pathname.startsWith('/esqueci-senha') ||

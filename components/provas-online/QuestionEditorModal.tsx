@@ -16,6 +16,7 @@ import {
   ConfigPontuacaoParcial,
   DificuldadeQuestao
 } from '@/types/provas-online'
+import { RichTextToolbarEditor } from './RichTextToolbarEditor'
 
 interface QuestionEditorModalProps {
   open: boolean
@@ -32,37 +33,93 @@ export function QuestionEditorModal({
 }: QuestionEditorModalProps) {
   if (!open || !question) return null
 
-  // Local editable draft of the question
-  const [draft, setDraft] = useState<QuestaoProva>(() => ({
-    ...question,
-    alternativas: question.alternativas ? [...question.alternativas] : [
-      { id: 'alt-1', letra: 'A', texto: '', correta: true, ordem: 0 },
-      { id: 'alt-2', letra: 'B', texto: '', correta: false, ordem: 1 },
-      { id: 'alt-3', letra: 'C', texto: '', correta: false, ordem: 2 },
-      { id: 'alt-4', letra: 'D', texto: '', correta: false, ordem: 3 },
-    ],
-    itensVF: question.itensVF ? [...question.itensVF] : [
-      { id: 'vf-1', afirmacao: '', correta: true, ordem: 0 },
-      { id: 'vf-2', afirmacao: '', correta: false, ordem: 1 },
-      { id: 'vf-3', afirmacao: '', correta: true, ordem: 2 }
-    ],
-    criteriosAvaliacao: question.criteriosAvaliacao ? [...question.criteriosAvaliacao] : [
-      { id: 'crit-1', descricao: 'Domínio do conteúdo e clareza argumentativa', pontosMaximos: 1.0 }
-    ],
-    configPontuacaoParcial: question.configPontuacaoParcial || {
-      permiteParcial: true,
-      tipoCalculo: 'proporcional',
-      explicacaoCalculo: 'Pontuação distribuída proporcionalmente entre as opções corretas'
+  // Local editable draft of the question, strictly isolated by question type
+  const [draft, setDraft] = useState<QuestaoProva>(() => {
+    const isMC = question.tipo === 'multipla_escolha' || question.tipo === 'multipla_selecao'
+    const isVF = question.tipo === 'verdadeiro_falso'
+    const isDissertativa = question.tipo === 'dissertativa'
+
+    return {
+      ...question,
+      alternativas: isMC
+        ? (question.alternativas && question.alternativas.length > 0
+            ? [...question.alternativas]
+            : [
+                { id: 'alt-1', letra: 'A', texto: '', correta: true, ordem: 0 },
+                { id: 'alt-2', letra: 'B', texto: '', correta: false, ordem: 1 },
+                { id: 'alt-3', letra: 'C', texto: '', correta: false, ordem: 2 },
+                { id: 'alt-4', letra: 'D', texto: '', correta: false, ordem: 3 },
+              ])
+        : undefined,
+      itensVF: isVF
+        ? (question.itensVF && question.itensVF.length > 0
+            ? [...question.itensVF]
+            : [
+                { id: 'vf-1', afirmacao: '', correta: true, ordem: 0 },
+                { id: 'vf-2', afirmacao: '', correta: false, ordem: 1 },
+                { id: 'vf-3', afirmacao: '', correta: true, ordem: 2 }
+              ])
+        : undefined,
+      criteriosAvaliacao: isDissertativa
+        ? (question.criteriosAvaliacao && question.criteriosAvaliacao.length > 0
+            ? [...question.criteriosAvaliacao]
+            : [
+                { id: 'crit-1', descricao: 'Domínio do conteúdo e clareza argumentativa', pontosMaximos: 1.0 }
+              ])
+        : undefined,
+      configPontuacaoParcial: question.configPontuacaoParcial || {
+        permiteParcial: true,
+        tipoCalculo: 'proporcional',
+        explicacaoCalculo: 'Pontuação distribuída proporcionalmente entre as opções corretas'
+      }
     }
-  }))
+  })
 
   const letters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
 
   const handleTypeChange = (newType: TipoQuestao) => {
-    setDraft(prev => ({
-      ...prev,
-      tipo: newType
-    }))
+    setDraft(prev => {
+      let novasAlternativas = prev.alternativas
+      let novosItensVF = prev.itensVF
+      let novosCriterios = prev.criteriosAvaliacao
+
+      if (newType === 'multipla_escolha' || newType === 'multipla_selecao') {
+        novosItensVF = undefined
+        if (!novasAlternativas || novasAlternativas.length === 0) {
+          novasAlternativas = [
+            { id: 'alt-1', letra: 'A', texto: '', correta: true, ordem: 0 },
+            { id: 'alt-2', letra: 'B', texto: '', correta: false, ordem: 1 },
+            { id: 'alt-3', letra: 'C', texto: '', correta: false, ordem: 2 },
+            { id: 'alt-4', letra: 'D', texto: '', correta: false, ordem: 3 },
+          ]
+        }
+      } else if (newType === 'verdadeiro_falso') {
+        novasAlternativas = undefined
+        if (!novosItensVF || novosItensVF.length === 0) {
+          novosItensVF = [
+            { id: 'vf-1', afirmacao: '', correta: true, ordem: 0 },
+            { id: 'vf-2', afirmacao: '', correta: false, ordem: 1 },
+            { id: 'vf-3', afirmacao: '', correta: true, ordem: 2 }
+          ]
+        }
+      } else if (newType === 'dissertativa') {
+        novasAlternativas = undefined
+        novosItensVF = undefined
+        if (!novosCriterios || novosCriterios.length === 0) {
+          novosCriterios = [
+            { id: 'crit-1', descricao: 'Domínio do conteúdo e clareza argumentativa', pontosMaximos: 1.0 }
+          ]
+        }
+      }
+
+      return {
+        ...prev,
+        tipo: newType,
+        alternativas: novasAlternativas,
+        itensVF: novosItensVF,
+        criteriosAvaliacao: novosCriterios
+      }
+    })
   }
 
   const handleAddAlternative = () => {
@@ -175,7 +232,8 @@ export function QuestionEditorModal({
   }
 
   const handleValidateAndSave = () => {
-    if (!draft.enunciado || draft.enunciado.trim() === '') {
+    const plainEnunciado = draft.enunciado ? draft.enunciado.replace(/<[^>]*>/g, '').trim() : ''
+    if (!plainEnunciado && !draft.enunciado?.includes('<img')) {
       toast.error('Informe o enunciado da questão.')
       return
     }
@@ -185,13 +243,18 @@ export function QuestionEditorModal({
       return
     }
 
+    const payload: QuestaoProva = { ...draft }
+
     if (draft.tipo === 'multipla_escolha' || draft.tipo === 'multipla_selecao') {
       const alts = draft.alternativas || []
       if (alts.length < 2) {
         toast.error('Cadastre ao menos duas alternativas.')
         return
       }
-      const emptyAlt = alts.some(a => !a.texto.trim())
+      const emptyAlt = alts.some(a => {
+        const plain = a.texto ? a.texto.replace(/<[^>]*>/g, '').trim() : ''
+        return !plain && !a.texto?.includes('<img')
+      })
       if (emptyAlt) {
         toast.error('Preencha o texto de todas as alternativas.')
         return
@@ -201,9 +264,10 @@ export function QuestionEditorModal({
         toast.error('Selecione ao menos uma alternativa correta como gabarito.')
         return
       }
-    }
-
-    if (draft.tipo === 'verdadeiro_falso') {
+      delete payload.itensVF
+      delete payload.respostaEsperada
+      delete payload.criteriosAvaliacao
+    } else if (draft.tipo === 'verdadeiro_falso') {
       const vfs = draft.itensVF || []
       if (vfs.length === 0) {
         toast.error('Cadastre ao menos uma afirmação para Verdadeiro ou Falso.')
@@ -214,9 +278,15 @@ export function QuestionEditorModal({
         toast.error('Preencha o texto de todas as afirmações V/F.')
         return
       }
+      delete payload.alternativas
+      delete payload.respostaEsperada
+      delete payload.criteriosAvaliacao
+    } else if (draft.tipo === 'dissertativa') {
+      delete payload.alternativas
+      delete payload.itensVF
     }
 
-    onSave(draft)
+    onSave(payload)
   }
 
   return (
@@ -364,14 +434,16 @@ export function QuestionEditorModal({
               <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
                 <FileText size={15} className="text-sky-600" /> Enunciado da Questão *
               </label>
-              <span className="text-[11px] text-slate-400">Suporta formatação HTML, imagens e fórmulas</span>
+              <span className="text-[11px] text-slate-500">
+                Formatação rica e fórmulas ativas • Preserva formatação original ao colar
+              </span>
             </div>
-            <textarea
-              rows={4}
-              placeholder="Digite com clareza o texto do enunciado, contexto ou problema a ser resolvido..."
+            <RichTextToolbarEditor
               value={draft.enunciado}
-              onChange={e => setDraft(p => ({ ...p, enunciado: e.target.value }))}
-              className="w-full p-4 rounded-2xl bg-slate-50 border border-slate-200 text-slate-900 text-sm focus:outline-none focus:border-sky-500 focus:bg-white focus:ring-2 focus:ring-sky-100 transition-all font-sans leading-relaxed"
+              onChange={val => setDraft(p => ({ ...p, enunciado: val }))}
+              placeholder="Digite com clareza o texto do enunciado, contexto ou problema a ser resolvido..."
+              minHeight={150}
+              compact={false}
             />
           </div>
 
@@ -464,7 +536,7 @@ export function QuestionEditorModal({
                     <button
                       type="button"
                       onClick={() => handleToggleAltCorrect(alt.id)}
-                      className={`w-7 h-7 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 transition-all ${
+                      className={`w-7 h-7 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 transition-all mt-1 ${
                         alt.correta
                           ? 'bg-emerald-600 text-white shadow-xs'
                           : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
@@ -474,26 +546,25 @@ export function QuestionEditorModal({
                       {alt.correta ? <Check size={14} /> : alt.letra}
                     </button>
 
-                    <div className="flex-1 space-y-1">
-                      <input
-                        type="text"
-                        placeholder={`Texto da alternativa ${alt.letra}...`}
+                    <div className="flex-1 min-w-0">
+                      <RichTextToolbarEditor
                         value={alt.texto}
-                        onChange={e => {
-                          const val = e.target.value
+                        onChange={val => {
                           setDraft(p => ({
                             ...p,
                             alternativas: (p.alternativas || []).map((a, i) => i === idx ? { ...a, texto: val } : a)
                           }))
                         }}
-                        className="w-full px-3.5 py-2 rounded-xl bg-transparent border border-transparent focus:border-slate-300 focus:bg-white text-slate-900 text-xs focus:outline-none transition-all"
+                        placeholder={`Texto da alternativa ${alt.letra}...`}
+                        compact={true}
+                        minHeight={38}
                       />
                     </div>
 
                     <button
                       type="button"
                       onClick={() => handleRemoveAlternative(alt.id)}
-                      className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors"
+                      className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors mt-1"
                       title="Excluir alternativa"
                     >
                       <Trash2 size={15} />

@@ -114,6 +114,7 @@ export interface ADConfig {
     visualizarNotas?: boolean
     visualizarFrequencia?: boolean
     visualizarOcorrencias?: boolean
+    visualizarProvasOnline?: boolean
     chamadaAlunoPortaria?: boolean
   }
   horarios: { inicio: string; fim: string; msgAusencia: string }
@@ -126,6 +127,7 @@ export interface ADConfig {
     pushFrequencia?: boolean
     pushOcorrencias?: boolean
     pushNotas?: boolean
+    pushProvasOnline?: boolean
     pushSaidaPortaria?: boolean
     pushMensagemChat?: boolean
     pushRelatorios?: boolean

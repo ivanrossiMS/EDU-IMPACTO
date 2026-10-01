@@ -650,6 +650,27 @@ async function resolveLogFullDetails(logIdOrLog: string | any, supabase: any) {
     }
   }
 
+  // Extrair informações de lembrete / agendamento
+  let sendAfter: string | null = null
+  let isReminder = Boolean(log.item_id?.includes('-reminder') || log.title?.toLowerCase().includes('lembrete'))
+  let eventDate: string | null = null
+  try {
+    if (log.onesignal_response) {
+      const p = typeof log.onesignal_response === 'string' ? JSON.parse(log.onesignal_response) : log.onesignal_response
+      sendAfter = p?._send_after || p?._metadata?.send_after || null
+      eventDate = p?._metadata?.data || null
+      if (p?._metadata?.is_reminder) isReminder = true
+    }
+  } catch {}
+
+  if (isReminder && !sendAfter && eventDate) {
+    try {
+      const evDate = new Date(`${eventDate}T12:00:00Z`)
+      evDate.setUTCDate(evDate.getUTCDate() - 1)
+      sendAfter = `${evDate.toISOString().split('T')[0]} 20:00:00 GMT-0400`
+    } catch {}
+  }
+
   return {
     logId: log.id,
     recipients,
@@ -659,6 +680,9 @@ async function resolveLogFullDetails(logIdOrLog: string | any, supabase: any) {
     readInfo,
     oneSignalId,
     oneSignalStats,
+    sendAfter,
+    isReminder,
+    eventDate,
   }
 }
 
@@ -1069,13 +1093,28 @@ export async function GET(request: Request) {
       const enrichedLogs = (logs || []).map((log: any) => {
         let oneSignalId = null
         let oneSignalErrors = null
+        let sendAfter: string | null = null
+        let isReminder = Boolean(log.item_id?.includes('-reminder') || log.title?.toLowerCase().includes('lembrete'))
+        let eventDate: string | null = null
+
         try {
           if (log.onesignal_response) {
             const parsed = typeof log.onesignal_response === 'string' ? JSON.parse(log.onesignal_response) : log.onesignal_response
             oneSignalId = parsed.id || null
             oneSignalErrors = parsed.errors || null
+            sendAfter = parsed._send_after || parsed._metadata?.send_after || null
+            eventDate = parsed._metadata?.data || null
+            if (parsed._metadata?.is_reminder) isReminder = true
           }
         } catch {}
+
+        if (isReminder && !sendAfter && eventDate) {
+          try {
+            const evDate = new Date(`${eventDate}T12:00:00Z`)
+            evDate.setUTCDate(evDate.getUTCDate() - 1)
+            sendAfter = `${evDate.toISOString().split('T')[0]} 20:00:00 GMT-0400`
+          } catch {}
+        }
 
         // Encontrar leitura por qualquer um dos candidate IDs do log
         const cands = logCandidateMap.get(log.id) || [log.item_id]
@@ -1131,6 +1170,9 @@ export async function GET(request: Request) {
           readBy: matchedRead?.usuario_id || null,
           recipient_summary,
           recipients_preview,
+          sendAfter,
+          isReminder,
+          eventDate,
         }
       })
 

@@ -81,16 +81,28 @@ export async function POST(request: Request) {
       const realEmail = (aluno.email || aluno.dados?.email || '').trim().toLowerCase()
 
       // Tenta apagar os dois se existirem para garantir reset total
-      const idsToDelete = [];
-      const virtualAuthId = await findAuthByEmail(virtualEmail);
-      if (virtualAuthId) idsToDelete.push(virtualAuthId);
+      const idsToDelete: string[] = []
+      const virtualAuthId = await findAuthByEmail(virtualEmail)
+      if (virtualAuthId) idsToDelete.push(virtualAuthId)
       
       if (realEmail) {
-        const realAuthId = await findAuthByEmail(realEmail);
-        if (realAuthId && realAuthId !== virtualAuthId) {
-          idsToDelete.push(realAuthId);
+        const realAuthId = await findAuthByEmail(realEmail)
+        if (realAuthId && !idsToDelete.includes(realAuthId)) {
+          idsToDelete.push(realAuthId)
         }
       }
+
+      // Procura também por metadata aluno_id para garantir remoção completa
+      try {
+        const { data: list } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 1000 })
+        const matches = (list?.users || []).filter((u: any) => 
+          u.user_metadata?.aluno_id === aluno.id ||
+          (matricula && u.user_metadata?.matricula === matricula)
+        )
+        for (const m of matches) {
+          if (!idsToDelete.includes(m.id)) idsToDelete.push(m.id)
+        }
+      } catch (e) {}
       
       if (idsToDelete.length > 0) {
         for (const authId of idsToDelete) {

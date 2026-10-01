@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { 
   Bell, MessageSquare, Image as ImageIcon, Calendar, DollarSign, 
-  BarChart2, AlertTriangle, GraduationCap, UserCog 
+  BarChart2, AlertTriangle, GraduationCap, UserCog, FileCheck2 
 } from 'lucide-react'
 import { triggerHaptic } from '@/lib/utils/haptics'
 
@@ -30,6 +30,7 @@ export const AgendaNavigationTabBar = React.memo(function AgendaNavigationTabBar
     { label: 'Frequência', href: `/agenda-digital/${alunoId}/frequencia`, icon: <BarChart2 size={18} /> },
     { label: 'Ocorrências', href: `/agenda-digital/${alunoId}/ocorrencias`, icon: <AlertTriangle size={18} /> },
     { label: 'Notas', href: `/agenda-digital/${alunoId}/notas`, icon: <GraduationCap size={18} /> },
+    { label: 'Provas Online', href: `/agenda-digital/${alunoId}/provas-online`, icon: <FileCheck2 size={18} /> },
     { label: 'Meu Perfil', href: `/agenda-digital/${alunoId}/perfil`, icon: <UserCog size={18} /> },
   ]
 
@@ -37,6 +38,7 @@ export const AgendaNavigationTabBar = React.memo(function AgendaNavigationTabBar
     if (item.label === 'Frequência' && adConfig?.permissoes?.visualizarFrequencia === false) return false
     if (item.label === 'Ocorrências' && adConfig?.permissoes?.visualizarOcorrencias === false) return false
     if (item.label === 'Notas' && adConfig?.permissoes?.visualizarNotas === false) return false
+    if (item.label === 'Provas Online' && adConfig?.permissoes?.visualizarProvasOnline === false) return false
     if (item.label === 'Financeiro') {
       if (adConfig?.permissoes?.visualizarFinanceiro === false) return false
     }

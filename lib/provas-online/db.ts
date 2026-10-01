@@ -272,6 +272,14 @@ export async function dbDeleteProva(id: string): Promise<boolean> {
   const sb = getAdminClient()
 
   try {
+    await sb.from('tentativas_prova_online').delete().eq('prova_id', id)
+  } catch {}
+
+  try {
+    await sb.from('provas_online_questoes').delete().eq('prova_id', id)
+  } catch {}
+
+  try {
     await sb.from('provas_online').delete().eq('id', id)
   } catch {}
 

@@ -66,7 +66,7 @@ export default function ADInnerLayout({
   const isMirrorModeActive = !!isMirroringAluno || !!espelharRespId || !!espelharColabId
 
   // Intercepta rotas genéricas de push notification (ex: /agenda-digital/comunicados)
-  const isGenericModule = ['comunicados', 'momentos', 'calendario', 'frequencia', 'ocorrencias', 'notas'].includes(resolvedParams?.slug || '')
+  const isGenericModule = ['comunicados', 'momentos', 'calendario', 'frequencia', 'ocorrencias', 'notas', 'provas-online'].includes(resolvedParams?.slug || '')
   
   useEffect(() => {
     if (isGenericModule && typeof window !== 'undefined') {
@@ -82,7 +82,13 @@ export default function ADInnerLayout({
 
   const baseRespId = (currentUser as any)?.responsavel_id || (currentUser as any)?.dados?.responsavel_id || (currentUser as any)?.user_metadata?.responsavel_id || currentUser?.id || ''
   const respId = espelharRespId || baseRespId
-  const isAlunoLogado = isMirroringAluno || currentUser?.cargo === 'Aluno'
+  const isAlunoLogado = Boolean(
+    isMirroringAluno ||
+    currentUser?.cargo === 'Aluno' ||
+    currentUser?.perfil === 'Aluno' ||
+    (currentUser as any)?.userType === 'aluno' ||
+    ((currentUser as any)?.aluno_id && currentUser?.cargo !== 'Responsável' && !(currentUser as any)?.responsavel_id)
+  )
   const isMirrorMode = currentUser?.perfil === 'Administrador' || currentUser?.perfil === 'Gestor' || currentUser?.perfil === 'Direção' || currentUser?.perfil === 'Secretaria'
 
   useEffect(() => {
@@ -295,6 +301,7 @@ export default function ADInnerLayout({
               profileData={profileData}
               userAccessRole={userAccessRole}
               onLogout={handleLogout}
+              isAlunoAccess={isAlunoLogado}
             />
 
             {/* 2. Controlador de Chamada e Ações Secundárias */}
@@ -307,6 +314,7 @@ export default function ADInnerLayout({
               adConfig={adConfig}
               isMirrorModeActive={isMirrorModeActive}
               onLogout={handleLogout}
+              isAlunoAccess={isAlunoLogado}
             />
           </div>
         </div>

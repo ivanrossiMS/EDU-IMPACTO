@@ -473,6 +473,10 @@ export function ReportFillerModal({ isOpen, anexoStr, onClose, onBack, currentUs
     const baseColabTitle = reportTitle ? reportTitle : `Relatório: ${template.name}`;
     const cleanColabTitle = baseColabTitle.replace(/Cópia - /g, '');
 
+    const studentReportIds = newComunicados
+      .filter(c => c.id && String(c.id).startsWith('AD-COM-REL-STU-'))
+      .map(c => String(c.id));
+
     newComunicados.push({
         id: `AD-COM-REL-COLAB-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
         titulo: cleanColabTitle,
@@ -484,6 +488,7 @@ export function ReportFillerModal({ isOpen, anexoStr, onClose, onBack, currentUs
         autorFoto: currentUser?.foto || null,
         turmas: uniqueTurmas.length > 0 ? uniqueTurmas : (payload.turmaId ? [payload.turmaId] : []),
         alunosIds: fillMode === 'especifico' ? activeStudents.map(a => a.id.replace(/^a_?/, '')) : [],
+        stuIds: studentReportIds,
         destino: 'interno',
         prioridade: 'normal',
         fixado: false,

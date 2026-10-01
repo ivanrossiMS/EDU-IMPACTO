@@ -38,6 +38,23 @@ export async function GET(
 
   // Prepare payload for grading view
   const correcaoSubmissions = submittedTentativas.map((t, idx) => {
+    const rawAnswers = t.respostas || {}
+    const answersMap: Record<string, any> = Array.isArray(rawAnswers)
+      ? Object.fromEntries(rawAnswers.filter((r: any) => r && r.questaoId).map((r: any) => [r.questaoId, r]))
+      : { ...rawAnswers }
+
+    // Normalize so each question is accessible by q.id even if stored by index
+    ;(prova.questoes || []).forEach((q: any, qIdx: number) => {
+      if (!answersMap[q.id]) {
+        if (answersMap[String(qIdx)]) {
+          answersMap[q.id] = answersMap[String(qIdx)]
+        } else {
+          const found = Object.values(answersMap).find((r: any) => r?.questaoId === q.id)
+          if (found) answersMap[q.id] = found
+        }
+      }
+    })
+
     return {
       tentativaId: t.id,
       alunoId: isAnonimo ? `anon-${idx + 1}` : t.alunoId,
@@ -49,7 +66,7 @@ export async function GET(
       pontuacaoDissertativa: t.pontuacaoDissertativa,
       notaFinal: t.notaFinal,
       statusCorrecao: t.statusCorrecao,
-      respostas: t.respostas || {}
+      respostas: answersMap
     }
   })
 
@@ -98,7 +115,7 @@ export async function POST(
   const graderName = dbUser?.nome || user.user_metadata?.nome || 'Professor Corretor'
 
   // 1. Salvar Correção de Questão Dissertativa
-  if (acao === 'salvar_correcao_dissertativa') {
+  if (acao === 'salvar_correcao' || acao === 'salvar_correcao_dissertativa') {
     if (!tentativaId || !questaoId) {
       return NextResponse.json({ error: 'tentativaId e questaoId são obrigatórios' }, { status: 400 })
     }
@@ -109,22 +126,42 @@ export async function POST(
     }
 
     const currentAnswers = { ...(tentativa.respostas || {}) }
-    const currentResp = currentAnswers[questaoId] || {
-      questaoId,
-      versao: 1,
-      salvoEm: new Date().toISOString()
+    let currentResp = currentAnswers[questaoId]
+    if (!currentResp) {
+      const qIdx = (prova.questoes || []).findIndex((q: any) => q.id === questaoId)
+      if (qIdx >= 0 && currentAnswers[String(qIdx)]) {
+        currentResp = currentAnswers[String(qIdx)]
+      } else {
+        const found = Object.values(currentAnswers).find((r: any) => r?.questaoId === questaoId)
+        if (found) currentResp = found
+      }
+    }
+
+    if (!currentResp) {
+      currentResp = {
+        questaoId,
+        versao: 1,
+        salvoEm: new Date().toISOString()
+      }
     }
 
     const awardedScore = Math.max(0, Number(nota) || 0)
+    const nowIso = new Date().toISOString()
 
     currentAnswers[questaoId] = {
       ...currentResp,
       corrigida: true,
       pontuacaoObtida: awardedScore,
+      pontosAtribuidos: awardedScore,
+      nota: awardedScore,
       comentarioProfessor: comentario || '',
+      comentarioCorrecao: comentario || '',
+      comentario: comentario || '',
       correcaoCriterios: criteriosPontos || {},
+      criteriosPontos: criteriosPontos || {},
       corrigidoPor: graderName,
-      corrigidoEm: new Date().toISOString()
+      corrigidoEm: nowIso,
+      corrigidaEm: nowIso
     }
 
     // Recalcular pontuação dissertativa e nota final
@@ -133,11 +170,18 @@ export async function POST(
     let allGraded = true
 
     for (const q of questoesDissertativas) {
-      const r = currentAnswers[q.id]
-      if (!r || !r.corrigida) {
+      let r = currentAnswers[q.id]
+      if (!r) {
+        const qIdx = (prova.questoes || []).findIndex((item: any) => item.id === q.id)
+        if (qIdx >= 0 && currentAnswers[String(qIdx)]) {
+          r = currentAnswers[String(qIdx)]
+          currentAnswers[q.id] = r
+        }
+      }
+      if (!r || (!r.corrigida && !r.corrigidoEm && !r.corrigidaEm)) {
         allGraded = false
       } else {
-        totalDissertativa += Number(r.pontuacaoObtida || 0)
+        totalDissertativa += Number(r.pontuacaoObtida ?? r.pontosAtribuidos ?? r.nota ?? 0)
       }
     }
 
@@ -149,7 +193,7 @@ export async function POST(
     tentativa.pontuacaoDissertativa = totalDissertativa
     tentativa.notaFinal = notaFinal
     tentativa.statusCorrecao = allGraded ? 'corrigida' : 'parcial'
-    tentativa.updatedAt = new Date().toISOString()
+    tentativa.updatedAt = nowIso
 
     const saved = await dbSaveTentativa(tentativa)
 
@@ -168,10 +212,82 @@ export async function POST(
     prova.status = 'publicada'
     prova.publicadoEm = new Date().toISOString()
     if (publicarGabaritoENota) {
+      prova.configuracaoDivulgacao = prova.configuracaoDivulgacao || {}
       prova.configuracaoDivulgacao.liberarGabarito = 'imediato'
       prova.configuracaoDivulgacao.liberarNota = 'apos_correcao'
     }
     await dbSaveProva(prova)
+
+    // Atualiza todas as tentativas submetidas para 'corrigida' e consolida as notas
+    const tentativas = await dbGetTentativasByProvaId(provaId)
+    const submitted = tentativas.filter(t => t.status === 'entregue' || t.status === 'expirada')
+    const gradesPayload = body.grades || {} // Record<`${tentativaId}_${questaoId}`, { nota, comentario, criteriosPontos }>
+
+    for (const t of submitted) {
+      const currentAnswers = { ...(t.respostas || {}) }
+      const questoesDissertativas = (prova.questoes || []).filter((q: any) => q.tipo === 'dissertativa')
+
+      // Aplicar notas do payload se houver
+      for (const q of questoesDissertativas) {
+        const gradeKey = `${t.id}_${q.id}`
+        const pendingGrade = gradesPayload[gradeKey]
+        let r = currentAnswers[q.id]
+        if (!r) {
+          const qIdx = (prova.questoes || []).findIndex((item: any) => item.id === q.id)
+          if (qIdx >= 0 && currentAnswers[String(qIdx)]) {
+            r = currentAnswers[String(qIdx)]
+          }
+        }
+
+        if (pendingGrade && pendingGrade.nota !== undefined) {
+          const awarded = Math.max(0, Number(pendingGrade.nota) || 0)
+          r = {
+            ...(r || { questaoId: q.id, versao: 1, salvoEm: new Date().toISOString() }),
+            corrigida: true,
+            pontuacaoObtida: awarded,
+            pontosAtribuidos: awarded,
+            nota: awarded,
+            comentarioProfessor: pendingGrade.comentario || '',
+            comentarioCorrecao: pendingGrade.comentario || '',
+            comentario: pendingGrade.comentario || '',
+            correcaoCriterios: pendingGrade.criteriosPontos || {},
+            criteriosPontos: pendingGrade.criteriosPontos || {},
+            corrigidoPor: graderName,
+            corrigidoEm: new Date().toISOString(),
+            corrigidaEm: new Date().toISOString()
+          }
+        } else if (r && !r.corrigida) {
+          // Marca como corrigida com a nota atual que tiver (ou 0)
+          r.corrigida = true
+          r.corrigidoEm = new Date().toISOString()
+          r.corrigidaEm = new Date().toISOString()
+          r.pontuacaoObtida = Number(r.pontuacaoObtida ?? r.pontosAtribuidos ?? r.nota ?? 0)
+        }
+        if (r) {
+          currentAnswers[q.id] = r
+        }
+      }
+
+      // Recalcula total dissertativa
+      let totalDissertativa = 0
+      for (const q of questoesDissertativas) {
+        const r = currentAnswers[q.id]
+        if (r) {
+          totalDissertativa += Number(r.pontuacaoObtida ?? r.pontosAtribuidos ?? r.nota ?? 0)
+        }
+      }
+      totalDissertativa = Math.round(totalDissertativa * 100) / 100
+      const pontuacaoObjetiva = Number(t.pontuacaoObjetiva || 0)
+      const notaFinal = Math.round((pontuacaoObjetiva + totalDissertativa) * 100) / 100
+
+      t.respostas = currentAnswers
+      t.pontuacaoDissertativa = totalDissertativa
+      t.notaFinal = notaFinal
+      t.statusCorrecao = 'corrigida'
+      t.updatedAt = new Date().toISOString()
+
+      await dbSaveTentativa(t)
+    }
 
     return NextResponse.json({
       ok: true,

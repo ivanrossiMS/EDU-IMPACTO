@@ -150,14 +150,14 @@ async function dispatchPushNotifications(supabase: any, row: any) {
     }
   }
 
-  // Common date calculation for reminder
+  // Common date calculation for reminder (horário local de MS: GMT-0400)
   let sendAfterStr = null;
   let shouldSendReminder = false;
   if (row.data) {
     const eventDate = new Date(`${row.data}T12:00:00Z`);
     eventDate.setUTCDate(eventDate.getUTCDate() - 1);
-    sendAfterStr = `${eventDate.toISOString().split('T')[0]} 20:00:00 GMT-0300`;
-    const sendAfterDate = new Date(`${eventDate.toISOString().split('T')[0]}T20:00:00-03:00`);
+    sendAfterStr = `${eventDate.toISOString().split('T')[0]} 20:00:00 GMT-0400`;
+    const sendAfterDate = new Date(`${eventDate.toISOString().split('T')[0]}T20:00:00-04:00`);
     shouldSendReminder = sendAfterDate > new Date();
   }
 
@@ -191,7 +191,16 @@ async function dispatchPushNotifications(supabase: any, row: any) {
               message: `Lembrete para ${nomeAluno}: amanhã temos o evento ${row.titulo}. Não se esqueça!`,
               targetUserIds: student.responsaveis_ids,
               targetUrl: `/agenda-digital/${student.aluno_id}/calendario?id=${row.id}`,
-              metadata: { aluno_id: student.aluno_id, perfil_destino: 'familia', item_id: String(row.id), rota: 'calendario', data: row.data, targetUrl: `/agenda-digital/${student.aluno_id}/calendario?id=${row.id}` },
+              metadata: {
+                aluno_id: student.aluno_id,
+                perfil_destino: 'familia',
+                item_id: String(row.id),
+                rota: 'calendario',
+                data: row.data,
+                targetUrl: `/agenda-digital/${student.aluno_id}/calendario?id=${row.id}`,
+                is_reminder: true,
+                send_after: sendAfterStr,
+              },
               sendAfter: sendAfterStr
             }).catch(err => console.error('Evento Reminder Error:', err))
           );
@@ -221,7 +230,15 @@ async function dispatchPushNotifications(supabase: any, row: any) {
         message: `Amanhã temos o evento: ${row.titulo}. Não se esqueça!`,
         targetUserIds: directColaboradores,
         targetUrl: `/agenda-digital/colaborador/calendario?id=${row.id}`,
-        metadata: { perfil_destino: 'colaborador', item_id: String(row.id), rota: 'calendario', data: row.data, targetUrl: `/agenda-digital/colaborador/calendario?id=${row.id}` },
+        metadata: {
+          perfil_destino: 'colaborador',
+          item_id: String(row.id),
+          rota: 'calendario',
+          data: row.data,
+          targetUrl: `/agenda-digital/colaborador/calendario?id=${row.id}`,
+          is_reminder: true,
+          send_after: sendAfterStr,
+        },
         sendAfter: sendAfterStr
       }).catch(err => console.error('Evento Reminder Error:', err))
     }

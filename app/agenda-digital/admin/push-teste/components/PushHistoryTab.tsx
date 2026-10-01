@@ -26,6 +26,19 @@ const CATEGORY_MAP: Record<string, { label: string; color: string; bg: string; i
   test: { label: 'Teste / Diagnóstico', color: '#64748b', bg: 'rgba(100, 116, 139, 0.12)', icon: Radio },
 }
 
+function formatScheduledDate(sendAfterStr?: string | null): string {
+  if (!sendAfterStr) return 'Véspera às 20:00'
+  try {
+    const d = new Date(sendAfterStr)
+    if (!isNaN(d.getTime())) {
+      const dayMonth = d.toLocaleDateString('pt-BR', { timeZone: 'America/Campo_Grande', day: '2-digit', month: '2-digit' })
+      const hourMinute = d.toLocaleTimeString('pt-BR', { timeZone: 'America/Campo_Grande', hour: '2-digit', minute: '2-digit' })
+      return `${dayMonth} às ${hourMinute}`
+    }
+  } catch {}
+  return sendAfterStr
+}
+
 interface PushHistoryTabProps {
   onSwitchToTesterWithPayload?: (payload: { title: string; message: string; category?: string; targetRoute?: string }) => void
 }
@@ -612,8 +625,29 @@ export function PushHistoryTab({ onSwitchToTesterWithPayload }: PushHistoryTabPr
                     </div>
                     <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
                       <Clock size={11} />
-                      {formattedDate}
+                      <span title="Horário em que o evento e a notificação foram registrados no sistema">
+                        Registrado: {formattedDate}
+                      </span>
                     </div>
+                    {log.isReminder && (
+                      <div
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 4,
+                          fontSize: 10,
+                          fontWeight: 700,
+                          padding: '2px 6px',
+                          borderRadius: 6,
+                          background: 'rgba(99, 102, 241, 0.12)',
+                          color: '#4f46e5',
+                          marginTop: 4,
+                        }}
+                        title="Disparo do lembrete programado no OneSignal (Horário do MS)"
+                      >
+                        <span>⏰ Agendado: {formatScheduledDate(log.sendAfter)}</span>
+                      </div>
+                    )}
                   </div>
 
                   {/* Coluna 2: Título e Mensagem */}
@@ -665,6 +699,24 @@ export function PushHistoryTab({ onSwitchToTesterWithPayload }: PushHistoryTabPr
                           Silenciado (Não reenviado)
                         </div>
                       </div>
+                    ) : log.isReminder && isSuccess ? (
+                      <>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{
+                            width: 7,
+                            height: 7,
+                            borderRadius: '50%',
+                            background: '#6366f1',
+                            boxShadow: '0 0 6px #6366f1',
+                          }} />
+                          <span style={{ fontWeight: 700, color: '#4f46e5' }}>
+                            Agendado
+                          </span>
+                        </div>
+                        <div style={{ fontSize: 10, color: 'hsl(var(--text-muted))', marginTop: 3 }}>
+                          Fila OneSignal (Véspera)
+                        </div>
+                      </>
                     ) : (
                       <>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>

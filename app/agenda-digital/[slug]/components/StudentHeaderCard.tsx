@@ -27,6 +27,7 @@ interface StudentHeaderCardProps {
   profileData: any
   userAccessRole: { isFin: boolean; isPed: boolean; parentesco: string }
   onLogout: () => void
+  isAlunoAccess?: boolean
 }
 
 export const StudentHeaderCard = React.memo(function StudentHeaderCard({
@@ -38,9 +39,17 @@ export const StudentHeaderCard = React.memo(function StudentHeaderCard({
   espelharRespId,
   profileData,
   userAccessRole,
-  onLogout
+  onLogout,
+  isAlunoAccess
 }: StudentHeaderCardProps) {
-  const isAlunoCargo = currentUser?.cargo === 'Aluno'
+  const isAluno = Boolean(
+    isAlunoAccess ||
+    isMirroringAluno ||
+    currentUser?.cargo === 'Aluno' ||
+    currentUser?.perfil === 'Aluno' ||
+    currentUser?.userType === 'aluno' ||
+    (currentUser?.aluno_id && currentUser?.cargo !== 'Responsável' && !currentUser?.responsavel_id)
+  )
 
   const mirroredResp = espelharRespId && profileData?.aluno?.responsaveis 
     ? profileData.aluno.responsaveis.find((r: any) => String(r.id) === String(espelharRespId)) 
@@ -143,30 +152,6 @@ export const StudentHeaderCard = React.memo(function StudentHeaderCard({
                 </span>
               </span>
             </h2>
-
-            {isAlunoCargo && (
-              <button 
-                onClick={onLogout}
-                title="Sair da Conta"
-                style={{
-                  background: 'rgba(239, 68, 68, 0.08)',
-                  color: '#ef4444',
-                  border: '1.5px solid rgba(239, 68, 68, 0.2)',
-                  borderRadius: '12px',
-                  padding: '5px 12px',
-                  fontSize: 11,
-                  fontWeight: 800,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 5,
-                  cursor: 'pointer',
-                  flexShrink: 0,
-                  fontFamily: 'Outfit, sans-serif'
-                }}
-              >
-                <LogOut size={12} strokeWidth={2.4} /> <span className="ad-desktop-only">Sair</span>
-              </button>
-            )}
           </div>
 
           {/* Chips: Turma + Turno */}
@@ -189,8 +174,22 @@ export const StudentHeaderCard = React.memo(function StudentHeaderCard({
           </div>
         </div>
 
+        {/* Botão de Sair exclusivo para o Aluno (Abaixo do Turno) */}
+        {isAluno && (
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 5, width: '100%' }}>
+            <button 
+              onClick={onLogout}
+              title="Sair da Conta"
+              className="ad-student-logout-btn"
+            >
+              <LogOut size={12.5} strokeWidth={2.4} />
+              <span>Sair</span>
+            </button>
+          </div>
+        )}
+
         {/* 3. Card do Responsável Compacto ao lado da foto */}
-        {(!isAlunoCargo && !isMirroringAluno) && (
+        {(!isAluno && !isMirroringAluno) && (
           <div 
             className="ad-modern-resp-card"
             title={`Responsável: ${rawName}`}

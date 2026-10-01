@@ -246,12 +246,16 @@ export interface RespostaQuestaoTentativa {
   corrigida?: boolean
   pontuacaoObtida?: number
   pontosAtribuidos?: number
+  nota?: number
   comentarioProfessor?: string
   comentarioCorrecao?: string
   correcaoCriterios?: Record<string, number>
   criteriosPontos?: Record<string, number>
   corrigidoPor?: string
   corrigidoEm?: string
+  corrigidaEm?: string
+  respostaTexto?: string
+  [key: string]: any
 }
 
 export interface TentativaAluno {

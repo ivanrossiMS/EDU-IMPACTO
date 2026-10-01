@@ -29,6 +29,19 @@ export interface RecipientItem {
   statusTone?: 'success' | 'warning' | 'danger' | 'neutral'
 }
 
+function formatScheduledDateModal(sendAfterStr?: string | null): string {
+  if (!sendAfterStr) return 'Véspera às 20:00 (MS)'
+  try {
+    const d = new Date(sendAfterStr)
+    if (!isNaN(d.getTime())) {
+      const dayMonth = d.toLocaleDateString('pt-BR', { timeZone: 'America/Campo_Grande', day: '2-digit', month: '2-digit', year: 'numeric' })
+      const hourMinute = d.toLocaleTimeString('pt-BR', { timeZone: 'America/Campo_Grande', hour: '2-digit', minute: '2-digit' })
+      return `${dayMonth} às ${hourMinute} (Horário do MS)`
+    }
+  } catch {}
+  return sendAfterStr
+}
+
 interface PushHistoryDetailModalProps {
   log: any | null
   onClose: () => void
@@ -55,6 +68,10 @@ export function PushHistoryDetailModal({
   } | null>(null)
   const [isLoadingDetails, setIsLoadingDetails] = useState(false)
   const [showTechnicalAliases, setShowTechnicalAliases] = useState(false)
+
+  // Detecção de lembrete e agendamento
+  const isReminder = Boolean(log?.isReminder || (detailsData as any)?.isReminder || log?.item_id?.includes('-reminder') || log?.title?.toLowerCase().includes('lembrete'))
+  const sendAfter = log?.sendAfter || (detailsData as any)?.sendAfter || null
 
   // Extrair ID do OneSignal do JSON armazenado no log
   const oneSignalId = log?.oneSignalId || (() => {
@@ -326,6 +343,27 @@ export function PushHistoryDetailModal({
             )}
           </div>
 
+          {/* Alerta explicativo de Lembrete Agendado */}
+          {isReminder && (
+            <div style={{
+              background: 'rgba(99, 102, 241, 0.08)',
+              border: '1px solid rgba(99, 102, 241, 0.25)',
+              borderRadius: 14,
+              padding: '12px 16px',
+              fontSize: 12,
+              color: '#4f46e5',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              marginBottom: 16,
+            }}>
+              <Clock size={18} style={{ flexShrink: 0 }} />
+              <div>
+                <b>Lembrete Automático da Véspera:</b> Este disparo foi pré-registrado na criação do evento e programado para entrega aos responsáveis em <b>{formatScheduledDateModal(sendAfter)}</b>.
+              </div>
+            </div>
+          )}
+
           {/* Cards de Resumo: Data, Destinatários e Leitura no App */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 12 }}>
             {/* Card 1: Data e Horário */}
@@ -335,10 +373,25 @@ export function PushHistoryDetailModal({
               background: 'hsl(var(--bg-main))',
               border: '1px solid hsl(var(--border-subtle))',
             }}>
-              <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', fontWeight: 700 }}>Data e Horário do Envio</div>
+              <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', fontWeight: 700 }}>
+                {isReminder ? 'Agendamento & Registro' : 'Data e Horário do Envio'}
+              </div>
               <div style={{ fontSize: 13, fontWeight: 700, marginTop: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
                 <Clock size={14} color="#6366f1" />
-                {new Date(log.created_at).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'medium' })}
+                {isReminder ? (
+                  <span style={{ color: '#4f46e5' }}>
+                    ⏰ {formatScheduledDateModal(sendAfter)}
+                  </span>
+                ) : (
+                  new Date(log.created_at).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'medium' })
+                )}
+              </div>
+              <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', marginTop: 4 }}>
+                {isReminder ? (
+                  <span>Registrado no sistema: {new Date(log.created_at).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}</span>
+                ) : (
+                  <span>Disparo imediato</span>
+                )}
               </div>
             </div>
 

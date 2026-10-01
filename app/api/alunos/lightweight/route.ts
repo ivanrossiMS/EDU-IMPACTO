@@ -53,7 +53,10 @@ export async function GET(req: Request) {
     let query = supabase
       .from('alunos')
       .select(`
-        id, nome, matricula, turma, status, 
+        id, nome, matricula, turma, status, email, telefone,
+        emailAlt:dados->>email,
+        telefoneAlt:dados->>telefone,
+        celularAlt:dados->>celular,
         anoLetivo:dados->>anoLetivo, 
         anoLetivoAlt:dados->>ano_letivo, 
         fotoAlt:dados->>foto, 
@@ -107,6 +110,8 @@ export async function GET(req: Request) {
         nome: String(aluno.nome || ''),
         matricula: aluno.matricula || '',
         turma: aluno.turma || '',
+        email: ((aluno.email as string) || (aluno as any).emailAlt || '').trim(),
+        telefone: ((aluno.telefone as string) || (aluno as any).telefoneAlt || (aluno as any).celularAlt || '').trim(),
         anoLetivo: (aluno as any).anoLetivo || (aluno as any).anoLetivoAlt || '',
         foto: safeFoto,
         responsaveis: (aluno as any).responsaveis || [],

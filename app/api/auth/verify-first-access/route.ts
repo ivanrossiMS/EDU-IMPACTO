@@ -71,7 +71,7 @@ export async function POST(request: Request) {
     const safeQ = q.replace(/"/g, '""')
     const qDigits = q.replace(/\D/g, '')
 
-    let orAlunos = `email.eq."${safeQ}",matricula.eq."${safeQ}",dados->>email.eq."${safeQ}",dados->>codigo.eq."${safeQ}"`
+    let orAlunos = `id.eq."${safeQ}",email.eq."${safeQ}",matricula.eq."${safeQ}",dados->>email.eq."${safeQ}",dados->>codigo.eq."${safeQ}"`
     if (qDigits.length >= 11) {
       orAlunos += `,cpf.eq."${qDigits}",dados->>cpf.eq."${qDigits}"`
     }
@@ -84,9 +84,11 @@ export async function POST(request: Request) {
     const aluno = (alunosRows || []).find((a: any) => {
       const emailA   = (a.email || a.dados?.email || '').trim().toLowerCase()
       const matricA  = (a.matricula || a.dados?.codigo || '').trim().toLowerCase()
+      const idA      = (a.id || '').trim().toLowerCase()
       const cpfA     = (a.cpf || a.dados?.cpf || '').replace(/\D/g, '')
       const qDigits  = q.replace(/\D/g, '')
       return (
+        (idA && idA === q) ||
         (emailA && emailA === q) ||
         (matricA && matricA === q) ||
         (cpfA && qDigits.length >= 11 && cpfA === qDigits)
@@ -114,10 +116,10 @@ export async function POST(request: Request) {
         id: `aluno-${aluno.id}`,
         realId: aluno.id,
         nome: aluno.nome,
-        email: isValidEmail(storedAlunoEmail) ? storedAlunoEmail : '',
+        email: storedAlunoEmail || '',
         cargo: 'Aluno',
         perfil: 'Família',
-        matricula: aluno.matricula || aluno.dados?.codigo || '',
+        matricula: aluno.matricula || aluno.dados?.codigo || aluno.id || '',
         userType: 'aluno'
       }
 

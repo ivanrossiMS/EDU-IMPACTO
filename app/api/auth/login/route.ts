@@ -23,36 +23,59 @@ export async function POST(request: NextRequest) {
     const supabaseAdmin = getAdminClient()
 
     // ── Resolve the actual email for Supabase Auth ──────────────────
-    // If it's NOT an email format, it might be a matrícula or CPF
+    // If it's NOT an email format or internal, it might be a matrícula, CPF, or student email
     let resolvedEmail = loginInput
     let userType: 'system_user' | 'aluno' | 'responsavel' = 'system_user'
     let alunoRecord: any = null
     let responsavelRecord: any = null
 
-    const isEmailFormat = loginInput.includes('@') && !loginInput.endsWith('@impactoedu.local')
+    const isVirtualEmail = loginInput.endsWith('@impactoedu.local')
+    const hasValidEmailSyntax = isValidEmail(loginInput)
 
-    if (!isEmailFormat) {
-      // ── Entrada é Matrícula ou CPF: busca filtrada no banco com Promise.all (Paralelo) ──
+    if (isVirtualEmail) {
+      resolvedEmail = loginInput
+      if (loginInput.startsWith('aluno.')) {
+        userType = 'aluno'
+        const matricula = loginInput.replace('aluno.', '').replace('@impactoedu.local', '')
+        const { data: aData } = await supabaseAdmin
+          .from('alunos')
+          .select('id, nome, email, matricula, dados, status, foto')
+          .or(`matricula.eq.${matricula},id.eq.${matricula},dados->>codigo.eq.${matricula}`)
+          .limit(1)
+        alunoRecord = aData?.[0] || null
+      }
+    } else if (!hasValidEmailSyntax) {
+      // ── Entrada é Matrícula, CPF, Código, Telefone ou E-mail sem domínio padrão (ex: aluno@aluno) ──
       const loginDigits = loginInput.replace(/\D/g, '')
 
-      let alunoQuery = `matricula.eq.${loginInput}`
-      if (loginDigits.length >= 11) alunoQuery += `,dados->>cpf.eq.${loginDigits}`
+      let alunoConditions = [
+        `matricula.eq.${loginInput}`,
+        `id.eq.${loginInput}`,
+        `dados->>codigo.eq.${loginInput}`,
+        `email.ilike.${loginInput}`,
+        `dados->>email.ilike.${loginInput}`
+      ]
+      if (loginDigits.length >= 11) alunoConditions.push(`dados->>cpf.eq.${loginDigits}`)
+      if (loginDigits.length >= 8) alunoConditions.push(`telefone.ilike.%${loginDigits}%`)
 
-      let respQuery = `codigo.eq.${loginInput}`
-      if (loginDigits.length >= 11) respQuery += `,dados->>cpf.eq.${loginDigits}`
-      if (loginDigits.length >= 10) respQuery += `,celular.ilike.%${loginDigits}%,telefone.ilike.%${loginDigits}%`
+      let respConditions = [
+        `codigo.eq.${loginInput}`,
+        `email.ilike.${loginInput}`
+      ]
+      if (loginDigits.length >= 11) respConditions.push(`dados->>cpf.eq.${loginDigits}`)
+      if (loginDigits.length >= 8) respConditions.push(`celular.ilike.%${loginDigits}%`, `telefone.ilike.%${loginDigits}%`)
 
       const alunoPromise = supabaseAdmin
         .from('alunos')
-        .select('id, nome, email, matricula, dados, status')
-        .or(alunoQuery)
+        .select('id, nome, email, matricula, dados, status, foto')
+        .or(alunoConditions.join(','))
         .limit(1)
         .then(r => r.data?.[0] || null)
 
       const responsavelPromise = supabaseAdmin
         .from('responsaveis')
         .select('id, nome, email, celular, codigo, telefone, dados')
-        .or(respQuery)
+        .or(respConditions.join(','))
         .limit(1)
         .then(r => r.data?.[0] || null)
 
@@ -75,7 +98,7 @@ export async function POST(request: NextRequest) {
         }
       }
     } else {
-      // ── Entrada já é um e-mail válido: autentica diretamente sem table scans prévios ──
+      // ── Entrada já é um e-mail válido com domínio: autentica diretamente sem table scans prévios ──
       resolvedEmail = loginInput
     }
 
@@ -165,22 +188,36 @@ export async function POST(request: NextRequest) {
     let session = signInResult?.data?.session
     let error = signInResult?.error
 
-    // FALLBACK for students: If login failed and they have a real email, their Auth user might still be on their virtual email
-    if (error && userType === 'aluno' && alunoRecord) {
-      const matricula = alunoRecord.matricula || alunoRecord.dados?.codigo || alunoRecord.id
-      const virtualEmail = `aluno.${matricula}@impactoedu.local`
-      
-      if (resolvedEmail !== virtualEmail) {
-        const fallbackAttempt: any = await Promise.race([
-          supabase.auth.signInWithPassword({ email: virtualEmail, password }),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT_SUPABASE')), 8000))
-        ]).catch(() => null)
+    // FALLBACK for students: If login failed, their Auth user might still be on their virtual email
+    if (error) {
+      let studentToTry = (userType === 'aluno' && alunoRecord) ? alunoRecord : null
+      if (!studentToTry) {
+        const { data: matchAlunos } = await supabaseAdmin
+          .from('alunos')
+          .select('id, nome, email, matricula, dados, status, foto')
+          .or(`email.ilike.${loginInput},dados->>email.ilike.${loginInput},matricula.eq.${loginInput},id.eq.${loginInput}`)
+          .limit(1)
+        studentToTry = matchAlunos?.[0] || null
+      }
 
-        if (fallbackAttempt && !fallbackAttempt.error && fallbackAttempt.data?.user) {
-          user = fallbackAttempt.data.user
-          session = fallbackAttempt.data.session
-          error = null
-          resolvedEmail = virtualEmail // update resolved email for downstream logic
+      if (studentToTry) {
+        const matricula = studentToTry.matricula || studentToTry.dados?.codigo || studentToTry.id
+        const virtualEmail = `aluno.${matricula}@impactoedu.local`
+        
+        if (resolvedEmail !== virtualEmail) {
+          const fallbackAttempt: any = await Promise.race([
+            supabase.auth.signInWithPassword({ email: virtualEmail, password }),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT_SUPABASE')), 8000))
+          ]).catch(() => null)
+
+          if (fallbackAttempt && !fallbackAttempt.error && fallbackAttempt.data?.user) {
+            user = fallbackAttempt.data.user
+            session = fallbackAttempt.data.session
+            error = null
+            resolvedEmail = virtualEmail // update resolved email for downstream logic
+            userType = 'aluno'
+            alunoRecord = studentToTry
+          }
         }
       }
     }
@@ -303,9 +340,25 @@ export async function POST(request: NextRequest) {
         if (aFoto) resolvedFoto = aFoto
       } else {
         // Usuário logou com e-mail direto mas não é system_user: verifica se é Responsável ou Aluno
+        const metaAlunoId = user?.user_metadata?.aluno_id || user?.user_metadata?.matricula
+        let alunoLookupQuery = supabaseAdmin.from('alunos').select('id, nome, email, matricula, status, foto, dados')
+        if (metaAlunoId) {
+          alunoLookupQuery = alunoLookupQuery.or(`id.eq.${metaAlunoId},matricula.eq.${metaAlunoId}`)
+        } else {
+          alunoLookupQuery = alunoLookupQuery.ilike('email', resolvedEmail)
+        }
+
+        const metaRespId = user?.user_metadata?.responsavel_id
+        let respLookupQuery = supabaseAdmin.from('responsaveis').select('id, nome, email, dados')
+        if (metaRespId) {
+          respLookupQuery = respLookupQuery.eq('id', metaRespId)
+        } else {
+          respLookupQuery = respLookupQuery.ilike('email', resolvedEmail)
+        }
+
         const [respLookup, alunoLookup] = await Promise.all([
-          supabaseAdmin.from('responsaveis').select('id, nome, email, dados').ilike('email', resolvedEmail).limit(1).then(r => r.data?.[0] || null),
-          supabaseAdmin.from('alunos').select('id, nome, email, status, foto, dados').ilike('email', resolvedEmail).limit(1).then(r => r.data?.[0] || null)
+          respLookupQuery.limit(1).then(r => r.data?.[0] || null),
+          alunoLookupQuery.limit(1).then(r => r.data?.[0] || null)
         ])
 
         if (respLookup) {

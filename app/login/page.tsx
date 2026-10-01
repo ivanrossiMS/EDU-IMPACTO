@@ -812,8 +812,10 @@ export default function LoginPage() {
         setCreateLoading(false); setCreateSuccess(true)
        await new Promise(r => setTimeout(r, 2000))
        setStep('login')
-       // Preenche com o e-mail cadastrado ou a matrícula
-       const loginHint = faRegEmail ? faRegEmail : (faUser?.matricula || '')
+       // Preenche com o Código do Aluno (matrícula) ou e-mail cadastrado
+       const isAluno = faUser?.cargo === 'Aluno' || faUser?.userType === 'aluno'
+       const studentCode = faUser?.matricula || faUser?.realId || faUser?.id?.replace(/^aluno-/, '')
+       const loginHint = isAluno && studentCode ? studentCode : (faRegEmail ? faRegEmail : (faUser?.matricula || ''))
        setEmail(loginHint)
        setFaQuery(''); setFaUser(null); setNewPass(''); setConfirmPass(''); setCreateSuccess(false); setFaAlreadyConfiguredUser(null)
     } catch (err: any) {
@@ -1115,7 +1117,11 @@ export default function LoginPage() {
                 <button 
                   type="button" 
                   onClick={() => {
-                    setEmail(faAlreadyConfiguredUser.email || faQuery.trim())
+                    const studentCode = faAlreadyConfiguredUser.matricula || faAlreadyConfiguredUser.realId || faAlreadyConfiguredUser.id?.replace(/^aluno-/, '')
+                    const loginValue = (faAlreadyConfiguredUser.cargo === 'Aluno' || faAlreadyConfiguredUser.userType === 'aluno') && studentCode
+                      ? studentCode
+                      : (faAlreadyConfiguredUser.email || faQuery.trim())
+                    setEmail(loginValue)
                     goLogin()
                   }}
                   style={{ padding: '10px 14px', borderRadius: 10, background: 'rgba(59,130,246,0.15)', border: '1px solid rgba(59,130,246,0.3)', color: '#93c5fd', fontSize: 12, fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s' }}

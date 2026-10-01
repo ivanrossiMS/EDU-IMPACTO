@@ -122,7 +122,10 @@ export async function PATCH(
   }
 
   // 4. Update Answers with Optimistic Locking / Versioning
-  const answersPatch: Record<string, RespostaQuestaoTentativa> = body.respostas || {}
+  const rawAnswers = body.respostas || {}
+  const answersPatch: Record<string, RespostaQuestaoTentativa> = Array.isArray(rawAnswers)
+    ? Object.fromEntries(rawAnswers.filter((r: any) => r && r.questaoId).map((r: any) => [r.questaoId, r]))
+    : rawAnswers
   const clientVersao = Number(body.versaoRespostas || 0)
 
   const currentRespostas = { ...(tentativa.respostas || {}) }

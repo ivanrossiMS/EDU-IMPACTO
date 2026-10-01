@@ -1,18 +1,18 @@
 'use client'
 
 import React, { useState, useEffect, useMemo } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   FileCheck2, CheckCircle2, AlertCircle, ArrowLeft, Eye, EyeOff,
-  User, BookOpen, Sparkles, Send, RefreshCw, Check, X, ShieldAlert,
-  ChevronRight, ChevronLeft, Sliders, MessageSquare, AlertTriangle,
-  Award, Layers, ArrowUpRight, Scale, Calculator
+  User, BookOpen, RefreshCw, Check, X, Award, Layers,
+  ArrowUpRight, Scale, Calculator, Search, AlertTriangle,
+  ChevronRight, HelpCircle, CheckSquare, MessageSquare, Sparkles
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { HtmlContent } from '@/components/HtmlContent'
-import { QuestaoProva } from '@/types/provas-online'
+import { QuestaoProva, AlternativaQuestao, ItemVerdadeiroFalso } from '@/types/provas-online'
 
 interface SubmissionItem {
   tentativaId: string
@@ -24,40 +24,211 @@ interface SubmissionItem {
   pontuacaoObjetiva?: number
   pontuacaoDissertativa?: number
   notaFinal?: number
-  statusCorrecao: 'pendente' | 'parcial' | 'concluida'
+  statusCorrecao: 'pendente' | 'parcial' | 'corrigida' | 'concluida'
   respostas: Record<string, any>
+}
+
+function getStudentQuestionResponse(sub: SubmissionItem | undefined, q: QuestaoProva | undefined, qIdx: number) {
+  if (!sub || !sub.respostas || !q) return null
+  const resps = sub.respostas
+  if (resps[q.id]) return resps[q.id]
+  if (resps[String(qIdx)]) return resps[String(qIdx)]
+  if (Array.isArray(resps)) {
+    return resps.find((r: any) => r?.questaoId === q.id) || resps[qIdx] || null
+  }
+  const vals = Object.values(resps)
+  return vals.find((r: any) => r?.questaoId === q.id) || vals[qIdx] || null
+}
+
+// ─── Design tokens ──────────────────────────────────────────────────────────
+const S = {
+  card: {
+    background: '#ffffff',
+    border: '1px solid #e2e8f0',
+    borderRadius: 16,
+    padding: '20px 24px',
+    boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+  } as React.CSSProperties,
+  pill: (color: string, bg: string, border: string) => ({
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 5,
+    padding: '4px 10px',
+    borderRadius: 99,
+    border: `1px solid ${border}`,
+    background: bg,
+    color,
+    fontSize: 11,
+    fontWeight: 700,
+  } as React.CSSProperties),
+  btnPrimary: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 6,
+    height: 36,
+    padding: '0 16px',
+    borderRadius: 10,
+    border: 'none',
+    background: '#0284c7',
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: 700,
+    cursor: 'pointer',
+    flexShrink: 0,
+    transition: 'background 0.15s',
+  } as React.CSSProperties,
+  btnSecondary: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 6,
+    height: 36,
+    padding: '0 14px',
+    borderRadius: 10,
+    border: '1px solid #e2e8f0',
+    background: '#ffffff',
+    color: '#334155',
+    fontSize: 12,
+    fontWeight: 600,
+    cursor: 'pointer',
+    flexShrink: 0,
+    textDecoration: 'none',
+    transition: 'all 0.15s',
+  } as React.CSSProperties,
+  input: {
+    background: '#f8fafc',
+    border: '1px solid #e2e8f0',
+    borderRadius: 10,
+    fontSize: 12,
+    color: '#0f172a',
+    outline: 'none',
+    padding: '0 12px',
+  } as React.CSSProperties,
+}
+
+// ─── GradingPanel Component (defined outside to avoid re-mounting) ───────────
+interface GradingPanelProps {
+  tentativaId: string
+  questaoId: string
+  maxPoints: number
+  gradingState: Record<string, { nota: number; comentario: string; criteriosPontos?: Record<string, number>; saving?: boolean }>
+  setGradingState: React.Dispatch<React.SetStateAction<Record<string, any>>>
+  onSave: (tentativaId: string, questaoId: string) => void
+}
+
+function GradingPanel({
+  tentativaId,
+  questaoId,
+  maxPoints,
+  gradingState,
+  setGradingState,
+  onSave
+}: GradingPanelProps) {
+  const key = `${tentativaId}_${questaoId}`
+  const state = gradingState[key] || { nota: 0, comentario: '' }
+
+  return (
+    <div style={{ padding: '14px 16px', borderRadius: 12, background: '#f8fafc', border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+        <span style={{ fontSize: 12, fontWeight: 700, color: '#334155', whiteSpace: 'nowrap' }}>Atribuir Nota:</span>
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          <input
+            type="number"
+            step="0.5"
+            min="0"
+            max={maxPoints}
+            value={state.nota ?? 0}
+            onChange={e => {
+              const val = parseFloat(e.target.value) || 0
+              setGradingState(prev => ({
+                ...prev,
+                [key]: { ...prev[key], nota: Math.min(maxPoints, Math.max(0, val)) }
+              }))
+            }}
+            style={{ ...S.input, width: 70, height: 34, textAlign: 'center', fontFamily: 'monospace', fontWeight: 800, color: '#0369a1', fontSize: 13 }}
+          />
+          <span style={{ fontSize: 11, color: '#94a3b8', fontFamily: 'monospace' }}>/ {maxPoints.toFixed(1)} pts</span>
+        </div>
+
+        {/* Quick percentage buttons */}
+        <div style={{ display: 'flex', gap: 4 }}>
+          {[0, 50, 100].map(pct => (
+            <button
+              key={pct}
+              type="button"
+              onClick={() => setGradingState(prev => ({
+                ...prev,
+                [key]: { ...prev[key], nota: (maxPoints * pct) / 100 }
+              }))}
+              style={{
+                height: 28,
+                padding: '0 8px',
+                borderRadius: 7,
+                border: `1px solid ${pct === 100 ? '#a7f3d0' : '#e2e8f0'}`,
+                background: pct === 100 ? '#ecfdf5' : '#ffffff',
+                color: pct === 100 ? '#065f46' : '#64748b',
+                fontSize: 11,
+                fontWeight: 700,
+                fontFamily: 'monospace',
+                cursor: 'pointer'
+              }}
+            >
+              {pct}%
+            </button>
+          ))}
+        </div>
+
+        {/* Save button */}
+        <button
+          type="button"
+          onClick={() => onSave(tentativaId, questaoId)}
+          disabled={state.saving}
+          style={{
+            ...S.btnPrimary,
+            height: 34,
+            marginLeft: 'auto',
+            opacity: state.saving ? 0.6 : 1,
+            cursor: state.saving ? 'not-allowed' : 'pointer'
+          }}
+        >
+          {state.saving ? <RefreshCw style={{ width: 13, height: 13 }} className="animate-spin" /> : <Check style={{ width: 13, height: 13 }} />}
+          Salvar Nota
+        </button>
+      </div>
+
+      <input
+        type="text"
+        value={state.comentario || ''}
+        onChange={e => setGradingState(prev => ({
+          ...prev,
+          [key]: { ...prev[key], comentario: e.target.value }
+        }))}
+        placeholder="Feedback ou devolutiva pedagógica para o aluno (opcional)..."
+        style={{ ...S.input, height: 34, width: '100%', boxSizing: 'border-box' }}
+      />
+    </div>
+  )
 }
 
 export default function CorrigirProvaPage() {
   const params = useParams()
-  const router = useRouter()
   const id = params?.id as string
 
   const [loading, setLoading] = useState(true)
   const [prova, setProva] = useState<any>(null)
-  const [questoesDissertativas, setQuestoesDissertativas] = useState<QuestaoProva[]>([])
   const [submissions, setSubmissions] = useState<SubmissionItem[]>([])
   const [pendentesCount, setPendentesCount] = useState(0)
 
-  // Modes & Toggles
   const [isAnonimo, setIsAnonimo] = useState(false)
   const [viewMode, setViewMode] = useState<'questao' | 'aluno'>('questao')
-
-  // Selected for Question View
   const [selectedQuestionId, setSelectedQuestionId] = useState<string>('')
-
-  // Selected for Student View
   const [selectedSubmissionIndex, setSelectedSubmissionIndex] = useState(0)
+  const [studentSearch, setStudentSearch] = useState('')
+  const [questionFilterType, setQuestionFilterType] = useState<'todas' | 'dissertativa' | 'objetiva'>('todas')
 
-  // Grading form state: key = `${tentativaId}_${questaoId}` -> { nota, comentario, criteriosPontos }
   const [gradingState, setGradingState] = useState<Record<string, {
-    nota: number
-    comentario: string
-    criteriosPontos?: Record<string, number>
-    saving?: boolean
+    nota: number; comentario: string; criteriosPontos?: Record<string, number>; saving?: boolean
   }>>({})
 
-  // Modals
   const [publishModalOpen, setPublishModalOpen] = useState(false)
   const [publishing, setPublishing] = useState(false)
 
@@ -69,35 +240,39 @@ export default function CorrigirProvaPage() {
   const [simulatingAnnul, setSimulatingAnnul] = useState(false)
   const [confirmingAnnul, setConfirmingAnnul] = useState(false)
 
-  // Load Submissions
   const loadData = async (anon = isAnonimo) => {
     if (!id) return
     try {
       setLoading(true)
       const res = await fetch(`/api/provas-online/${id}/corrigir?anonimo=${anon}`)
       const data = await res.json()
-
       if (!res.ok) throw new Error(data.error || 'Erro ao carregar dados de correção')
 
       setProva(data.prova)
-      setQuestoesDissertativas(data.questoesDissertativas || [])
       setSubmissions(data.submissions || [])
       setPendentesCount(data.pendentesCorrecao || 0)
 
-      if (data.questoesDissertativas && data.questoesDissertativas.length > 0 && !selectedQuestionId) {
-        setSelectedQuestionId(data.questoesDissertativas[0].id)
+      // Ensure initial selectedQuestionId is valid
+      const allQuestoes: QuestaoProva[] = data.prova?.questoes || []
+      if (allQuestoes.length > 0 && !selectedQuestionId) {
+        // Prioritize first dissertative question if exists, otherwise first question
+        const firstDiss = allQuestoes.find(q => q.tipo === 'dissertativa')
+        setSelectedQuestionId(firstDiss ? firstDiss.id : allQuestoes[0].id)
       }
 
-      // Initialize grading state
+      // Initialize grading state from submissions answers
       const initialGrading: Record<string, any> = {}
       data.submissions?.forEach((sub: SubmissionItem) => {
-        data.questoesDissertativas?.forEach((q: QuestaoProva) => {
-          const resp = sub.respostas ? (sub.respostas[q.id] || (Array.isArray(sub.respostas) ? sub.respostas.find((r: any) => r.questaoId === q.id) : null)) : null
-          const key = `${sub.tentativaId}_${q.id}`
-          initialGrading[key] = {
-            nota: resp?.pontosAtribuidos ?? resp?.nota ?? 0,
-            comentario: resp?.comentarioCorrecao || resp?.comentario || '',
-            criteriosPontos: resp?.criteriosPontos || {}
+        allQuestoes.forEach((q: QuestaoProva, qIdx: number) => {
+          if (q.tipo === 'dissertativa') {
+            const resp = getStudentQuestionResponse(sub, q, qIdx)
+            const key = `${sub.tentativaId}_${q.id}`
+            const currentPoints = resp?.pontuacaoObtida ?? resp?.pontosAtribuidos ?? resp?.nota ?? 0
+            initialGrading[key] = {
+              nota: Number(currentPoints),
+              comentario: resp?.comentarioProfessor ?? resp?.comentarioCorrecao ?? resp?.comentario ?? '',
+              criteriosPontos: resp?.correcaoCriterios ?? resp?.criteriosPontos ?? {}
+            }
           }
         })
       })
@@ -109,21 +284,15 @@ export default function CorrigirProvaPage() {
     }
   }
 
-  useEffect(() => {
-    loadData(isAnonimo)
-  }, [id, isAnonimo])
+  useEffect(() => { loadData(isAnonimo) }, [id, isAnonimo])
 
-  // Save Single Essay Grade
+  // Save single grade with instant optimistic UI update
   const handleSaveGrade = async (tentativaId: string, questaoId: string) => {
     const key = `${tentativaId}_${questaoId}`
     const state = gradingState[key]
     if (!state) return
 
-    setGradingState(prev => ({
-      ...prev,
-      [key]: { ...prev[key], saving: true }
-    }))
-
+    setGradingState(prev => ({ ...prev, [key]: { ...prev[key], saving: true } }))
     try {
       const res = await fetch(`/api/provas-online/${id}/corrigir`, {
         method: 'POST',
@@ -137,23 +306,43 @@ export default function CorrigirProvaPage() {
           criteriosPontos: state.criteriosPontos || {}
         })
       })
-
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Erro ao salvar nota')
 
       toast.success('Nota salva com sucesso!')
+
+      // Optimistic update on submissions state
+      setSubmissions(prev => prev.map(sub => {
+        if (sub.tentativaId !== tentativaId) return sub
+        const updatedRespostas = { ...(sub.respostas || {}) }
+        if (updatedRespostas[questaoId]) {
+          updatedRespostas[questaoId] = {
+            ...updatedRespostas[questaoId],
+            corrigida: true,
+            corrigidoEm: new Date().toISOString(),
+            pontuacaoObtida: Number(state.nota) || 0
+          }
+        }
+        return {
+          ...sub,
+          statusCorrecao: (data.statusCorrecao || 'corrigida') as any,
+          pontuacaoDissertativa: data.pontuacaoDissertativa ?? sub.pontuacaoDissertativa,
+          notaFinal: data.notaFinal ?? sub.notaFinal,
+          respostas: updatedRespostas
+        }
+      }))
+
+      // Recalculate pending count
+      setPendentesCount(prev => Math.max(0, prev - 1))
       loadData(isAnonimo)
     } catch (err: any) {
-      toast.error(err.message || 'Falha ao salvar correção')
+      toast.error(err.message || 'Falha ao salvar nota')
     } finally {
-      setGradingState(prev => ({
-        ...prev,
-        [key]: { ...prev[key], saving: false }
-      }))
+      setGradingState(prev => ({ ...prev, [key]: { ...prev[key], saving: false } }))
     }
   }
 
-  // Publish Results Handler
+  // Publish results officially
   const handlePublishResults = async () => {
     setPublishing(true)
     try {
@@ -162,859 +351,1060 @@ export default function CorrigirProvaPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           acao: 'publicar_resultados',
-          publicarGabaritoENota: true
+          publicarGabaritoENota: true,
+          grades: gradingState
         })
       })
-
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Falha ao publicar resultados')
+      if (!res.ok) throw new Error(data.error || 'Falha ao publicar')
 
-      toast.success('Resultados e gabarito publicados com sucesso para alunos e famílias!')
+      toast.success('Gabarito e notas publicados com sucesso!')
       setPublishModalOpen(false)
+
+      // Optimistically clear pendentes and set all submissions to corrigida
+      setPendentesCount(0)
+      setSubmissions(prev => prev.map(s => ({ ...s, statusCorrecao: 'corrigida' })))
+      if (prova) {
+        setProva((prev: any) => ({ ...prev, status: 'publicada' }))
+      }
+
       loadData(isAnonimo)
     } catch (err: any) {
-      toast.error(err.message)
+      toast.error(err.message || 'Erro ao publicar')
     } finally {
       setPublishing(false)
     }
   }
 
-  // Question Annulment Simulation
   const handleSimulateAnnul = async () => {
-    if (!annulQuestionId) {
-      toast.error('Selecione a questão a ser anulada.')
-      return
-    }
-
+    if (!annulQuestionId) return
     setSimulatingAnnul(true)
     try {
-      const res = await fetch(`/api/provas-online/${id}/anular-questao`, {
+      const res = await fetch(`/api/provas-online/${id}/corrigir`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          questaoId: annulQuestionId,
-          metodo: annulMetodo,
-          justificativa: annulMotivo.trim() || 'Anulação administrativa por inconsistência ou recurso.',
-          simulacao: true
-        })
+        body: JSON.stringify({ acao: 'simular_anulacao', questaoId: annulQuestionId, metodo: annulMetodo })
       })
-
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Falha ao simular anulação')
-
-      setAnnulSimulation(data)
-    } catch (err: any) {
-      toast.error(err.message)
-    } finally {
-      setSimulatingAnnul(false)
-    }
+      if (!res.ok) throw new Error(data.error || 'Falha na simulação')
+      setAnnulSimulation(data.simulacao || data)
+    } catch (err: any) { toast.error(err.message) }
+    finally { setSimulatingAnnul(false) }
   }
 
-  // Confirm Annulment
   const handleConfirmAnnul = async () => {
-    if (!annulQuestionId) return
+    if (!annulQuestionId || !annulMotivo.trim()) { toast.error('Informe a justificativa.'); return }
     setConfirmingAnnul(true)
     try {
-      const res = await fetch(`/api/provas-online/${id}/anular-questao`, {
+      const res = await fetch(`/api/provas-online/${id}/corrigir`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          questaoId: annulQuestionId,
-          metodo: annulMetodo,
-          justificativa: annulMotivo.trim() || 'Anulação administrativa.',
-          simulacao: false
-        })
+        body: JSON.stringify({ acao: 'anular_questao', questaoId: annulQuestionId, metodo: annulMetodo, motivo: annulMotivo.trim() })
       })
-
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Erro ao efetivar anulação')
-
-      toast.success('Questão anulada e notas de todos os alunos recalculadas!')
+      if (!res.ok) throw new Error(data.error || 'Falha ao anular questão')
+      toast.success(data.message || 'Questão anulada e notas recalculadas!')
       setAnnulModalOpen(false)
       setAnnulSimulation(null)
       loadData(isAnonimo)
-    } catch (err: any) {
-      toast.error(err.message)
-    } finally {
-      setConfirmingAnnul(false)
+    } catch (err: any) { toast.error(err.message) }
+    finally { setConfirmingAnnul(false) }
+  }
+
+  // All questions list
+  const allQuestoes: QuestaoProva[] = prova?.questoes || []
+  const questoesDissertativas = allQuestoes.filter(q => q.tipo === 'dissertativa')
+
+  // Filtered questions for tab selector in Por Questão
+  const visibleQuestoes = useMemo(() => {
+    if (questionFilterType === 'dissertativa') return allQuestoes.filter(q => q.tipo === 'dissertativa')
+    if (questionFilterType === 'objetiva') return allQuestoes.filter(q => q.tipo !== 'dissertativa')
+    return allQuestoes
+  }, [allQuestoes, questionFilterType])
+
+  const activeQuestion = allQuestoes.find(q => q.id === selectedQuestionId) || allQuestoes[0]
+  const activeSubmission = submissions[selectedSubmissionIndex]
+
+  const filteredSubmissions = useMemo(() => {
+    if (!studentSearch.trim()) return submissions
+    const q = studentSearch.toLowerCase()
+    return submissions.filter(s => s.alunoNome.toLowerCase().includes(q) || s.alunoMatricula.toLowerCase().includes(q))
+  }, [submissions, studentSearch])
+
+  // Helper to format question type nicely
+  const getTipoLabel = (tipo: string) => {
+    switch (tipo) {
+      case 'multipla_escolha': return 'Múltipla Escolha'
+      case 'verdadeiro_falso': return 'Verdadeiro ou Falso'
+      case 'multipla_selecao': return 'Múltipla Seleção'
+      case 'dissertativa': return 'Dissertativa'
+      default: return tipo
     }
   }
 
-  const activeQuestion = useMemo(() => {
-    return (prova?.questoes || []).find((q: QuestaoProva) => q.id === selectedQuestionId) || questoesDissertativas[0]
-  }, [prova, selectedQuestionId, questoesDissertativas])
+  // Modal Backdrop wrapper
+  const ModalBackdrop = ({ onClose, children }: { onClose: () => void; children: React.ReactNode }) => (
+    <div
+      onClick={e => e.target === e.currentTarget && onClose()}
+      style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, background: 'rgba(15,23,42,0.5)', backdropFilter: 'blur(4px)' }}
+    >
+      {children}
+    </div>
+  )
 
-  const activeSubmission = submissions[selectedSubmissionIndex]
+  const ModalCard = ({ children, maxWidth = 480 }: { children: React.ReactNode; maxWidth?: number }) => (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.96, y: 8 }}
+      animate={{ opacity: 1, scale: 1, y: 0 }}
+      exit={{ opacity: 0, scale: 0.96 }}
+      style={{ width: '100%', maxWidth, background: '#ffffff', borderRadius: 20, border: '1px solid #e2e8f0', padding: 24, display: 'flex', flexDirection: 'column', gap: 16, maxHeight: '90vh', overflowY: 'auto' }}
+    >
+      {children}
+    </motion.div>
+  )
 
   if (loading && !prova) {
     return (
-      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center text-slate-500 gap-3">
-        <RefreshCw className="w-8 h-8 animate-spin text-sky-600" />
-        <p className="text-sm font-semibold text-slate-700">Carregando fila de correção...</p>
+      <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, background: '#f8fafc' }}>
+        <div style={{ width: 44, height: 44, borderRadius: 14, background: '#e0f2fe', border: '1px solid #bae6fd', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <RefreshCw style={{ width: 20, height: 20, color: '#0284c7' }} className="animate-spin" />
+        </div>
+        <p style={{ fontSize: 13, fontWeight: 600, color: '#475569' }}>Carregando Central de Correção...</p>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] text-slate-900 p-4 md:p-8 space-y-6 max-w-7xl mx-auto">
-      {/* 1. TOP HEADER & WORKFLOW BAR */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-slate-200">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
+    <div style={{ padding: '24px 20px', minHeight: '100vh', background: '#f8fafc', color: '#0f172a', boxSizing: 'border-box' }}>
+      <div style={{ maxWidth: 1240, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+        {/* ── HEADER CARD ─────────────────────────────────────────────────── */}
+        <div style={S.card}>
+          {/* Breadcrumb + Status badges */}
+          <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
             <Link
               href="/provas-online"
-              className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 transition-colors mr-1"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 8, background: '#f1f5f9', border: '1px solid #e2e8f0', color: '#475569', fontSize: 12, fontWeight: 600, textDecoration: 'none' }}
             >
-              <ArrowLeft className="w-4 h-4" />
+              <ArrowLeft style={{ width: 13, height: 13 }} /> Provas Online
             </Link>
-            <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-sky-50 text-sky-700 border border-sky-200">
-              Fila de Correção & Devolutivas
-            </span>
-            <span className="text-xs text-slate-500">
-              {submissions.length} entregas recebidas • {pendentesCount} correções pendentes
-            </span>
-          </div>
-          <h1 className="text-2xl font-black text-slate-900 tracking-tight">{prova?.titulo}</h1>
-        </div>
+            <span style={{ color: '#cbd5e1' }}>/</span>
+            <span style={S.pill('#0369a1', '#e0f2fe', '#bae6fd')}>Central de Correção</span>
+            <span style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>• {submissions.length} entrega(s)</span>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-          {/* Blind Grading (Modo Anônimo) Toggle */}
-          <button
-            type="button"
-            onClick={() => setIsAnonimo(!isAnonimo)}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '8px',
-              height: '38px',
-              padding: '0 16px',
-              borderRadius: '10px',
-              fontSize: '13px',
-              fontWeight: 600,
-              whiteSpace: 'nowrap',
-              cursor: 'pointer',
-              border: isAnonimo ? '1px solid #7dd3fc' : '1px solid #cbd5e1',
-              background: isAnonimo ? '#f0f9ff' : '#ffffff',
-              color: isAnonimo ? '#0369a1' : '#334155',
-              boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
-              transition: 'all 0.15s'
-            }}
-          >
-            {isAnonimo ? <EyeOff size={16} color="#0284c7" /> : <Eye size={16} color="#64748b" />}
-            {isAnonimo ? 'Modo Anônimo Ativo' : 'Ativar Modo Anônimo'}
-          </button>
-
-          {/* Annul Question Button */}
-          <button
-            type="button"
-            onClick={() => setAnnulModalOpen(true)}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '8px',
-              height: '38px',
-              padding: '0 16px',
-              borderRadius: '10px',
-              fontSize: '13px',
-              fontWeight: 600,
-              whiteSpace: 'nowrap',
-              cursor: 'pointer',
-              border: '1px solid #cbd5e1',
-              background: '#ffffff',
-              color: '#334155',
-              boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
-              transition: 'all 0.15s'
-            }}
-          >
-            <Scale size={16} color="#d97706" />
-            Anular Questão
-          </button>
-
-          {/* Integrate to Gradebook / Diário Button */}
-          <Link
-            href={`/provas-online/${id}/relatorio`}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '8px',
-              height: '38px',
-              padding: '0 16px',
-              borderRadius: '10px',
-              fontSize: '13px',
-              fontWeight: 600,
-              whiteSpace: 'nowrap',
-              cursor: 'pointer',
-              border: '1px solid #cbd5e1',
-              background: '#ffffff',
-              color: '#334155',
-              textDecoration: 'none',
-              boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
-              transition: 'all 0.15s'
-            }}
-          >
-            <ArrowUpRight size={16} color="#0284c7" />
-            Relatório & Notas
-          </Link>
-
-          {/* Publish Results Button */}
-          <button
-            type="button"
-            onClick={() => setPublishModalOpen(true)}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '8px',
-              height: '38px',
-              padding: '0 20px',
-              borderRadius: '10px',
-              fontSize: '13px',
-              fontWeight: 800,
-              whiteSpace: 'nowrap',
-              cursor: 'pointer',
-              border: 'none',
-              background: '#0284c7',
-              color: '#ffffff',
-              boxShadow: '0 2px 6px rgba(2, 132, 199, 0.28)',
-              transition: 'all 0.15s'
-            }}
-          >
-            <Award size={16} color="#ffffff" />
-            Publicar Gabarito & Notas
-          </button>
-        </div>
-      </div>
-
-      {/* 2. MODE SELECTOR (POR QUESTÃO vs POR ALUNO) */}
-      <div style={{
-        background: '#ffffff',
-        border: '1px solid #e2e8f0',
-        borderRadius: '16px',
-        padding: '10px 16px',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        flexWrap: 'wrap',
-        gap: '12px'
-      }}>
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          background: '#f1f5f9',
-          padding: '3px',
-          borderRadius: '10px',
-          gap: '3px'
-        }}>
-          <button
-            onClick={() => setViewMode('questao')}
-            style={{
-              padding: '6px 14px',
-              borderRadius: '8px',
-              fontSize: '12px',
-              fontWeight: viewMode === 'questao' ? 800 : 600,
-              background: viewMode === 'questao' ? '#ffffff' : 'transparent',
-              color: viewMode === 'questao' ? '#0284c7' : '#64748b',
-              border: 'none',
-              boxShadow: viewMode === 'questao' ? '0 1px 3px rgba(0,0,0,0.06)' : 'none',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px'
-            }}
-          >
-            <Layers size={14} />
-            Corrigir por Questão ({questoesDissertativas.length})
-          </button>
-          <button
-            onClick={() => setViewMode('aluno')}
-            style={{
-              padding: '6px 14px',
-              borderRadius: '8px',
-              fontSize: '12px',
-              fontWeight: viewMode === 'aluno' ? 800 : 600,
-              background: viewMode === 'aluno' ? '#ffffff' : 'transparent',
-              color: viewMode === 'aluno' ? '#0284c7' : '#64748b',
-              border: 'none',
-              boxShadow: viewMode === 'aluno' ? '0 1px 3px rgba(0,0,0,0.06)' : 'none',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px'
-            }}
-          >
-            <User size={14} />
-            Corrigir por Aluno ({submissions.length})
-          </button>
-        </div>
-
-        {questoesDissertativas.length === 0 && (
-          <div style={{ fontSize: '12px', color: '#047857', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <CheckCircle2 size={15} color="#059669" />
-            Prova 100% objetiva. Todas as notas calculadas automaticamente!
-          </div>
-        )}
-      </div>
-
-      {/* 3. VIEW MODE A: CORRIGIR POR QUESTÃO (BATCH ESSAY GRADING) */}
-      {viewMode === 'questao' && (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          {/* Question Selector Tabs */}
-          {questoesDissertativas.length > 0 && (
-            <div className="col-span-12 flex flex-wrap gap-2">
-              {questoesDissertativas.map((q, idx) => (
-                <button
-                  key={q.id}
-                  onClick={() => setSelectedQuestionId(q.id)}
-                  style={{
-                    padding: '8px 16px',
-                    borderRadius: '12px',
-                    fontSize: '12px',
-                    fontWeight: activeQuestion?.id === q.id ? 800 : 600,
-                    border: activeQuestion?.id === q.id ? '1.5px solid #0284c7' : '1px solid #e2e8f0',
-                    background: activeQuestion?.id === q.id ? '#f0f9ff' : '#ffffff',
-                    color: activeQuestion?.id === q.id ? '#0284c7' : '#475569',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    cursor: 'pointer',
-                    transition: 'all 0.15s'
-                  }}
-                >
-                  <span>Dissertativa #{idx + 1}</span>
-                  <span style={{ fontSize: '11px', color: '#94a3b8' }}>({(q.valorPontos || q.pontuacao || 0).toFixed(1)} pts)</span>
-                </button>
-              ))}
-            </div>
-          )}
-
-          {/* Left Column: Question Details & Expected Answer (4 cols) */}
-          <div className="lg:col-span-4 space-y-4">
-            <div style={{
-              background: '#ffffff',
-              border: '1px solid #e2e8f0',
-              borderRadius: '16px',
-              padding: '20px',
-              boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
-              position: 'sticky',
-              top: '80px'
-            }}>
-              <span style={{ fontSize: '11px', fontWeight: 800, color: '#0284c7', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'block', marginBottom: '8px' }}>
-                Enunciado da Questão
+            {/* Dynamic Status Pill */}
+            {prova?.status === 'publicada' ? (
+              <span style={S.pill('#5b21b6', '#ede9fe', '#ddd6fe')}>
+                <Award style={{ width: 11, height: 11 }} /> Gabarito e Notas Publicados
               </span>
-              <div style={{ fontSize: '13px', color: '#334155', lineHeight: 1.6, marginBottom: '16px', borderBottom: '1px solid #f1f5f9', paddingBottom: '16px' }}>
-                <HtmlContent html={activeQuestion?.enunciado || 'Nenhuma questão dissertativa selecionada.'} />
-              </div>
+            ) : pendentesCount === 0 ? (
+              <span style={S.pill('#065f46', '#d1fae5', '#a7f3d0')}>
+                <CheckCircle2 style={{ width: 11, height: 11 }} /> Todas as Correções Concluídas
+              </span>
+            ) : (
+              <span style={S.pill('#92400e', '#fef3c7', '#fde68a')}>
+                <AlertCircle style={{ width: 11, height: 11 }} /> {pendentesCount} dissertativa(s) pendente(s)
+              </span>
+            )}
+          </div>
 
-              {/* Expected Answer (Gabarito do Professor) */}
-              <div style={{ marginBottom: '16px' }}>
-                <span style={{ fontSize: '11px', fontWeight: 800, color: '#059669', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
-                  <CheckCircle2 size={14} color="#059669" />
-                  Resposta Esperada (Guia do Corretor)
+          {/* Title and Top Actions */}
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                <span style={{ fontSize: 11, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#0369a1' }}>
+                  {prova?.disciplina || 'Geral'} {prova?.bimestre ? `• ${prova.bimestre}º Bimestre` : ''}
                 </span>
-                <p style={{ fontSize: '12px', color: '#166534', background: '#f0fdf4', padding: '12px', borderRadius: '12px', border: '1px solid #bbf7d0', lineHeight: 1.5, margin: 0 }}>
-                  {activeQuestion?.respostaEsperada || 'Não informada pelo autor da questão.'}
-                </p>
+                <span style={{ fontSize: 11, color: '#94a3b8' }}>•</span>
+                <span style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>
+                  {allQuestoes.length} questões ({prova?.valorTotal || 10} pts totais)
+                </span>
               </div>
+              <h1
+                style={{ fontSize: 20, fontWeight: 900, color: '#0f172a', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}
+                title={prova?.titulo || ''}
+              >
+                {prova?.titulo || 'Carregando avaliação...'}
+              </h1>
+            </div>
 
-              {/* Rubrics Criteria Table */}
-              {activeQuestion?.criteriosAvaliacao && activeQuestion.criteriosAvaliacao.length > 0 && (
-                <div>
-                  <span style={{ fontSize: '11px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'block', marginBottom: '8px' }}>
-                    Grade de Critérios
-                  </span>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    {(activeQuestion.criteriosAvaliacao || []).map((crit: any) => (
-                      <div
-                        key={crit.id}
-                        style={{
-                          padding: '10px 12px',
-                          borderRadius: '10px',
-                          background: '#f8fafc',
-                          border: '1px solid #e2e8f0',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          fontSize: '12px'
-                        }}
-                      >
-                        <span style={{ color: '#334155' }}>{crit.descricao}</span>
-                        <span style={{ color: '#0284c7', fontWeight: 800, fontFamily: 'monospace' }}>+{(crit.pesoPontos || crit.pontosMaximos || 0).toFixed(1)}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
+            {/* Action buttons */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', flexShrink: 0 }}>
+              <button
+                type="button"
+                onClick={() => setIsAnonimo(!isAnonimo)}
+                style={{
+                  ...S.btnSecondary,
+                  background: isAnonimo ? '#e0f2fe' : '#ffffff',
+                  borderColor: isAnonimo ? '#bae6fd' : '#e2e8f0',
+                  color: isAnonimo ? '#0369a1' : '#334155'
+                }}
+              >
+                {isAnonimo ? <EyeOff style={{ width: 13, height: 13 }} /> : <Eye style={{ width: 13, height: 13 }} />}
+                {isAnonimo ? 'Anônimo Ativo' : 'Modo Anônimo'}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setAnnulModalOpen(true)}
+                style={S.btnSecondary}
+              >
+                <Scale style={{ width: 13, height: 13, color: '#b45309' }} /> Anular Questão
+              </button>
+
+              <Link
+                href={`/provas-online/${id}/relatorio`}
+                style={S.btnSecondary}
+              >
+                <ArrowUpRight style={{ width: 13, height: 13, color: '#64748b' }} /> Relatório
+              </Link>
+
+              <button
+                type="button"
+                onClick={() => setPublishModalOpen(true)}
+                style={{ ...S.btnPrimary, background: '#0284c7' }}
+              >
+                <Award style={{ width: 14, height: 14 }} /> Publicar Gabarito & Notas
+              </button>
             </div>
           </div>
 
-          {/* Right Column: Student Responses Cards (8 cols) */}
-          <div className="lg:col-span-8 space-y-4">
-            {submissions.length === 0 ? (
-              <div style={{
-                padding: '64px 24px',
-                textAlign: 'center',
-                background: '#ffffff',
-                border: '1px dashed #cbd5e1',
-                borderRadius: '20px',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '12px'
-              }}>
-                <div style={{
-                  width: '56px',
-                  height: '56px',
-                  borderRadius: '16px',
-                  background: '#f8fafc',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  border: '1px solid #e2e8f0'
-                }}>
-                  <BookOpen size={28} color="#94a3b8" />
-                </div>
-                <div style={{ fontSize: '15px', fontWeight: 700, color: '#334155' }}>
-                  Nenhuma resposta entregue até o momento
-                </div>
-                <p style={{ fontSize: '12px', color: '#64748b', margin: 0, maxWidth: '340px' }}>
-                  Assim que os estudantes concluírem suas tentativas e enviarem as avaliações, elas aparecerão aqui prontas para correção.
-                </p>
+          {/* Mode Selector Tabs: Por Questão vs Por Aluno */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginTop: 16, paddingTop: 14, borderTop: '1px solid #f1f5f9' }}>
+            <div style={{ display: 'flex', background: '#f1f5f9', borderRadius: 12, padding: 4, gap: 4 }}>
+              {[
+                { id: 'questao', label: `Visão por Questão (${allQuestoes.length})`, icon: <Layers style={{ width: 13, height: 13 }} /> },
+                { id: 'aluno', label: `Visão por Estudante (${submissions.length})`, icon: <User style={{ width: 13, height: 13 }} /> },
+              ].map(tab => {
+                const active = viewMode === tab.id
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setViewMode(tab.id as any)}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      height: 32,
+                      padding: '0 14px',
+                      borderRadius: 8,
+                      border: 'none',
+                      background: active ? '#ffffff' : 'transparent',
+                      color: active ? '#0369a1' : '#64748b',
+                      fontSize: 12,
+                      fontWeight: active ? 700 : 600,
+                      cursor: 'pointer',
+                      boxShadow: active ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                      transition: 'all 0.15s'
+                    }}
+                  >
+                    {tab.icon} {tab.label}
+                  </button>
+                )
+              })}
+            </div>
+
+            {questoesDissertativas.length === 0 ? (
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 10, background: '#f0fdf4', border: '1px solid #bbf7d0', color: '#166534', fontSize: 12, fontWeight: 600 }}>
+                <CheckCircle2 style={{ width: 14, height: 14, color: '#16a34a' }} />
+                Prova 100% objetiva — notas calculadas automaticamente pelo sistema.
               </div>
             ) : (
-              submissions.map(sub => {
-                const qid = activeQuestion?.id || ''
-                const key = `${sub.tentativaId}_${qid}`
-                const state = gradingState[key] || { nota: 0, comentario: '' }
-                const resp = sub.respostas ? (sub.respostas[qid] || (Array.isArray(sub.respostas) ? sub.respostas.find((r: any) => r.questaoId === qid) : null)) : null
-                const maxPoints = activeQuestion?.valorPontos || activeQuestion?.pontuacao || 10
-
-                return (
-                  <div
-                    key={sub.tentativaId}
-                    className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4 shadow-xs hover:border-slate-300 transition-all"
-                  >
-                    {/* Student Info Bar */}
-                    <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center font-bold text-xs font-mono border border-slate-200">
-                          {isAnonimo ? '#' : sub.alunoNome.slice(0, 2).toUpperCase()}
-                        </div>
-                        <div>
-                          <h4 className="text-xs font-bold text-slate-900">
-                            {sub.alunoNome}
-                          </h4>
-                          <span className="text-[11px] text-slate-500">
-                            Entregue em {new Date(sub.entregueEm || Date.now()).toLocaleString('pt-BR')}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Current saved status */}
-                      {resp?.corrigidaEm ? (
-                        <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200 flex items-center gap-1">
-                          <Check className="w-3 h-3" />
-                          Corrigida ({resp.pontosAtribuidos ?? resp.nota} pts)
-                        </span>
-                      ) : (
-                        <span className="text-[11px] font-semibold text-amber-700 bg-amber-50 px-2.5 py-1 rounded-full border border-amber-200">
-                          Aguardando Nota
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Student Written Response */}
-                    <div className="p-4 rounded-xl bg-slate-50 border border-slate-200">
-                      <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-2">
-                        Resposta do Aluno:
-                      </span>
-                      {resp?.textoDissertativo || resp?.respostaTexto ? (
-                        <p className="text-xs text-slate-800 leading-relaxed whitespace-pre-wrap font-sans">
-                          {resp.textoDissertativo || resp.respostaTexto}
-                        </p>
-                      ) : (
-                        <span className="text-xs text-slate-400 italic">Questão deixada em branco pelo aluno.</span>
-                      )}
-                    </div>
-
-                    {/* Rubric evaluation sliders (if criteria configured) */}
-                    {activeQuestion?.criteriosAvaliacao && activeQuestion.criteriosAvaliacao.length > 0 && (
-                      <div className="space-y-2 pt-2">
-                        <span className="text-xs font-semibold text-slate-700 block">Pontuação por Critério:</span>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                          {(activeQuestion.criteriosAvaliacao || []).map((crit: any) => {
-                            const maxP = crit.pesoPontos || crit.pontosMaximos || 1
-                            const currentCritScore = state.criteriosPontos?.[crit.id] ?? maxP
-                            return (
-                              <div
-                                key={crit.id}
-                                className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between gap-3 text-xs"
-                              >
-                                <span className="text-slate-700 truncate">{crit.descricao}</span>
-                                <div className="flex items-center gap-1.5 shrink-0">
-                                  <input
-                                    type="number"
-                                    step="0.5"
-                                    min="0"
-                                    max={maxP}
-                                    value={currentCritScore}
-                                    onChange={e => {
-                                      const val = parseFloat(e.target.value) || 0
-                                      const nextCriterios = { ...(state.criteriosPontos || {}), [crit.id]: val }
-                                      const sum = Object.values(nextCriterios).reduce<number>((acc, cur) => acc + Number(cur || 0), 0)
-                                      setGradingState(prev => ({
-                                        ...prev,
-                                        [key]: {
-                                          ...prev[key],
-                                          criteriosPontos: nextCriterios,
-                                          nota: Math.min(maxPoints, sum)
-                                        }
-                                      }))
-                                    }}
-                                    className="w-16 bg-white border border-slate-300 rounded-lg px-2 py-1 text-center font-mono text-sky-700 font-bold focus:outline-none focus:border-sky-500"
-                                  />
-                                  <span className="text-slate-400 font-mono">/ {maxP.toFixed(1)}</span>
-                                </div>
-                              </div>
-                            )
-                          })}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Quick Points & Comment Controls */}
-                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 pt-2">
-                      {/* Score Input */}
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-semibold text-slate-700">Nota Final do Item:</span>
-                        <input
-                          type="number"
-                          step="0.5"
-                          min="0"
-                          max={maxPoints}
-                          value={state.nota}
-                          onChange={e => {
-                            const val = parseFloat(e.target.value) || 0
-                            setGradingState(prev => ({
-                              ...prev,
-                              [key]: { ...prev[key], nota: Math.min(maxPoints, Math.max(0, val)) }
-                            }))
-                          }}
-                          className="w-20 bg-white border border-slate-300 rounded-xl px-3 py-2 text-center font-mono font-bold text-sky-700 text-sm focus:outline-none focus:border-sky-500"
-                        />
-                        <span className="text-xs text-slate-400 font-mono">de {maxPoints.toFixed(1)} pts</span>
-                      </div>
-
-                      {/* Quick percentage pills */}
-                      <div className="flex items-center gap-1">
-                        <button
-                          type="button"
-                          onClick={() => setGradingState(prev => ({ ...prev, [key]: { ...prev[key], nota: 0 } }))}
-                          className="px-2.5 py-1 rounded-lg bg-slate-100 text-[11px] font-mono text-slate-600 hover:bg-slate-200"
-                        >
-                          0%
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setGradingState(prev => ({ ...prev, [key]: { ...prev[key], nota: maxPoints / 2 } }))}
-                          className="px-2.5 py-1 rounded-lg bg-slate-100 text-[11px] font-mono text-slate-600 hover:bg-slate-200"
-                        >
-                          50%
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setGradingState(prev => ({ ...prev, [key]: { ...prev[key], nota: maxPoints } }))}
-                          className="px-2.5 py-1 rounded-lg bg-emerald-50 text-[11px] font-mono text-emerald-700 hover:bg-emerald-100 border border-emerald-200"
-                        >
-                          100%
-                        </button>
-                      </div>
-
-                      {/* Save Button */}
-                      <button
-                        type="button"
-                        onClick={() => handleSaveGrade(sub.tentativaId, qid)}
-                        disabled={state.saving}
-                        className="sm:ml-auto px-5 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm cursor-pointer transition-colors"
-                      >
-                        {state.saving ? (
-                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                        ) : (
-                          <Check className="w-3.5 h-3.5" />
-                        )}
-                        Salvar Nota
-                      </button>
-                    </div>
-
-                    {/* Teacher Feedback Comment Field */}
-                    <div>
-                      <input
-                        type="text"
-                        value={state.comentario}
-                        onChange={e => setGradingState(prev => ({
-                          ...prev,
-                          [key]: { ...prev[key], comentario: e.target.value }
-                        }))}
-                        placeholder="Adicionar feedback ou devolutiva pedagógica para o aluno..."
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-sky-500 focus:bg-white"
-                      />
-                    </div>
-                  </div>
-                )
-              })
+              <div style={{ fontSize: 12, color: '#64748b' }}>
+                {questoesDissertativas.length} questão(ões) dissertativa(s) exigem avaliação do professor.
+              </div>
             )}
           </div>
         </div>
-      )}
 
-      {/* 4. VIEW MODE B: CORRIGIR POR ALUNO */}
-      {viewMode === 'aluno' && (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          {/* Submissions list sidebar (4 cols) */}
-          <div className="lg:col-span-4 space-y-2">
-            <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-              Selecione o Aluno:
-            </h3>
-            {submissions.map((sub, idx) => {
-              const isSelected = idx === selectedSubmissionIndex
-              return (
-                <div
-                  key={sub.tentativaId}
-                  onClick={() => setSelectedSubmissionIndex(idx)}
-                  className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between ${
-                    isSelected
-                      ? 'bg-sky-50 border-sky-300 ring-1 ring-sky-200 shadow-xs'
-                      : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50'
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center font-bold text-xs font-mono border border-slate-200">
-                      {isAnonimo ? `#${idx + 1}` : sub.alunoNome.slice(0, 2).toUpperCase()}
-                    </div>
-                    <div>
-                      <h4 className="text-xs font-bold text-slate-900">{sub.alunoNome}</h4>
-                      <span className="text-[11px] text-slate-500 font-mono">
-                        Nota Total: {sub.notaFinal !== undefined ? sub.notaFinal.toFixed(1) : '--'}
+        {/* ── VIEW 1: POR QUESTÃO (EXIBE TODAS AS QUESTÕES) ─────────────────── */}
+        {viewMode === 'questao' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+            {/* Type Filter & Question Selector Bar */}
+            <div style={{ ...S.card, padding: '14px 18px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+                <span style={{ fontSize: 11, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#64748b' }}>
+                  Navegar Questões da Prova ({allQuestoes.length} no total):
+                </span>
+
+                {/* Filter buttons: Todas | Dissertativas | Objetivas */}
+                <div style={{ display: 'flex', gap: 4 }}>
+                  {[
+                    { id: 'todas', label: `Todas (${allQuestoes.length})` },
+                    { id: 'dissertativa', label: `Dissertativas (${questoesDissertativas.length})` },
+                    { id: 'objetiva', label: `Objetivas (${allQuestoes.length - questoesDissertativas.length})` },
+                  ].map(f => (
+                    <button
+                      key={f.id}
+                      type="button"
+                      onClick={() => setQuestionFilterType(f.id as any)}
+                      style={{
+                        padding: '4px 10px',
+                        borderRadius: 8,
+                        fontSize: 11,
+                        fontWeight: 700,
+                        border: `1px solid ${questionFilterType === f.id ? '#0284c7' : '#e2e8f0'}`,
+                        background: questionFilterType === f.id ? '#e0f2fe' : '#ffffff',
+                        color: questionFilterType === f.id ? '#0369a1' : '#64748b',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Question Pills Row */}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {visibleQuestoes.map((q, idx) => {
+                  const globalIdx = allQuestoes.findIndex(item => item.id === q.id)
+                  const isSelected = activeQuestion?.id === q.id
+                  const isDiss = q.tipo === 'dissertativa'
+                  const pts = Number(q.valorPontos || q.pontuacao || 0)
+
+                  return (
+                    <button
+                      key={q.id}
+                      type="button"
+                      onClick={() => setSelectedQuestionId(q.id)}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        padding: '8px 14px',
+                        borderRadius: 12,
+                        border: `1px solid ${isSelected ? '#0284c7' : '#e2e8f0'}`,
+                        background: isSelected ? '#e0f2fe' : '#ffffff',
+                        color: isSelected ? '#0369a1' : '#334155',
+                        fontSize: 12,
+                        fontWeight: isSelected ? 800 : 600,
+                        cursor: 'pointer',
+                        boxShadow: isSelected ? '0 0 0 2px rgba(2, 132, 199, 0.2)' : 'none',
+                        transition: 'all 0.15s'
+                      }}
+                    >
+                      <span style={{
+                        width: 20,
+                        height: 20,
+                        borderRadius: 6,
+                        background: isSelected ? '#0284c7' : '#f1f5f9',
+                        color: isSelected ? '#ffffff' : '#64748b',
+                        fontSize: 11,
+                        fontWeight: 800,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontFamily: 'monospace'
+                      }}>
+                        {globalIdx + 1}
+                      </span>
+                      <span>{getTipoLabel(q.tipo)}</span>
+                      <span style={{ fontSize: 11, color: isSelected ? '#0369a1' : '#94a3b8', fontFamily: 'monospace' }}>
+                        ({pts.toFixed(1)} pts)
+                      </span>
+                      {isDiss && (
+                        <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#f59e0b' }} title="Questão dissertativa requer correção" />
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* Question Details: Left (Question & Key) + Right (Student Submissions) */}
+            {activeQuestion && (
+              <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 5fr) minmax(0, 8fr)', gap: 20, alignItems: 'start' }}>
+
+                {/* LEFT: Question Statement & Evaluation Rubric / Gabarito */}
+                <div style={{ position: 'sticky', top: 24, display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  <div style={S.card}>
+                    {/* Header info */}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                      <span style={{ fontSize: 11, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#0369a1' }}>
+                        Questão {allQuestoes.findIndex(q => q.id === activeQuestion.id) + 1} · {getTipoLabel(activeQuestion.tipo)}
+                      </span>
+                      <span style={S.pill('#0369a1', '#e0f2fe', '#bae6fd')}>
+                        {(Number(activeQuestion.valorPontos || activeQuestion.pontuacao || 0)).toFixed(1)} pontos
                       </span>
                     </div>
-                  </div>
 
-                  <span
-                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                      sub.statusCorrecao === 'concluida'
-                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                        : 'bg-amber-50 text-amber-700 border border-amber-200'
-                    }`}
-                  >
-                    {sub.statusCorrecao === 'concluida' ? 'Corrigida' : 'Pendente'}
-                  </span>
-                </div>
-              )
-            })}
-          </div>
+                    {/* Enunciado */}
+                    <div style={{ padding: '14px 16px', borderRadius: 12, background: '#f8fafc', border: '1px solid #e2e8f0', fontSize: 13, color: '#1e293b', lineHeight: 1.6, marginBottom: 16 }}>
+                      <HtmlContent html={activeQuestion.enunciado} />
+                    </div>
 
-          {/* Student Complete Exam View (8 cols) */}
-          <div className="lg:col-span-8 space-y-6">
-            {activeSubmission ? (
-              <div className="bg-white border border-slate-200/90 rounded-3xl p-6 space-y-6 shadow-xs">
-                <div className="flex items-center justify-between pb-4 border-b border-slate-100">
-                  <div>
-                    <h2 className="text-base font-bold text-slate-900">{activeSubmission.alunoNome}</h2>
-                    <p className="text-xs text-slate-500">
-                      Entregue em {new Date(activeSubmission.entregueEm || Date.now()).toLocaleString('pt-BR')}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-xs text-slate-400 block font-medium">Nota Atual</span>
-                    <span className="text-xl font-bold font-mono text-sky-700">
-                      {activeSubmission.notaFinal !== undefined ? activeSubmission.notaFinal.toFixed(1) : '--'} / {prova?.valorTotal}
-                    </span>
-                  </div>
-                </div>
+                    {/* Objective questions: Display Gabarito Oficial */}
+                    {activeQuestion.tipo === 'multipla_escolha' && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        <span style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#166534', display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <CheckCircle2 style={{ width: 13, height: 13, color: '#16a34a' }} /> Gabarito Oficial:
+                        </span>
+                        {(activeQuestion.alternativas || []).map(alt => (
+                          <div
+                            key={alt.id}
+                            style={{
+                              padding: '8px 12px',
+                              borderRadius: 10,
+                              border: `1px solid ${alt.correta ? '#86efac' : '#e2e8f0'}`,
+                              background: alt.correta ? '#f0fdf4' : '#ffffff',
+                              color: alt.correta ? '#166534' : '#475569',
+                              fontSize: 12,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              fontWeight: alt.correta ? 700 : 500
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <span style={{ width: 22, height: 22, borderRadius: 6, background: alt.correta ? '#16a34a' : '#f1f5f9', color: alt.correta ? '#ffffff' : '#64748b', fontWeight: 800, fontSize: 11, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+                                {alt.letra}
+                              </span>
+                              <span>{alt.texto}</span>
+                            </div>
+                            {alt.correta && (
+                              <span style={{ fontSize: 10, fontWeight: 800, background: '#bbf7d0', color: '#166534', padding: '2px 8px', borderRadius: 99 }}>
+                                Correta
+                              </span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
 
-                {/* Questions Breakdown */}
-                <div className="space-y-6">
-                  {(prova?.questoes || []).map((q: QuestaoProva, qIdx: number) => {
-                    const resp = activeSubmission.respostas ? (activeSubmission.respostas[q.id] || (Array.isArray(activeSubmission.respostas) ? activeSubmission.respostas.find((r: any) => r.questaoId === q.id) : null)) : null
-                    const isDissertativa = q.tipo === 'dissertativa'
+                    {/* V/F Gabarito */}
+                    {activeQuestion.tipo === 'verdadeiro_falso' && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        <span style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#166534', display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <CheckCircle2 style={{ width: 13, height: 13, color: '#16a34a' }} /> Itens do Gabarito:
+                        </span>
+                        {(activeQuestion.itensVF || []).map((item, idx) => (
+                          <div
+                            key={item.id || idx}
+                            style={{ padding: '8px 12px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}
+                          >
+                            <span style={{ color: '#334155' }}>#{idx + 1}. {item.afirmacao}</span>
+                            <span style={{ fontWeight: 800, fontFamily: 'monospace', padding: '2px 8px', borderRadius: 6, background: item.correta ? '#16a34a' : '#dc2626', color: '#ffffff', fontSize: 11 }}>
+                              {item.correta ? 'V' : 'F'}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
 
-                    return (
-                      <div key={q.id} className="p-5 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold text-slate-700 uppercase">
-                            Questão {qIdx + 1} ({q.tipo.replace('_', ' ')})
+                    {/* Dissertativa: Expected answer + Rubrics */}
+                    {activeQuestion.tipo === 'dissertativa' && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                        <div>
+                          <span style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#065f46', display: 'flex', alignItems: 'center', gap: 5, marginBottom: 6 }}>
+                            <CheckCircle2 style={{ width: 13, height: 13, color: '#16a34a' }} /> Resposta Esperada (Referência Pedagógica):
                           </span>
-                          <span className="text-xs font-mono font-bold text-sky-700">
-                            {resp?.pontosAtribuidos ?? resp?.nota ?? 0} / {(q.valorPontos || q.pontuacao || 0).toFixed(1)} pts
-                          </span>
+                          <div style={{ padding: '12px 14px', borderRadius: 12, background: '#f0fdf4', border: '1px solid #bbf7d0', fontSize: 12, color: '#166534', lineHeight: 1.6 }}>
+                            {activeQuestion.respostaEsperada || 'Não informada pelo autor da prova.'}
+                          </div>
                         </div>
 
-                        <div className="text-xs text-slate-800">
-                          <HtmlContent html={q.enunciado} />
-                        </div>
-
-                        {/* Student response summary */}
-                        <div className="p-3 rounded-xl bg-white border border-slate-200 text-xs">
-                          <span className="text-slate-400 font-medium block mb-1">Resposta do Estudante:</span>
-                          <p className="text-slate-800">
-                            {resp?.textoDissertativo || resp?.respostaTexto || (resp?.alternativaIdSelecionada ? `Alternativa selecionada: ${resp.alternativaIdSelecionada}` : 'Sem resposta preenchida.')}
-                          </p>
-                        </div>
-
-                        {/* If dissertativa, allow quick inline score save */}
-                        {isDissertativa && (
-                          <div className="flex items-center gap-3 pt-2">
-                            <span className="text-xs text-slate-600 font-medium">Atribuir Nota:</span>
-                            <input
-                              type="number"
-                              step="0.5"
-                              max={q.valorPontos || q.pontuacao || 10}
-                              defaultValue={resp?.pontosAtribuidos ?? resp?.nota ?? 0}
-                              onBlur={e => {
-                                handleSaveGrade(activeSubmission.tentativaId, q.id)
-                              }}
-                              className="w-20 bg-white border border-slate-300 rounded-lg px-2 py-1 text-center font-mono text-sky-700 font-bold"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => handleSaveGrade(activeSubmission.tentativaId, q.id)}
-                              className="px-3 py-1 rounded-lg bg-sky-600 text-white font-bold text-xs cursor-pointer hover:bg-sky-700"
-                            >
-                              Salvar
-                            </button>
+                        {activeQuestion.criteriosAvaliacao && activeQuestion.criteriosAvaliacao.length > 0 && (
+                          <div>
+                            <span style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#334155', display: 'block', marginBottom: 6 }}>
+                              Rubricas e Critérios de Correção:
+                            </span>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                              {activeQuestion.criteriosAvaliacao.map((crit: any) => (
+                                <div key={crit.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '8px 12px', borderRadius: 10, background: '#f8fafc', border: '1px solid #e2e8f0', fontSize: 12 }}>
+                                  <span style={{ color: '#475569' }}>{crit.descricao}</span>
+                                  <span style={{ fontFamily: 'monospace', fontWeight: 700, color: '#0369a1', fontSize: 11 }}>
+                                    +{(crit.pesoPontos || crit.pontosMaximos || 0).toFixed(1)} pts
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
                           </div>
                         )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* RIGHT: List of All Students' Submissions for this Question */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  {submissions.length === 0 ? (
+                    <div style={{ padding: '64px 24px', textAlign: 'center', background: '#ffffff', border: '2px dashed #e2e8f0', borderRadius: 20, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+                      <BookOpen style={{ width: 32, height: 32, color: '#94a3b8' }} />
+                      <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e293b', margin: 0 }}>Nenhuma entrega recebida ainda</h3>
+                      <p style={{ fontSize: 12, color: '#94a3b8', margin: 0 }}>As respostas dos alunos aparecerão aqui conforme as provas forem concluídas.</p>
+                    </div>
+                  ) : (
+                    submissions.map((sub, sIdx) => {
+                      const qid = activeQuestion.id
+                      const activeQIdx = allQuestoes.findIndex(q => q.id === qid)
+                      const resp = getStudentQuestionResponse(sub, activeQuestion, activeQIdx)
+                      const maxPoints = Number(activeQuestion.valorPontos || activeQuestion.pontuacao || 10)
+                      const isDissertativa = activeQuestion.tipo === 'dissertativa'
+
+                      // Dissertativa evaluation status: is it graded?
+                      const isCorrigida = Boolean(resp?.corrigida === true || resp?.corrigidoEm || resp?.corrigidaEm)
+                      const scoreObtained = Number(resp?.pontuacaoObtida ?? resp?.pontosAtribuidos ?? resp?.nota ?? 0)
+
+                      return (
+                        <div key={sub.tentativaId} style={S.card}>
+                          {/* Student Info Bar */}
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: 12, borderBottom: '1px solid #f1f5f9', marginBottom: 12 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                              <div style={{ width: 34, height: 34, borderRadius: 10, background: '#f1f5f9', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 11, color: '#475569', fontFamily: 'monospace' }}>
+                                {isAnonimo ? `#${sIdx + 1}` : sub.alunoNome.slice(0, 2).toUpperCase()}
+                              </div>
+                              <div>
+                                <h4 style={{ fontSize: 13, fontWeight: 700, color: '#0f172a', margin: 0 }}>
+                                  {isAnonimo ? `Estudante #${sIdx + 1}` : sub.alunoNome}
+                                </h4>
+                                <span style={{ fontSize: 11, color: '#94a3b8' }}>
+                                  Entregue em {new Date(sub.entregueEm || Date.now()).toLocaleString('pt-BR')}
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Badge */}
+                            {isDissertativa ? (
+                              isCorrigida ? (
+                                <span style={S.pill('#065f46', '#d1fae5', '#a7f3d0')}>
+                                  <Check style={{ width: 11, height: 11 }} /> Nota Atribuída ({scoreObtained.toFixed(1)} pts)
+                                </span>
+                              ) : (
+                                <span style={S.pill('#92400e', '#fef3c7', '#fde68a')}>
+                                  <AlertCircle style={{ width: 11, height: 11 }} /> Aguardando Correção
+                                </span>
+                              )
+                            ) : (
+                              <span style={{ fontSize: 12, fontFamily: 'monospace', fontWeight: 800, color: scoreObtained > 0 ? '#166534' : '#dc2626' }}>
+                                {scoreObtained.toFixed(1)} / {maxPoints.toFixed(1)} pts
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Render Student Answer depending on question type */}
+                          {isDissertativa ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                              <div>
+                                <span style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#64748b', display: 'block', marginBottom: 6 }}>
+                                  Resposta Escrita pelo Estudante:
+                                </span>
+                                {resp?.textoDissertativo || resp?.respostaTexto || resp?.respostaDissertativa ? (
+                                  <div style={{ padding: '14px 16px', borderRadius: 12, background: '#f8fafc', border: '1px solid #e2e8f0', fontSize: 13, color: '#1e293b', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>
+                                    {resp.textoDissertativo || resp.respostaTexto || resp.respostaDissertativa}
+                                  </div>
+                                ) : (
+                                  <div style={{ padding: '12px 14px', borderRadius: 12, background: '#fffbeb', border: '1px dashed #fde68a', fontSize: 12, color: '#92400e', fontStyle: 'italic' }}>
+                                    Questão deixada em branco pelo aluno.
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Rubrics breakdown if available */}
+                              {activeQuestion.criteriosAvaliacao && activeQuestion.criteriosAvaliacao.length > 0 && (
+                                <div>
+                                  <span style={{ fontSize: 11, fontWeight: 700, color: '#334155', display: 'block', marginBottom: 6 }}>
+                                    Critérios de Avaliação (Pontuação Parcial):
+                                  </span>
+                                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 8 }}>
+                                    {activeQuestion.criteriosAvaliacao.map((crit: any) => {
+                                      const key = `${sub.tentativaId}_${qid}`
+                                      const maxP = crit.pesoPontos || crit.pontosMaximos || 1
+                                      const curVal = gradingState[key]?.criteriosPontos?.[crit.id] ?? maxP
+                                      return (
+                                        <div key={crit.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '8px 12px', borderRadius: 10, background: '#f8fafc', border: '1px solid #e2e8f0', fontSize: 12 }}>
+                                          <span style={{ color: '#475569', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{crit.descricao}</span>
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+                                            <input
+                                              type="number"
+                                              step="0.5"
+                                              min="0"
+                                              max={maxP}
+                                              value={curVal}
+                                              onChange={e => {
+                                                const val = parseFloat(e.target.value) || 0
+                                                const nextCriterios = { ...(gradingState[key]?.criteriosPontos || {}), [crit.id]: val }
+                                                const sum = Object.values(nextCriterios).reduce<number>((acc, cur) => acc + Number(cur || 0), 0)
+                                                setGradingState(prev => ({
+                                                  ...prev,
+                                                  [key]: { ...prev[key], criteriosPontos: nextCriterios, nota: Math.min(maxPoints, sum) }
+                                                }))
+                                              }}
+                                              style={{ ...S.input, width: 56, height: 28, textAlign: 'center', fontFamily: 'monospace', fontWeight: 700, color: '#0369a1', fontSize: 12 }}
+                                            />
+                                            <span style={{ fontSize: 10, color: '#94a3b8', fontFamily: 'monospace' }}>/{maxP.toFixed(1)}</span>
+                                          </div>
+                                        </div>
+                                      )
+                                    })}
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Interactive Grading Panel */}
+                              <GradingPanel
+                                tentativaId={sub.tentativaId}
+                                questaoId={qid}
+                                maxPoints={maxPoints}
+                                gradingState={gradingState}
+                                setGradingState={setGradingState}
+                                onSave={handleSaveGrade}
+                              />
+                            </div>
+                          ) : (
+                            /* Objective Questions: Multipla Escolha / VF / Multipla Selecao */
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                              {activeQuestion.tipo === 'multipla_escolha' && (() => {
+                                const selectedAltId = resp?.alternativaIdSelecionada || resp?.respostaOpcaoId
+                                const selectedAlt = (activeQuestion.alternativas || []).find(a => a.id === selectedAltId)
+                                const isCorrect = Boolean(selectedAlt?.correta)
+
+                                return (
+                                  <div style={{ padding: '10px 14px', borderRadius: 12, background: isCorrect ? '#f0fdf4' : '#fff1f2', border: `1px solid ${isCorrect ? '#86efac' : '#fca5a5'}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                      <span style={{ width: 22, height: 22, borderRadius: 6, background: isCorrect ? '#16a34a' : '#dc2626', color: '#ffffff', fontWeight: 800, fontSize: 11, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+                                        {selectedAlt?.letra || '?'}
+                                      </span>
+                                      <span style={{ fontSize: 12, color: isCorrect ? '#166534' : '#991b1b', fontWeight: 600 }}>
+                                        {selectedAlt ? `Marcou opção ${selectedAlt.letra}: "${selectedAlt.texto}"` : 'Não respondeu a questão'}
+                                      </span>
+                                    </div>
+                                    <span style={S.pill(isCorrect ? '#065f46' : '#991b1b', isCorrect ? '#d1fae5' : '#fee2e2', isCorrect ? '#a7f3d0' : '#fca5a5')}>
+                                      {isCorrect ? <Check style={{ width: 11, height: 11 }} /> : <X style={{ width: 11, height: 11 }} />}
+                                      {isCorrect ? `Acertou (+${maxPoints.toFixed(1)} pts)` : 'Errou (0.0 pts)'}
+                                    </span>
+                                  </div>
+                                )
+                              })()}
+
+                              {activeQuestion.tipo === 'verdadeiro_falso' && (() => {
+                                const vfAnswers: Record<string, boolean> = {}
+                                if (resp?.respostaVF && typeof resp.respostaVF === 'object') Object.assign(vfAnswers, resp.respostaVF)
+                                if (resp?.itensVouF) {
+                                  if (Array.isArray(resp.itensVouF)) {
+                                    resp.itensVouF.forEach((it: any) => {
+                                      if (it?.id) { const val = it.respostaAluno !== undefined ? it.respostaAluno : it.valor !== undefined ? it.valor : it.resposta; if (val !== undefined) vfAnswers[it.id] = Boolean(val) }
+                                    })
+                                  } else if (typeof resp.itensVouF === 'object') {
+                                    Object.entries(resp.itensVouF).forEach(([k, v]: [string, any]) => {
+                                      const val = v?.respostaAluno !== undefined ? v.respostaAluno : v?.valor !== undefined ? v.valor : v; if (val !== undefined) vfAnswers[k] = Boolean(val)
+                                    })
+                                  }
+                                }
+
+                                return (
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                    {(activeQuestion.itensVF || []).map((item, idx) => {
+                                      const studentVal = vfAnswers[item.id]
+                                      const hasAnswered = studentVal !== undefined
+                                      const isCorrect = hasAnswered && studentVal === item.correta
+                                      return (
+                                        <div key={item.id || idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '8px 12px', borderRadius: 10, border: `1px solid ${!hasAnswered ? '#e2e8f0' : isCorrect ? '#86efac' : '#fca5a5'}`, background: !hasAnswered ? '#ffffff' : isCorrect ? '#f0fdf4' : '#fff1f2', fontSize: 12 }}>
+                                          <span style={{ color: '#475569' }}>#{idx + 1}. {item.afirmacao}</span>
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                            <span style={{ fontWeight: 800, fontFamily: 'monospace', padding: '2px 8px', borderRadius: 6, background: isCorrect ? '#16a34a' : '#dc2626', color: '#ffffff', fontSize: 11 }}>
+                                              {hasAnswered ? (studentVal ? 'V' : 'F') : '--'}
+                                            </span>
+                                            <span style={{ fontSize: 11, color: '#64748b' }}>Gabarito: <strong>{item.correta ? 'V' : 'F'}</strong></span>
+                                          </div>
+                                        </div>
+                                      )
+                                    })}
+                                  </div>
+                                )
+                              })()}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── VIEW 2: POR ALUNO ────────────────────────────────────────────── */}
+        {viewMode === 'aluno' && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 4fr) minmax(0, 9fr)', gap: 20, alignItems: 'start' }}>
+
+            {/* Left: Students Navigation List */}
+            <div style={{ position: 'sticky', top: 24 }}>
+              <div style={{ ...S.card, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <h3 style={{ fontSize: 12, fontWeight: 800, color: '#334155', textTransform: 'uppercase', letterSpacing: '0.06em', margin: 0 }}>
+                    Estudantes ({submissions.length})
+                  </h3>
+                </div>
+
+                {/* Search */}
+                <div style={{ position: 'relative' }}>
+                  <Search style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', width: 13, height: 13, color: '#94a3b8', pointerEvents: 'none' }} />
+                  <input
+                    type="text"
+                    value={studentSearch}
+                    onChange={e => setStudentSearch(e.target.value)}
+                    placeholder="Buscar estudante..."
+                    style={{ ...S.input, width: '100%', height: 34, paddingLeft: 32, boxSizing: 'border-box' }}
+                  />
+                </div>
+
+                {/* List of Students */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 560, overflowY: 'auto', paddingRight: 2 }}>
+                  {filteredSubmissions.map((sub, idx) => {
+                    const isSelected = sub.tentativaId === activeSubmission?.tentativaId
+                    const isCorrigida = sub.statusCorrecao === 'corrigida' || sub.statusCorrecao === 'concluida'
+                    const isParcial = sub.statusCorrecao === 'parcial'
+
+                    return (
+                      <div
+                        key={sub.tentativaId}
+                        onClick={() => {
+                          const originalIdx = submissions.findIndex(s => s.tentativaId === sub.tentativaId)
+                          if (originalIdx >= 0) setSelectedSubmissionIndex(originalIdx)
+                        }}
+                        style={{
+                          padding: '10px 12px',
+                          borderRadius: 12,
+                          border: `1px solid ${isSelected ? '#0284c7' : '#e2e8f0'}`,
+                          background: isSelected ? '#e0f2fe' : '#ffffff',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          gap: 8,
+                          boxShadow: isSelected ? '0 0 0 2px rgba(2, 132, 199, 0.2)' : 'none',
+                          transition: 'all 0.15s'
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                          <div style={{
+                            width: 32,
+                            height: 32,
+                            borderRadius: 8,
+                            background: isSelected ? '#0284c7' : '#f1f5f9',
+                            border: `1px solid ${isSelected ? '#0284c7' : '#e2e8f0'}`,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontWeight: 800,
+                            fontSize: 11,
+                            color: isSelected ? '#ffffff' : '#475569',
+                            fontFamily: 'monospace',
+                            flexShrink: 0
+                          }}>
+                            {isAnonimo ? `#${idx + 1}` : sub.alunoNome.slice(0, 2).toUpperCase()}
+                          </div>
+                          <div style={{ minWidth: 0 }}>
+                            <h4 style={{ fontSize: 12, fontWeight: 700, color: '#0f172a', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {isAnonimo ? `Estudante #${idx + 1}` : sub.alunoNome}
+                            </h4>
+                            <span style={{ fontSize: 11, color: '#64748b', fontFamily: 'monospace', display: 'block' }}>
+                              Nota: <strong style={{ color: '#0f172a' }}>{sub.notaFinal !== undefined ? sub.notaFinal.toFixed(1) : '--'}</strong> pts
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Status badge */}
+                        <span style={{
+                          ...S.pill(
+                            isCorrigida ? '#065f46' : isParcial ? '#92400e' : '#991b1b',
+                            isCorrigida ? '#d1fae5' : isParcial ? '#fef3c7' : '#fee2e2',
+                            isCorrigida ? '#a7f3d0' : isParcial ? '#fde68a' : '#fca5a5'
+                          ),
+                          fontSize: 10,
+                          flexShrink: 0
+                        }}>
+                          {isCorrigida ? 'Corrigida' : isParcial ? 'Parcial' : 'Pendente'}
+                        </span>
                       </div>
                     )
                   })}
                 </div>
               </div>
-            ) : (
-              <p className="text-center text-slate-400 py-12">Selecione uma entrega para visualizar.</p>
-            )}
-          </div>
-        </div>
-      )}
+            </div>
 
-      {/* 5. MODAL: PUBLICAR RESULTADOS & GABARITO */}
+            {/* Right: Full Exam Breakdown for Selected Student */}
+            <div>
+              {activeSubmission ? (
+                <div style={{ ...S.card, display: 'flex', flexDirection: 'column', gap: 24 }}>
+                  {/* Student Header Bar */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, paddingBottom: 16, borderBottom: '1px solid #f1f5f9', flexWrap: 'wrap' }}>
+                    <div>
+                      <h2 style={{ fontSize: 18, fontWeight: 900, color: '#0f172a', margin: 0 }}>
+                        {isAnonimo ? 'Estudante Selecionado' : activeSubmission.alunoNome}
+                      </h2>
+                      <p style={{ fontSize: 12, color: '#64748b', margin: '4px 0 0' }}>
+                        Entregue em {new Date(activeSubmission.entregueEm || Date.now()).toLocaleString('pt-BR')} • Matrícula: {activeSubmission.alunoMatricula || 'S/M'}
+                      </p>
+                    </div>
+
+                    <div style={{ padding: '10px 18px', borderRadius: 14, background: '#e0f2fe', border: '1px solid #bae6fd', flexShrink: 0, textAlign: 'right' }}>
+                      <span style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', color: '#0369a1', display: 'block' }}>
+                        Nota Calculada
+                      </span>
+                      <span style={{ fontSize: 24, fontWeight: 900, fontFamily: 'monospace', color: '#0f172a' }}>
+                        {activeSubmission.notaFinal !== undefined ? activeSubmission.notaFinal.toFixed(1) : '--'}
+                        <span style={{ fontSize: 13, color: '#64748b', fontWeight: 600 }}> / {prova?.valorTotal || 10}</span>
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Quick question jump bar */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', padding: '10px 12px', borderRadius: 12, background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+                    <span style={{ fontSize: 11, fontWeight: 800, color: '#64748b', marginRight: 4 }}>Pular para:</span>
+                    {allQuestoes.map((q, idx) => (
+                      <a
+                        key={q.id}
+                        href={`#q-${q.id}`}
+                        style={{
+                          padding: '3px 8px',
+                          borderRadius: 6,
+                          background: '#ffffff',
+                          border: '1px solid #e2e8f0',
+                          color: '#0369a1',
+                          fontSize: 11,
+                          fontWeight: 700,
+                          textDecoration: 'none'
+                        }}
+                      >
+                        Q{idx + 1} ({q.tipo === 'dissertativa' ? 'Diss.' : 'Obj.'})
+                      </a>
+                    ))}
+                  </div>
+
+                  {/* Questions List */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                    {allQuestoes.map((q: QuestaoProva, qIdx: number) => {
+                      const resp = getStudentQuestionResponse(activeSubmission, q, qIdx)
+                      const isDissertativa = q.tipo === 'dissertativa'
+                      const maxPoints = Number(q.valorPontos || q.pontuacao || 10)
+                      const scoreObtained = Number(resp?.pontuacaoObtida ?? resp?.pontosAtribuidos ?? resp?.nota ?? 0)
+
+                      return (
+                        <div
+                          key={q.id}
+                          id={`q-${q.id}`}
+                          style={{
+                            padding: '18px 20px',
+                            borderRadius: 14,
+                            background: '#f8fafc',
+                            border: '1px solid #e2e8f0',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: 14
+                          }}
+                        >
+                          {/* Question header */}
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <span style={{ width: 24, height: 24, borderRadius: 8, background: '#e0f2fe', color: '#0369a1', fontWeight: 900, fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'monospace', flexShrink: 0 }}>
+                                {qIdx + 1}
+                              </span>
+                              <span style={{ fontSize: 12, fontWeight: 800, color: '#1e293b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                                Questão {qIdx + 1} · {getTipoLabel(q.tipo)}
+                              </span>
+                            </div>
+                            <span style={{ fontSize: 12, fontFamily: 'monospace', fontWeight: 800, color: '#0369a1', background: '#e0f2fe', padding: '3px 10px', borderRadius: 8, flexShrink: 0 }}>
+                              {scoreObtained.toFixed(1)} / {maxPoints.toFixed(1)} pts
+                            </span>
+                          </div>
+
+                          {/* Enunciado */}
+                          <div style={{ padding: '12px 14px', borderRadius: 10, background: '#ffffff', border: '1px solid #e2e8f0', fontSize: 13, color: '#1e293b', lineHeight: 1.6 }}>
+                            <HtmlContent html={q.enunciado} />
+                          </div>
+
+                          {/* Multiple Choice */}
+                          {q.tipo === 'multipla_escolha' && (() => {
+                            const selectedAltId = resp?.alternativaIdSelecionada || resp?.respostaOpcaoId
+                            const correctAlt = (q.alternativas || []).find(a => a.correta)
+                            const isCorrect = Boolean(selectedAltId && correctAlt && selectedAltId === correctAlt.id)
+
+                            return (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
+                                  <span style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', color: '#64748b' }}>Alternativas:</span>
+                                  {selectedAltId ? (
+                                    isCorrect
+                                      ? <span style={S.pill('#065f46', '#d1fae5', '#a7f3d0')}><CheckCircle2 style={{ width: 11, height: 11 }} /> Acertou (+{maxPoints.toFixed(1)} pts)</span>
+                                      : <span style={S.pill('#991b1b', '#fee2e2', '#fca5a5')}><X style={{ width: 11, height: 11 }} /> Errou (0.0 pts)</span>
+                                  ) : <span style={S.pill('#92400e', '#fef3c7', '#fde68a')}>Não respondida</span>}
+                                </div>
+                                {(q.alternativas || []).map(alt => {
+                                  const isSelected = alt.id === selectedAltId
+                                  const isThisCorrect = alt.correta
+                                  let bg = '#ffffff', border = '#e2e8f0', color = '#475569'
+                                  if (isSelected && isThisCorrect) { bg = '#f0fdf4'; border = '#86efac'; color = '#166534' }
+                                  else if (isSelected && !isThisCorrect) { bg = '#fff1f2'; border = '#fca5a5'; color = '#9f1239' }
+                                  else if (!isSelected && isThisCorrect) { bg = '#f0fdf4'; border = '#86efac'; color = '#166534' }
+
+                                  return (
+                                    <div key={alt.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '8px 12px', borderRadius: 10, border: `1px solid ${border}`, background: bg, fontSize: 12, color }}>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                        <span style={{ width: 22, height: 22, borderRadius: 6, background: isSelected ? '#1e293b' : '#f1f5f9', color: isSelected ? '#ffffff' : '#475569', fontWeight: 800, fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                          {alt.letra}
+                                        </span>
+                                        <span>{alt.texto}</span>
+                                      </div>
+                                      <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                                        {isSelected && <span style={{ fontSize: 10, fontWeight: 800, padding: '2px 6px', borderRadius: 5, background: '#e2e8f0', color: '#475569' }}>Marcada</span>}
+                                        {isThisCorrect && <span style={{ fontSize: 10, fontWeight: 800, padding: '2px 6px', borderRadius: 5, background: '#bbf7d0', color: '#166534', display: 'inline-flex', alignItems: 'center', gap: 3 }}><Check style={{ width: 10, height: 10 }} /> Gabarito</span>}
+                                      </div>
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            )
+                          })()}
+
+                          {/* Verdadeiro ou Falso */}
+                          {q.tipo === 'verdadeiro_falso' && (() => {
+                            const vfAnswers: Record<string, boolean> = {}
+                            if (resp?.respostaVF && typeof resp.respostaVF === 'object') Object.assign(vfAnswers, resp.respostaVF)
+                            if (resp?.itensVouF) {
+                              if (Array.isArray(resp.itensVouF)) {
+                                resp.itensVouF.forEach((it: any) => {
+                                  if (it?.id) { const val = it.respostaAluno !== undefined ? it.respostaAluno : it.valor !== undefined ? it.valor : it.resposta; if (val !== undefined) vfAnswers[it.id] = Boolean(val) }
+                                })
+                              } else if (typeof resp.itensVouF === 'object') {
+                                Object.entries(resp.itensVouF).forEach(([k, v]: [string, any]) => {
+                                  const val = v?.respostaAluno !== undefined ? v.respostaAluno : v?.valor !== undefined ? v.valor : v; if (val !== undefined) vfAnswers[k] = Boolean(val)
+                                })
+                              }
+                            }
+
+                            return (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                <span style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', color: '#64748b' }}>Itens (V / F):</span>
+                                {(q.itensVF || []).map((item, idx) => {
+                                  const studentVal = vfAnswers[item.id]
+                                  const hasAnswered = studentVal !== undefined
+                                  const isCorrect = hasAnswered && studentVal === item.correta
+                                  return (
+                                    <div key={item.id || idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '8px 12px', borderRadius: 10, border: `1px solid ${!hasAnswered ? '#e2e8f0' : isCorrect ? '#86efac' : '#fca5a5'}`, background: !hasAnswered ? '#ffffff' : isCorrect ? '#f0fdf4' : '#fff1f2', fontSize: 12 }}>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                        <span style={{ fontSize: 10, fontFamily: 'monospace', fontWeight: 800, color: '#64748b' }}>#{idx + 1}</span>
+                                        <span style={{ color: '#475569' }}>{item.afirmacao}</span>
+                                      </div>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                                        {hasAnswered && (
+                                          <span style={{ fontWeight: 800, fontFamily: 'monospace', padding: '2px 8px', borderRadius: 6, background: isCorrect ? '#16a34a' : '#dc2626', color: '#ffffff', fontSize: 11 }}>
+                                            {studentVal ? 'V' : 'F'} {isCorrect ? '✓' : '✗'}
+                                          </span>
+                                        )}
+                                        <span style={{ fontSize: 11, color: '#64748b' }}>Gabarito: <strong>{item.correta ? 'V' : 'F'}</strong></span>
+                                      </div>
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            )
+                          })()}
+
+                          {/* Dissertativa: Written response + Scoring Form */}
+                          {isDissertativa && (() => {
+                            const studentText = resp?.textoDissertativo || resp?.respostaTexto || resp?.respostaDissertativa
+
+                            return (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                                <div>
+                                  <span style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', color: '#64748b', display: 'block', marginBottom: 6 }}>
+                                    Resposta do Estudante:
+                                  </span>
+                                  {studentText?.trim() ? (
+                                    <div style={{ padding: '14px 16px', borderRadius: 12, background: '#ffffff', border: '1px solid #e2e8f0', fontSize: 13, color: '#1e293b', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>
+                                      {studentText}
+                                    </div>
+                                  ) : (
+                                    <div style={{ padding: '12px 14px', borderRadius: 12, background: '#fffbeb', border: '1px dashed #fde68a', fontSize: 12, color: '#92400e', fontStyle: 'italic' }}>
+                                      Questão deixada em branco pelo aluno.
+                                    </div>
+                                  )}
+                                </div>
+
+                                {q.respostaEsperada && (
+                                  <div style={{ padding: '10px 14px', borderRadius: 12, background: '#f0fdf4', border: '1px solid #bbf7d0', fontSize: 12, color: '#166534' }}>
+                                    <span style={{ fontWeight: 800, display: 'flex', alignItems: 'center', gap: 5, marginBottom: 4, fontSize: 10, textTransform: 'uppercase' }}>
+                                      <CheckCircle2 style={{ width: 12, height: 12 }} /> Resposta Esperada de Referência:
+                                    </span>
+                                    <p style={{ margin: 0, lineHeight: 1.6 }}>{q.respostaEsperada}</p>
+                                  </div>
+                                )}
+
+                                {/* Interactive Grading Panel */}
+                                <GradingPanel
+                                  tentativaId={activeSubmission.tentativaId}
+                                  questaoId={q.id}
+                                  maxPoints={maxPoints}
+                                  gradingState={gradingState}
+                                  setGradingState={setGradingState}
+                                  onSave={handleSaveGrade}
+                                />
+                              </div>
+                            )
+                          })()}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              ) : (
+                <div style={{ padding: '64px 24px', textAlign: 'center', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 16, color: '#94a3b8', fontSize: 12 }}>
+                  Selecione um estudante na lista ao lado para visualizar a prova completa.
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+      </div>
+
+      {/* ── MODAL: PUBLICAR RESULTADOS ─────────────────────────────────────── */}
       <AnimatePresence>
         {publishModalOpen && (
-          <div
-            style={{
-              position: 'fixed',
-              inset: 0,
-              zIndex: 9999,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: '16px',
-              background: 'rgba(15, 23, 42, 0.6)',
-              backdropFilter: 'blur(6px)',
-            }}
-          >
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              style={{
-                width: '100%',
-                maxWidth: '480px',
-                margin: '0 auto',
-                background: '#ffffff',
-                borderRadius: '24px',
-                border: '1px solid #e2e8f0',
-                boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
-                padding: '28px',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '16px',
-                textAlign: 'center',
-              }}
-            >
-              <div
-                style={{
-                  width: '48px',
-                  height: '48px',
-                  borderRadius: '16px',
-                  background: '#f0f9ff',
-                  color: '#0284c7',
-                  margin: '0 auto',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  border: '1px solid #bae6fd',
-                }}
-              >
-                <Award className="w-6 h-6" />
-              </div>
-
-              <div>
-                <h2 className="text-lg font-bold text-slate-900">Publicar Gabarito e Notas</h2>
-                <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                  Ao publicar, as notas calculadas e o gabarito oficial com justificativas ficarão visíveis para todos os alunos e responsáveis no portal.
-                </p>
-              </div>
-
-              <div
-                style={{
-                  background: '#f8fafc',
-                  border: '1px solid #e2e8f0',
-                  borderRadius: '16px',
-                  padding: '16px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '8px',
-                  textAlign: 'left',
-                }}
-              >
-                <div className="flex justify-between items-center text-xs">
-                  <span className="text-slate-600 font-medium">Total de Entregas:</span>
-                  <span className="font-bold text-slate-900 font-mono text-sm">{submissions.length}</span>
+          <ModalBackdrop onClose={() => setPublishModalOpen(false)}>
+            <ModalCard maxWidth={460}>
+              <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+                <div style={{ width: 52, height: 52, borderRadius: 16, background: '#e0f2fe', border: '1px solid #bae6fd', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Award style={{ width: 26, height: 26, color: '#0284c7' }} />
                 </div>
-                <div className="flex justify-between items-center text-xs">
-                  <span className="text-slate-600 font-medium">Dissertativas Pendentes:</span>
-                  <span className={`font-bold font-mono text-sm ${pendentesCount > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                <div>
+                  <h2 style={{ fontSize: 18, fontWeight: 900, color: '#0f172a', margin: '0 0 6px' }}>Publicar Gabarito e Notas</h2>
+                  <p style={{ fontSize: 12, color: '#64748b', margin: 0, lineHeight: 1.6 }}>
+                    Ao publicar, as notas calculadas e o gabarito oficial ficarão imediatamente visíveis para todos os estudantes e responsáveis no portal.
+                  </p>
+                </div>
+              </div>
+
+              <div style={{ padding: '14px 16px', borderRadius: 12, background: '#f8fafc', border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#475569' }}>
+                  <span>Total de Entregas Recebidas:</span>
+                  <strong style={{ fontFamily: 'monospace', fontSize: 14, color: '#0f172a' }}>{submissions.length}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#475569' }}>
+                  <span>Dissertativas Pendentes:</span>
+                  <strong style={{ fontFamily: 'monospace', fontSize: 14, color: pendentesCount > 0 ? '#b45309' : '#059669' }}>
                     {pendentesCount}
-                  </span>
+                  </strong>
                 </div>
               </div>
 
               {pendentesCount > 0 && (
-                <div
-                  style={{
-                    padding: '12px 14px',
-                    borderRadius: '12px',
-                    background: '#fffbeb',
-                    border: '1px solid #fde68a',
-                    color: '#92400e',
-                    fontSize: '12px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    textAlign: 'left',
-                  }}
-                >
-                  <AlertTriangle className="w-4 h-4 shrink-0 text-amber-600" />
-                  <span>Atenção: Ainda existem questões dissertativas sem nota atribuída.</span>
+                <div style={{ padding: '10px 14px', borderRadius: 10, background: '#fffbeb', border: '1px solid #fde68a', fontSize: 12, color: '#92400e', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <AlertTriangle style={{ width: 16, height: 16, flexShrink: 0, color: '#b45309' }} />
+                  <span>Atenção: A publicação consolidará as notas pendentes e marcará todas as entregas como corrigidas.</span>
                 </div>
               )}
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', paddingTop: '8px' }}>
+              <div style={{ display: 'flex', gap: 10, paddingTop: 12, borderTop: '1px solid #f1f5f9' }}>
                 <button
                   type="button"
                   onClick={() => setPublishModalOpen(false)}
-                  style={{
-                    flex: 1,
-                    padding: '10px 16px',
-                    borderRadius: '12px',
-                    background: '#f1f5f9',
-                    border: '1px solid #e2e8f0',
-                    color: '#334155',
-                    fontWeight: 600,
-                    fontSize: '13px',
-                    cursor: 'pointer',
-                  }}
-                  className="hover:bg-slate-200 transition-colors"
+                  style={{ ...S.btnSecondary, flex: 1, justifyContent: 'center' }}
                 >
                   Voltar
                 </button>
@@ -1022,189 +1412,126 @@ export default function CorrigirProvaPage() {
                   type="button"
                   onClick={handlePublishResults}
                   disabled={publishing}
-                  style={{
-                    flex: 1,
-                    padding: '10px 16px',
-                    borderRadius: '12px',
-                    background: '#0284c7',
-                    border: 'none',
-                    color: '#ffffff',
-                    fontWeight: 700,
-                    fontSize: '13px',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '6px',
-                  }}
-                  className="hover:bg-sky-700 transition-colors shadow-sm disabled:opacity-50"
+                  style={{ ...S.btnPrimary, flex: 1, justifyContent: 'center', opacity: publishing ? 0.6 : 1 }}
                 >
-                  {publishing ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Award className="w-4 h-4" />}
+                  {publishing ? <RefreshCw style={{ width: 14, height: 14 }} className="animate-spin" /> : <Award style={{ width: 14, height: 14 }} />}
                   Confirmar Publicação
                 </button>
               </div>
-            </motion.div>
-          </div>
+            </ModalCard>
+          </ModalBackdrop>
         )}
       </AnimatePresence>
 
-      {/* 6. MODAL: ANULAR QUESTÃO (COM PRÉVIA E SIMULAÇÃO DE IMPACTO) */}
+      {/* ── MODAL: ANULAR QUESTÃO ──────────────────────────────────────────── */}
       <AnimatePresence>
         {annulModalOpen && (
-          <div
-            style={{
-              position: 'fixed',
-              inset: 0,
-              zIndex: 9999,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: '16px',
-              background: 'rgba(15, 23, 42, 0.6)',
-              backdropFilter: 'blur(6px)',
-            }}
-          >
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              style={{
-                width: '100%',
-                maxWidth: '540px',
-                maxHeight: '90vh',
-                overflowY: 'auto',
-                margin: '0 auto',
-                background: '#ffffff',
-                borderRadius: '24px',
-                border: '1px solid #e2e8f0',
-                boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
-                padding: '24px',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '16px',
-              }}
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center border border-amber-200 shrink-0">
-                  <Scale className="w-5 h-5" />
+          <ModalBackdrop onClose={() => { setAnnulModalOpen(false); setAnnulSimulation(null) }}>
+            <ModalCard maxWidth={520}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, paddingBottom: 14, borderBottom: '1px solid #f1f5f9' }}>
+                <div style={{ width: 42, height: 42, borderRadius: 13, background: '#fef3c7', border: '1px solid #fde68a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Scale style={{ width: 20, height: 20, color: '#b45309' }} />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-slate-900">Anular Questão Pós-Aplicação</h3>
-                  <p className="text-xs text-slate-500">Recálculo automático com auditoria de notas</p>
+                  <h3 style={{ fontSize: 16, fontWeight: 900, color: '#0f172a', margin: 0 }}>Anular Questão Pós-Aplicação</h3>
+                  <p style={{ fontSize: 12, color: '#64748b', margin: 0 }}>Recálculo automático e auditoria pedagógica</p>
                 </div>
               </div>
 
-              {/* Select Question */}
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Questão a anular:</label>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#334155', marginBottom: 6 }}>
+                  Questão a anular:
+                </label>
                 <select
                   value={annulQuestionId}
-                  onChange={e => {
-                    setAnnulQuestionId(e.target.value)
-                    setAnnulSimulation(null)
-                  }}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-900 focus:outline-none focus:border-sky-500"
+                  onChange={e => { setAnnulQuestionId(e.target.value); setAnnulSimulation(null) }}
+                  style={{ ...S.input, width: '100%', height: 38, boxSizing: 'border-box' }}
                 >
                   <option value="">Selecione uma questão...</option>
-                  {(prova?.questoes || []).map((q: QuestaoProva, idx: number) => (
+                  {allQuestoes.map((q: QuestaoProva, idx: number) => (
                     <option key={q.id} value={q.id}>
-                      Questão {idx + 1} ({(q.valorPontos || q.pontuacao || 0).toFixed(1)} pts) - {q.tipo}
+                      Questão {idx + 1} ({(q.valorPontos || q.pontuacao || 0).toFixed(1)} pts) - {getTipoLabel(q.tipo)}
                     </option>
                   ))}
                 </select>
               </div>
 
-              {/* Method choice */}
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Política de Anulação:</label>
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setAnnulMetodo('pontuar_todos')
-                      setAnnulSimulation(null)
-                    }}
-                    className={`p-3 rounded-xl border text-left transition-all ${
-                      annulMetodo === 'pontuar_todos'
-                        ? 'bg-amber-50 border-amber-300 text-amber-900 ring-1 ring-amber-200'
-                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
-                    }`}
-                  >
-                    <span className="font-bold block mb-1">Atribuir Acerto Geral</span>
-                    <span className="text-[11px] text-slate-500">Todos os alunos recebem a pontuação integral da questão.</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setAnnulMetodo('redistribuir')
-                      setAnnulSimulation(null)
-                    }}
-                    className={`p-3 rounded-xl border text-left transition-all ${
-                      annulMetodo === 'redistribuir'
-                        ? 'bg-amber-50 border-amber-300 text-amber-900 ring-1 ring-amber-200'
-                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
-                    }`}
-                  >
-                    <span className="font-bold block mb-1">Redistribuir Pontos</span>
-                    <span className="text-[11px] text-slate-500">O valor da questão é rateado proporcionalmente entre as demais.</span>
-                  </button>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#334155', marginBottom: 8 }}>
+                  Política de Anulação:
+                </label>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  {[
+                    { id: 'pontuar_todos', title: 'Atribuir Acerto Geral', desc: 'Todos os alunos recebem a pontuação integral da questão.' },
+                    { id: 'redistribuir', title: 'Redistribuir Pontos', desc: 'O valor da questão é rateado proporcionalmente entre as demais.' },
+                  ].map(opt => (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => { setAnnulMetodo(opt.id as any); setAnnulSimulation(null) }}
+                      style={{
+                        padding: '12px 14px',
+                        borderRadius: 12,
+                        border: `1px solid ${annulMetodo === opt.id ? '#fde68a' : '#e2e8f0'}`,
+                        background: annulMetodo === opt.id ? '#fffbeb' : '#f8fafc',
+                        cursor: 'pointer',
+                        textAlign: 'left',
+                        boxShadow: annulMetodo === opt.id ? '0 0 0 2px #fde68a' : 'none'
+                      }}
+                    >
+                      <span style={{ fontSize: 12, fontWeight: 800, color: '#334155', display: 'block', marginBottom: 4 }}>{opt.title}</span>
+                      <span style={{ fontSize: 11, color: '#64748b', lineHeight: 1.5, display: 'block' }}>{opt.desc}</span>
+                    </button>
+                  ))}
                 </div>
               </div>
 
-              {/* Reason */}
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Justificativa da Anulação:</label>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#334155', marginBottom: 6 }}>
+                  Justificativa (Auditoria):
+                </label>
                 <textarea
                   rows={2}
                   value={annulMotivo}
                   onChange={e => setAnnulMotivo(e.target.value)}
-                  placeholder="Ex: Duplicidade de gabarito ou enunciado com ambiguidade identificado pela banca..."
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-900 focus:outline-none focus:border-sky-500 focus:bg-white"
+                  placeholder="Ex: Duplicidade de gabarito ou ambiguidade identificada no enunciado..."
+                  style={{ ...S.input, width: '100%', padding: '10px 12px', boxSizing: 'border-box', resize: 'vertical' }}
                 />
               </div>
 
-              {/* Simulation Result Preview */}
               {annulSimulation ? (
-                <div className="bg-amber-50/50 border border-amber-200 rounded-2xl p-4 space-y-2 text-xs">
-                  <div className="flex items-center gap-1.5 text-amber-800 font-semibold mb-1">
-                    <Calculator className="w-4 h-4 text-amber-600" />
-                    <span>Prévia do Impacto nas Notas:</span>
+                <div style={{ padding: '12px 14px', borderRadius: 12, background: '#fffbeb', border: '1px solid #fde68a', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 800, color: '#92400e' }}>
+                    <Calculator style={{ width: 14, height: 14, color: '#b45309' }} /> Prévia do Impacto nas Notas:
                   </div>
-                  <div className="flex justify-between text-slate-700">
-                    <span>Média anterior da turma:</span>
-                    <span className="font-mono">{annulSimulation.mediaAnterior?.toFixed(2) || '--'}</span>
-                  </div>
-                  <div className="flex justify-between text-emerald-700 font-bold">
-                    <span>Nova média projetada:</span>
-                    <span className="font-mono">{annulSimulation.novaMedia?.toFixed(2) || '--'}</span>
-                  </div>
-                  <div className="flex justify-between text-sky-700">
-                    <span>Alunos impactados positivamente:</span>
-                    <span className="font-mono font-bold">{annulSimulation.alunosBeneficiados || 0} alunos</span>
-                  </div>
+                  {[
+                    { label: 'Média anterior', val: annulSimulation.mediaAnterior?.toFixed(2) || '--', color: '#475569' },
+                    { label: 'Nova média projetada', val: annulSimulation.novaMedia?.toFixed(2) || '--', color: '#059669' },
+                    { label: 'Alunos beneficiados', val: `${annulSimulation.alunosBeneficiados || 0} estudantes`, color: '#0369a1' },
+                  ].map(row => (
+                    <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: row.color }}>
+                      <span>{row.label}:</span>
+                      <strong style={{ fontFamily: 'monospace' }}>{row.val}</strong>
+                    </div>
+                  ))}
                 </div>
               ) : (
                 <button
                   type="button"
                   onClick={handleSimulateAnnul}
                   disabled={simulatingAnnul || !annulQuestionId}
-                  className="w-full py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold flex items-center justify-center gap-1.5 border border-slate-200 transition-colors"
+                  style={{ ...S.btnSecondary, width: '100%', justifyContent: 'center', height: 38, opacity: (simulatingAnnul || !annulQuestionId) ? 0.5 : 1 }}
                 >
-                  {simulatingAnnul ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Calculator className="w-3.5 h-3.5 text-sky-600" />}
+                  {simulatingAnnul ? <RefreshCw style={{ width: 13, height: 13 }} className="animate-spin" /> : <Calculator style={{ width: 13, height: 13, color: '#0284c7' }} />}
                   Simular Prévia do Impacto
                 </button>
               )}
 
-              {/* Actions */}
-              <div className="flex items-center justify-end gap-2 pt-2">
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, paddingTop: 12, borderTop: '1px solid #f1f5f9' }}>
                 <button
                   type="button"
-                  onClick={() => {
-                    setAnnulModalOpen(false)
-                    setAnnulSimulation(null)
-                  }}
-                  className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold border border-slate-200"
+                  onClick={() => { setAnnulModalOpen(false); setAnnulSimulation(null) }}
+                  style={S.btnSecondary}
                 >
                   Cancelar
                 </button>
@@ -1212,14 +1539,14 @@ export default function CorrigirProvaPage() {
                   type="button"
                   onClick={handleConfirmAnnul}
                   disabled={confirmingAnnul || !annulQuestionId}
-                  className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition-colors"
+                  style={{ ...S.btnPrimary, background: '#b45309', opacity: (confirmingAnnul || !annulQuestionId) ? 0.5 : 1 }}
                 >
-                  {confirmingAnnul ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                  {confirmingAnnul ? <RefreshCw style={{ width: 13, height: 13 }} className="animate-spin" /> : <Check style={{ width: 13, height: 13 }} />}
                   Efetivar Anulação
                 </button>
               </div>
-            </motion.div>
-          </div>
+            </ModalCard>
+          </ModalBackdrop>
         )}
       </AnimatePresence>
     </div>

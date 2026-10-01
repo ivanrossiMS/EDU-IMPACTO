@@ -11,11 +11,14 @@ export async function GET(request: Request) {
   const { user, errorResponse } = await requireAuth(request)
   if (errorResponse) return errorResponse
 
-  const { searchParams } = new URL(request.url)
-  const turmaParam = searchParams.get('turma')
-  const disciplinaParam = searchParams.get('disciplina')
-  const statusParam = searchParams.get('status')
-  const periodoParam = searchParams.get('bimestre')
+  try {
+    const { searchParams } = new URL(request.url)
+    const turmaParam = searchParams.get('turma')
+    const disciplinaParam = searchParams.get('disciplina')
+    const statusParam = searchParams.get('status')
+    const periodoParam = searchParams.get('bimestre')
+    const anoParam = searchParams.get('anoLetivo') || searchParams.get('ano')
+    const requestedAlunoId = searchParams.get('aluno_id') || searchParams.get('slug')
 
   const adminClient = getAdminClient()
 
@@ -26,16 +29,21 @@ export async function GET(request: Request) {
     .or(`id.eq.${user.id},auth_id.eq.${user.id},email.eq.${user.email}`)
     .maybeSingle()
 
-  // Check if user is a Student
+  // Check if user is a Student (or querying for a specific student)
   let dbAluno: any = null
-  const targetAlunoId = user.user_metadata?.aluno_id || (dbUser as any)?.dados?.aluno_id
+  const targetAlunoId = requestedAlunoId || user.user_metadata?.aluno_id || (dbUser as any)?.dados?.aluno_id
   if (targetAlunoId || user.email) {
     const conds: string[] = []
-    if (targetAlunoId) conds.push(`id.eq.${targetAlunoId}`)
-    if (user.email) conds.push(`email.ilike.${user.email.trim()}`)
+    if (targetAlunoId) {
+      conds.push(`id.eq.${targetAlunoId}`)
+      conds.push(`matricula.eq.${targetAlunoId}`)
+    }
+    if (user.email && !requestedAlunoId) {
+      conds.push(`email.ilike.${user.email.trim()}`)
+    }
     const { data } = await adminClient
       .from('alunos')
-      .select('id, nome, matricula, turma, serie, email, responsaveis')
+      .select('id, nome, matricula, turma, serie, email, responsavel')
       .or(conds.join(','))
       .limit(1)
       .maybeSingle()
@@ -60,8 +68,8 @@ export async function GET(request: Request) {
 
   const perfil = dbUser?.perfil || user.user_metadata?.perfil || (dbResp ? 'Família' : (dbAluno ? 'Aluno' : 'Professor'))
   const cargo = dbUser?.cargo || user.user_metadata?.cargo || (dbAluno ? 'Aluno' : (dbResp ? 'Responsável' : ''))
-  const isStudent = cargo === 'Aluno' || perfil === 'Aluno' || Boolean(dbAluno && !dbUser)
-  const isResponsible = cargo === 'Responsável' || perfil === 'Família' || perfil === 'Responsável'
+  const isStudent = cargo === 'Aluno' || perfil === 'Aluno' || Boolean(dbAluno && !dbUser) || Boolean(requestedAlunoId && dbAluno)
+  const isResponsible = (cargo === 'Responsável' || perfil === 'Família' || perfil === 'Responsável') && !requestedAlunoId
   const isTeacher = perfil === 'Professor' || cargo === 'PROFESSORA' || cargo === 'Professor'
   const isAdminOrCoord = ['Diretor Geral', 'Direção', 'Administrador', 'Coordenador', 'Coordenadora'].includes(perfil)
 
@@ -90,14 +98,45 @@ export async function GET(request: Request) {
     }
   }
 
-  // 3. Filter based on user profile and role
+  // 3. Filter by anoLetivo if requested
+  if (anoParam && anoParam !== 'todos') {
+    allProvas = allProvas.filter(p => {
+      const pAno = String(p.anoLetivo || (p.dataAbertura ? new Date(p.dataAbertura).getFullYear() : ''))
+      return pAno === String(anoParam)
+    })
+  }
+
+  // 4. Filter based on user profile and role
   let filteredProvas = allProvas
 
   if (isStudent && dbAluno) {
     // Aluno vê provas destinadas à sua turma/série ou a ele especificamente
-    const alunoTurma = dbAluno.turma || ''
-    const alunoSerie = dbAluno.serie || ''
     const alunoId = dbAluno.id
+
+    // Resolve comprehensive turma representations (ID, Code, Name)
+    const studentTurmaIdentifiers: string[] = []
+    if (dbAluno.turma) {
+      studentTurmaIdentifiers.push(String(dbAluno.turma).trim().toLowerCase())
+    }
+    
+    // Query turma table to get turma name and code
+    if (dbAluno.turma) {
+      try {
+        const { data: turmaObj } = await adminClient
+          .from('turmas')
+          .select('id, codigo, nome, serie')
+          .or(`id.eq.${dbAluno.turma},codigo.eq.${dbAluno.turma},nome.eq.${dbAluno.turma}`)
+          .maybeSingle()
+        if (turmaObj) {
+          if (turmaObj.nome) studentTurmaIdentifiers.push(turmaObj.nome.trim().toLowerCase())
+          if (turmaObj.codigo) studentTurmaIdentifiers.push(String(turmaObj.codigo).trim().toLowerCase())
+          if (turmaObj.id) studentTurmaIdentifiers.push(String(turmaObj.id).trim().toLowerCase())
+          if (!dbAluno.serie && turmaObj.serie) dbAluno.serie = turmaObj.serie
+        }
+      } catch (err) {
+        console.error('[provas-online] Erro ao buscar turma do aluno:', err)
+      }
+    }
 
     filteredProvas = filteredProvas.filter(p => {
       // Provas em rascunho nunca aparecem para alunos
@@ -106,14 +145,36 @@ export async function GET(request: Request) {
       // Se requer aprovação e ainda não foi aprovada, não exibe
       if (p.aprovacaoRequerida && p.statusAprovacao !== 'aprovada') return false
 
-      // Se prova restrita a alunos específicos
+      // 1. Se a prova foi vinculada a alunos específicos:
+      // O aluno só deve ver se seu ID ou matrícula estiver explicitamente na lista
       if (p.alunosEspecificos && p.alunosEspecificos.length > 0) {
-        return p.alunosEspecificos.includes(alunoId)
+        const isSelected = p.alunosEspecificos.includes(alunoId) ||
+          p.alunosEspecificos.includes(dbAluno.id) ||
+          (dbAluno.matricula && p.alunosEspecificos.includes(dbAluno.matricula))
+        return Boolean(isSelected)
       }
 
-      // Senão, verifica turma ou série
-      const matchesTurma = p.turmas.some(t => t === alunoTurma || alunoTurma.includes(t))
-      const matchesSerie = p.series.some(s => s === alunoSerie || alunoSerie.includes(s))
+      // 2. Se a prova NÃO define turmas nem séries nem alunos específicos, não foi vinculada ao aluno
+      const pTurmas = Array.isArray(p.turmas) ? p.turmas : []
+      const pSeries = Array.isArray(p.series) ? p.series : []
+      if (pTurmas.length === 0 && pSeries.length === 0) {
+        return false
+      }
+
+      // 3. Verifica correspondência exata de turma
+      const matchesTurma = pTurmas.length > 0 && pTurmas.some(t => {
+        const tNorm = String(t || '').trim().toLowerCase()
+        if (!tNorm) return false
+        return studentTurmaIdentifiers.some(st => st === tNorm)
+      })
+
+      // 4. Verifica correspondência exata de série
+      const alunoSerieNorm = String(dbAluno.serie || '').trim().toLowerCase()
+      const matchesSerie = pSeries.length > 0 && Boolean(alunoSerieNorm) && pSeries.some(s => {
+        const sNorm = String(s || '').trim().toLowerCase()
+        return sNorm && sNorm === alunoSerieNorm
+      })
+
       return matchesTurma || matchesSerie
     })
 
@@ -121,7 +182,10 @@ export async function GET(request: Request) {
     const studentProvasWithAttempt = await Promise.all(
       filteredProvas.map(async prova => {
         const tentativas = await dbGetTentativasByProvaId(prova.id)
-        const myTentativas = tentativas.filter(t => t.alunoId === alunoId)
+        const myTentativas = tentativas
+          .filter(t => t.alunoId === alunoId || (dbAluno.matricula && t.alunoMatricula === dbAluno.matricula))
+          .sort((a, b) => new Date(b.iniciadaEm || b.createdAt || 0).getTime() - new Date(a.iniciadaEm || a.createdAt || 0).getTime())
+
         const activeTentativa = myTentativas.find(t => t.status === 'em_andamento')
         const submittedTentativas = myTentativas.filter(t => t.status === 'entregue' || t.status === 'expirada')
         const canView = shouldPublishResults(prova, tentativas)
@@ -131,7 +195,7 @@ export async function GET(request: Request) {
           ...sanitized,
           studentInfo: {
             tentativasRealizadas: myTentativas.length,
-            tentativasPermitidas: prova.quantidadeTentativas,
+            tentativasPermitidas: prova.quantidadeTentativas || 1,
             tentativaAtivaId: activeTentativa?.id || null,
             ultimaTentativa: myTentativas[0] || null,
             submetida: submittedTentativas.length > 0,
@@ -224,7 +288,11 @@ export async function GET(request: Request) {
     })
   )
 
-  return NextResponse.json(enrichedProvas)
+    return NextResponse.json(enrichedProvas)
+  } catch (err: any) {
+    console.error('[GET /api/provas-online error]', err)
+    return NextResponse.json({ error: err.message || 'Erro ao carregar provas online' }, { status: 500 })
+  }
 }
 
 export async function POST(request: Request) {

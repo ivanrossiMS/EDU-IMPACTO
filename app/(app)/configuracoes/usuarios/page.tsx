@@ -382,11 +382,11 @@ export default function UsuariosPage() {
         </button>
         <button className={`tab-trigger ${tab === 'alunos' ? 'active' : ''}`} onClick={() => setTab('alunos')}>
           <GraduationCap size={12} />Alunos
-          {users.length > 0 && <span style={{ marginLeft: 6, fontSize: 10, background: 'rgba(0,0,0,0.1)', padding: '2px 6px', borderRadius: 10 }}></span>}
+          {(alunos || []).length > 0 && <span style={{ marginLeft: 6, fontSize: 10, background: 'rgba(0,0,0,0.1)', padding: '2px 6px', borderRadius: 10 }}>{(alunos || []).length}</span>}
         </button>
         <button className={`tab-trigger ${tab === 'responsaveis' ? 'active' : ''}`} onClick={() => setTab('responsaveis')}>
           <Users size={12} />Responsáveis
-          {users.length > 0 && <span style={{ marginLeft: 6, fontSize: 10, background: 'rgba(0,0,0,0.1)', padding: '2px 6px', borderRadius: 10 }}></span>}
+          {totalFamiliaUsuarios > (alunos || []).length && <span style={{ marginLeft: 6, fontSize: 10, background: 'rgba(0,0,0,0.1)', padding: '2px 6px', borderRadius: 10 }}>{Math.max(0, totalFamiliaUsuarios - (alunos || []).length)}</span>}
         </button>
         <button className={`tab-trigger ${tab === 'perfis' ? 'active' : ''}`} onClick={() => setTab('perfis')}><Lock size={12} />Perfis & Permissões</button>
         <button className={`tab-trigger ${tab === 'logs' ? 'active' : ''}`} onClick={() => setTab('logs')}>📋 Logs de Acesso</button>

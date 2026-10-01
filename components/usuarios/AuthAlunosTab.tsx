@@ -174,10 +174,19 @@ export function AuthAlunosTab() {
 
   // Merge with auth data and filter
   const displayed = alunos.map(aluno => {
-    const authRecord = authUsers.find(u => u.user_type === 'student' && (u.reference_key === aluno.id || u.academic_id === aluno.id || (aluno.dados?.matricula && u.login === aluno.dados.matricula)))
+    const authRecord = authUsers.find(u => u.user_type === 'student' && (u.reference_key === aluno.id || u.academic_id === aluno.id || (aluno.dados?.matricula && u.login === aluno.dados.matricula) || (aluno.matricula && u.login === aluno.matricula)))
     
+    // Tenta obter o e-mail real do cadastro do aluno (coluna ou dados)
+    const rawStudentEmail = (aluno.email || aluno.dados?.email || aluno.dados?.emailAluno || aluno.dados?.email_aluno || '').trim()
+    const studentPhone = (aluno.celular || aluno.telefone || aluno.dados?.celular || aluno.dados?.telefone || '').trim()
+    const studentLogin = (aluno as any).codigo || (aluno as any).matricula || (aluno as any).dados?.codigo || (aluno as any).dados?.matricula || String(aluno.id).substring(0, 8)
+
+    // O e-mail cadastrado no aluno tem prioridade sobre registro prévio no cache local
+    const effectiveEmail = rawStudentEmail || (authRecord?.email || '').trim()
+    const effectivePhone = studentPhone || (authRecord?.celular || authRecord?.telefone || '').trim()
+
     // Tenta encontrar o usuário real no banco (mapeado pelo e-mail)
-    const searchEmail = (aluno.email || (authRecord?.email) || '').trim().toLowerCase()
+    const searchEmail = effectiveEmail.toLowerCase()
     const realUser = usersData?.find(u => u.email?.toLowerCase() === searchEmail && u.perfil === 'Família')
 
     // Virtual record automatically linking the user to FAMILIA and ATIVO
@@ -185,38 +194,60 @@ export function AuthAlunosTab() {
       id: `virtual-${aluno.id}`,
       user_type: 'student',
       academic_id: aluno.id,
-      login: (aluno as any).codigo || (aluno as any).matricula || aluno.id.substring(0, 8),
-      email: (aluno as any).email || '',
-      celular: (aluno as any).celular || (aluno as any).telefone || '',
+      login: studentLogin,
+      email: effectiveEmail,
+      celular: effectivePhone,
       status: 'ATIVO',
       profile_code: 'FAMILIA',
       last_login: realUser ? realUser.ultimoAcesso : null
     }
 
-    const auth = authRecord || defaultAuth
+    const auth = authRecord ? {
+      ...authRecord,
+      login: authRecord.login || studentLogin,
+      email: effectiveEmail,
+      celular: effectivePhone
+    } : defaultAuth
+
     // Sobrescreve o last_login mockado com o real do Supabase
     if (realUser && realUser.ultimoAcesso) {
       auth.last_login = realUser.ultimoAcesso === 'Nunca acessou' ? null : realUser.ultimoAcesso
     }
 
-    return { ...aluno, auth }
+    return { 
+      ...aluno,
+      email: effectiveEmail,
+      telefone: effectivePhone,
+      celular: effectivePhone,
+      matricula: studentLogin,
+      codigo: studentLogin,
+      auth 
+    }
   }).filter(item => {
-    const q = search.toLowerCase()
-    return item.nome.toLowerCase().includes(q) || (getTurmaNome((item as any).turma) && getTurmaNome((item as any).turma).toLowerCase().includes(q)) || (item.auth?.login?.toLowerCase().includes(q))
+    if (!debouncedSearch && !search) return true
+    const q = (debouncedSearch || search).toLowerCase()
+    const nome = String(item.nome || '').toLowerCase()
+    const turma = String(getTurmaNome((item as any).turma) || '').toLowerCase()
+    const login = String(item.auth?.login || (item as any).codigo || (item as any).matricula || '').toLowerCase()
+    const email = String(item.email || item.auth?.email || '').toLowerCase()
+    return nome.includes(q) || turma.includes(q) || login.includes(q) || email.includes(q)
   })
 
   const saveEdit = async () => {
     if (!editModal) return
     const { auth, form, aluno } = editModal
 
+    const newEmail = (form.email || '').trim()
+    const newPhone = (form.celular || '').trim()
+
     // 1. Persistir no banco de dados principal (tabela 'alunos')
     if (aluno.id && !String(aluno.id).startsWith('virtual-')) {
       try {
         const payload = {
           ...aluno,
-          email: form.email,
-          celular: form.celular,
-          telefone: form.celular
+          email: newEmail,
+          celular: newPhone,
+          telefone: newPhone
         }
         const res = await fetch(`/api/alunos?id=${aluno.id}`, {
           method: 'PUT',
@@ -231,20 +262,39 @@ export function AuthAlunosTab() {
       }
     }
 
-    if (auth) {
-      setAuthUsers(prev => prev.map(u => u.id === auth.id ? { ...u, email: form.email, celular: form.celular, login: (aluno as any).codigo || (aluno as any).matricula || u.login } : u))
-    } else {
-      // Create first
-      const newU = handleCreateAuth(aluno)
-      setAuthUsers(prev => prev.map(u => u.id === newU.id ? { ...u, email: form.email, celular: form.celular, login: (aluno as any).codigo || (aluno as any).matricula || u.login } : u))
-    }
+    // 2. Persistir no localStorage (authUsers)
+    setAuthUsers(prev => {
+      const studentLogin = (aluno as any).codigo || (aluno as any).matricula || (aluno as any).dados?.codigo || aluno.id
+      const existsIndex = prev.findIndex(u => u.academic_id === aluno.id || (auth && !auth.id?.startsWith('virtual-') && u.id === auth.id))
+      
+      const updatedRecord = {
+        id: (auth && !auth.id?.startsWith('virtual-')) ? auth.id : crypto.randomUUID(),
+        user_type: 'student',
+        academic_id: aluno.id,
+        login: studentLogin,
+        email: newEmail,
+        celular: newPhone,
+        status: auth?.status || 'ATIVO',
+        profile_code: 'FAMILIA',
+        last_login: auth?.last_login || null
+      }
 
-    // Bidirectional Sync: Salva na ficha acadêmica do aluno (Fonte de Verdade)
+      if (existsIndex >= 0) {
+        const copy = [...prev]
+        copy[existsIndex] = { ...copy[existsIndex], ...updatedRecord }
+        return copy
+      } else {
+        return [...prev, updatedRecord]
+      }
+    })
+
+    // Bidirectional Sync: Salva na lista local imediatamente
     setAlunos(prev => prev.map(a => a.id === aluno.id ? {
       ...a,
-      email: form.email,
-      celular: form.celular,
-      telefone: form.celular
+      email: newEmail,
+      celular: newPhone,
+      telefone: newPhone,
+      dados: { ...(a.dados || {}), email: newEmail, telefone: newPhone }
     } : a))
 
     logSystemAction('Config (Acessos)', 'Edição', `Atualização de contatos de acesso (Aluno: ${aluno.nome})`, { registroId: aluno.id, detalhesDepois: form })
@@ -373,12 +423,14 @@ export function AuthAlunosTab() {
                         </code>
                       </td>
                       <td><span className="badge badge-neutral">{getTurmaNome((a as any).turma) || '-'}</span></td>
-                      <td style={{ fontSize: 12 }}>{(a as any).email || a.auth?.email || '-'}</td>
+                      <td style={{ fontSize: 12, color: (a.email || a.auth?.email) ? 'inherit' : 'hsl(var(--text-muted))' }}>
+                        {a.email || a.auth?.email || '-'}
+                      </td>
                       <td style={{ fontSize: 12, color: a.auth?.last_login ? 'inherit' : 'hsl(var(--text-muted))' }}>{a.auth?.last_login || 'Nunca acessou'}</td>
                       <td>{badgeStatus(currentStatus)}</td>
                       <td>
                         <div style={{ display: 'flex', gap: 4 }}>
-                          <button className="btn btn-ghost btn-icon btn-sm" title="Editar Contatos de Acesso" onClick={() => setEditModal({ aluno: a, auth: a.auth, form: { email: (a as any).email || a.auth?.email || '', celular: (a as any).celular || (a as any).telefone || a.auth?.celular || '' } })}><Pencil size={13} /></button>
+                          <button className="btn btn-ghost btn-icon btn-sm" title="Editar Contatos de Acesso" onClick={() => setEditModal({ aluno: a, auth: a.auth, form: { email: a.email || a.auth?.email || '', celular: a.celular || a.telefone || a.auth?.celular || '' } })}><Pencil size={13} /></button>
                           <button className="btn btn-ghost btn-icon btn-sm" title="Responsáveis Vinculados" onClick={() => setLinksModal(a)}><Users size={13} /></button>
                           <button className="btn btn-ghost btn-icon btn-sm" title="Redefinir Senha" onClick={() => { setResetModal({ aluno: a, auth: a.auth }); setResetParams({ mode: 'auto', password: generateAutoPass(), confirm: '', sendSms: false, sendEmail: false, requireChange: true }); setCopied(false) }}><Key size={13} /></button>
                           <button className="btn btn-ghost btn-icon btn-sm" title={currentStatus === 'ATIVO' ? 'Inativar Acesso' : 'Ativar Acesso'} onClick={() => toggleStatus(a)}><Power size={13} style={{ color: currentStatus === 'ATIVO' ? '#ef4444' : '#10b981' }} /></button>

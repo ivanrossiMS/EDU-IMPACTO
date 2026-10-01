@@ -8,7 +8,8 @@ import {
   ChevronLeft, ChevronRight, Send, Wifi, WifiOff, RefreshCw,
   Maximize2, Minimize2, FileCheck2, AlertCircle, HelpCircle,
   Hash, Calendar, User, BookOpen, Printer, Check, Info, Bell,
-  Calculator, Copy, CheckCheck, X
+  Calculator, Copy, CheckCheck, X, ArrowLeft, Flame, Sparkles,
+  FileText
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { HtmlContent } from '@/components/HtmlContent'
@@ -25,11 +26,12 @@ interface ExamRoomProps {
   initialTentativa?: TentativaAluno | null
   currentUserId?: string
   alunoNome?: string
+  returnUrl?: string
 }
 
 type SaveState = 'saved' | 'saving' | 'offline_queued' | 'error'
 
-export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome }: ExamRoomProps) {
+export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, returnUrl }: ExamRoomProps) {
   const router = useRouter()
 
   // Briefing vs Taking vs Submitted
@@ -47,10 +49,20 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome }: 
   // Current Question
   const [currentIndex, setCurrentIndex] = useState(0)
 
-  // Answers Map: questionId -> RespostaQuestaoTentativa
+  // Answers Map: questionId -> RespostaQuestaoTentativa (safely parses array or object)
   const [respostas, setRespostas] = useState<Record<string, RespostaQuestaoTentativa>>(() => {
     if (!initialTentativa?.respostas) return {}
-    return { ...initialTentativa.respostas }
+    if (Array.isArray(initialTentativa.respostas)) {
+      const map: Record<string, RespostaQuestaoTentativa> = {}
+      initialTentativa.respostas.forEach((r: any) => {
+        if (r && r.questaoId) map[r.questaoId] = r
+      })
+      return map
+    }
+    if (typeof initialTentativa.respostas === 'object') {
+      return { ...initialTentativa.respostas }
+    }
+    return {}
   })
 
   // Flagged for review set
@@ -160,7 +172,7 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome }: 
     list.forEach(q => {
       if (!ordered.find(o => o.id === q.id)) ordered.push(q)
     })
-    return ordered
+    return ordered.length > 0 ? ordered : list
   }, [prova.questoes, tentativa?.ordemQuestoesSorteada])
 
   const currentQuestion = orderedQuestions[currentIndex] || orderedQuestions[0]
@@ -182,7 +194,7 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome }: 
     function handleOffline() {
       setIsOnline(false)
       setSaveStatus('offline_queued')
-      toast.warning('Sem conexão à internet. Respostas estão sendo salvas no dispositivo.')
+      toast.warning('Sem conexão à internet. Respostas sendo salvas localmente.')
     }
 
     window.addEventListener('online', handleOnline)
@@ -197,10 +209,7 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome }: 
   const syncPendingAnswers = useCallback(async () => {
     if (!tentativa || !started || tentativa.status !== 'em_andamento') return
 
-    // Collect answers
-    const answersArray = Object.values(respostas)
     const revisaoArray = Array.from(flaggedIds)
-
     setSaveStatus('saving')
 
     try {
@@ -209,7 +218,7 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome }: 
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          respostas: answersArray,
+          respostas: respostas, // Envia o mapa indexado por questaoId
           questoesRevisao: revisaoArray,
           versaoRespostas: newVersion,
           tempoGastoSegundos: Math.max(0, (prova.duracaoMinutos * 60) - timeRemainingSeconds)
@@ -240,13 +249,13 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome }: 
       // Save to local storage as fallback
       if (typeof window !== 'undefined') {
         localStorage.setItem(storageQueueKey, JSON.stringify({
-          respostas: answersArray,
+          respostas: respostas,
           questoesRevisao: revisaoArray,
           savedAt: new Date().toISOString()
         }))
       }
       setSaveStatus('offline_queued')
-      setPendingSyncCount(answersArray.length)
+      setPendingSyncCount(Object.keys(respostas).length)
     }
   }, [tentativa, started, respostas, flaggedIds, versaoRespostas, prova.duracaoMinutos, timeRemainingSeconds, storageQueueKey])
 
@@ -426,22 +435,31 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome }: 
       setTentativa(data.tentativa)
       setStarted(true)
 
-      // Initialize answers from attempt
-      if (data.tentativa.respostas) {
+      // Initialize answers from attempt safely (resolves data.tentativa.respostas.forEach is not a function)
+      if (data.tentativa?.respostas) {
         const map: Record<string, RespostaQuestaoTentativa> = {}
-        data.tentativa.respostas.forEach((r: RespostaQuestaoTentativa) => {
-          map[r.questaoId] = r
-        })
+        if (Array.isArray(data.tentativa.respostas)) {
+          data.tentativa.respostas.forEach((r: any) => {
+            if (r && r.questaoId) map[r.questaoId] = r
+          })
+        } else if (typeof data.tentativa.respostas === 'object') {
+          Object.entries(data.tentativa.respostas).forEach(([key, val]: [string, any]) => {
+            if (val && typeof val === 'object') {
+              const qId = val.questaoId || key
+              map[qId] = { ...val, questaoId: qId }
+            }
+          })
+        }
         setRespostas(map)
       }
 
       // Initialize flags
-      if (data.tentativa.questoesRevisao) {
+      if (data.tentativa?.questoesRevisao) {
         setFlaggedIds(new Set(data.tentativa.questoesRevisao))
       }
 
       // Compute remaining time
-      if (data.tentativa.prazoLimite) {
+      if (data.tentativa?.prazoLimite) {
         const diff = Math.floor((new Date(data.tentativa.prazoLimite).getTime() - Date.now()) / 1000)
         setTimeRemainingSeconds(Math.max(0, diff))
       }
@@ -569,14 +587,13 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome }: 
     setSubmitting(true)
 
     try {
-      const answersArray = Object.values(respostas)
       const revisaoArray = Array.from(flaggedIds)
 
       const res = await fetch(`/api/provas-online/tentativas/${tentativa.id}/entregar`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          respostas: answersArray,
+          respostas: respostas, // Envia o mapa direto indexado por questaoId
           questoesRevisao: revisaoArray,
           tempoGastoSegundos: Math.max(0, (prova.duracaoMinutos * 60) - timeRemainingSeconds)
         })
@@ -628,10 +645,19 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome }: 
     return orderedQuestions.filter(q => {
       const ans = respostas[q.id]
       if (!ans) return false
-      if (q.tipo === 'multipla_escolha') return !!ans.alternativaIdSelecionada
-      if (q.tipo === 'multipla_selecao') return (ans.alternativasIdsSelecionadas || []).length > 0
-      if (q.tipo === 'verdadeiro_falso') return (ans.itensVouF || []).length === (q.itensVouF || []).length
-      if (q.tipo === 'dissertativa') return !!ans.textoDissertativo && ans.textoDissertativo.trim().length > 0
+      if (q.tipo === 'multipla_escolha') {
+        return !!(ans.alternativaIdSelecionada || ans.respostaOpcaoId)
+      }
+      if (q.tipo === 'multipla_selecao') {
+        return (ans.alternativasIdsSelecionadas || ans.respostaOpcoesIds || []).length > 0
+      }
+      if (q.tipo === 'verdadeiro_falso') {
+        const vfCount = (q.itensVF || q.itensVouF || []).length
+        return (ans.itensVouF || Object.keys(ans.respostaVF || {})).length === vfCount
+      }
+      if (q.tipo === 'dissertativa') {
+        return (ans.textoDissertativo || ans.respostaDissertativa || '').trim().length > 0
+      }
       return false
     }).length
   }, [orderedQuestions, respostas])
@@ -639,100 +665,223 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome }: 
   const blankCount = orderedQuestions.length - answeredCount
 
   // =========================================================================
-  // VIEW 1: VOUCHER / SUBMITTED SCREEN
+  // VIEW 1: VOUCHER / SUBMITTED RECEIPT (COMPROVANTE DIGITAL DE ENTREGA)
   // =========================================================================
-  if (submittedVoucher || (initialTentativa && initialTentativa.status === 'entregue')) {
+  if (submittedVoucher || (initialTentativa && (initialTentativa.status === 'entregue' || initialTentativa.status === 'expirada'))) {
     const voucher = submittedVoucher || initialTentativa?.comprovanteEntrega
+
     return (
-      <div className="max-w-2xl mx-auto py-12 px-4">
+      <div style={{ maxWidth: '840px', margin: '0 auto', padding: '40px 20px' }}>
         <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
+          initial={{ opacity: 0, scale: 0.98 }}
           animate={{ opacity: 1, scale: 1 }}
-          className="bg-white border border-slate-200/90 rounded-3xl p-8 shadow-sm text-center"
+          style={{
+            background: '#ffffff',
+            border: '1.5px solid #e2e8f0',
+            borderRadius: '24px',
+            padding: '36px 32px',
+            textAlign: 'center',
+            boxShadow: '0 8px 30px rgba(0, 0, 0, 0.04)'
+          }}
         >
-          <div className="w-16 h-16 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-600 mx-auto flex items-center justify-center mb-5 shadow-xs">
-            <CheckCircle2 className="w-8 h-8" />
+          {/* Logo do Colégio Impacto & Badge de Sucesso */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '14px', margin: '0 auto 20px' }}>
+            <div style={{
+              width: '56px',
+              height: '56px',
+              borderRadius: '16px',
+              background: 'linear-gradient(135deg, #070d1e 0%, #1e1b4b 100%)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '6px',
+              boxShadow: '0 6px 16px rgba(0, 0, 0, 0.12)'
+            }}>
+              <img
+                src="/logo-impacto-clean.png"
+                alt="Colégio Impacto"
+                style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+              />
+            </div>
+            <div style={{
+              width: '56px',
+              height: '56px',
+              borderRadius: '16px',
+              background: '#ecfdf5',
+              border: '1.5px solid #a7f3d0',
+              color: '#059669',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}>
+              <CheckCircle2 size={28} />
+            </div>
           </div>
 
-          <h1 className="text-2xl font-black text-slate-900 mb-2">Comprovante Oficial de Entrega</h1>
-          <p className="text-slate-500 text-sm mb-6">Sua avaliação foi recebida e registrada pelo servidor com autenticidade garantida.</p>
+          <h1 style={{ fontSize: '24px', fontWeight: 900, color: '#0f172a', margin: '0 0 8px', letterSpacing: '-0.02em' }}>
+            Avaliação Entregue com Sucesso!
+          </h1>
+          <p style={{ fontSize: '14px', color: '#64748b', maxWidth: '520px', margin: '0 auto 28px', lineHeight: 1.5 }}>
+            Suas respostas foram processadas e armazenadas com segurança nos servidores da instituição.
+          </p>
 
           {/* Voucher Details Card */}
-          <div className="bg-slate-50 border border-slate-200 rounded-2xl p-6 text-left space-y-4 mb-8">
-            <div className="flex items-center justify-between pb-4 border-b border-slate-200">
-              <span className="text-xs uppercase font-mono tracking-wider text-slate-500 font-semibold">Código Autenticador</span>
-              <div className="flex items-center gap-2">
-                <span className="text-emerald-700 font-mono font-bold text-sm tracking-widest bg-emerald-50 px-3 py-1 rounded-lg border border-emerald-200">
+          <div style={{
+            background: '#f8fafc',
+            border: '1.5px solid #e2e8f0',
+            borderRadius: '20px',
+            padding: '24px',
+            textAlign: 'left',
+            marginBottom: '32px'
+          }}>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              paddingBottom: '16px',
+              borderBottom: '1px solid #e2e8f0',
+              flexWrap: 'wrap',
+              gap: '12px'
+            }}>
+              <div>
+                <span style={{ fontSize: '11px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                  Código Autenticador Digital
+                </span>
+                <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '2px' }}>
+                  Guarde este código para comprovação oficial
+                </div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{
+                  fontSize: '13px',
+                  fontWeight: 800,
+                  color: '#059669',
+                  background: '#ecfdf5',
+                  padding: '6px 14px',
+                  borderRadius: '10px',
+                  border: '1px solid #a7f3d0',
+                  letterSpacing: '0.05em'
+                }}>
                   {voucher?.hash || initialTentativa?.id?.slice(0, 16)}
                 </span>
                 <button
                   type="button"
                   onClick={() => {
                     const code = voucher?.hash || initialTentativa?.id || ''
-                    navigator.clipboard.writeText(code)
+                    if (navigator?.clipboard?.writeText) {
+                      navigator.clipboard.writeText(code)
+                    }
                     setCopiedVoucher(true)
-                    toast.success('Código autenticador copiado!')
+                    toast.success('Código autenticador copiado com sucesso!')
                     setTimeout(() => setCopiedVoucher(false), 2000)
                   }}
                   title="Copiar código autenticador"
-                  className="p-1.5 rounded-lg bg-white border border-slate-200 hover:bg-slate-100 text-slate-600 transition-colors"
+                  style={{
+                    padding: '8px',
+                    borderRadius: '10px',
+                    background: '#ffffff',
+                    border: '1px solid #cbd5e1',
+                    color: '#475569',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
                 >
-                  {copiedVoucher ? <CheckCheck className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
+                  {copiedVoucher ? <CheckCheck size={16} color="#059669" /> : <Copy size={16} />}
                 </button>
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4 text-xs">
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+              gap: '16px',
+              marginTop: '18px',
+              fontSize: '13px'
+            }}>
               <div>
-                <span className="text-slate-500 block mb-1">Avaliação</span>
-                <span className="text-slate-900 font-semibold">{prova.titulo}</span>
+                <span style={{ color: '#64748b', fontSize: '12px', display: 'block', marginBottom: '2px' }}>Avaliação</span>
+                <strong style={{ color: '#0f172a' }}>{prova.titulo}</strong>
               </div>
               <div>
-                <span className="text-slate-500 block mb-1">Disciplina</span>
-                <span className="text-slate-900 font-semibold">{prova.disciplinaNome || prova.disciplina}</span>
+                <span style={{ color: '#64748b', fontSize: '12px', display: 'block', marginBottom: '2px' }}>Disciplina</span>
+                <strong style={{ color: '#0f172a' }}>{prova.disciplinaNome || prova.disciplina}</strong>
               </div>
               <div>
-                <span className="text-slate-500 block mb-1">Aluno</span>
-                <span className="text-slate-900 font-semibold">{alunoNome || voucher?.alunoNome || 'Aluno'}</span>
+                <span style={{ color: '#64748b', fontSize: '12px', display: 'block', marginBottom: '2px' }}>Aluno Participante</span>
+                <strong style={{ color: '#0f172a' }}>{alunoNome || voucher?.alunoNome || 'Aluno'}</strong>
               </div>
               <div>
-                <span className="text-slate-500 block mb-1">Data / Horário de Entrega</span>
-                <span className="text-slate-900 font-semibold">
+                <span style={{ color: '#64748b', fontSize: '12px', display: 'block', marginBottom: '2px' }}>Data / Horário de Envio</span>
+                <strong style={{ color: '#0f172a' }}>
                   {new Date(voucher?.dataHoraEntrega || Date.now()).toLocaleString('pt-BR')}
-                </span>
+                </strong>
               </div>
               <div>
-                <span className="text-slate-500 block mb-1">Total de Questões</span>
-                <span className="text-slate-900 font-semibold">{(prova.questoes || []).length} questões</span>
+                <span style={{ color: '#64748b', fontSize: '12px', display: 'block', marginBottom: '2px' }}>Total de Questões</span>
+                <strong style={{ color: '#0f172a' }}>{(prova.questoes || []).length} questões</strong>
               </div>
               <div>
-                <span className="text-slate-500 block mb-1">Respostas Registradas</span>
-                <span className="text-emerald-700 font-semibold">{voucher?.totalRespostasRegistradas || answeredCount} recebidas</span>
+                <span style={{ color: '#64748b', fontSize: '12px', display: 'block', marginBottom: '2px' }}>Respostas Registradas</span>
+                <strong style={{ color: '#059669' }}>{voucher?.totalRespostasRegistradas || answeredCount} computadas</strong>
               </div>
             </div>
 
-            {/* If instant grade published */}
+            {/* Instant Grade Result if available */}
             {initialTentativa?.statusCorrecao === 'corrigida' && initialTentativa.notaFinal !== undefined && (
-              <div className="pt-4 border-t border-slate-200 flex items-center justify-between">
-                <span className="text-xs text-slate-600 font-medium">Nota Final Obtida:</span>
-                <span className="text-lg font-bold text-sky-700 font-mono">
-                  {initialTentativa.notaFinal.toFixed(1)} / {prova.valorTotal.toFixed(1)}
+              <div style={{
+                marginTop: '20px',
+                paddingTop: '16px',
+                borderTop: '1px solid #e2e8f0',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between'
+              }}>
+                <span style={{ fontSize: '13px', fontWeight: 700, color: '#334155' }}>Nota Final Obtida:</span>
+                <span style={{ fontSize: '20px', fontWeight: 900, color: '#0284c7' }}>
+                  {initialTentativa.notaFinal.toFixed(1)} / {prova.valorTotal.toFixed(1)} pts
                 </span>
               </div>
             )}
           </div>
 
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '14px', flexWrap: 'wrap' }}>
             <button
               onClick={() => window.print()}
-              className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-semibold flex items-center justify-center gap-2 border border-slate-200 transition-colors"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '11px 22px',
+                borderRadius: '12px',
+                background: '#ffffff',
+                border: '1.5px solid #cbd5e1',
+                color: '#334155',
+                fontSize: '13px',
+                fontWeight: 700,
+                cursor: 'pointer'
+              }}
             >
-              <Printer className="w-4 h-4" />
+              <Printer size={16} />
               Imprimir Comprovante
             </button>
             <button
-              onClick={() => router.push('/provas-online')}
-              className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-sm font-semibold transition-colors shadow-sm"
+              onClick={() => router.push(returnUrl || '/provas-online')}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '11px 26px',
+                borderRadius: '12px',
+                background: 'linear-gradient(135deg, #0284c7, #0369a1)',
+                border: 'none',
+                color: '#ffffff',
+                fontSize: '13px',
+                fontWeight: 800,
+                cursor: 'pointer',
+                boxShadow: '0 4px 14px rgba(2, 132, 199, 0.3)'
+              }}
             >
               Voltar para Minhas Provas
             </button>
@@ -743,7 +892,7 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome }: 
   }
 
   // =========================================================================
-  // VIEW 2: BRIEFING & INSTRUCTIONS (BEFORE STARTING)
+  // VIEW 2: BRIEFING & INSTRUCTIONS (SALA DE ACOLHIMENTO PRÉ-PROVA)
   // =========================================================================
   if (!started) {
     const deadlineStr = prova.dataHoraFim || prova.dataEncerramento || new Date().toISOString()
@@ -755,127 +904,370 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome }: 
     const isEndingSoon = effectiveDurationMinutes < prova.duracaoMinutos
 
     return (
-      <div className="max-w-3xl mx-auto py-8 px-4">
+      <div style={{ maxWidth: '960px', margin: '0 auto', padding: '36px 20px 60px' }}>
         <motion.div
-          initial={{ opacity: 0, y: 15 }}
+          initial={{ opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-white border border-slate-200/90 rounded-3xl p-6 md:p-8 shadow-sm relative"
+          style={{
+            background: '#ffffff',
+            border: '1.5px solid #e2e8f0',
+            borderRadius: '24px',
+            padding: '32px',
+            boxShadow: '0 10px 30px rgba(0, 0, 0, 0.03)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '24px'
+          }}
         >
-          {/* Header */}
-          <div className="flex flex-wrap items-center justify-between gap-3 pb-6 border-b border-slate-100">
-            <div>
-              <div className="flex items-center gap-2 mb-2">
-                <span className="px-3 py-1 rounded-full text-xs font-semibold bg-sky-50 text-sky-700 border border-sky-200">
-                  {prova.disciplinaNome || prova.disciplina}
-                </span>
-                <span className="px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-700">
-                  {prova.finalidade.toUpperCase()}
-                </span>
+          {/* Header Card */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '18px',
+            paddingBottom: '22px',
+            borderBottom: '1px solid #f1f5f9'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '16px', flex: 1, minWidth: '280px' }}>
+              {/* Logo do Colégio Impacto */}
+              <div style={{
+                width: '52px',
+                height: '52px',
+                borderRadius: '16px',
+                background: 'linear-gradient(135deg, #070d1e 0%, #1e1b4b 100%)',
+                padding: '6px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                boxShadow: '0 6px 16px rgba(0, 0, 0, 0.12)',
+                flexShrink: 0
+              }}>
+                <img
+                  src="/logo-impacto-clean.png"
+                  alt="Colégio Impacto"
+                  style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                />
               </div>
-              <h1 className="text-2xl font-black text-slate-900 tracking-tight">{prova.titulo}</h1>
-              <p className="text-xs text-slate-500 mt-1">Professor Responsável: {prova.professorNome}</p>
+
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px', flexWrap: 'wrap' }}>
+                  <span style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '4px 12px',
+                    borderRadius: '20px',
+                    fontSize: '12px',
+                    fontWeight: 800,
+                    background: '#f0f9ff',
+                    color: '#0284c7',
+                    border: '1px solid #bae6fd'
+                  }}>
+                    <BookOpen size={13} />
+                    {prova.disciplinaNome || prova.disciplina}
+                  </span>
+                  <span style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    padding: '4px 12px',
+                    borderRadius: '20px',
+                    fontSize: '11px',
+                    fontWeight: 800,
+                    background: '#f8fafc',
+                    color: '#64748b',
+                    border: '1px solid #e2e8f0',
+                    textTransform: 'uppercase'
+                  }}>
+                    {prova.finalidade === 'avaliacao' ? 'Avaliação Oficial' : prova.finalidade}
+                  </span>
+                </div>
+
+              <h1 style={{
+                fontSize: '24px',
+                fontWeight: 900,
+                color: '#0f172a',
+                margin: '0 0 6px',
+                letterSpacing: '-0.02em',
+                lineHeight: 1.3
+              }}>
+                {prova.titulo}
+              </h1>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#64748b', fontSize: '13px' }}>
+                <User size={14} color="#94a3b8" />
+                <span>Docente Responsável: <strong style={{ color: '#334155' }}>{prova.professorNome || 'Professor da Turma'}</strong></span>
+              </div>
             </div>
-            <div className="text-right">
-              <span className="text-xs text-slate-400 block font-medium">Valor Total</span>
-              <span className="text-2xl font-mono font-bold text-sky-700">{prova.valorTotal.toFixed(1)} pts</span>
+            </div>
+
+            <div style={{
+              background: '#f8fafc',
+              border: '1.5px solid #e2e8f0',
+              borderRadius: '16px',
+              padding: '12px 20px',
+              textAlign: 'right',
+              minWidth: '130px'
+            }}>
+              <span style={{ fontSize: '11px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block' }}>
+                Valor Total
+              </span>
+              <div style={{ fontSize: '26px', fontWeight: 900, color: '#0284c7', lineHeight: 1.1, marginTop: '2px' }}>
+                {prova.valorTotal.toFixed(1)} <span style={{ fontSize: '14px', fontWeight: 800, color: '#38bdf8' }}>pts</span>
+              </div>
             </div>
           </div>
 
           {/* Quick Metrics Grid */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 my-6">
-            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4">
-              <div className="flex items-center gap-2 text-slate-500 text-xs mb-1 font-medium">
-                <Clock className="w-3.5 h-3.5 text-sky-600" />
-                Duração
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+            gap: '12px'
+          }}>
+            {/* Duração */}
+            <div style={{
+              background: '#ffffff',
+              border: '1.5px solid #e2e8f0',
+              borderRadius: '16px',
+              padding: '16px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '14px'
+            }}>
+              <div style={{
+                width: '42px',
+                height: '42px',
+                borderRadius: '12px',
+                background: '#f0f9ff',
+                border: '1px solid #bae6fd',
+                color: '#0284c7',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0
+              }}>
+                <Clock size={20} />
               </div>
-              <p className="text-base font-bold text-slate-900 font-mono">{prova.duracaoMinutos} min</p>
+              <div>
+                <span style={{ fontSize: '11px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'block' }}>
+                  Duração
+                </span>
+                <strong style={{ fontSize: '18px', fontWeight: 900, color: '#0f172a' }}>
+                  {prova.duracaoMinutos} min
+                </strong>
+              </div>
             </div>
 
-            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4">
-              <div className="flex items-center gap-2 text-slate-500 text-xs mb-1 font-medium">
-                <FileCheck2 className="w-3.5 h-3.5 text-blue-600" />
-                Questões
+            {/* Questões */}
+            <div style={{
+              background: '#ffffff',
+              border: '1.5px solid #e2e8f0',
+              borderRadius: '16px',
+              padding: '16px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '14px'
+            }}>
+              <div style={{
+                width: '42px',
+                height: '42px',
+                borderRadius: '12px',
+                background: '#eef2ff',
+                border: '1px solid #c7d2fe',
+                color: '#4f46e5',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0
+              }}>
+                <FileCheck2 size={20} />
               </div>
-              <p className="text-base font-bold text-slate-900 font-mono">{(prova.questoes || []).length} itens</p>
+              <div>
+                <span style={{ fontSize: '11px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'block' }}>
+                  Questões
+                </span>
+                <strong style={{ fontSize: '18px', fontWeight: 900, color: '#0f172a' }}>
+                  {(prova.questoes || []).length} itens
+                </strong>
+              </div>
             </div>
 
-            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4">
-              <div className="flex items-center gap-2 text-slate-500 text-xs mb-1 font-medium">
-                <Calendar className="w-3.5 h-3.5 text-purple-600" />
-                Encerramento
+            {/* Encerramento */}
+            <div style={{
+              background: '#ffffff',
+              border: '1.5px solid #e2e8f0',
+              borderRadius: '16px',
+              padding: '16px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '14px'
+            }}>
+              <div style={{
+                width: '42px',
+                height: '42px',
+                borderRadius: '12px',
+                background: '#faf5ff',
+                border: '1px solid #e9d5ff',
+                color: '#7e22ce',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0
+              }}>
+                <Calendar size={20} />
               </div>
-              <p className="text-xs font-semibold text-slate-800">
-                {new Date(deadlineStr).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-              </p>
+              <div>
+                <span style={{ fontSize: '11px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'block' }}>
+                  Encerramento
+                </span>
+                <strong style={{ fontSize: '15px', fontWeight: 900, color: '#0f172a' }}>
+                  {new Date(deadlineStr).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })} às {new Date(deadlineStr).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                </strong>
+              </div>
             </div>
 
-            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4">
-              <div className="flex items-center gap-2 text-slate-500 text-xs mb-1 font-medium">
-                <Wifi className="w-3.5 h-3.5 text-emerald-600" />
-                Conexão
+            {/* Conexão */}
+            <div style={{
+              background: '#ffffff',
+              border: '1.5px solid #e2e8f0',
+              borderRadius: '16px',
+              padding: '16px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '14px'
+            }}>
+              <div style={{
+                width: '42px',
+                height: '42px',
+                borderRadius: '12px',
+                background: isOnline ? '#f0fdf4' : '#fff1f2',
+                border: `1px solid ${isOnline ? '#bbf7d0' : '#fecdd3'}`,
+                color: isOnline ? '#16a34a' : '#e11d48',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0
+              }}>
+                <Wifi size={20} />
               </div>
-              <p className={`text-xs font-semibold ${isOnline ? 'text-emerald-700' : 'text-rose-600'}`}>
-                {isOnline ? 'Conectado' : 'Offline'}
-              </p>
+              <div>
+                <span style={{ fontSize: '11px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'block' }}>
+                  Conexão
+                </span>
+                <strong style={{ fontSize: '15px', fontWeight: 900, color: isOnline ? '#15803d' : '#e11d48' }}>
+                  {isOnline ? 'Online e Sincronizado' : 'Offline'}
+                </strong>
+              </div>
             </div>
           </div>
 
           {/* Near-Closing Warning if applicable */}
           {isEndingSoon && (
-            <div className="mb-6 p-4 rounded-2xl bg-amber-50 border border-amber-200 flex items-start gap-3 text-amber-800 text-xs leading-relaxed">
-              <AlertTriangle className="w-5 h-5 shrink-0 text-amber-600 mt-0.5" />
+            <div style={{
+              padding: '14px 18px',
+              borderRadius: '14px',
+              background: '#fffbeb',
+              border: '1.5px solid #fde68a',
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: '12px',
+              color: '#92400e',
+              fontSize: '13px',
+              lineHeight: 1.5
+            }}>
+              <AlertTriangle size={18} color="#d97706" style={{ flexShrink: 0, marginTop: '2px' }} />
               <div>
-                <strong className="block font-semibold mb-1">Atenção ao horário de encerramento da prova:</strong>
-                O encerramento oficial da prova ocorre às {new Date(deadlineStr).toLocaleTimeString('pt-BR')}. Caso inicie agora, seu tempo real disponível será de aproximadamente <strong>{effectiveDurationMinutes} minutos</strong> (o término oficial prevalece sobre a duração individual).
+                <strong style={{ display: 'block', color: '#78350f', marginBottom: '2px' }}>
+                  Atenção ao horário de encerramento da prova:
+                </strong>
+                O encerramento oficial da prova ocorre às {new Date(deadlineStr).toLocaleTimeString('pt-BR')}. Caso inicie agora, seu tempo real disponível será de aproximadamente <strong>{effectiveDurationMinutes} minutos</strong> (o encerramento geral prevalece sobre a duração individual).
               </div>
             </div>
           )}
 
-          {/* Instructions & Guidelines */}
-          <div className="space-y-4 mb-6">
-            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5">
-              <h3 className="text-sm font-bold text-slate-900 mb-2 flex items-center gap-2">
-                <Info className="w-4 h-4 text-sky-600" />
-                Instruções Gerais
-              </h3>
-              <p className="text-xs text-slate-600 leading-relaxed whitespace-pre-wrap">
+          {/* Instructions & Guidelines Cards */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            {/* Instruções Gerais */}
+            <div style={{
+              background: '#f8fafc',
+              border: '1.5px solid #e2e8f0',
+              borderRadius: '18px',
+              padding: '18px 22px'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                <Info size={16} color="#0284c7" />
+                <h3 style={{ fontSize: '14px', fontWeight: 800, color: '#0f172a', margin: 0 }}>
+                  Instruções Gerais
+                </h3>
+              </div>
+              <p style={{ fontSize: '13px', color: '#475569', lineHeight: 1.6, margin: 0 }}>
                 {prova.instrucoes || 'Leia com atenção cada questão antes de responder. Suas respostas são salvas automaticamente pelo sistema.'}
               </p>
               {prova.materiaisPermitidos && (
-                <div className="mt-3 pt-3 border-t border-slate-200 text-xs text-slate-600">
-                  <span className="font-semibold text-slate-800">Materiais permitidos: </span>
+                <div style={{
+                  marginTop: '12px',
+                  paddingTop: '10px',
+                  borderTop: '1px solid #e2e8f0',
+                  fontSize: '12.5px',
+                  color: '#64748b'
+                }}>
+                  <strong style={{ color: '#334155' }}>Materiais autorizados: </strong>
                   {prova.materiaisPermitidos}
                 </div>
               )}
             </div>
 
-            {/* Monitoring Rules Disclaimer */}
-            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5">
-              <h3 className="text-sm font-bold text-slate-900 mb-2 flex items-center gap-2">
-                <Shield className="w-4 h-4 text-sky-600" />
-                Regras de Navegação e Supervisão
-              </h3>
-              <ul className="text-xs text-slate-600 space-y-1.5 list-disc pl-5">
-                <li>O cronômetro é gerenciado e sincronizado pelo servidor e começa assim que você clica em Iniciar.</li>
-                <li>Recarregar a página, fechar o navegador ou trocar de aparelho não pausa ou amplia o tempo.</li>
+            {/* Regras de Navegação e Supervisão */}
+            <div style={{
+              background: '#f8fafc',
+              border: '1.5px solid #e2e8f0',
+              borderRadius: '18px',
+              padding: '18px 22px'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
+                <Shield size={16} color="#7e22ce" />
+                <h3 style={{ fontSize: '14px', fontWeight: 800, color: '#0f172a', margin: 0 }}>
+                  Regras de Navegação e Supervisão
+                </h3>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '12.5px', color: '#475569' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Check size={14} color="#0284c7" strokeWidth={3} />
+                  <span>O cronômetro é sincronizado com o servidor e inicia assim que você clicar em "Iniciar Prova Agora".</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Check size={14} color="#0284c7" strokeWidth={3} />
+                  <span>Recarregar a página, fechar o navegador ou trocar de dispositivo <strong>não pausa</strong> seu tempo.</span>
+                </div>
                 {prova.bloquearRetorno && (
-                  <li className="text-amber-700 font-semibold">Nesta prova, não é permitido retornar a questões anteriores após avançar.</li>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#b45309' }}>
+                    <AlertTriangle size={14} color="#d97706" />
+                    <span><strong>Atenção:</strong> Esta avaliação não permite retornar a questões anteriores após avançar.</span>
+                  </div>
                 )}
                 {prova.exigirTelaCheia && (
-                  <li>A prova solicita modo de tela cheia para evitar distrações. Saídas de tela serão registradas.</li>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Check size={14} color="#0284c7" strokeWidth={3} />
+                    <span>A prova solicita modo de tela cheia para evitar distrações. Saídas de tela são registradas.</span>
+                  </div>
                 )}
-                {prova.bloquearColar && (
-                  <li>Copiar e colar conteúdos externos está desabilitado durante a realização.</li>
-                )}
-                <li>Suas respostas possuem salvamento automático com tolerância a oscilações temporárias de rede.</li>
-              </ul>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Check size={14} color="#0284c7" strokeWidth={3} />
+                  <span>Suas respostas possuem salvamento automático e tolerância a oscilações temporárias de rede.</span>
+                </div>
+              </div>
             </div>
           </div>
 
-          {/* PIN Verification (Presential Mode) */}
+          {/* PIN Verification if required */}
           {prova.exigeCodigoAcesso && (
-            <div className="mb-6 p-5 rounded-2xl bg-sky-50 border border-sky-200">
-              <label className="block text-xs font-semibold text-sky-900 mb-2">
+            <div style={{
+              background: '#f0f9ff',
+              border: '1.5px solid #bae6fd',
+              borderRadius: '18px',
+              padding: '18px 22px'
+            }}>
+              <label style={{ display: 'block', fontSize: '12.5px', fontWeight: 800, color: '#0369a1', marginBottom: '8px' }}>
                 Código de Liberação da Aplicação (Fornecido pelo Professor)
               </label>
               <input
@@ -883,58 +1275,189 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome }: 
                 value={pinCode}
                 onChange={e => setPinCode(e.target.value.toUpperCase())}
                 placeholder="Ex: PROVA123"
-                className="w-full bg-white border border-slate-300 rounded-xl px-4 py-3 text-slate-900 font-mono tracking-widest text-center text-lg placeholder:text-slate-400 focus:outline-none focus:border-sky-500"
+                style={{
+                  width: '100%',
+                  padding: '12px 16px',
+                  borderRadius: '12px',
+                  border: '1.5px solid #7dd3fc',
+                  background: '#ffffff',
+                  color: '#0f172a',
+                  fontWeight: 800,
+                  fontSize: '16px',
+                  letterSpacing: '0.1em',
+                  textAlign: 'center',
+                  outline: 'none'
+                }}
               />
             </div>
           )}
 
-          {/* Start Error */}
+          {/* Start Error Alert */}
           {startError && (
-            <div className="mb-6 p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
-              <span>{startError}</span>
+            <div style={{
+              padding: '14px 18px',
+              borderRadius: '14px',
+              background: '#fff1f2',
+              border: '1.5px solid #fecdd3',
+              color: '#be123c',
+              fontSize: '13px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '12px'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <AlertCircle size={18} color="#e11d48" />
+                <span>{startError}</span>
+              </div>
+              <button
+                type="button"
+                onClick={handleStartExam}
+                style={{
+                  padding: '6px 14px',
+                  borderRadius: '8px',
+                  background: '#ffffff',
+                  border: '1px solid #fecdd3',
+                  color: '#be123c',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  cursor: 'pointer'
+                }}
+              >
+                Tentar Novamente
+              </button>
             </div>
           )}
 
-          {/* Academic Integrity Pledge */}
-          <div className="mb-6 p-4 rounded-2xl bg-amber-50/70 border border-amber-200">
-            <label className="flex items-start gap-3 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={pledgeAccepted}
-                onChange={e => setPledgeAccepted(e.target.checked)}
-                className="mt-1 w-4 h-4 rounded text-sky-600 focus:ring-sky-500 border-slate-300 cursor-pointer shrink-0"
-              />
-              <span className="text-xs text-slate-700 leading-relaxed">
-                <strong className="text-amber-900 block font-semibold mb-0.5">Termo de Integridade Acadêmica e Responsabilidade Escolar:</strong>
-                Declaro que compreendi todas as regras de realização desta prova. Comprometo-me a realizar esta avaliação com estrita honestidade, de maneira estritamente individual, sem consulta a materiais não permitidos e sem comunicação com terceiros.
-              </span>
-            </label>
+          {/* Academic Integrity Pledge Box */}
+          <div
+            onClick={() => setPledgeAccepted(!pledgeAccepted)}
+            style={{
+              padding: '18px 20px',
+              borderRadius: '18px',
+              background: pledgeAccepted
+                ? 'linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%)'
+                : 'linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%)',
+              border: `1.5px solid ${pledgeAccepted ? '#86efac' : '#fde68a'}`,
+              boxShadow: pledgeAccepted ? '0 4px 14px rgba(16, 185, 129, 0.12)' : 'none',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: '14px',
+              transition: 'all 0.2s ease'
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={pledgeAccepted}
+              onChange={e => {
+                e.stopPropagation()
+                setPledgeAccepted(e.target.checked)
+              }}
+              style={{
+                width: '20px',
+                height: '20px',
+                accentColor: '#059669',
+                marginTop: '3px',
+                cursor: 'pointer'
+              }}
+            />
+            <div style={{ flex: 1, fontSize: '13px', lineHeight: 1.5, color: '#334155' }}>
+              <strong style={{
+                display: 'block',
+                color: pledgeAccepted ? '#166534' : '#92400e',
+                fontSize: '13.5px',
+                fontWeight: 800,
+                marginBottom: '3px'
+              }}>
+                Termo de Integridade Acadêmica e Responsabilidade Escolar:
+              </strong>
+              Declaro que compreendi todas as regras desta avaliação. Comprometo-me a realizar este exame com integridade e dedicação, de forma estritamente individual, sem consulta a materiais não autorizados e sem comunicação com terceiros.
+            </div>
           </div>
 
-          {/* Action Button */}
-          <div className="flex items-center justify-between pt-4 border-t border-slate-100">
+          {/* Bottom Navigation & Start Button */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            paddingTop: '16px',
+            borderTop: '1px solid #f1f5f9',
+            flexWrap: 'wrap',
+            gap: '12px'
+          }}>
             <button
-              onClick={() => router.push('/provas-online')}
-              className="px-5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-semibold transition-colors border border-slate-200"
+              onClick={() => router.push(returnUrl || '/provas-online')}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '11px 22px',
+                borderRadius: '12px',
+                background: '#ffffff',
+                border: '1.5px solid #cbd5e1',
+                color: '#475569',
+                fontSize: '13px',
+                fontWeight: 700,
+                cursor: 'pointer',
+                transition: 'all 0.15s'
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.borderColor = '#94a3b8'
+                e.currentTarget.style.color = '#0f172a'
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.borderColor = '#cbd5e1'
+                e.currentTarget.style.color = '#475569'
+              }}
             >
+              <ArrowLeft size={16} />
               Voltar
             </button>
 
             <button
               onClick={handleStartExam}
               disabled={startingLoading || !isOnline || !pledgeAccepted || (prova.exigeCodigoAcesso && !pinCode.trim())}
-              className="px-8 py-3.5 rounded-xl bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white font-bold text-sm shadow-sm flex items-center gap-3 transition-colors cursor-pointer"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '10px',
+                padding: '13px 32px',
+                borderRadius: '14px',
+                background: (!pledgeAccepted || startingLoading)
+                  ? '#cbd5e1'
+                  : 'linear-gradient(135deg, #10b981, #059669)',
+                border: 'none',
+                color: '#ffffff',
+                fontSize: '14px',
+                fontWeight: 800,
+                cursor: (!pledgeAccepted || startingLoading) ? 'not-allowed' : 'pointer',
+                boxShadow: (!pledgeAccepted || startingLoading) ? 'none' : '0 6px 20px rgba(16, 185, 129, 0.35)',
+                transition: 'all 0.2s ease'
+              }}
+              onMouseEnter={e => {
+                if (pledgeAccepted && !startingLoading) {
+                  e.currentTarget.style.transform = 'translateY(-2px)'
+                  e.currentTarget.style.boxShadow = '0 8px 24px rgba(16, 185, 129, 0.45)'
+                }
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.transform = 'translateY(0)'
+                if (pledgeAccepted && !startingLoading) {
+                  e.currentTarget.style.boxShadow = '0 6px 20px rgba(16, 185, 129, 0.35)'
+                }
+              }}
             >
               {startingLoading ? (
                 <>
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                  Iniciando tentativa...
+                  <RefreshCw size={18} className="animate-spin" />
+                  Carregando Sala...
                 </>
               ) : (
                 <>
+                  <Flame size={18} />
                   Iniciar Prova Agora
-                  <ChevronRight className="w-5 h-5" />
+                  <ChevronRight size={18} />
                 </>
               )}
             </button>
@@ -945,96 +1468,322 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome }: 
   }
 
   // =========================================================================
-  // VIEW 3: ACTIVE EXAM ROOM (TAKING THE EXAM)
+  // VIEW 3: ACTIVE EXAM ROOM (REALIZAÇÃO DA PROVA)
   // =========================================================================
   const isTimeCritical = timeRemainingSeconds <= 300 // under 5 min
   const isFlagged = flaggedIds.has(currentQuestion.id)
   const currentAnswer = respostas[currentQuestion.id]
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] text-slate-900 flex flex-col pb-16">
-      {/* 1. STICKY TOPBAR */}
-      <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200 px-4 py-3 shadow-xs">
-        <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
-          {/* Left: Title & Subject */}
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="w-9 h-9 rounded-xl bg-sky-50 border border-sky-200 text-sky-600 flex items-center justify-center shrink-0">
-              <FileCheck2 className="w-5 h-5" />
+    <div style={{ minHeight: '100vh', background: '#f8fafc', color: '#0f172a', display: 'flex', flexDirection: 'column', paddingBottom: '60px' }}>
+      
+      {/* 1. STICKY TOPBAR COM GRADIENTE ULTRA MODERNO */}
+      <header style={{
+        position: 'sticky',
+        top: 0,
+        zIndex: 40,
+        background: 'linear-gradient(135deg, #070d1e 0%, #0d1a3a 35%, #18153d 70%, #0b112c 100%)',
+        backdropFilter: 'blur(20px)',
+        WebkitBackdropFilter: 'blur(20px)',
+        borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+        padding: '12px 20px',
+        boxShadow: '0 4px 24px -2px rgba(0, 0, 0, 0.4), inset 0 1px 0 0 rgba(255, 255, 255, 0.1)'
+      }}>
+        {/* Linha decorativa de brilho ultra moderna na borda inferior */}
+        <div style={{
+          position: 'absolute',
+          bottom: 0,
+          left: 0,
+          right: 0,
+          height: '2px',
+          background: 'linear-gradient(90deg, #0ea5e9 0%, #6366f1 35%, #a855f7 70%, #ec4899 100%)',
+          opacity: 0.85
+        }} />
+
+        <div style={{ maxWidth: '1440px', margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px' }}>
+          
+          {/* Left: School Logo & Exam Title */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px', minWidth: 0, flex: '1 1 auto' }}>
+            {/* Logo do Colégio Impacto */}
+            <div style={{
+              width: '42px',
+              height: '42px',
+              borderRadius: '12px',
+              background: 'linear-gradient(145deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0.05) 100%)',
+              border: '1px solid rgba(255, 255, 255, 0.2)',
+              boxShadow: '0 4px 14px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.25)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '4px',
+              flexShrink: 0,
+              backdropFilter: 'blur(10px)'
+            }}>
+              <img
+                src="/logo-impacto-clean.png"
+                alt="Colégio Impacto"
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'contain',
+                  filter: 'drop-shadow(0 2px 4px rgba(0, 0, 0, 0.4))'
+                }}
+              />
             </div>
-            <div className="min-w-0">
-              <h2 className="text-sm font-bold text-slate-900 truncate">{prova.titulo}</h2>
-              <span className="text-xs text-slate-500 truncate block">{prova.disciplinaNome || prova.disciplina}</span>
+
+            {/* School Tag / Branding */}
+            <div className="hidden sm:flex" style={{ flexDirection: 'column', gap: '1px', flexShrink: 0 }}>
+              <span style={{
+                fontSize: '11px',
+                fontWeight: 900,
+                letterSpacing: '0.08em',
+                color: '#38bdf8',
+                textTransform: 'uppercase',
+                textShadow: '0 0 12px rgba(56, 189, 248, 0.4)'
+              }}>
+                Colégio Impacto
+              </span>
+              <span style={{
+                fontSize: '9.5px',
+                fontWeight: 700,
+                color: 'rgba(255, 255, 255, 0.6)',
+                letterSpacing: '0.05em',
+                textTransform: 'uppercase'
+              }}>
+                Ambiente de Avaliação
+              </span>
+            </div>
+
+            {/* Subtle Divider */}
+            <div className="hidden sm:block" style={{
+              width: '1px',
+              height: '28px',
+              background: 'rgba(255, 255, 255, 0.15)',
+              flexShrink: 0,
+              margin: '0 2px'
+            }} />
+
+            {/* Exam Title & Discipline */}
+            <div style={{ minWidth: 0, flex: '1 1 auto' }}>
+              <h2 style={{
+                fontSize: '14.5px',
+                fontWeight: 800,
+                color: '#ffffff',
+                margin: 0,
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                letterSpacing: '-0.01em',
+                lineHeight: 1.25,
+                textShadow: '0 1px 3px rgba(0, 0, 0, 0.5)'
+              }} title={prova.titulo}>
+                {prova.titulo}
+              </h2>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '2px' }}>
+                <span style={{
+                  fontSize: '12px',
+                  color: '#94a3b8',
+                  fontWeight: 600,
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis'
+                }}>
+                  {prova.disciplinaNome || prova.disciplina}
+                </span>
+                {prova.finalidade && (
+                  <span style={{
+                    fontSize: '9.5px',
+                    fontWeight: 700,
+                    color: '#bae6fd',
+                    background: 'rgba(14, 165, 233, 0.18)',
+                    border: '1px solid rgba(56, 189, 248, 0.35)',
+                    padding: '1px 7px',
+                    borderRadius: '6px',
+                    textTransform: 'uppercase'
+                  }} className="hidden md:inline">
+                    {prova.finalidade === 'avaliacao' ? 'Avaliação' : prova.finalidade}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
 
-          {/* Center: Save Status & Sync */}
-          <div className="hidden md:flex items-center gap-2">
+          {/* Center: Autosave Status Pill */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
             {saveStatus === 'saved' && (
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
-                <Check className="w-3.5 h-3.5 text-emerald-600" />
+              <span style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '5px 13px',
+                borderRadius: '20px',
+                fontSize: '11.5px',
+                fontWeight: 700,
+                background: 'rgba(16, 185, 129, 0.16)',
+                color: '#34d399',
+                border: '1px solid rgba(52, 211, 153, 0.4)',
+                boxShadow: '0 0 14px rgba(16, 185, 129, 0.2)',
+                backdropFilter: 'blur(8px)',
+                letterSpacing: '0.01em'
+              }}>
+                <Check size={13} strokeWidth={3} color="#34d399" />
                 Salvo {lastSavedAt && `(${lastSavedAt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })})`}
               </span>
             )}
             {saveStatus === 'saving' && (
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-sky-50 text-sky-700 border border-sky-200">
-                <RefreshCw className="w-3.5 h-3.5 animate-spin text-sky-600" />
+              <span style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '5px 13px',
+                borderRadius: '20px',
+                fontSize: '11.5px',
+                fontWeight: 700,
+                background: 'rgba(14, 165, 233, 0.18)',
+                color: '#38bdf8',
+                border: '1px solid rgba(56, 189, 248, 0.45)',
+                boxShadow: '0 0 14px rgba(14, 165, 233, 0.25)',
+                backdropFilter: 'blur(8px)',
+                letterSpacing: '0.01em'
+              }}>
+                <RefreshCw size={13} className="animate-spin" color="#38bdf8" />
                 Salvando respostas...
               </span>
             )}
             {saveStatus === 'offline_queued' && (
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200">
-                <WifiOff className="w-3.5 h-3.5 text-amber-600" />
+              <span style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '5px 13px',
+                borderRadius: '20px',
+                fontSize: '11.5px',
+                fontWeight: 700,
+                background: 'rgba(245, 158, 11, 0.18)',
+                color: '#fbbf24',
+                border: '1px solid rgba(251, 191, 36, 0.45)',
+                boxShadow: '0 0 14px rgba(245, 158, 11, 0.22)',
+                backdropFilter: 'blur(8px)',
+                letterSpacing: '0.01em'
+              }}>
+                <WifiOff size={13} color="#fbbf24" />
                 Sem conexão — {pendingSyncCount} alterações locais
               </span>
             )}
             {saveStatus === 'error' && (
               <button
                 onClick={() => syncPendingAnswers()}
-                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100 cursor-pointer"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '5px 13px',
+                  borderRadius: '20px',
+                  fontSize: '11.5px',
+                  fontWeight: 700,
+                  background: 'rgba(239, 68, 68, 0.22)',
+                  color: '#f87171',
+                  border: '1px solid rgba(248, 113, 113, 0.5)',
+                  boxShadow: '0 0 14px rgba(239, 68, 68, 0.25)',
+                  backdropFilter: 'blur(8px)',
+                  cursor: 'pointer',
+                  letterSpacing: '0.01em',
+                  transition: 'all 0.15s ease'
+                }}
               >
-                <AlertCircle className="w-3.5 h-3.5 text-rose-600" />
-                Falha ao salvar — Tentar novamente
+                <AlertCircle size={13} color="#f87171" />
+                Falha ao sincronizar • Clique para reenviar
               </button>
             )}
           </div>
 
-          {/* Right: Timer & Final Submit Button */}
-          <div className="flex items-center gap-3">
-            {/* Sticky Timer */}
-            <div
-              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl font-mono text-sm font-bold border transition-all ${
-                isTimeCritical
-                  ? 'bg-rose-50 border-rose-300 text-rose-700 animate-pulse shadow-xs'
-                  : 'bg-slate-100 border-slate-200 text-slate-800'
-              }`}
-            >
-              <Clock className={`w-4 h-4 ${isTimeCritical ? 'text-rose-600' : 'text-sky-600'}`} />
-              <span>{formatTimer(timeRemainingSeconds)}</span>
+          {/* Right: Timer, Accessibility, Calculator, Fullscreen & Deliver Button */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
+            {/* Countdown Timer */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '7px',
+              padding: '6px 14px',
+              borderRadius: '12px',
+              fontWeight: 800,
+              fontSize: '14px',
+              border: isTimeCritical ? '1.5px solid rgba(239, 68, 68, 0.65)' : '1px solid rgba(255, 255, 255, 0.16)',
+              background: isTimeCritical ? 'rgba(239, 68, 68, 0.22)' : 'rgba(255, 255, 255, 0.08)',
+              color: isTimeCritical ? '#fca5a5' : '#ffffff',
+              letterSpacing: '0.04em',
+              backdropFilter: 'blur(10px)',
+              boxShadow: isTimeCritical ? '0 0 16px rgba(239, 68, 68, 0.35)' : '0 2px 8px rgba(0, 0, 0, 0.2)',
+              transition: 'all 0.2s ease'
+            }}>
+              <Clock size={16} color={isTimeCritical ? '#ef4444' : '#38bdf8'} className={isTimeCritical ? 'animate-pulse' : ''} />
+              <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 800 }}>{formatTimer(timeRemainingSeconds)}</span>
             </div>
 
             {/* Accessibility Font Size Zoom */}
-            <div className="hidden md:flex items-center rounded-xl bg-slate-100 border border-slate-200 p-0.5 text-xs font-bold text-slate-600">
+            <div style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              background: 'rgba(255, 255, 255, 0.07)',
+              border: '1px solid rgba(255, 255, 255, 0.14)',
+              borderRadius: '10px',
+              padding: '2px',
+              backdropFilter: 'blur(10px)'
+            }}>
               <button
                 type="button"
                 onClick={() => setFontSize(prev => prev === 'lg' ? 'base' : 'sm')}
-                title="Diminuir tamanho da fonte (A-)"
-                className={`px-2 py-1 rounded-lg transition-colors cursor-pointer ${fontSize === 'sm' ? 'bg-white text-sky-700 shadow-xs' : 'hover:text-slate-900'}`}
+                title="Diminuir fonte (A-)"
+                style={{
+                  padding: '4px 9px',
+                  borderRadius: '7px',
+                  fontSize: '11px',
+                  fontWeight: 800,
+                  border: 'none',
+                  background: fontSize === 'sm' ? 'rgba(56, 189, 248, 0.3)' : 'transparent',
+                  color: fontSize === 'sm' ? '#38bdf8' : 'rgba(255, 255, 255, 0.7)',
+                  cursor: 'pointer',
+                  boxShadow: fontSize === 'sm' ? '0 1px 4px rgba(0, 0, 0, 0.3)' : 'none',
+                  transition: 'all 0.15s ease'
+                }}
               >
                 A-
               </button>
               <button
                 type="button"
                 onClick={() => setFontSize('base')}
-                title="Tamanho padrão de fonte (A)"
-                className={`px-2 py-1 rounded-lg transition-colors cursor-pointer ${fontSize === 'base' ? 'bg-white text-sky-700 shadow-xs' : 'hover:text-slate-900'}`}
+                title="Fonte padrão (A)"
+                style={{
+                  padding: '4px 9px',
+                  borderRadius: '7px',
+                  fontSize: '11px',
+                  fontWeight: 800,
+                  border: 'none',
+                  background: fontSize === 'base' ? 'rgba(56, 189, 248, 0.3)' : 'transparent',
+                  color: fontSize === 'base' ? '#38bdf8' : 'rgba(255, 255, 255, 0.7)',
+                  cursor: 'pointer',
+                  boxShadow: fontSize === 'base' ? '0 1px 4px rgba(0, 0, 0, 0.3)' : 'none',
+                  transition: 'all 0.15s ease'
+                }}
               >
                 A
               </button>
               <button
                 type="button"
                 onClick={() => setFontSize(prev => prev === 'sm' ? 'base' : 'lg')}
-                title="Aumentar tamanho da fonte (A+)"
-                className={`px-2 py-1 rounded-lg transition-colors cursor-pointer ${fontSize === 'lg' ? 'bg-white text-sky-700 shadow-xs' : 'hover:text-slate-900'}`}
+                title="Aumentar fonte (A+)"
+                style={{
+                  padding: '4px 9px',
+                  borderRadius: '7px',
+                  fontSize: '11px',
+                  fontWeight: 800,
+                  border: 'none',
+                  background: fontSize === 'lg' ? 'rgba(56, 189, 248, 0.3)' : 'transparent',
+                  color: fontSize === 'lg' ? '#38bdf8' : 'rgba(255, 255, 255, 0.7)',
+                  cursor: 'pointer',
+                  boxShadow: fontSize === 'lg' ? '0 1px 4px rgba(0, 0, 0, 0.3)' : 'none',
+                  transition: 'all 0.15s ease'
+                }}
               >
                 A+
               </button>
@@ -1044,33 +1793,89 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome }: 
             <button
               type="button"
               onClick={() => setCalculatorOpen(!calculatorOpen)}
-              title="Calculadora Básica Integrada"
-              className={`p-2 rounded-xl border transition-colors hidden sm:flex items-center gap-1.5 text-xs font-semibold cursor-pointer ${
-                calculatorOpen
-                  ? 'bg-sky-50 text-sky-700 border-sky-300 ring-1 ring-sky-200'
-                  : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
-              }`}
+              title="Calculadora Integrada"
+              style={{
+                padding: '7px 13px',
+                borderRadius: '10px',
+                border: calculatorOpen ? '1.5px solid #38bdf8' : '1px solid rgba(255, 255, 255, 0.15)',
+                background: calculatorOpen ? 'rgba(56, 189, 248, 0.22)' : 'rgba(255, 255, 255, 0.08)',
+                color: calculatorOpen ? '#38bdf8' : '#e2e8f0',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                fontSize: '12px',
+                fontWeight: 700,
+                backdropFilter: 'blur(10px)',
+                boxShadow: calculatorOpen ? '0 0 14px rgba(56, 189, 248, 0.35)' : '0 2px 6px rgba(0, 0, 0, 0.2)',
+                transition: 'all 0.15s ease'
+              }}
             >
-              <Calculator className="w-4 h-4 text-slate-600" />
+              <Calculator size={15} color={calculatorOpen ? '#38bdf8' : '#7dd3fc'} />
               <span className="hidden xl:inline">Calculadora</span>
             </button>
 
             {/* Fullscreen Button */}
             <button
               onClick={enterFullscreen}
-              title="Tela Cheia"
-              className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-900 border border-slate-200 transition-colors hidden sm:flex"
+              title={isFullscreen ? "Sair da Tela Cheia" : "Tela Cheia"}
+              style={{
+                padding: '7px 10px',
+                borderRadius: '10px',
+                border: '1px solid rgba(255, 255, 255, 0.15)',
+                background: 'rgba(255, 255, 255, 0.08)',
+                color: '#e2e8f0',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                backdropFilter: 'blur(10px)',
+                boxShadow: '0 2px 6px rgba(0, 0, 0, 0.2)',
+                transition: 'all 0.15s ease'
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.15)'
+                e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.3)'
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)'
+                e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.15)'
+              }}
             >
-              <Maximize2 className="w-4 h-4" />
+              {isFullscreen ? <Minimize2 size={16} color="#7dd3fc" /> : <Maximize2 size={16} color="#7dd3fc" />}
             </button>
 
-            {/* Deliver Exam Button */}
+            {/* Deliver Exam Top Button */}
             <button
               onClick={() => setSubmitModalOpen(true)}
-              className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-sm flex items-center gap-1.5 transition-colors cursor-pointer"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '7px',
+                padding: '8px 18px',
+                borderRadius: '12px',
+                background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                border: '1px solid rgba(255, 255, 255, 0.25)',
+                color: '#ffffff',
+                fontWeight: 800,
+                fontSize: '12.5px',
+                cursor: 'pointer',
+                boxShadow: '0 4px 14px rgba(16, 185, 129, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.35)',
+                transition: 'all 0.15s ease',
+                letterSpacing: '0.02em',
+                textShadow: '0 1px 2px rgba(0, 0, 0, 0.2)'
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.transform = 'translateY(-1px)'
+                e.currentTarget.style.boxShadow = '0 6px 18px rgba(16, 185, 129, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.45)'
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.transform = 'translateY(0)'
+                e.currentTarget.style.boxShadow = '0 4px 14px rgba(16, 185, 129, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.35)'
+              }}
             >
-              <Send className="w-3.5 h-3.5" />
-              Entregar Prova
+              <Send size={13} color="#ffffff" />
+              <span>Entregar Prova</span>
             </button>
           </div>
         </div>
@@ -1083,17 +1888,26 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome }: 
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
-            className="bg-sky-600 text-white px-4 py-2.5 text-xs flex items-center justify-between shadow-xs"
+            style={{
+              background: '#0284c7',
+              color: '#ffffff',
+              padding: '10px 20px',
+              fontSize: '12.5px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.05)'
+            }}
           >
-            <div className="flex items-center gap-2 max-w-4xl mx-auto w-full">
-              <Bell className="w-4 h-4 shrink-0 animate-bounce" />
-              <span><strong>Aviso do Professor:</strong> {teacherBroadcast}</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', maxWidth: '1200px', margin: '0 auto', width: '100%' }}>
+              <Bell size={16} className="animate-bounce" />
+              <span><strong>Mensagem do Professor:</strong> {teacherBroadcast}</span>
             </div>
             <button
               onClick={() => setTeacherBroadcast(null)}
-              className="text-white/80 hover:text-white text-xs underline cursor-pointer"
+              style={{ background: 'none', border: 'none', color: '#ffffff', textDecoration: 'underline', fontSize: '12px', cursor: 'pointer' }}
             >
-              Fechar
+              Dispensar
             </button>
           </motion.div>
         )}
@@ -1101,62 +1915,55 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome }: 
 
       {/* 3. SUSPENSION FULLSCREEN BLOCKER IF SUSPENDED */}
       {suspensionAlert && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 9999,
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          zIndex: 9999,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '16px',
+          background: 'rgba(15, 23, 42, 0.65)',
+          backdropFilter: 'blur(8px)'
+        }}>
+          <div style={{
+            width: '100%',
+            maxWidth: '480px',
+            background: '#ffffff',
+            borderRadius: '24px',
+            border: '1.5px solid #fecdd3',
+            boxShadow: '0 25px 60px rgba(0, 0, 0, 0.3)',
+            padding: '32px 24px',
+            textAlign: 'center',
             display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '16px',
-            background: 'rgba(15, 23, 42, 0.6)',
-            backdropFilter: 'blur(6px)',
-          }}
-        >
-          <div
-            style={{
-              width: '100%',
-              maxWidth: '480px',
-              margin: '0 auto',
-              background: '#ffffff',
-              borderRadius: '24px',
+            flexDirection: 'column',
+            gap: '16px'
+          }}>
+            <div style={{
+              width: '56px',
+              height: '56px',
+              borderRadius: '18px',
+              background: '#fff1f2',
               border: '1px solid #fecdd3',
-              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
-              padding: '32px 24px',
-              textAlign: 'center',
+              color: '#e11d48',
+              margin: '0 auto',
               display: 'flex',
-              flexDirection: 'column',
-              gap: '14px',
-            }}
-          >
-            <div
-              style={{
-                width: '56px',
-                height: '56px',
-                borderRadius: '16px',
-                background: '#fff1f2',
-                border: '1px solid #fecdd3',
-                color: '#e11d48',
-                margin: '0 auto',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <Shield className="w-7 h-7" />
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}>
+              <Shield size={28} />
             </div>
-            <h2 className="text-xl font-bold text-slate-900 m-0">Prova Suspensa para Supervisão</h2>
-            <p className="text-slate-600 text-xs m-0 leading-relaxed">
+            <h2 style={{ fontSize: '18px', fontWeight: 900, color: '#0f172a', margin: 0 }}>
+              Sessão Temporariamente Suspensa
+            </h2>
+            <p style={{ fontSize: '13px', color: '#64748b', margin: 0, lineHeight: 1.5 }}>
               {suspensionAlert}
             </p>
-            <p className="text-[11px] text-slate-400 m-0">
-              Aguarde a liberação pelo professor supervisor. O cronômetro da sua prova permanece protegido.
+            <p style={{ fontSize: '11.5px', color: '#94a3b8', margin: 0 }}>
+              O tempo restante da sua prova permanece pausado e protegido no servidor.
             </p>
             <button
-              onClick={() => {
-                syncPendingAnswers()
-              }}
+              onClick={() => syncPendingAnswers()}
               style={{
                 width: '100%',
                 padding: '12px',
@@ -1164,17 +1971,16 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome }: 
                 background: '#f1f5f9',
                 border: '1px solid #cbd5e1',
                 color: '#334155',
-                fontSize: '12px',
-                fontWeight: 600,
+                fontSize: '12.5px',
+                fontWeight: 700,
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                gap: '8px',
+                gap: '8px'
               }}
-              className="hover:bg-slate-200 transition-colors"
             >
-              <RefreshCw className="w-4 h-4 text-sky-600" />
+              <RefreshCw size={15} color="#0284c7" />
               Verificar se já fui liberado
             </button>
           </div>
@@ -1182,28 +1988,67 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome }: 
       )}
 
       {/* 4. MAIN EXAM BODY (Split: Question View + Navigation Palette) */}
-      <div className="max-w-7xl mx-auto w-full px-4 py-6 flex-1 grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Left Column: Current Question Content (8 cols) */}
-        <div className="lg:col-span-8 flex flex-col">
+      <div className="exam-room-grid" style={{
+        maxWidth: '1440px',
+        margin: '0 auto',
+        width: '100%',
+        padding: '24px 20px',
+        flex: 1,
+        display: 'grid',
+        gridTemplateColumns: 'minmax(0, 1fr) 300px',
+        gap: '24px',
+        alignItems: 'start'
+      }}>
+        {/* Left Column: Current Question Content */}
+        <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
           <motion.div
             key={currentQuestion.id}
-            initial={{ opacity: 0, x: -10 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.2 }}
-            className="bg-white border border-slate-200/90 rounded-3xl p-6 md:p-8 shadow-xs flex-1 flex flex-col"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.18 }}
+            style={{
+              background: '#ffffff',
+              border: '1.5px solid #e2e8f0',
+              borderRadius: '24px',
+              padding: '28px 32px',
+              boxShadow: '0 4px 20px rgba(0, 0, 0, 0.03)',
+              display: 'flex',
+              flexDirection: 'column',
+              minHeight: '480px'
+            }}
           >
             {/* Question Header */}
-            <div className="flex items-center justify-between pb-4 border-b border-slate-100 gap-3">
-              <div className="flex items-center gap-3">
-                <span className="w-8 h-8 rounded-xl bg-sky-100 text-sky-700 font-bold font-mono text-sm flex items-center justify-center border border-sky-200">
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              paddingBottom: '16px',
+              borderBottom: '1px solid #f1f5f9',
+              gap: '12px',
+              flexWrap: 'wrap'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <span style={{
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: '12px',
+                  background: '#f0f9ff',
+                  color: '#0284c7',
+                  fontWeight: 900,
+                  fontSize: '15px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  border: '1.5px solid #bae6fd'
+                }}>
                   {currentIndex + 1}
                 </span>
                 <div>
-                  <span className="text-xs font-bold text-slate-700 uppercase tracking-wider block">
+                  <span style={{ fontSize: '12px', fontWeight: 800, color: '#334155', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'block' }}>
                     Questão {currentIndex + 1} de {orderedQuestions.length}
                   </span>
-                  <span className="text-xs text-slate-500 font-mono">
-                    Valor: {(currentQuestion.valorPontos || currentQuestion.pontuacao || 0).toFixed(1)} {((currentQuestion.valorPontos || currentQuestion.pontuacao) === 1) ? 'ponto' : 'pontos'}
+                  <span style={{ fontSize: '12px', color: '#64748b' }}>
+                    Valor: <strong style={{ color: '#0284c7' }}>{(currentQuestion.valorPontos || currentQuestion.pontuacao || 0).toFixed(1)}</strong> {((currentQuestion.valorPontos || currentQuestion.pontuacao) === 1) ? 'ponto' : 'pontos'}
                   </span>
                 </div>
               </div>
@@ -1211,30 +2056,45 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome }: 
               {/* Flag for Review Button */}
               <button
                 onClick={() => handleToggleFlag(currentQuestion.id)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
-                  isFlagged
-                    ? 'bg-amber-50 text-amber-700 border-amber-300 shadow-xs'
-                    : 'bg-slate-100 text-slate-600 border-slate-200 hover:text-slate-900'
-                }`}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '7px 14px',
+                  borderRadius: '10px',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  border: isFlagged ? '1.5px solid #fcd34d' : '1px solid #e2e8f0',
+                  background: isFlagged ? '#fffbeb' : '#f8fafc',
+                  color: isFlagged ? '#b45309' : '#64748b',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s'
+                }}
               >
-                <Bookmark className={`w-3.5 h-3.5 ${isFlagged ? 'fill-amber-500 text-amber-500' : ''}`} />
+                <Bookmark size={14} color={isFlagged ? '#f59e0b' : '#94a3b8'} fill={isFlagged ? '#f59e0b' : 'none'} />
                 {isFlagged ? 'Marcada para Revisar' : 'Marcar para Revisar'}
               </button>
             </div>
 
-            {/* Question Enunciado / Statement */}
-            <div className={`py-6 text-slate-800 leading-relaxed border-b border-slate-100 ${
-              fontSize === 'sm' ? 'text-xs md:text-sm' : fontSize === 'lg' ? 'text-base md:text-lg' : 'text-sm md:text-base'
-            }`}>
-              <HtmlContent html={currentQuestion.enunciado} />
+            {/* Question Statement / Enunciado */}
+            <div style={{
+              padding: '24px 0',
+              borderBottom: '1px solid #f1f5f9',
+              color: '#0f172a',
+              lineHeight: 1.6,
+              fontSize: fontSize === 'sm' ? '13.5px' : fontSize === 'lg' ? '17px' : '15px'
+            }}>
+              <HtmlContent html={currentQuestion.enunciado} style={{ textAlign: 'left' }} />
             </div>
 
             {/* Question Input Section */}
-            <div className="py-6 flex-1">
-              {/* TYPE 1: Single Choice (Multipla Escolha) */}
+            <div style={{ padding: '24px 0', flex: 1 }}>
+              {/* TYPE 1: Single Choice (Múltipla Escolha) */}
               {currentQuestion.tipo === 'multipla_escolha' && (
-                <div className="space-y-3">
-                  <p className="text-xs text-slate-500 font-medium mb-3">Selecione apenas uma alternativa:</p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <p style={{ fontSize: '12.5px', fontWeight: 600, color: '#64748b', margin: '0 0 4px' }}>
+                    Selecione apenas uma alternativa:
+                  </p>
                   {(currentQuestion.alternativas || []).map((alt, altIdx) => {
                     const isSelected = currentAnswer?.alternativaIdSelecionada === alt.id || currentAnswer?.respostaOpcaoId === alt.id
                     const letter = String.fromCharCode(65 + altIdx)
@@ -1243,25 +2103,57 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome }: 
                       <div
                         key={alt.id}
                         onClick={() => handleSelectSingleChoice(currentQuestion.id, alt.id)}
-                        className={`group p-4 rounded-2xl border transition-all cursor-pointer flex items-start gap-3.5 ${
-                          isSelected
-                            ? 'bg-sky-50 border-sky-300 ring-1 ring-sky-200 shadow-xs'
-                            : 'bg-slate-50 border-slate-200 hover:border-slate-300 hover:bg-slate-100/60'
-                        }`}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '14px',
+                          padding: '12px 18px',
+                          borderRadius: '16px',
+                          border: isSelected ? '2px solid #0284c7' : '1.5px solid #e2e8f0',
+                          background: isSelected ? '#f0f9ff' : '#ffffff',
+                          boxShadow: isSelected ? '0 4px 12px rgba(2, 132, 199, 0.12)' : '0 1px 3px rgba(0,0,0,0.02)',
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease'
+                        }}
+                        onMouseEnter={e => {
+                          if (!isSelected) {
+                            e.currentTarget.style.borderColor = '#bae6fd'
+                            e.currentTarget.style.background = '#f8fafc'
+                          }
+                        }}
+                        onMouseLeave={e => {
+                          if (!isSelected) {
+                            e.currentTarget.style.borderColor = '#e2e8f0'
+                            e.currentTarget.style.background = '#ffffff'
+                          }
+                        }}
                       >
-                        <div
-                          className={`w-7 h-7 rounded-xl flex items-center justify-center font-bold text-xs font-mono transition-all shrink-0 mt-0.5 ${
-                            isSelected
-                              ? 'bg-sky-600 text-white font-bold'
-                              : 'bg-white text-slate-600 border border-slate-200 group-hover:bg-slate-200'
-                          }`}
-                        >
+                        <div style={{
+                          width: '32px',
+                          height: '32px',
+                          borderRadius: '10px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontWeight: 800,
+                          fontSize: '13px',
+                          background: isSelected ? '#0284c7' : '#f1f5f9',
+                          color: isSelected ? '#ffffff' : '#475569',
+                          border: isSelected ? 'none' : '1px solid #cbd5e1',
+                          flexShrink: 0,
+                          transition: 'all 0.15s'
+                        }}>
                           {letter}
                         </div>
-                        <div className={`flex-1 leading-relaxed pt-0.5 text-slate-800 ${
-                          fontSize === 'sm' ? 'text-xs' : fontSize === 'lg' ? 'text-base md:text-lg' : 'text-sm'
-                        }`}>
-                          <HtmlContent html={alt.texto} />
+                        <div style={{
+                          flex: 1,
+                          fontSize: fontSize === 'sm' ? '13px' : fontSize === 'lg' ? '16px' : '14px',
+                          color: isSelected ? '#0369a1' : '#1e293b',
+                          fontWeight: isSelected ? 600 : 400,
+                          lineHeight: 1.5,
+                          textAlign: 'left'
+                        }}>
+                          <HtmlContent html={alt.texto} style={{ textAlign: 'left' }} />
                         </div>
                       </div>
                     )
@@ -1269,12 +2161,14 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome }: 
                 </div>
               )}
 
-              {/* TYPE 2: Multiple Choice (Multipla Seleção) */}
+              {/* TYPE 2: Multiple Choice (Múltipla Seleção) */}
               {currentQuestion.tipo === 'multipla_selecao' && (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between mb-3 text-xs">
-                    <p className="text-slate-500 font-medium">Selecione todas as alternativas corretas:</p>
-                    <span className="text-sky-700 font-mono font-medium">
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                    <p style={{ fontSize: '12.5px', fontWeight: 600, color: '#64748b', margin: 0 }}>
+                      Selecione todas as alternativas corretas:
+                    </p>
+                    <span style={{ fontSize: '11.5px', fontWeight: 700, color: '#0284c7' }}>
                       {currentQuestion.permitePontuacaoParcial ? 'Pontuação parcial admitida' : 'Exige todas as corretas'}
                     </span>
                   </div>
@@ -1287,26 +2181,42 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome }: 
                       <div
                         key={alt.id}
                         onClick={() => handleToggleMultipleChoice(currentQuestion.id, alt.id)}
-                        className={`group p-4 rounded-2xl border transition-all cursor-pointer flex items-start gap-3.5 ${
-                          isSelected
-                            ? 'bg-sky-50 border-sky-300 ring-1 ring-sky-200 shadow-xs'
-                            : 'bg-slate-50 border-slate-200 hover:border-slate-300 hover:bg-slate-100/60'
-                        }`}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '14px',
+                          padding: '12px 18px',
+                          borderRadius: '16px',
+                          border: isSelected ? '2px solid #0284c7' : '1.5px solid #e2e8f0',
+                          background: isSelected ? '#f0f9ff' : '#ffffff',
+                          boxShadow: isSelected ? '0 4px 12px rgba(2, 132, 199, 0.12)' : '0 1px 3px rgba(0,0,0,0.02)',
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease'
+                        }}
                       >
-                        <div
-                          className={`w-6 h-6 rounded-lg flex items-center justify-center text-xs transition-all shrink-0 mt-0.5 border ${
-                            isSelected
-                              ? 'bg-sky-600 border-sky-600 text-white'
-                              : 'bg-white border-slate-300 text-transparent'
-                          }`}
-                        >
-                          <Check className="w-4 h-4 stroke-[3]" />
+                        <div style={{
+                          width: '28px',
+                          height: '28px',
+                          borderRadius: '8px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          background: isSelected ? '#0284c7' : '#ffffff',
+                          color: isSelected ? '#ffffff' : '#64748b',
+                          border: isSelected ? 'none' : '1.5px solid #cbd5e1',
+                          flexShrink: 0
+                        }}>
+                          {isSelected ? <Check size={16} strokeWidth={3} /> : <span style={{ fontSize: '12px', fontWeight: 800 }}>{letter}</span>}
                         </div>
-                        <div className={`flex-1 leading-relaxed pt-0.5 text-slate-800 ${
-                          fontSize === 'sm' ? 'text-xs' : fontSize === 'lg' ? 'text-base md:text-lg' : 'text-sm'
-                        }`}>
-                          <span className="font-mono font-bold text-slate-500 mr-2">{letter})</span>
-                          <HtmlContent html={alt.texto} />
+                        <div style={{
+                          flex: 1,
+                          fontSize: fontSize === 'sm' ? '13px' : fontSize === 'lg' ? '16px' : '14px',
+                          color: isSelected ? '#0369a1' : '#1e293b',
+                          fontWeight: isSelected ? 600 : 400,
+                          lineHeight: 1.5,
+                          textAlign: 'left'
+                        }}>
+                          <HtmlContent html={alt.texto} style={{ textAlign: 'left' }} />
                         </div>
                       </div>
                     )
@@ -1314,44 +2224,95 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome }: 
                 </div>
               )}
 
-              {/* TYPE 3: True / False (Verdadeiro ou Falso) */}
+              {/* TYPE 3: True / False (Verdadeiro ou Falso) - PERFECTED DESIGN */}
               {currentQuestion.tipo === 'verdadeiro_falso' && (
-                <div className="space-y-3">
-                  <p className="text-xs text-slate-500 font-medium mb-3">Classifique cada afirmação como Verdadeira (V) ou Falsa (F):</p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <p style={{ fontSize: '12.5px', fontWeight: 600, color: '#64748b', margin: '0 0 4px' }}>
+                    Classifique cada afirmação como Verdadeira (V) ou Falsa (F):
+                  </p>
                   {((currentQuestion.itensVF || currentQuestion.itensVouF || []) as any[]).map((item, itemIdx) => {
                     const itemAnswer = (currentAnswer?.itensVouF || []).find(i => i.id === item.id)
 
                     return (
                       <div
                         key={item.id}
-                        className="p-4 rounded-2xl bg-slate-50 border border-slate-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4"
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '14px 18px',
+                          borderRadius: '16px',
+                          background: itemAnswer?.respostaAluno !== undefined ? '#f8fafc' : '#ffffff',
+                          border: `1.5px solid ${itemAnswer?.respostaAluno !== undefined ? '#cbd5e1' : '#e2e8f0'}`,
+                          gap: '16px',
+                          transition: 'all 0.15s ease'
+                        }}
                       >
-                        <div className="flex-1 text-sm text-slate-800 leading-relaxed">
-                          <span className="font-mono font-bold text-slate-500 mr-2">{itemIdx + 1}.</span>
-                          <HtmlContent html={item.afirmacao} />
+                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', flex: 1 }}>
+                          <span style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            minWidth: '26px',
+                            height: '26px',
+                            borderRadius: '8px',
+                            background: '#f1f5f9',
+                            border: '1px solid #e2e8f0',
+                            color: '#475569',
+                            fontWeight: 800,
+                            fontSize: '12px',
+                            marginTop: '1px'
+                          }}>
+                            {itemIdx + 1}
+                          </span>
+                          <div style={{ flex: 1, fontSize: '14px', color: '#0f172a', lineHeight: 1.5, textAlign: 'left' }}>
+                            <HtmlContent html={item.afirmacao} style={{ textAlign: 'left' }} />
+                          </div>
                         </div>
 
-                        <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
                           <button
                             type="button"
                             onClick={() => handleToggleTrueFalse(currentQuestion.id, item.id, true)}
-                            className={`px-4 py-2 rounded-xl text-xs font-bold font-mono transition-all border cursor-pointer ${
-                              itemAnswer?.respostaAluno === true
-                                ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
-                                : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
-                            }`}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              padding: '8px 16px',
+                              borderRadius: '10px',
+                              border: itemAnswer?.respostaAluno === true ? '1.5px solid #10b981' : '1px solid #cbd5e1',
+                              background: itemAnswer?.respostaAluno === true ? '#10b981' : '#ffffff',
+                              color: itemAnswer?.respostaAluno === true ? '#ffffff' : '#334155',
+                              fontWeight: 800,
+                              fontSize: '12px',
+                              cursor: 'pointer',
+                              boxShadow: itemAnswer?.respostaAluno === true ? '0 2px 8px rgba(16, 185, 129, 0.3)' : 'none',
+                              transition: 'all 0.15s'
+                            }}
                           >
+                            <Check size={13} strokeWidth={3} />
                             V (Verdadeiro)
                           </button>
                           <button
                             type="button"
                             onClick={() => handleToggleTrueFalse(currentQuestion.id, item.id, false)}
-                            className={`px-4 py-2 rounded-xl text-xs font-bold font-mono transition-all border cursor-pointer ${
-                              itemAnswer?.respostaAluno === false
-                                ? 'bg-rose-600 text-white border-rose-600 shadow-xs'
-                                : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
-                            }`}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              padding: '8px 16px',
+                              borderRadius: '10px',
+                              border: itemAnswer?.respostaAluno === false ? '1.5px solid #ef4444' : '1px solid #cbd5e1',
+                              background: itemAnswer?.respostaAluno === false ? '#ef4444' : '#ffffff',
+                              color: itemAnswer?.respostaAluno === false ? '#ffffff' : '#334155',
+                              fontWeight: 800,
+                              fontSize: '12px',
+                              cursor: 'pointer',
+                              boxShadow: itemAnswer?.respostaAluno === false ? '0 2px 8px rgba(239, 68, 68, 0.3)' : 'none',
+                              transition: 'all 0.15s'
+                            }}
                           >
+                            <X size={13} strokeWidth={3} />
                             F (Falso)
                           </button>
                         </div>
@@ -1363,41 +2324,89 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome }: 
 
               {/* TYPE 4: Essay (Dissertativa) */}
               {currentQuestion.tipo === 'dissertativa' && (
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between text-xs text-slate-500">
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '12.5px', color: '#64748b' }}>
                     <span>Digite sua resposta fundamentada no campo abaixo:</span>
                     {currentQuestion.limitePalavras && (
-                      <span className="font-mono text-sky-700 font-medium">
+                      <span style={{ fontWeight: 700, color: '#0284c7' }}>
                         Limite sugerido: {currentQuestion.limitePalavras} palavras
                       </span>
                     )}
                   </div>
 
                   <textarea
-                    rows={8}
+                    rows={7}
                     value={currentAnswer?.textoDissertativo || ''}
                     onChange={e => handleEssayChange(currentQuestion.id, e.target.value)}
-                    placeholder="Escreva sua resolução aqui de forma clara e objetiva..."
-                    className="w-full bg-slate-50 border border-slate-200 focus:border-sky-500 focus:bg-white rounded-2xl p-4 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-100 transition-all resize-y leading-relaxed font-sans"
+                    placeholder="Escreva sua resolução aqui de forma clara e fundamentada..."
+                    style={{
+                      width: '100%',
+                      minHeight: '160px',
+                      padding: '16px',
+                      borderRadius: '16px',
+                      background: '#ffffff',
+                      border: '1.5px solid #cbd5e1',
+                      color: '#0f172a',
+                      fontSize: fontSize === 'sm' ? '13px' : fontSize === 'lg' ? '16px' : '14px',
+                      lineHeight: '1.6',
+                      resize: 'vertical',
+                      outline: 'none',
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
+                      transition: 'border-color 0.15s, box-shadow 0.15s'
+                    }}
+                    onFocus={e => {
+                      e.currentTarget.style.borderColor = '#0284c7'
+                      e.currentTarget.style.boxShadow = '0 0 0 3px rgba(2, 132, 199, 0.15)'
+                    }}
+                    onBlur={e => {
+                      e.currentTarget.style.borderColor = '#cbd5e1'
+                      e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.02)'
+                    }}
                   />
 
                   {/* Word / Char counter */}
-                  <div className="flex items-center justify-between text-xs text-slate-400">
-                    <span>
-                      {(currentAnswer?.textoDissertativo || '').trim().split(/\s+/).filter(Boolean).length} palavras • {(currentAnswer?.textoDissertativo || '').length} caracteres
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '12px', color: '#64748b' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <strong style={{ color: '#334155' }}>
+                        {(currentAnswer?.textoDissertativo || '').trim().split(/\s+/).filter(Boolean).length} palavras
+                      </strong>
+                      <span>•</span>
+                      <span>{(currentAnswer?.textoDissertativo || '').length} caracteres</span>
+                    </div>
+                    <span style={{ color: '#059669', fontSize: '11.5px', fontWeight: 600 }}>
+                      ✓ Salvamento contínuo durante a digitação
                     </span>
-                    <span className="text-slate-400 italic">Salvamento contínuo durante a digitação</span>
                   </div>
 
-                  {/* Evaluation Rubrics info for student transparency */}
+                  {/* Evaluation Rubrics info */}
                   {currentQuestion.criteriosAvaliacao && currentQuestion.criteriosAvaliacao.length > 0 && (
-                    <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-xs">
-                      <span className="font-semibold text-slate-700 block mb-2">Critérios de Correção da Questão:</span>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div style={{
+                      marginTop: '8px',
+                      padding: '14px 18px',
+                      borderRadius: '14px',
+                      background: '#f8fafc',
+                      border: '1px solid #e2e8f0'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
+                        <FileText size={15} color="#0284c7" />
+                        <span style={{ fontSize: '12.5px', fontWeight: 800, color: '#0f172a' }}>
+                          Critérios de Correção da Questão:
+                        </span>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '8px' }}>
                         {currentQuestion.criteriosAvaliacao.map(crit => (
-                          <div key={crit.id} className="flex items-center justify-between p-2 rounded-lg bg-white border border-slate-200">
-                            <span className="text-slate-700">{crit.descricao}</span>
-                            <span className="text-sky-700 font-mono font-semibold">{(crit.pesoPontos || crit.pontosMaximos || 0).toFixed(1)} pts</span>
+                          <div key={crit.id} style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '8px 12px',
+                            borderRadius: '10px',
+                            background: '#ffffff',
+                            border: '1px solid #e2e8f0',
+                            fontSize: '12px'
+                          }}>
+                            <span style={{ color: '#334155' }}>{crit.descricao}</span>
+                            <strong style={{ color: '#0284c7' }}>{(crit.pesoPontos || crit.pontosMaximos || 0).toFixed(1)} pts</strong>
                           </div>
                         ))}
                       </div>
@@ -1410,7 +2419,7 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome }: 
             {/* Navigation Bottom Footer */}
             <div style={{
               paddingTop: '20px',
-              borderTop: '1px solid #e2e8f0',
+              borderTop: '1px solid #f1f5f9',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
@@ -1425,16 +2434,16 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome }: 
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: '8px',
-                  height: '40px',
+                  height: '42px',
                   padding: '0 20px',
-                  borderRadius: '10px',
+                  borderRadius: '12px',
                   background: '#ffffff',
-                  border: '1px solid #cbd5e1',
+                  border: '1.5px solid #cbd5e1',
                   color: (currentIndex === 0 || !!prova.bloquearRetorno) ? '#94a3b8' : '#334155',
                   fontSize: '13px',
-                  fontWeight: 700,
+                  fontWeight: 800,
                   cursor: (currentIndex === 0 || !!prova.bloquearRetorno) ? 'not-allowed' : 'pointer',
-                  opacity: (currentIndex === 0 || !!prova.bloquearRetorno) ? 0.5 : 1,
+                  opacity: (currentIndex === 0 || !!prova.bloquearRetorno) ? 0.4 : 1,
                   boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
                   transition: 'all 0.15s'
                 }}
@@ -1443,7 +2452,15 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome }: 
                 Anterior
               </button>
 
-              <span style={{ fontSize: '12px', color: '#64748b', fontWeight: 700, fontFamily: 'monospace' }}>
+              <span style={{
+                fontSize: '12.5px',
+                color: '#64748b',
+                fontWeight: 800,
+                background: '#f8fafc',
+                padding: '6px 14px',
+                borderRadius: '10px',
+                border: '1px solid #e2e8f0'
+              }}>
                 {currentIndex + 1} de {orderedQuestions.length}
               </span>
 
@@ -1455,18 +2472,20 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome }: 
                     display: 'inline-flex',
                     alignItems: 'center',
                     gap: '8px',
-                    height: '40px',
-                    padding: '0 22px',
-                    borderRadius: '10px',
-                    background: '#0284c7',
+                    height: '42px',
+                    padding: '0 24px',
+                    borderRadius: '12px',
+                    background: 'linear-gradient(135deg, #0284c7, #0369a1)',
                     border: 'none',
                     color: '#ffffff',
                     fontSize: '13px',
                     fontWeight: 800,
                     cursor: 'pointer',
-                    boxShadow: '0 2px 6px rgba(2, 132, 199, 0.28)',
+                    boxShadow: '0 2px 8px rgba(2, 132, 199, 0.3)',
                     transition: 'all 0.15s'
                   }}
+                  onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-1px)'}
+                  onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
                 >
                   Próxima Questão
                   <ChevronRight size={16} />
@@ -1479,10 +2498,10 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome }: 
                     display: 'inline-flex',
                     alignItems: 'center',
                     gap: '8px',
-                    height: '40px',
+                    height: '42px',
                     padding: '0 24px',
-                    borderRadius: '10px',
-                    background: '#10b981',
+                    borderRadius: '12px',
+                    background: 'linear-gradient(135deg, #10b981, #059669)',
                     border: 'none',
                     color: '#ffffff',
                     fontSize: '13px',
@@ -1491,6 +2510,8 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome }: 
                     boxShadow: '0 2px 8px rgba(16, 185, 129, 0.3)',
                     transition: 'all 0.15s'
                   }}
+                  onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-1px)'}
+                  onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
                 >
                   Revisar e Entregar
                   <Send size={15} />
@@ -1500,24 +2521,59 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome }: 
           </motion.div>
         </div>
 
-        {/* Right Column: Question Palette Drawer / Summary (4 cols) */}
-        <div className="lg:col-span-4 flex flex-col gap-4">
-          <div className="bg-white border border-slate-200/90 rounded-3xl p-5 shadow-xs">
-            <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-4 flex items-center justify-between">
-              <span>Navegação de Questões</span>
-              <span className="font-mono text-sky-700">{answeredCount}/{orderedQuestions.length} respondidas</span>
-            </h3>
-
-            {/* Progress Bar */}
-            <div className="w-full bg-slate-100 rounded-full h-2 mb-5 overflow-hidden">
-              <div
-                className="bg-sky-500 h-2 rounded-full transition-all duration-300"
-                style={{ width: `${(answeredCount / orderedQuestions.length) * 100}%` }}
-              />
+        {/* Right Column: Question Navigation Palette (Sticky) */}
+        <div className="exam-room-sidebar" style={{
+          position: 'sticky',
+          top: '80px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '16px'
+        }}>
+          <div style={{
+            background: '#ffffff',
+            border: '1.5px solid #e2e8f0',
+            borderRadius: '24px',
+            padding: '22px',
+            boxShadow: '0 4px 16px rgba(0, 0, 0, 0.03)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '16px'
+          }}>
+            {/* Palette Header */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: '12px', fontWeight: 800, color: '#334155', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                Navegação
+              </span>
+              <span style={{
+                fontSize: '11.5px',
+                fontWeight: 800,
+                color: '#0284c7',
+                background: '#f0f9ff',
+                padding: '3px 8px',
+                borderRadius: '8px',
+                border: '1px solid #bae6fd'
+              }}>
+                {answeredCount}/{orderedQuestions.length} respondidas
+              </span>
             </div>
 
-            {/* Question Quick Access Grid */}
-            <div className="grid grid-cols-5 gap-2 mb-6">
+            {/* Progress Bar */}
+            <div style={{ width: '100%', height: '6px', background: '#f1f5f9', borderRadius: '999px', overflow: 'hidden' }}>
+              <div style={{
+                width: `${(answeredCount / orderedQuestions.length) * 100}%`,
+                height: '100%',
+                background: 'linear-gradient(90deg, #0284c7, #10b981)',
+                borderRadius: '999px',
+                transition: 'width 0.3s ease'
+              }} />
+            </div>
+
+            {/* Question Quick Access Grid (Fixed neat pills) */}
+            <div style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: '8px'
+            }}>
               {orderedQuestions.map((q, idx) => {
                 const ans = respostas[q.id]
                 const vfCount = (q.itensVF || q.itensVouF || []).length
@@ -1530,24 +2586,55 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome }: 
                 const isCurrent = idx === currentIndex
                 const isFlag = flaggedIds.has(q.id)
 
-                let btnClass = 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
-                if (isAnswered) {
-                  btnClass = 'bg-emerald-50 text-emerald-800 border-emerald-300 font-bold'
-                }
-                if (isCurrent) {
-                  btnClass = 'ring-2 ring-sky-500 text-sky-900 font-bold bg-sky-100 border-sky-300'
-                }
-
                 return (
                   <button
                     key={q.id}
+                    type="button"
                     onClick={() => goToQuestion(idx)}
                     disabled={!!prova.bloquearRetorno && idx < currentIndex}
-                    className={`h-10 rounded-xl font-mono text-xs font-semibold border flex items-center justify-center relative transition-all cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed ${btnClass}`}
+                    style={{
+                      width: '44px',
+                      height: '44px',
+                      borderRadius: '12px',
+                      fontSize: '13px',
+                      fontWeight: 800,
+                      cursor: (!!prova.bloquearRetorno && idx < currentIndex) ? 'not-allowed' : 'pointer',
+                      opacity: (!!prova.bloquearRetorno && idx < currentIndex) ? 0.35 : 1,
+                      position: 'relative',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      transition: 'all 0.15s ease',
+                      border: isCurrent
+                        ? '2px solid #0284c7'
+                        : isAnswered
+                        ? '1.5px solid #86efac'
+                        : '1.5px solid #e2e8f0',
+                      background: isCurrent
+                        ? '#e0f2fe'
+                        : isAnswered
+                        ? '#f0fdf4'
+                        : '#f8fafc',
+                      color: isCurrent
+                        ? '#0284c7'
+                        : isAnswered
+                        ? '#15803d'
+                        : '#475569',
+                      boxShadow: isCurrent ? '0 0 0 3px rgba(2, 132, 199, 0.15)' : 'none'
+                    }}
                   >
                     {idx + 1}
                     {isFlag && (
-                      <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-amber-400 rounded-full shadow-xs" />
+                      <span style={{
+                        position: 'absolute',
+                        top: '-3px',
+                        right: '-3px',
+                        width: '10px',
+                        height: '10px',
+                        borderRadius: '50%',
+                        background: '#f59e0b',
+                        border: '2px solid #ffffff'
+                      }} />
                     )}
                   </button>
                 )
@@ -1555,28 +2642,60 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome }: 
             </div>
 
             {/* Legend */}
-            <div className="border-t border-slate-100 pt-4 space-y-2 text-xs">
-              <div className="flex items-center gap-2 text-slate-700">
-                <span className="w-3 h-3 rounded-md bg-emerald-50 border border-emerald-300" />
+            <div style={{
+              borderTop: '1px solid #f1f5f9',
+              paddingTop: '12px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '6px',
+              fontSize: '11.5px'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#166534' }}>
+                <span style={{ width: '10px', height: '10px', borderRadius: '4px', background: '#bbf7d0', border: '1px solid #86efac' }} />
                 <span>Respondida ({answeredCount})</span>
               </div>
-              <div className="flex items-center gap-2 text-slate-500">
-                <span className="w-3 h-3 rounded-md bg-slate-50 border border-slate-200" />
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#64748b' }}>
+                <span style={{ width: '10px', height: '10px', borderRadius: '4px', background: '#f8fafc', border: '1px solid #cbd5e1' }} />
                 <span>Em branco ({blankCount})</span>
               </div>
-              <div className="flex items-center gap-2 text-amber-700">
-                <span className="w-3 h-3 rounded-full bg-amber-400" />
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#b45309' }}>
+                <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#f59e0b' }} />
                 <span>Marcada para revisar ({flaggedIds.size})</span>
               </div>
             </div>
 
-            {/* Ready to submit card */}
-            <div className="mt-6 pt-4 border-t border-slate-100">
+            {/* Final Submit Button */}
+            <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: '12px' }}>
               <button
+                type="button"
                 onClick={() => setSubmitModalOpen(true)}
-                className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-sm flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                style={{
+                  width: '100%',
+                  padding: '12px 16px',
+                  borderRadius: '12px',
+                  background: 'linear-gradient(135deg, #10b981, #059669)',
+                  border: 'none',
+                  color: '#ffffff',
+                  fontSize: '13px',
+                  fontWeight: 800,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 12px rgba(16, 185, 129, 0.25)',
+                  transition: 'transform 0.15s, box-shadow 0.15s'
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.transform = 'translateY(-1px)'
+                  e.currentTarget.style.boxShadow = '0 6px 16px rgba(16, 185, 129, 0.35)'
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.transform = 'translateY(0)'
+                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(16, 185, 129, 0.25)'
+                }}
               >
-                <CheckCircle2 className="w-4 h-4" />
+                <CheckCircle2 size={16} />
                 Finalizar e Entregar Prova
               </button>
             </div>
@@ -1587,19 +2706,17 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome }: 
       {/* 5. SUBMISSION CONFIRMATION MODAL */}
       <AnimatePresence>
         {submitModalOpen && (
-          <div
-            style={{
-              position: 'fixed',
-              inset: 0,
-              zIndex: 9999,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: '16px',
-              background: 'rgba(15, 23, 42, 0.6)',
-              backdropFilter: 'blur(6px)',
-            }}
-          >
+          <div style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 9999,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '16px',
+            background: 'rgba(15, 23, 42, 0.65)',
+            backdropFilter: 'blur(8px)'
+          }}>
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
@@ -1607,95 +2724,90 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome }: 
               style={{
                 width: '100%',
                 maxWidth: '480px',
-                margin: '0 auto',
                 background: '#ffffff',
                 borderRadius: '24px',
-                border: '1px solid #e2e8f0',
-                boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
-                padding: '24px',
+                border: '1.5px solid #e2e8f0',
+                boxShadow: '0 25px 60px rgba(0, 0, 0, 0.25)',
+                padding: '28px',
                 display: 'flex',
                 flexDirection: 'column',
-                gap: '16px',
+                gap: '16px'
               }}
             >
-              <div
-                style={{
-                  width: '48px',
-                  height: '48px',
-                  borderRadius: '16px',
-                  background: '#f0f9ff',
-                  border: '1px solid #bae6fd',
-                  color: '#0284c7',
-                  margin: '0 auto',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                <Send className="w-6 h-6" />
+              <div style={{
+                width: '48px',
+                height: '48px',
+                borderRadius: '16px',
+                background: '#f0fdf4',
+                border: '1px solid #bbf7d0',
+                color: '#15803d',
+                margin: '0 auto',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}>
+                <Send size={22} />
               </div>
 
               <div style={{ textAlign: 'center' }}>
-                <h2 className="text-lg font-bold text-slate-900 m-0">Confirmar Entrega da Avaliação</h2>
-                <p className="text-xs text-slate-500 mt-1 mb-0">
-                  Revise os dados da sua tentativa antes de confirmar o encerramento definitivo:
+                <h2 style={{ fontSize: '18px', fontWeight: 900, color: '#0f172a', margin: '0 0 6px' }}>
+                  Confirmar Entrega da Avaliação
+                </h2>
+                <p style={{ fontSize: '13px', color: '#64748b', margin: 0, lineHeight: 1.5 }}>
+                  Revise o resumo das suas respostas antes de realizar o envio definitivo:
                 </p>
               </div>
 
               {/* Status summary list */}
-              <div
-                style={{
-                  background: '#f8fafc',
-                  border: '1px solid #e2e8f0',
-                  borderRadius: '16px',
-                  padding: '16px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '10px',
-                  fontSize: '12px',
-                }}
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-600">Total de Questões:</span>
-                  <span className="font-bold text-slate-900 font-mono">{orderedQuestions.length}</span>
+              <div style={{
+                background: '#f8fafc',
+                border: '1px solid #e2e8f0',
+                borderRadius: '16px',
+                padding: '16px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '10px',
+                fontSize: '13px'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span style={{ color: '#64748b' }}>Total de Questões:</span>
+                  <strong style={{ color: '#0f172a' }}>{orderedQuestions.length}</strong>
                 </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-600">Questões Respondidas:</span>
-                  <span className="font-bold text-emerald-700 font-mono">{answeredCount}</span>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span style={{ color: '#64748b' }}>Questões Respondidas:</span>
+                  <strong style={{ color: '#15803d' }}>{answeredCount}</strong>
                 </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-600">Questões em Branco:</span>
-                  <span className={`font-bold font-mono ${blankCount > 0 ? 'text-amber-700' : 'text-slate-400'}`}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span style={{ color: '#64748b' }}>Questões em Branco:</span>
+                  <strong style={{ color: blankCount > 0 ? '#b45309' : '#94a3b8' }}>
                     {blankCount}
-                  </span>
+                  </strong>
                 </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-600">Marcadas para Revisão:</span>
-                  <span className="font-bold text-amber-700 font-mono">{flaggedIds.size}</span>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span style={{ color: '#64748b' }}>Marcadas para Revisão:</span>
+                  <strong style={{ color: '#b45309' }}>{flaggedIds.size}</strong>
                 </div>
               </div>
 
               {blankCount > 0 && (
-                <div
-                  style={{
-                    padding: '12px',
-                    borderRadius: '12px',
-                    background: '#fffbeb',
-                    border: '1px solid #fde68a',
-                    color: '#92400e',
-                    fontSize: '12px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                  }}
-                >
-                  <AlertTriangle className="w-4 h-4 shrink-0 text-amber-600" />
-                  <span>Você ainda tem {blankCount} questão(ões) sem resposta preenchida.</span>
+                <div style={{
+                  padding: '12px 14px',
+                  borderRadius: '12px',
+                  background: '#fffbeb',
+                  border: '1px solid #fde68a',
+                  color: '#92400e',
+                  fontSize: '12.5px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px'
+                }}>
+                  <AlertTriangle size={16} color="#d97706" style={{ flexShrink: 0 }} />
+                  <span>Você ainda possui <strong>{blankCount} questão(ões)</strong> sem resposta preenchida.</span>
                 </div>
               )}
 
-              <p className="text-xs text-slate-500 text-center m-0 leading-relaxed">
-                Após confirmar, suas respostas serão computadas pelo servidor e um comprovante digital de entrega será gerado. Não será possível alterar respostas após o envio.
+              <p style={{ fontSize: '12px', color: '#64748b', textAlign: 'center', margin: 0, lineHeight: 1.5 }}>
+                Após confirmar, suas respostas serão registradas e um comprovante digital oficial será gerado. Não será possível alterar respostas após a entrega.
               </p>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px', paddingTop: '4px' }}>
@@ -1705,16 +2817,15 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome }: 
                   disabled={submitting}
                   style={{
                     flex: 1,
-                    padding: '10px 14px',
+                    padding: '11px 14px',
                     borderRadius: '12px',
-                    background: '#f1f5f9',
-                    border: '1px solid #e2e8f0',
+                    background: '#ffffff',
+                    border: '1.5px solid #cbd5e1',
                     color: '#334155',
-                    fontSize: '12px',
-                    fontWeight: 600,
-                    cursor: 'pointer',
+                    fontSize: '13px',
+                    fontWeight: 700,
+                    cursor: 'pointer'
                   }}
-                  className="hover:bg-slate-200 transition-colors"
                 >
                   Continuar Respondendo
                 </button>
@@ -1725,30 +2836,30 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome }: 
                   disabled={submitting}
                   style={{
                     flex: 1,
-                    padding: '10px 14px',
+                    padding: '11px 14px',
                     borderRadius: '12px',
-                    background: '#059669',
+                    background: 'linear-gradient(135deg, #10b981, #059669)',
                     border: 'none',
                     color: '#ffffff',
-                    fontSize: '12px',
-                    fontWeight: 700,
-                    cursor: 'pointer',
+                    fontSize: '13px',
+                    fontWeight: 800,
+                    cursor: submitting ? 'not-allowed' : 'pointer',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     gap: '6px',
+                    boxShadow: '0 4px 12px rgba(16, 185, 129, 0.25)'
                   }}
-                  className="hover:bg-emerald-700 transition-colors shadow-sm disabled:opacity-50"
                 >
                   {submitting ? (
                     <>
-                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      <RefreshCw size={15} className="animate-spin" />
                       Entregando...
                     </>
                   ) : (
                     <>
-                      Confirmar Entrega
-                      <Check className="w-4 h-4" />
+                      <CheckCircle2 size={16} />
+                      Sim, Entregar Prova
                     </>
                   )}
                 </button>
@@ -1758,91 +2869,91 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome }: 
         )}
       </AnimatePresence>
 
-      {/* 5. BUILT-IN FLOATING CALCULATOR WIDGET */}
+      {/* 6. POPUP FLOATING CALCULATOR */}
       {calculatorOpen && (
-        <div
-          style={{
-            position: 'fixed',
-            bottom: '24px',
-            right: '24px',
-            zIndex: 50,
-            width: '290px',
-            background: '#ffffff',
-            borderRadius: '22px',
-            border: '1px solid #cbd5e1',
-            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.18), 0 8px 10px -6px rgba(0, 0, 0, 0.1)',
-            padding: '14px',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '12px',
-          }}
-        >
+        <div style={{
+          position: 'fixed',
+          bottom: '24px',
+          right: '24px',
+          zIndex: 50,
+          background: '#ffffff',
+          border: '1.5px solid #cbd5e1',
+          borderRadius: '20px',
+          boxShadow: '0 12px 36px rgba(0, 0, 0, 0.18)',
+          padding: '16px',
+          width: '260px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '12px'
+        }}>
           {/* Header */}
-          <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-lg bg-sky-50 text-sky-600 flex items-center justify-center border border-sky-200">
-                <Calculator className="w-4 h-4" />
-              </div>
-              <span className="text-xs font-bold text-slate-800">Calculadora de Apoio</span>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #f1f5f9', paddingBottom: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Calculator size={15} color="#0284c7" />
+              <span style={{ fontSize: '12px', fontWeight: 800, color: '#0f172a' }}>Calculadora</span>
             </div>
             <button
               type="button"
               onClick={() => setCalculatorOpen(false)}
-              className="text-slate-400 hover:text-slate-700 p-1 rounded-md transition-colors cursor-pointer"
+              style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '2px' }}
             >
-              <X className="w-4 h-4" />
+              <X size={15} />
             </button>
           </div>
 
           {/* Calculator Screen */}
-          <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-right">
-            <div className="text-[11px] font-mono text-slate-400 h-4 truncate">
+          <div style={{
+            background: '#f8fafc',
+            border: '1px solid #e2e8f0',
+            borderRadius: '12px',
+            padding: '10px 12px',
+            textAlign: 'right'
+          }}>
+            <div style={{ fontSize: '11px', color: '#94a3b8', height: '16px', overflow: 'hidden' }}>
               {calcPrev || ' '}
             </div>
-            <div className="text-2xl font-bold font-mono text-slate-900 tracking-tight truncate">
+            <div style={{ fontSize: '20px', fontWeight: 800, color: '#0f172a', letterSpacing: '0.04em' }}>
               {calcDisplay}
             </div>
           </div>
 
-          {/* Buttons Grid */}
-          <div className="grid grid-cols-4 gap-1.5 text-xs font-semibold">
-            {/* Row 1 */}
+          {/* Calculator Buttons Grid */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px' }}>
             <button
               type="button"
               onClick={() => handleCalcClick('C')}
-              className="p-2.5 rounded-xl bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 font-mono transition-colors cursor-pointer"
+              style={{ padding: '8px', borderRadius: '10px', background: '#fee2e2', color: '#dc2626', border: '1px solid #fca5a5', fontWeight: 800, fontSize: '12px', cursor: 'pointer' }}
             >
               C
             </button>
             <button
               type="button"
               onClick={() => handleCalcClick('DEL')}
-              className="p-2.5 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200 font-mono transition-colors cursor-pointer"
+              style={{ padding: '8px', borderRadius: '10px', background: '#f1f5f9', color: '#475569', border: '1px solid #e2e8f0', fontWeight: 800, fontSize: '12px', cursor: 'pointer' }}
             >
               ⌫
             </button>
             <button
               type="button"
               onClick={() => handleCalcClick('√')}
-              className="p-2.5 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200 font-mono transition-colors cursor-pointer"
+              style={{ padding: '8px', borderRadius: '10px', background: '#f1f5f9', color: '#475569', border: '1px solid #e2e8f0', fontWeight: 800, fontSize: '12px', cursor: 'pointer' }}
             >
               √
             </button>
             <button
               type="button"
               onClick={() => handleCalcClick('÷')}
-              className="p-2.5 rounded-xl bg-sky-50 text-sky-700 hover:bg-sky-100 border border-sky-200 font-mono font-bold transition-colors cursor-pointer"
+              style={{ padding: '8px', borderRadius: '10px', background: '#f0f9ff', color: '#0284c7', border: '1px solid #bae6fd', fontWeight: 800, fontSize: '14px', cursor: 'pointer' }}
             >
               ÷
             </button>
 
-            {/* Row 2 */}
             {['7', '8', '9'].map(n => (
               <button
                 key={n}
                 type="button"
                 onClick={() => handleCalcClick(n)}
-                className="p-2.5 rounded-xl bg-white text-slate-800 hover:bg-slate-100 border border-slate-200 font-mono font-bold transition-colors cursor-pointer shadow-xs"
+                style={{ padding: '8px', borderRadius: '10px', background: '#ffffff', color: '#0f172a', border: '1px solid #e2e8f0', fontWeight: 800, fontSize: '13px', cursor: 'pointer' }}
               >
                 {n}
               </button>
@@ -1850,18 +2961,17 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome }: 
             <button
               type="button"
               onClick={() => handleCalcClick('×')}
-              className="p-2.5 rounded-xl bg-sky-50 text-sky-700 hover:bg-sky-100 border border-sky-200 font-mono font-bold transition-colors cursor-pointer"
+              style={{ padding: '8px', borderRadius: '10px', background: '#f0f9ff', color: '#0284c7', border: '1px solid #bae6fd', fontWeight: 800, fontSize: '14px', cursor: 'pointer' }}
             >
               ×
             </button>
 
-            {/* Row 3 */}
             {['4', '5', '6'].map(n => (
               <button
                 key={n}
                 type="button"
                 onClick={() => handleCalcClick(n)}
-                className="p-2.5 rounded-xl bg-white text-slate-800 hover:bg-slate-100 border border-slate-200 font-mono font-bold transition-colors cursor-pointer shadow-xs"
+                style={{ padding: '8px', borderRadius: '10px', background: '#ffffff', color: '#0f172a', border: '1px solid #e2e8f0', fontWeight: 800, fontSize: '13px', cursor: 'pointer' }}
               >
                 {n}
               </button>
@@ -1869,18 +2979,17 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome }: 
             <button
               type="button"
               onClick={() => handleCalcClick('-')}
-              className="p-2.5 rounded-xl bg-sky-50 text-sky-700 hover:bg-sky-100 border border-sky-200 font-mono font-bold transition-colors cursor-pointer"
+              style={{ padding: '8px', borderRadius: '10px', background: '#f0f9ff', color: '#0284c7', border: '1px solid #bae6fd', fontWeight: 800, fontSize: '14px', cursor: 'pointer' }}
             >
               -
             </button>
 
-            {/* Row 4 */}
             {['1', '2', '3'].map(n => (
               <button
                 key={n}
                 type="button"
                 onClick={() => handleCalcClick(n)}
-                className="p-2.5 rounded-xl bg-white text-slate-800 hover:bg-slate-100 border border-slate-200 font-mono font-bold transition-colors cursor-pointer shadow-xs"
+                style={{ padding: '8px', borderRadius: '10px', background: '#ffffff', color: '#0f172a', border: '1px solid #e2e8f0', fontWeight: 800, fontSize: '13px', cursor: 'pointer' }}
               >
                 {n}
               </button>
@@ -1888,36 +2997,48 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome }: 
             <button
               type="button"
               onClick={() => handleCalcClick('+')}
-              className="p-2.5 rounded-xl bg-sky-50 text-sky-700 hover:bg-sky-100 border border-sky-200 font-mono font-bold transition-colors cursor-pointer"
+              style={{ padding: '8px', borderRadius: '10px', background: '#f0f9ff', color: '#0284c7', border: '1px solid #bae6fd', fontWeight: 800, fontSize: '14px', cursor: 'pointer' }}
             >
               +
             </button>
 
-            {/* Row 5 */}
             <button
               type="button"
               onClick={() => handleCalcClick('0')}
-              className="p-2.5 rounded-xl bg-white text-slate-800 hover:bg-slate-100 border border-slate-200 font-mono font-bold transition-colors cursor-pointer shadow-xs col-span-2"
+              style={{ gridColumn: 'span 2', padding: '8px', borderRadius: '10px', background: '#ffffff', color: '#0f172a', border: '1px solid #e2e8f0', fontWeight: 800, fontSize: '13px', cursor: 'pointer' }}
             >
               0
             </button>
             <button
               type="button"
               onClick={() => handleCalcClick('.')}
-              className="p-2.5 rounded-xl bg-white text-slate-800 hover:bg-slate-100 border border-slate-200 font-mono font-bold transition-colors cursor-pointer shadow-xs"
+              style={{ padding: '8px', borderRadius: '10px', background: '#ffffff', color: '#0f172a', border: '1px solid #e2e8f0', fontWeight: 800, fontSize: '13px', cursor: 'pointer' }}
             >
               .
             </button>
             <button
               type="button"
               onClick={() => handleCalcClick('=')}
-              className="p-2.5 rounded-xl bg-sky-600 text-white hover:bg-sky-700 border border-sky-600 font-mono font-bold transition-colors cursor-pointer shadow-xs"
+              style={{ padding: '8px', borderRadius: '10px', background: '#0284c7', color: '#ffffff', border: 'none', fontWeight: 800, fontSize: '14px', cursor: 'pointer' }}
             >
               =
             </button>
           </div>
         </div>
       )}
+
+      <style dangerouslySetInnerHTML={{__html: `
+        @media (max-width: 1024px) {
+          .exam-room-grid {
+            grid-template-columns: 1fr !important;
+            gap: 16px !important;
+          }
+          .exam-room-sidebar {
+            position: static !important;
+            order: 2;
+          }
+        }
+      `}} />
     </div>
   )
 }

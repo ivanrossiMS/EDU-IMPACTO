@@ -144,7 +144,8 @@ export function gradeObjectiveQuestion(
   // 1. Múltipla Escolha (Única alternativa)
   if (questao.tipo === 'multipla_escolha') {
     const correta = (questao.alternativas || []).find(a => a.correta)
-    if (correta && resposta.respostaOpcaoId === correta.id) {
+    const selectedId = (resposta as any)?.alternativaIdSelecionada || resposta?.respostaOpcaoId
+    if (correta && selectedId === correta.id) {
       return { pontuacaoObtida: maxPoints, corrigida: true }
     }
     return { pontuacaoObtida: 0, corrigida: true }
@@ -154,7 +155,8 @@ export function gradeObjectiveQuestion(
   if (questao.tipo === 'multipla_selecao') {
     const corretas = (questao.alternativas || []).filter(a => a.correta).map(a => a.id)
     const incorretas = (questao.alternativas || []).filter(a => !a.correta).map(a => a.id)
-    const selecionadas = Array.isArray(resposta.respostaOpcoesIds) ? resposta.respostaOpcoesIds : []
+    const rawSelecionadas = (resposta as any)?.alternativasIdsSelecionadas || resposta?.respostaOpcoesIds
+    const selecionadas = Array.isArray(rawSelecionadas) ? rawSelecionadas : []
 
     const config: ConfigPontuacaoParcial = questao.configPontuacaoParcial || {
       permiteParcial: true,
@@ -195,7 +197,28 @@ export function gradeObjectiveQuestion(
     const itens = questao.itensVF || []
     if (itens.length === 0) return { pontuacaoObtida: 0, corrigida: true }
 
-    const respostasVF = resposta.respostaVF || {}
+    // Suporta tanto respostaVF quanto itensVouF
+    const respostasVF: Record<string, boolean> = {}
+    if (resposta?.respostaVF && typeof resposta.respostaVF === 'object') {
+      Object.assign(respostasVF, resposta.respostaVF)
+    }
+    if ((resposta as any)?.itensVouF) {
+      const ivf = (resposta as any).itensVouF
+      if (Array.isArray(ivf)) {
+        ivf.forEach((item: any) => {
+          if (item && item.id) {
+            const val = item.respostaAluno !== undefined ? item.respostaAluno : item.valor !== undefined ? item.valor : item.resposta
+            if (val !== undefined) respostasVF[item.id] = Boolean(val)
+          }
+        })
+      } else if (typeof ivf === 'object') {
+        Object.entries(ivf).forEach(([k, v]: [string, any]) => {
+          const val = v?.respostaAluno !== undefined ? v.respostaAluno : v?.valor !== undefined ? v.valor : v
+          if (val !== undefined) respostasVF[k] = Boolean(val)
+        })
+      }
+    }
+
     let acertos = 0
 
     itens.forEach(item => {
@@ -213,8 +236,8 @@ export function gradeObjectiveQuestion(
   if (questao.tipo === 'dissertativa') {
     // Retorna nota já lançada pelo professor ou 0 com pendente
     return {
-      pontuacaoObtida: Number(resposta.pontuacaoObtida || 0),
-      corrigida: Boolean(resposta.corrigida)
+      pontuacaoObtida: Number(resposta?.pontuacaoObtida || 0),
+      corrigida: Boolean(resposta?.corrigida)
     }
   }
 
@@ -245,11 +268,12 @@ export function shouldPublishResults(
   prova: ProvaOnline,
   allTentativas: TentativaAluno[] = []
 ): boolean {
-  if (prova.configuracaoDivulgacao.liberarGabarito === 'imediato') {
+  const modo = prova?.configuracaoDivulgacao?.liberarGabarito || 'apos_encerramento'
+  if (modo === 'imediato') {
     return true
   }
 
-  if (prova.configuracaoDivulgacao.liberarGabarito === 'manual') {
+  if (modo === 'manual') {
     return prova.status === 'publicada'
   }
 

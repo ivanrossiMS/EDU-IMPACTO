@@ -310,6 +310,28 @@ export function HtmlContent({ html, onBlurHtml, onBackspaceAtStart, editable, ..
         .html-content div:first-child {
           margin-top: 0 !important;
         }
+        .html-content ul {
+          list-style-type: disc !important;
+          padding-left: 1.25rem !important;
+          margin: 0.25rem 0 !important;
+        }
+        .html-content ol {
+          list-style-type: decimal !important;
+          padding-left: 1.25rem !important;
+          margin: 0.25rem 0 !important;
+        }
+        .html-content li {
+          margin-bottom: 0.15rem !important;
+        }
+        .html-content table {
+          border-collapse: collapse;
+          width: 100%;
+          margin: 0.5rem 0;
+        }
+        .html-content th, .html-content td {
+          border: 1px solid #cbd5e1;
+          padding: 4px 8px;
+        }
         .html-content sub, .html-content sup {
           font-size: 75%;
           line-height: 0;

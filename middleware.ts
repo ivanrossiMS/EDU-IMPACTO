@@ -290,6 +290,8 @@ export async function middleware(request: NextRequest) {
       '/assinar',
       '/validar-assinatura',
       '/recibo',
+      '/provas-online/fazer',
+      '/api/provas-online',
       '/api/alunos',
       '/api/comunicados',
       '/api/agenda',

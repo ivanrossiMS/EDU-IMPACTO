@@ -44,7 +44,10 @@ export async function POST(
   const body = await request.json().catch(() => ({}))
 
   // Optional: final batch of answers passed during submission
-  const finalAnswers: Record<string, RespostaQuestaoTentativa> = body.respostas || {}
+  const rawAnswers = body.respostas || {}
+  const finalAnswers: Record<string, RespostaQuestaoTentativa> = Array.isArray(rawAnswers)
+    ? Object.fromEntries(rawAnswers.filter((r: any) => r && r.questaoId).map((r: any) => [r.questaoId, r]))
+    : rawAnswers
   const mergedAnswers = { ...(tentativa.respostas || {}) }
   const nowIso = new Date().toISOString()
 
@@ -62,8 +65,19 @@ export async function POST(
   let temDissertativaPendente = false
   const questoes = prova.questoes || []
 
-  for (const q of questoes) {
-    const resp = mergedAnswers[q.id]
+  for (let qIdx = 0; qIdx < questoes.length; qIdx++) {
+    const q = questoes[qIdx]
+    let resp = mergedAnswers[q.id]
+    if (!resp && mergedAnswers[String(qIdx)]) {
+      resp = mergedAnswers[String(qIdx)]
+      mergedAnswers[q.id] = resp
+    } else if (!resp) {
+      const found = Object.values(mergedAnswers).find((r: any) => r?.questaoId === q.id)
+      if (found) {
+        resp = found
+        mergedAnswers[q.id] = resp
+      }
+    }
     if (q.tipo === 'dissertativa') {
       temDissertativaPendente = true
       // Preserve any existing teacher correction if already reviewed

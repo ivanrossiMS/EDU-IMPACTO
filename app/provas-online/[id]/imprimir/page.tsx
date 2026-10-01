@@ -40,26 +40,71 @@ export default function ImprimirProvaPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center gap-3 text-slate-600">
-        <RefreshCw className="w-8 h-8 animate-spin text-sky-600" />
-        <p className="text-sm font-semibold">Preparando caderno para impressão escolar...</p>
+      <div style={{
+        minHeight: '100vh',
+        background: '#f8fafc',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: '12px',
+        color: '#475569'
+      }}>
+        <RefreshCw style={{ width: '32px', height: '32px', color: '#0284c7' }} className="animate-spin" />
+        <p style={{ fontSize: '14px', fontWeight: 600 }}>Preparando caderno para impressão escolar...</p>
       </div>
     )
   }
 
   if (error || !prova) {
     return (
-      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 text-center">
-        <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center mb-4 border border-rose-200">
-          <AlertCircle className="w-6 h-6" />
+      <div style={{
+        minHeight: '100vh',
+        background: '#f8fafc',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '24px',
+        textAlign: 'center'
+      }}>
+        <div style={{
+          width: '52px',
+          height: '52px',
+          borderRadius: '16px',
+          background: '#fee2e2',
+          border: '1px solid #fca5a5',
+          color: '#dc2626',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          marginBottom: '16px'
+        }}>
+          <AlertCircle size={28} />
         </div>
-        <h2 className="text-lg font-bold text-slate-900 mb-1">Não foi possível carregar a prova</h2>
-        <p className="text-sm text-slate-500 max-w-md mb-6">{error || 'Prova não encontrada.'}</p>
+        <h2 style={{ fontSize: '18px', fontWeight: 900, color: '#0f172a', margin: '0 0 6px 0' }}>
+          Não foi possível carregar a prova
+        </h2>
+        <p style={{ fontSize: '14px', color: '#64748b', maxWidth: '420px', margin: '0 0 20px 0' }}>
+          {error || 'Prova não encontrada.'}
+        </p>
         <Link
           href="/provas-online"
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-slate-200 text-slate-700 text-sm font-semibold hover:bg-slate-100"
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '10px 20px',
+            borderRadius: '12px',
+            background: '#ffffff',
+            border: '1px solid #cbd5e1',
+            color: '#334155',
+            fontSize: '13px',
+            fontWeight: 700,
+            textDecoration: 'none'
+          }}
         >
-          <ArrowLeft className="w-4 h-4" />
+          <ArrowLeft size={16} />
           Voltar para Provas Online
         </Link>
       </div>
@@ -69,72 +114,166 @@ export default function ImprimirProvaPage() {
   const questoes = prova.questoes || []
 
   return (
-    <div className="min-h-screen bg-slate-100 print:bg-white text-slate-900">
+    <div style={{ minHeight: '100vh', background: '#f1f5f9', color: '#0f172a' }}>
+      
       {/* ── TOP CONTROL BAR (HIDDEN IN PRINT) ── */}
-      <header className="print:hidden sticky top-0 z-50 bg-white/95 backdrop-blur-md border-b border-slate-200 px-4 sm:px-8 py-3.5 shadow-xs">
-        <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
-          <div className="flex items-center gap-3 w-full sm:w-auto">
+      <header
+        className="print:hidden"
+        style={{
+          position: 'sticky',
+          top: 0,
+          zIndex: 50,
+          background: '#ffffff',
+          borderBottom: '1px solid #cbd5e1',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
+          padding: '12px 24px'
+        }}
+      >
+        <div style={{
+          maxWidth: '1200px',
+          margin: '0 auto',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '16px',
+          flexWrap: 'wrap'
+        }}>
+          {/* Left: Back button & Title */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
             <Link
               href="/provas-online"
-              className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 transition-colors"
-              title="Voltar"
+              style={{
+                width: '38px',
+                height: '38px',
+                borderRadius: '10px',
+                background: '#f8fafc',
+                border: '1px solid #cbd5e1',
+                color: '#334155',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                textDecoration: 'none',
+                cursor: 'pointer',
+                transition: 'all 0.15s'
+              }}
+              title="Voltar para Provas Online"
             >
-              <ArrowLeft className="w-4 h-4" />
+              <ArrowLeft size={16} />
             </Link>
             <div>
-              <h1 className="text-sm font-bold text-slate-900 truncate max-w-xs sm:max-w-md">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '2px' }}>
+                <span style={{
+                  padding: '2px 8px',
+                  borderRadius: '6px',
+                  fontSize: '11px',
+                  fontWeight: 800,
+                  background: '#f0f9ff',
+                  color: '#0284c7',
+                  border: '1px solid #bae6fd',
+                  textTransform: 'uppercase'
+                }}>
+                  {prova.disciplinaNome || prova.disciplina}
+                </span>
+                <span style={{ fontSize: '12px', color: '#64748b', fontWeight: 600 }}>
+                  {questoes.length} questões • {(prova.valorTotal || 10).toFixed(1)} pts
+                </span>
+              </div>
+              <h1 style={{ margin: 0, fontSize: '18px', fontWeight: 900, color: '#0f172a' }}>
                 {prova.titulo}
               </h1>
-              <p className="text-xs text-slate-500">
-                {prova.disciplinaNome || prova.disciplina} • {questoes.length} questões • {(prova.valorTotal || 10).toFixed(1)} pts
-              </p>
             </div>
           </div>
 
-          {/* Mode Selector and Print Button */}
-          <div className="flex items-center gap-2 w-full sm:w-auto justify-end flex-wrap">
-            <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs">
+          {/* Right: Mode Selector Tabs + Print Button */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+            {/* Mode Pills Segmented Control */}
+            <div style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              background: '#f1f5f9',
+              border: '1px solid #cbd5e1',
+              borderRadius: '12px',
+              padding: '4px',
+              gap: '4px'
+            }}>
               <button
                 type="button"
                 onClick={() => setModoImpressao('aluno')}
-                className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
-                  modoImpressao === 'aluno'
-                    ? 'bg-white text-sky-700 shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: '8px',
+                  fontSize: '12px',
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                  border: 'none',
+                  background: modoImpressao === 'aluno' ? '#ffffff' : 'transparent',
+                  color: modoImpressao === 'aluno' ? '#0284c7' : '#64748b',
+                  boxShadow: modoImpressao === 'aluno' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                  transition: 'all 0.15s'
+                }}
               >
                 Caderno do Aluno
               </button>
               <button
                 type="button"
                 onClick={() => setModoImpressao('professor')}
-                className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
-                  modoImpressao === 'professor'
-                    ? 'bg-white text-emerald-700 shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: '8px',
+                  fontSize: '12px',
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                  border: 'none',
+                  background: modoImpressao === 'professor' ? '#ffffff' : 'transparent',
+                  color: modoImpressao === 'professor' ? '#059669' : '#64748b',
+                  boxShadow: modoImpressao === 'professor' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                  transition: 'all 0.15s'
+                }}
               >
                 Gabarito Oficial
               </button>
               <button
                 type="button"
                 onClick={() => setModoImpressao('cartao_resposta')}
-                className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
-                  modoImpressao === 'cartao_resposta'
-                    ? 'bg-white text-indigo-700 shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: '8px',
+                  fontSize: '12px',
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                  border: 'none',
+                  background: modoImpressao === 'cartao_resposta' ? '#ffffff' : 'transparent',
+                  color: modoImpressao === 'cartao_resposta' ? '#7e22ce' : '#64748b',
+                  boxShadow: modoImpressao === 'cartao_resposta' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                  transition: 'all 0.15s'
+                }}
               >
                 Cartão-Resposta
               </button>
             </div>
 
+            {/* Print Trigger Button */}
             <button
               type="button"
               onClick={() => window.print()}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white font-bold text-xs shadow-sm cursor-pointer transition-colors"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                height: '38px',
+                padding: '0 20px',
+                borderRadius: '10px',
+                background: '#0284c7',
+                border: 'none',
+                color: '#ffffff',
+                fontSize: '13px',
+                fontWeight: 800,
+                cursor: 'pointer',
+                boxShadow: '0 2px 8px rgba(2, 132, 199, 0.3)',
+                transition: 'all 0.15s'
+              }}
             >
-              <Printer className="w-4 h-4" />
+              <Printer size={16} />
               Imprimir / Salvar PDF
             </button>
           </div>
@@ -142,91 +281,166 @@ export default function ImprimirProvaPage() {
       </header>
 
       {/* ── PRINTABLE SHEET CONTAINER (A4 STYLED) ── */}
-      <main className="max-w-4xl mx-auto my-6 print:my-0 p-8 sm:p-12 bg-white border border-slate-200 print:border-none shadow-sm print:shadow-none print:p-0">
-        
+      <main
+        style={{
+          maxWidth: '860px',
+          margin: '24px auto',
+          padding: '40px',
+          background: '#ffffff',
+          borderRadius: '20px',
+          border: '1px solid #cbd5e1',
+          boxShadow: '0 4px 20px rgba(0, 0, 0, 0.05)'
+        }}
+        className="print:border-none print:shadow-none print:m-0 print:p-0"
+      >
         {/* ── CABEÇALHO ESCOLAR OFICIAL ── */}
-        <div className="border-2 border-slate-900 rounded-2xl p-4 sm:p-6 mb-6">
-          <div className="flex items-center justify-between border-b-2 border-slate-900 pb-3 mb-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-slate-900 text-white flex items-center justify-center font-black text-lg">
+        <div style={{
+          border: '2px solid #0f172a',
+          borderRadius: '16px',
+          padding: '20px',
+          marginBottom: '24px'
+        }}>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            borderBottom: '2px solid #0f172a',
+            paddingBottom: '14px',
+            marginBottom: '16px'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+              <div style={{
+                width: '44px',
+                height: '44px',
+                borderRadius: '12px',
+                background: '#0f172a',
+                color: '#ffffff',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontWeight: 900,
+                fontSize: '18px'
+              }}>
                 IE
               </div>
               <div>
-                <h2 className="text-base font-black tracking-wide text-slate-900 uppercase">
+                <h2 style={{ margin: 0, fontSize: '16px', fontWeight: 900, letterSpacing: '0.04em', color: '#0f172a', textTransform: 'uppercase' }}>
                   IMPACTO-EDU • COLÉGIO E CURSO
                 </h2>
-                <p className="text-[11px] text-slate-600 font-medium">
+                <p style={{ margin: '2px 0 0 0', fontSize: '11px', color: '#475569', fontWeight: 600 }}>
                   SECRETARIA ACADÊMICA • AVALIAÇÃO OFICIAL
                 </p>
               </div>
             </div>
 
-            <div className="text-right">
-              <span className={`px-2.5 py-1 rounded-md text-[10px] font-black uppercase border ${
-                modoImpressao === 'professor'
-                  ? 'bg-emerald-100 text-emerald-900 border-emerald-400'
+            <div style={{ textAlign: 'right' }}>
+              <span style={{
+                padding: '4px 10px',
+                borderRadius: '6px',
+                fontSize: '11px',
+                fontWeight: 900,
+                textTransform: 'uppercase',
+                border: modoImpressao === 'professor'
+                  ? '1px solid #86efac'
                   : modoImpressao === 'cartao_resposta'
-                  ? 'bg-indigo-100 text-indigo-900 border-indigo-400'
-                  : 'bg-slate-100 text-slate-800 border-slate-300'
-              }`}>
+                  ? '1px solid #c4b5fd'
+                  : '1px solid #cbd5e1',
+                background: modoImpressao === 'professor'
+                  ? '#ecfdf5'
+                  : modoImpressao === 'cartao_resposta'
+                  ? '#f5f3ff'
+                  : '#f8fafc',
+                color: modoImpressao === 'professor'
+                  ? '#065f46'
+                  : modoImpressao === 'cartao_resposta'
+                  ? '#5b21b6'
+                  : '#1e293b'
+              }}>
                 {modoImpressao === 'professor'
                   ? 'Gabarito Oficial do Professor'
                   : modoImpressao === 'cartao_resposta'
                   ? 'Folha de Respostas / Cartão Óptico'
                   : 'Caderno de Prova do Aluno'}
               </span>
-              <p className="text-[11px] font-mono text-slate-500 mt-1">
+              <p style={{ margin: '4px 0 0 0', fontSize: '11px', fontFamily: 'monospace', color: '#64748b' }}>
                 Ano Letivo: {prova.anoLetivo || 2026} • {prova.bimestre ? `${prova.bimestre}º Bimestre` : '1º Bimestre'}
               </p>
             </div>
           </div>
 
           {/* Dados da Prova e do Estudante */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs border-b border-slate-200 pb-3 mb-3">
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(3, 1fr)',
+            gap: '12px',
+            fontSize: '12px',
+            borderBottom: '1px solid #e2e8f0',
+            paddingBottom: '12px',
+            marginBottom: '14px'
+          }}>
             <div>
-              <span className="text-slate-500 font-semibold block text-[10px] uppercase">Avaliação:</span>
-              <span className="font-bold text-slate-900">{prova.titulo}</span>
+              <span style={{ fontSize: '10px', color: '#64748b', fontWeight: 700, textTransform: 'uppercase', display: 'block' }}>Avaliação:</span>
+              <span style={{ fontWeight: 800, color: '#0f172a' }}>{prova.titulo}</span>
             </div>
             <div>
-              <span className="text-slate-500 font-semibold block text-[10px] uppercase">Disciplina:</span>
-              <span className="font-bold text-slate-900">{prova.disciplinaNome || prova.disciplina}</span>
+              <span style={{ fontSize: '10px', color: '#64748b', fontWeight: 700, textTransform: 'uppercase', display: 'block' }}>Disciplina:</span>
+              <span style={{ fontWeight: 800, color: '#0f172a' }}>{prova.disciplinaNome || prova.disciplina}</span>
             </div>
             <div>
-              <span className="text-slate-500 font-semibold block text-[10px] uppercase">Professor(a):</span>
-              <span className="font-bold text-slate-900">{prova.professorNome || 'Corpo Docente'}</span>
+              <span style={{ fontSize: '10px', color: '#64748b', fontWeight: 700, textTransform: 'uppercase', display: 'block' }}>Professor(a):</span>
+              <span style={{ fontWeight: 800, color: '#0f172a' }}>{prova.professorNome || 'Corpo Docente'}</span>
             </div>
           </div>
 
           {/* Campos de Preenchimento Manual para o Estudante */}
-          <div className="grid grid-cols-12 gap-3 text-xs items-end">
-            <div className="col-span-12 sm:col-span-6 border-b border-slate-400 pb-1">
-              <span className="text-[10px] uppercase font-bold text-slate-500 block">Nome do Aluno(a):</span>
-              <span className="text-sm font-medium text-slate-800">____________________________________________________</span>
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: '3fr 1.2fr 1fr 1.2fr',
+            gap: '16px',
+            fontSize: '12px',
+            alignItems: 'end'
+          }}>
+            <div style={{ borderBottom: '1px solid #94a3b8', paddingBottom: '4px' }}>
+              <span style={{ fontSize: '10px', textTransform: 'uppercase', fontWeight: 700, color: '#64748b', display: 'block' }}>Nome do Aluno(a):</span>
+              <span style={{ fontSize: '13px', color: '#0f172a' }}>&nbsp;</span>
             </div>
-            <div className="col-span-6 sm:col-span-2 border-b border-slate-400 pb-1">
-              <span className="text-[10px] uppercase font-bold text-slate-500 block">Matrícula:</span>
-              <span className="text-sm font-medium text-slate-800">_____________</span>
+            <div style={{ borderBottom: '1px solid #94a3b8', paddingBottom: '4px' }}>
+              <span style={{ fontSize: '10px', textTransform: 'uppercase', fontWeight: 700, color: '#64748b', display: 'block' }}>Matrícula:</span>
+              <span style={{ fontSize: '13px', color: '#0f172a' }}>&nbsp;</span>
             </div>
-            <div className="col-span-6 sm:col-span-2 border-b border-slate-400 pb-1">
-              <span className="text-[10px] uppercase font-bold text-slate-500 block">Turma:</span>
-              <span className="text-sm font-bold text-slate-900">{(prova.turmas || []).join(', ') || 'Turma'}</span>
+            <div style={{ borderBottom: '1px solid #94a3b8', paddingBottom: '4px' }}>
+              <span style={{ fontSize: '10px', textTransform: 'uppercase', fontWeight: 700, color: '#64748b', display: 'block' }}>Turma:</span>
+              <span style={{ fontSize: '13px', fontWeight: 800, color: '#0f172a' }}>{(prova.turmas || []).join(', ') || 'Turma'}</span>
             </div>
-            <div className="col-span-12 sm:col-span-2 border-2 border-slate-900 rounded-xl p-2 text-center bg-slate-50">
-              <span className="text-[9px] uppercase font-black text-slate-600 block">Nota Final</span>
-              <span className="text-base font-black font-mono text-slate-900">
-                [ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ]
+            <div style={{
+              border: '2px solid #0f172a',
+              borderRadius: '12px',
+              padding: '6px',
+              textAlign: 'center',
+              background: '#f8fafc'
+            }}>
+              <span style={{ fontSize: '9px', textTransform: 'uppercase', fontWeight: 900, color: '#475569', display: 'block' }}>Nota Final</span>
+              <span style={{ fontSize: '16px', fontWeight: 900, fontFamily: 'monospace', color: '#0f172a' }}>
+                [ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ]
               </span>
-              <span className="text-[9px] text-slate-500 block">de {(prova.valorTotal || 10).toFixed(1)} pts</span>
+              <span style={{ fontSize: '9px', color: '#64748b', display: 'block' }}>de {(prova.valorTotal || 10).toFixed(1)} pts</span>
             </div>
           </div>
 
           {/* Instruções */}
           {prova.instrucoes && modoImpressao !== 'cartao_resposta' && (
-            <div className="mt-3 pt-3 border-t border-slate-200 text-[11px] text-slate-600 leading-relaxed">
+            <div style={{
+              marginTop: '14px',
+              paddingTop: '10px',
+              borderTop: '1px solid #e2e8f0',
+              fontSize: '11px',
+              color: '#475569',
+              lineHeight: 1.5
+            }}>
               <strong>Orientações: </strong>
               {prova.instrucoes}
               {prova.materiaisPermitidos && (
-                <span className="block mt-0.5"><strong>Materiais autorizados: </strong>{prova.materiaisPermitidos}</span>
+                <span style={{ display: 'block', marginTop: '2px' }}><strong>Materiais autorizados: </strong>{prova.materiaisPermitidos}</span>
               )}
             </div>
           )}
@@ -234,7 +448,7 @@ export default function ImprimirProvaPage() {
 
         {/* ── MODO 1 & 2: CADERNO DE QUESTÕES (ALUNO OU GABARITO PROFESSOR) ── */}
         {modoImpressao !== 'cartao_resposta' && (
-          <div className="space-y-6">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             {questoes.map((q: any, idx: number) => {
               const valor = q.valorPontos || q.pontuacao || 1.0
               const isObjSingle = q.tipo === 'multipla_escolha' || q.tipo === 'unica_escolha'
@@ -245,16 +459,40 @@ export default function ImprimirProvaPage() {
               return (
                 <div
                   key={q.id || idx}
-                  className="page-break-inside-avoid border border-slate-200 rounded-2xl p-4 sm:p-5 text-sm bg-white"
-                  style={{ pageBreakInside: 'avoid' }}
+                  style={{
+                    border: '1px solid #cbd5e1',
+                    borderRadius: '16px',
+                    padding: '20px',
+                    background: '#ffffff',
+                    pageBreakInside: 'avoid'
+                  }}
                 >
                   {/* Questão Header */}
-                  <div className="flex items-start justify-between gap-3 mb-2.5 pb-2 border-b border-slate-100">
-                    <div className="flex items-center gap-2">
-                      <span className="w-7 h-7 rounded-lg bg-slate-900 text-white font-black text-xs flex items-center justify-center font-mono">
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    paddingBottom: '10px',
+                    marginBottom: '12px',
+                    borderBottom: '1px solid #f1f5f9'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <span style={{
+                        width: '28px',
+                        height: '28px',
+                        borderRadius: '8px',
+                        background: '#0f172a',
+                        color: '#ffffff',
+                        fontWeight: 900,
+                        fontSize: '13px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontFamily: 'monospace'
+                      }}>
                         {idx + 1}
                       </span>
-                      <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">
+                      <span style={{ fontSize: '12px', fontWeight: 800, color: '#334155', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                         {isObjSingle && 'Múltipla Escolha'}
                         {isObjMulti && 'Múltipla Seleção'}
                         {isVF && 'Verdadeiro ou Falso'}
@@ -262,21 +500,34 @@ export default function ImprimirProvaPage() {
                       </span>
                     </div>
 
-                    <div className="text-right">
-                      <span className="text-xs font-mono font-bold text-slate-800 bg-slate-100 px-2.5 py-0.5 rounded-md border border-slate-200">
-                        {valor.toFixed(1)} {valor === 1 ? 'ponto' : 'pontos'}
-                      </span>
+                    <div style={{
+                      fontSize: '12px',
+                      fontFamily: 'monospace',
+                      fontWeight: 700,
+                      color: '#0f172a',
+                      background: '#f1f5f9',
+                      padding: '3px 10px',
+                      borderRadius: '8px',
+                      border: '1px solid #e2e8f0'
+                    }}>
+                      {valor.toFixed(1)} {valor === 1 ? 'ponto' : 'pontos'}
                     </div>
                   </div>
 
                   {/* Enunciado */}
-                  <div className="text-slate-800 leading-relaxed mb-4 font-normal text-xs sm:text-sm">
+                  <div style={{
+                    fontSize: '13px',
+                    color: '#0f172a',
+                    lineHeight: 1.6,
+                    marginBottom: '16px',
+                    fontWeight: 500
+                  }}>
                     {q.enunciado}
                   </div>
 
                   {/* Alternativas (Objetivas) */}
                   {(isObjSingle || isObjMulti) && q.alternativas && (
-                    <div className="space-y-2 mb-3">
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '12px' }}>
                       {q.alternativas.map((alt: any, altIdx: number) => {
                         const letter = String.fromCharCode(65 + altIdx)
                         const isCorrect = alt.correta || q.gabaritoOficial === alt.id
@@ -284,23 +535,55 @@ export default function ImprimirProvaPage() {
                         return (
                           <div
                             key={alt.id || altIdx}
-                            className={`flex items-start gap-2.5 p-2 rounded-xl border text-xs sm:text-sm ${
-                              modoImpressao === 'professor' && isCorrect
-                                ? 'bg-emerald-50 border-emerald-300 font-semibold text-emerald-950'
-                                : 'bg-slate-50/50 border-slate-200 text-slate-800'
-                            }`}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'flex-start',
+                              gap: '12px',
+                              padding: '10px 14px',
+                              borderRadius: '10px',
+                              border: modoImpressao === 'professor' && isCorrect
+                                ? '1.5px solid #86efac'
+                                : '1px solid #e2e8f0',
+                              background: modoImpressao === 'professor' && isCorrect
+                                ? '#f0fdf4'
+                                : '#f8fafc',
+                              fontSize: '13px',
+                              color: '#0f172a'
+                            }}
                           >
-                            <span className={`w-6 h-6 rounded-full border flex items-center justify-center font-mono font-bold text-xs shrink-0 ${
-                              modoImpressao === 'professor' && isCorrect
-                                ? 'bg-emerald-600 text-white border-emerald-600'
-                                : 'bg-white border-slate-300 text-slate-700'
-                            }`}>
+                            <span style={{
+                              width: '26px',
+                              height: '26px',
+                              borderRadius: '50%',
+                              border: modoImpressao === 'professor' && isCorrect
+                                ? '1.5px solid #059669'
+                                : '1.5px solid #94a3b8',
+                              background: modoImpressao === 'professor' && isCorrect
+                                ? '#059669'
+                                : '#ffffff',
+                              color: modoImpressao === 'professor' && isCorrect
+                                ? '#ffffff'
+                                : '#334155',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontFamily: 'monospace',
+                              fontWeight: 800,
+                              fontSize: '12px',
+                              flexShrink: 0
+                            }}>
                               {letter}
                             </span>
-                            <div className="pt-0.5 flex-1">
+                            <div style={{ paddingTop: '3px', flex: 1 }}>
                               <span>{alt.texto}</span>
                               {modoImpressao === 'professor' && isCorrect && (
-                                <span className="ml-2 text-[11px] font-bold text-emerald-700 uppercase tracking-wider">
+                                <span style={{
+                                  marginLeft: '8px',
+                                  fontSize: '11px',
+                                  fontWeight: 800,
+                                  color: '#059669',
+                                  textTransform: 'uppercase'
+                                }}>
                                   [Resposta Correta]
                                 </span>
                               )}
@@ -313,31 +596,42 @@ export default function ImprimirProvaPage() {
 
                   {/* Verdadeiro ou Falso */}
                   {isVF && q.itensVouF && (
-                    <div className="space-y-2 mb-3">
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '12px' }}>
                       {q.itensVouF.map((item: any, itIdx: number) => {
                         const correctVal = item.respostaCorreta ?? item.correta
                         return (
                           <div
                             key={item.id || itIdx}
-                            className={`flex items-center justify-between p-2.5 rounded-xl border text-xs sm:text-sm ${
-                              modoImpressao === 'professor'
-                                ? 'bg-slate-50 border-slate-200'
-                                : 'bg-slate-50/50 border-slate-200'
-                            }`}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              padding: '10px 14px',
+                              borderRadius: '10px',
+                              border: '1px solid #e2e8f0',
+                              background: '#f8fafc',
+                              fontSize: '13px'
+                            }}
                           >
-                            <span className="text-slate-800 pr-3">{item.texto}</span>
-                            <div className="flex items-center gap-2 shrink-0 font-mono font-bold text-xs">
+                            <span style={{ color: '#0f172a', paddingRight: '12px' }}>{item.texto}</span>
+                            <div style={{ fontFamily: 'monospace', fontWeight: 800, fontSize: '12px', flexShrink: 0 }}>
                               {modoImpressao === 'professor' ? (
-                                <span className="px-2.5 py-1 rounded-md bg-emerald-100 text-emerald-900 border border-emerald-300">
+                                <span style={{
+                                  padding: '4px 10px',
+                                  borderRadius: '6px',
+                                  background: '#ecfdf5',
+                                  color: '#065f46',
+                                  border: '1px solid #a7f3d0'
+                                }}>
                                   Gabarito: {correctVal ? 'VERDADEIRO' : 'FALSO'}
                                 </span>
                               ) : (
-                                <div className="flex items-center gap-3">
-                                  <span className="flex items-center gap-1 text-slate-600">
-                                    <span className="w-4 h-4 rounded-full border-2 border-slate-400 inline-block" /> (V)
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                                  <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#475569' }}>
+                                    <span style={{ width: '16px', height: '16px', borderRadius: '50%', border: '2px solid #64748b', display: 'inline-block' }} /> (V)
                                   </span>
-                                  <span className="flex items-center gap-1 text-slate-600">
-                                    <span className="w-4 h-4 rounded-full border-2 border-slate-400 inline-block" /> (F)
+                                  <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#475569' }}>
+                                    <span style={{ width: '16px', height: '16px', borderRadius: '50%', border: '2px solid #64748b', display: 'inline-block' }} /> (F)
                                   </span>
                                 </div>
                               )}
@@ -350,31 +644,40 @@ export default function ImprimirProvaPage() {
 
                   {/* Dissertativa: Pauta para resposta ou espelho de correção */}
                   {isDissertativa && (
-                    <div className="mt-3">
+                    <div style={{ marginTop: '12px' }}>
                       {modoImpressao === 'aluno' ? (
-                        <div className="space-y-3 pt-2">
-                          <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">
+                        <div>
+                          <span style={{ fontSize: '11px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', display: 'block', marginBottom: '8px' }}>
                             Espaço para Resposta do Estudante:
                           </span>
-                          <div className="space-y-4 py-2">
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '18px', padding: '8px 0' }}>
                             {[1, 2, 3, 4, 5, 6].map(line => (
-                              <div key={line} className="border-b border-dashed border-slate-300 h-4" />
+                              <div key={line} style={{ borderBottom: '1px dashed #cbd5e1', height: '14px' }} />
                             ))}
                           </div>
                         </div>
                       ) : (
-                        <div className="p-3.5 rounded-xl bg-emerald-50/70 border border-emerald-200 text-xs space-y-2">
-                          <div className="flex items-center gap-1.5 font-bold text-emerald-900">
-                            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                        <div style={{
+                          padding: '14px',
+                          borderRadius: '12px',
+                          background: '#f0fdf4',
+                          border: '1px solid #bbf7d0',
+                          fontSize: '12px',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '8px'
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 800, color: '#065f46' }}>
+                            <CheckCircle2 size={16} color="#059669" />
                             <span>Espelho de Correção / Resposta Esperada da Banca:</span>
                           </div>
-                          <p className="text-slate-700 leading-relaxed">
+                          <p style={{ margin: 0, color: '#334155', lineHeight: 1.6 }}>
                             {q.respostaEsperada || q.gabaritoOficial || 'Critério de pontuação atribuído pelo professor conforme argumentação, coerência e domínio do conteúdo.'}
                           </p>
                           {q.criteriosAvaliacao && q.criteriosAvaliacao.length > 0 && (
-                            <div className="pt-2 border-t border-emerald-200">
-                              <span className="font-semibold text-emerald-950 block mb-1">Critérios de Avaliação:</span>
-                              <ul className="list-disc pl-4 space-y-0.5 text-slate-600">
+                            <div style={{ paddingTop: '8px', borderTop: '1px solid #bbf7d0' }}>
+                              <span style={{ fontWeight: 800, color: '#065f46', display: 'block', marginBottom: '4px' }}>Critérios de Avaliação:</span>
+                              <ul style={{ margin: 0, paddingLeft: '18px', color: '#475569' }}>
                                 {q.criteriosAvaliacao.map((c: any, cIdx: number) => (
                                   <li key={cIdx}>
                                     {c.descricao} (até {c.pontosMaximos || c.pontos || 0} pts)
@@ -390,7 +693,15 @@ export default function ImprimirProvaPage() {
 
                   {/* Justificativa Pedagógica no modo Professor */}
                   {modoImpressao === 'professor' && q.explicacao && (
-                    <div className="mt-3 p-3 rounded-xl bg-sky-50 border border-sky-200 text-xs text-sky-950">
+                    <div style={{
+                      marginTop: '12px',
+                      padding: '12px',
+                      borderRadius: '10px',
+                      background: '#f0f9ff',
+                      border: '1px solid #bae6fd',
+                      fontSize: '12px',
+                      color: '#0369a1'
+                    }}>
                       <strong>Comentário Pedagógico / Resolução: </strong>
                       {q.explicacao}
                     </div>
@@ -403,60 +714,136 @@ export default function ImprimirProvaPage() {
 
         {/* ── MODO 3: FOLHA DE RESPOSTAS / CARTÃO ÓPTICO RÁPIDO ── */}
         {modoImpressao === 'cartao_resposta' && (
-          <div className="border border-slate-300 rounded-2xl p-6 bg-white space-y-6">
-            <div className="text-center pb-3 border-b border-slate-200">
-              <h3 className="text-sm font-bold uppercase tracking-wider text-slate-800">
+          <div style={{
+            border: '2px solid #0f172a',
+            borderRadius: '16px',
+            padding: '24px',
+            background: '#ffffff'
+          }}>
+            <div style={{
+              textAlign: 'center',
+              paddingBottom: '16px',
+              borderBottom: '2px solid #0f172a',
+              marginBottom: '20px'
+            }}>
+              <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#0f172a' }}>
                 Grade de Respostas para Preenchimento Óptico / Manual
               </h3>
-              <p className="text-xs text-slate-500 mt-1">
+              <p style={{ margin: '6px 0 0 0', fontSize: '12px', color: '#64748b' }}>
                 Preencha totalmente a bolha correspondente à alternativa escolhida utilizando caneta esferográfica azul ou preta.
               </p>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            {/* Structured Optical Bubble Grid */}
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
+              gap: '12px',
+              marginBottom: '32px'
+            }}>
               {questoes.map((q: any, idx: number) => {
                 const isObj = q.tipo === 'multipla_escolha' || q.tipo === 'unica_escolha' || q.tipo === 'multipla_selecao'
                 const isVF = q.tipo === 'verdadeiro_falso'
                 const countOptions = q.alternativas ? q.alternativas.length : 5
 
                 return (
-                  <div key={q.id || idx} className="p-3 rounded-xl border border-slate-200 bg-slate-50 flex items-center justify-between">
-                    <span className="font-mono font-bold text-xs w-6 text-slate-700">
+                  <div
+                    key={q.id || idx}
+                    style={{
+                      padding: '10px 14px',
+                      borderRadius: '12px',
+                      border: '1px solid #cbd5e1',
+                      background: '#f8fafc',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: '10px'
+                    }}
+                  >
+                    <span style={{
+                      fontFamily: 'monospace',
+                      fontWeight: 900,
+                      fontSize: '13px',
+                      color: '#0f172a',
+                      minWidth: '28px'
+                    }}>
                       {String(idx + 1).padStart(2, '0')}.
                     </span>
 
                     {isObj ? (
-                      <div className="flex items-center gap-1.5">
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         {Array.from({ length: countOptions }).map((_, altI) => (
                           <div
                             key={altI}
-                            className="w-5 h-5 rounded-full border border-slate-400 bg-white flex items-center justify-center font-mono text-[10px] font-bold text-slate-600"
+                            style={{
+                              width: '28px',
+                              height: '28px',
+                              borderRadius: '50%',
+                              border: '1.5px solid #64748b',
+                              background: '#ffffff',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontFamily: 'monospace',
+                              fontSize: '11px',
+                              fontWeight: 800,
+                              color: '#334155'
+                            }}
                           >
                             {String.fromCharCode(65 + altI)}
                           </div>
                         ))}
                       </div>
                     ) : isVF ? (
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-mono text-slate-500">(V / F)</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <span style={{ fontSize: '11px', fontFamily: 'monospace', color: '#64748b' }}>(V / F)</span>
                       </div>
                     ) : (
-                      <span className="text-[10px] text-slate-400 uppercase font-semibold">Dissertativa</span>
+                      <span style={{ fontSize: '11px', textTransform: 'uppercase', fontWeight: 700, color: '#94a3b8' }}>
+                        Dissertativa
+                      </span>
                     )}
                   </div>
                 )
               })}
             </div>
 
-            <div className="pt-6 border-t border-slate-200 flex items-center justify-between text-xs text-slate-500">
-              <span>Assinatura do Aluno: _____________________________________________</span>
-              <span>Visto do Fiscal: __________________</span>
+            {/* Signature & Seal row */}
+            <div style={{
+              paddingTop: '20px',
+              borderTop: '1px solid #cbd5e1',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              fontSize: '12px',
+              color: '#475569',
+              flexWrap: 'wrap',
+              gap: '16px'
+            }}>
+              <div>
+                <span>Assinatura do Aluno: _____________________________________________</span>
+              </div>
+              <div>
+                <span>Visto do Fiscal: __________________</span>
+              </div>
             </div>
           </div>
         )}
 
         {/* ── RODAPÉ ESCOLAR DE AUTENTICIDADE ── */}
-        <div className="mt-8 pt-4 border-t border-slate-300 flex items-center justify-between text-[10px] text-slate-400 font-mono">
+        <div style={{
+          marginTop: '32px',
+          paddingTop: '16px',
+          borderTop: '1px solid #cbd5e1',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          fontSize: '11px',
+          color: '#94a3b8',
+          fontFamily: 'monospace',
+          flexWrap: 'wrap',
+          gap: '8px'
+        }}>
           <span>IMPACTO-EDU • Sistema de Gestão Escolar Integrada</span>
           <span>Documento gerado em {new Date().toLocaleDateString('pt-BR')} às {new Date().toLocaleTimeString('pt-BR')}</span>
           <span>Hash ID: {prova.id?.slice(0, 12)}</span>
