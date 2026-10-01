@@ -16,6 +16,7 @@ import { HtmlContent } from '@/components/HtmlContent'
 import {
   ProvaOnline,
   QuestaoProva,
+  AlternativaQuestao,
   TentativaAluno,
   RespostaQuestaoTentativa,
   ComprovanteEntrega
@@ -30,6 +31,69 @@ interface ExamRoomProps {
 }
 
 type SaveState = 'saved' | 'saving' | 'offline_queued' | 'error'
+
+// Helper function to build deterministic storage key for offline attempts
+function getOfflineStorageKey(provaId: string, tentativaId?: string): string {
+  return `impacto_offline_respostas_${provaId}_${tentativaId || 'draft'}`
+}
+
+// Safely retrieve offline cached responses across localStorage and sessionStorage
+function safeGetOfflineQueue(key: string): { respostas?: Record<string, RespostaQuestaoTentativa>; questoesRevisao?: string[] } | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const raw = localStorage.getItem(key) || sessionStorage.getItem(key)
+    if (raw) return JSON.parse(raw)
+  } catch (e) {
+    console.warn('[ExamRoom] Erro ao recuperar fila offline:', e)
+  }
+  return null
+}
+
+// Safely save offline responses handling QuotaExceededError, automatic cleanup, and sessionStorage fallback
+function safeSaveOfflineQueue(key: string, data: any): void {
+  if (typeof window === 'undefined') return
+  const serialized = JSON.stringify(data)
+
+  // 1. Tentar gravar diretamente no localStorage
+  try {
+    localStorage.setItem(key, serialized)
+    return
+  } catch (err: any) {
+    console.warn('[ExamRoom] localStorage indisponível ou quota excedida. Executando purga de tentativas antigas:', err)
+  }
+
+  // 2. Se a quota foi atingida, purga rascunhos de outras provas/tentativas antigas para liberar espaço
+  try {
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const k = localStorage.key(i)
+      if (k && k.startsWith('impacto_offline_respostas_') && k !== key) {
+        localStorage.removeItem(k)
+      }
+    }
+    // Tenta gravar novamente após a limpeza
+    localStorage.setItem(key, serialized)
+    return
+  } catch (err: any) {
+    console.warn('[ExamRoom] localStorage continua indisponível após limpeza:', err)
+  }
+
+  // 3. Fallback para sessionStorage (possui quota isolada de ~5MB e persiste durante o ciclo de vida da aba)
+  try {
+    sessionStorage.setItem(key, serialized)
+    return
+  } catch (err: any) {
+    console.warn('[ExamRoom] sessionStorage também indisponível:', err)
+  }
+
+  // 4. Contingência final segura: dados mantidos com integridade no estado React em memória
+}
+
+// Safely remove key from both local and session storage
+function safeRemoveOfflineQueue(key: string): void {
+  if (typeof window === 'undefined') return
+  try { localStorage.removeItem(key) } catch {}
+  try { sessionStorage.removeItem(key) } catch {}
+}
 
 export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, returnUrl }: ExamRoomProps) {
   const router = useRouter()
@@ -51,27 +115,50 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
 
   // Answers Map: questionId -> RespostaQuestaoTentativa (safely parses array or object)
   const [respostas, setRespostas] = useState<Record<string, RespostaQuestaoTentativa>>(() => {
-    if (!initialTentativa?.respostas) return {}
-    if (Array.isArray(initialTentativa.respostas)) {
-      const map: Record<string, RespostaQuestaoTentativa> = {}
-      initialTentativa.respostas.forEach((r: any) => {
-        if (r && r.questaoId) map[r.questaoId] = r
-      })
-      return map
+    const map: Record<string, RespostaQuestaoTentativa> = {}
+    if (initialTentativa?.respostas) {
+      if (Array.isArray(initialTentativa.respostas)) {
+        initialTentativa.respostas.forEach((r: any) => {
+          if (r && r.questaoId) map[r.questaoId] = r
+        })
+      } else if (typeof initialTentativa.respostas === 'object') {
+        Object.assign(map, initialTentativa.respostas)
+      }
     }
-    if (typeof initialTentativa.respostas === 'object') {
-      return { ...initialTentativa.respostas }
+
+    // Hydrate offline fallback if present
+    if (typeof window !== 'undefined' && prova?.id) {
+      const qKey = getOfflineStorageKey(prova.id, initialTentativa?.id)
+      const offlineData = safeGetOfflineQueue(qKey)
+      if (offlineData?.respostas && typeof offlineData.respostas === 'object') {
+        for (const [qId, offAns] of Object.entries(offlineData.respostas)) {
+          const currentAns = map[qId]
+          if (!currentAns || (offAns.versao || 0) >= (currentAns.versao || 0)) {
+            map[qId] = offAns
+          }
+        }
+      }
     }
-    return {}
+
+    return map
   })
 
   // Flagged for review set
   const [flaggedIds, setFlaggedIds] = useState<Set<string>>(() => {
-    return new Set(initialTentativa?.questoesRevisao || [])
+    const initialFlags = new Set(initialTentativa?.questoesRevisao || [])
+    if (typeof window !== 'undefined' && prova?.id) {
+      const qKey = getOfflineStorageKey(prova.id, initialTentativa?.id)
+      const offlineData = safeGetOfflineQueue(qKey)
+      if (Array.isArray(offlineData?.questoesRevisao)) {
+        offlineData.questoesRevisao.forEach(id => initialFlags.add(id))
+      }
+    }
+    return initialFlags
   })
 
   // Version counter for optimistic locking
   const [versaoRespostas, setVersaoRespostas] = useState<number>(initialTentativa?.versaoRespostas || 1)
+
 
   // Autosave status
   const [saveStatus, setSaveStatus] = useState<SaveState>('saved')
@@ -96,6 +183,16 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
   // Submission Modal
   const [submitModalOpen, setSubmitModalOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+
+  // Derived Exam Configuration Properties
+  const isSingleQuestionPage = prova.configuracaoLayout?.questaoPorPagina !== false
+  const isFreeNavigation = prova.configuracaoLayout?.navegacaoLivre !== false
+  const allowReturn = prova.configuracaoLayout?.permitirVoltar !== false && !prova.bloquearRetorno
+  const requiresFullscreen = Boolean(prova.configuracaoMonitoramento?.solicitarTelaCheia || prova.exigirTelaCheia)
+  const monitorTabSwitch = prova.configuracaoMonitoramento?.registrarSaidaTela !== false
+  const blockCopyPaste = Boolean(prova.configuracaoMonitoramento?.bloquearColar || prova.bloquearColar)
+  const actionOnIncident = prova.configuracaoMonitoramento?.acaoOcorrencia || 'alertar'
+  const hasPinRequirement = Boolean(prova.exigeCodigoAcesso || (prova.codigoLiberacao && String(prova.codigoLiberacao).trim() !== ''))
 
   // Pedagogical & Accessibility Enhancements
   const [pledgeAccepted, setPledgeAccepted] = useState(false)
@@ -159,12 +256,13 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
   // Questions ordered according to attempt (if shuffled)
   const orderedQuestions: QuestaoProva[] = useMemo(() => {
     const list = prova.questoes || []
-    if (!tentativa?.ordemQuestoesSorteada || tentativa.ordemQuestoesSorteada.length === 0) {
+    const sortOrder = tentativa?.ordemQuestoesSorteada || tentativa?.ordemQuestoes?.map(o => o.questaoId)
+    if (!sortOrder || sortOrder.length === 0) {
       return list
     }
     const map = new Map(list.map(q => [q.id, q]))
     const ordered: QuestaoProva[] = []
-    tentativa.ordemQuestoesSorteada.forEach(qid => {
+    sortOrder.forEach(qid => {
       const q = map.get(qid)
       if (q) ordered.push(q)
     })
@@ -173,16 +271,99 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
       if (!ordered.find(o => o.id === q.id)) ordered.push(q)
     })
     return ordered.length > 0 ? ordered : list
-  }, [prova.questoes, tentativa?.ordemQuestoesSorteada])
+  }, [prova.questoes, tentativa?.ordemQuestoesSorteada, tentativa?.ordemQuestoes])
+
+  // Get shuffled alternatives according to tentativa.ordemQuestoes
+  const getQuestionAlternatives = useCallback((q: QuestaoProva) => {
+    const alts = q.alternativas || []
+    if (alts.length === 0) return []
+    const qOrder = tentativa?.ordemQuestoes?.find(o => o.questaoId === q.id)
+    if (!qOrder?.alternativasOrdem || qOrder.alternativasOrdem.length === 0) {
+      return alts
+    }
+    const altMap = new Map(alts.map(a => [a.id, a]))
+    const sorted: AlternativaQuestao[] = []
+    qOrder.alternativasOrdem.forEach(id => {
+      const found = altMap.get(id)
+      if (found) sorted.push(found)
+    })
+    alts.forEach(a => {
+      if (!sorted.find(s => s.id === a.id)) sorted.push(a)
+    })
+    return sorted
+  }, [tentativa?.ordemQuestoes])
 
   const currentQuestion = orderedQuestions[currentIndex] || orderedQuestions[0]
 
   // Offline queue storage key
-  const storageQueueKey = useMemo(() => `impacto_offline_respostas_${prova.id}_${tentativa?.id || 'draft'}`, [prova.id, tentativa?.id])
+  const storageQueueKey = useMemo(() => getOfflineStorageKey(prova.id, tentativa?.id), [prova.id, tentativa?.id])
 
   // Refs for autosave debounce & anti-cheat debounce
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const lastIncidentTimeRef = useRef<number>(0)
+
+  // Proactively clean up obsolete offline caches on mount to preserve browser quota
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    try {
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const k = localStorage.key(i)
+        if (k && k.startsWith('impacto_offline_respostas_') && k !== storageQueueKey) {
+          localStorage.removeItem(k)
+        }
+      }
+    } catch {}
+  }, [storageQueueKey])
+
+  // --- Autosave Debounce Sync to Server ---
+  const syncPendingAnswers = useCallback(async () => {
+    if (!tentativa || !started || tentativa.status !== 'em_andamento') return
+
+    const revisaoArray = Array.from(flaggedIds)
+    setSaveStatus('saving')
+
+    try {
+      const newVersion = versaoRespostas + 1
+      const res = await fetch(`/api/provas-online/tentativas/${tentativa.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          respostas: respostas, // Envia o mapa indexado por questaoId
+          questoesRevisao: revisaoArray,
+          versaoRespostas: newVersion,
+          tempoGastoSegundos: Math.max(0, (prova.duracaoMinutos * 60) - timeRemainingSeconds)
+        })
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        if (res.status === 409) {
+          toast.info('Respostas sincronizadas com versão mais recente do servidor.')
+        } else {
+          throw new Error(data.error || 'Erro ao sincronizar respostas')
+        }
+      }
+
+      setVersaoRespostas(data.versao || newVersion)
+      setSaveStatus('saved')
+      setLastSavedAt(new Date())
+      setPendingSyncCount(0)
+
+      // Clear local queue if succeeded
+      safeRemoveOfflineQueue(storageQueueKey)
+    } catch (err: any) {
+      console.warn('Falha no salvamento remoto:', err)
+      // Save to local storage as fallback (guarded against QuotaExceededError)
+      safeSaveOfflineQueue(storageQueueKey, {
+        respostas: respostas,
+        questoesRevisao: revisaoArray,
+        savedAt: new Date().toISOString()
+      })
+      setSaveStatus('offline_queued')
+      setPendingSyncCount(Object.keys(respostas).length)
+    }
+  }, [tentativa, started, respostas, flaggedIds, versaoRespostas, prova.duracaoMinutos, timeRemainingSeconds, storageQueueKey])
 
   // --- Network Online / Offline Listeners ---
   useEffect(() => {
@@ -203,61 +384,7 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
       window.removeEventListener('online', handleOnline)
       window.removeEventListener('offline', handleOffline)
     }
-  }, [tentativa?.id, versaoRespostas])
-
-  // --- Autosave Debounce Sync to Server ---
-  const syncPendingAnswers = useCallback(async () => {
-    if (!tentativa || !started || tentativa.status !== 'em_andamento') return
-
-    const revisaoArray = Array.from(flaggedIds)
-    setSaveStatus('saving')
-
-    try {
-      const newVersion = versaoRespostas + 1
-      const res = await fetch(`/api/provas-online/tentativas/${tentativa.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          respostas: respostas, // Envia o mapa indexado por questaoId
-          questoesRevisao: revisaoArray,
-          versaoRespostas: newVersion,
-          tempoGastoSegundos: Math.max(0, (prova.duracaoMinutos * 60) - timeRemainingSeconds)
-        })
-      })
-
-      const data = await res.json()
-
-      if (!res.ok) {
-        if (res.status === 409) {
-          toast.info('Respostas sincronizadas com versão mais recente do servidor.')
-        } else {
-          throw new Error(data.error || 'Erro ao sincronizar respostas')
-        }
-      }
-
-      setVersaoRespostas(newVersion)
-      setSaveStatus('saved')
-      setLastSavedAt(new Date())
-      setPendingSyncCount(0)
-
-      // Clear local queue if succeeded
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem(storageQueueKey)
-      }
-    } catch (err: any) {
-      console.warn('Falha no salvamento remoto:', err)
-      // Save to local storage as fallback
-      if (typeof window !== 'undefined') {
-        localStorage.setItem(storageQueueKey, JSON.stringify({
-          respostas: respostas,
-          questoesRevisao: revisaoArray,
-          savedAt: new Date().toISOString()
-        }))
-      }
-      setSaveStatus('offline_queued')
-      setPendingSyncCount(Object.keys(respostas).length)
-    }
-  }, [tentativa, started, respostas, flaggedIds, versaoRespostas, prova.duracaoMinutos, timeRemainingSeconds, storageQueueKey])
+  }, [syncPendingAnswers])
 
   // Trigger autosave when answers change with 900ms debounce
   const scheduleAutosave = useCallback(() => {
@@ -314,7 +441,7 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
           // Check teacher messages
           if (data.mensagensNaoLidas && data.mensagensNaoLidas.length > 0) {
             const latest = data.mensagensNaoLidas[data.mensagensNaoLidas.length - 1]
-            setTeacherBroadcast(latest.conteudo)
+            setTeacherBroadcast(latest.mensagem || latest.conteudo)
           }
         }
       } catch (err) {
@@ -333,7 +460,7 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
     if (!tentativa || !started || tentativa.status !== 'em_andamento') return
 
     const now = Date.now()
-    if (now - lastIncidentTimeRef.current < 3000) return
+    if (now - lastIncidentTimeRef.current < 2500) return
     lastIncidentTimeRef.current = now
 
     try {
@@ -344,48 +471,63 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
       })
       const data = await res.json()
 
-      if (data.suspensa) {
-        setSuspensionAlert('Prova suspensa automaticamente por múltiplos eventos de saída da tela.')
+      if (data.suspensa || actionOnIncident === 'suspender') {
+        setSuspensionAlert('Prova suspensa automaticamente pela supervisão da prova.')
       }
     } catch (err) {
       // Ignore network errors in incident logging
     }
-  }, [tentativa, started])
+  }, [tentativa, started, actionOnIncident])
 
   // Setup Anti-Cheat Listeners
   useEffect(() => {
     if (!started || !tentativa || tentativa.status !== 'em_andamento') return
 
     function handleVisibilityChange() {
+      if (!monitorTabSwitch) return
       if (document.hidden) {
-        recordIncident('troca_aba', 'Aluno saiu da aba ou minimizou a janela da prova.')
+        recordIncident('saida_tela', 'Aluno saiu da aba ou minimizou a janela da prova.')
       } else {
-        toast.warning('Atenção: A mudança de aba durante a prova foi registrada pela supervisão.')
+        if (actionOnIncident === 'alertar') {
+          toast.warning('Atenção: A mudança de aba durante a prova foi registrada pela supervisão.')
+        }
       }
     }
 
     function handleFullscreenChange() {
       const isFull = !!document.fullscreenElement
       setIsFullscreen(isFull)
-      if (!isFull && prova.exigirTelaCheia) {
+      if (!isFull && requiresFullscreen) {
         recordIncident('saida_tela_cheia', 'Aluno saiu do modo de tela cheia obrigatório.')
-        toast.error('Você saiu do modo tela cheia. Retorne para prosseguir.')
+        if (actionOnIncident === 'alertar') {
+          toast.error('Você saiu do modo tela cheia. Retorne para prosseguir.')
+        }
       }
     }
 
     function handleCopy(e: ClipboardEvent) {
-      if (prova.bloquearColar) {
+      if (blockCopyPaste) {
         e.preventDefault()
-        recordIncident('tentativa_copia', 'Tentativa de cópia de texto bloqueada.')
-        toast.warning('Ação desabilitada pela política da prova.')
+        recordIncident('tentativa_colar', 'Tentativa de cópia de texto bloqueada.')
+        if (actionOnIncident === 'alertar') {
+          toast.warning('Ação de copiar desabilitada pela política de integridade da prova.')
+        }
       }
     }
 
     function handlePaste(e: ClipboardEvent) {
-      if (prova.bloquearColar) {
+      if (blockCopyPaste) {
         e.preventDefault()
-        recordIncident('tentativa_cola', 'Tentativa de colar conteúdo externo bloqueada.')
-        toast.warning('Ação desabilitada pela política da prova.')
+        recordIncident('tentativa_colar', 'Tentativa de colar conteúdo externo bloqueada.')
+        if (actionOnIncident === 'alertar') {
+          toast.warning('Ação de colar desabilitada pela política de integridade da prova.')
+        }
+      }
+    }
+
+    function handleContextMenu(e: MouseEvent) {
+      if (blockCopyPaste) {
+        e.preventDefault()
       }
     }
 
@@ -393,14 +535,16 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
     document.addEventListener('fullscreenchange', handleFullscreenChange)
     window.addEventListener('copy', handleCopy)
     window.addEventListener('paste', handlePaste)
+    window.addEventListener('contextmenu', handleContextMenu)
 
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange)
       document.removeEventListener('fullscreenchange', handleFullscreenChange)
       window.removeEventListener('copy', handleCopy)
       window.removeEventListener('paste', handlePaste)
+      window.removeEventListener('contextmenu', handleContextMenu)
     }
-  }, [started, tentativa, prova.exigirTelaCheia, prova.bloquearColar, recordIncident])
+  }, [started, tentativa, requiresFullscreen, blockCopyPaste, monitorTabSwitch, actionOnIncident, recordIncident])
 
   // Request Fullscreen helper
   const enterFullscreen = async () => {
@@ -416,14 +560,23 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
 
   // --- Start Exam Action ---
   const handleStartExam = async () => {
+    if (hasPinRequirement && !pinCode.trim()) {
+      toast.error('Informe o código de liberação presencial fornecido pelo professor para iniciar.')
+      return
+    }
+
     setStartingLoading(true)
     setStartError(null)
 
     try {
+      const codeUpper = pinCode.trim().toUpperCase()
       const res = await fetch(`/api/provas-online/${prova.id}/iniciar`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ codigoAcesso: pinCode.trim() })
+        body: JSON.stringify({ 
+          codigoAcesso: codeUpper,
+          codigoLiberacao: codeUpper
+        })
       })
 
       const data = await res.json()
@@ -434,6 +587,11 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
 
       setTentativa(data.tentativa)
       setStarted(true)
+
+      // Enter fullscreen if mandated
+      if (requiresFullscreen) {
+        void enterFullscreen()
+      }
 
       // Initialize answers from attempt safely (resolves data.tentativa.respostas.forEach is not a function)
       if (data.tentativa?.respostas) {
@@ -462,11 +620,6 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
       if (data.tentativa?.prazoLimite) {
         const diff = Math.floor((new Date(data.tentativa.prazoLimite).getTime() - Date.now()) / 1000)
         setTimeRemainingSeconds(Math.max(0, diff))
-      }
-
-      // Enter fullscreen if required
-      if (prova.exigirTelaCheia) {
-        await enterFullscreen()
       }
 
       toast.success(data.retomada ? 'Prova retomada com sucesso!' : 'Prova iniciada! Boa sorte!')
@@ -571,14 +724,22 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
   // Switch Question (triggers immediate save of previous)
   const goToQuestion = (index: number) => {
     if (index < 0 || index >= orderedQuestions.length) return
-    if (prova.bloquearRetorno && index < currentIndex) {
-      toast.warning('A configuração desta prova não permite retornar a questões anteriores.')
+    if (!allowReturn && index < currentIndex) {
+      toast.warning('A configuração desta avaliação não permite retornar a questões anteriores.')
+      return
+    }
+    if (!isFreeNavigation && index > currentIndex + 1) {
+      toast.warning('Navegação sequencial ativa: responda a questão atual antes de avançar.')
       return
     }
     if (saveStatus === 'saving') {
       void syncPendingAnswers()
     }
     setCurrentIndex(index)
+    if (!isSingleQuestionPage) {
+      const el = document.getElementById(`question-card-${index}`)
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
   }
 
   // --- Final Delivery Submit Handler ---
@@ -608,6 +769,7 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
       setSubmittedVoucher(data.comprovante)
       setStarted(false)
       setSubmitModalOpen(false)
+      safeRemoveOfflineQueue(storageQueueKey)
 
       if (document.fullscreenElement) {
         document.exitFullscreen().catch(() => {})
@@ -690,15 +852,17 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
               width: '56px',
               height: '56px',
               borderRadius: '16px',
-              background: 'linear-gradient(135deg, #070d1e 0%, #1e1b4b 100%)',
+              background: '#ffffff',
+              border: '1.5px solid #e2e8f0',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               padding: '6px',
-              boxShadow: '0 6px 16px rgba(0, 0, 0, 0.12)'
+              boxShadow: '0 4px 14px rgba(0, 0, 0, 0.05)',
+              overflow: 'hidden'
             }}>
               <img
-                src="/logo-impacto-clean.png"
+                src="/logo-impacto.png"
                 alt="Colégio Impacto"
                 style={{ width: '100%', height: '100%', objectFit: 'contain' }}
               />
@@ -935,16 +1099,18 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
                 width: '52px',
                 height: '52px',
                 borderRadius: '16px',
-                background: 'linear-gradient(135deg, #070d1e 0%, #1e1b4b 100%)',
+                background: '#ffffff',
+                border: '1px solid #e2e8f0',
                 padding: '6px',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                boxShadow: '0 6px 16px rgba(0, 0, 0, 0.12)',
-                flexShrink: 0
+                boxShadow: '0 4px 14px rgba(0, 0, 0, 0.05)',
+                flexShrink: 0,
+                overflow: 'hidden'
               }}>
                 <img
-                  src="/logo-impacto-clean.png"
+                  src="/logo-impacto.png"
                   alt="Colégio Impacto"
                   style={{ width: '100%', height: '100%', objectFit: 'contain' }}
                 />
@@ -1239,16 +1405,40 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
                   <Check size={14} color="#0284c7" strokeWidth={3} />
                   <span>Recarregar a página, fechar o navegador ou trocar de dispositivo <strong>não pausa</strong> seu tempo.</span>
                 </div>
-                {prova.bloquearRetorno && (
+                {!allowReturn && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#b45309' }}>
                     <AlertTriangle size={14} color="#d97706" />
                     <span><strong>Atenção:</strong> Esta avaliação não permite retornar a questões anteriores após avançar.</span>
                   </div>
                 )}
-                {prova.exigirTelaCheia && (
+                {!isFreeNavigation && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#b45309' }}>
+                    <AlertTriangle size={14} color="#d97706" />
+                    <span><strong>Navegação Sequencial:</strong> As questões devem ser respondidas na ordem apresentada.</span>
+                  </div>
+                )}
+                {requiresFullscreen && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <Check size={14} color="#0284c7" strokeWidth={3} />
-                    <span>A prova solicita modo de tela cheia para evitar distrações. Saídas de tela são registradas.</span>
+                    <span>Modo de tela cheia obrigatório para evitar distrações. Saídas são monitoradas.</span>
+                  </div>
+                )}
+                {monitorTabSwitch && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Check size={14} color="#0284c7" strokeWidth={3} />
+                    <span>Monitoramento de abas ativo: saídas da página do exame são registradas pela supervisão.</span>
+                  </div>
+                )}
+                {blockCopyPaste && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Check size={14} color="#0284c7" strokeWidth={3} />
+                    <span>Proteção de integridade: cópia e colagem de conteúdo bloqueadas nesta prova.</span>
+                  </div>
+                )}
+                {actionOnIncident === 'suspender' && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#b45309' }}>
+                    <AlertTriangle size={14} color="#d97706" />
+                    <span><strong>Suspensão Automática:</strong> Infrações não autorizadas suspenderão a prova imediatamente.</span>
                   </div>
                 )}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -1260,7 +1450,7 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
           </div>
 
           {/* PIN Verification if required */}
-          {prova.exigeCodigoAcesso && (
+          {hasPinRequirement && (
             <div style={{
               background: '#f0f9ff',
               border: '1.5px solid #bae6fd',
@@ -1417,7 +1607,7 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
 
             <button
               onClick={handleStartExam}
-              disabled={startingLoading || !isOnline || !pledgeAccepted || (prova.exigeCodigoAcesso && !pinCode.trim())}
+              disabled={startingLoading || !isOnline || !pledgeAccepted || (hasPinRequirement && !pinCode.trim())}
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -1474,6 +1664,532 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
   const isFlagged = flaggedIds.has(currentQuestion.id)
   const currentAnswer = respostas[currentQuestion.id]
 
+  const renderQuestionCard = (q: QuestaoProva, qIndex: number, showPaginationFooter = false) => {
+    const qAnswer = respostas[q.id]
+    const isQFlagged = flaggedIds.has(q.id)
+    const alternatives = getQuestionAlternatives(q)
+
+    return (
+      <div
+        style={{
+          background: '#ffffff',
+          border: '1.5px solid #e2e8f0',
+          borderRadius: '24px',
+          padding: '28px 32px',
+          boxShadow: '0 4px 20px rgba(0, 0, 0, 0.03)',
+          display: 'flex',
+          flexDirection: 'column',
+          minHeight: showPaginationFooter ? '480px' : 'auto'
+        }}
+      >
+        {/* Question Header */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          paddingBottom: '16px',
+          borderBottom: '1px solid #f1f5f9',
+          gap: '12px',
+          flexWrap: 'wrap'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <span style={{
+              width: '36px',
+              height: '36px',
+              borderRadius: '12px',
+              background: '#f0f9ff',
+              color: '#0284c7',
+              fontWeight: 900,
+              fontSize: '15px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              border: '1.5px solid #bae6fd'
+            }}>
+              {qIndex + 1}
+            </span>
+            <div>
+              <span style={{ fontSize: '12px', fontWeight: 800, color: '#334155', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'block' }}>
+                Questão {qIndex + 1} de {orderedQuestions.length}
+              </span>
+              <span style={{ fontSize: '12px', color: '#64748b' }}>
+                Valor: <strong style={{ color: '#0284c7' }}>{(q.valorPontos || q.pontuacao || 0).toFixed(1)}</strong> {((q.valorPontos || q.pontuacao) === 1) ? 'ponto' : 'pontos'}
+              </span>
+            </div>
+          </div>
+
+          {/* Flag for Review Button */}
+          <button
+            type="button"
+            onClick={() => handleToggleFlag(q.id)}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '7px 14px',
+              borderRadius: '10px',
+              fontSize: '12px',
+              fontWeight: 700,
+              border: isQFlagged ? '1.5px solid #fcd34d' : '1px solid #e2e8f0',
+              background: isQFlagged ? '#fffbeb' : '#f8fafc',
+              color: isQFlagged ? '#b45309' : '#64748b',
+              cursor: 'pointer',
+              transition: 'all 0.15s'
+            }}
+          >
+            <Bookmark size={14} color={isQFlagged ? '#f59e0b' : '#94a3b8'} fill={isQFlagged ? '#f59e0b' : 'none'} />
+            {isQFlagged ? 'Marcada para Revisar' : 'Marcar para Revisar'}
+          </button>
+        </div>
+
+        {/* Question Statement / Enunciado */}
+        <div style={{
+          padding: '24px 0',
+          borderBottom: '1px solid #f1f5f9',
+          color: '#0f172a',
+          lineHeight: 1.6,
+          fontSize: fontSize === 'sm' ? '13.5px' : fontSize === 'lg' ? '17px' : '15px'
+        }}>
+          <HtmlContent html={q.enunciado} style={{ textAlign: 'left' }} />
+        </div>
+
+        {/* Question Input Section */}
+        <div style={{ padding: '24px 0', flex: 1 }}>
+          {/* TYPE 1: Single Choice (Múltipla Escolha) */}
+          {q.tipo === 'multipla_escolha' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <p style={{ fontSize: '12.5px', fontWeight: 600, color: '#64748b', margin: '0 0 4px' }}>
+                Selecione apenas uma alternativa:
+              </p>
+              {alternatives.map((alt, altIdx) => {
+                const isSelected = qAnswer?.alternativaIdSelecionada === alt.id || qAnswer?.respostaOpcaoId === alt.id
+                const letter = String.fromCharCode(65 + altIdx)
+
+                return (
+                  <div
+                    key={alt.id}
+                    onClick={() => handleSelectSingleChoice(q.id, alt.id)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '14px',
+                      padding: '12px 18px',
+                      borderRadius: '16px',
+                      border: isSelected ? '2px solid #0284c7' : '1.5px solid #e2e8f0',
+                      background: isSelected ? '#f0f9ff' : '#ffffff',
+                      boxShadow: isSelected ? '0 4px 12px rgba(2, 132, 199, 0.12)' : '0 1px 3px rgba(0,0,0,0.02)',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease'
+                    }}
+                    onMouseEnter={e => {
+                      if (!isSelected) {
+                        e.currentTarget.style.borderColor = '#bae6fd'
+                        e.currentTarget.style.background = '#f8fafc'
+                      }
+                    }}
+                    onMouseLeave={e => {
+                      if (!isSelected) {
+                        e.currentTarget.style.borderColor = '#e2e8f0'
+                        e.currentTarget.style.background = '#ffffff'
+                      }
+                    }}
+                  >
+                    <div style={{
+                      width: '32px',
+                      height: '32px',
+                      borderRadius: '10px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontWeight: 800,
+                      fontSize: '13px',
+                      background: isSelected ? '#0284c7' : '#f1f5f9',
+                      color: isSelected ? '#ffffff' : '#475569',
+                      border: isSelected ? 'none' : '1px solid #cbd5e1',
+                      flexShrink: 0,
+                      transition: 'all 0.15s'
+                    }}>
+                      {letter}
+                    </div>
+                    <div style={{
+                      flex: 1,
+                      fontSize: fontSize === 'sm' ? '13px' : fontSize === 'lg' ? '16px' : '14px',
+                      color: isSelected ? '#0369a1' : '#1e293b',
+                      fontWeight: isSelected ? 600 : 400,
+                      lineHeight: 1.5,
+                      textAlign: 'left'
+                    }}>
+                      <HtmlContent html={alt.texto} style={{ textAlign: 'left' }} />
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
+          {/* TYPE 2: Multiple Choice (Múltipla Seleção) */}
+          {q.tipo === 'multipla_selecao' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                <p style={{ fontSize: '12.5px', fontWeight: 600, color: '#64748b', margin: 0 }}>
+                  Selecione todas as alternativas corretas:
+                </p>
+                <span style={{ fontSize: '11.5px', fontWeight: 700, color: '#0284c7' }}>
+                  {q.permitePontuacaoParcial ? 'Pontuação parcial admitida' : 'Exige todas as corretas'}
+                </span>
+              </div>
+              {alternatives.map((alt, altIdx) => {
+                const selectedList = qAnswer?.alternativasIdsSelecionadas || qAnswer?.respostaOpcoesIds || []
+                const isSelected = selectedList.includes(alt.id)
+                const letter = String.fromCharCode(65 + altIdx)
+
+                return (
+                  <div
+                    key={alt.id}
+                    onClick={() => handleToggleMultipleChoice(q.id, alt.id)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '14px',
+                      padding: '12px 18px',
+                      borderRadius: '16px',
+                      border: isSelected ? '2px solid #0284c7' : '1.5px solid #e2e8f0',
+                      background: isSelected ? '#f0f9ff' : '#ffffff',
+                      boxShadow: isSelected ? '0 4px 12px rgba(2, 132, 199, 0.12)' : '0 1px 3px rgba(0,0,0,0.02)',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    <div style={{
+                      width: '28px',
+                      height: '28px',
+                      borderRadius: '8px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      background: isSelected ? '#0284c7' : '#ffffff',
+                      color: isSelected ? '#ffffff' : '#64748b',
+                      border: isSelected ? 'none' : '1.5px solid #cbd5e1',
+                      flexShrink: 0
+                    }}>
+                      {isSelected ? <Check size={16} strokeWidth={3} /> : <span style={{ fontSize: '12px', fontWeight: 800 }}>{letter}</span>}
+                    </div>
+                    <div style={{
+                      flex: 1,
+                      fontSize: fontSize === 'sm' ? '13px' : fontSize === 'lg' ? '16px' : '14px',
+                      color: isSelected ? '#0369a1' : '#1e293b',
+                      fontWeight: isSelected ? 600 : 400,
+                      lineHeight: 1.5,
+                      textAlign: 'left'
+                    }}>
+                      <HtmlContent html={alt.texto} style={{ textAlign: 'left' }} />
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
+          {/* TYPE 3: True / False (Verdadeiro ou Falso) */}
+          {q.tipo === 'verdadeiro_falso' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <p style={{ fontSize: '12.5px', fontWeight: 600, color: '#64748b', margin: '0 0 4px' }}>
+                Classifique cada afirmação como Verdadeira (V) ou Falsa (F):
+              </p>
+              {((q.itensVF || q.itensVouF || []) as any[]).map((item, itemIdx) => {
+                const itemAnswer = (qAnswer?.itensVouF || []).find(i => i.id === item.id)
+
+                return (
+                  <div
+                    key={item.id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '14px 18px',
+                      borderRadius: '16px',
+                      background: itemAnswer?.respostaAluno !== undefined ? '#f8fafc' : '#ffffff',
+                      border: `1.5px solid ${itemAnswer?.respostaAluno !== undefined ? '#cbd5e1' : '#e2e8f0'}`,
+                      gap: '16px',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', flex: 1 }}>
+                      <span style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        minWidth: '26px',
+                        height: '26px',
+                        borderRadius: '8px',
+                        background: '#f1f5f9',
+                        border: '1px solid #e2e8f0',
+                        color: '#475569',
+                        fontWeight: 800,
+                        fontSize: '12px',
+                        marginTop: '1px'
+                      }}>
+                        {itemIdx + 1}
+                      </span>
+                      <div style={{ flex: 1, fontSize: '14px', color: '#0f172a', lineHeight: 1.5, textAlign: 'left' }}>
+                        <HtmlContent html={item.afirmacao} style={{ textAlign: 'left' }} />
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+                      <button
+                        type="button"
+                        onClick={() => handleToggleTrueFalse(q.id, item.id, true)}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          padding: '8px 16px',
+                          borderRadius: '10px',
+                          border: itemAnswer?.respostaAluno === true ? '1.5px solid #10b981' : '1px solid #cbd5e1',
+                          background: itemAnswer?.respostaAluno === true ? '#10b981' : '#ffffff',
+                          color: itemAnswer?.respostaAluno === true ? '#ffffff' : '#334155',
+                          fontWeight: 800,
+                          fontSize: '12px',
+                          cursor: 'pointer',
+                          boxShadow: itemAnswer?.respostaAluno === true ? '0 2px 8px rgba(16, 185, 129, 0.3)' : 'none',
+                          transition: 'all 0.15s'
+                        }}
+                      >
+                        <Check size={13} strokeWidth={3} />
+                        V (Verdadeiro)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleToggleTrueFalse(q.id, item.id, false)}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          padding: '8px 16px',
+                          borderRadius: '10px',
+                          border: itemAnswer?.respostaAluno === false ? '1.5px solid #ef4444' : '1px solid #cbd5e1',
+                          background: itemAnswer?.respostaAluno === false ? '#ef4444' : '#ffffff',
+                          color: itemAnswer?.respostaAluno === false ? '#ffffff' : '#334155',
+                          fontWeight: 800,
+                          fontSize: '12px',
+                          cursor: 'pointer',
+                          boxShadow: itemAnswer?.respostaAluno === false ? '0 2px 8px rgba(239, 68, 68, 0.3)' : 'none',
+                          transition: 'all 0.15s'
+                        }}
+                      >
+                        <X size={13} strokeWidth={3} />
+                        F (Falso)
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
+          {/* TYPE 4: Essay (Dissertativa) */}
+          {q.tipo === 'dissertativa' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '12.5px', color: '#64748b' }}>
+                <span>Digite sua resposta fundamentada no campo abaixo:</span>
+                {q.limitePalavras && (
+                  <span style={{ fontWeight: 700, color: '#0284c7' }}>
+                    Limite sugerido: {q.limitePalavras} palavras
+                  </span>
+                )}
+              </div>
+
+              <textarea
+                rows={7}
+                value={qAnswer?.textoDissertativo || ''}
+                onChange={e => handleEssayChange(q.id, e.target.value)}
+                placeholder="Escreva sua resolução aqui de forma clara e fundamentada..."
+                style={{
+                  width: '100%',
+                  minHeight: '160px',
+                  padding: '16px',
+                  borderRadius: '16px',
+                  background: '#ffffff',
+                  border: '1.5px solid #cbd5e1',
+                  color: '#0f172a',
+                  fontSize: fontSize === 'sm' ? '13px' : fontSize === 'lg' ? '16px' : '14px',
+                  lineHeight: '1.6',
+                  resize: 'vertical',
+                  outline: 'none',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
+                  transition: 'border-color 0.15s, box-shadow 0.15s'
+                }}
+                onFocus={e => {
+                  e.currentTarget.style.borderColor = '#0284c7'
+                  e.currentTarget.style.boxShadow = '0 0 0 3px rgba(2, 132, 199, 0.15)'
+                }}
+                onBlur={e => {
+                  e.currentTarget.style.borderColor = '#cbd5e1'
+                  e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.02)'
+                }}
+              />
+
+              {/* Word / Char counter */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '12px', color: '#64748b' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <strong style={{ color: '#334155' }}>
+                    {(qAnswer?.textoDissertativo || '').trim().split(/\s+/).filter(Boolean).length} palavras
+                  </strong>
+                  <span>•</span>
+                  <span>{(qAnswer?.textoDissertativo || '').length} caracteres</span>
+                </div>
+                <span style={{ color: '#059669', fontSize: '11.5px', fontWeight: 600 }}>
+                  ✓ Salvamento contínuo durante a digitação
+                </span>
+              </div>
+
+              {/* Evaluation Rubrics info */}
+              {q.criteriosAvaliacao && q.criteriosAvaliacao.length > 0 && (
+                <div style={{
+                  marginTop: '8px',
+                  padding: '14px 18px',
+                  borderRadius: '14px',
+                  background: '#f8fafc',
+                  border: '1px solid #e2e8f0'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
+                    <FileText size={15} color="#0284c7" />
+                    <span style={{ fontSize: '12.5px', fontWeight: 800, color: '#0f172a' }}>
+                      Critérios de Correção da Questão:
+                    </span>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '8px' }}>
+                    {q.criteriosAvaliacao.map(crit => (
+                      <div key={crit.id} style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '8px 12px',
+                        borderRadius: '10px',
+                        background: '#ffffff',
+                        border: '1px solid #e2e8f0',
+                        fontSize: '12px'
+                      }}>
+                        <span style={{ color: '#334155' }}>{crit.descricao}</span>
+                        <strong style={{ color: '#0284c7' }}>{(crit.pesoPontos || crit.pontosMaximos || 0).toFixed(1)} pts</strong>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Navigation Bottom Footer (only for single question mode) */}
+        {showPaginationFooter && (
+          <div style={{
+            paddingTop: '20px',
+            borderTop: '1px solid #f1f5f9',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '12px',
+            marginTop: 'auto'
+          }}>
+            <button
+              type="button"
+              onClick={() => goToQuestion(qIndex - 1)}
+              disabled={qIndex === 0 || !allowReturn}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                height: '42px',
+                padding: '0 20px',
+                borderRadius: '12px',
+                background: '#ffffff',
+                border: '1.5px solid #cbd5e1',
+                color: (qIndex === 0 || !allowReturn) ? '#94a3b8' : '#334155',
+                fontSize: '13px',
+                fontWeight: 800,
+                cursor: (qIndex === 0 || !allowReturn) ? 'not-allowed' : 'pointer',
+                opacity: (qIndex === 0 || !allowReturn) ? 0.4 : 1,
+                boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
+                transition: 'all 0.15s'
+              }}
+            >
+              <ChevronLeft size={16} />
+              Anterior
+            </button>
+
+            <span style={{
+              fontSize: '12.5px',
+              color: '#64748b',
+              fontWeight: 800,
+              background: '#f8fafc',
+              padding: '6px 14px',
+              borderRadius: '10px',
+              border: '1px solid #e2e8f0'
+            }}>
+              {qIndex + 1} de {orderedQuestions.length}
+            </span>
+
+            {qIndex < orderedQuestions.length - 1 ? (
+              <button
+                type="button"
+                onClick={() => goToQuestion(qIndex + 1)}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  height: '42px',
+                  padding: '0 24px',
+                  borderRadius: '12px',
+                  background: 'linear-gradient(135deg, #0284c7, #0369a1)',
+                  border: 'none',
+                  color: '#ffffff',
+                  fontSize: '13px',
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                  boxShadow: '0 2px 8px rgba(2, 132, 199, 0.3)',
+                  transition: 'all 0.15s'
+                }}
+                onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-1px)'}
+                onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
+              >
+                Próxima Questão
+                <ChevronRight size={16} />
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setSubmitModalOpen(true)}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  height: '42px',
+                  padding: '0 24px',
+                  borderRadius: '12px',
+                  background: 'linear-gradient(135deg, #10b981, #059669)',
+                  border: 'none',
+                  color: '#ffffff',
+                  fontSize: '13px',
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                  boxShadow: '0 2px 8px rgba(16, 185, 129, 0.3)',
+                  transition: 'all 0.15s'
+                }}
+                onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-1px)'}
+                onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
+              >
+                Revisar e Entregar
+                <Send size={15} />
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    )
+  }
+
   return (
     <div style={{ minHeight: '100vh', background: '#f8fafc', color: '#0f172a', display: 'flex', flexDirection: 'column', paddingBottom: '60px' }}>
       
@@ -1509,24 +2225,23 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
               width: '42px',
               height: '42px',
               borderRadius: '12px',
-              background: 'linear-gradient(145deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0.05) 100%)',
-              border: '1px solid rgba(255, 255, 255, 0.2)',
-              boxShadow: '0 4px 14px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.25)',
+              background: '#ffffff',
+              border: '1px solid rgba(255, 255, 255, 0.4)',
+              boxShadow: '0 4px 14px rgba(0, 0, 0, 0.25)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               padding: '4px',
               flexShrink: 0,
-              backdropFilter: 'blur(10px)'
+              overflow: 'hidden'
             }}>
               <img
-                src="/logo-impacto-clean.png"
+                src="/logo-impacto.png"
                 alt="Colégio Impacto"
                 style={{
                   width: '100%',
                   height: '100%',
-                  objectFit: 'contain',
-                  filter: 'drop-shadow(0 2px 4px rgba(0, 0, 0, 0.4))'
+                  objectFit: 'contain'
                 }}
               />
             </div>
@@ -1987,6 +2702,80 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
         </div>
       )}
 
+      {/* 3.1 FULLSCREEN ENFORCEMENT OVERLAY */}
+      {requiresFullscreen && started && !isFullscreen && !submittedVoucher && !suspensionAlert && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          zIndex: 9998,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '16px',
+          background: 'rgba(15, 23, 42, 0.85)',
+          backdropFilter: 'blur(10px)'
+        }}>
+          <div style={{
+            width: '100%',
+            maxWidth: '480px',
+            background: '#ffffff',
+            borderRadius: '24px',
+            border: '1.5px solid #bae6fd',
+            boxShadow: '0 25px 60px rgba(0, 0, 0, 0.4)',
+            padding: '32px 24px',
+            textAlign: 'center',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '16px'
+          }}>
+            <div style={{
+              width: '56px',
+              height: '56px',
+              borderRadius: '18px',
+              background: '#f0f9ff',
+              border: '1px solid #bae6fd',
+              color: '#0284c7',
+              margin: '0 auto',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}>
+              <Maximize2 size={28} />
+            </div>
+            <h2 style={{ fontSize: '18px', fontWeight: 900, color: '#0f172a', margin: 0 }}>
+              Modo Tela Cheia Obrigatório
+            </h2>
+            <p style={{ fontSize: '13px', color: '#64748b', margin: 0, lineHeight: 1.5 }}>
+              Esta avaliação exige execução em tela cheia para garantir a integridade do processo avaliativo. Clique no botão abaixo para retornar à tela cheia e prosseguir.
+            </p>
+            <button
+              type="button"
+              onClick={enterFullscreen}
+              style={{
+                width: '100%',
+                padding: '13px',
+                borderRadius: '14px',
+                background: 'linear-gradient(135deg, #0284c7, #0369a1)',
+                border: 'none',
+                color: '#ffffff',
+                fontSize: '13.5px',
+                fontWeight: 800,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                boxShadow: '0 4px 14px rgba(2, 132, 199, 0.3)',
+                transition: 'transform 0.15s'
+              }}
+            >
+              <Maximize2 size={16} />
+              Retornar para Tela Cheia
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* 4. MAIN EXAM BODY (Split: Question View + Navigation Palette) */}
       <div className="exam-room-grid" style={{
         maxWidth: '1440px',
@@ -1999,498 +2788,45 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
         gap: '24px',
         alignItems: 'start'
       }}>
-        {/* Left Column: Current Question Content */}
-        <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-          <motion.div
-            key={currentQuestion.id}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.18 }}
-            style={{
-              background: '#ffffff',
-              border: '1.5px solid #e2e8f0',
-              borderRadius: '24px',
-              padding: '28px 32px',
-              boxShadow: '0 4px 20px rgba(0, 0, 0, 0.03)',
-              display: 'flex',
-              flexDirection: 'column',
-              minHeight: '480px'
-            }}
-          >
-            {/* Question Header */}
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              paddingBottom: '16px',
-              borderBottom: '1px solid #f1f5f9',
-              gap: '12px',
-              flexWrap: 'wrap'
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <span style={{
-                  width: '36px',
-                  height: '36px',
-                  borderRadius: '12px',
-                  background: '#f0f9ff',
-                  color: '#0284c7',
-                  fontWeight: 900,
-                  fontSize: '15px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  border: '1.5px solid #bae6fd'
-                }}>
-                  {currentIndex + 1}
-                </span>
-                <div>
-                  <span style={{ fontSize: '12px', fontWeight: 800, color: '#334155', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'block' }}>
-                    Questão {currentIndex + 1} de {orderedQuestions.length}
-                  </span>
-                  <span style={{ fontSize: '12px', color: '#64748b' }}>
-                    Valor: <strong style={{ color: '#0284c7' }}>{(currentQuestion.valorPontos || currentQuestion.pontuacao || 0).toFixed(1)}</strong> {((currentQuestion.valorPontos || currentQuestion.pontuacao) === 1) ? 'ponto' : 'pontos'}
-                  </span>
+        {/* Left Column: Questions Content */}
+        <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, gap: '24px' }}>
+          {isSingleQuestionPage ? (
+            <motion.div
+              key={currentQuestion.id}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.18 }}
+            >
+              {renderQuestionCard(currentQuestion, currentIndex, true)}
+            </motion.div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+              {orderedQuestions.map((q, idx) => (
+                <div key={q.id} id={`question-card-${idx}`} style={{ scrollMarginTop: '90px' }}>
+                  {renderQuestionCard(q, idx, false)}
                 </div>
-              </div>
-
-              {/* Flag for Review Button */}
-              <button
-                onClick={() => handleToggleFlag(currentQuestion.id)}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '7px 14px',
-                  borderRadius: '10px',
-                  fontSize: '12px',
-                  fontWeight: 700,
-                  border: isFlagged ? '1.5px solid #fcd34d' : '1px solid #e2e8f0',
-                  background: isFlagged ? '#fffbeb' : '#f8fafc',
-                  color: isFlagged ? '#b45309' : '#64748b',
-                  cursor: 'pointer',
-                  transition: 'all 0.15s'
-                }}
-              >
-                <Bookmark size={14} color={isFlagged ? '#f59e0b' : '#94a3b8'} fill={isFlagged ? '#f59e0b' : 'none'} />
-                {isFlagged ? 'Marcada para Revisar' : 'Marcar para Revisar'}
-              </button>
-            </div>
-
-            {/* Question Statement / Enunciado */}
-            <div style={{
-              padding: '24px 0',
-              borderBottom: '1px solid #f1f5f9',
-              color: '#0f172a',
-              lineHeight: 1.6,
-              fontSize: fontSize === 'sm' ? '13.5px' : fontSize === 'lg' ? '17px' : '15px'
-            }}>
-              <HtmlContent html={currentQuestion.enunciado} style={{ textAlign: 'left' }} />
-            </div>
-
-            {/* Question Input Section */}
-            <div style={{ padding: '24px 0', flex: 1 }}>
-              {/* TYPE 1: Single Choice (Múltipla Escolha) */}
-              {currentQuestion.tipo === 'multipla_escolha' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  <p style={{ fontSize: '12.5px', fontWeight: 600, color: '#64748b', margin: '0 0 4px' }}>
-                    Selecione apenas uma alternativa:
-                  </p>
-                  {(currentQuestion.alternativas || []).map((alt, altIdx) => {
-                    const isSelected = currentAnswer?.alternativaIdSelecionada === alt.id || currentAnswer?.respostaOpcaoId === alt.id
-                    const letter = String.fromCharCode(65 + altIdx)
-
-                    return (
-                      <div
-                        key={alt.id}
-                        onClick={() => handleSelectSingleChoice(currentQuestion.id, alt.id)}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '14px',
-                          padding: '12px 18px',
-                          borderRadius: '16px',
-                          border: isSelected ? '2px solid #0284c7' : '1.5px solid #e2e8f0',
-                          background: isSelected ? '#f0f9ff' : '#ffffff',
-                          boxShadow: isSelected ? '0 4px 12px rgba(2, 132, 199, 0.12)' : '0 1px 3px rgba(0,0,0,0.02)',
-                          cursor: 'pointer',
-                          transition: 'all 0.15s ease'
-                        }}
-                        onMouseEnter={e => {
-                          if (!isSelected) {
-                            e.currentTarget.style.borderColor = '#bae6fd'
-                            e.currentTarget.style.background = '#f8fafc'
-                          }
-                        }}
-                        onMouseLeave={e => {
-                          if (!isSelected) {
-                            e.currentTarget.style.borderColor = '#e2e8f0'
-                            e.currentTarget.style.background = '#ffffff'
-                          }
-                        }}
-                      >
-                        <div style={{
-                          width: '32px',
-                          height: '32px',
-                          borderRadius: '10px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          fontWeight: 800,
-                          fontSize: '13px',
-                          background: isSelected ? '#0284c7' : '#f1f5f9',
-                          color: isSelected ? '#ffffff' : '#475569',
-                          border: isSelected ? 'none' : '1px solid #cbd5e1',
-                          flexShrink: 0,
-                          transition: 'all 0.15s'
-                        }}>
-                          {letter}
-                        </div>
-                        <div style={{
-                          flex: 1,
-                          fontSize: fontSize === 'sm' ? '13px' : fontSize === 'lg' ? '16px' : '14px',
-                          color: isSelected ? '#0369a1' : '#1e293b',
-                          fontWeight: isSelected ? 600 : 400,
-                          lineHeight: 1.5,
-                          textAlign: 'left'
-                        }}>
-                          <HtmlContent html={alt.texto} style={{ textAlign: 'left' }} />
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-
-              {/* TYPE 2: Multiple Choice (Múltipla Seleção) */}
-              {currentQuestion.tipo === 'multipla_selecao' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
-                    <p style={{ fontSize: '12.5px', fontWeight: 600, color: '#64748b', margin: 0 }}>
-                      Selecione todas as alternativas corretas:
-                    </p>
-                    <span style={{ fontSize: '11.5px', fontWeight: 700, color: '#0284c7' }}>
-                      {currentQuestion.permitePontuacaoParcial ? 'Pontuação parcial admitida' : 'Exige todas as corretas'}
-                    </span>
-                  </div>
-                  {(currentQuestion.alternativas || []).map((alt, altIdx) => {
-                    const selectedList = currentAnswer?.alternativasIdsSelecionadas || currentAnswer?.respostaOpcoesIds || []
-                    const isSelected = selectedList.includes(alt.id)
-                    const letter = String.fromCharCode(65 + altIdx)
-
-                    return (
-                      <div
-                        key={alt.id}
-                        onClick={() => handleToggleMultipleChoice(currentQuestion.id, alt.id)}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '14px',
-                          padding: '12px 18px',
-                          borderRadius: '16px',
-                          border: isSelected ? '2px solid #0284c7' : '1.5px solid #e2e8f0',
-                          background: isSelected ? '#f0f9ff' : '#ffffff',
-                          boxShadow: isSelected ? '0 4px 12px rgba(2, 132, 199, 0.12)' : '0 1px 3px rgba(0,0,0,0.02)',
-                          cursor: 'pointer',
-                          transition: 'all 0.15s ease'
-                        }}
-                      >
-                        <div style={{
-                          width: '28px',
-                          height: '28px',
-                          borderRadius: '8px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          background: isSelected ? '#0284c7' : '#ffffff',
-                          color: isSelected ? '#ffffff' : '#64748b',
-                          border: isSelected ? 'none' : '1.5px solid #cbd5e1',
-                          flexShrink: 0
-                        }}>
-                          {isSelected ? <Check size={16} strokeWidth={3} /> : <span style={{ fontSize: '12px', fontWeight: 800 }}>{letter}</span>}
-                        </div>
-                        <div style={{
-                          flex: 1,
-                          fontSize: fontSize === 'sm' ? '13px' : fontSize === 'lg' ? '16px' : '14px',
-                          color: isSelected ? '#0369a1' : '#1e293b',
-                          fontWeight: isSelected ? 600 : 400,
-                          lineHeight: 1.5,
-                          textAlign: 'left'
-                        }}>
-                          <HtmlContent html={alt.texto} style={{ textAlign: 'left' }} />
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-
-              {/* TYPE 3: True / False (Verdadeiro ou Falso) - PERFECTED DESIGN */}
-              {currentQuestion.tipo === 'verdadeiro_falso' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  <p style={{ fontSize: '12.5px', fontWeight: 600, color: '#64748b', margin: '0 0 4px' }}>
-                    Classifique cada afirmação como Verdadeira (V) ou Falsa (F):
-                  </p>
-                  {((currentQuestion.itensVF || currentQuestion.itensVouF || []) as any[]).map((item, itemIdx) => {
-                    const itemAnswer = (currentAnswer?.itensVouF || []).find(i => i.id === item.id)
-
-                    return (
-                      <div
-                        key={item.id}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          padding: '14px 18px',
-                          borderRadius: '16px',
-                          background: itemAnswer?.respostaAluno !== undefined ? '#f8fafc' : '#ffffff',
-                          border: `1.5px solid ${itemAnswer?.respostaAluno !== undefined ? '#cbd5e1' : '#e2e8f0'}`,
-                          gap: '16px',
-                          transition: 'all 0.15s ease'
-                        }}
-                      >
-                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', flex: 1 }}>
-                          <span style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            minWidth: '26px',
-                            height: '26px',
-                            borderRadius: '8px',
-                            background: '#f1f5f9',
-                            border: '1px solid #e2e8f0',
-                            color: '#475569',
-                            fontWeight: 800,
-                            fontSize: '12px',
-                            marginTop: '1px'
-                          }}>
-                            {itemIdx + 1}
-                          </span>
-                          <div style={{ flex: 1, fontSize: '14px', color: '#0f172a', lineHeight: 1.5, textAlign: 'left' }}>
-                            <HtmlContent html={item.afirmacao} style={{ textAlign: 'left' }} />
-                          </div>
-                        </div>
-
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
-                          <button
-                            type="button"
-                            onClick={() => handleToggleTrueFalse(currentQuestion.id, item.id, true)}
-                            style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '6px',
-                              padding: '8px 16px',
-                              borderRadius: '10px',
-                              border: itemAnswer?.respostaAluno === true ? '1.5px solid #10b981' : '1px solid #cbd5e1',
-                              background: itemAnswer?.respostaAluno === true ? '#10b981' : '#ffffff',
-                              color: itemAnswer?.respostaAluno === true ? '#ffffff' : '#334155',
-                              fontWeight: 800,
-                              fontSize: '12px',
-                              cursor: 'pointer',
-                              boxShadow: itemAnswer?.respostaAluno === true ? '0 2px 8px rgba(16, 185, 129, 0.3)' : 'none',
-                              transition: 'all 0.15s'
-                            }}
-                          >
-                            <Check size={13} strokeWidth={3} />
-                            V (Verdadeiro)
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleToggleTrueFalse(currentQuestion.id, item.id, false)}
-                            style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '6px',
-                              padding: '8px 16px',
-                              borderRadius: '10px',
-                              border: itemAnswer?.respostaAluno === false ? '1.5px solid #ef4444' : '1px solid #cbd5e1',
-                              background: itemAnswer?.respostaAluno === false ? '#ef4444' : '#ffffff',
-                              color: itemAnswer?.respostaAluno === false ? '#ffffff' : '#334155',
-                              fontWeight: 800,
-                              fontSize: '12px',
-                              cursor: 'pointer',
-                              boxShadow: itemAnswer?.respostaAluno === false ? '0 2px 8px rgba(239, 68, 68, 0.3)' : 'none',
-                              transition: 'all 0.15s'
-                            }}
-                          >
-                            <X size={13} strokeWidth={3} />
-                            F (Falso)
-                          </button>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-
-              {/* TYPE 4: Essay (Dissertativa) */}
-              {currentQuestion.tipo === 'dissertativa' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '12.5px', color: '#64748b' }}>
-                    <span>Digite sua resposta fundamentada no campo abaixo:</span>
-                    {currentQuestion.limitePalavras && (
-                      <span style={{ fontWeight: 700, color: '#0284c7' }}>
-                        Limite sugerido: {currentQuestion.limitePalavras} palavras
-                      </span>
-                    )}
-                  </div>
-
-                  <textarea
-                    rows={7}
-                    value={currentAnswer?.textoDissertativo || ''}
-                    onChange={e => handleEssayChange(currentQuestion.id, e.target.value)}
-                    placeholder="Escreva sua resolução aqui de forma clara e fundamentada..."
-                    style={{
-                      width: '100%',
-                      minHeight: '160px',
-                      padding: '16px',
-                      borderRadius: '16px',
-                      background: '#ffffff',
-                      border: '1.5px solid #cbd5e1',
-                      color: '#0f172a',
-                      fontSize: fontSize === 'sm' ? '13px' : fontSize === 'lg' ? '16px' : '14px',
-                      lineHeight: '1.6',
-                      resize: 'vertical',
-                      outline: 'none',
-                      boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
-                      transition: 'border-color 0.15s, box-shadow 0.15s'
-                    }}
-                    onFocus={e => {
-                      e.currentTarget.style.borderColor = '#0284c7'
-                      e.currentTarget.style.boxShadow = '0 0 0 3px rgba(2, 132, 199, 0.15)'
-                    }}
-                    onBlur={e => {
-                      e.currentTarget.style.borderColor = '#cbd5e1'
-                      e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.02)'
-                    }}
-                  />
-
-                  {/* Word / Char counter */}
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '12px', color: '#64748b' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <strong style={{ color: '#334155' }}>
-                        {(currentAnswer?.textoDissertativo || '').trim().split(/\s+/).filter(Boolean).length} palavras
-                      </strong>
-                      <span>•</span>
-                      <span>{(currentAnswer?.textoDissertativo || '').length} caracteres</span>
-                    </div>
-                    <span style={{ color: '#059669', fontSize: '11.5px', fontWeight: 600 }}>
-                      ✓ Salvamento contínuo durante a digitação
-                    </span>
-                  </div>
-
-                  {/* Evaluation Rubrics info */}
-                  {currentQuestion.criteriosAvaliacao && currentQuestion.criteriosAvaliacao.length > 0 && (
-                    <div style={{
-                      marginTop: '8px',
-                      padding: '14px 18px',
-                      borderRadius: '14px',
-                      background: '#f8fafc',
-                      border: '1px solid #e2e8f0'
-                    }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
-                        <FileText size={15} color="#0284c7" />
-                        <span style={{ fontSize: '12.5px', fontWeight: 800, color: '#0f172a' }}>
-                          Critérios de Correção da Questão:
-                        </span>
-                      </div>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '8px' }}>
-                        {currentQuestion.criteriosAvaliacao.map(crit => (
-                          <div key={crit.id} style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
-                            padding: '8px 12px',
-                            borderRadius: '10px',
-                            background: '#ffffff',
-                            border: '1px solid #e2e8f0',
-                            fontSize: '12px'
-                          }}>
-                            <span style={{ color: '#334155' }}>{crit.descricao}</span>
-                            <strong style={{ color: '#0284c7' }}>{(crit.pesoPontos || crit.pontosMaximos || 0).toFixed(1)} pts</strong>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Navigation Bottom Footer */}
-            <div style={{
-              paddingTop: '20px',
-              borderTop: '1px solid #f1f5f9',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: '12px',
-              marginTop: 'auto'
-            }}>
-              <button
-                type="button"
-                onClick={() => goToQuestion(currentIndex - 1)}
-                disabled={currentIndex === 0 || !!prova.bloquearRetorno}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  height: '42px',
-                  padding: '0 20px',
-                  borderRadius: '12px',
-                  background: '#ffffff',
-                  border: '1.5px solid #cbd5e1',
-                  color: (currentIndex === 0 || !!prova.bloquearRetorno) ? '#94a3b8' : '#334155',
-                  fontSize: '13px',
-                  fontWeight: 800,
-                  cursor: (currentIndex === 0 || !!prova.bloquearRetorno) ? 'not-allowed' : 'pointer',
-                  opacity: (currentIndex === 0 || !!prova.bloquearRetorno) ? 0.4 : 1,
-                  boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
-                  transition: 'all 0.15s'
-                }}
-              >
-                <ChevronLeft size={16} />
-                Anterior
-              </button>
-
-              <span style={{
-                fontSize: '12.5px',
-                color: '#64748b',
-                fontWeight: 800,
-                background: '#f8fafc',
-                padding: '6px 14px',
-                borderRadius: '10px',
-                border: '1px solid #e2e8f0'
+              ))}
+              {/* Continuous view completion card */}
+              <div style={{
+                background: '#ffffff',
+                border: '1.5px solid #e2e8f0',
+                borderRadius: '24px',
+                padding: '24px 32px',
+                boxShadow: '0 4px 20px rgba(0, 0, 0, 0.03)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '16px',
+                flexWrap: 'wrap'
               }}>
-                {currentIndex + 1} de {orderedQuestions.length}
-              </span>
-
-              {currentIndex < orderedQuestions.length - 1 ? (
-                <button
-                  type="button"
-                  onClick={() => goToQuestion(currentIndex + 1)}
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    height: '42px',
-                    padding: '0 24px',
-                    borderRadius: '12px',
-                    background: 'linear-gradient(135deg, #0284c7, #0369a1)',
-                    border: 'none',
-                    color: '#ffffff',
-                    fontSize: '13px',
-                    fontWeight: 800,
-                    cursor: 'pointer',
-                    boxShadow: '0 2px 8px rgba(2, 132, 199, 0.3)',
-                    transition: 'all 0.15s'
-                  }}
-                  onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-1px)'}
-                  onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
-                >
-                  Próxima Questão
-                  <ChevronRight size={16} />
-                </button>
-              ) : (
+                <div>
+                  <h4 style={{ margin: '0 0 4px', fontSize: '15px', fontWeight: 800, color: '#0f172a' }}>
+                    Fim das questões da avaliação
+                  </h4>
+                  <p style={{ margin: 0, fontSize: '13px', color: '#64748b' }}>
+                    Revise suas respostas no painel de navegação antes de confirmar o envio definitivo.
+                  </p>
+                </div>
                 <button
                   type="button"
                   onClick={() => setSubmitModalOpen(true)}
@@ -2498,27 +2834,27 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
                     display: 'inline-flex',
                     alignItems: 'center',
                     gap: '8px',
-                    height: '42px',
-                    padding: '0 24px',
-                    borderRadius: '12px',
+                    height: '44px',
+                    padding: '0 28px',
+                    borderRadius: '14px',
                     background: 'linear-gradient(135deg, #10b981, #059669)',
                     border: 'none',
                     color: '#ffffff',
-                    fontSize: '13px',
+                    fontSize: '13.5px',
                     fontWeight: 800,
                     cursor: 'pointer',
-                    boxShadow: '0 2px 8px rgba(16, 185, 129, 0.3)',
+                    boxShadow: '0 4px 14px rgba(16, 185, 129, 0.3)',
                     transition: 'all 0.15s'
                   }}
                   onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-1px)'}
                   onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
                 >
-                  Revisar e Entregar
                   <Send size={15} />
+                  Revisar e Entregar Prova
                 </button>
-              )}
+              </div>
             </div>
-          </motion.div>
+          )}
         </div>
 
         {/* Right Column: Question Navigation Palette (Sticky) */}
@@ -2585,21 +2921,25 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
                 )
                 const isCurrent = idx === currentIndex
                 const isFlag = flaggedIds.has(q.id)
+                const isNavDisabled = isSingleQuestionPage && (
+                  (!allowReturn && idx < currentIndex) ||
+                  (!isFreeNavigation && idx > currentIndex + 1)
+                )
 
                 return (
                   <button
                     key={q.id}
                     type="button"
                     onClick={() => goToQuestion(idx)}
-                    disabled={!!prova.bloquearRetorno && idx < currentIndex}
+                    disabled={isNavDisabled}
                     style={{
                       width: '44px',
                       height: '44px',
                       borderRadius: '12px',
                       fontSize: '13px',
                       fontWeight: 800,
-                      cursor: (!!prova.bloquearRetorno && idx < currentIndex) ? 'not-allowed' : 'pointer',
-                      opacity: (!!prova.bloquearRetorno && idx < currentIndex) ? 0.35 : 1,
+                      cursor: isNavDisabled ? 'not-allowed' : 'pointer',
+                      opacity: isNavDisabled ? 0.35 : 1,
                       position: 'relative',
                       display: 'flex',
                       alignItems: 'center',

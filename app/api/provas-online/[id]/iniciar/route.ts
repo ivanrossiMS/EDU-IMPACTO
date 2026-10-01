@@ -10,7 +10,8 @@ import {
 import {
   checkExamAvailabilityForStudent,
   calculateServerDeadline,
-  generateVoucherCode
+  generateVoucherCode,
+  autoGradeTentativa
 } from '@/lib/provas-online/engine'
 import { TentativaAluno } from '@/types/provas-online'
 
@@ -110,17 +111,24 @@ export async function POST(
         message: 'Tentativa em andamento recuperada com sucesso.'
       })
     } else {
-      // Deadline expired while away: update status to expirada
+      // Deadline expired while away: update status to expirada and auto-grade
       existingActive.status = 'expirada'
       existingActive.entregueEm = new Date(deadline).toISOString()
+      const graded = autoGradeTentativa(prova, existingActive)
+      existingActive.pontuacaoObjetiva = graded.pontuacaoObjetiva
+      existingActive.notaFinal = graded.notaFinal
+      existingActive.statusCorrecao = graded.statusCorrecao
+      existingActive.comprovanteCodigo = graded.comprovanteCodigo
+      existingActive.respostas = graded.respostas
       await dbSaveTentativa(existingActive)
     }
   }
 
   // 4. Verify release PIN code if in-person proctoring is enabled
   if (prova.codigoLiberacao && String(prova.codigoLiberacao).trim() !== '') {
-    const providedCode = String(body.codigoLiberacao || body.codigoAcesso || '').trim()
-    if (providedCode !== prova.codigoLiberacao.trim()) {
+    const providedCode = String(body.codigoLiberacao || body.codigoAcesso || '').trim().toUpperCase()
+    const expectedCode = String(prova.codigoLiberacao).trim().toUpperCase()
+    if (!providedCode || providedCode !== expectedCode) {
       return NextResponse.json({
         error: 'Código de liberação presencial incorreto ou não fornecido. Solicite o código ao professor aplicador.'
       }, { status: 401 })
@@ -138,7 +146,7 @@ export async function POST(
   let orderedQuestoes = [...questoes]
 
   // Embaralhar questões se configurado (mas respeitando dependência de texto base se houver)
-  if (prova.configuracaoLayout.embaralharQuestoes) {
+  if (prova.configuracaoLayout?.embaralharQuestoes) {
     orderedQuestoes.sort(() => Math.random() - 0.5)
   }
 
@@ -150,7 +158,7 @@ export async function POST(
       const hasDependentAlt = alts.some(a => 
         /todas as anteriores|nenhuma das anteriores|a e b|b e c/i.test(a.texto)
       )
-      if (prova.configuracaoLayout.embaralharAlternativas && !hasDependentAlt) {
+      if (prova.configuracaoLayout?.embaralharAlternativas && !hasDependentAlt) {
         alts.sort(() => Math.random() - 0.5)
       }
       altOrder = alts.map(a => a.id)
@@ -185,6 +193,7 @@ export async function POST(
     tempoAdicionalMinutos: 0,
     ultimaAtividade: nowIso,
     ordemQuestoes,
+    ordemQuestoesSorteada: orderedQuestoes.map(q => q.id),
     respostas: {},
     versaoRespostas: 1,
     pontuacaoObjetiva: 0,

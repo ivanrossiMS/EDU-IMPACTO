@@ -38,7 +38,22 @@ export function ReportsSelectionModal({
   const [turmas, _st, { loading: loadingTurmas }] = useSupabaseArray<any>('turmas')
   const [colaboradores, _sc, { loading: loadingColabs }] = useSupabaseArray<any>('configuracoes/usuarios')
   
-  const isLoadingData = loadingAlunos || loadingGrupos || loadingTurmas || loadingColabs
+  // Timeout de segurança para evitar travamento em caso de erro de rede
+  const [loadTimeoutPassed, setLoadTimeoutPassed] = useState(false)
+  useEffect(() => {
+    if (!isOpen) {
+      setLoadTimeoutPassed(false)
+      return
+    }
+    const timer = setTimeout(() => {
+      setLoadTimeoutPassed(true)
+    }, 8000)
+    return () => clearTimeout(timer)
+  }, [isOpen])
+
+  const isLoadingTurmas = !loadTimeoutPassed && (loadingTurmas || loadingGrupos)
+  const isAnyHookLoading = loadingTurmas || loadingGrupos || loadingAlunos || loadingColabs
+  const isLoadingData = !loadTimeoutPassed && isAnyHookLoading
 
   const [step, setStep] = useState<1 | 2>(1)
   const [selectedTemplate, setSelectedTemplate] = useState<ReportTemplate | null>(null)
@@ -421,8 +436,8 @@ export function ReportsSelectionModal({
       const currentYearStr = new Date().getFullYear().toString()
       const initialYear = availableYears.includes(currentYearStr)
         ? currentYearStr
-        : (availableYears[0] || '')
-      setFilterYear(initialYear)
+        : (availableYears[0] || currentYearStr)
+      setFilterYear(prev => prev || initialYear)
       setFilterTurmaIds([])
       setShowTurmaModal(false)
       setShowYearDropdown(false)
@@ -833,6 +848,15 @@ export function ReportsSelectionModal({
               padding: 13px 14px !important;
             }
           }
+          @keyframes reportsSkeletonShimmer {
+            0% { background-position: -200% 0; }
+            100% { background-position: 200% 0; }
+          }
+          .reports-skeleton-shimmer {
+            background: linear-gradient(90deg, #f1f5f9 0%, #e2e8f0 50%, #f1f5f9 100%) !important;
+            background-size: 200% 100% !important;
+            animation: reportsSkeletonShimmer 1.6s cubic-bezier(0.4, 0, 0.2, 1) infinite !important;
+          }
         `}</style>
         
         <motion.div 
@@ -931,8 +955,8 @@ export function ReportsSelectionModal({
 
                 {isLoadingData ? (
                   <div style={{ display: 'flex', gap: 10 }}>
-                    <div style={{ width: 110, height: 44, borderRadius: 14, background: '#f1f5f9', animation: 'pulse 1.5s infinite' }} />
-                    <div style={{ flex: 1, height: 44, borderRadius: 14, background: '#f1f5f9', animation: 'pulse 1.5s infinite' }} />
+                    <div style={{ width: 110, height: 44, borderRadius: 14, background: '#f1f5f9' }} className="reports-skeleton-shimmer" />
+                    <div style={{ flex: 1, height: 44, borderRadius: 14, background: '#f1f5f9' }} className="reports-skeleton-shimmer" />
                   </div>
                 ) : (
                   <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
@@ -1090,8 +1114,22 @@ export function ReportsSelectionModal({
                 {/* Status e Feedback de Alunos e Turmas Selecionadas */}
                 {filterTurmaIds.length > 0 && (
                   <div style={{ marginTop: 2, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    {isLoadingData ? (
-                      <div style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>Carregando alunos das turmas...</div>
+                    {(isLoadingData || loadingAlunos) ? (
+                      <div style={{
+                        fontSize: 12,
+                        fontWeight: 600,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        color: '#2563eb',
+                        background: '#eff6ff',
+                        border: '1px solid #bfdbfe',
+                        padding: '8px 12px',
+                        borderRadius: 11
+                      }}>
+                        <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#2563eb', animation: 'pulse 1.2s infinite' }} />
+                        <span>Carregando alunos vinculados às turmas selecionadas...</span>
+                      </div>
                     ) : targetedStudents.length > 0 ? (
                       <>
                         <div style={{ 
@@ -1184,10 +1222,10 @@ export function ReportsSelectionModal({
                   {isLoadingData ? (
                     Array.from({ length: 4 }).map((_, i) => (
                       <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 12, background: '#f8fafc', border: '1px solid #f1f5f9' }}>
-                        <div style={{ width: 32, height: 32, borderRadius: 8, background: '#e2e8f0', animation: 'pulse 1.5s infinite' }} />
-                        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                          <div style={{ height: 12, width: '50%', background: '#e2e8f0', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
-                          <div style={{ height: 10, width: '30%', background: '#e2e8f0', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
+                        <div style={{ width: 32, height: 32, borderRadius: 8, background: '#e2e8f0' }} className="reports-skeleton-shimmer" />
+                        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 5 }}>
+                          <div style={{ height: 12, width: '50%', background: '#e2e8f0', borderRadius: 4 }} className="reports-skeleton-shimmer" />
+                          <div style={{ height: 10, width: '30%', background: '#f1f5f9', borderRadius: 4 }} className="reports-skeleton-shimmer" />
                         </div>
                       </div>
                     ))
@@ -1425,7 +1463,12 @@ export function ReportsSelectionModal({
                         Selecionar Turmas
                       </h4>
                       <p style={{ fontSize: 11.5, color: '#64748b', margin: '2px 0 0 0', fontWeight: 500 }}>
-                        {filterTurmaIds.length === 0
+                        {isLoadingTurmas ? (
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: '#2563eb', fontWeight: 600 }}>
+                            <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#2563eb', display: 'inline-block', animation: 'pulse 1.2s infinite' }} />
+                            Carregando turmas disponíveis...
+                          </span>
+                        ) : filterTurmaIds.length === 0
                           ? `Escolha uma ou mais turmas (${availableTurmas.length} em ${filterYear || 'ano selecionado'})`
                           : `${filterTurmaIds.length} de ${availableTurmas.length} turmas selecionadas`}
                       </p>
@@ -1456,7 +1499,7 @@ export function ReportsSelectionModal({
                 </div>
 
                 {/* Barra de Ações Rápidas (Selecionar Todas / Limpar) */}
-                {availableTurmas.length > 0 && (
+                {!isLoadingTurmas && availableTurmas.length > 0 && (
                   <div style={{
                     padding: '8px 16px',
                     background: '#f8fafc',
@@ -1528,7 +1571,39 @@ export function ReportsSelectionModal({
                     gap: 7 
                   }}
                 >
-                  {availableTurmas.length === 0 ? (
+                  {isLoadingTurmas ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+                      {Array.from({ length: 5 }).map((_, idx) => (
+                        <div
+                          key={`turma-skel-${idx}`}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 12,
+                            padding: '10px 14px',
+                            borderRadius: 14,
+                            background: '#ffffff',
+                            border: '1px solid #e2e8f0',
+                            minHeight: 52
+                          }}
+                        >
+                          {/* Checkbox Placeholder */}
+                          <div style={{ width: 18, height: 18, borderRadius: 5, background: '#e2e8f0', flexShrink: 0 }} className="reports-skeleton-shimmer" />
+                          {/* Icon Placeholder */}
+                          <div style={{ width: 34, height: 34, borderRadius: 10, background: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                            <div style={{ width: 16, height: 16, borderRadius: 4, background: '#bfdbfe' }} className="reports-skeleton-shimmer" />
+                          </div>
+                          {/* Title & Subtitle Placeholder */}
+                          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
+                            <div style={{ width: `${55 + (idx % 3) * 15}%`, height: 13, borderRadius: 4, background: '#e2e8f0' }} className="reports-skeleton-shimmer" />
+                            <div style={{ width: `${35 + (idx % 2) * 15}%`, height: 10, borderRadius: 3, background: '#f1f5f9' }} className="reports-skeleton-shimmer" />
+                          </div>
+                          {/* Badge Placeholder */}
+                          <div style={{ width: 56, height: 20, borderRadius: 8, background: '#f1f5f9', flexShrink: 0 }} className="reports-skeleton-shimmer" />
+                        </div>
+                      ))}
+                    </div>
+                  ) : availableTurmas.length === 0 ? (
                     <div style={{ padding: '32px 16px', textAlign: 'center', color: '#64748b', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
                       <Users size={28} style={{ color: '#cbd5e1' }} />
                       <div style={{ fontSize: 13.5, fontWeight: 700, color: '#334155' }}>Nenhuma turma encontrada</div>
@@ -1683,7 +1758,12 @@ export function ReportsSelectionModal({
                   gap: 12
                 }}>
                   <div style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>
-                    {filterTurmaIds.length > 0 ? (
+                    {isLoadingTurmas ? (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: '#2563eb' }}>
+                        <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#2563eb', display: 'inline-block', animation: 'pulse 1.2s infinite' }} />
+                        Sincronizando turmas...
+                      </span>
+                    ) : filterTurmaIds.length > 0 ? (
                       <span><strong>{filterTurmaIds.length}</strong> turma(s) selecionada(s)</span>
                     ) : (
                       <span>Nenhuma turma selecionada</span>
@@ -1693,24 +1773,25 @@ export function ReportsSelectionModal({
                   <button
                     type="button"
                     onClick={() => setShowTurmaModal(false)}
+                    disabled={isLoadingTurmas}
                     style={{
                       padding: '8px 18px',
                       borderRadius: 11,
                       border: 'none',
-                      background: filterTurmaIds.length > 0 ? 'linear-gradient(135deg, #2563eb 0%, #4f46e5 100%)' : '#e2e8f0',
-                      color: filterTurmaIds.length > 0 ? '#ffffff' : '#94a3b8',
+                      background: (filterTurmaIds.length > 0 && !isLoadingTurmas) ? 'linear-gradient(135deg, #2563eb 0%, #4f46e5 100%)' : '#e2e8f0',
+                      color: (filterTurmaIds.length > 0 && !isLoadingTurmas) ? '#ffffff' : '#94a3b8',
                       fontSize: 13,
                       fontWeight: 700,
-                      cursor: 'pointer',
+                      cursor: (filterTurmaIds.length > 0 && !isLoadingTurmas) ? 'pointer' : 'not-allowed',
                       display: 'flex',
                       alignItems: 'center',
                       gap: 6,
-                      boxShadow: filterTurmaIds.length > 0 ? '0 2px 8px rgba(37, 99, 235, 0.25)' : 'none',
+                      boxShadow: (filterTurmaIds.length > 0 && !isLoadingTurmas) ? '0 2px 8px rgba(37, 99, 235, 0.25)' : 'none',
                       transition: 'all 0.15s'
                     }}
                   >
                     <Check size={14} strokeWidth={2.5} />
-                    <span>Confirmar Seleção</span>
+                    <span>{isLoadingTurmas ? 'Aguarde...' : 'Confirmar Seleção'}</span>
                   </button>
                 </div>
               </motion.div>

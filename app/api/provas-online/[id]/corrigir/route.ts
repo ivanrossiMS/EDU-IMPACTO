@@ -6,8 +6,10 @@ import {
   dbSaveProva,
   dbGetTentativasByProvaId,
   dbGetTentativaById,
-  dbSaveTentativa
+  dbSaveTentativa,
+  dbSaveQuestoes
 } from '@/lib/provas-online/db'
+import { repairExamQuestoes } from '@/lib/provas-online/textSanitizer'
 
 export const dynamic = 'force-dynamic'
 
@@ -292,6 +294,18 @@ export async function POST(
     return NextResponse.json({
       ok: true,
       message: 'Resultados e gabaritos publicados com sucesso aos alunos e responsáveis.'
+    })
+  }
+
+  // 3. Reparar e Higienizar Textos das Questões Permanentemente
+  if (acao === 'reparar_textos') {
+    const repairedQuestoes = repairExamQuestoes(prova.questoes || [])
+    await dbSaveQuestoes(provaId, repairedQuestoes)
+    return NextResponse.json({
+      ok: true,
+      message: 'Textos das questões higienizados e alternativas reparadas com sucesso!',
+      totalQuestoes: repairedQuestoes.length,
+      questoes: repairedQuestoes
     })
   }
 

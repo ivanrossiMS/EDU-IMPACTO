@@ -7,6 +7,8 @@ import {
   Printer, ArrowLeft, CheckCircle2, FileText,
   Eye, Check, BookOpen, AlertCircle, RefreshCw, Award
 } from 'lucide-react'
+import { HtmlContent } from '@/components/HtmlContent'
+import { cleanAlternativeText, cleanQuestionStatementHtml } from '@/lib/provas-online/textSanitizer'
 
 export default function ImprimirProvaPage() {
   const params = useParams()
@@ -522,14 +524,14 @@ export default function ImprimirProvaPage() {
                     marginBottom: '16px',
                     fontWeight: 500
                   }}>
-                    {q.enunciado}
+                    <HtmlContent html={cleanQuestionStatementHtml(q.enunciado)} />
                   </div>
 
                   {/* Alternativas (Objetivas) */}
                   {(isObjSingle || isObjMulti) && q.alternativas && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '12px' }}>
                       {q.alternativas.map((alt: any, altIdx: number) => {
-                        const letter = String.fromCharCode(65 + altIdx)
+                        const letter = alt.letra || String.fromCharCode(65 + altIdx)
                         const isCorrect = alt.correta || q.gabaritoOficial === alt.id
 
                         return (
@@ -574,8 +576,8 @@ export default function ImprimirProvaPage() {
                             }}>
                               {letter}
                             </span>
-                            <div style={{ paddingTop: '3px', flex: 1 }}>
-                              <span>{alt.texto}</span>
+                            <div style={{ paddingTop: '3px', flex: 1, minWidth: 0, wordBreak: 'break-word', lineHeight: 1.5 }}>
+                              <HtmlContent html={cleanAlternativeText(alt.texto)} />
                               {modoImpressao === 'professor' && isCorrect && (
                                 <span style={{
                                   marginLeft: '8px',

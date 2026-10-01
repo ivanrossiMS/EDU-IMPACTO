@@ -4,6 +4,7 @@ import { DOMParser } from '@xmldom/xmldom'
 import { convertMetafileToSvg, isWmfOrEmf } from './wmfToSvg'
 import { parseMtefToLatex } from './mtefParser'
 import { normalizeQuestionImages } from '@/lib/utils'
+import { cleanAlternativeText, cleanQuestionStatementHtml } from '@/lib/provas-online/textSanitizer'
 
 // ═══════════════════════════════════════════════════════════════════════════
 // OMML (Office Math Markup Language) to LaTeX Converter
@@ -504,7 +505,7 @@ export function parseBlock(block: string): ParsedBlock {
 
   // Mask GABARITO markers so they don't break regex position indices
   const spaceBlock = block.replace(/\[\[GABARITO\]\]/g, '            ')
-  const markerRe = /(^|[\s\n,;:!?\u2013\u2014])(?:<[^>]+>)*([a-eA-E])(?:<[^>]+>)*\s*[\.\-\)](?:<[^>]+>)*\s+/gm
+  const markerRe = /(^|[\s\n,;:!?\u2013\u2014])(?:<[^>]+>|\s)*([a-eA-E])(?:<[^>]+>|\s)*[\.\-\)](?:<[^>]+>|\s)*/gm
 
   const found: AltMarker[] = []
   let m: RegExpExecArray | null
@@ -518,7 +519,7 @@ export function parseBlock(block: string): ParsedBlock {
 
   if (found.length === 0) {
     return {
-      statement: cleanEnunciadoHtml(block.trim()),
+      statement: cleanQuestionStatementHtml(cleanEnunciadoHtml(block.trim())),
       alternatives: [],
       detectedGabarito: explicitGabaritoLetter || undefined,
     }
@@ -558,14 +559,14 @@ export function parseBlock(block: string): ParsedBlock {
 
   if (bestSeq.length < 2) {
     return {
-      statement: cleanEnunciadoHtml(block.trim()),
+      statement: cleanQuestionStatementHtml(cleanEnunciadoHtml(block.trim())),
       alternatives: [],
       detectedGabarito: explicitGabaritoLetter || undefined,
     }
   }
 
   // Extract statement
-  const statement = cleanEnunciadoHtml(block.slice(0, bestSeq[0].pos).trim())
+  const statement = cleanQuestionStatementHtml(cleanEnunciadoHtml(block.slice(0, bestSeq[0].pos).trim()))
 
   // Extract each alternative's text
   const alternatives: { letter: string; text: string; correct: boolean }[] = []
@@ -580,9 +581,15 @@ export function parseBlock(block: string): ParsedBlock {
     const fullAltText = markerText + textPart
     let isCorrect = fullAltText.includes('[[GABARITO]]') || (explicitGabaritoLetter === bestSeq[i].letter)
 
-    let text = textPart
-      .replace(/\[\[GABARITO\]\]/g, '')
-      .trim()
+    // Check if the marker or letter itself was bolded (e.g., <b>a)</b> or <strong>A.</strong>)
+    const isBoldMarker = /(?:<b>|<strong>|<span[^>]*font-weight:\s*(?:bold|[789]00)).*?[a-eA-E].*?(?:<\/b>|<\/strong>|<\/span>)/i.test(markerText) ||
+      /^(?:<b>|<strong>|<span[^>]*font-weight:\s*(?:bold|[789]00))/i.test(markerText)
+
+    let text = cleanAlternativeText(
+      textPart
+        .replace(/\[\[GABARITO\]\]/g, '')
+        .trim()
+    )
 
     // Check if this alternative contains an explicit gabarito marker at the end
     const altGabMatch = text.match(/(?:[\n\r\s,;.\-\–\—]|^)(?:\(?\s*(?:gabarito|resposta(?:\s+correta)?|resp|chave)[\s\:\-\–\—\=]+(?:\(?\s*)?([a-eA-E])(?:\s*\)?)?[\s\.\,\;]*\s*)$/i)
@@ -595,7 +602,7 @@ export function parseBlock(block: string): ParsedBlock {
     // Also clean any trailing standalone "Gabarito X"
     text = text.replace(/(?:[\n\r\s,;.\-\–\—]|^)(?:gabarito|resposta|resp|chave)\s*[:=\-]?\s*[a-eA-E]\s*$/i, '').trim()
 
-    alternatives.push({ letter: bestSeq[i].letter, text, correct: isCorrect })
+    alternatives.push({ letter: bestSeq[i].letter, text, correct: isCorrect, ...(isBoldMarker ? { _isBold: true } : {}) } as any)
   }
 
   // If explicit gabarito was found, update the alternatives' correct flag
@@ -603,7 +610,16 @@ export function parseBlock(block: string): ParsedBlock {
     alternatives.forEach((alt) => {
       alt.correct = (alt.letter === explicitGabaritoLetter)
     })
+  } else if (!alternatives.some((a) => a.correct)) {
+    // If no explicit gabarito, check if exactly one alternative was formatted in bold
+    const boldAlts = alternatives.filter((a: any) => a._isBold)
+    if (boldAlts.length === 1) {
+      boldAlts[0].correct = true
+    }
   }
+
+  // Clean internal _isBold marker
+  alternatives.forEach((a: any) => delete (a as any)._isBold)
 
   return {
     statement,
@@ -625,8 +641,9 @@ export function parseQuestionsFromText(text: string, imageMap: Map<string, any>)
     .replace(/\r/g, '\n')
     .replace(/\n{3,}/g, '\n\n')
 
-  // Header regex: e.g. "1)", "1.", "1 -", "<b>1)</b>", "<strong>1.</strong>"
-  const headerRe = /^[ \t]*(?:<(?:b|strong|i|em|u|span\b[^>]*?)>)*(\d{1,3})(?:<\/(?:b|strong|i|em|u|span)>)*\s*[\.\-\)](?:<\/(?:b|strong|i|em|u|span)>)*\s+/gm
+  // Header regex: e.g. "1)", "1.", "1 -", "<b>1)</b>", "<strong>1.</strong>", "Questão 1:"
+  // Supports questions without space after punctuation: e.g. "9-Oficialmente", "10.Texto"
+  const headerRe = /^[ \t]*(?:<(?:b|strong|i|em|u|span\b[^>]*?)>)*\s*(?:(?:quest[ãa]o|item|exerc[ií]cio|q\.?)\s*)?(\d{1,3})(?:<\/(?:b|strong|i|em|u|span)>)*\s*[\.\-\:\)\–\—\]](?:<\/(?:b|strong|i|em|u|span)>)*(?:\s+|(?=[A-Za-z\u00C0-\u017F"“'(\[<]|\[\[IMAGE:))/gim
   const headers: { index: number; num: number; end: number }[] = []
   let hm: RegExpExecArray | null
 
@@ -646,6 +663,16 @@ export function parseQuestionsFromText(text: string, imageMap: Map<string, any>)
     lastNum = h.num
     return h
   })
+
+  // Check if there are image markers placed before the first numbered question (e.g. diagrams or headers above Q1)
+  let introImages: string[] = []
+  if (unique.length > 0 && unique[0].index > 0) {
+    const introText = normalized.slice(0, unique[0].index)
+    const introMatches = Array.from(introText.matchAll(/\[\[IMAGE:([^\]]+)\]\]/g)).map((m) => m[1])
+    if (introMatches.length > 0) {
+      introImages = introMatches
+    }
+  }
 
   // If no numbered headers are found, treat the whole document as question 1 or text of support
   if (unique.length === 0 && normalized.trim().length > 0) {
@@ -679,6 +706,10 @@ export function parseQuestionsFromText(text: string, imageMap: Map<string, any>)
 
     // Extract [[IMAGE:id]] markers from this block
     const imgIds: string[] = []
+    if (i === 0 && introImages.length > 0) {
+      imgIds.push(...introImages)
+    }
+
     block = block.replace(/\[\[IMAGE:([^\]]+)\]\]/g, (_match, id) => {
       imgIds.push(id)
       return `[IMAGEM ${imgIds.length}]`
@@ -687,22 +718,17 @@ export function parseQuestionsFromText(text: string, imageMap: Map<string, any>)
     // Parse statement + alternatives
     const { statement, alternatives, detectedGabarito } = parseBlock(block)
 
-    // Resolve images
-    const allImages = Array.from(imageMap.values())
-    let unmappedIdx = 0
+    // Resolve images strictly by key match in imageMap (never fallback to arbitrary images)
     const imagens = imgIds
       .map((id) => {
         let found = imageMap.get(id)
         if (!found) {
           for (const [k, v] of imageMap.entries()) {
-            if (k.includes(id) || id.includes(k)) {
+            if (k === id || k.endsWith(id) || id.endsWith(k)) {
               found = v
               break
             }
           }
-        }
-        if (!found && unmappedIdx < allImages.length) {
-          found = allImages[unmappedIdx++]
         }
         return found
       })
@@ -860,10 +886,20 @@ export async function parseDocx(originalBuffer: Buffer): Promise<{ text: string;
       }
 
       // 6. Pre-extract all drawings, pictures, and OLE objects (<w:drawing>, <w:pict>, <w:object>, <v:shape>, <v:imagedata>, <a:blip>)
-      let vmlImgCounter = 0
       docXml = docXml.replace(/<(?:w:drawing|w:pict|w:object|v:shape)\b[\s\S]*?<\/(?:w:drawing|w:pict|w:object|v:shape)>/gi, (shapeBlock) => {
-        const allRIds = Array.from(shapeBlock.matchAll(/(?:r:id|r:embed)="([^"]+)"/g)).map((m) => m[1])
-        for (const rId of allRIds) {
+        const allRIds = Array.from(shapeBlock.matchAll(/(?:r:id|r:embed|o:relid|r:pict)="([^"]+)"/g)).map((m) => m[1])
+        // Sort rIds so that standard web image formats come first before hdphoto (.wdp) or metafiles (.emf, .wmf)
+        const sortedRIds = allRIds.sort((a, b) => {
+          const targetA = (relsMap.get(a) || '').toLowerCase()
+          const targetB = (relsMap.get(b) || '').toLowerCase()
+          const isStandardA = targetA.endsWith('.png') || targetA.endsWith('.jpg') || targetA.endsWith('.jpeg') || targetA.endsWith('.gif') || targetA.endsWith('.webp')
+          const isStandardB = targetB.endsWith('.png') || targetB.endsWith('.jpg') || targetB.endsWith('.jpeg') || targetB.endsWith('.gif') || targetB.endsWith('.webp')
+          if (isStandardA && !isStandardB) return -1
+          if (!isStandardA && isStandardB) return 1
+          return 0
+        })
+
+        for (const rId of sortedRIds) {
           let target = relsMap.get(rId)
           if (target) {
             if (target.startsWith('../')) target = target.replace(/^\.\.\//, '')
@@ -874,9 +910,7 @@ export async function parseDocx(originalBuffer: Buffer): Promise<{ text: string;
             }
           }
         }
-        const fid = `obj_img_${++vmlImgCounter}`
-        modified = true
-        return `<w:r><w:t>[[IMAGE:${fid}]]</w:t></w:r>`
+        return shapeBlock
       })
 
       if (modified) {
@@ -940,7 +974,7 @@ export async function parseDocx(originalBuffer: Buffer): Promise<{ text: string;
     }
 
     // Process all files in word/media/
-    const mediaFiles = Object.keys(zip.files).filter((k) => k.startsWith('word/media/'))
+    const mediaFiles = Object.keys(zip.files).filter((k) => k.startsWith('word/media/') && !k.toLowerCase().endsWith('.wdp'))
     for (const mf of mediaFiles) {
       const f = zip.file(mf)
       if (f) {

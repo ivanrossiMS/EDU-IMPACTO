@@ -43,6 +43,7 @@ import { useApp } from '@/lib/context'
 import { EmptyStateCard } from '../../components/EmptyStateCard'
 import { apiFetch } from '@/lib/api/apiClient'
 import { HtmlContent } from '@/components/HtmlContent'
+import { cleanAlternativeText } from '@/lib/provas-online/textSanitizer'
 
 interface ProvaStudentView {
   id: string
@@ -2705,7 +2706,7 @@ export default function ADProvasOnlineStudentPage() {
                                               {alt.letra}
                                             </span>
                                             <div style={{ fontSize: 13, color: itemTextColor, fontWeight: isSelected || isCorrect ? 600 : 500 }}>
-                                              <HtmlContent html={alt.texto} />
+                                              <HtmlContent html={cleanAlternativeText(alt.texto)} />
                                             </div>
                                           </div>
 

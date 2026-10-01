@@ -212,6 +212,7 @@ export interface ProvaOnline {
   configuracaoDivulgacao: ConfigDivulgacaoProva
   
   // Público Alvo
+  alunosModo?: 'todos' | 'especificos'
   alunosEspecificos?: string[] // IDs dos alunos, se restrito
   
   // Questões da prova

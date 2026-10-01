@@ -20,13 +20,17 @@ interface StudentMonitorRow {
   alunoFoto?: string
   turma: string
   situacao: 'nao_iniciada' | 'em_andamento' | 'entregue' | 'expirada' | 'suspensa'
-  statusConexao: 'online' | 'instavel' | 'sem_sinal' | 'desconectado'
+  statusConexao: 'online' | 'instavel' | 'sem_sinal' | 'desconectado' | 'finalizado'
   questoesRespondidas: number
+  totalQuestoes?: number
   percentualConcluido: number
   tempoRestanteSegundos: number | null
   tentativaId: string | null
   ocorrenciasCount: number
   notaFinal: number | null
+  pontuacaoObjetiva?: number | null
+  statusCorrecao?: string | null
+  comprovanteCodigo?: string | null
 }
 
 // ─── inline style tokens ────────────────────────────────────────────────────
@@ -325,10 +329,10 @@ export default function MonitoramentoProvaPage() {
       const matchTurma = filterTurma === 'todas' || a.turma === filterTurma
       let matchStatus = true
       if (filterStatus === 'em_andamento') matchStatus = a.situacao === 'em_andamento'
-      else if (filterStatus === 'entregue') matchStatus = a.situacao === 'entregue'
+      else if (filterStatus === 'entregue') matchStatus = a.situacao === 'entregue' || a.situacao === 'expirada'
       else if (filterStatus === 'nao_iniciada') matchStatus = a.situacao === 'nao_iniciada'
       else if (filterStatus === 'suspensa') matchStatus = a.situacao === 'suspensa'
-      else if (filterStatus === 'ocorrencias') matchStatus = a.ocorrenciasCount > 0
+      else if (filterStatus === 'ocorrencias') matchStatus = (a.ocorrenciasCount || 0) > 0
       return matchSearch && matchTurma && matchStatus
     })
   }, [alunos, search, filterTurma, filterStatus])
@@ -344,7 +348,7 @@ export default function MonitoramentoProvaPage() {
     let emAndamento = 0, entregues = 0, suspensas = 0, comOcorrencias = 0
     alunos.forEach(a => {
       if (a.situacao === 'em_andamento') emAndamento++
-      else if (a.situacao === 'entregue') entregues++
+      else if (a.situacao === 'entregue' || a.situacao === 'expirada') entregues++
       else if (a.situacao === 'suspensa') suspensas++
       if ((a.ocorrenciasCount || 0) > 0) comOcorrencias++
     })
@@ -445,9 +449,13 @@ export default function MonitoramentoProvaPage() {
                 <span style={{ color: '#e2e8f0' }}>•</span>
                 <span style={{ fontSize: 12, color: '#64748b' }}>
                   Encerramento: <strong style={{ color: '#334155' }}>
-                    {(prova?.dataHoraFim || prova?.dataEncerramento)
-                      ? new Date(prova?.dataHoraFim || prova?.dataEncerramento || '').toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
-                      : '--'}
+                    {(() => {
+                      const dtStr = prova?.dataHoraFim || prova?.dataEncerramento
+                      if (!dtStr) return '--'
+                      const dt = new Date(dtStr)
+                      if (isNaN(dt.getTime())) return dtStr
+                      return `${dt.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })} às ${dt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`
+                    })()}
                   </strong>
                 </span>
               </div>
@@ -659,7 +667,8 @@ export default function MonitoramentoProvaPage() {
           ) : filteredAlunos.map(aluno => {
             const isSuspended = aluno.situacao === 'suspensa'
             const isTaking = aluno.situacao === 'em_andamento'
-            const isDelivered = aluno.situacao === 'entregue'
+            const isDelivered = aluno.situacao === 'entregue' || aluno.situacao === 'expirada'
+            const isExpired = aluno.situacao === 'expirada'
 
             let cardBorderColor = '#e2e8f0'
             let cardBorderTopColor: string | undefined
@@ -707,7 +716,7 @@ export default function MonitoramentoProvaPage() {
                   )}
                   {isDelivered && (
                     <span style={{ ...S.pill('#065f46', '#d1fae5', '#a7f3d0'), flexShrink: 0 }}>
-                      <CheckCircle2 style={{ width: 11, height: 11 }} /> Entregue
+                      <CheckCircle2 style={{ width: 11, height: 11 }} /> {isExpired ? 'Finalizada (Tempo)' : 'Entregue'}
                     </span>
                   )}
                   {isSuspended && (
@@ -765,16 +774,32 @@ export default function MonitoramentoProvaPage() {
                     </div>
                   </div>
                 ) : isDelivered ? (
-                  <div style={{ padding: '10px 12px', borderRadius: 12, background: '#f0fdf4', border: '1px solid #bbf7d0', fontSize: 12, color: '#166534' }}>
+                  <div style={{ padding: '12px 14px', borderRadius: 12, background: '#f0fdf4', border: '1px solid #bbf7d0', fontSize: 12, color: '#166534', display: 'flex', flexDirection: 'column', gap: 6 }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontWeight: 700 }}>
-                      <span>Prova Entregue</span>
-                      <CheckCircle2 style={{ width: 15, height: 15, color: '#16a34a' }} />
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                        <CheckCircle2 style={{ width: 15, height: 15, color: '#16a34a' }} />
+                        {isExpired ? 'Prova Finalizada (Tempo Esgotado)' : 'Prova Entregue'}
+                      </span>
+                      {aluno.comprovanteCodigo && (
+                        <span style={{ fontSize: 9, fontFamily: 'monospace', color: '#15803d', background: '#dcfce7', padding: '2px 6px', borderRadius: 4 }}>
+                          {aluno.comprovanteCodigo.slice(-9)}
+                        </span>
+                      )}
                     </div>
-                    {aluno.notaFinal !== null && (
-                      <p style={{ margin: '4px 0 0', fontFamily: 'monospace', fontWeight: 700 }}>
-                        Nota: <strong style={{ color: '#15803d' }}>{aluno.notaFinal.toFixed(1)} pts</strong>
-                      </p>
-                    )}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 11, color: '#15803d' }}>
+                      <span>{aluno.questoesRespondidas} de {aluno.totalQuestoes || prova?.questoes?.length || 0} respondidas</span>
+                      <span style={{ fontWeight: 700 }}>{aluno.percentualConcluido}%</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: 6, borderTop: '1px dashed #bbf7d0' }}>
+                      <span style={{ fontSize: 12, color: '#166534', fontWeight: 700 }}>
+                        {aluno.notaFinal !== null && aluno.notaFinal !== undefined
+                          ? `Nota: ${Number(aluno.notaFinal).toFixed(1)} pts`
+                          : 'Aguardando correção'}
+                      </span>
+                      <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 6, background: aluno.statusCorrecao === 'corrigida' ? '#dcfce7' : '#fef9c3', color: aluno.statusCorrecao === 'corrigida' ? '#15803d' : '#854d0e' }}>
+                        {aluno.statusCorrecao === 'corrigida' ? 'Corrigida' : 'Correção Pendente'}
+                      </span>
+                    </div>
                   </div>
                 ) : isSuspended ? (
                   <div style={{ padding: '10px 12px', borderRadius: 12, background: '#fff1f2', border: '1px solid #fecdd3', fontSize: 12, color: '#9f1239' }}>
@@ -828,14 +853,26 @@ export default function MonitoramentoProvaPage() {
                       </button>
                     </>
                   ) : isDelivered ? (
-                    <div style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
                       <span style={{ fontSize: 11, color: '#16a34a', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 5 }}>
                         <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#16a34a', display: 'inline-block' }} /> Concluída
                       </span>
-                      <Link href={`/provas-online/${id}/corrigir`}
-                        style={{ ...S.btnSecondary, height: 32, fontSize: 11, textDecoration: 'none' }}>
-                        <Eye style={{ width: 12, height: 12, color: '#3b82f6' }} /> Ver Correção
-                      </Link>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        {isExpired && (
+                          <button
+                            type="button"
+                            onClick={() => setAddTimeModal({ open: true, aluno })}
+                            title="Conceder tempo extra e reabrir prova para o aluno"
+                            style={{ ...S.btnGhost, height: 32, fontSize: 11, padding: '0 8px', color: '#b45309', background: '#fffbeb', borderColor: '#fde68a' }}
+                          >
+                            <Plus style={{ width: 11, height: 11 }} /> Reabrir (+Tempo)
+                          </button>
+                        )}
+                        <Link href={`/provas-online/${id}/corrigir`}
+                          style={{ ...S.btnSecondary, height: 32, fontSize: 11, textDecoration: 'none' }}>
+                          <Eye style={{ width: 12, height: 12, color: '#3b82f6' }} /> Ver Correção
+                        </Link>
+                      </div>
                     </div>
                   ) : (
                     <div style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>

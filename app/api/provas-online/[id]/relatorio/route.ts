@@ -28,7 +28,22 @@ export async function GET(
   if (prova.alunosEspecificos && prova.alunosEspecificos.length > 0) {
     alunosQuery = alunosQuery.in('id', prova.alunosEspecificos)
   } else if (prova.turmas && prova.turmas.length > 0) {
-    alunosQuery = alunosQuery.in('turma', prova.turmas)
+    const { data: turmasDb } = await adminClient.from('turmas').select('id, codigo, nome')
+    const turmaTokens = new Set<string>()
+    for (const t of prova.turmas) {
+      turmaTokens.add(String(t).trim())
+      const match = (turmasDb || []).find(row =>
+        String(row.nome).toLowerCase() === String(t).toLowerCase() ||
+        String(row.id).toLowerCase() === String(t).toLowerCase() ||
+        String(row.codigo).toLowerCase() === String(t).toLowerCase()
+      )
+      if (match) {
+        if (match.id) turmaTokens.add(String(match.id).trim())
+        if (match.codigo) turmaTokens.add(String(match.codigo).trim())
+        if (match.nome) turmaTokens.add(String(match.nome).trim())
+      }
+    }
+    alunosQuery = alunosQuery.in('turma', Array.from(turmaTokens))
   }
 
   const { data: expectedStudents } = await alunosQuery

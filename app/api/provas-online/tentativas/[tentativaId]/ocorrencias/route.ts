@@ -37,7 +37,11 @@ export async function POST(
   }
 
   const body = await request.json()
-  const tipo = body.tipo as OcorrenciaMonitoramento['tipo']
+  const rawTipo = String(body.tipo || '')
+  const tipo: OcorrenciaMonitoramento['tipo'] =
+    rawTipo === 'troca_aba' ? 'saida_tela' :
+    rawTipo === 'tentativa_cola' ? 'tentativa_colar' :
+    (body.tipo as OcorrenciaMonitoramento['tipo'])
   const descricao = body.descricao || 'Ocorrência registrada durante a aplicação'
   const duracaoSegundos = Number(body.duracaoSegundos || 0)
 
@@ -71,9 +75,17 @@ export async function POST(
   const prova = await dbGetProvaById(tentativa.provaId)
   let suspensa = false
 
-  if (prova && prova.configuracaoMonitoramento.acaoOcorrencia === 'suspender') {
-    if (tipo === 'saida_tela' || tipo === 'saida_tela_cheia' || tipo === 'tentativa_colar') {
+  const acaoConfig = prova?.configuracaoMonitoramento?.acaoOcorrencia || (prova as any)?.acaoOcorrencia || 'alertar'
+
+  if (acaoConfig === 'suspender') {
+    const isSuspensionIncident = 
+      tipo === 'saida_tela' || 
+      tipo === 'saida_tela_cheia' || 
+      tipo === 'tentativa_colar'
+
+    if (isSuspensionIncident) {
       tentativa.status = 'suspensa'
+      tentativa.motivoSuspensao = `Sessão suspensa automaticamente: ${descricao}`
       await dbSaveTentativa(tentativa)
       suspensa = true
     }
@@ -82,7 +94,7 @@ export async function POST(
   return NextResponse.json({
     ok: true,
     ocorrencia: novaOcorrencia,
-    acao: prova?.configuracaoMonitoramento.acaoOcorrencia || 'alertar',
+    acao: acaoConfig,
     suspensa
   }, { status: 201 })
 }

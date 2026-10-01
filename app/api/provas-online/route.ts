@@ -43,7 +43,7 @@ export async function GET(request: Request) {
     }
     const { data } = await adminClient
       .from('alunos')
-      .select('id, nome, matricula, turma, serie, email, responsavel')
+      .select('id, nome, matricula, turma, serie, email, responsavel, dados')
       .or(conds.join(','))
       .limit(1)
       .maybeSingle()
@@ -69,7 +69,7 @@ export async function GET(request: Request) {
   const perfil = dbUser?.perfil || user.user_metadata?.perfil || (dbResp ? 'Família' : (dbAluno ? 'Aluno' : 'Professor'))
   const cargo = dbUser?.cargo || user.user_metadata?.cargo || (dbAluno ? 'Aluno' : (dbResp ? 'Responsável' : ''))
   const isStudent = cargo === 'Aluno' || perfil === 'Aluno' || Boolean(dbAluno && !dbUser) || Boolean(requestedAlunoId && dbAluno)
-  const isResponsible = (cargo === 'Responsável' || perfil === 'Família' || perfil === 'Responsável') && !requestedAlunoId
+  const isResponsible = (cargo === 'Responsável' || perfil === 'Família' || perfil === 'Responsável') && !requestedAlunoId && !isStudent
   const isTeacher = perfil === 'Professor' || cargo === 'PROFESSORA' || cargo === 'Professor'
   const isAdminOrCoord = ['Diretor Geral', 'Direção', 'Administrador', 'Coordenador', 'Coordenadora'].includes(perfil)
 
@@ -115,27 +115,46 @@ export async function GET(request: Request) {
 
     // Resolve comprehensive turma representations (ID, Code, Name)
     const studentTurmaIdentifiers: string[] = []
-    if (dbAluno.turma) {
-      studentTurmaIdentifiers.push(String(dbAluno.turma).trim().toLowerCase())
+    const studentSeriesList: string[] = []
+    if (dbAluno.serie) studentSeriesList.push(String(dbAluno.serie).trim().toLowerCase())
+
+    const studentTurmaRaw = String(dbAluno.turma || '').trim().toLowerCase()
+    if (studentTurmaRaw) {
+      studentTurmaIdentifiers.push(studentTurmaRaw)
     }
-    
-    // Query turma table to get turma name and code
-    if (dbAluno.turma) {
-      try {
-        const { data: turmaObj } = await adminClient
-          .from('turmas')
-          .select('id, codigo, nome, serie')
-          .or(`id.eq.${dbAluno.turma},codigo.eq.${dbAluno.turma},nome.eq.${dbAluno.turma}`)
-          .maybeSingle()
-        if (turmaObj) {
-          if (turmaObj.nome) studentTurmaIdentifiers.push(turmaObj.nome.trim().toLowerCase())
-          if (turmaObj.codigo) studentTurmaIdentifiers.push(String(turmaObj.codigo).trim().toLowerCase())
-          if (turmaObj.id) studentTurmaIdentifiers.push(String(turmaObj.id).trim().toLowerCase())
-          if (!dbAluno.serie && turmaObj.serie) dbAluno.serie = turmaObj.serie
+
+    // Also check student's active turma from dados.historicoTurmas if present
+    const historicoList = Array.isArray(dbAluno.dados?.historicoTurmas) ? dbAluno.dados.historicoTurmas : []
+    for (const h of historicoList) {
+      if (h.serieTurma) studentTurmaIdentifiers.push(String(h.serieTurma).trim().toLowerCase())
+      if (h.turma) studentTurmaIdentifiers.push(String(h.turma).trim().toLowerCase())
+      if (h.serie) studentSeriesList.push(String(h.serie).trim().toLowerCase())
+    }
+
+    // Fetch turmas table to cross-reference ID, Código, Nome and Série safely
+    try {
+      const { data: allTurmasDb } = await adminClient
+        .from('turmas')
+        .select('id, codigo, nome, serie')
+
+      for (const t of allTurmasDb || []) {
+        const tId = String(t.id || '').trim().toLowerCase()
+        const tCodigo = String(t.codigo || '').trim().toLowerCase()
+        const tNome = String(t.nome || '').trim().toLowerCase()
+
+        const isMatch = studentTurmaIdentifiers.some(st => st === tId || st === tCodigo || st === tNome)
+        if (isMatch) {
+          if (tId) studentTurmaIdentifiers.push(tId)
+          if (tCodigo) studentTurmaIdentifiers.push(tCodigo)
+          if (tNome) studentTurmaIdentifiers.push(tNome)
+          if (t.serie) {
+            studentSeriesList.push(String(t.serie).trim().toLowerCase())
+            if (!dbAluno.serie) dbAluno.serie = t.serie
+          }
         }
-      } catch (err) {
-        console.error('[provas-online] Erro ao buscar turma do aluno:', err)
       }
+    } catch (err) {
+      console.error('[provas-online] Erro ao buscar turmas no banco:', err)
     }
 
     filteredProvas = filteredProvas.filter(p => {
@@ -145,13 +164,23 @@ export async function GET(request: Request) {
       // Se requer aprovação e ainda não foi aprovada, não exibe
       if (p.aprovacaoRequerida && p.statusAprovacao !== 'aprovada') return false
 
-      // 1. Se a prova foi vinculada a alunos específicos:
-      // O aluno só deve ver se seu ID ou matrícula estiver explicitamente na lista
-      if (p.alunosEspecificos && p.alunosEspecificos.length > 0) {
-        const isSelected = p.alunosEspecificos.includes(alunoId) ||
+      // 1. Se o aluno está explicitamente listado em alunosEspecificos:
+      const isInAlunosEspecificos = Boolean(
+        p.alunosEspecificos && p.alunosEspecificos.length > 0 && (
+          p.alunosEspecificos.includes(alunoId) ||
           p.alunosEspecificos.includes(dbAluno.id) ||
           (dbAluno.matricula && p.alunosEspecificos.includes(dbAluno.matricula))
-        return Boolean(isSelected)
+        )
+      )
+
+      // Se a prova foi definida no MODO ESPECÍFICO (somente alunos selecionados manualmente)
+      if (p.alunosModo === 'especificos') {
+        return isInAlunosEspecificos
+      }
+
+      // Se o aluno está na lista de alunos da prova (modo todos ou pré-computado), libera
+      if (isInAlunosEspecificos) {
+        return true
       }
 
       // 2. Se a prova NÃO define turmas nem séries nem alunos específicos, não foi vinculada ao aluno
@@ -161,7 +190,7 @@ export async function GET(request: Request) {
         return false
       }
 
-      // 3. Verifica correspondência exata de turma
+      // 3. Verifica correspondência exata de turma (por ID, código ou nome)
       const matchesTurma = pTurmas.length > 0 && pTurmas.some(t => {
         const tNorm = String(t || '').trim().toLowerCase()
         if (!tNorm) return false
@@ -169,10 +198,10 @@ export async function GET(request: Request) {
       })
 
       // 4. Verifica correspondência exata de série
-      const alunoSerieNorm = String(dbAluno.serie || '').trim().toLowerCase()
-      const matchesSerie = pSeries.length > 0 && Boolean(alunoSerieNorm) && pSeries.some(s => {
+      const matchesSerie = pSeries.length > 0 && pSeries.some(s => {
         const sNorm = String(s || '').trim().toLowerCase()
-        return sNorm && sNorm === alunoSerieNorm
+        if (!sNorm) return false
+        return studentSeriesList.some(st => st === sNorm)
       })
 
       return matchesTurma || matchesSerie

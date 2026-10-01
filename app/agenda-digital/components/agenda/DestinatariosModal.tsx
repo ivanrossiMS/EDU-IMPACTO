@@ -153,6 +153,15 @@ const DEST_MODAL_STYLES = `
     0% { background-position: -200% 0; }
     100% { background-position: 200% 0; }
   }
+  @keyframes destSkeletonShimmer {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+  }
+  .dest-skeleton-shimmer {
+    background: linear-gradient(90deg, #f1f5f9 0%, #e2e8f0 50%, #f1f5f9 100%) !important;
+    background-size: 200% 100% !important;
+    animation: destSkeletonShimmer 1.6s cubic-bezier(0.4, 0, 0.2, 1) infinite !important;
+  }
   @keyframes waveAnimation {
     0% { background-position: 0% 50%; }
     50% { background-position: 100% 50%; }
@@ -590,12 +599,14 @@ export function DestinatariosModal({
     return colaboradoresByTurmaId.get(String(t.id)) || []
   }
 
-  // Verificação de carregamento
+  // Verificação rigorosa de carregamento: só deve parar quando carregar TUDO
   const isAnyHookLoading = loadingTurmas || loadingGrupos || loadingAlunos || loadingColabs
-  const hasInitialData = turmas.length > 0 || (colaboradores && colaboradores.length > 0)
-  const isWaitingForAlunos = !loadTimeoutPassed && turmas.length > 0 && alunos.length === 0
+  const isWaitingForAlunos = loadingAlunos && alunos.length === 0
+  const isWaitingForTurmas = (loadingTurmas || Boolean(data?.turmasLoading)) && turmas.length === 0
+  const isWaitingForColabs = loadingColabs && colaboradores.length === 0
+  const isWaitingForGrupos = loadingGrupos && gruposManuais.length === 0
 
-  const isLoadingData = !hasInitialData && (isAnyHookLoading || isWaitingForAlunos) && !loadTimeoutPassed
+  const isLoadingData = !loadTimeoutPassed && (isAnyHookLoading || isWaitingForAlunos || isWaitingForTurmas || isWaitingForColabs || isWaitingForGrupos)
 
   useEffect(() => {
     if (isOpen && availableAnos.length > 0 && selectedAno === '' && defaultAno) {
@@ -1733,137 +1744,175 @@ export function DestinatariosModal({
             {/* ── CORPO PRINCIPAL ────────────────────────────────────────── */}
             <div style={{ flex: 1, overflowY: 'auto', paddingBottom: 120, display: 'flex', flexDirection: 'column' }}>
               {isLoadingData ? (
-                <div style={{
-                  flex: 1,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  padding: '48px 24px',
-                  position: 'relative',
-                  minHeight: 460
-                }}>
-                  {/* Cyber Atmospheric Ambient Glow */}
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', paddingBottom: 120 }}>
+                  {/* Status Informativo de Sincronização */}
                   <div style={{
-                    position: 'absolute',
-                    width: 260,
-                    height: 260,
-                    borderRadius: '50%',
-                    background: 'radial-gradient(circle, rgba(0, 210, 255, 0.22) 0%, rgba(117, 81, 255, 0.18) 45%, rgba(236, 72, 153, 0.08) 70%, transparent 85%)',
-                    filter: 'blur(32px)',
-                    animation: 'destAuraGlow 3s ease-in-out infinite',
-                    pointerEvents: 'none',
-                    zIndex: 0
-                  }} />
-
-                  {/* Multi-Ring Ultra-Modern Gyroscope */}
-                  <div style={{ position: 'relative', width: 92, height: 92, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1, marginBottom: 24 }}>
-                    <div style={{
-                      position: 'absolute',
-                      inset: 0,
-                      borderRadius: '50%',
-                      border: '3px solid transparent',
-                      borderTopColor: '#00D2FF',
-                      borderRightColor: '#7551FF',
-                      filter: 'drop-shadow(0 0 8px rgba(0, 210, 255, 0.6))',
-                      animation: 'orbitSpinCW 1.3s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite'
-                    }} />
-                    <div style={{
-                      position: 'absolute',
-                      inset: 10,
-                      borderRadius: '50%',
-                      border: '2px dashed rgba(236, 72, 153, 0.75)',
-                      borderBottomColor: '#00D2FF',
-                      animation: 'orbitSpinCCW 1.9s linear infinite'
-                    }} />
-                    <div style={{
-                      position: 'relative',
-                      width: 52,
-                      height: 52,
-                      borderRadius: '50%',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.96) 0%, rgba(240, 244, 255, 0.9) 100%)',
-                      border: '1.5px solid rgba(255, 255, 255, 0.95)',
-                      boxShadow: '0 10px 25px -4px rgba(79, 70, 229, 0.25)',
-                    }}>
-                      <Users size={22} style={{
-                        color: '#6D5DF6',
-                        filter: 'drop-shadow(0 0 6px rgba(109, 93, 246, 0.5))',
-                        animation: 'cyberCorePulse 2s ease-in-out infinite'
+                    margin: '16px 24px 8px 24px',
+                    padding: '10px 16px',
+                    borderRadius: 14,
+                    background: 'linear-gradient(135deg, rgba(109, 93, 246, 0.08) 0%, rgba(79, 70, 229, 0.04) 100%)',
+                    border: '1px solid rgba(109, 93, 246, 0.15)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: 10
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <div style={{
+                        width: 8,
+                        height: 8,
+                        borderRadius: '50%',
+                        background: '#6D5DF6',
+                        boxShadow: '0 0 8px #6D5DF6',
+                        animation: 'destPulseDot 1.2s infinite'
                       }} />
+                      <span style={{ fontSize: 13, fontWeight: 700, color: '#4338CA' }}>
+                        Carregando turmas e contatos escolares...
+                      </span>
+                    </div>
+                    <span style={{
+                      fontSize: 11,
+                      fontWeight: 600,
+                      color: '#6D5DF6',
+                      background: 'rgba(255, 255, 255, 0.8)',
+                      padding: '2px 8px',
+                      borderRadius: 10,
+                      border: '1px solid rgba(109, 93, 246, 0.2)'
+                    }}>
+                      Aguarde a conclusão
+                    </span>
+                  </div>
+
+                  {/* Barra de Filtro Rápido Skeleton */}
+                  {!hideFilterTabs && (
+                    <div style={{
+                      display: 'flex',
+                      padding: 4,
+                      background: '#EDF2F7',
+                      borderRadius: 18,
+                      gap: 6,
+                      margin: '8px 24px',
+                      border: '1px solid #E2E8F0'
+                    }}>
+                      <div style={{ flex: 1, height: 36, borderRadius: 14, background: '#FFFFFF', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }} />
+                      <div style={{ flex: 1, height: 36, borderRadius: 14, background: '#f1f5f9' }} />
+                      <div style={{ flex: 1, height: 36, borderRadius: 14, background: '#f1f5f9' }} />
+                    </div>
+                  )}
+
+                  {/* Barra de Pesquisa & Selecionar Tudo Skeleton */}
+                  <div style={{ padding: '8px 24px 14px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                      <div style={{ flex: 1, height: 42, borderRadius: 14, background: '#FFFFFF', border: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', padding: '0 14px', gap: 10 }}>
+                        <div style={{ width: 18, height: 18, borderRadius: 4, background: '#E2E8F0' }} className="dest-skeleton-shimmer" />
+                        <div style={{ width: '55%', height: 12, borderRadius: 4, background: '#F1F5F9' }} className="dest-skeleton-shimmer" />
+                      </div>
+                      <div style={{ width: 110, height: 28, borderRadius: 8, background: '#F1F5F9' }} className="dest-skeleton-shimmer" />
                     </div>
                   </div>
 
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, textAlign: 'center', zIndex: 1, maxWidth: 360 }}>
-                    <h3 style={{
-                      fontSize: 18,
-                      fontWeight: 700,
-                      color: '#0F172A',
-                      letterSpacing: '-0.3px',
-                      margin: 0,
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 6
-                    }}>
-                      Carregando Destinatários
-                      <span style={{ display: 'inline-flex', gap: 4, marginLeft: 2 }}>
-                        {[0, 1, 2].map(i => (
-                          <span key={i} style={{
-                            display: 'inline-block',
-                            width: 4,
-                            height: 4,
-                            borderRadius: '50%',
-                            background: 'linear-gradient(135deg, #00D2FF, #7551FF)',
-                            animation: `destPulseDot 1.2s ease-in-out ${i * 0.2}s infinite`
-                          }} />
-                        ))}
-                      </span>
-                    </h3>
+                  {/* Corpo do Skeleton */}
+                  <div style={{ padding: '0 24px', display: 'flex', flexDirection: 'column', gap: 20 }}>
+                    {/* Seção 1: Turmas de Alunos Skeleton */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <div style={{ width: 18, height: 18, borderRadius: 4, background: '#E0E7FF' }} className="dest-skeleton-shimmer" />
+                          <div style={{ width: 130, height: 16, borderRadius: 4, background: '#E2E8F0' }} className="dest-skeleton-shimmer" />
+                        </div>
+                        <div style={{ width: 70, height: 24, borderRadius: 10, background: '#F1F5F9' }} className="dest-skeleton-shimmer" />
+                      </div>
 
-                    <div style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 8,
-                      padding: '6px 14px',
-                      borderRadius: 99,
-                      background: 'rgba(255, 255, 255, 0.85)',
-                      border: '1px solid #E2E8F0',
-                      boxShadow: '0 2px 8px rgba(0, 0, 0, 0.04)',
-                    }}>
-                      <span style={{
-                        width: 7,
-                        height: 7,
-                        borderRadius: '50%',
-                        background: '#10B981',
-                        boxShadow: '0 0 8px #10B981',
-                        display: 'inline-block',
-                        animation: 'destPulseBadge 1.8s ease-in-out infinite'
-                      }} />
-                      <span style={{ fontSize: 12, fontWeight: 600, color: '#475569' }}>
-                        Sincronizando turmas, alunos e colaboradores...
-                      </span>
+                      {/* 4 Cards de Segmentos / Turmas */}
+                      {[
+                        { titleW: '42%', subW: '58%' },
+                        { titleW: '50%', subW: '52%' },
+                        { titleW: '48%', subW: '55%' },
+                        { titleW: '38%', subW: '45%' },
+                      ].map((item, idx) => (
+                        <div
+                          key={`turma-skel-${idx}`}
+                          style={{
+                            background: '#FFFFFF',
+                            borderRadius: 16,
+                            border: '1px solid #E2E8F0',
+                            padding: '12px 16px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            gap: 12,
+                            boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0 }}>
+                            <div style={{ width: 20, height: 20, borderRadius: 6, background: '#F1F5F9', border: '1.5px solid #CBD5E1', flexShrink: 0 }} />
+                            <div style={{ width: 38, height: 38, borderRadius: 12, background: '#EEF2FF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                              <div style={{ width: 18, height: 18, borderRadius: 4, background: '#C7D2FE' }} className="dest-skeleton-shimmer" />
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1, minWidth: 0 }}>
+                              <div style={{ width: item.titleW, height: 14, borderRadius: 4, background: '#E2E8F0' }} className="dest-skeleton-shimmer" />
+                              <div style={{ width: item.subW, height: 11, borderRadius: 3, background: '#F1F5F9' }} className="dest-skeleton-shimmer" />
+                            </div>
+                          </div>
+                          <div style={{ width: 18, height: 18, borderRadius: 4, background: '#F1F5F9' }} className="dest-skeleton-shimmer" />
+                        </div>
+                      ))}
                     </div>
 
-                    <div style={{
-                      width: 200,
-                      height: 4,
-                      borderRadius: 99,
-                      background: '#E2E8F0',
-                      overflow: 'hidden',
-                      position: 'relative',
-                      marginTop: 4
-                    }}>
-                      <div style={{
-                        position: 'absolute',
-                        top: 0,
-                        bottom: 0,
-                        width: '50%',
-                        borderRadius: 99,
-                        background: 'linear-gradient(90deg, transparent, #00D2FF, #7551FF, #EC4899, transparent)',
-                        animation: 'laserBeamSweep 1.5s cubic-bezier(0.4, 0, 0.2, 1) infinite'
-                      }} />
+                    {/* Separador Equipe Escolar */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '6px 0 2px' }}>
+                      <div style={{ flex: 1, height: 1, background: '#E2E8F0' }} />
+                      <span style={{ fontSize: 11, fontWeight: 800, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: 0.8 }}>
+                        Equipe Escolar
+                      </span>
+                      <div style={{ flex: 1, height: 1, background: '#E2E8F0' }} />
+                    </div>
+
+                    {/* Seção 2: Equipe Escolar Skeleton */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
+                        <div style={{ width: 18, height: 18, borderRadius: 4, background: '#EDE9FE' }} className="dest-skeleton-shimmer" />
+                        <div style={{ width: 110, height: 16, borderRadius: 4, background: '#E2E8F0' }} className="dest-skeleton-shimmer" />
+                      </div>
+
+                      {/* 5 Cards de Setores da Equipe */}
+                      {[
+                        { titleW: '46%', badgeW: 84 },
+                        { titleW: '44%', badgeW: 84 },
+                        { titleW: '32%', badgeW: 68 },
+                        { titleW: '36%', badgeW: 76 },
+                        { titleW: '38%', badgeW: 80 },
+                      ].map((item, idx) => (
+                        <div
+                          key={`equipe-skel-${idx}`}
+                          style={{
+                            background: '#FFFFFF',
+                            borderRadius: 14,
+                            border: '1px solid #E2E8F0',
+                            padding: '11px 14px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            gap: 12,
+                            boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0 }}>
+                            <div style={{ width: 20, height: 20, borderRadius: 6, background: '#F1F5F9', border: '1.5px solid #CBD5E1', flexShrink: 0 }} />
+                            <div style={{ width: 36, height: 36, borderRadius: 10, background: '#F5F3FF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                              <div style={{ width: 18, height: 18, borderRadius: 4, background: '#DDD6FE' }} className="dest-skeleton-shimmer" />
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 5, flex: 1, minWidth: 0 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <div style={{ width: item.titleW, height: 13, borderRadius: 4, background: '#E2E8F0' }} className="dest-skeleton-shimmer" />
+                                <div style={{ width: item.badgeW, height: 16, borderRadius: 6, background: '#EDE9FE' }} className="dest-skeleton-shimmer" />
+                              </div>
+                              <div style={{ width: '32%', height: 10, borderRadius: 3, background: '#F1F5F9' }} className="dest-skeleton-shimmer" />
+                            </div>
+                          </div>
+                          <div style={{ width: 16, height: 16, borderRadius: 4, background: '#F1F5F9' }} className="dest-skeleton-shimmer" />
+                        </div>
+                      ))}
                     </div>
                   </div>
                 </div>
@@ -2244,7 +2293,29 @@ export function DestinatariosModal({
 
                                 {/* Cartões de Categorias/Segmentos */}
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                                  {turmasListItems.map((item: any) => renderSegmentCard(item))}
+                                  {turmasListItems.length === 0 ? (
+                                    <div style={{
+                                      padding: '24px 16px',
+                                      textAlign: 'center',
+                                      background: '#FFFFFF',
+                                      borderRadius: 16,
+                                      border: '1px dashed #CBD5E1',
+                                      display: 'flex',
+                                      flexDirection: 'column',
+                                      alignItems: 'center',
+                                      gap: 6
+                                    }}>
+                                      <GraduationCap size={24} style={{ color: '#94A3B8' }} />
+                                      <span style={{ fontSize: 13, fontWeight: 700, color: '#475569' }}>
+                                        Nenhuma turma encontrada para o ano {effectiveAno}
+                                      </span>
+                                      <span style={{ fontSize: 11.5, color: '#94A3B8' }}>
+                                        Verifique o ano selecionado ou cadastre turmas para este período.
+                                      </span>
+                                    </div>
+                                  ) : (
+                                    turmasListItems.map((item: any) => renderSegmentCard(item))
+                                  )}
                                 </div>
                               </div>
                             )}
@@ -2274,7 +2345,26 @@ export function DestinatariosModal({
 
                                 {/* Cartões dos setores da Equipe Escolar */}
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                                  {equipeListItems.map((item: any) => renderEquipeCard(item))}
+                                  {equipeListItems.length === 0 ? (
+                                    <div style={{
+                                      padding: '20px 16px',
+                                      textAlign: 'center',
+                                      background: '#FFFFFF',
+                                      borderRadius: 14,
+                                      border: '1px dashed #CBD5E1',
+                                      display: 'flex',
+                                      flexDirection: 'column',
+                                      alignItems: 'center',
+                                      gap: 6
+                                    }}>
+                                      <Shield size={22} style={{ color: '#94A3B8' }} />
+                                      <span style={{ fontSize: 13, fontWeight: 700, color: '#475569' }}>
+                                        Nenhum setor da equipe escolar cadastrado
+                                      </span>
+                                    </div>
+                                  ) : (
+                                    equipeListItems.map((item: any) => renderEquipeCard(item))
+                                  )}
                                 </div>
 
                                 {/* Colaboradores Individuais */}
@@ -2315,7 +2405,7 @@ export function DestinatariosModal({
                     : '0 8px 20px -4px rgba(79, 70, 229, 0.45)'
                 }}
               >
-                Confirmar
+                {isLoadingData ? 'Carregando...' : Object.keys(selected).length > 0 ? `Confirmar (${Object.keys(selected).length})` : 'Confirmar'}
               </button>
             </div>
           </motion.div>

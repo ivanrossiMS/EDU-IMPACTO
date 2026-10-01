@@ -3,9 +3,10 @@ import { requireAuth } from '@/lib/server/authGuard'
 import {
   dbGetTentativaById,
   dbSaveTentativa,
-  dbGetProvaById
+  dbGetProvaById,
+  dbGetMessages
 } from '@/lib/provas-online/db'
-import { sanitizeExamForParticipant } from '@/lib/provas-online/engine'
+import { sanitizeExamForParticipant, autoGradeTentativa } from '@/lib/provas-online/engine'
 import { RespostaQuestaoTentativa } from '@/types/provas-online'
 
 export const dynamic = 'force-dynamic'
@@ -36,6 +37,12 @@ export async function GET(
   if (now > deadline && tentativa.status === 'em_andamento') {
     tentativa.status = 'expirada'
     tentativa.entregueEm = new Date(deadline).toISOString()
+    const graded = autoGradeTentativa(prova, tentativa)
+    tentativa.pontuacaoObjetiva = graded.pontuacaoObjetiva
+    tentativa.notaFinal = graded.notaFinal
+    tentativa.statusCorrecao = graded.statusCorrecao
+    tentativa.comprovanteCodigo = graded.comprovanteCodigo
+    tentativa.respostas = graded.respostas
     await dbSaveTentativa(tentativa)
   }
 
@@ -59,6 +66,11 @@ export async function GET(
     }
   }).filter(Boolean)
 
+  const todasMensagens = await dbGetMessages(tentativa.provaId)
+  const mensagensRelevantes = todasMensagens.filter(m => 
+    !m.tentativaId || m.tentativaId === tentativaId || m.alunoId === tentativa.alunoId
+  )
+
   return NextResponse.json({
     tentativa: {
       ...tentativa,
@@ -68,6 +80,8 @@ export async function GET(
       ...sanitizedProva,
       questoes: orderedQuestions
     },
+    mensagens: mensagensRelevantes,
+    mensagensNaoLidas: mensagensRelevantes,
     servidorAgora: new Date(now).toISOString(),
     tempoRestanteSegundos,
     expirada: now > deadline
@@ -95,6 +109,15 @@ export async function PATCH(
     if (tentativa.status === 'em_andamento') {
       tentativa.status = 'expirada'
       tentativa.entregueEm = new Date(deadline).toISOString()
+      const prova = await dbGetProvaById(tentativa.provaId)
+      if (prova) {
+        const graded = autoGradeTentativa(prova, tentativa)
+        tentativa.pontuacaoObjetiva = graded.pontuacaoObjetiva
+        tentativa.notaFinal = graded.notaFinal
+        tentativa.statusCorrecao = graded.statusCorrecao
+        tentativa.comprovanteCodigo = graded.comprovanteCodigo
+        tentativa.respostas = graded.respostas
+      }
       await dbSaveTentativa(tentativa)
     }
     return NextResponse.json({
@@ -147,6 +170,10 @@ export async function PATCH(
     }
   }
 
+  if (Array.isArray(body.questoesRevisao)) {
+    tentativa.questoesRevisao = body.questoesRevisao
+  }
+
   const nextVersao = Math.max(tentativa.versaoRespostas + 1, clientVersao + 1)
   tentativa.respostas = currentRespostas
   tentativa.versaoRespostas = nextVersao
@@ -170,3 +197,6 @@ export async function PATCH(
     ).length
   })
 }
+
+export const PUT = PATCH
+

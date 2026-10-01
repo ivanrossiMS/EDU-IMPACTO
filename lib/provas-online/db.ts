@@ -8,6 +8,7 @@ import {
   MensagemProva,
   ExcecaoAutorizada
 } from '@/types/provas-online'
+import { repairExamQuestoes } from './textSanitizer'
 
 /**
  * Resilient Database Repository for Provas Online.
@@ -60,6 +61,8 @@ export async function dbGetProvas(): Promise<ProvaOnline[]> {
         configuracaoDivulgacao: row.configuracao_divulgacao || row.dados?.configuracaoDivulgacao,
         turmas: row.turmas || row.dados?.turmas || [],
         series: row.series || row.dados?.series || [],
+        alunosModo: row.alunos_modo || row.dados?.alunosModo || 'todos',
+        alunosEspecificos: row.alunos_especificos || row.dados?.alunosEspecificos || [],
         professorId: row.professor_id || row.dados?.professorId,
         professorNome: row.professor_nome || row.dados?.professorNome,
       }))
@@ -120,6 +123,8 @@ export async function dbGetProvaById(id: string): Promise<ProvaOnline | null> {
         configuracaoDivulgacao: data.configuracao_divulgacao || data.dados?.configuracaoDivulgacao,
         turmas: data.turmas || data.dados?.turmas || [],
         series: data.series || data.dados?.series || [],
+        alunosModo: data.alunos_modo || data.dados?.alunosModo || 'todos',
+        alunosEspecificos: data.alunos_especificos || data.dados?.alunosEspecificos || [],
         professorId: data.professor_id || data.dados?.professorId,
         professorNome: data.professor_nome || data.dados?.professorNome,
         questoes
@@ -307,7 +312,7 @@ export async function dbGetQuestoesByProvaId(provaId: string): Promise<QuestaoPr
       .order('ordem', { ascending: true })
 
     if (!error && Array.isArray(data)) {
-      return data.map(q => ({
+      const mapped = data.map(q => ({
         ...q,
         ...(q.dados || {}),
         id: q.id,
@@ -324,6 +329,7 @@ export async function dbGetQuestoesByProvaId(provaId: string): Promise<QuestaoPr
         explicacaoResposta: q.explicacao_resposta || q.dados?.explicacaoResposta,
         anulada: q.anulada ?? false
       }))
+      return repairExamQuestoes(mapped)
     }
   } catch (err: any) {
     if (!isTableMissingError(err)) console.error('[dbGetQuestoes dedicated error]', err)
@@ -338,7 +344,8 @@ export async function dbGetQuestoesByProvaId(provaId: string): Promise<QuestaoPr
       .maybeSingle()
 
     if (error || !data) return []
-    return Array.isArray(data.dados?.questoes) ? data.dados.questoes : []
+    const rawList = Array.isArray(data.dados?.questoes) ? data.dados.questoes : []
+    return repairExamQuestoes(rawList)
   } catch (e: any) {
     console.error('[dbGetQuestoes fallback error]', e)
     return []
@@ -347,7 +354,8 @@ export async function dbGetQuestoesByProvaId(provaId: string): Promise<QuestaoPr
 
 export async function dbSaveQuestoes(provaId: string, questoes: QuestaoProva[]): Promise<boolean> {
   const sb = getAdminClient()
-  const ordered = questoes.map((q, idx) => ({
+  const repaired = repairExamQuestoes(questoes)
+  const ordered = repaired.map((q, idx) => ({
     ...q,
     id: q.id || crypto.randomUUID(),
     provaId,

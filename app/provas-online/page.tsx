@@ -40,7 +40,7 @@ export default function ProvasOnlineDashboardPage() {
   const cargo = currentUser?.cargo || ''
   const perfil = currentUser?.perfil || ''
   const isStudent = cargo === 'Aluno' || perfil === 'Aluno' || Boolean(currentUser?.aluno_id && cargo !== 'Responsável')
-  const isResponsible = cargo === 'Responsável' || perfil === 'Família' || perfil === 'Responsável'
+  const isResponsible = (cargo === 'Responsável' || perfil === 'Família' || perfil === 'Responsável') && !isStudent
   const isTeacherOrStaff = !isStudent && !isResponsible
 
   const [copiedId, setCopiedId] = useState<string | null>(null)
@@ -516,80 +516,24 @@ export default function ProvasOnlineDashboardPage() {
         </div>
       )}
 
-      {/* 3. TABS & FILTER BAR */}
+      {/* 3. SEARCH & FILTERS BAR */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {/* Navigation Tabs */}
-        {isTeacherOrStaff && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, overflowX: 'auto', padding: 4, background: '#f1f5f9', borderRadius: 14 }}>
-            {[
-              { id: 'todas', label: 'Todas as Provas', count: tabCounts.todas },
-              { id: 'em_aplicacao', label: 'Em Aplicação', count: tabCounts.em_aplicacao, isLive: true },
-              { id: 'agendada', label: 'Agendadas', count: tabCounts.agendada },
-              { id: 'correcao', label: 'Correção Pendente', count: tabCounts.correcao },
-              { id: 'publicada', label: 'Publicadas', count: tabCounts.publicada },
-              { id: 'rascunho', label: 'Rascunhos', count: tabCounts.rascunho },
-              { id: 'encerrada', label: 'Encerradas', count: tabCounts.encerrada },
-            ].map(tab => {
-              const active = activeTab === tab.id
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id as any)}
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 6,
-                    height: 32,
-                    padding: '0 12px',
-                    borderRadius: 10,
-                    border: 'none',
-                    background: active ? '#ffffff' : 'transparent',
-                    color: active ? '#0284c7' : '#64748b',
-                    fontSize: 12,
-                    fontWeight: active ? 800 : 600,
-                    cursor: 'pointer',
-                    boxShadow: active ? '0 1px 3px rgba(0,0,0,0.06)' : 'none',
-                    flexShrink: 0,
-                    transition: 'all 0.15s'
-                  }}
-                >
-                  {tab.isLive && (
-                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10b981' }} className="animate-pulse" />
-                  )}
-                  <span>{tab.label}</span>
-                  <span style={{
-                    fontSize: 10,
-                    fontWeight: 800,
-                    padding: '2px 6px',
-                    borderRadius: 6,
-                    background: active ? '#e0f2fe' : '#e2e8f0',
-                    color: active ? '#0369a1' : '#64748b'
-                  }}>
-                    {tab.count}
-                  </span>
-                </button>
-              )
-            })}
-          </div>
-        )}
-
-        {/* Search & Filters in 1 SINGLE ROW */}
+        {/* Search & Filters Row */}
         <div style={{
-          padding: '8px 12px',
+          padding: '10px 14px',
           borderRadius: 14,
           background: '#ffffff',
           border: '1px solid #e2e8f0',
           display: 'flex',
           alignItems: 'center',
           gap: 10,
-          flexWrap: 'nowrap',
-          overflowX: 'auto',
+          flexWrap: 'wrap',
           boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
           width: '100%',
           boxSizing: 'border-box'
         }}>
           {/* Search bar (takes remaining space) */}
-          <div style={{ position: 'relative', flex: 1, minWidth: 220 }}>
+          <div style={{ position: 'relative', flex: '1 1 240px', minWidth: 200 }}>
             <Search size={15} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', pointerEvents: 'none' }} />
             <input
               type="text"
@@ -639,10 +583,8 @@ export default function ProvasOnlineDashboardPage() {
               value={filterAnoLetivo}
               onChange={e => setFilterAnoLetivo(e.target.value)}
               style={{
-                width: 135,
-                minWidth: 120,
-                maxWidth: 150,
-                flexShrink: 0,
+                flex: '1 1 120px',
+                minWidth: 110,
                 height: 38,
                 padding: '0 10px',
                 borderRadius: 10,
@@ -669,10 +611,8 @@ export default function ProvasOnlineDashboardPage() {
               value={filterTurma}
               onChange={e => setFilterTurma(e.target.value)}
               style={{
-                width: 155,
-                minWidth: 135,
-                maxWidth: 175,
-                flexShrink: 0,
+                flex: '1 1 135px',
+                minWidth: 125,
                 height: 38,
                 padding: '0 12px',
                 borderRadius: 10,
@@ -699,10 +639,8 @@ export default function ProvasOnlineDashboardPage() {
               value={filterDisciplina}
               onChange={e => setFilterDisciplina(e.target.value)}
               style={{
-                width: 165,
-                minWidth: 145,
-                maxWidth: 190,
-                flexShrink: 0,
+                flex: '1 1 145px',
+                minWidth: 130,
                 height: 38,
                 padding: '0 12px',
                 borderRadius: 10,
@@ -728,10 +666,8 @@ export default function ProvasOnlineDashboardPage() {
             value={filterPeriodo}
             onChange={e => setFilterPeriodo(e.target.value)}
             style={{
-              width: 145,
-              minWidth: 130,
-              maxWidth: 160,
-              flexShrink: 0,
+              flex: '1 1 130px',
+              minWidth: 120,
               height: 38,
               padding: '0 12px',
               borderRadius: 10,
@@ -825,7 +761,7 @@ export default function ProvasOnlineDashboardPage() {
           )}
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))', gap: 16 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 320px), 1fr))', gap: 16 }}>
           {filteredProvas.map(prova => {
             const openDate = new Date(prova.dataAbertura)
             const closeDate = new Date(prova.dataEncerramento)

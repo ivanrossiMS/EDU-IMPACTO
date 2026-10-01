@@ -11,6 +11,7 @@ import {
   dbGetMessages,
   dbSaveExcecao
 } from '@/lib/provas-online/db'
+import { autoGradeTentativa } from '@/lib/provas-online/engine'
 
 export const dynamic = 'force-dynamic'
 
@@ -34,7 +35,22 @@ export async function GET(
   if (prova.alunosEspecificos && prova.alunosEspecificos.length > 0) {
     alunosQuery = alunosQuery.in('id', prova.alunosEspecificos)
   } else if (prova.turmas && prova.turmas.length > 0) {
-    alunosQuery = alunosQuery.in('turma', prova.turmas)
+    const { data: turmasDb } = await adminClient.from('turmas').select('id, codigo, nome')
+    const turmaTokens = new Set<string>()
+    for (const t of prova.turmas) {
+      turmaTokens.add(String(t).trim())
+      const match = (turmasDb || []).find(row =>
+        String(row.nome).toLowerCase() === String(t).toLowerCase() ||
+        String(row.id).toLowerCase() === String(t).toLowerCase() ||
+        String(row.codigo).toLowerCase() === String(t).toLowerCase()
+      )
+      if (match) {
+        if (match.id) turmaTokens.add(String(match.id).trim())
+        if (match.codigo) turmaTokens.add(String(match.codigo).trim())
+        if (match.nome) turmaTokens.add(String(match.nome).trim())
+      }
+    }
+    alunosQuery = alunosQuery.in('turma', Array.from(turmaTokens))
   }
 
   const { data: expectedStudents } = await alunosQuery
@@ -49,7 +65,9 @@ export async function GET(
 
   // Process attempts with live connection estimates and time left
   const studentRows = validStudents.map((aluno: any) => {
-    const studentTentativas = tentativas.filter(t => t.alunoId === aluno.id)
+    const studentTentativas = tentativas
+      .filter(t => t.alunoId === aluno.id)
+      .sort((a, b) => new Date(b.createdAt || b.iniciadaEm || 0).getTime() - new Date(a.createdAt || a.iniciadaEm || 0).getTime())
     const activeTentativa = studentTentativas.find(t => t.status === 'em_andamento')
     const submittedTentativa = studentTentativas.find(t => t.status === 'entregue' || t.status === 'expirada')
     const currentTentativa = activeTentativa || submittedTentativa || studentTentativas[0] || null
@@ -77,11 +95,45 @@ export async function GET(
     const ultimaAtividade = new Date(currentTentativa.ultimaAtividade || currentTentativa.iniciadaEm).getTime()
     const diffActivity = (now - ultimaAtividade) / 1000
 
+    let situacao = currentTentativa.status
+    if (currentTentativa.status === 'em_andamento' && now > prazo) {
+      situacao = 'expirada'
+      currentTentativa.status = 'expirada'
+      currentTentativa.entregueEm = new Date(prazo).toISOString()
+      const graded = autoGradeTentativa(prova, currentTentativa)
+      currentTentativa.pontuacaoObjetiva = graded.pontuacaoObjetiva
+      currentTentativa.notaFinal = graded.notaFinal
+      currentTentativa.statusCorrecao = graded.statusCorrecao
+      currentTentativa.comprovanteCodigo = graded.comprovanteCodigo
+      currentTentativa.respostas = graded.respostas
+      void dbSaveTentativa(currentTentativa).catch(() => {})
+    } else if (
+      (currentTentativa.status === 'expirada' || currentTentativa.status === 'entregue') &&
+      (currentTentativa.notaFinal === undefined || currentTentativa.notaFinal === null || (currentTentativa.notaFinal === 0 && currentTentativa.pontuacaoObjetiva === 0))
+    ) {
+      // Ensure existing completed attempts have their objective questions scored
+      const graded = autoGradeTentativa(prova, currentTentativa)
+      if (graded.pontuacaoObjetiva > 0 || !currentTentativa.comprovanteCodigo) {
+        currentTentativa.pontuacaoObjetiva = graded.pontuacaoObjetiva
+        currentTentativa.notaFinal = graded.notaFinal
+        currentTentativa.statusCorrecao = graded.statusCorrecao
+        currentTentativa.comprovanteCodigo = graded.comprovanteCodigo
+        currentTentativa.respostas = graded.respostas
+        void dbSaveTentativa(currentTentativa).catch(() => {})
+      }
+    }
+
     // Infer connection state:
+    // Delivered or expired = finalizado
     // < 45s: online, 45s-120s: instável, > 120s: sem sinal
-    let statusConexao: 'online' | 'instavel' | 'sem_sinal' = 'online'
-    if (diffActivity > 120) statusConexao = 'sem_sinal'
-    else if (diffActivity > 45) statusConexao = 'instavel'
+    let statusConexao: 'online' | 'instavel' | 'sem_sinal' | 'finalizado' | 'desconectado' = 'online'
+    if (situacao === 'entregue' || situacao === 'expirada') {
+      statusConexao = 'finalizado'
+    } else if (diffActivity > 120) {
+      statusConexao = 'sem_sinal'
+    } else if (diffActivity > 45) {
+      statusConexao = 'instavel'
+    }
 
     const respostasMap = currentTentativa.respostas || {}
     let respondidas = 0
@@ -101,11 +153,6 @@ export async function GET(
 
     const percentualConcluido = Math.min(100, Math.round((respondidas / totalQuestoes) * 100))
 
-    let situacao = currentTentativa.status
-    if (currentTentativa.status === 'em_andamento' && now > prazo) {
-      situacao = 'expirada'
-    }
-
     return {
       alunoId: aluno.id,
       alunoNome: aluno.nome,
@@ -113,7 +160,7 @@ export async function GET(
       alunoFoto: aluno.foto,
       turma: aluno.turma,
       situacao,
-      statusConexao: currentTentativa.status === 'entregue' ? 'finalizado' : statusConexao,
+      statusConexao,
       ultimaAtividade: currentTentativa.ultimaAtividade,
       tempoRestanteSegundos,
       tempoAdicionalMinutos: currentTentativa.tempoAdicionalMinutos || 0,
@@ -339,7 +386,7 @@ export async function POST(
   }
 
   // 2.2 Desbloquear / Retomar tentativa suspensa
-  if (acao === 'desbloquear') {
+  if (acao === 'desbloquear' || acao === 'liberar_tentativa') {
     tentativa.status = 'em_andamento'
     tentativa.updatedAt = new Date().toISOString()
     await dbSaveTentativa(tentativa)
@@ -361,9 +408,17 @@ export async function POST(
   }
 
   // 2.3 Forçar encerramento
-  if (acao === 'forcar_encerramento') {
+  if (acao === 'forcar_encerramento' || acao === 'encerrar_tentativa') {
+    const nowIso = new Date().toISOString()
     tentativa.status = 'entregue'
-    tentativa.entregueEm = new Date().toISOString()
+    tentativa.entregueEm = nowIso
+    const graded = autoGradeTentativa(prova, tentativa)
+    tentativa.pontuacaoObjetiva = graded.pontuacaoObjetiva
+    tentativa.notaFinal = graded.notaFinal
+    tentativa.statusCorrecao = graded.statusCorrecao
+    tentativa.comprovanteCodigo = graded.comprovanteCodigo
+    tentativa.respostas = graded.respostas
+    tentativa.updatedAt = nowIso
     await dbSaveTentativa(tentativa)
 
     await dbSaveExcecao({
@@ -373,7 +428,7 @@ export async function POST(
       tipoExcecao: 'reabertura',
       justificativa: justificativa || 'Encerramento administrativo forçado pelo aplicador',
       autorizadoPor: authorName,
-      createdAt: new Date().toISOString()
+      createdAt: nowIso
     })
 
     return NextResponse.json({

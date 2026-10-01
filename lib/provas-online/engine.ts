@@ -24,10 +24,13 @@ export function calculateServerDeadline(
   const totalDurationMinutes = Number(prova.duracaoMinutos || 60) + Number(tempoAdicionalMinutos || 0)
   const individualEnd = startTime + totalDurationMinutes * 60 * 1000
 
-  const schoolClosingEnd = new Date(prova.dataEncerramento).getTime()
+  const schoolClosingEnd = prova.dataEncerramento ? new Date(prova.dataEncerramento).getTime() : NaN
 
   // O prazo efetivo é o menor entre o término da duração individual e o encerramento da aplicação
-  const effectiveDeadlineTime = Math.min(individualEnd, schoolClosingEnd)
+  const effectiveDeadlineTime = !isNaN(schoolClosingEnd) && schoolClosingEnd > startTime
+    ? Math.min(individualEnd, schoolClosingEnd)
+    : individualEnd
+
   return new Date(effectiveDeadlineTime).toISOString()
 }
 
@@ -40,8 +43,8 @@ export function checkExamAvailabilityForStudent(
   attemptsCount: number
 ): { canStart: boolean; reason?: string } {
   const now = Date.now()
-  const abertura = new Date(prova.dataAbertura).getTime()
-  const encerramento = new Date(prova.dataEncerramento).getTime()
+  const abertura = prova.dataAbertura ? new Date(prova.dataAbertura).getTime() : 0
+  const encerramento = prova.dataEncerramento ? new Date(prova.dataEncerramento).getTime() : Infinity
 
   if (prova.status === 'rascunho') {
     return { canStart: false, reason: 'Esta prova ainda é um rascunho e não foi publicada pelo professor.' }
@@ -51,23 +54,23 @@ export function checkExamAvailabilityForStudent(
     return { canStart: false, reason: 'Esta prova aguarda aprovação da coordenação pedagógica.' }
   }
 
-  if (now < abertura) {
+  if (abertura > 0 && now < abertura) {
     return { canStart: false, reason: `Esta prova será liberada em ${new Date(prova.dataAbertura).toLocaleString('pt-BR')}.` }
   }
 
-  if (now > encerramento) {
+  if (!isNaN(encerramento) && now > encerramento) {
     return { canStart: false, reason: 'O período de aplicação desta prova já foi encerrado.' }
   }
 
   if (prova.dataLimiteInicio) {
     const limiteInicio = new Date(prova.dataLimiteInicio).getTime()
-    if (now > limiteInicio) {
+    if (!isNaN(limiteInicio) && now > limiteInicio) {
       return { canStart: false, reason: `O horário limite para iniciar esta prova encerrou às ${new Date(prova.dataLimiteInicio).toLocaleTimeString('pt-BR')}.` }
     }
   }
 
-  // Verificar se o aluno está na lista se houver restrição
-  if (prova.alunosEspecificos && prova.alunosEspecificos.length > 0) {
+  // Verificar se o aluno está na lista se houver restrição específica para alunos selecionados
+  if (prova.alunosModo === 'especificos' && prova.alunosEspecificos && prova.alunosEspecificos.length > 0) {
     if (!prova.alunosEspecificos.includes(alunoId)) {
       return { canStart: false, reason: 'Você não está na lista de participantes autorizados para esta prova.' }
     }
@@ -112,9 +115,12 @@ export function sanitizeExamForParticipant(
     return safeQ
   })
 
+  const hasPin = Boolean((prova.codigoLiberacao && String(prova.codigoLiberacao).trim() !== '') || prova.exigeCodigoAcesso)
+
   return {
     ...prova,
     questoes: sanitizedQuestoes,
+    exigeCodigoAcesso: hasPin,
     codigoLiberacao: undefined // Never send release PIN to student browser
   }
 }
@@ -242,6 +248,82 @@ export function gradeObjectiveQuestion(
   }
 
   return { pontuacaoObtida: 0, corrigida: false }
+}
+
+/**
+ * Auto-grades objective questions and calculates total scores for an attempt.
+ * Updates answers map, calculates pontuacaoObjetiva, notaFinal, statusCorrecao,
+ * and generates a voucher code if missing.
+ */
+export function autoGradeTentativa(
+  prova: ProvaOnline,
+  tentativa: TentativaAluno
+): {
+  pontuacaoObjetiva: number
+  pontuacaoDissertativa: number
+  notaFinal: number
+  statusCorrecao: 'pendente' | 'corrigida'
+  respostas: Record<string, RespostaQuestaoTentativa>
+  comprovanteCodigo: string
+} {
+  const questoes = prova.questoes || []
+  const respostas = { ...(tentativa.respostas || {}) }
+  let pontuacaoObjetiva = 0
+  let temDissertativaPendente = false
+
+  for (let qIdx = 0; qIdx < questoes.length; qIdx++) {
+    const q = questoes[qIdx]
+    let resp = respostas[q.id]
+    if (!resp && respostas[String(qIdx)]) {
+      resp = respostas[String(qIdx)]
+      respostas[q.id] = resp
+    } else if (!resp) {
+      const found = Object.values(respostas).find((r: any) => r?.questaoId === q.id)
+      if (found) {
+        resp = found
+        respostas[q.id] = resp
+      }
+    }
+
+    if (q.tipo === 'dissertativa') {
+      if (resp && resp.corrigida) {
+        // Já corrigida pelo professor
+      } else {
+        temDissertativaPendente = true
+        if (resp) {
+          resp.corrigida = false
+          resp.pontuacaoObtida = 0
+        }
+      }
+    } else {
+      const { pontuacaoObtida } = gradeObjectiveQuestion(q, resp)
+      pontuacaoObjetiva += pontuacaoObtida
+      if (resp) {
+        resp.corrigida = true
+        resp.pontuacaoObtida = pontuacaoObtida
+      }
+    }
+  }
+
+  pontuacaoObjetiva = Math.round(pontuacaoObjetiva * 100) / 100
+  const pontuacaoDissertativa = Number(tentativa.pontuacaoDissertativa || 0)
+  const notaFinal = Math.round((pontuacaoObjetiva + pontuacaoDissertativa) * 100) / 100
+  const statusCorrecao = temDissertativaPendente ? 'pendente' : 'corrigida'
+  const comprovanteCodigo = tentativa.comprovanteCodigo || generateVoucherCode(
+    prova.id,
+    tentativa.alunoId,
+    tentativa.id,
+    tentativa.entregueEm || tentativa.iniciadaEm || new Date().toISOString()
+  )
+
+  return {
+    pontuacaoObjetiva,
+    pontuacaoDissertativa,
+    notaFinal,
+    statusCorrecao,
+    respostas,
+    comprovanteCodigo
+  }
 }
 
 /**
