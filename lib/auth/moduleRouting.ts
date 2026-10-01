@@ -5,9 +5,10 @@ export interface UserModuleAccess {
   hasAgendaDigital: boolean
   hasGestaoPessoas: boolean
   hasSimulados: boolean
+  hasProvasOnline: boolean
   totalModules: number
   onlyAgendaDigital: boolean
-  availableModules: ('gestao-escolar' | 'agenda-digital' | 'gestao-pessoas' | 'simulados')[]
+  availableModules: ('gestao-escolar' | 'agenda-digital' | 'gestao-pessoas' | 'simulados' | 'provas-online')[]
 }
 
 const NORMALIZE = (s?: string) =>
@@ -86,22 +87,43 @@ export function getUserModuleAccess(user: any, perfilObj?: any): UserModuleAcces
       hasAgendaDigital: false,
       hasGestaoPessoas: false,
       hasSimulados: false,
+      hasProvasOnline: false,
       totalModules: 0,
       onlyAgendaDigital: false,
       availableModules: []
     }
   }
 
-  // Família / Aluno / Responsável têm apenas a Agenda Digital
-  if (isFamilyOrStudent(user)) {
+  const p = NORMALIZE(user.perfil)
+  const c = NORMALIZE(user.cargo)
+  const isStudent = p === 'aluno' || c === 'aluno'
+  const isFamily = p === 'familia' || p === 'responsavel' || c === 'responsavel'
+
+  // Família / Responsável têm apenas a Agenda Digital
+  if (isFamily) {
     return {
       hasGestaoEscolar: false,
       hasAgendaDigital: true,
       hasGestaoPessoas: false,
       hasSimulados: false,
+      hasProvasOnline: false,
       totalModules: 1,
       onlyAgendaDigital: true,
       availableModules: ['agenda-digital']
+    }
+  }
+
+  // Alunos têm Agenda Digital e Provas Online
+  if (isStudent) {
+    return {
+      hasGestaoEscolar: false,
+      hasAgendaDigital: true,
+      hasGestaoPessoas: false,
+      hasSimulados: false,
+      hasProvasOnline: true,
+      totalModules: 2,
+      onlyAgendaDigital: false,
+      availableModules: ['agenda-digital', 'provas-online']
     }
   }
 
@@ -112,12 +134,14 @@ export function getUserModuleAccess(user: any, perfilObj?: any): UserModuleAcces
     const hasAgendaDigital = !perfilObj.bloqueadoAgendaDigital
     const hasGestaoPessoas = !perfilObj.bloqueadoGestaoPessoas
     const hasSimulados = !perfilObj.bloqueadoSimulados
+    const hasProvasOnline = !perfilObj.bloqueadoProvasOnline
 
-    const availableModules: ('gestao-escolar' | 'agenda-digital' | 'gestao-pessoas' | 'simulados')[] = []
+    const availableModules: ('gestao-escolar' | 'agenda-digital' | 'gestao-pessoas' | 'simulados' | 'provas-online')[] = []
     if (hasGestaoEscolar) availableModules.push('gestao-escolar')
     if (hasAgendaDigital) availableModules.push('agenda-digital')
     if (hasGestaoPessoas) availableModules.push('gestao-pessoas')
     if (hasSimulados) availableModules.push('simulados')
+    if (hasProvasOnline) availableModules.push('provas-online')
 
     const totalModules = availableModules.length
     const onlyAgendaDigital = hasAgendaDigital && totalModules === 1
@@ -127,6 +151,7 @@ export function getUserModuleAccess(user: any, perfilObj?: any): UserModuleAcces
       hasAgendaDigital,
       hasGestaoPessoas,
       hasSimulados,
+      hasProvasOnline,
       totalModules,
       onlyAgendaDigital,
       availableModules
@@ -141,12 +166,14 @@ export function getUserModuleAccess(user: any, perfilObj?: any): UserModuleAcces
   const hasAgendaDigital = defaultFound ? !defaultFound.bloqueadoAgendaDigital : true
   const hasGestaoPessoas = defaultFound ? !defaultFound.bloqueadoGestaoPessoas : true
   const hasSimulados = defaultFound ? !defaultFound.bloqueadoSimulados : true
+  const hasProvasOnline = defaultFound ? !defaultFound.bloqueadoProvasOnline : true
 
-  const availableModules: ('gestao-escolar' | 'agenda-digital' | 'gestao-pessoas' | 'simulados')[] = []
+  const availableModules: ('gestao-escolar' | 'agenda-digital' | 'gestao-pessoas' | 'simulados' | 'provas-online')[] = []
   if (hasGestaoEscolar) availableModules.push('gestao-escolar')
   if (hasAgendaDigital) availableModules.push('agenda-digital')
   if (hasGestaoPessoas) availableModules.push('gestao-pessoas')
   if (hasSimulados) availableModules.push('simulados')
+  if (hasProvasOnline) availableModules.push('provas-online')
 
   const totalModules = availableModules.length
   const onlyAgendaDigital = hasAgendaDigital && totalModules === 1
@@ -156,6 +183,7 @@ export function getUserModuleAccess(user: any, perfilObj?: any): UserModuleAcces
     hasAgendaDigital,
     hasGestaoPessoas,
     hasSimulados,
+    hasProvasOnline,
     totalModules,
     onlyAgendaDigital,
     availableModules
@@ -181,6 +209,7 @@ export function getInitialRouteForUser(user: any, perfilObj?: any): string {
     if (access.hasGestaoEscolar) return '/dashboard'
     if (access.hasGestaoPessoas) return '/gestao-pessoas'
     if (access.hasSimulados) return '/simulados'
+    if (access.hasProvasOnline) return '/provas-online'
   }
 
   // 3. Tem múltiplos módulos (ex.: Gestão Escolar + Agenda Digital)

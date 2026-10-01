@@ -1423,8 +1423,11 @@ export default function LoginPage() {
     return ''
   })()
 
+  const authUser = pendingAuth || currentUser
+  const isStudentUser = authUser?.cargo === 'Aluno' || authUser?.perfil === 'Aluno'
+
   const ChooseSystemContent = (
-    <div className="login-form-wrapper" style={{ width:'100%', maxWidth:540, position:'relative', zIndex:1, animation:'fadeSlideIn 0.4s cubic-bezier(0.4, 0, 0.2, 1) both' }}>
+    <div className="login-form-wrapper" style={{ width:'100%', maxWidth:680, position:'relative', zIndex:1, animation:'fadeSlideIn 0.4s cubic-bezier(0.4, 0, 0.2, 1) both' }}>
       <div style={{ marginBottom:36, textAlign:'center' }}>
         <h2 style={{ fontFamily:"'Outfit',sans-serif", fontSize:32, fontWeight:900, color:'#fff', letterSpacing:'-0.02em', marginBottom:8 }}>Acesso Autorizado</h2>
         <p style={{ fontSize:15, color:'rgba(255,255,255,0.45)', lineHeight: 1.6 }}>
@@ -1460,7 +1463,7 @@ export default function LoginPage() {
           </div>
         ) : (
           <>
-            {(!profileData || !profileData.bloqueadoGestaoEscolar) && (
+            {!isStudentUser && (!profileData || !profileData.bloqueadoGestaoEscolar) && (
               <button type="button" 
                 onClick={() => {
                   clearLogoutBarrierSync();
@@ -1507,7 +1510,7 @@ export default function LoginPage() {
               </button>
             )}
 
-            {(!profileData || !profileData.bloqueadoGestaoPessoas) && (
+            {!isStudentUser && (!profileData || !profileData.bloqueadoGestaoPessoas) && (
               <button type="button" 
                 onClick={() => {
                   clearLogoutBarrierSync();
@@ -1528,7 +1531,7 @@ export default function LoginPage() {
               </button>
             )}
 
-            {(!profileData || !profileData.bloqueadoSimulados) && (
+            {!isStudentUser && (!profileData || !profileData.bloqueadoSimulados) && (
               <button type="button" 
                 onClick={() => {
                   clearLogoutBarrierSync();
@@ -1545,6 +1548,27 @@ export default function LoginPage() {
                 <div>
                   <div style={{ fontSize:18, fontWeight:800, color:'#fff', marginBottom:4 }}>Provas/Simulados</div>
                   <div style={{ fontSize:12, color:'rgba(255,255,255,0.4)' }}>Geração de Provas</div>
+                </div>
+              </button>
+            )}
+
+            {(!profileData || !profileData.bloqueadoProvasOnline) && (
+              <button type="button" 
+                onClick={() => {
+                  clearLogoutBarrierSync();
+                  markExplicitLogin();
+                  setLoadingSystem('provas-online');
+                  setTimeout(() => {
+                    window.location.href = '/provas-online';
+                  }, 100);
+                }}
+                style={{ position: 'relative', overflow: 'hidden', flex:'1 1 200px', padding:'32px 24px', borderRadius:24, background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.08)', backdropFilter:'blur(20px)', cursor:'pointer', transition:'all 0.3s', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:16, minWidth: '180px' }}
+                onMouseEnter={e=>{e.currentTarget.style.background='rgba(6,182,212,0.08)'; e.currentTarget.style.borderColor='rgba(6,182,212,0.3)'; e.currentTarget.style.transform='translateY(-4px)'; e.currentTarget.style.boxShadow='0 20px 40px rgba(0,0,0,0.3), 0 0 40px rgba(6,182,212,0.1)'}}
+                onMouseLeave={e=>{e.currentTarget.style.background='rgba(255,255,255,0.03)'; e.currentTarget.style.borderColor='rgba(255,255,255,0.08)'; e.currentTarget.style.transform='translateY(0)'; e.currentTarget.style.boxShadow='none'}}>
+                {loadingSystem === 'provas-online' ? <ModernLoadingSpinner /> : <div style={{ width:64, height:64, borderRadius:20, background:'linear-gradient(135deg, #06b6d4, #0284c7)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:28, boxShadow:'0 10px 24px rgba(6,182,212,0.4)' }}>💻</div>}
+                <div>
+                  <div style={{ fontSize:18, fontWeight:800, color:'#fff', marginBottom:4 }}>Provas Online</div>
+                  <div style={{ fontSize:12, color:'rgba(255,255,255,0.4)' }}>Avaliações Digitais</div>
                 </div>
               </button>
             )}

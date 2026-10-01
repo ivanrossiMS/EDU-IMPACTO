@@ -361,7 +361,7 @@ export function RouteGuard({ children }: { children: React.ReactNode }) {
 
   // ── Step 2.5: Check for Gestão Escolar Block (Applies to all ERP routes) ──
   // Exceptions: /simulados, /provas, and /redacao-enem are separate modules. /meu-perfil is global.
-  const isSimuladosRoute = pathname.startsWith('/simulados') || pathname.startsWith('/provas') || pathname.startsWith('/redacao-enem')
+  const isSimuladosRoute = pathname.startsWith('/simulados') || pathname.startsWith('/provas') || pathname.startsWith('/redacao-enem') || pathname.startsWith('/provas-online')
   const isMeuPerfilRoute = pathname.startsWith('/meu-perfil')
   
   if (userPerfilObj?.bloqueadoGestaoEscolar && !isSimuladosRoute && !isMeuPerfilRoute) {
