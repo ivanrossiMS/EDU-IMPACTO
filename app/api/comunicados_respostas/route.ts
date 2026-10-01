@@ -69,6 +69,10 @@ async function checkIsStaffOrAuthor({
     }
   }
 
+  if (isStaff) {
+    return { isStaff: true, isAuthor: true, canViewAllThreads: true };
+  }
+
   let isAuthor = false;
   const userCandidateIds = new Set<string>([
     String(user.id),
@@ -121,11 +125,25 @@ export async function GET(request: Request) {
   const espelharColabId = searchParams.get('espelhar_colaborador');
   const adminParam = searchParams.get('admin') === 'true';
 
-  const groupedAutorId = searchParams.get('grouped_autor_id');
-  const groupedTime = searchParams.get('grouped_time');
+  let groupedAutorId = searchParams.get('grouped_autor_id');
+  let groupedTime = searchParams.get('grouped_time');
 
   if (!comunicadoId && !comunicadoIds && !groupedAutorId) {
     return NextResponse.json({ error: 'comunicado_id or comunicado_ids is required' }, { status: 400 });
+  }
+
+  // Se for um comunicado de relatório agrupado (COLAB), auto-detecta autor e timestamp se não vieram na query
+  if (!groupedAutorId && comunicadoId && comunicadoId.startsWith('AD-COM-REL-COLAB-')) {
+    const { data: parentData } = await supabase
+      .from('comunicados')
+      .select('created_at, dados')
+      .eq('id', comunicadoId)
+      .maybeSingle();
+    if (parentData?.dados?.autorId) {
+      groupedAutorId = parentData.dados.autorId;
+      const gDate = new Date(parentData.created_at || parentData.dados?.dataEnvio || 0).getTime();
+      groupedTime = String(gDate);
+    }
   }
 
   // Verifica permissão institucional (staff) ou autoria do comunicado
@@ -145,8 +163,8 @@ export async function GET(request: Request) {
   if (groupedAutorId && groupedTime) {
     // Busca os IDs dos relatórios filhos no banco
     const timeNum = parseInt(groupedTime, 10);
-    const minTime = new Date(timeNum - 15000).toISOString();
-    const maxTime = new Date(timeNum + 15000).toISOString();
+    const minTime = new Date(timeNum - 60000).toISOString();
+    const maxTime = new Date(timeNum + 60000).toISOString();
     
     const { data: relatedComs } = await supabase
       .from('comunicados')
@@ -157,6 +175,9 @@ export async function GET(request: Request) {
       .lte('created_at', maxTime);
       
     const idsArray = relatedComs?.map(c => c.id) || [];
+    if (comunicadoId && !idsArray.includes(comunicadoId)) {
+      idsArray.push(comunicadoId);
+    }
     if (idsArray.length > 0) {
       query = query.in('comunicado_id', idsArray);
     } else {

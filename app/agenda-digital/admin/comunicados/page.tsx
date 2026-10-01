@@ -2,7 +2,7 @@
 // Last Update: 2026-05-16T16:08:00Z - Forced Rebuild
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSupabaseArray } from '@/lib/useSupabaseCollection';
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import Image from 'next/image'
 import { useAgendaDigital, ADComunicado } from '@/lib/agendaDigitalContext'
@@ -72,7 +72,7 @@ const MediaLabel = ({ name, url, initialSize }: { name: string, url: string, ini
 export default function ADAdminComunicados() {
   const queryClient = useQueryClient()
   const { currentUser } = useApp()
-  const { comunicados, setComunicados, setComunicadosLocally, adAlert, adConfirm, isDataLoading, fetchNextPageComunicados, hasNextPageComunicados, chatGroups } = useAgendaDigital()
+  const { comunicados, setComunicados, setComunicadosLocally, adAlert, adConfirm, isDataLoading, fetchNextPageComunicados, hasNextPageComunicados, isFetchingNextPageComunicados, chatGroups } = useAgendaDigital()
   const { turmas = [] } = useData();
   const [alunos] = useSupabaseArray<any>('alunos/lightweight?limit=2000');
   const { forms, setDisparos } = useFormularios()
@@ -246,12 +246,12 @@ export default function ADAdminComunicados() {
   const [showEngagementDashboard, setShowEngagementDashboard] = useState(false);
   const [colaboradores, setColaboradores] = useState<{nome: string}[]>([]);
 
-  const [visibleCount, setVisibleCount] = useState(5);
+  const [visibleCount, setVisibleCount] = useState(10);
   const [selectedComs, setSelectedComs] = useState<string[]>([]);
   const [isFetchingMore, setIsFetchingMore] = useState(false);
 
   useEffect(() => {
-    setVisibleCount(5);
+    setVisibleCount(10);
   }, [tab, search, authorFilter, attachmentFilter]);
 
   useEffect(() => {
@@ -487,41 +487,75 @@ export default function ADAdminComunicados() {
     });
   }
 
-  const filtered = comunicados.filter(c => {
-    if (tab === 'enviados' && c.status !== 'enviado') return false
-    if (tab === 'agendados' && c.status !== 'agendado') return false
-    if (tab === 'rascunhos' && c.status !== 'rascunho') return false
-    
-    if (authorFilter !== 'todos') {
-      const cAutor = c.autor || (c as any).dados?.autor;
-      const cCargo = c.autorCargo || (c as any).dados?.autorCargo;
-      if (authorFilter === 'meus') {
-        if (c.autorId !== currentUser?.id && cAutor !== currentUser?.nome) return false;
-      } else if (authorFilter.startsWith('cargo:')) {
-        const roleTarget = authorFilter.split(':')[1];
-        if (cCargo !== roleTarget) return false;
-      } else if (authorFilter.startsWith('autor:')) {
-        const autorTarget = authorFilter.split(':')[1];
-        if (cAutor !== autorTarget) return false;
+  const filterComunicados = useCallback((list: any[]) => {
+    return (list || []).filter((c: any) => {
+      if (tab === 'enviados' && c.status !== 'enviado') return false
+      if (tab === 'agendados' && c.status !== 'agendado') return false
+      if (tab === 'rascunhos' && c.status !== 'rascunho') return false
+      
+      if (authorFilter !== 'todos') {
+        const cAutor = c.autor || (c as any).dados?.autor;
+        const cCargo = c.autorCargo || (c as any).dados?.autorCargo;
+        if (authorFilter === 'meus') {
+          if (c.autorId !== currentUser?.id && cAutor !== currentUser?.nome) return false;
+        } else if (authorFilter.startsWith('cargo:')) {
+          const roleTarget = authorFilter.split(':')[1];
+          if (cCargo !== roleTarget) return false;
+        } else if (authorFilter.startsWith('autor:')) {
+          const autorTarget = authorFilter.split(':')[1];
+          if (cAutor !== autorTarget) return false;
+        }
       }
-    }
 
-    if (search) {
-      const searchLower = search.toLowerCase()
-      const titleMatch = (c.titulo || '').toLowerCase().includes(searchLower)
-      const contentMatch = (c.conteudo || (c as any).texto || '').toLowerCase().includes(searchLower)
-      return titleMatch || contentMatch
+      if (search) {
+        const searchLower = search.toLowerCase()
+        const titleMatch = (c.titulo || '').toLowerCase().includes(searchLower)
+        const contentMatch = (c.conteudo || (c as any).texto || '').toLowerCase().includes(searchLower)
+        return titleMatch || contentMatch
+      }
+      
+      // Ocultar envios individuais de relatórios do Feed (Mostrando apenas a Cópia-Resumo da Turma)
+      if (c.id?.startsWith('AD-COM-REL-STU-')) return false
+      
+      return true
+    }).sort((a: any, b: any) => {
+      const timeA = new Date(a.dataEnvio || (a as any).data || (a as any).created_at || 0).getTime();
+      const timeB = new Date(b.dataEnvio || (b as any).data || (b as any).created_at || 0).getTime();
+      return timeB - timeA;
+    });
+  }, [tab, authorFilter, search, currentUser]);
+
+  const filtered = useMemo(() => {
+    return filterComunicados(comunicados);
+  }, [filterComunicados, comunicados]);
+
+  const handleLoadMore = useCallback(async () => {
+    if (isFetchingMore || isFetchingNextPageComunicados) return;
+    setIsFetchingMore(true);
+    try {
+      const targetCount = visibleCount + 10;
+      let currentFiltered = filterComunicados(comunicados);
+      let currentHasNext = Boolean(hasNextPageComunicados);
+
+      // Busca na API em lotes de 10 em 10 até que tenhamos itens filtrados suficientes para exibir os próximos 10
+      while (currentFiltered.length < targetCount && currentHasNext && fetchNextPageComunicados) {
+        const res: any = await fetchNextPageComunicados();
+        if (!res || !res.data) break;
+        currentHasNext = Boolean(res.hasNextPage);
+        const allItems = res.data.pages ? res.data.pages.flat() : [];
+        const nextFiltered = filterComunicados(allItems);
+        if (nextFiltered.length <= currentFiltered.length && !currentHasNext) {
+          break;
+        }
+        currentFiltered = nextFiltered;
+      }
+      setVisibleCount(targetCount);
+    } catch (err) {
+      console.error('Erro ao carregar mais comunicados:', err);
+    } finally {
+      setIsFetchingMore(false);
     }
-    
-    // Ocultar envios individuais de relatórios do Feed (Mostrando apenas a Cópia-Resumo da Turma)
-    if (c.id?.startsWith('AD-COM-REL-STU-')) return false
-    
-    return true
-  }).sort((a,b) => {
-    const timeA = new Date(a.dataEnvio || (a as any).data || (a as any).created_at || 0).getTime();
-    const timeB = new Date(b.dataEnvio || (b as any).data || (b as any).created_at || 0).getTime();
-    return timeB - timeA;
-  })
+  }, [isFetchingMore, isFetchingNextPageComunicados, visibleCount, comunicados, hasNextPageComunicados, fetchNextPageComunicados, filterComunicados]);
 
   return (
     <div className="ad-admin-page-container ad-mobile-optimized" style={{ display: 'flex', flexDirection: 'column', height: '100%', position: 'relative' }}>
@@ -963,18 +997,8 @@ export default function ADAdminComunicados() {
           {(filtered.length > visibleCount || hasNextPageComunicados) && (
             <div style={{ display: 'flex', justifyContent: 'center', marginTop: 16, marginBottom: 32 }}>
               <button 
-                onClick={async () => {
-                  if (visibleCount >= filtered.length && hasNextPageComunicados && fetchNextPageComunicados) {
-                    setIsFetchingMore(true);
-                    try {
-                      await fetchNextPageComunicados();
-                    } finally {
-                      setIsFetchingMore(false);
-                    }
-                  }
-                  setVisibleCount(prev => prev + 5)
-                }}
-                disabled={isFetchingMore}
+                onClick={handleLoadMore}
+                disabled={isFetchingMore || isFetchingNextPageComunicados}
                 style={{
                   background: '#f1f5f9',
                   color: '#475569',
@@ -983,21 +1007,21 @@ export default function ADAdminComunicados() {
                   borderRadius: 20,
                   fontSize: 14,
                   fontWeight: 700,
-                  cursor: isFetchingMore ? 'not-allowed' : 'pointer',
-                  opacity: isFetchingMore ? 0.7 : 1,
+                  cursor: (isFetchingMore || isFetchingNextPageComunicados) ? 'not-allowed' : 'pointer',
+                  opacity: (isFetchingMore || isFetchingNextPageComunicados) ? 0.7 : 1,
                   transition: 'all 0.2s',
                   display: 'flex',
                   alignItems: 'center',
                   gap: 8,
                 }}
                 onMouseEnter={e => {
-                  if (!isFetchingMore) e.currentTarget.style.background = '#e2e8f0'
+                  if (!(isFetchingMore || isFetchingNextPageComunicados)) e.currentTarget.style.background = '#e2e8f0'
                 }}
                 onMouseLeave={e => {
-                  if (!isFetchingMore) e.currentTarget.style.background = '#f1f5f9'
+                  if (!(isFetchingMore || isFetchingNextPageComunicados)) e.currentTarget.style.background = '#f1f5f9'
                 }}
               >
-                {isFetchingMore ? (
+                {(isFetchingMore || isFetchingNextPageComunicados) ? (
                   <>
                     <Loader2 size={16} className="animate-spin" /> Carregando...
                   </>
@@ -1007,7 +1031,7 @@ export default function ADAdminComunicados() {
               </button>
             </div>
           )}
-          {!(filtered.length > visibleCount || hasNextPageComunicados) && filtered.length >= 5 && (
+          {!(filtered.length > visibleCount || hasNextPageComunicados) && filtered.length >= 10 && (
             <div style={{
               display: 'flex',
               alignItems: 'center',

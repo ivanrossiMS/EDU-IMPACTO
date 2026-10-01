@@ -8,7 +8,7 @@ import { Bell, Search, Filter, Pin, CheckCircle2, X, Paperclip, FileText, FileBa
 import { EmptyStateCard } from '../../components/EmptyStateCard'
 import { UserAvatar } from '@/components/UserAvatar'
 
-import { use, useState, useEffect, useRef, useCallback } from 'react'
+import { use, useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useQueryComunicados } from '@/lib/hooks/useAgendaQueries'
 import { useFormularios, FormTemplate } from '@/lib/formulariosContext'
@@ -19,6 +19,7 @@ import { supabase } from '@/lib/supabase'
 import Portal from '@/components/Portal'
 import { ComunicadoChat } from '@/components/ComunicadoChat'
 import { ComunicadoViewModal } from '@/components/agenda/ComunicadoViewModal'
+import { seedComunicadosRespostasCache, prefetchComunicadoMessages, getGlobalCachedMessages } from '@/lib/comunicadosRespostasCache'
 import { ComunicadoSkeleton } from '../../components/ComunicadoSkeleton'
 import { ReportPayloadView } from '@/components/DynamicReports/ReportPayloadView'
 import { apiFetch } from '@/lib/api/apiClient'
@@ -120,8 +121,13 @@ export default function ADComunicadosPage({ params }: { params: any }) {
 
   const endpoint = resolvedParams?.slug ? `/api/comunicados?aluno_id=${resolvedParams.slug}` : null
   
-  const { data: comunicadosData, isLoading: loading, refetch, hasNextPage, fetchNextPage, isFetchingNextPage } = useQueryComunicados(endpoint, 5, { enabled: true })
+  const { data: comunicadosData, isLoading: loading, refetch, hasNextPage, fetchNextPage, isFetchingNextPage } = useQueryComunicados(endpoint, 10, { enabled: true })
   const comunicados = comunicadosData?.pages?.flat() || []
+  useEffect(() => {
+    if (comunicados && comunicados.length > 0) {
+      seedComunicadosRespostasCache(comunicados);
+    }
+  }, [comunicados]);
   
   const searchParams = useSearchParams()
   const queryId = searchParams.get('id')
@@ -168,6 +174,12 @@ export default function ADComunicadosPage({ params }: { params: any }) {
 
     const updatedConversasInfo = {
       ...(comunicadoItem.conversas_info || {}),
+      tem_conversas: Boolean(
+        comunicadoItem.conversas_info?.tem_conversas ||
+        (comunicadoItem.conversas_info?.total && comunicadoItem.conversas_info.total > 0) ||
+        (Array.isArray(comunicadoItem.respostas) && comunicadoItem.respostas.length > 0) ||
+        (getGlobalCachedMessages(comunicadoItem.id)?.length)
+      ),
       has_unread: false,
       nao_lidas: 0
     };
@@ -225,6 +237,33 @@ export default function ADComunicadosPage({ params }: { params: any }) {
       markComunicadoAsRead(selectedComunicado);
     }
   }, [selectedComunicado?.id, markComunicadoAsRead]);
+
+  useEffect(() => {
+    const handleConversasUpdated = (e: any) => {
+      const detail = e.detail;
+      if (!detail || !detail.comunicadoId) return;
+      const cId = String(detail.comunicadoId);
+      queryClient.setQueriesData({ queryKey: ['agenda', 'comunicados'] }, (old: any) => {
+        if (!old || !old.pages) return old;
+        return {
+          ...old,
+          pages: old.pages.map((page: any[]) =>
+            page.map((x: any) => String(x.id) === cId ? {
+              ...x,
+              respostas: detail.messages || x.respostas,
+              conversas_info: {
+                ...(x.conversas_info || {}),
+                tem_conversas: true,
+                total: detail.total || (detail.messages ? detail.messages.length : 1),
+              }
+            } : x)
+          )
+        };
+      });
+    };
+    window.addEventListener('agenda-digital:conversas-updated', handleConversasUpdated);
+    return () => window.removeEventListener('agenda-digital:conversas-updated', handleConversasUpdated);
+  }, [queryClient]);
   
   // Auto-open comunicado if queryId is present (only once)
   const hasAutoOpened = useRef(false)
@@ -396,6 +435,82 @@ export default function ADComunicadosPage({ params }: { params: any }) {
   }, [queryClient, refetch])
 
   const [searchTerm, setSearchTerm] = useState('')
+  const [visibleCount, setVisibleCount] = useState(10)
+  const [isFetchingMore, setIsFetchingMore] = useState(false)
+
+  useEffect(() => {
+    setVisibleCount(10)
+  }, [searchTerm, resolvedParams?.slug])
+
+  const filterAndSortComunicados = useCallback((rawList: any[]) => {
+    return (rawList || []).filter((c: any) => {
+      // Esconder comunicados internos (para staff) e relatórios mestre (COLAB) do feed dos pais/alunos
+      if (c.destino === 'interno' || c.destino === 'funcionarios') return false;
+      if (c.id && c.id.startsWith('AD-COM-REL-COLAB')) return false;
+      if (c.tipo === 'AD-COM-REL-TURMA' || (c.id && c.id.startsWith('AD-COM-REL-TURMA'))) return false;
+
+      // Relatórios individuais: apenas exibir se pertencer a este aluno
+      if (c.id && c.id.startsWith('AD-COM-REL-STU-')) {
+        const currentAlunoId = String(aluno?.id || resolvedParams?.slug || '').replace(/^(a_|_ALU)/, '');
+        const cAlunos = [
+          ...(c.alunosIds || []),
+          ...(c.dados?.alunosIds || [])
+        ].map((id: any) => String(id).replace(/^(a_|_ALU)/, ''));
+        if (!cAlunos.includes(currentAlunoId)) return false;
+      }
+
+      if (!searchTerm) return true;
+      const term = searchTerm.toLowerCase();
+      const titulo = c.titulo?.toLowerCase() || '';
+      const remetente = c.remetente?.toLowerCase() || '';
+      const conteudo = c.conteudo?.toLowerCase() || '';
+      return titulo.includes(term) || remetente.includes(term) || conteudo.includes(term);
+    }).sort((a: any, b: any) => {
+      const dateA = new Date(a.dataEnvio || a.data || a.created_at || 0).getTime();
+      const dateB = new Date(b.dataEnvio || b.data || b.created_at || 0).getTime();
+      return dateB - dateA;
+    });
+  }, [aluno?.id, resolvedParams?.slug, searchTerm]);
+
+  const filteredComunicados = useMemo(() => {
+    return filterAndSortComunicados(comunicados);
+  }, [comunicados, filterAndSortComunicados]);
+
+  const paginatedComunicados = useMemo(() => {
+    return filteredComunicados.slice(0, visibleCount);
+  }, [filteredComunicados, visibleCount]);
+
+  const hasMoreToDisplay = filteredComunicados.length > visibleCount || Boolean(hasNextPage);
+
+  const handleLoadMore = useCallback(async () => {
+    if (isFetchingMore || isFetchingNextPage) return;
+    setIsFetchingMore(true);
+    try {
+      const targetCount = visibleCount + 10;
+      let currentPages = comunicadosData?.pages || [];
+      let currentHasNext = Boolean(hasNextPage);
+      let currentFiltered = filterAndSortComunicados(currentPages.flat());
+
+      // Busca na API em lotes de 10 em 10 até que tenhamos itens filtrados suficientes para exibir os próximos 10
+      while (currentFiltered.length < targetCount && currentHasNext && fetchNextPage) {
+        const res = await fetchNextPage();
+        if (!res || !res.data) break;
+        currentPages = res.data.pages || [];
+        currentHasNext = Boolean(res.hasNextPage);
+        const nextFiltered = filterAndSortComunicados(currentPages.flat());
+        if (nextFiltered.length <= currentFiltered.length && !currentHasNext) {
+          break;
+        }
+        currentFiltered = nextFiltered;
+      }
+
+      setVisibleCount(targetCount);
+    } catch (e) {
+      console.error('Erro ao carregar mais comunicados:', e);
+    } finally {
+      setIsFetchingMore(false);
+    }
+  }, [isFetchingMore, isFetchingNextPage, visibleCount, comunicadosData?.pages, hasNextPage, fetchNextPage, filterAndSortComunicados]);
   
   const [openedFormStr, setOpenedFormStr] = useState<string | null>(null)
   const [openedReportPayloadStr, setOpenedReportPayloadStr] = useState<string | null>(null)
@@ -953,38 +1068,8 @@ export default function ADComunicadosPage({ params }: { params: any }) {
 
       <div className="ad-feed-list" style={{ display: 'flex', flexDirection: 'column' }}>
         {(() => {
-          const filteredComunicados = (comunicados || []).filter((c: any) => {
-            // Esconder comunicados internos (para staff) e relatórios mestre (COLAB) do feed dos pais/alunos
-            if (c.destino === 'interno' || c.destino === 'funcionarios') return false;
-            if (c.id && c.id.startsWith('AD-COM-REL-COLAB')) return false;
-            if (c.tipo === 'AD-COM-REL-TURMA' || (c.id && c.id.startsWith('AD-COM-REL-TURMA'))) return false;
-
-            // Relatórios individuais: apenas exibir se pertencer a este aluno
-            if (c.id && c.id.startsWith('AD-COM-REL-STU-')) {
-              const currentAlunoId = String(aluno?.id || resolvedParams?.slug || '').replace(/^(a_|_ALU)/, '');
-              const cAlunos = [
-                ...(c.alunosIds || []),
-                ...(c.dados?.alunosIds || [])
-              ].map((id: any) => String(id).replace(/^(a_|_ALU)/, ''));
-              if (!cAlunos.includes(currentAlunoId)) return false;
-            }
-
-            if (!searchTerm) return true;
-            const term = searchTerm.toLowerCase();
-            const titulo = c.titulo?.toLowerCase() || '';
-            const remetente = c.remetente?.toLowerCase() || '';
-            const conteudo = c.conteudo?.toLowerCase() || '';
-            return titulo.includes(term) || remetente.includes(term) || conteudo.includes(term);
-          }).sort((a: any, b: any) => {
-            const dateA = new Date(a.dataEnvio || a.data || a.created_at || 0).getTime();
-            const dateB = new Date(b.dataEnvio || b.data || b.created_at || 0).getTime();
-            return dateB - dateA;
-          });
-          
-          const paginatedComunicados = filteredComunicados;
-          
           if (loading || !aluno) {
-            return <ComunicadoSkeleton count={5} />
+            return <ComunicadoSkeleton count={10} />
           }
           
           if (paginatedComunicados.length === 0) {
@@ -1022,8 +1107,17 @@ export default function ADComunicadosPage({ params }: { params: any }) {
             const readerIdWithSlug = legacyResponsavelId ? `${legacyResponsavelId}_${resolvedParams.slug}` : '';
             const currentReaderWithSlug = `${currentReaderId}_${resolvedParams.slug}`;
 
-            const hasUnreadConversation = Boolean(c.conversas_info?.has_unread || c._has_unread_reply);
-            const hasConversas = Boolean(c.conversas_info?.tem_conversas || (c.conversas_info?.total && c.conversas_info.total > 0));
+            const hasUnreadConversation = Boolean(
+              c.conversas_info?.has_unread || 
+              (c.conversas_info?.nao_lidas && c.conversas_info.nao_lidas > 0) ||
+              c._has_unread_reply
+            );
+            const hasConversas = Boolean(
+              c.conversas_info?.tem_conversas || 
+              (c.conversas_info?.total && c.conversas_info.total > 0) ||
+              (Array.isArray(c.respostas) && c.respostas.length > 0) ||
+              (getGlobalCachedMessages(c.id)?.length)
+            );
 
             const isRead = !hasUnreadConversation && (locallyReadIds.has(String(c.id)) || !!(
               (c.leituras || {})[currentReaderId] || 
@@ -1142,6 +1236,9 @@ export default function ADComunicadosPage({ params }: { params: any }) {
                     display: 'flex', 
                     flexDirection: 'column', 
                     gap: 16
+                  }}
+                  onPointerDown={() => {
+                    prefetchComunicadoMessages(c, false, resolvedParams?.slug);
                   }}
                   onClick={() => {
                     markComunicadoAsRead(c);
@@ -1409,17 +1506,13 @@ export default function ADComunicadosPage({ params }: { params: any }) {
               </motion.div>
             )
           })}
-              {hasNextPage && (
+              {hasMoreToDisplay && (
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', marginTop: 24, marginBottom: 24, gap: 10 }}>
                   <motion.button 
-                    whileHover={!isFetchingNextPage ? { scale: 1.02, translateY: -1 } : {}}
-                    whileTap={!isFetchingNextPage ? { scale: 0.98 } : {}}
-                    onClick={() => {
-                      if (hasNextPage && !isFetchingNextPage && fetchNextPage) {
-                        fetchNextPage()
-                      }
-                    }} 
-                    disabled={isFetchingNextPage}
+                    whileHover={!(isFetchingMore || isFetchingNextPage) ? { scale: 1.02, translateY: -1 } : {}}
+                    whileTap={!(isFetchingMore || isFetchingNextPage) ? { scale: 0.98 } : {}}
+                    onClick={handleLoadMore} 
+                    disabled={isFetchingMore || isFetchingNextPage}
                     className="ad-btn-load-more"
                     style={{ 
                       background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)', 
@@ -1430,17 +1523,17 @@ export default function ADComunicadosPage({ params }: { params: any }) {
                       fontWeight: 700, 
                       fontSize: 13.5,
                       letterSpacing: -0.2,
-                      cursor: isFetchingNextPage ? 'not-allowed' : 'pointer',
+                      cursor: (isFetchingMore || isFetchingNextPage) ? 'not-allowed' : 'pointer',
                       display: 'inline-flex',
                       alignItems: 'center',
                       justifyContent: 'center',
                       gap: 8,
                       boxShadow: '0 8px 20px -4px rgba(79, 70, 229, 0.4), 0 2px 6px rgba(0, 0, 0, 0.06)',
                       transition: 'all 0.2s ease',
-                      opacity: isFetchingNextPage ? 0.75 : 1,
+                      opacity: (isFetchingMore || isFetchingNextPage) ? 0.75 : 1,
                     }}
                   >
-                    {isFetchingNextPage ? (
+                    {(isFetchingMore || isFetchingNextPage) ? (
                       <>
                         <Loader2 size={16} className="animate-spin" />
                         <span>Carregando...</span>
@@ -1454,7 +1547,7 @@ export default function ADComunicadosPage({ params }: { params: any }) {
                   </motion.button>
                 </div>
               )}
-              {!hasNextPage && paginatedComunicados.length >= 5 && (
+              {!hasMoreToDisplay && paginatedComunicados.length >= 10 && (
                 <div style={{
                   display: 'flex',
                   alignItems: 'center',

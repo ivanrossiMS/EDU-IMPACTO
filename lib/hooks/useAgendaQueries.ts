@@ -5,7 +5,7 @@ import { apiFetch } from '@/lib/api/apiClient'
 // --- COMUNICADOS ---
 export function useQueryComunicados(
   fetchUrl: string | null = '/api/comunicados',
-  pageSize: number = 20,
+  pageSize: number = 10,
   options?: { enabled?: boolean }
 ) {
   const { currentUser } = useApp()
@@ -17,7 +17,7 @@ export function useQueryComunicados(
       if (!currentUser || !fetchUrl) return [] 
       const url = new URL(fetchUrl, window.location.origin)
       url.searchParams.set('limit', String(pageSize))
-      url.searchParams.set('offset', String(pageParam * pageSize))
+      url.searchParams.set('offset', String(pageParam))
       
       const res = await apiFetch(url.toString(), { credentials: 'include' })
       if (!res.ok) {
@@ -27,12 +27,13 @@ export function useQueryComunicados(
       const data = await res.json()
       return Array.isArray(data) ? data : []
     },
-    getNextPageParam: (lastPage, allPages) => {
-      return (lastPage && lastPage.length >= pageSize) ? allPages.length : undefined
+    getNextPageParam: (lastPage, allPages, lastPageParam) => {
+      if (!lastPage || lastPage.length === 0) return undefined
+      return (typeof lastPageParam === 'number' ? lastPageParam : 0) + pageSize
     },
-    staleTime: 0, // Considera dados imediatamente prontos para revalidação
+    staleTime: 1000 * 30, // 30s de retenção para estabilidade e navegação ágil
     gcTime: 1000 * 60 * 10, // 10 min na memória para exibição em 0ms
-    refetchOnWindowFocus: 'always', 
+    refetchOnWindowFocus: false, // Evita re-fetch automático que cancela paginação ao clicar
     refetchOnMount: 'always',
     enabled: isEnabled
   })
@@ -55,7 +56,7 @@ export function useQueryMomentos(
       if (!currentUser || !fetchUrl) return [] 
       const url = new URL(fetchUrl, window.location.origin)
       url.searchParams.set('limit', String(pageSize))
-      url.searchParams.set('offset', String(pageParam * pageSize))
+      url.searchParams.set('offset', String(pageParam))
       
       const res = await apiFetch(url.toString(), { credentials: 'include' })
       if (!res.ok) {
@@ -65,12 +66,13 @@ export function useQueryMomentos(
       const data = await res.json()
       return Array.isArray(data) ? data : []
     },
-    getNextPageParam: (lastPage, allPages) => {
-      return lastPage.length === pageSize ? allPages.length : undefined
+    getNextPageParam: (lastPage, allPages, lastPageParam) => {
+      if (!lastPage || lastPage.length === 0) return undefined
+      return (typeof lastPageParam === 'number' ? lastPageParam : 0) + pageSize
     },
-    staleTime: 0,
+    staleTime: 1000 * 30,
     gcTime: 1000 * 60 * 10,
-    refetchOnWindowFocus: 'always',
+    refetchOnWindowFocus: false,
     refetchOnMount: 'always',
     enabled: isEnabled
   })

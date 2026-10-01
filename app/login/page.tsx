@@ -909,12 +909,11 @@ export default function LoginPage() {
       
 
 
-      <div className="login-header-group" style={{ marginBottom:32, textAlign: 'center' }}>
+      <div className="login-header-group" style={{ marginBottom:28, textAlign: 'center' }}>
 
-        <h2 className="login-h2" style={{ fontFamily:"'Outfit',sans-serif", fontSize:32, fontWeight:900, color:'#fff', letterSpacing:'-0.02em', marginBottom:12, minHeight: 38 }}>
+        <h2 className="login-h2" style={{ fontFamily:"'Outfit',sans-serif", fontSize:32, fontWeight:900, color:'#fff', letterSpacing:'-0.02em', marginBottom:0, minHeight: 38 }}>
           {typedText}<span style={{ display:'inline-block', width:3, height:'0.85em', background:'#60a5fa', marginLeft:3, verticalAlign:'middle', animation:'blink 1s step-end infinite', borderRadius:1 }} />
         </h2>
-        <p className="login-p" style={{ fontSize:15, color:'rgba(255,255,255,0.4)', lineHeight:1.5, margin: '0 auto', maxWidth: 300 }}>Entre com suas credenciais para acessar sua plataforma.</p>
       </div>
 
       <div className="login-card" style={cardStyle}>
@@ -994,13 +993,8 @@ export default function LoginPage() {
               <span>{loginError}</span>
             </div>
           ) : null}
-          
-          <div style={{ display:'flex', alignItems:'center', gap:12 }}>
-            <input type="checkbox" id="remember" checked={keepConnected} onChange={(e) => setKeepConnected(e.target.checked)} style={{ width:20, height:20, accentColor:'#2563eb', cursor:'pointer', borderRadius: 4 }} />
-            <label htmlFor="remember" style={{ fontSize:14, color:'rgba(255,255,255,0.5)', cursor:'pointer' }}>Manter conectado</label>
-          </div>
 
-          <button type="submit" disabled={loginLoading} style={{...btnBase(loginLoading), padding: '16px', background: loginLoading ? 'rgba(255,255,255,0.05)' : 'linear-gradient(90deg, #2563eb 0%, #a855f7 100%)', borderRadius: 16, boxShadow: loginLoading ? 'none' : '0 8px 32px rgba(139,92,246,0.4)'}}
+          <button type="submit" disabled={loginLoading} style={{...btnBase(loginLoading), marginTop: 6, padding: '16px', background: loginLoading ? 'rgba(255,255,255,0.05)' : 'linear-gradient(90deg, #2563eb 0%, #a855f7 100%)', borderRadius: 16, boxShadow: loginLoading ? 'none' : '0 8px 32px rgba(139,92,246,0.4)'}}
             onMouseEnter={e=>{if(!loginLoading){e.currentTarget.style.transform='translateY(-2px)';e.currentTarget.style.boxShadow='0 12px 40px rgba(139,92,246,0.6)'}}}
             onMouseLeave={e=>{e.currentTarget.style.transform='';e.currentTarget.style.boxShadow='0 8px 32px rgba(139,92,246,0.4)'}}>
             {!loginLoading && <ShimmerOverlay />}
@@ -1042,22 +1036,22 @@ export default function LoginPage() {
       </div>
       
       {/* Bottom Disclaimer Mobile */}
-      <div className="mobile-only" style={{ display: 'none', flexDirection: 'column', alignItems: 'center', marginTop: 32, paddingBottom: 24 }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 24, maxWidth: 300 }}>
-          <span style={{ fontSize: 20, color: 'rgba(255,255,255,0.2)', filter:'grayscale(1)' }}>🛡️</span>
-          <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', lineHeight: 1.5, margin: 0 }}>
-            Seus dados estão protegidos com<br/>criptografia de ponta.
-          </p>
-        </div>
-        <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.2)', marginBottom: 20 }}>Desenvolvido por Ivan Rossi © 2025 Todos os direitos reservados</p>
-        <div style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 16px', borderRadius:100, border:'1px solid rgba(16,185,129,0.15)', background: 'rgba(16,185,129,0.05)' }}>
+      <div className="mobile-only" style={{ display: 'none', flexDirection: 'column', alignItems: 'center', marginTop: 28, paddingBottom: 24 }}>
+        <div style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 14px', borderRadius:100, border:'1px solid rgba(16,185,129,0.25)', background: 'rgba(16,185,129,0.08)', marginBottom: 28 }}>
           <div style={{ width:6, height:6, borderRadius:'50%', background:'#10b981', boxShadow:'0 0 8px #10b981' }} />
           <span style={{ fontSize:11, color:'#34d399', fontWeight:800, letterSpacing:'0.08em' }}>SISTEMA SEGURO</span>
         </div>
+        <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.65)', margin: 0, textAlign: 'center', lineHeight: 1.6 }}>
+          Desenvolvido por Ivan Rossi<br/>
+          © 2026 Todos os direitos reservados
+        </p>
       </div>
 
       <div className="hide-on-mobile" style={{ marginTop:28, textAlign:'center' }}>
-        <p style={{ fontSize:11, color:'rgba(255,255,255,0.13)' }}>Desenvolvido por Ivan Rossi © 2025 Todos os direitos reservados</p>
+        <p style={{ fontSize:11, color:'rgba(255,255,255,0.65)', lineHeight: 1.6 }}>
+          Desenvolvido por Ivan Rossi<br/>
+          © 2026 Todos os direitos reservados
+        </p>
       </div>
     </div>
   )
@@ -1684,7 +1678,7 @@ export default function LoginPage() {
     <div className="login-wrapper" style={{ display:'flex', minHeight:'100vh', fontFamily:"'Inter',sans-serif", overflow:'hidden' }}>
       
       {/* Top Bar with Glassmorphism */}
-      <div className="login-top-bar" style={{ position: 'absolute', top: 0, left: 0, right: 0, padding: '16px 32px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', borderBottom: '1px solid rgba(255,255,255,0.05)', zIndex: 50 }}>
+      <div className="login-top-bar" style={{ position: 'absolute', top: 0, left: 0, right: 0, padding: '8px 32px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', borderBottom: '1px solid rgba(255,255,255,0.05)', zIndex: 50 }}>
         <div style={{ display:'flex', alignItems:'center', gap:14 }}>
           <div style={{ width:40, height:40, borderRadius:12, background:'linear-gradient(135deg, #3b82f6, #8b5cf6)', display:'flex', alignItems:'center', justifyContent:'center', boxShadow:'0 4px 16px rgba(59,130,246,0.3)', overflow: 'hidden' }}>
             <img src="/logo-impacto.png" alt="Logo Impacto" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
@@ -1696,7 +1690,7 @@ export default function LoginPage() {
         </div>
       </div>
 
-      <div className="login-right-panel" style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:'80px 20px 48px', background:'linear-gradient(-45deg, #020617, #0f172a, #172554, #082f49)', backgroundSize: '400% 400%', animation: 'gradientBG 15s ease infinite', position:'relative', overflow:'hidden', overflowY:'auto' }}>
+      <div className="login-right-panel" style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:'64px 20px 48px', background:'linear-gradient(-45deg, #020617, #0f172a, #172554, #082f49)', backgroundSize: '400% 400%', animation: 'gradientBG 15s ease infinite', position:'relative', overflow:'hidden', overflowY:'auto' }}>
         
 
         {/* Enterprise SaaS Background Overlay */}
@@ -1837,8 +1831,8 @@ export default function LoginPage() {
             left: auto !important;
             right: auto !important;
             width: 100% !important;
-            padding-top: max(calc(env(safe-area-inset-top, 0px) + 12px), 52px) !important;
-            padding-bottom: 12px !important;
+            padding-top: max(calc(env(safe-area-inset-top, 0px) + 2px), 24px) !important;
+            padding-bottom: 6px !important;
             padding-left: 16px !important;
             padding-right: 16px !important;
             border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
@@ -1868,17 +1862,12 @@ export default function LoginPage() {
           }
           .login-header-group {
             margin-top: 4px !important;
-            margin-bottom: 18px !important;
+            margin-bottom: 16px !important;
           }
           .login-h2 {
             font-size: 26px !important;
-            margin-bottom: 6px !important;
+            margin-bottom: 0px !important;
             min-height: auto !important;
-          }
-          .login-p {
-            font-size: 13.5px !important;
-            line-height: 1.4 !important;
-            max-width: 290px !important;
           }
         }
       `}</style>

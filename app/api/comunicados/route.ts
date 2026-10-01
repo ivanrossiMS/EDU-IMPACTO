@@ -483,34 +483,81 @@ export async function GET(request: Request) {
      const [readsRes, cienciasRes, respostasRes] = await Promise.all([
         supabaseServer.from('agenda_notification_reads').select('content_id, usuario_id, read_at, aluno_id').in('content_id', itemIds),
         supabaseServer.from('agenda_ciencias').select('content_id, usuario_id, ciente_em, aluno_id').in('content_id', itemIds),
-        supabaseServer.from('comunicados_respostas').select('id, comunicado_id, remetente_id, is_admin, created_at').in('comunicado_id', itemIds).order('created_at', { ascending: true })
+        supabaseServer.from('comunicados_respostas').select('id, comunicado_id, remetente_id, remetente_nome, conteudo, anexos, is_admin, created_at').in('comunicado_id', itemIds).order('created_at', { ascending: true })
      ]);
      allReads = readsRes.data || [];
      allCiencias = cienciasRes.data || [];
      allRespostas = respostasRes.data || [];
 
-     // Fetch reads and responses for dynamic STU reports related to COLAB reports
-     const colabs = (data || []).filter((d: any) => d.id && String(d.id).startsWith('AD-COM-REL-COLAB-'));
+     // Fetch reads and responses for dynamic STU reports related to consolidated reports
+     const colabs = (data || []).filter((d: any) => 
+       d.id && (
+         String(d.id).startsWith('AD-COM-REL-COLAB-') || 
+         String(d.id).startsWith('AD-COM-REL-TURMA-') || 
+         (String(d.id).startsWith('AD-COM-REL-') && !String(d.id).startsWith('AD-COM-REL-STU-'))
+       )
+     );
      if (colabs.length > 0) {
        const colabReadsPromises = colabs.map(async (colab: any) => {
          try {
-           const dateStr = colab.created_at || (colab.dados && colab.dados.dataEnvio);
-           if (!dateStr) return null;
-           const createdDate = new Date(dateStr);
-           if (isNaN(createdDate.getTime())) return null;
+           const parseDados = (dados: any) => {
+             if (!dados) return {};
+             if (typeof dados === 'string') {
+               try { return JSON.parse(dados); } catch { return {}; }
+             }
+             return dados;
+           };
+           const colabDados = parseDados(colab.dados);
+           const idMatch = String(colab.id).match(/AD-COM-REL-[A-Za-z]+-(\d+)/);
+           const colabTs = idMatch ? parseInt(idMatch[1], 10) : null;
+
+           const dateStr = colab.created_at || colab.data || colab.dataEnvio || colabDados.dataEnvio;
+           const baseTime = colabTs || (dateStr ? new Date(dateStr).getTime() : Date.now());
            
-           const minDate = new Date(createdDate.getTime() - 2 * 60000).toISOString();
-           const maxDate = new Date(createdDate.getTime() + 2 * 60000).toISOString();
-           const autorId = colab.dados && colab.dados.autorId;
-           if (!autorId) return null;
-           
-           const { data: stus } = await supabaseServer.from('comunicados')
-             .select('id, dados')
+           const minDate = new Date(baseTime - 15 * 60000).toISOString();
+           const maxDate = new Date(baseTime + 15 * 60000).toISOString();
+           const rawAutorId = colab.autorId || colab.autor_id || colabDados.autorId || colabDados.autor_id;
+           const cleanAutorId = rawAutorId ? String(rawAutorId).replace(/^f_?/, '').trim().toLowerCase() : '';
+
+           // Busca candidatos por prefixo de timestamp no ID e por janela de tempo
+           const candidateStusMap = new Map<string, any>();
+
+           if (colabTs) {
+             const tsPrefix = String(colabTs).substring(0, 8);
+             const { data: stusByPrefix } = await supabaseServer.from('comunicados')
+               .select('id, dados, created_at')
+               .ilike('id', `AD-COM-REL-STU-${tsPrefix}%`);
+             (stusByPrefix || []).forEach((s: any) => candidateStusMap.set(s.id, s));
+           }
+
+           const { data: stusByDate } = await supabaseServer.from('comunicados')
+             .select('id, dados, created_at')
              .ilike('id', 'AD-COM-REL-STU-%')
              .gte('created_at', minDate)
              .lte('created_at', maxDate);
-             
-           const filteredStus = (stus || []).filter((s: any) => s.dados && s.dados.autorId === autorId);
+           (stusByDate || []).forEach((s: any) => candidateStusMap.set(s.id, s));
+
+           const candidateStus = Array.from(candidateStusMap.values());
+           if (candidateStus.length === 0) return null;
+
+           const filteredStus = candidateStus.filter((s: any) => {
+             const sDados = parseDados(s.dados);
+             const sRawAutorId = s.autorId || s.autor_id || sDados.autorId || sDados.autor_id;
+             const sCleanAutorId = sRawAutorId ? String(sRawAutorId).replace(/^f_?/, '').trim().toLowerCase() : '';
+             const autorMatches = Boolean(cleanAutorId && sCleanAutorId && cleanAutorId === sCleanAutorId);
+
+             const sMatch = String(s.id).match(/AD-COM-REL-STU-(\d+)/);
+             let tsMatches = false;
+             if (sMatch && colabTs) {
+               const sTs = parseInt(sMatch[1], 10);
+               if (!isNaN(sTs) && Math.abs(sTs - colabTs) < 120000) {
+                 tsMatches = true;
+               }
+             }
+
+             return tsMatches || autorMatches;
+           });
+
            if (filteredStus.length === 0) return null;
            
            const stuIds = filteredStus.map((s: any) => s.id);
@@ -519,7 +566,7 @@ export async function GET(request: Request) {
                .select('content_id, usuario_id, read_at, aluno_id')
                .in('content_id', stuIds),
              supabaseServer.from('comunicados_respostas')
-               .select('id, comunicado_id, remetente_id, is_admin, created_at')
+               .select('id, comunicado_id, remetente_id, remetente_nome, conteudo, anexos, is_admin, created_at')
                .in('comunicado_id', stuIds)
                .order('created_at', { ascending: true })
            ]);
@@ -549,7 +596,8 @@ export async function GET(request: Request) {
          for (const resp of res.respostas) {
            allRespostas.push({
              ...resp,
-             comunicado_id: res.colabId
+             comunicado_id: res.colabId,
+             original_comunicado_id: resp.comunicado_id
            });
          }
        }
@@ -650,11 +698,38 @@ export async function GET(request: Request) {
         }
       }
 
+      const formattedRespostas = comRespostas.map((r: any) => {
+        let reacoes = Array.isArray(r.reacoes) ? r.reacoes : [];
+        let anexos = Array.isArray(r.anexos) ? r.anexos : [];
+        if (reacoes.length === 0 && anexos.length > 0) {
+          const rxItem = anexos.find((a: any) => typeof a === 'object' && a !== null && a.__reactions__);
+          if (rxItem && Array.isArray(rxItem.__reactions__)) {
+            reacoes = rxItem.__reactions__;
+          }
+        }
+        const cleanAnexos = anexos.filter((a: any) => !(typeof a === 'object' && a !== null && a.__reactions__));
+        return {
+          ...r,
+          anexos: cleanAnexos,
+          reacoes
+        };
+      });
+
+      if (isFamilyOrStudent) {
+        const studentKeys = new Set([studentParamId, alunoMetaId, responsavelParamId, currentUserId, userSlugMeta].filter(Boolean));
+        merged.respostas = formattedRespostas.filter((r: any) => 
+          studentKeys.has(String(r.remetente_id)) || 
+          (r.is_admin && (!r.destinatario_id || studentKeys.has(String(r.destinatario_id))))
+        );
+      } else {
+        merged.respostas = formattedRespostas;
+      }
+
       merged.conversas_info = {
-        tem_conversas: temConversas,
+        tem_conversas: temConversas || totalConversas > 0 || (Array.isArray(merged.respostas) && merged.respostas.length > 0),
         has_unread: hasUnread,
         nao_lidas: unreadCount,
-        total: totalConversas,
+        total: Math.max(totalConversas, merged.respostas?.length || 0),
         ultima_resposta_at: ultimaRespostaAt
       };
 

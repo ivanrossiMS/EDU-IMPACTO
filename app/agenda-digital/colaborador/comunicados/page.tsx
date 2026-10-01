@@ -20,6 +20,7 @@ import { useData } from '@/lib/dataContext'
 import Portal from '@/components/Portal'
 import { ComunicadoChat } from '@/components/ComunicadoChat'
 import { ComunicadoViewModal } from '@/components/agenda/ComunicadoViewModal'
+import { seedComunicadosRespostasCache, prefetchComunicadoMessages, getGlobalCachedMessages } from '@/lib/comunicadosRespostasCache'
 import { DestinatariosModal } from '../../components/agenda/DestinatariosModal'
 import NovoComunicadoModal from '../../components/agenda/NovoComunicadoModal'
 import { ReportsSelectionModal } from '@/components/agenda/ReportsSelectionModal'
@@ -180,7 +181,8 @@ function ColaboradorComunicadosContent() {
   const { forms, setSubmissions, setDisparos, submissions } = useFormularios()
   
   const [isClient, setIsClient] = useState(false)
-  const [isSimulatedLoading, setIsSimulatedLoading] = useState(false)
+  const [visibleCount, setVisibleCount] = useState(10)
+  const [isFetchingMore, setIsFetchingMore] = useState(false)
   const [hasSettled, setHasSettled] = useState(false)
   
   useEffect(() => {
@@ -362,10 +364,16 @@ function ColaboradorComunicadosContent() {
     hasNextPage: hasNextPageComunicados, 
     fetchNextPage: fetchNextPageComunicados, 
     isFetchingNextPage: isFetchingNextPageComunicados 
-  } = useQueryComunicados(endpoint, 5, { enabled: true })
+  } = useQueryComunicados(endpoint, 10, { enabled: true })
 
   const comunicados = useMemo(() => comunicadosData?.pages?.flat() || [], [comunicadosData?.pages])
   const comunicadosLoading = comunicadosLoadingLocal || comunicadosFetchingLocal
+
+  useEffect(() => {
+    if (comunicados && comunicados.length > 0) {
+      seedComunicadosRespostasCache(comunicados);
+    }
+  }, [comunicados]);
 
   const alunosAtivos = (alunos || []).filter((a: any) => a.status === 'matriculado' || a.status === 'ativo')
 
@@ -747,7 +755,10 @@ function ColaboradorComunicadosContent() {
   const [selectedComunicado, setSelectedComunicado] = useState<any>(null)
   const [locallyReadIds, setLocallyReadIds] = useState<Set<string>>(() => new Set())
   const [searchTerm, setSearchTerm] = useState('')
-  const [limit, setLimit] = useState(6)
+
+  useEffect(() => {
+    setVisibleCount(10)
+  }, [searchTerm])
 
   const router = useRouter()
   const queryId = searchParams?.get('id')
@@ -773,6 +784,12 @@ function ColaboradorComunicadosContent() {
       },
       conversas_info: {
         ...(comunicadoItem.conversas_info || {}),
+        tem_conversas: Boolean(
+          comunicadoItem.conversas_info?.tem_conversas ||
+          (comunicadoItem.conversas_info?.total && comunicadoItem.conversas_info.total > 0) ||
+          (Array.isArray(comunicadoItem.respostas) && comunicadoItem.respostas.length > 0) ||
+          (getGlobalCachedMessages(comunicadoItem.id)?.length)
+        ),
         has_unread: false,
         nao_lidas: 0
       },
@@ -819,6 +836,32 @@ function ColaboradorComunicadosContent() {
       markComunicadoAsReadColab(selectedComunicado);
     }
   }, [selectedComunicado?.id, markComunicadoAsReadColab]);
+
+  useEffect(() => {
+    const handleConversasUpdated = (e: any) => {
+      const detail = e.detail;
+      if (!detail || !detail.comunicadoId) return;
+      const cId = String(detail.comunicadoId);
+      const updateFn = (prev: any) => (prev || []).map((x: any) => {
+        if (String(x.id) === cId) {
+          return {
+            ...x,
+            respostas: detail.messages || x.respostas,
+            conversas_info: {
+              ...(x.conversas_info || {}),
+              tem_conversas: true,
+              total: detail.total || (detail.messages ? detail.messages.length : 1),
+            }
+          };
+        }
+        return x;
+      });
+      if (setComunicadosLocally) setComunicadosLocally(updateFn);
+      if (setComunicados) setComunicados(updateFn);
+    };
+    window.addEventListener('agenda-digital:conversas-updated', handleConversasUpdated);
+    return () => window.removeEventListener('agenda-digital:conversas-updated', handleConversasUpdated);
+  }, [setComunicadosLocally, setComunicados]);
 
   // Auto-open comunicado if queryId is present in URL or via custom event
   const hasAutoOpened = useRef(false)
@@ -991,6 +1034,123 @@ function ColaboradorComunicadosContent() {
       );
     });
   }
+
+  const perfisAdminFeed = useMemo(() => ['Diretor Geral', 'Administrador', 'Admin', 'Coordenador', 'Coordenadora'], [])
+  const cargosAdminFeed = useMemo(() => ['Administrador Master', 'Diretor Geral', 'Coordenador', 'Coordenadora'], [])
+  const perfilStrFeed = effectiveUser?.perfil || ''
+  const cargoStrFeed = effectiveUser?.cargo || ''
+  const isTeacherFeed = cargoStrFeed.toUpperCase().includes('PROFESSOR') || perfilStrFeed.toUpperCase().includes('PROFESSOR')
+  const isMasterFeed = !isTeacherFeed && (perfisAdminFeed.some(p => p.toLowerCase() === perfilStrFeed.toLowerCase()) || cargosAdminFeed.some(c => c.toLowerCase() === cargoStrFeed.toLowerCase()))
+  const myTurmaNamesFeed = useMemo(() => feedTurmaOptions.map((t: any) => t.nome), [feedTurmaOptions])
+  const myGroupsFeed = useMemo(() => (chatGroups || []).filter((g: any) => {
+    let colabs = g.colaboradoresIds;
+    if (typeof colabs === 'string') {
+      try { colabs = JSON.parse(colabs); } catch(e) { colabs = []; }
+    }
+    if (!Array.isArray(colabs)) colabs = [];
+    return colabs.some((id: any) => candidateColabIds.includes(String(id).replace(/^f_?/, '').trim().toLowerCase()));
+  }).map((g: any) => g.nome), [chatGroups, candidateColabIds])
+
+  const filterAndSortComunicados = useCallback((rawList: any[]) => {
+    const seenIds = new Set<string>()
+    const uniqueComunicados = (rawList || []).filter((c: any) => {
+      if (!c.id || seenIds.has(c.id)) return false
+      seenIds.add(c.id)
+      return true
+    })
+
+    return uniqueComunicados.filter((c: any) => {
+      if (c.id?.startsWith('AD-COM-REL-STU')) return false;
+      const authorIdClean = String(c.autorId || c.dados?.autorId || '').replace(/^f_?/, '').trim().toLowerCase();
+      const authorNameClean = String(c.autor || c.dados?.autor || '').trim().toLowerCase();
+      const effNameClean = String(effectiveUser?.nome || '').trim().toLowerCase();
+      const isAuthor = 
+        (authorIdClean && candidateColabIds.includes(authorIdClean)) ||
+        (authorNameClean && effNameClean && (authorNameClean === effNameClean || effNameClean.includes(authorNameClean) || authorNameClean.includes(effNameClean)));
+      if ((c.status === 'rascunho' || c.status === 'agendado') && !isAuthor) return false;
+      const isTodos = c.destino === 'todos';
+      
+      const targetFuncs = c.funcionariosIds || (c.dados?.funcionariosIds) || [];
+      const targetGrupos = c.grupos || (c.dados?.grupos) || [];
+      const targetTurmas = c.turmas || (c.dados?.turmas) || [];
+      
+      const inFuncs = targetFuncs.some((id: any) => candidateColabIds.includes(String(id).replace(/^f_?/, '').trim().toLowerCase()));
+      const inGrupos = targetGrupos.some((g: string) => {
+        const gClean = String(g).toLowerCase().trim();
+        return myGroupsFeed.some((m: string) => {
+          const mClean = String(m).toLowerCase().trim();
+          return mClean === gClean || mClean.includes(gClean) || gClean.includes(mClean);
+        });
+      });
+      const inTurmas = targetTurmas.some((t: string) => {
+        const tClean = String(t).toLowerCase().trim();
+        return myTurmaNamesFeed.some((m: string) => String(m).toLowerCase().trim() === tClean) ||
+               myGroupsFeed.some((m: string) => String(m).toLowerCase().trim() === tClean);
+      });
+      
+      if (!isAuthor && !isTodos && !inFuncs && !inGrupos && !inTurmas && !isMasterFeed) {
+        return false;
+      }
+      if (!searchTerm) return true;
+      const term = searchTerm.toLowerCase();
+      const titulo = c.titulo?.toLowerCase() || '';
+      const remetente = c.remetente?.toLowerCase() || '';
+      const conteudo = c.conteudo?.toLowerCase() || '';
+      return titulo.includes(term) || remetente.includes(term) || conteudo.includes(term);
+    }).sort((a: any, b: any) => {
+      const dateA = new Date(a.dataEnvio || a.data || a.created_at || 0).getTime();
+      const dateB = new Date(b.dataEnvio || b.data || b.created_at || 0).getTime();
+      return dateB - dateA;
+    });
+  }, [effectiveUser, candidateColabIds, myGroupsFeed, myTurmaNamesFeed, isMasterFeed, searchTerm])
+
+  const filteredComunicados = useMemo(() => {
+    return filterAndSortComunicados(comunicados);
+  }, [comunicados, filterAndSortComunicados]);
+
+  const paginatedComunicados = useMemo(() => {
+    return filteredComunicados.slice(0, visibleCount);
+  }, [filteredComunicados, visibleCount]);
+
+  const hasMoreToDisplay = filteredComunicados.length > visibleCount || Boolean(hasNextPageComunicados);
+
+  const isFeedLoading = 
+    !hasSettled ||
+    !effectiveUser ||
+    isDataLoading ||
+    !!comunicadosLoading ||
+    !!colabLoading ||
+    !!chatGroupsLoading;
+
+  const handleLoadMore = useCallback(async () => {
+    if (isFetchingMore || isFetchingNextPageComunicados) return;
+    setIsFetchingMore(true);
+    try {
+      const targetCount = visibleCount + 10;
+      let currentPages = comunicadosData?.pages || [];
+      let currentHasNext = Boolean(hasNextPageComunicados);
+      let currentFiltered = filterAndSortComunicados(currentPages.flat());
+
+      // Busca na API em lotes de 10 em 10 até que tenhamos itens filtrados suficientes para exibir os próximos 10
+      while (currentFiltered.length < targetCount && currentHasNext && fetchNextPageComunicados) {
+        const res = await fetchNextPageComunicados();
+        if (!res || !res.data) break;
+        currentPages = res.data.pages || [];
+        currentHasNext = Boolean(res.hasNextPage);
+        const nextFiltered = filterAndSortComunicados(currentPages.flat());
+        if (nextFiltered.length <= currentFiltered.length && !currentHasNext) {
+          break;
+        }
+        currentFiltered = nextFiltered;
+      }
+
+      setVisibleCount(targetCount);
+    } catch (e) {
+      console.error('Erro ao carregar mais comunicados:', e);
+    } finally {
+      setIsFetchingMore(false);
+    }
+  }, [isFetchingMore, isFetchingNextPageComunicados, visibleCount, comunicadosData?.pages, hasNextPageComunicados, fetchNextPageComunicados, filterAndSortComunicados]);
 
   return (
     <>
@@ -1514,88 +1674,6 @@ function ColaboradorComunicadosContent() {
       <div className="ad-feed-list" style={{ display: 'flex', flexDirection: 'column' }}>
         <AnimatePresence mode="wait">
         {(() => {
-          const perfisAdmin = ['Diretor Geral', 'Administrador', 'Admin', 'Coordenador', 'Coordenadora']; 
-          const cargosAdmin = ['Administrador Master', 'Diretor Geral', 'Coordenador', 'Coordenadora']; 
-          const perfilStr = effectiveUser?.perfil || ''; 
-          const cargoStr = effectiveUser?.cargo || ''; 
-          const isTeacher = cargoStr.toUpperCase().includes('PROFESSOR') || perfilStr.toUpperCase().includes('PROFESSOR');
-          const isMaster = !isTeacher && (perfisAdmin.some(p => p.toLowerCase() === perfilStr.toLowerCase()) || cargosAdmin.some(c => c.toLowerCase() === cargoStr.toLowerCase()));
-          const myTurmaNames = feedTurmaOptions.map((t: any) => t.nome);
-          const myGroups = (chatGroups || []).filter((g: any) => {
-            let colabs = g.colaboradoresIds;
-            if (typeof colabs === 'string') {
-              try { colabs = JSON.parse(colabs); } catch(e) { colabs = []; }
-            }
-            if (!Array.isArray(colabs)) colabs = [];
-            return colabs.some((id: any) => candidateColabIds.includes(String(id).replace(/^f_?/, '').trim().toLowerCase()));
-          }).map((g: any) => g.nome);
-
-          // Deduplicar por id — previne "Encountered two children with the same key"
-          // causado pela atualização otimística (setComunicadosLocally) sobreposta ao
-          // refetch do Realtime (invalidateQueries). A entrada mais recente (índice menor,
-          // já que o array vem ordenado DESC) prevalece sobre duplicatas.
-          const seenIds = new Set<string>()
-          const uniqueComunicados = (comunicados || []).filter((c: any) => {
-            if (!c.id || seenIds.has(c.id)) return false
-            seenIds.add(c.id)
-            return true
-          })
-
-          const filteredComunicados = uniqueComunicados.filter((c: any) => {
-            if (c.id?.startsWith('AD-COM-REL-STU')) return false;
-            const authorIdClean = String(c.autorId || c.dados?.autorId || '').replace(/^f_?/, '').trim().toLowerCase();
-            const authorNameClean = String(c.autor || c.dados?.autor || '').trim().toLowerCase();
-            const effNameClean = String(effectiveUser?.nome || '').trim().toLowerCase();
-            const isAuthor = 
-              (authorIdClean && candidateColabIds.includes(authorIdClean)) ||
-              (authorNameClean && effNameClean && (authorNameClean === effNameClean || effNameClean.includes(authorNameClean) || authorNameClean.includes(effNameClean)));
-            if ((c.status === 'rascunho' || c.status === 'agendado') && !isAuthor) return false;
-            const isTodos = c.destino === 'todos';
-            
-            const targetFuncs = c.funcionariosIds || (c.dados?.funcionariosIds) || [];
-            const targetGrupos = c.grupos || (c.dados?.grupos) || [];
-            const targetTurmas = c.turmas || (c.dados?.turmas) || [];
-            
-            const inFuncs = targetFuncs.some((id: any) => candidateColabIds.includes(String(id).replace(/^f_?/, '').trim().toLowerCase()));
-            const inGrupos = targetGrupos.some((g: string) => {
-              const gClean = String(g).toLowerCase().trim();
-              return myGroups.some((m: string) => {
-                const mClean = String(m).toLowerCase().trim();
-                return mClean === gClean || mClean.includes(gClean) || gClean.includes(mClean);
-              });
-            });
-            const inTurmas = targetTurmas.some((t: string) => {
-              const tClean = String(t).toLowerCase().trim();
-              return myTurmaNames.some((m: string) => String(m).toLowerCase().trim() === tClean) ||
-                     myGroups.some((m: string) => String(m).toLowerCase().trim() === tClean);
-            });
-            
-            if (!isAuthor && !isTodos && !inFuncs && !inGrupos && !inTurmas && !isMaster) {
-              return false;
-            }
-            if (!searchTerm) return true;
-            const term = searchTerm.toLowerCase();
-            const titulo = c.titulo?.toLowerCase() || '';
-            const remetente = c.remetente?.toLowerCase() || '';
-            const conteudo = c.conteudo?.toLowerCase() || '';
-            return titulo.includes(term) || remetente.includes(term) || conteudo.includes(term);
-          }).sort((a: any, b: any) => {
-            const dateA = new Date(a.dataEnvio || a.data || a.created_at || 0).getTime();
-            const dateB = new Date(b.dataEnvio || b.data || b.created_at || 0).getTime();
-            return dateB - dateA;
-          });
-          
-          const paginatedComunicados = filteredComunicados;
-          
-          const isFeedLoading = 
-            !hasSettled ||
-            !effectiveUser ||
-            isDataLoading ||
-            !!comunicadosLoading ||
-            !!colabLoading ||
-            !!chatGroupsLoading ||
-            isSimulatedLoading;
-
           if ((isFeedLoading && filteredComunicados.length === 0) || !effectiveUser) {
             return (
               <motion.div
@@ -1606,7 +1684,7 @@ function ColaboradorComunicadosContent() {
                 transition={{ duration: 0.25 }}
                 style={{ width: '100%' }}
               >
-                <ComunicadoSkeleton count={5} />
+                <ComunicadoSkeleton count={10} />
               </motion.div>
             );
           }
@@ -1650,8 +1728,17 @@ function ColaboradorComunicadosContent() {
             const month = parsedDate.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '').toUpperCase();
             const time = parsedDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
             
-            const hasUnreadConversation = Boolean(c.conversas_info?.has_unread || c._has_unread_reply);
-            const hasConversas = Boolean(c.conversas_info?.tem_conversas || (c.conversas_info?.total && c.conversas_info.total > 0));
+            const hasUnreadConversation = Boolean(
+              c.conversas_info?.has_unread || 
+              (c.conversas_info?.nao_lidas && c.conversas_info.nao_lidas > 0) ||
+              c._has_unread_reply
+            );
+            const hasConversas = Boolean(
+              c.conversas_info?.tem_conversas || 
+              (c.conversas_info?.total && c.conversas_info.total > 0) ||
+              (Array.isArray(c.respostas) && c.respostas.length > 0) ||
+              (getGlobalCachedMessages(c.id)?.length)
+            );
 
             const isRead = !hasUnreadConversation && (locallyReadIds.has(String(c.id)) || !!(
               (c.leituras || {})[userSlug] ||
@@ -1743,6 +1830,9 @@ function ColaboradorComunicadosContent() {
                     borderRadius: 22,
                     gap: 16,
                     overflow: 'hidden'
+                  }}
+                  onPointerDown={() => {
+                    prefetchComunicadoMessages(c, true, userSlug, espelharColabId);
                   }}
                   onClick={() => {
                     markComunicadoAsReadColab(c);
@@ -1852,6 +1942,9 @@ function ColaboradorComunicadosContent() {
                                  cursor: 'pointer',
                                  transition: 'all 0.25s ease'
                                }}
+                               onPointerDown={() => {
+                                 prefetchComunicadoMessages(c, true, userSlug, espelharColabId);
+                               }}
                                onClick={(e) => {
                                  e.stopPropagation();
                                  markComunicadoAsReadColab(c);
@@ -1875,6 +1968,9 @@ function ColaboradorComunicadosContent() {
                                  color: '#94a3b8',
                                  cursor: 'pointer',
                                  transition: 'all 0.25s ease'
+                               }}
+                               onPointerDown={() => {
+                                 prefetchComunicadoMessages(c, true, userSlug, espelharColabId);
                                }}
                                onClick={(e) => {
                                  e.stopPropagation();
@@ -2029,24 +2125,13 @@ function ColaboradorComunicadosContent() {
               </motion.div>
             )
           })}
-              {hasNextPageComunicados && (
+              {hasMoreToDisplay && (
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', marginTop: 32, marginBottom: 24, gap: 10 }}>
                   <motion.button 
-                    whileHover={!isSimulatedLoading ? { scale: 1.02, translateY: -1 } : {}}
-                    whileTap={!isSimulatedLoading ? { scale: 0.98 } : {}}
-                    onClick={async () => {
-                      if (hasNextPageComunicados && !isSimulatedLoading && fetchNextPageComunicados) {
-                        setIsSimulatedLoading(true);
-                        try {
-                          await fetchNextPageComunicados();
-                        } catch (e) {
-                          console.error('Erro ao carregar mais comunicados:', e);
-                        } finally {
-                          setIsSimulatedLoading(false);
-                        }
-                      }
-                    }} 
-                    disabled={isSimulatedLoading}
+                    whileHover={!(isFetchingMore || isFetchingNextPageComunicados) ? { scale: 1.02, translateY: -1 } : {}}
+                    whileTap={!(isFetchingMore || isFetchingNextPageComunicados) ? { scale: 0.98 } : {}}
+                    onClick={handleLoadMore} 
+                    disabled={isFetchingMore || isFetchingNextPageComunicados}
                     className="ad-btn-load-more"
                     style={{ 
                       background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)', 
@@ -2057,17 +2142,17 @@ function ColaboradorComunicadosContent() {
                       fontWeight: 700, 
                       fontSize: 13.5,
                       letterSpacing: -0.2,
-                      cursor: isSimulatedLoading ? 'not-allowed' : 'pointer',
+                      cursor: (isFetchingMore || isFetchingNextPageComunicados) ? 'not-allowed' : 'pointer',
                       display: 'inline-flex',
                       alignItems: 'center',
                       justifyContent: 'center',
                       gap: 8,
                       boxShadow: '0 8px 20px -4px rgba(79, 70, 229, 0.4), 0 2px 6px rgba(0, 0, 0, 0.06)',
                       transition: 'all 0.2s ease',
-                      opacity: isSimulatedLoading ? 0.75 : 1,
+                      opacity: (isFetchingMore || isFetchingNextPageComunicados) ? 0.75 : 1,
                     }}
                   >
-                    {isSimulatedLoading ? (
+                    {isFetchingMore || isFetchingNextPageComunicados ? (
                       <>
                         <Loader2 size={16} className="animate-spin" />
                         <span>Carregando...</span>
@@ -2081,7 +2166,7 @@ function ColaboradorComunicadosContent() {
                   </motion.button>
                 </div>
               )}
-              {!hasNextPageComunicados && paginatedComunicados.length >= 5 && (
+              {!hasMoreToDisplay && paginatedComunicados.length >= 10 && (
                 <div style={{
                   display: 'flex',
                   alignItems: 'center',

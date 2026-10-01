@@ -8,6 +8,7 @@ import Portal from '@/components/Portal'
 import { UserAvatar } from '@/components/UserAvatar'
 import { uploadFileToSupabase } from '@/lib/upload/uploadClient'
 import { getCachedStudentPhoto, setCachedStudentPhoto, fetchStudentPhotos } from '@/lib/studentPhotoCache'
+import { getGlobalCachedMessages, setGlobalCachedMessages } from '@/lib/comunicadosRespostasCache'
 import { EnqueteWidget } from '@/components/agenda/enquetes/EnqueteWidget'
 import { AutorizacaoWidget } from '@/components/agenda/autorizacoes/AutorizacaoWidget'
 import { triggerHaptic } from '@/lib/utils/haptics'
@@ -89,6 +90,11 @@ function timeAgoShort(dateString: string) {
   if (diffInWeeks < 4) return `${diffInWeeks}sem`
   return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
 }
+
+const normalizeText = (text: any): string => {
+  if (!text || typeof text !== 'string') return '';
+  return text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
+};
 
 export interface ChatMessageReaction {
   emoji: string
@@ -249,6 +255,11 @@ export function ComunicadoViewModal({
         .then(data => {
           if (data && data.length > 0) {
             setComunicado(data[0])
+            if (Array.isArray(data[0].respostas) && data[0].respostas.length > 0) {
+              setMessages(data[0].respostas);
+              setLoadingMsg(false);
+              setGlobalCachedMessages(data[0].id, data[0].respostas);
+            }
           }
         })
         .finally(() => setIsLoadingFull(false))
@@ -258,8 +269,40 @@ export function ComunicadoViewModal({
   const isGroupedReport = comunicado.id?.startsWith('AD-COM-REL-COLAB');
   const canReply = comunicado.permiteResposta || (isAdminMode && isGroupedReport) || comunicado.isSaudacao || comunicado.dados?.isSaudacao || comunicado.titulo === 'Mensagem de Boas-vindas' || comunicado.titulo === 'Mensagem de Saudação'
 
-  const [messages, setMessages] = useState<ChatMessage[]>([])
-  const [loadingMsg, setLoadingMsg] = useState(true)
+  const initialMessages = useMemo(() => {
+    if (Array.isArray(initialComunicado?.respostas) && initialComunicado.respostas.length > 0) {
+      return initialComunicado.respostas;
+    }
+    if (Array.isArray(initialComunicado?.dados?.respostas) && initialComunicado.dados.respostas.length > 0) {
+      return initialComunicado.dados.respostas;
+    }
+    const cached = getGlobalCachedMessages(initialComunicado?.id);
+    if (Array.isArray(cached) && cached.length > 0) {
+      return cached;
+    }
+    return [];
+  }, [initialComunicado]);
+
+  const hasKnownNoConversas = Boolean(
+    initialComunicado?.conversas_info && 
+    initialComunicado.conversas_info.tem_conversas === false
+  );
+
+  const [messages, setMessages] = useState<ChatMessage[]>(initialMessages)
+  const [loadingMsg, setLoadingMsg] = useState(!hasKnownNoConversas && initialMessages.length === 0)
+
+  useEffect(() => {
+    if (initialComunicado) {
+      setComunicado(initialComunicado);
+      const seed = initialComunicado.respostas || initialComunicado.dados?.respostas || getGlobalCachedMessages(initialComunicado.id);
+      if (Array.isArray(seed) && seed.length > 0) {
+        setMessages(seed);
+        setLoadingMsg(false);
+      } else if (initialComunicado?.conversas_info?.tem_conversas === false) {
+        setLoadingMsg(false);
+      }
+    }
+  }, [initialComunicado])
   const [newMessage, setNewMessage] = useState('')
   const [isSending, setIsSending] = useState(false)
   const [isInputFocused, setIsInputFocused] = useState(false)
@@ -345,17 +388,19 @@ export function ComunicadoViewModal({
         return aIdStr === rIdStr || aIdStr === `a_${rIdStr}` || aIdStr.replace(/^_*(ALU)?/, '') === rIdStr.replace(/^_*(ALU)?/, '');
       });
 
-      if (!threadsMap.has(threadId)) {
-        threadsMap.set(threadId, {
+      const key = alunoObj?.id ? String(alunoObj.id) : String(threadId);
+
+      if (!threadsMap.has(key)) {
+        threadsMap.set(key, {
           studentId: alunoObj?.id || threadId,
           studentName: alunoObj?.nome || (!msg.is_admin ? msg.remetente_nome : 'Aluno') || 'Usuário',
-          studentFoto: alunoObj?.foto,
+          studentFoto: alunoObj?.foto || alunoObj?.fotoUrl || alunoObj?.foto_url || studentPhotosMap[threadId] || studentPhotosMap[alunoObj?.id] || getCachedStudentPhoto(alunoObj?.id || threadId),
           messages: [],
           lastMessageAt: msg.created_at
         })
       }
       
-      const thread = threadsMap.get(threadId)!
+      const thread = threadsMap.get(key)!
       thread.messages.push(msg)
       if (new Date(msg.created_at) > new Date(thread.lastMessageAt)) {
         thread.lastMessageAt = msg.created_at
@@ -374,7 +419,7 @@ export function ComunicadoViewModal({
     )
     
     return validThreads.sort((a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime())
-  }, [messages, isAdminMode, alunos])
+  }, [messages, isAdminMode, alunos, studentPhotosMap])
   
   const messagesToShow = isAdminMode ? (selectedThreadId ? adminThreads.find(t => t.studentId === selectedThreadId)?.messages || [] : []) : messages;
 
@@ -435,18 +480,36 @@ export function ComunicadoViewModal({
   }, [comunicado, isGroupedReport, allComunicados]);
 
   const getComunicadoIdForStudent = (studentId: string) => {
+    // 1. Se já temos mensagem deste aluno com original_comunicado_id ou STU id, usa direto
+    const existingMsg = messages.find(m => 
+      (String(m.remetente_id) === String(studentId) || String(m.destinatario_id) === String(studentId)) && 
+      (m as any).original_comunicado_id
+    );
+    if (existingMsg && (existingMsg as any).original_comunicado_id) {
+      return (existingMsg as any).original_comunicado_id;
+    }
+    const stuMsg = messages.find(m => 
+      (String(m.remetente_id) === String(studentId) || String(m.destinatario_id) === String(studentId)) && 
+      m.comunicado_id && m.comunicado_id.startsWith('AD-COM-REL-STU-')
+    );
+    if (stuMsg) return stuMsg.comunicado_id;
+
     if (!isGroupedReport || !allComunicados) return comunicado.id;
     const groupDate = new Date(comunicado.dataEnvio || comunicado.created_at || 0).getTime();
+    const comAutorId = comunicado.autorId || comunicado.dados?.autorId;
     const related = allComunicados.find(c => 
       c.id?.startsWith('AD-COM-REL-STU') && 
-      c.autorId === comunicado.autorId &&
-      Math.abs(new Date(c.dataEnvio || c.created_at || 0).getTime() - groupDate) < 15000 &&
+      (c.autorId === comAutorId || c.dados?.autorId === comAutorId) &&
+      Math.abs(new Date(c.dataEnvio || c.created_at || 0).getTime() - groupDate) < 60000 &&
       (c.alunosIds || []).some((id: string) => String(id) === String(studentId))
     );
     return related ? related.id : comunicado.id;
   };
 
-  const fetchMessages = async () => {
+  const fetchMessages = async (silent = false) => {
+    if (!silent && messages.length === 0 && !hasKnownNoConversas) {
+      setLoadingMsg(true);
+    }
     try {
       let espelharParam = '';
       if (typeof window !== 'undefined') {
@@ -458,24 +521,31 @@ export function ComunicadoViewModal({
       }
 
       let url = '';
+      const autorId = comunicado.autorId || comunicado.dados?.autorId;
       if (isAdminMode) {
-        if (isGroupedReport) {
+        if (isGroupedReport && autorId) {
           const gDate = new Date(comunicado.dataEnvio || comunicado.created_at || 0).getTime();
-          url = `/api/comunicados_respostas?grouped_autor_id=${comunicado.autorId}&grouped_time=${gDate}&admin=true${espelharParam}`;
+          url = `/api/comunicados_respostas?grouped_autor_id=${encodeURIComponent(autorId)}&grouped_time=${gDate}&admin=true${espelharParam}`;
         } else {
-          url = `/api/comunicados_respostas?comunicado_id=${comunicado.id}&admin=true${espelharParam}`;
+          url = `/api/comunicados_respostas?comunicado_id=${encodeURIComponent(comunicado.id)}&admin=true${espelharParam}`;
         }
       } else {
-        url = `/api/comunicados_respostas?comunicado_id=${comunicado.id}&remetente_id=${currentUserSlug}${espelharParam}`;
+        url = `/api/comunicados_respostas?comunicado_id=${encodeURIComponent(comunicado.id)}&remetente_id=${encodeURIComponent(currentUserSlug)}${espelharParam}`;
       }
       
       const res = await fetch(url)
       if (res.ok) {
         const data = await res.json()
         if (Array.isArray(data)) {
-          const unique = Array.from(new Map(data.map((m: any) => [m.id, m])).values());
-          setMessages(unique as ChatMessage[])
-        } else {
+          const unique = Array.from(new Map(data.map((m: any) => [m.id, m])).values()) as ChatMessage[];
+          setMessages(unique);
+          setGlobalCachedMessages(comunicado.id, unique);
+          if (typeof window !== 'undefined' && unique.length > 0) {
+            window.dispatchEvent(new CustomEvent('agenda-digital:conversas-updated', {
+              detail: { comunicadoId: comunicado.id, total: unique.length, messages: unique }
+            }));
+          }
+        } else if (data) {
           setMessages(data)
         }
       }
@@ -488,12 +558,47 @@ export function ComunicadoViewModal({
 
   useEffect(() => {
     if (canReply) {
-      fetchMessages()
-      const interval = setInterval(fetchMessages, 10000)
+      fetchMessages(true)
+      const interval = setInterval(() => fetchMessages(true), 10000)
       return () => clearInterval(interval)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [comunicado.id, currentUserSlug, isAdminMode, canReply])
+
+  // Realtime updates listener for instant response arrival
+  useEffect(() => {
+    const handleConversasUpdate = (e: any) => {
+      const payload = e.detail;
+      if (!payload) return;
+      const { eventType, new: newMsg, old: oldMsg } = payload;
+      const currentId = String(comunicado.id);
+      const isRelated = 
+        (newMsg && (String(newMsg.comunicado_id) === currentId || isGroupedReport)) ||
+        (oldMsg && (String(oldMsg.comunicado_id) === currentId || isGroupedReport));
+        
+      if (!isRelated) return;
+      
+      if (eventType === 'INSERT' && newMsg) {
+        setMessages(prev => {
+          if (prev.some(m => m.id === newMsg.id)) return prev;
+          const next = [...prev, newMsg];
+          setGlobalCachedMessages(comunicado.id, next);
+          return next;
+        });
+      } else if (eventType === 'DELETE' && oldMsg) {
+        setMessages(prev => {
+          const next = prev.filter(m => m.id !== oldMsg.id);
+          setGlobalCachedMessages(comunicado.id, next);
+          return next;
+        });
+      } else {
+        fetchMessages(true);
+      }
+    };
+
+    window.addEventListener('agenda-digital:conversas-updated', handleConversasUpdate);
+    return () => window.removeEventListener('agenda-digital:conversas-updated', handleConversasUpdate);
+  }, [comunicado.id, isGroupedReport])
 
   const handleSend = async () => {
     if (!newMessage.trim() && pendingAnexos.length === 0) return
@@ -528,7 +633,16 @@ export function ComunicadoViewModal({
 
       if (res.ok) {
         const data = await res.json()
-        setMessages(prev => [...prev, data])
+        setMessages(prev => {
+          const next = [...prev, data];
+          setGlobalCachedMessages(comunicado.id, next);
+          if (typeof window !== 'undefined' && next.length > 0) {
+            window.dispatchEvent(new CustomEvent('agenda-digital:conversas-updated', {
+              detail: { comunicadoId: comunicado.id, total: next.length, messages: next }
+            }));
+          }
+          return next;
+        });
         setNewMessage('')
         setPendingAnexos([])
         setTimeout(() => scrollToBottom(true), 100)
@@ -555,7 +669,11 @@ export function ComunicadoViewModal({
 
       const res = await fetch(delUrl, { method: 'DELETE' });
       if (res.ok) {
-        setMessages(prev => prev.filter(m => m.id !== msgId));
+        setMessages(prev => {
+          const next = prev.filter(m => m.id !== msgId);
+          setGlobalCachedMessages(comunicado.id, next);
+          return next;
+        });
       } else {
         const errorData = await res.json();
         alert(`Erro ao excluir mensagem: ${errorData.error}`);
@@ -1469,7 +1587,22 @@ export function ComunicadoViewModal({
                         </div>
                      ))}
                      {adminThreads.length === 0 && (
-                       <div style={{ textAlign: 'center', padding: '32px 0', color: '#94a3b8', fontSize: 13, fontWeight: 500 }}>Nenhuma conversa iniciada.</div>
+                       loadingMsg ? (
+                         <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '4px 0' }}>
+                           <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 16, padding: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                             <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                               <div style={{ width: 44, height: 44, borderRadius: '50%', background: '#f1f5f9' }} />
+                               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                 <div style={{ width: 140, height: 16, borderRadius: 6, background: '#f1f5f9' }} />
+                                 <div style={{ width: 180, height: 12, borderRadius: 4, background: '#f8fafc' }} />
+                               </div>
+                             </div>
+                             <div style={{ width: 30, height: 12, borderRadius: 4, background: '#f1f5f9' }} />
+                           </div>
+                         </div>
+                       ) : (
+                         <div style={{ textAlign: 'center', padding: '32px 0', color: '#94a3b8', fontSize: 13, fontWeight: 500 }}>Nenhuma conversa iniciada.</div>
+                       )
                      )}
                    </div>
                 ) : (
@@ -1508,17 +1641,52 @@ export function ComunicadoViewModal({
                          }
                       }
 
-                      let avatarToUse = undefined;
+                      let avatarToUse: string | null | undefined = undefined;
+                      let avatarUserId: string | undefined = undefined;
+
                       if (!msg.is_admin) {
-                        if (alunoObj?.foto) {
-                          avatarToUse = alunoObj.foto;
-                        }
+                        avatarToUse = alunoObj?.foto;
+                        avatarUserId = alunoObj?.id || msg.remetente_id;
                       } else {
-                        if (isMe && currentUserAvatar) {
-                          avatarToUse = currentUserAvatar;
+                        const normMsgSender = normalizeText(msg.remetente_nome);
+                        const normAutor = normalizeText(comunicado.autor || comunicado.dados?.autor || comunicado.autorNome || comunicado.dados?.autorNome);
+                        const normCurrentUser = normalizeText(currentUserName);
+
+                        // 1. Se remetente_nome for o autor do comunicado, usa a foto e ID do autor
+                        if (normMsgSender && normAutor && (normMsgSender === normAutor || normAutor.includes(normMsgSender) || normMsgSender.includes(normAutor))) {
+                          avatarToUse = comunicado.autorFoto || comunicado.dados?.autorFoto || (comunicado as any).autorAvatar;
+                          avatarUserId = comunicado.autorId || comunicado.dados?.autorId;
                         }
-                        if (!avatarToUse && msg.remetente_nome === comunicado.autorNome && comunicado.autorAvatar) {
-                          avatarToUse = comunicado.autorAvatar;
+
+                        // 2. Busca na lista de colaboradores pelo nome ou ID
+                        if (!avatarToUse && colaboradores && Array.isArray(colaboradores) && colaboradores.length > 0) {
+                          const foundColab = colaboradores.find((c: any) => {
+                            if (!c) return false;
+                            const cNome = normalizeText(c.nome || c.dados?.nome);
+                            if (normMsgSender && cNome && (cNome === normMsgSender || cNome.includes(normMsgSender) || normMsgSender.includes(cNome))) {
+                              return true;
+                            }
+                            const cId = String(c.id || c.dados?.id || '').replace(/^f_?/, '');
+                            const rId = String(msg.remetente_id || '').replace(/^f_?/, '');
+                            return Boolean(cId && rId && cId === rId);
+                          });
+
+                          if (foundColab) {
+                            avatarToUse = foundColab.foto || foundColab.fotoUrl || foundColab.foto_url || foundColab.dados?.foto || foundColab.dados?.avatarUrl || foundColab.dados?.fotoUrl;
+                            avatarUserId = foundColab.id || foundColab.dados?.id;
+                          }
+                        }
+
+                        // 3. Se remetente_nome bater estritamente com o usuário logado atual, usa a foto dele
+                        if (!avatarToUse && normMsgSender && normCurrentUser && (normMsgSender === normCurrentUser || normCurrentUser.includes(normMsgSender))) {
+                          avatarToUse = currentUserAvatar;
+                          avatarUserId = currentUserSlug;
+                        }
+
+                        // 4. Fallback padrão para a foto do autor do comunicado (pois foi enviado no contexto institucional deste comunicado)
+                        if (!avatarToUse) {
+                          avatarToUse = comunicado.autorFoto || comunicado.dados?.autorFoto || currentUserAvatar;
+                          avatarUserId = comunicado.autorId || comunicado.dados?.autorId || currentUserSlug;
                         }
                       }
                       
@@ -1539,7 +1707,7 @@ export function ComunicadoViewModal({
                       return (
                         <div key={`${msg.id}-${idx}`} style={{ display: 'flex', gap: 12 }}>
                           <UserAvatar
-                            userId={msg.is_admin ? (currentUserSlug || msg.remetente_id) : (alunoObj?.id || msg.remetente_id)}
+                            userId={avatarUserId || msg.remetente_id}
                             name={msg.is_admin ? msg.remetente_nome : (alunoObj?.nome || msg.remetente_nome)}
                             fotoUrl={avatarToUse}
                             size={36}

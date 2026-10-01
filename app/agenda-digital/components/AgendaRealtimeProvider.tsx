@@ -28,6 +28,7 @@ import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 import { toast, Toaster } from 'sonner'
 import { supabase } from '@/lib/supabase'
 import { useSelectedStudent } from '@/lib/selectedStudentContext'
+import { addOrUpdateCachedMessage, removeCachedMessage } from '@/lib/comunicadosRespostasCache'
 import { notificationService } from '@/lib/notifications/notificationService'
 import { useData } from '@/lib/dataContext'
 import { useAgendaNotifications } from '../hooks/useAgendaNotifications'
@@ -776,6 +777,11 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
     // ── RESPOSTAS / CONVERSAS DE COMUNICADOS ─────────────────────────────
     createBinding('comunicados_respostas', { event: '*', schema: 'public', table: 'comunicados_respostas' }, payload => {
       console.log('⚡ [Realtime] Nova resposta/conversa em comunicado:', payload.eventType, payload.new?.comunicado_id);
+      if (payload.eventType === 'INSERT' && payload.new?.comunicado_id) {
+        addOrUpdateCachedMessage(payload.new.comunicado_id, payload.new as any);
+      } else if (payload.eventType === 'DELETE' && payload.old?.comunicado_id && payload.old?.id) {
+        removeCachedMessage(payload.old.comunicado_id, payload.old.id);
+      }
       queryClient.invalidateQueries({ queryKey: ['agenda', 'comunicados'], refetchType: 'all' });
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('agenda-digital:unread-updated'));
