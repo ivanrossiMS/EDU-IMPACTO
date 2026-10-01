@@ -131,7 +131,7 @@ const STATUS_THEMES: Record<
   }
 > = {
   OPEN: {
-    label: 'Em Aberto',
+    label: 'A Vencer',
     badgeBg: '#f0f9ff',
     badgeText: '#0284c7',
     badgeBorder: '#bae6fd',
@@ -414,7 +414,7 @@ function MobileInvoiceCard({
         </div>
       </div>
 
-      {/* Botão Pagar com Pix Rápido Direto no Card se Em Aberto */}
+      {/* Botão Pagar com Pix Rápido Direto no Card se A Vencer */}
       {canPay && (
         <div style={{ padding: '0 16px 16px' }}>
           <motion.button
@@ -824,7 +824,7 @@ function RestrictedFinancialAccessView({
           >
             Por diretrizes de segurança da instituição e em conformidade com a{' '}
             <strong style={{ color: '#334155' }}>Lei Geral de Proteção de Dados (LGPD)</strong>, as informações de
-            mensalidades, contratos, faturas em aberto, boletos e pagamentos via Pix são restritas exclusivamente ao{' '}
+            mensalidades, contratos, faturas a vencer, boletos e pagamentos via Pix são restritas exclusivamente ao{' '}
             <strong style={{ color: '#4f46e5' }}>responsável financeiro</strong> cadastrado no contrato do aluno.
           </p>
         </div>
@@ -2109,7 +2109,7 @@ export default function ADFinanceiroPage() {
             </motion.div>
           )}
 
-          {/* ── Sub-Métricas: Em Aberto e Total Liquidado (2 Colunas Compactas) ── */}
+          {/* ── Sub-Métricas: A Vencer e Total Liquidado (2 Colunas Compactas) ── */}
           <div
             style={{
               display: 'grid',
@@ -2118,7 +2118,7 @@ export default function ADFinanceiroPage() {
               marginBottom: 16,
             }}
           >
-            {/* Em Aberto */}
+            {/* A Vencer */}
             <div
               style={{
                 background: '#ffffff',
@@ -2130,7 +2130,7 @@ export default function ADFinanceiroPage() {
             >
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
                 <span style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', color: '#64748b', letterSpacing: 0.4 }}>
-                  Em Aberto
+                  A Vencer
                 </span>
                 <Clock size={13} color="#d97706" />
               </div>
@@ -2138,7 +2138,7 @@ export default function ADFinanceiroPage() {
                 {data.summary.totalEmAbertoFormatado}
               </div>
               <div style={{ fontSize: 10.5, color: '#64748b', fontWeight: 600, marginTop: 2 }}>
-                {data.summary.quantidadeEmAberto} pendente(s)
+                {data.summary.quantidadeEmAberto} a vencer
               </div>
             </div>
 
@@ -2169,7 +2169,7 @@ export default function ADFinanceiroPage() {
 
           {/* ── Toolbar: Tabs de Status + Seletor de Alunos Moderno ────────────── */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 14 }}>
-            {/* Tabs de Status: Em Aberto / Pagas / Todas */}
+            {/* Tabs de Status: A Vencer / Pagas / Todas */}
             <div
               style={{
                 display: 'flex',
@@ -2181,7 +2181,7 @@ export default function ADFinanceiroPage() {
               }}
             >
               {[
-                { key: 'emAberto' as TabKey, label: 'Em Aberto', count: data.summary.quantidadeEmAberto },
+                { key: 'emAberto' as TabKey, label: 'A Vencer', count: data.summary.quantidadeEmAberto },
                 { key: 'pagas' as TabKey, label: 'Pagas', count: data.summary.quantidadePagas },
                 {
                   key: 'todas' as TabKey,
@@ -2377,7 +2377,7 @@ export default function ADFinanceiroPage() {
                     {selectedStudentFilter !== 'todos'
                       ? `Nenhuma fatura encontrada para ${selectedStudentFilter}.`
                       : activeTab === 'emAberto'
-                      ? `Não existem faturas pendentes para ${selectedAno}.`
+                      ? `Não existem faturas a vencer para ${selectedAno}.`
                       : `Nenhum registro para esta seleção em ${selectedAno}.`}
                   </div>
                 </motion.div>
