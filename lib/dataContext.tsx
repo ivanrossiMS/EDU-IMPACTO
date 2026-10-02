@@ -1430,8 +1430,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [advertencias, setAdvertencias] = useSupabaseArray<Advertencia>('rh/advertencias')
   const [adiantamentos, setAdiantamentos] = useSupabaseArray<Adiantamento>('rh/adiantamentos')
 
-  // ── SYSTEM LOGS — persistidos no Supabase ──────────────────────────
-  const [ setSystemLogs] = useSupabaseArray<SystemLog>('system-logs')
+  // ── SYSTEM LOGS — inseridos no Supabase via batch / api / beacon ────
 
   const [perfis, setPerfisRaw, { loading: perfisLoading }] = useSupabaseArray<Perfil>('configuracoes/perfis', DEFAULT_PERFIS)
 

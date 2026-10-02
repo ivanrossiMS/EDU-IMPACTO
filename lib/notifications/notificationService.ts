@@ -39,6 +39,9 @@ class NotificationService {
   private requestPermissionPromise: Promise<boolean> | null = null
   /** Timestamp of the last clearUser() call, used to reject stale syncs */
   private lastClearAt = 0
+  private syncUserDebounceTimer: any = null
+  private lastSyncedPayloadHash = ''
+  private registeredAliases: Set<string> = new Set()
 
   /** Histórico de auditoria em memória para diagnóstico preciso */
   private auditLogs: DiagnosticLogEntry[] = []
@@ -576,18 +579,28 @@ class NotificationService {
   ): Promise<void> {
     if (!user?.id) return
 
-    // Serializa chamadas: espera a anterior terminar para evitar estado inconsistente
-    if (this.syncUserPromise) {
-      await this.syncUserPromise.catch(() => {})
-    }
+    return new Promise<void>((resolve) => {
+      if (this.syncUserDebounceTimer) {
+        clearTimeout(this.syncUserDebounceTimer)
+      }
 
-    const clearAtSnapshot = this.lastClearAt
-    this.syncUserPromise = this._doSyncUser(user, extraData, clearAtSnapshot)
-    try {
-      await this.syncUserPromise
-    } finally {
-      this.syncUserPromise = null
-    }
+      this.syncUserDebounceTimer = setTimeout(async () => {
+        try {
+          // Serializa chamadas: espera a anterior terminar para evitar estado inconsistente
+          if (this.syncUserPromise) {
+            await this.syncUserPromise.catch(() => {})
+          }
+
+          const clearAtSnapshot = this.lastClearAt
+          this.syncUserPromise = this._doSyncUser(user, extraData, clearAtSnapshot)
+          await this.syncUserPromise
+        } catch (_) {
+        } finally {
+          this.syncUserPromise = null
+          resolve()
+        }
+      }, 300)
+    })
   }
 
   private async _doSyncUser(
@@ -697,6 +710,12 @@ class NotificationService {
       // Identifica se o usuário é colaborador puro sem alunos vinculados
       const isPureStaff = !user.aluno_id && !extraData?.alunoId && (!Array.isArray(extraData?.meusAlunos) || extraData.meusAlunos.length === 0)
 
+      // Evita chamadas redundantes se os dados forem idênticos ao último sync bem-sucedido
+      const payloadHash = JSON.stringify({ userId, tags, aliasesToRegister })
+      if (this.lastSyncedPayloadHash === payloadHash && this.loggedInToOneSignal) {
+        return
+      }
+
       if (isNative) {
         const { default: OneSignalNative } = await import('@onesignal/capacitor-plugin')
 
@@ -747,9 +766,11 @@ class NotificationService {
           try {
             if (OneSignalNative.User?.addAliases) {
               await OneSignalNative.User.addAliases(aliasMap)
+              Object.keys(aliasMap).forEach(k => this.registeredAliases.add(k))
             } else if (OneSignalNative.User?.addAlias) {
               for (const [k, v] of Object.entries(aliasMap)) {
                 await OneSignalNative.User.addAlias(k, v).catch(() => {})
+                this.registeredAliases.add(k)
               }
             }
           } catch (aliasErr) {
@@ -767,16 +788,20 @@ class NotificationService {
           if (typeof OneSignalNative.User?.removeTags === 'function') {
             await OneSignalNative.User.removeTags(studentTags).catch(() => {})
           }
-          if (typeof OneSignalNative.User?.removeAliases === 'function') {
-            await OneSignalNative.User.removeAliases(['responsavel_id', 'aluno_id']).catch(() => {})
+          const toRemove = ['responsavel_id', 'aluno_id'].filter(a => this.registeredAliases.has(a))
+          if (toRemove.length > 0 && typeof OneSignalNative.User?.removeAliases === 'function') {
+            await OneSignalNative.User.removeAliases(toRemove).catch(() => {})
+            toRemove.forEach(a => this.registeredAliases.delete(a))
           }
         } else if (!colabId && !isMaster) {
           const staffTags = ['colaborador_id', 'system_user_id', 'isMasterAdmin']
           if (typeof OneSignalNative.User?.removeTags === 'function') {
             await OneSignalNative.User.removeTags(staffTags).catch(() => {})
           }
-          if (typeof OneSignalNative.User?.removeAliases === 'function') {
-            await OneSignalNative.User.removeAliases(['colaborador_id', 'system_user_id']).catch(() => {})
+          const toRemove = ['colaborador_id', 'system_user_id'].filter(a => this.registeredAliases.has(a))
+          if (toRemove.length > 0 && typeof OneSignalNative.User?.removeAliases === 'function') {
+            await OneSignalNative.User.removeAliases(toRemove).catch(() => {})
+            toRemove.forEach(a => this.registeredAliases.delete(a))
           }
         }
 
@@ -865,10 +890,12 @@ class NotificationService {
             try {
               if (OS.User?.addAliases) {
                 await OS.User.addAliases(aliasMap)
+                Object.keys(aliasMap).forEach(k => this.registeredAliases.add(k))
               } else if (OS.User?.addAlias) {
                 for (const [k, v] of Object.entries(aliasMap)) {
                   try {
                     await OS.User.addAlias(k, v)
+                    this.registeredAliases.add(k)
                   } catch {}
                 }
               }
@@ -890,9 +917,11 @@ class NotificationService {
                 await OS.User.removeTags(studentTags)
               } catch {}
             }
-            if (OS.User?.removeAliases) {
+            const toRemove = ['responsavel_id', 'aluno_id'].filter(a => this.registeredAliases.has(a))
+            if (toRemove.length > 0 && OS.User?.removeAliases) {
               try {
-                await OS.User.removeAliases(['responsavel_id', 'aluno_id'])
+                await OS.User.removeAliases(toRemove)
+                toRemove.forEach(a => this.registeredAliases.delete(a))
               } catch {}
             }
           } else if (!colabId && !isMaster) {
@@ -902,9 +931,11 @@ class NotificationService {
                 await OS.User.removeTags(staffTags)
               } catch {}
             }
-            if (OS.User?.removeAliases) {
+            const toRemove = ['colaborador_id', 'system_user_id'].filter(a => this.registeredAliases.has(a))
+            if (toRemove.length > 0 && OS.User?.removeAliases) {
               try {
-                await OS.User.removeAliases(['colaborador_id', 'system_user_id'])
+                await OS.User.removeAliases(toRemove)
+                toRemove.forEach(a => this.registeredAliases.delete(a))
               } catch {}
             }
           }
@@ -942,6 +973,7 @@ class NotificationService {
       }
 
       await this.refresh()
+      this.lastSyncedPayloadHash = payloadHash
     } catch (err) {
       console.warn('⚠️ [NotificationService] Falha ao sincronizar usuário com OneSignal:', err)
     }
@@ -960,6 +992,13 @@ class NotificationService {
     // Isso permite que chamadas concorrentes de syncUser() se abortem ao detectar
     // que um clearUser mais recente foi chamado.
     this.lastClearAt = Date.now()
+
+    if (this.syncUserDebounceTimer) {
+      clearTimeout(this.syncUserDebounceTimer)
+      this.syncUserDebounceTimer = null
+    }
+    this.lastSyncedPayloadHash = ''
+    this.registeredAliases.clear()
 
     this.currentUserId = null
     this.cachedUser = null

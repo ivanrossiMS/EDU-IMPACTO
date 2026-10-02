@@ -57,48 +57,48 @@ export async function GET(request: Request) {
       effectivePerfil === 'Aluno'
     );
 
-    // BLINDAGEM IDOR: Se aluno_id foi fornecido, validar autorização
-    if (alunoId) {
-      if (!isAdmin) {
-        const candidateRespIds = new Set<string>();
-        if (user.user_metadata?.responsavel_id) candidateRespIds.add(String(user.user_metadata.responsavel_id));
-        if (user.user_metadata?.aluno_id) candidateRespIds.add(String(user.user_metadata.aluno_id));
-        if (user.id) candidateRespIds.add(String(user.id));
-        if (dbUser?.id) candidateRespIds.add(String(dbUser.id));
-        if (dbUser?.dados?.responsavel_id) candidateRespIds.add(String(dbUser.dados.responsavel_id));
-        if (dbUser?.dados?.aluno_id) candidateRespIds.add(String(dbUser.dados.aluno_id));
+    // BLINDAGEM IDOR: Se for perfil de família ou aluno, validar obrigatoriamente a relação
+    if (isFamilyOrStudentProfile) {
+      if (!alunoId) {
+        return NextResponse.json({ error: 'Acesso negado: ID do aluno não informado.' }, { status: 403 });
+      }
 
-        if (user.email) {
-          const { data: respByEmail } = await supabase
-            .from('responsaveis')
-            .select('id')
-            .eq('email', user.email)
-            .maybeSingle();
-          if (respByEmail?.id) candidateRespIds.add(String(respByEmail.id));
+      const candidateRespIds = new Set<string>();
+      if (user.user_metadata?.responsavel_id) candidateRespIds.add(String(user.user_metadata.responsavel_id));
+      if (user.user_metadata?.aluno_id) candidateRespIds.add(String(user.user_metadata.aluno_id));
+      if (user.id) candidateRespIds.add(String(user.id));
+      if (dbUser?.id) candidateRespIds.add(String(dbUser.id));
+      if (dbUser?.dados?.responsavel_id) candidateRespIds.add(String(dbUser.dados.responsavel_id));
+      if (dbUser?.dados?.aluno_id) candidateRespIds.add(String(dbUser.dados.aluno_id));
+
+      if (user.email) {
+        const { data: respByEmail } = await supabase
+          .from('responsaveis')
+          .select('id')
+          .eq('email', user.email)
+          .maybeSingle();
+        if (respByEmail?.id) candidateRespIds.add(String(respByEmail.id));
+      }
+
+      let isAuthorized = false;
+      const cleanAlunoId = String(alunoId).replace(/^(a_|_ALU)/, '');
+
+      for (const checkId of candidateRespIds) {
+        const cleanCheckId = String(checkId).replace(/^(a_|_ALU)/, '');
+        if (cleanCheckId === cleanAlunoId) {
+          isAuthorized = true;
+          break;
         }
-
-        let isAuthorized = false;
-        const cleanAlunoId = String(alunoId).replace(/^(a_|_ALU)/, '');
-
-        for (const checkId of candidateRespIds) {
-          const cleanCheckId = String(checkId).replace(/^(a_|_ALU)/, '');
-          if (cleanCheckId === cleanAlunoId) {
-            isAuthorized = true;
-            break;
-          }
-          const hasRel = await checkResponsavelRelationship(checkId, alunoId);
-          if (hasRel) {
-            isAuthorized = true;
-            break;
-          }
-        }
-
-        if (!isAuthorized) {
-          return NextResponse.json({ error: 'Acesso negado: Você não tem permissão para visualizar dados deste aluno.' }, { status: 403 });
+        const hasRel = await checkResponsavelRelationship(checkId, alunoId, user.email);
+        if (hasRel) {
+          isAuthorized = true;
+          break;
         }
       }
-    } else if (isFamilyOrStudentProfile) {
-      return NextResponse.json({ error: 'Acesso negado: ID do aluno não informado.' }, { status: 403 });
+
+      if (!isAuthorized) {
+        return NextResponse.json({ error: 'Acesso negado: Você não tem permissão para visualizar dados deste aluno.' }, { status: 403 });
+      }
     }
 
     let accessStartDate = await getLoggedUserAccessStartDate();

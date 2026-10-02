@@ -9,7 +9,7 @@ import { getAlunoTodasTurmasEGrupos, canStudentViewMomento, isAlunoCursandoTurma
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 import { useData } from '@/lib/dataContext'
 import React, { use, useState, useEffect, useMemo, useRef } from 'react'
-import { Image as ImageIcon, Heart, MessageCircle, Send, Sparkles, Star, Smile, Camera, Loader2, ChevronLeft, ChevronRight, X, Maximize2, ShieldAlert } from 'lucide-react'
+import { Image as ImageIcon, Heart, MessageCircle, Send, Sparkles, Star, Smile, Camera, Loader2, ChevronLeft, ChevronRight, X, Maximize2, ShieldAlert, AlertCircle, RotateCw } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { createPortal } from 'react-dom'
 import { useApp } from '@/lib/context'
@@ -48,7 +48,7 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
   const isMirroring = !!(espelharRespId || espelharAluno);
   
   const endpoint = resolvedParams?.slug ? `/api/agenda/momentos?aluno_id=${resolvedParams.slug}` : null
-  const { data: fetchMomentosData, isLoading: loading, refetch, hasNextPage, fetchNextPage } = useQueryMomentos(endpoint, 20)
+  const { data: fetchMomentosData, isLoading: loading, isError, error, refetch, hasNextPage, fetchNextPage } = useQueryMomentos(endpoint, 20)
   const fetchMomentos = fetchMomentosData?.pages?.flat() || []
   
   const [grupos = []] = useSupabaseArray<any>('agenda/grupos');
@@ -677,6 +677,64 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
           <div style={{ padding: '0 24px' }}>
             {loading || !aluno ? (
               <MomentoSkeleton count={2} />
+            ) : isError ? (
+              <motion.div 
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                style={{ 
+                  background: '#ffffff', 
+                  padding: '50px 24px', 
+                  borderRadius: 32, 
+                  textAlign: 'center', 
+                  border: '1px solid #fee2e2', 
+                  boxShadow: '0 10px 30px rgba(239, 68, 68, 0.05)',
+                  maxWidth: 480,
+                  margin: '0 auto',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center'
+                }}
+              >
+                <div style={{
+                  width: 60,
+                  height: 60,
+                  borderRadius: '50%',
+                  background: '#fef2f2',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  marginBottom: 16,
+                  color: '#ef4444'
+                }}>
+                  <AlertCircle size={32} />
+                </div>
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#1f2937', marginBottom: 8 }}>
+                  Não foi possível carregar os momentos
+                </h3>
+                <p style={{ fontSize: '0.875rem', color: '#6b7280', maxWidth: 360, margin: '0 auto 20px', lineHeight: 1.5 }}>
+                  Ocorreu uma instabilidade na conexão ou na autorização. Toque abaixo para tentar novamente.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => refetch()}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    padding: '12px 24px',
+                    borderRadius: 16,
+                    background: 'linear-gradient(135deg, #ec4899 0%, #db2777 100%)',
+                    color: '#ffffff',
+                    fontWeight: 600,
+                    fontSize: '0.875rem',
+                    border: 'none',
+                    cursor: 'pointer',
+                    boxShadow: '0 4px 14px rgba(219, 39, 119, 0.3)'
+                  }}
+                >
+                  <RotateCw size={15} /> Tentar novamente
+                </button>
+              </motion.div>
             ) : (
               <motion.div 
                 initial={{ opacity: 0, y: 20 }}

@@ -4,7 +4,7 @@ import { useSearchParams, useRouter, useParams } from 'next/navigation';
 import Image from 'next/image'
 
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
-import { Bell, Search, Filter, Pin, CheckCircle2, X, Paperclip, FileText, FileBarChart, DollarSign, Image as ImageIcon, Video, ShieldAlert, Calendar, Loader2, ChevronDown, RotateCw, Vote, FileCheck2, MessageSquare } from 'lucide-react'
+import { Bell, Search, Filter, Pin, CheckCircle2, X, Paperclip, FileText, FileBarChart, DollarSign, Image as ImageIcon, Video, ShieldAlert, AlertCircle, Calendar, Loader2, ChevronDown, RotateCw, Vote, FileCheck2, MessageSquare } from 'lucide-react'
 import { EmptyStateCard } from '../../components/EmptyStateCard'
 import { UserAvatar } from '@/components/UserAvatar'
 
@@ -121,7 +121,7 @@ export default function ADComunicadosPage({ params }: { params: any }) {
 
   const endpoint = resolvedParams?.slug ? `/api/comunicados?aluno_id=${resolvedParams.slug}` : null
   
-  const { data: comunicadosData, isLoading: loading, refetch, hasNextPage, fetchNextPage, isFetchingNextPage } = useQueryComunicados(endpoint, 10, { enabled: true })
+  const { data: comunicadosData, isLoading: loading, isError, error, refetch, hasNextPage, fetchNextPage, isFetchingNextPage } = useQueryComunicados(endpoint, 10, { enabled: true })
   const comunicados = comunicadosData?.pages?.flat() || []
   useEffect(() => {
     if (comunicados && comunicados.length > 0) {
@@ -1082,6 +1082,60 @@ export default function ADComunicadosPage({ params }: { params: any }) {
         {(() => {
           if (loading || !aluno) {
             return <ComunicadoSkeleton count={10} />
+          }
+
+          if (isError) {
+            return (
+              <div style={{
+                margin: '20px 0',
+                padding: '36px 20px',
+                textAlign: 'center',
+                background: '#ffffff',
+                borderRadius: 24,
+                border: '1px solid #fee2e2',
+                boxShadow: '0 4px 16px rgba(239, 68, 68, 0.06)'
+              }}>
+                <div style={{
+                  width: 54,
+                  height: 54,
+                  borderRadius: 18,
+                  background: '#fef2f2',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  margin: '0 auto 16px',
+                  color: '#ef4444'
+                }}>
+                  <AlertCircle size={28} />
+                </div>
+                <h3 style={{ fontSize: '1.05rem', fontWeight: 600, color: '#1f2937', marginBottom: 6 }}>
+                  Não foi possível carregar os comunicados
+                </h3>
+                <p style={{ fontSize: '0.875rem', color: '#6b7280', maxWidth: 360, margin: '0 auto 18px', lineHeight: 1.5 }}>
+                  Ocorreu uma instabilidade na conexão ou na autorização. Toque abaixo para tentar novamente.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => refetch()}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    padding: '10px 22px',
+                    borderRadius: 14,
+                    background: 'var(--ad-primary, #6366f1)',
+                    color: '#ffffff',
+                    fontWeight: 600,
+                    fontSize: '0.875rem',
+                    border: 'none',
+                    cursor: 'pointer',
+                    boxShadow: '0 4px 12px rgba(99, 102, 241, 0.25)'
+                  }}
+                >
+                  <RotateCw size={15} /> Tentar novamente
+                </button>
+              </div>
+            );
           }
           
           if (paginatedComunicados.length === 0) {

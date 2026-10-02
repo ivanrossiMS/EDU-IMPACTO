@@ -9,10 +9,30 @@ export async function GET(request: Request) {
   const { user, errorResponse } = await requireAuth()
   if (errorResponse) return errorResponse
 
+  // Família e alunos não utilizam a tabela de relatórios administrativos
+  const perfil = user.user_metadata?.perfil || ''
+  const cargo = user.user_metadata?.cargo || ''
+  if (
+    perfil === 'Família' || 
+    perfil === 'Responsável' || 
+    cargo === 'Responsável' || 
+    cargo === 'Aluno' || 
+    perfil === 'Aluno'
+  ) {
+    return NextResponse.json([], {
+      headers: { 'Cache-Control': 'no-store, max-age=0' }
+    })
+  }
+
   try {
     const supabase = await createProtectedClient()
     const accessStartDate = await getLoggedUserAccessStartDate()
-    let query = supabase.from('relatorios_records').select('id, dados, created_at')
+    let query = supabase
+      .from('relatorios_records')
+      .select('id, dados, created_at')
+      .not('id', 'like', 'provas_online%')
+      .limit(200)
+
     if (accessStartDate) {
       query = query.gte('created_at', accessStartDate.toISOString())
     }

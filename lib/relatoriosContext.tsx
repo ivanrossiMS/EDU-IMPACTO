@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, ReactNode } from 'react'
 import { useSupabaseArray } from '@/lib/useSupabaseCollection'
+import { useApp } from '@/lib/context'
 export type FieldType = 
   | 'texto-curto' | 'texto-longo' | 'unica-escolha' | 'multipla-escolha' 
   | 'sim-nao' | 'numero' | 'moeda' | 'percentual' | 'data' | 'hora' 
@@ -80,10 +81,14 @@ interface RelatoriosContextState {
 const RelatoriosContext = createContext<RelatoriosContextState | null>(null)
 
 export function RelatoriosProvider({ children }: { children: ReactNode }) {
+  const { currentUser } = useApp()
+  const isFamily = currentUser?.perfil === 'Família' || currentUser?.cargo === 'Aluno' || currentUser?.cargo === 'Responsável'
+  const isStaffAdmin = currentUser?.perfil === 'Administrador' || currentUser?.perfil === 'Diretor Geral' || currentUser?.cargo === 'Administrador Master' || currentUser?.perfil === 'Admin' || currentUser?.perfil === 'Coordenador'
+
   // Using useSupabaseArray to sync directly with Supabase via the API routes we just created
-  const [templates, setTemplates] = useSupabaseArray<ReportTemplate>('agenda/relatorios_templates', [])
-  const [records, setRecords] = useSupabaseArray<ReportRecord>('agenda/relatorios_records', [])
-  const [logs, setLogs] = useSupabaseArray<any>('agenda/relatorios_logs', [])
+  const [templates, setTemplates] = useSupabaseArray<ReportTemplate>('agenda/relatorios_templates', [], { enabled: !isFamily })
+  const [records, setRecords] = useSupabaseArray<ReportRecord>('agenda/relatorios_records', [], { enabled: !isFamily && Boolean(isStaffAdmin) })
+  const [logs, setLogs] = useSupabaseArray<any>('agenda/relatorios_logs', [], { enabled: !isFamily && Boolean(isStaffAdmin) })
 
   const addLog = async (action: string, details: string) => {
     const newLog = { 
