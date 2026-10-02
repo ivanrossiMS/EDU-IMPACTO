@@ -3614,7 +3614,7 @@ export default function ValoresPage() {
                           </span>
                         </div>
                         <span style={{ fontSize: 12, fontWeight: 600, color: '#334155', display: 'block', marginTop: 6 }}>
-                          ou em até <strong style={{ color: '#047857', fontWeight: 800 }}>{numParcelasMatricula}x de {fmt(calculations.seriesCalc[0]?.parcelaMat || 0)}</strong> sem juros
+                          ou em até <strong style={{ color: '#047857', fontWeight: 800 }}>{numParcelasMatricula}x de {fmt(calculations.seriesCalc[0]?.parcelaMat || 0)}</strong>
                         </span>
                       </div>
                     </div>
