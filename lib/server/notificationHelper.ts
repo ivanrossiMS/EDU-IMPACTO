@@ -1061,15 +1061,8 @@ export async function getStudentTargetsForComunicados(dados: TargetParams | null
       if (clean && clean !== '[object Object]') finalColabIds.add(clean)
     })
 
-    // Incluir Administradores Master / Acesso Institucional para supervisão contínua da escola
-    try {
-      const masterAdminIds = await getInstitutionalMasterAdminIds()
-      masterAdminIds.forEach(id => {
-        if (id) finalColabIds.add(id)
-      })
-    } catch (adminErr) {
-      console.warn('[NotifHelper] Erro ao incluir administradores master em comunicados:', adminErr)
-    }
+    // Apenas colaboradores explicitamente marcados nos destinatários recebem a notificação push.
+    // Administradores Master não são mais incluídos compulsoriamente se não tiverem sido marcados.
 
     if (finalColabIds.size > 0) {
       try {

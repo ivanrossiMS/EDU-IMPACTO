@@ -243,8 +243,10 @@ export function AgendaDigitalProvider({ children, isFamily = false }: { children
   const pathname = usePathname() || ''
   const isComunicadosRoute = pathname.includes('comunicados') || pathname === '/agenda-digital/admin'
   const isMomentosRoute = pathname.includes('momentos') || pathname === '/agenda-digital/admin'
+  const isAdminPath = pathname.startsWith('/agenda-digital/admin')
 
-  const comunicadosQuery = useQueryComunicados('/api/comunicados', 10, { enabled: !isFamilyFetch && isComunicadosRoute })
+  const comunicadosEndpoint = isAdminPath ? '/api/comunicados?scope=admin' : '/api/comunicados'
+  const comunicadosQuery = useQueryComunicados(comunicadosEndpoint, 10, { enabled: !isFamilyFetch && isComunicadosRoute })
   const comunicados = comunicadosQuery.data?.pages?.flat() || []
   const comunicadosLoading = comunicadosQuery.isLoading || comunicadosQuery.isFetching
 
@@ -294,7 +296,8 @@ export function AgendaDigitalProvider({ children, isFamily = false }: { children
   const chatsLoading = false;
   const messagesLoading = false;
   
-  const momentosQuery = useQueryMomentos('/api/agenda/momentos', 20, { enabled: !isFamilyFetch && isMomentosRoute })
+  const momentosEndpoint = isAdminPath ? '/api/agenda/momentos?scope=admin' : '/api/agenda/momentos'
+  const momentosQuery = useQueryMomentos(momentosEndpoint, 20, { enabled: !isFamilyFetch && isMomentosRoute })
   const momentosFeed = useMemo(() => {
     return momentosQuery.data?.pages?.flat() || []
   }, [momentosQuery.data?.pages])

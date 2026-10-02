@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Paperclip, FileText, CheckCircle2, ShieldAlert, Calendar, Mic, Send, Share, Bookmark, MoreHorizontal, Edit2, Trash2, Loader2, CreditCard, Info, ExternalLink, Vote, Smile } from 'lucide-react'
+import { X, Paperclip, FileText, CheckCircle2, ShieldAlert, Calendar, Mic, Send, Share, Bookmark, MoreHorizontal, Edit2, Trash2, Loader2, CreditCard, Info, ExternalLink, Vote, Smile, MessageSquare, ChevronRight } from 'lucide-react'
 import Image from 'next/image'
 import Portal from '@/components/Portal'
 import { UserAvatar } from '@/components/UserAvatar'
@@ -283,7 +283,7 @@ export function ComunicadoViewModal({
   }, [comunicado.id, isAdminMode, isStaff, currentUserSlug, filterAuthorizedMessages])
 
   const isGroupedReport = comunicado.id?.startsWith('AD-COM-REL-COLAB');
-  const canReply = comunicado.permiteResposta || (isAdminMode && isGroupedReport) || comunicado.isSaudacao || comunicado.dados?.isSaudacao || comunicado.titulo === 'Mensagem de Boas-vindas' || comunicado.titulo === 'Mensagem de Saudação'
+  const canReply = Boolean(isAdminMode || comunicado.permiteResposta || isGroupedReport || comunicado.isSaudacao || comunicado.dados?.isSaudacao || comunicado.titulo === 'Mensagem de Boas-vindas' || comunicado.titulo === 'Mensagem de Saudação');
 
   const initialMessages = useMemo(() => {
     let raw: any[] = [];
@@ -409,10 +409,35 @@ export function ComunicadoViewModal({
       const key = alunoObj?.id ? String(alunoObj.id) : String(threadId);
 
       if (!threadsMap.has(key)) {
+        let senderName = alunoObj?.nome;
+        let senderFoto = alunoObj?.foto || alunoObj?.fotoUrl || alunoObj?.foto_url || studentPhotosMap[threadId] || studentPhotosMap[alunoObj?.id] || getCachedStudentPhoto(alunoObj?.id || threadId);
+
+        if (!senderName && colaboradores && colaboradores.length > 0) {
+          const colabFound = colaboradores.find((c: any) => {
+            if (!c) return false;
+            const cId = String(c.id || '').replace(/^f_?/, '');
+            const tId = String(threadId).replace(/^f_?/, '');
+            if (cId && tId && cId === tId) return true;
+            const cNome = (c.nome || '').trim().toLowerCase();
+            const mNome = (msg.remetente_nome || '').trim().toLowerCase();
+            return Boolean(cNome && mNome && (cNome === mNome || cNome.includes(mNome) || mNome.includes(cNome)));
+          });
+          if (colabFound) {
+            senderName = colabFound.nome;
+            if (colabFound.foto || colabFound.fotoUrl) {
+              senderFoto = colabFound.foto || colabFound.fotoUrl;
+            }
+          }
+        }
+
+        if (!senderName) {
+          senderName = (!msg.is_admin ? msg.remetente_nome : 'Usuário') || 'Participante';
+        }
+
         threadsMap.set(key, {
           studentId: alunoObj?.id || threadId,
-          studentName: alunoObj?.nome || (!msg.is_admin ? msg.remetente_nome : 'Aluno') || 'Usuário',
-          studentFoto: alunoObj?.foto || alunoObj?.fotoUrl || alunoObj?.foto_url || studentPhotosMap[threadId] || studentPhotosMap[alunoObj?.id] || getCachedStudentPhoto(alunoObj?.id || threadId),
+          studentName: senderName,
+          studentFoto: senderFoto,
           messages: [],
           lastMessageAt: msg.created_at
         })
@@ -424,20 +449,20 @@ export function ComunicadoViewModal({
         thread.lastMessageAt = msg.created_at
       }
       
-      // Se não achou alunoObj no map, mas a mensagem é do responsável/aluno, atualiza o nome (fallback)
+      // Se não achou alunoObj no map, mas a mensagem é do participante não-admin, atualiza o nome
       if (!msg.is_admin && msg.remetente_nome && !alunoObj) {
         thread.studentName = msg.remetente_nome
       }
     })
     
-    // Filter out threads that don't have any message from a student/parent
-    // These are usually phantom "global" messages sent by admins before the UI was restricted.
+    // Filter out threads that don't have any message from a participant
     const validThreads = Array.from(threadsMap.values()).filter(t => 
       t.messages.some(m => !m.is_admin)
     )
+    const result = validThreads.length > 0 ? validThreads : Array.from(threadsMap.values());
     
-    return validThreads.sort((a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime())
-  }, [messages, isAdminMode, alunos, studentPhotosMap])
+    return result.sort((a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime())
+  }, [messages, isAdminMode, alunos, colaboradores, studentPhotosMap])
   
   const messagesToShow = isAdminMode ? (selectedThreadId ? adminThreads.find(t => t.studentId === selectedThreadId)?.messages || [] : []) : messages;
 
@@ -1593,46 +1618,82 @@ export function ComunicadoViewModal({
             {canReply && (
               <div style={{ marginTop: 24, maxWidth: 800, width: '100%', margin: '0 auto' }}>
                 {isAdminMode && !selectedThreadId ? (
-                   <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                     <h3 style={{ fontSize: 14, fontWeight: 700, color: '#64748b', margin: 0, textTransform: 'uppercase', letterSpacing: 0.5 }}>Conversas Privadas ({adminThreads.length})</h3>
-                     {adminThreads.map(thread => (
-                        <div key={thread.studentId} onClick={() => setSelectedThreadId(thread.studentId)} style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 16, padding: 16, cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.02)' }}>
-                          <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                            <UserAvatar 
-                              userId={thread.studentId}
-                              name={thread.studentName}
-                              fotoUrl={thread.studentFoto}
-                              size={44}
-                            />
-                            <div>
-                              <div style={{ fontWeight: 700, fontSize: 15, color: '#0f172a' }}>{thread.studentName}</div>
-                              <div style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>{thread.messages.length} mensagens com este usuário</div>
-                            </div>
-                          </div>
-                          <div style={{ fontSize: 12, color: '#94a3b8' }}>
-                            {timeAgoShort(thread.lastMessageAt)}
-                          </div>
-                        </div>
-                     ))}
-                     {adminThreads.length === 0 && (
-                       loadingMsg ? (
-                         <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '4px 0' }}>
-                           <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 16, padding: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                             <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                               <div style={{ width: 44, height: 44, borderRadius: '50%', background: '#f1f5f9' }} />
-                               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                                 <div style={{ width: 140, height: 16, borderRadius: 6, background: '#f1f5f9' }} />
-                                 <div style={{ width: 180, height: 12, borderRadius: 4, background: '#f8fafc' }} />
+                  adminThreads.length > 0 ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
+                        <h3 style={{ fontSize: 14, fontWeight: 800, color: '#334155', margin: 0, textTransform: 'uppercase', letterSpacing: 0.5, display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <MessageSquare size={16} color="#6366f1" /> Conversas Privadas ({adminThreads.length})
+                        </h3>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: '#4f46e5', background: 'rgba(99, 102, 241, 0.08)', padding: '3px 10px', borderRadius: 20 }}>
+                          Painel do Administrador
+                        </span>
+                      </div>
+                      {adminThreads.map(thread => (
+                         <div 
+                           key={thread.studentId} 
+                           onClick={() => setSelectedThreadId(thread.studentId)} 
+                           style={{ 
+                             background: '#ffffff', 
+                             border: '1px solid #e2e8f0', 
+                             borderRadius: 16, 
+                             padding: '14px 18px', 
+                             cursor: 'pointer', 
+                             display: 'flex', 
+                             justifyContent: 'space-between', 
+                             alignItems: 'center', 
+                             boxShadow: '0 2px 8px rgba(0,0,0,0.02)',
+                             transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)'
+                           }}
+                           onMouseEnter={e => {
+                             e.currentTarget.style.borderColor = '#818cf8';
+                             e.currentTarget.style.boxShadow = '0 6px 18px rgba(99, 102, 241, 0.12)';
+                             e.currentTarget.style.transform = 'translateY(-1px)';
+                           }}
+                           onMouseLeave={e => {
+                             e.currentTarget.style.borderColor = '#e2e8f0';
+                             e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.02)';
+                             e.currentTarget.style.transform = 'translateY(0)';
+                           }}
+                         >
+                           <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
+                             <UserAvatar 
+                               userId={thread.studentId}
+                               name={thread.studentName}
+                               fotoUrl={thread.studentFoto}
+                               size={46}
+                             />
+                             <div>
+                               <div style={{ fontWeight: 800, fontSize: 15, color: '#0f172a' }}>{thread.studentName}</div>
+                               <div style={{ fontSize: 13, color: '#64748b', marginTop: 3 }}>
+                                 {thread.messages.length} {thread.messages.length === 1 ? 'mensagem' : 'mensagens'} nesta conversa
                                </div>
                              </div>
-                             <div style={{ width: 30, height: 12, borderRadius: 4, background: '#f1f5f9' }} />
+                           </div>
+                           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                             <span style={{ fontSize: 12, color: '#94a3b8', fontWeight: 600 }}>
+                               {timeAgoShort(thread.lastMessageAt)}
+                             </span>
+                             <div style={{ width: 30, height: 30, borderRadius: 10, background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b' }}>
+                               <ChevronRight size={16} />
+                             </div>
                            </div>
                          </div>
-                       ) : (
-                         <div style={{ textAlign: 'center', padding: '32px 0', color: '#94a3b8', fontSize: 13, fontWeight: 500 }}>Nenhuma conversa iniciada.</div>
-                       )
-                     )}
-                   </div>
+                      ))}
+                    </div>
+                  ) : loadingMsg ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '4px 0' }}>
+                      <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 16, padding: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                          <div style={{ width: 44, height: 44, borderRadius: '50%', background: '#f1f5f9' }} />
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                            <div style={{ width: 140, height: 16, borderRadius: 6, background: '#f1f5f9' }} />
+                            <div style={{ width: 180, height: 12, borderRadius: 4, background: '#f8fafc' }} />
+                          </div>
+                        </div>
+                        <div style={{ width: 30, height: 12, borderRadius: 4, background: '#f1f5f9' }} />
+                      </div>
+                    </div>
+                  ) : null
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
                     {isAdminMode && (

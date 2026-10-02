@@ -30,6 +30,9 @@ import { compressImage, compressVideo } from '@/lib/mediaCompressor'
 import { uploadFileToSupabase } from '@/lib/upload/uploadClient'
 import { ReportPayloadView } from '@/components/DynamicReports/ReportPayloadView'
 import { DashboardEngajamento } from '@/components/agenda/DashboardEngajamento'
+import { ComunicadoViewModal } from '@/components/agenda/ComunicadoViewModal'
+import { MiniCalendarFilter } from '@/components/agenda/MiniCalendarFilter'
+import { seedComunicadosRespostasCache, prefetchComunicadoMessages, getGlobalCachedMessages } from '@/lib/comunicadosRespostasCache'
 
 const ClientPortal = ({ children }: { children: React.ReactNode }) => {
   const [mounted, setMounted] = useState(false);
@@ -246,6 +249,9 @@ export default function ADAdminComunicados() {
   const [viewingDestCom, setViewingDestCom] = useState<ADComunicado | null>(null)
   
   const [authorFilter, setAuthorFilter] = useState<string>('todos');
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [filterComentarios, setFilterComentarios] = useState<boolean>(false);
+  const [filterRelatorio, setFilterRelatorio] = useState<boolean>(false);
   const [attachmentFilter, setAttachmentFilter] = useState<string>('todos');
   const [reportAuthorFilter, setReportAuthorFilter] = useState<string>('todos');
   const [showMonthlyReport, setShowMonthlyReport] = useState(false);
@@ -259,7 +265,7 @@ export default function ADAdminComunicados() {
 
   useEffect(() => {
     setSelectedComs([]);
-  }, [tab, debouncedSearch, authorFilter, attachmentFilter]);
+  }, [tab, debouncedSearch, authorFilter, attachmentFilter, selectedDate, filterComentarios, filterRelatorio]);
 
   useEffect(() => {
     const fetchColaboradoresAndAuthors = async () => {
@@ -318,9 +324,16 @@ export default function ADAdminComunicados() {
 
   const endpoint = useMemo(() => {
     const params = new URLSearchParams();
+    params.set('scope', 'admin');
     if (tab) {
       const statusValue = tab === 'enviados' ? 'enviado' : tab === 'agendados' ? 'agendado' : 'rascunho';
       params.set('status', statusValue);
+    }
+    if (filterComentarios) {
+      params.set('tem_comentarios', 'true');
+    }
+    if (filterRelatorio) {
+      params.set('tipo', 'relatorio');
     }
     if (authorFilter && authorFilter !== 'todos') {
       if (authorFilter === 'meus') {
@@ -337,12 +350,15 @@ export default function ADAdminComunicados() {
         }
       }
     }
+    if (selectedDate) {
+      params.set('date', selectedDate);
+    }
     if (debouncedSearch.trim()) {
       params.set('search', debouncedSearch.trim());
     }
     const q = params.toString();
     return q ? `/api/comunicados?${q}` : '/api/comunicados';
-  }, [tab, authorFilter, debouncedSearch, currentUser, colaboradores]);
+  }, [tab, authorFilter, debouncedSearch, currentUser, colaboradores, selectedDate, filterComentarios, filterRelatorio]);
 
   const {
     data: localQueryData,
@@ -352,10 +368,98 @@ export default function ADAdminComunicados() {
     hasNextPage: hasNextPageComunicados,
     fetchNextPage: fetchNextPageComunicados,
     isFetchingNextPage: isFetchingNextPageComunicados
-  } = useQueryComunicados(endpoint, 10, { enabled: true });
+  } = useQueryComunicados(endpoint, 25, { enabled: true });
 
   const comunicados = useMemo(() => localQueryData?.pages?.flat() || [], [localQueryData?.pages]);
   const isDataLoading = isLocalLoading || isLocalFetching;
+
+  // Cache instantâneo de IDs com respostas na base de dados
+  const [idsWithReplies, setIdsWithReplies] = useState<Set<string>>(new Set());
+
+  const fetchIdsWithReplies = useCallback(() => {
+    fetch('/api/comunicados?type=comentarios_ids')
+      .then(res => res.json())
+      .then(data => {
+        if (Array.isArray(data?.ids)) {
+          setIdsWithReplies(new Set(data.ids.map(String)));
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    fetchIdsWithReplies();
+  }, [fetchIdsWithReplies]);
+
+  // Sincroniza cache de mensagens e escuta atualizações de respostas em tempo real
+  useEffect(() => {
+    if (comunicados && comunicados.length > 0) {
+      seedComunicadosRespostasCache(comunicados);
+    }
+  }, [comunicados]);
+
+  useEffect(() => {
+    const handleConversasUpdated = (e: any) => {
+      const detail = e.detail;
+      if (!detail?.comunicadoId) return;
+      setIdsWithReplies(prev => {
+        const next = new Set(prev);
+        next.add(String(detail.comunicadoId));
+        return next;
+      });
+      if (setComunicadosLocally) {
+        setComunicadosLocally((prev: any[]) => {
+          if (!Array.isArray(prev)) return prev;
+          return prev.map(c => {
+            if (String(c.id) === String(detail.comunicadoId)) {
+              return {
+                ...c,
+                respostas: detail.messages || c.respostas,
+                conversas_info: {
+                  ...(c.conversas_info || {}),
+                  tem_conversas: true,
+                  total: detail.total || (detail.messages?.length ?? c.conversas_info?.total ?? 1)
+                }
+              };
+            }
+            return c;
+          });
+        });
+      }
+    };
+    window.addEventListener('agenda-digital:conversas-updated', handleConversasUpdated);
+    return () => window.removeEventListener('agenda-digital:conversas-updated', handleConversasUpdated);
+  }, [setComunicadosLocally]);
+
+  // Coleção de dias que possuem comunicados para marcar no mini calendário
+  const activeDatesWithComunicados = useMemo(() => {
+    const set = new Set<string>();
+    comunicados.forEach((c: any) => {
+      const raw = c.dataEnvio || c.data || c.created_at || (c.dados && (c.dados.dataEnvio || c.dados.data || c.dados.created_at));
+      if (!raw) return;
+      try {
+        const d = new Date(raw);
+        if (isNaN(d.getTime())) return;
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        set.add(`${y}-${m}-${day}`);
+      } catch {}
+    });
+    return set;
+  }, [comunicados]);
+
+  // Rótulo formatado para exibição do dia selecionado
+  const selectedDateFormatted = useMemo(() => {
+    if (!selectedDate) return '';
+    try {
+      const [y, m, d] = selectedDate.split('-').map(Number);
+      const date = new Date(y, m - 1, d);
+      return date.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
+    } catch {
+      return selectedDate;
+    }
+  }, [selectedDate]);
 
   // Extração Dinâmica de Autores e Cargos unificando Colaboradores + Autores do Banco + Comunicados locais
   const availableAuthors = useMemo(() => {
@@ -595,17 +699,89 @@ export default function ADAdminComunicados() {
     });
   }
 
+  const handleDeleteSingleComunicado = (id: string) => {
+    adConfirm('Tem certeza que deseja excluir este comunicado? Esta ação é irreversível.', 'Excluir Comunicado', async () => {
+      try {
+        const res = await fetch(`/api/comunicados?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+        if (res.ok) {
+          if (setComunicadosLocally) {
+            setComunicadosLocally(prev => prev.filter(c => c.id !== id));
+          } else {
+            setComunicados(prev => prev.filter(c => c.id !== id));
+          }
+          setSelectedComs(prev => prev.filter(x => x !== id));
+          queryClient.invalidateQueries({ queryKey: ['agenda', 'comunicados'] });
+          refetchLocal();
+          window.dispatchEvent(new CustomEvent('ad:comunicados-delete', { detail: { ids: [id], old: [{ id }] } }));
+          adAlert('Comunicado excluído com sucesso.', 'Sucesso');
+        } else {
+          const data = await res.json().catch(() => ({ error: 'Erro desconhecido' }));
+          adAlert(`Erro ao excluir: ${data.error || res.statusText}`, 'Erro');
+        }
+      } catch (err: any) {
+        adAlert(`Erro ao excluir: ${err.message}`, 'Erro');
+      }
+    });
+  };
+
   const filtered = useMemo(() => {
     return comunicados.filter((c: any) => {
       // Ocultar envios individuais de relatórios do Feed (Mostrando apenas a Cópia-Resumo da Turma)
       if (c.id?.startsWith('AD-COM-REL-STU-')) return false;
+
+      // Filtro local adicional de data caso selecionada
+      if (selectedDate) {
+        const raw = c.dataEnvio || c.data || c.created_at || (c.dados && (c.dados.dataEnvio || c.dados.data || c.dados.created_at));
+        if (raw) {
+          try {
+            const d = new Date(raw);
+            if (!isNaN(d.getTime())) {
+              const y = d.getFullYear();
+              const m = String(d.getMonth() + 1).padStart(2, '0');
+              const day = String(d.getDate()).padStart(2, '0');
+              const cDateStr = `${y}-${m}-${day}`;
+              if (cDateStr !== selectedDate) return false;
+            }
+          } catch {}
+        }
+      }
+
+      // Filtro: Tem Comentários
+      if (filterComentarios) {
+        const hasConversas = Boolean(
+          idsWithReplies.has(String(c.id)) ||
+          c.conversas_info?.tem_conversas || 
+          (c.conversas_info?.total && c.conversas_info.total > 0) ||
+          (Array.isArray(c.respostas) && c.respostas.length > 0) ||
+          (getGlobalCachedMessages(c.id)?.length)
+        );
+        if (!hasConversas) return false;
+      }
+
+      // Filtro: Tem Relatório
+      if (filterRelatorio) {
+        const hasReport = Boolean(
+          c.tipo === 'relatorio' ||
+          (c as any).dados?.tipo === 'relatorio' ||
+          (c.id && c.id.includes('REL')) ||
+          (Array.isArray(c.anexos) && c.anexos.some((a: any) => {
+            if (typeof a === 'string') {
+              return a.includes('PAYLOAD_RELATORIO') || a.includes('|report-payload') || a.toLowerCase().includes('relatorio') || a.toLowerCase().includes('relatório');
+            }
+            return a?.mimeType === 'report-payload' || a?.tipo === 'relatorio' || (a?.name && a.name.toLowerCase().includes('relat')) || (a?.nome && a.nome.toLowerCase().includes('relat'));
+          })) ||
+          (c.titulo && (c.titulo.toLowerCase().includes('relatório') || c.titulo.toLowerCase().includes('relatorio')))
+        );
+        if (!hasReport) return false;
+      }
+
       return true;
     }).sort((a: any, b: any) => {
       const timeA = new Date(a.dataEnvio || (a as any).data || (a as any).created_at || 0).getTime();
       const timeB = new Date(b.dataEnvio || (b as any).data || (b as any).created_at || 0).getTime();
       return timeB - timeA;
     });
-  }, [comunicados]);
+  }, [comunicados, selectedDate, filterComentarios, filterRelatorio, idsWithReplies]);
 
   const handleLoadMore = useCallback(async () => {
     if (isFetchingMore || isFetchingNextPageComunicados) return;
@@ -759,68 +935,293 @@ export default function ADAdminComunicados() {
         }
       `}} />
 
-      <div className="ad-comunicados-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-        <div>
-          <h2 style={{ fontSize: 24, fontWeight: 800, fontFamily: 'Outfit, sans-serif' }}>Caixa de Comunicados</h2>
-          <p style={{ color: 'hsl(var(--text-muted))' }}>Gerencie o envio, relatórios de leitura e arquivos anexos.</p>
-        </div>
-        
-        <div className="ad-comunicados-actions" style={{ display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-          <div className="ad-comunicados-top-row" style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-            <div style={{ position: 'relative', flex: 1 }}>
-              <Filter size={16} style={{ position: 'absolute', left: 12, top: 10, color: 'hsl(var(--text-muted))', pointerEvents: 'none' }} />
-              <select 
-                className="form-input" 
-                value={authorFilter}
-                onChange={e => setAuthorFilter(e.target.value)}
-                style={{ paddingLeft: 36, width: 220, appearance: 'none', cursor: 'pointer', fontWeight: 600, color: 'hsl(var(--text-main))' }}
-              >
-                <option value="todos">Todos os Autores</option>
-                <option value="meus">Meus Comunicados</option>
-                {availableRoles.length > 0 && <optgroup label="Filtrar por Cargo">
-                  {availableRoles.map(role => <option key={`role-${role}`} value={`cargo:${role}`}>{role}</option>)}
-                </optgroup>}
-                {availableAuthors.length > 0 && <optgroup label="Filtrar por Colaborador">
-                  {availableAuthors.map(autor => <option key={`aut-${autor}`} value={`autor:${autor}`}>{autor}</option>)}
-                </optgroup>}
-              </select>
-            </div>
-            <div style={{ position: 'relative', flex: 1 }}>
-              <Search size={16} style={{ position: 'absolute', left: 12, top: 10, color: 'hsl(var(--text-muted))' }} />
-              <input 
-                className="form-input" 
-                placeholder="Buscar..." 
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                style={{ paddingLeft: 36, width: 180 }} 
-              />
-            </div>
+      <div className="ad-comunicados-header" style={{ marginBottom: 20 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 16 }}>
+          <div>
+            <h2 style={{ fontSize: 24, fontWeight: 800, fontFamily: 'Outfit, sans-serif', color: '#0f172a', margin: '0 0 4px 0', letterSpacing: '-0.02em' }}>
+              Caixa de Comunicados
+            </h2>
+            <p style={{ color: '#64748b', fontSize: 14, margin: 0, fontWeight: 500 }}>
+              Gerencie comunicados, acompanhe relatórios de leitura e interaja com conversas escolares.
+            </p>
           </div>
-          <div className="ad-comunicados-btn-row" style={{ display: 'flex', gap: 10 }}>
-            <button className="btn btn-secondary" onClick={() => setShowMonthlyReport(true)} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              <Calendar size={16} /> Relatório Mensal
+
+          {/* Action Buttons group: Relatório Mensal, Engajamento, Refresh */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <button
+              onClick={() => setShowMonthlyReport(true)}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 7,
+                height: 38,
+                padding: '0 14px',
+                borderRadius: 12,
+                fontSize: 13,
+                fontWeight: 700,
+                background: '#ffffff',
+                color: '#334155',
+                border: '1px solid #e2e8f0',
+                boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
+                cursor: 'pointer',
+                transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)'
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.borderColor = '#cbd5e1';
+                e.currentTarget.style.background = '#f8fafc';
+                e.currentTarget.style.transform = 'translateY(-1px)';
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.borderColor = '#e2e8f0';
+                e.currentTarget.style.background = '#ffffff';
+                e.currentTarget.style.transform = 'translateY(0)';
+              }}
+            >
+              <Calendar size={15} style={{ color: '#6366f1' }} />
+              <span>Relatório Mensal</span>
             </button>
-            <button className="btn btn-secondary" onClick={() => setShowEngagementDashboard(true)} style={{ display: 'flex', gap: 8, alignItems: 'center', background: 'rgba(79, 70, 229, 0.1)', color: '#4f46e5', borderColor: 'transparent' }}>
-              <Activity size={16} /> Engajamento
+
+            <button
+              onClick={() => setShowEngagementDashboard(true)}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 7,
+                height: 38,
+                padding: '0 14px',
+                borderRadius: 12,
+                fontSize: 13,
+                fontWeight: 700,
+                background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.08), rgba(79, 70, 229, 0.12))',
+                color: '#4f46e5',
+                border: '1px solid rgba(99, 102, 241, 0.2)',
+                boxShadow: '0 1px 2px rgba(79, 70, 229, 0.05)',
+                cursor: 'pointer',
+                transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)'
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.borderColor = 'rgba(99, 102, 241, 0.4)';
+                e.currentTarget.style.background = 'linear-gradient(135deg, rgba(99, 102, 241, 0.14), rgba(79, 70, 229, 0.18))';
+                e.currentTarget.style.transform = 'translateY(-1px)';
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.borderColor = 'rgba(99, 102, 241, 0.2)';
+                e.currentTarget.style.background = 'linear-gradient(135deg, rgba(99, 102, 241, 0.08), rgba(79, 70, 229, 0.12))';
+                e.currentTarget.style.transform = 'translateY(0)';
+              }}
+            >
+              <Activity size={15} />
+              <span>Engajamento</span>
             </button>
+
             <button
               className={`ad-com-btn-refresh ${isRefreshing ? 'is-loading' : ''}`}
               onClick={handleRefresh}
               disabled={isRefreshing}
               type="button"
-              title="Atualizar"
-              aria-label="Atualizar"
+              title="Atualizar lista de comunicados"
+              aria-label="Atualizar lista de comunicados"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: 38,
+                height: 38,
+                borderRadius: 12,
+                background: '#ffffff',
+                color: '#64748b',
+                border: '1px solid #e2e8f0',
+                cursor: isRefreshing ? 'not-allowed' : 'pointer',
+                transition: 'all 0.2s',
+                boxShadow: '0 1px 2px rgba(0,0,0,0.03)'
+              }}
             >
-              <RotateCw size={14} strokeWidth={2.3} className={isRefreshing ? 'ad-spin-icon' : ''} />
-            </button>
-            <button className="btn btn-primary ad-comunicados-btn-primary" onClick={handleNovo}>
-              <Plus size={16} /> Novo Comunicado
+              <RotateCw size={15} strokeWidth={2.2} className={isRefreshing ? 'ad-spin-icon' : ''} />
             </button>
           </div>
         </div>
+
+        {/* Filter bar container */}
+        <div 
+          style={{ 
+            marginTop: 16, 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: 10, 
+            flexWrap: 'wrap',
+            background: 'rgba(255, 255, 255, 0.8)',
+            backdropFilter: 'blur(12px)',
+            WebkitBackdropFilter: 'blur(12px)',
+            padding: '10px 14px',
+            borderRadius: 16,
+            border: '1px solid #e2e8f0',
+            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.02)'
+          }}
+        >
+          {/* Mini Calendar Filter */}
+          <MiniCalendarFilter
+            selectedDate={selectedDate}
+            onSelectDate={setSelectedDate}
+            activeDatesWithComunicados={activeDatesWithComunicados}
+          />
+
+          <div style={{ width: 1, height: 24, background: '#e2e8f0', margin: '0 2px' }} />
+
+          {/* Author filter */}
+          <div style={{ position: 'relative', flex: '1 1 220px', minWidth: 200 }}>
+            <Filter size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', pointerEvents: 'none' }} />
+            <select 
+              value={authorFilter}
+              onChange={e => setAuthorFilter(e.target.value)}
+              style={{
+                width: '100%',
+                height: 38,
+                paddingLeft: 34,
+                paddingRight: 28,
+                borderRadius: 12,
+                border: '1px solid #e2e8f0',
+                background: '#ffffff',
+                color: '#1e293b',
+                fontSize: 13,
+                fontWeight: 600,
+                appearance: 'none',
+                cursor: 'pointer',
+                outline: 'none',
+                transition: 'border-color 0.2s'
+              }}
+            >
+              <option value="todos">Todos os Autores</option>
+              <option value="meus">Meus Comunicados</option>
+              {availableRoles.length > 0 && (
+                <optgroup label="Filtrar por Cargo">
+                  {availableRoles.map(role => <option key={`role-${role}`} value={`cargo:${role}`}>{role}</option>)}
+                </optgroup>
+              )}
+              {availableAuthors.length > 0 && (
+                <optgroup label="Filtrar por Colaborador">
+                  {availableAuthors.map(autor => <option key={`aut-${autor}`} value={`autor:${autor}`}>{autor}</option>)}
+                </optgroup>
+              )}
+            </select>
+          </div>
+
+          {/* Search bar with clear button */}
+          <div style={{ position: 'relative', flex: '1 1 240px', minWidth: 200 }}>
+            <Search size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', pointerEvents: 'none' }} />
+            <input 
+              placeholder="Buscar título, texto ou autor..." 
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              style={{
+                width: '100%',
+                height: 38,
+                paddingLeft: 34,
+                paddingRight: search ? 32 : 12,
+                borderRadius: 12,
+                border: '1px solid #e2e8f0',
+                background: '#ffffff',
+                color: '#1e293b',
+                fontSize: 13,
+                fontWeight: 500,
+                outline: 'none',
+                transition: 'border-color 0.2s'
+              }}
+            />
+            {search && (
+              <button
+                onClick={() => setSearch('')}
+                style={{
+                  position: 'absolute',
+                  right: 8,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'none',
+                  border: 'none',
+                  color: '#94a3b8',
+                  cursor: 'pointer',
+                  padding: 4,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+                title="Limpar busca"
+              >
+                <X size={14} />
+              </button>
+            )}
+          </div>
+
+          <div style={{ width: 1, height: 24, background: '#e2e8f0', margin: '0 2px' }} />
+
+          {/* Quick Filter: Tem Comentários */}
+          <button
+            type="button"
+            onClick={() => setFilterComentarios(prev => !prev)}
+            title="Filtrar apenas comunicados que possuem comentários/conversas particulares"
+            style={{
+              height: 38,
+              padding: '0 13px',
+              borderRadius: 12,
+              border: filterComentarios ? '1px solid #4f46e5' : '1px solid #e2e8f0',
+              background: filterComentarios ? 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)' : '#ffffff',
+              color: filterComentarios ? '#ffffff' : '#475569',
+              fontSize: 13,
+              fontWeight: 700,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 7,
+              cursor: 'pointer',
+              boxShadow: filterComentarios ? '0 4px 12px rgba(79, 70, 229, 0.3)' : '0 1px 2px rgba(0,0,0,0.02)',
+              transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+              whiteSpace: 'nowrap',
+              flexShrink: 0
+            }}
+          >
+            <MessageSquare size={14} fill={filterComentarios ? '#ffffff' : 'none'} />
+            <span>Comentários</span>
+            {filterComentarios && (
+              <span style={{ width: 16, height: 16, borderRadius: '50%', background: 'rgba(255,255,255,0.25)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 900 }}>
+                ✓
+              </span>
+            )}
+          </button>
+
+          {/* Quick Filter: Tem Relatório */}
+          <button
+            type="button"
+            onClick={() => setFilterRelatorio(prev => !prev)}
+            title="Filtrar apenas comunicados que possuem relatório pedagógico anexado"
+            style={{
+              height: 38,
+              padding: '0 13px',
+              borderRadius: 12,
+              border: filterRelatorio ? '1px solid #7c3aed' : '1px solid #e2e8f0',
+              background: filterRelatorio ? 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)' : '#ffffff',
+              color: filterRelatorio ? '#ffffff' : '#475569',
+              fontSize: 13,
+              fontWeight: 700,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 7,
+              cursor: 'pointer',
+              boxShadow: filterRelatorio ? '0 4px 12px rgba(124, 58, 237, 0.3)' : '0 1px 2px rgba(0,0,0,0.02)',
+              transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+              whiteSpace: 'nowrap',
+              flexShrink: 0
+            }}
+          >
+            <FileBarChart size={14} />
+            <span>Relatórios</span>
+            {filterRelatorio && (
+              <span style={{ width: 16, height: 16, borderRadius: '50%', background: 'rgba(255,255,255,0.25)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 900 }}>
+                ✓
+              </span>
+            )}
+          </button>
+        </div>
       </div>
 
-      <div className="tab-list ad-comunicados-tabs" style={{ marginBottom: 24, width: 'fit-content' }}>
+      <div className="tab-list ad-comunicados-tabs" style={{ marginBottom: 16, width: 'fit-content' }}>
         <button className={`tab-trigger ${tab === 'enviados' ? 'active' : ''}`} onClick={() => setTab('enviados')}>
           <SendIcon size={14} /> Enviados
         </button>
@@ -831,6 +1232,81 @@ export default function ADAdminComunicados() {
           <FileText size={14} /> Rascunhos
         </button>
       </div>
+
+      {/* Active Filters Indicator Banner */}
+      {(selectedDate || filterComentarios || filterRelatorio) && (
+        <motion.div
+          initial={{ opacity: 0, y: -6 }}
+          animate={{ opacity: 1, y: 0 }}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '10px 16px',
+            background: 'linear-gradient(135deg, rgba(79, 70, 229, 0.08), rgba(99, 102, 241, 0.04))',
+            border: '1px solid rgba(79, 70, 229, 0.18)',
+            borderRadius: 14,
+            marginBottom: 16,
+            gap: 12,
+            flexWrap: 'wrap'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: '#1e293b' }}>
+              Filtros ativos ({filtered.length} {filtered.length === 1 ? 'encontrado' : 'encontrados'}):
+            </span>
+
+            {selectedDate && (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#ffffff', border: '1px solid rgba(79, 70, 229, 0.25)', padding: '4px 10px', borderRadius: 8, fontSize: 12, fontWeight: 700, color: '#4f46e5' }}>
+                <Calendar size={13} />
+                <span>{selectedDateFormatted}</span>
+                <span role="button" onClick={() => setSelectedDate(null)} style={{ cursor: 'pointer', opacity: 0.7, marginLeft: 2 }} title="Remover filtro de data">×</span>
+              </span>
+            )}
+
+            {filterComentarios && (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#ffffff', border: '1px solid rgba(79, 70, 229, 0.25)', padding: '4px 10px', borderRadius: 8, fontSize: 12, fontWeight: 700, color: '#4f46e5' }}>
+                <MessageSquare size={13} />
+                <span>Com Comentários</span>
+                <span role="button" onClick={() => setFilterComentarios(false)} style={{ cursor: 'pointer', opacity: 0.7, marginLeft: 2 }} title="Remover filtro de comentários">×</span>
+              </span>
+            )}
+
+            {filterRelatorio && (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#ffffff', border: '1px solid rgba(124, 58, 237, 0.25)', padding: '4px 10px', borderRadius: 8, fontSize: 12, fontWeight: 700, color: '#7c3aed' }}>
+                <FileBarChart size={13} />
+                <span>Com Relatório</span>
+                <span role="button" onClick={() => setFilterRelatorio(false)} style={{ cursor: 'pointer', opacity: 0.7, marginLeft: 2 }} title="Remover filtro de relatório">×</span>
+              </span>
+            )}
+          </div>
+
+          <button
+            onClick={() => {
+              setSelectedDate(null);
+              setFilterComentarios(false);
+              setFilterRelatorio(false);
+            }}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              fontSize: 12,
+              fontWeight: 700,
+              color: '#4f46e5',
+              background: '#ffffff',
+              border: '1px solid rgba(79, 70, 229, 0.25)',
+              padding: '5px 12px',
+              borderRadius: 8,
+              cursor: 'pointer',
+              boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
+              transition: 'all 0.15s'
+            }}
+          >
+            <X size={13} /> Limpar todos os filtros
+          </button>
+        </motion.div>
+      )}
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -872,7 +1348,38 @@ export default function ADAdminComunicados() {
           {filtered.length === 0 && !isDataLoading && (
             <div style={{ textAlign: 'center', padding: '80px 20px', background: 'rgba(0,0,0,0.02)', borderRadius: 20, border: '2px dashed hsl(var(--border-subtle))' }}>
               <Bell size={48} style={{ opacity: 0.1, marginBottom: 16 }} />
-              <p style={{ color: 'hsl(var(--text-muted))', fontSize: 16, fontWeight: 500 }}>Nenhum comunicado encontrado nesta aba.</p>
+              {(selectedDate || filterComentarios || filterRelatorio) ? (
+                <div>
+                  <p style={{ color: 'hsl(var(--text-main))', fontSize: 16, fontWeight: 700, margin: '0 0 6px 0' }}>
+                    Nenhum comunicado encontrado com os filtros selecionados.
+                  </p>
+                  <p style={{ color: 'hsl(var(--text-muted))', fontSize: 14, margin: '0 0 16px 0' }}>
+                    Tente ajustar ou limpar os filtros para visualizar outros comunicados.
+                  </p>
+                  <button
+                    onClick={() => {
+                      setSelectedDate(null);
+                      setFilterComentarios(false);
+                      setFilterRelatorio(false);
+                    }}
+                    style={{
+                      background: '#4f46e5',
+                      color: '#ffffff',
+                      border: 'none',
+                      padding: '8px 18px',
+                      borderRadius: 10,
+                      fontSize: 13,
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      boxShadow: '0 4px 12px rgba(79, 70, 229, 0.25)'
+                    }}
+                  >
+                    Limpar filtros
+                  </button>
+                </div>
+              ) : (
+                <p style={{ color: 'hsl(var(--text-muted))', fontSize: 16, fontWeight: 500 }}>Nenhum comunicado encontrado nesta aba.</p>
+              )}
             </div>
           )}
           {filtered.map(c => {
@@ -921,6 +1428,20 @@ export default function ADAdminComunicados() {
              const progresso = targetCount > 0 ? Math.min(100, (lidas / targetCount) * 100) : 0
              const dateObj = (c.dataEnvio || (c as any).data) ? new Date(c.dataEnvio || (c as any).data) : null
 
+             const hasConversas = Boolean(
+               idsWithReplies.has(String(c.id)) ||
+               c.conversas_info?.tem_conversas || 
+               (c.conversas_info?.total && c.conversas_info.total > 0) ||
+               (Array.isArray(c.respostas) && c.respostas.length > 0) ||
+               (getGlobalCachedMessages(c.id)?.length)
+             );
+             const conversasCount = c.conversas_info?.total || (Array.isArray(c.respostas) ? c.respostas.length : 0) || (getGlobalCachedMessages(c.id)?.length || 0) || (idsWithReplies.has(String(c.id)) ? 1 : 0);
+             const hasUnreadConversation = Boolean(
+               c.conversas_info?.has_unread || 
+               (c.conversas_info?.nao_lidas && c.conversas_info.nao_lidas > 0) ||
+               c._has_unread_reply
+             );
+
               return (
                <motion.div 
                 key={c.id}
@@ -928,6 +1449,7 @@ export default function ADAdminComunicados() {
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 onClick={() => setViewingCom(c)}
+                onPointerDown={() => prefetchComunicadoMessages(c, true)}
                 className="ad-comunicado-card"
                 style={{ 
                   background: '#ffffff',
@@ -970,11 +1492,35 @@ export default function ADAdminComunicados() {
                 </div>
                 {/* Content Column */}
                 <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                     <h3 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', letterSpacing: '-0.01em' }}>
                       {c.titulo}
                     </h3>
                     {c.fixado && <span style={{ background: 'rgba(245, 158, 11, 0.1)', color: '#f59e0b', padding: '2px 6px', borderRadius: 6, display: 'flex', alignItems: 'center' }}><Pin size={12} fill="#f59e0b" /></span>}
+                    {hasConversas && (
+                      <span 
+                        title={`${conversasCount} comentários/conversas registradas`}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 4,
+                          background: hasUnreadConversation ? 'rgba(239, 68, 68, 0.12)' : 'rgba(79, 70, 229, 0.1)',
+                          color: hasUnreadConversation ? '#dc2626' : '#4f46e5',
+                          border: `1px solid ${hasUnreadConversation ? 'rgba(239, 68, 68, 0.25)' : 'rgba(79, 70, 229, 0.2)'}`,
+                          padding: '2px 8px',
+                          borderRadius: 8,
+                          fontSize: 11,
+                          fontWeight: 800,
+                          flexShrink: 0
+                        }}
+                      >
+                        <MessageSquare size={12} fill={hasUnreadConversation ? '#dc2626' : '#4f46e5'} fillOpacity={0.25} />
+                        <span>{conversasCount}</span>
+                        {hasUnreadConversation && (
+                          <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#dc2626', display: 'inline-block' }} />
+                        )}
+                      </span>
+                    )}
                   </div>
                   
                   <p style={{ margin: 0, fontSize: 14, color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 500 }}>
@@ -1018,6 +1564,35 @@ export default function ADAdminComunicados() {
                           Ver Destinatários ({(c.turmas?.length || 0) + (c.grupos?.length || 0) + (c.funcionariosIds?.length || 0) + (c.alunosIds?.length || 0)})
                         </button>
                       )
+                    )}
+                    {hasConversas && (
+                      <div 
+                        title={`${conversasCount} comentário(s) em conversas particulares. Clique para abrir.`}
+                        onClick={e => {
+                          e.stopPropagation();
+                          setViewingCom(c);
+                        }}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 5,
+                          background: hasUnreadConversation ? 'rgba(239, 68, 68, 0.08)' : 'rgba(79, 70, 229, 0.06)',
+                          color: hasUnreadConversation ? '#dc2626' : '#4f46e5',
+                          border: `1px solid ${hasUnreadConversation ? 'rgba(239, 68, 68, 0.25)' : 'rgba(79, 70, 229, 0.2)'}`,
+                          padding: '4px 10px',
+                          borderRadius: 12,
+                          fontSize: 12,
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          transition: 'all 0.15s'
+                        }}
+                      >
+                        <MessageSquare size={13} />
+                        <span>{conversasCount} {conversasCount === 1 ? 'comentário' : 'comentários'}</span>
+                        {hasUnreadConversation && (
+                          <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#dc2626', display: 'inline-block' }} />
+                        )}
+                      </div>
                     )}
                     <div style={{ fontSize: 12, fontWeight: 600, color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 4 }}>
                       <Clock size={13} />
@@ -1288,233 +1863,35 @@ export default function ADAdminComunicados() {
         )}
       </AnimatePresence>
 
-      <AnimatePresence>
-        {/* View Communication Modal */}
-        {viewingCom && (
-          <ClientPortal>
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.85)', backdropFilter: 'none', zIndex: 10002, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-            <motion.div 
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              style={{ background: 'white', width: '100%', maxWidth: 650, borderRadius: 24, boxShadow: '0 40px 100px rgba(0,0,0,0.3)', overflow: 'hidden', display: 'flex', flexDirection: 'column', maxHeight: '90vh' }}
-            >
-              {/* Header */}
-              <div style={{ padding: '24px 32px', background: 'hsl(var(--bg-overlay))', borderBottom: '1px solid hsl(var(--border-subtle))', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                  <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg, #6366f1, #4f46e5)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 900, boxShadow: '0 4px 12px rgba(79, 70, 229, 0.3)' }}>
-                    {viewingCom.autor?.charAt(0)}
-                  </div>
-                  <div>
-                    <div style={{ fontSize: 16, fontWeight: 900, color: '#1e293b' }}>{viewingCom.autor}</div>
-                    <div style={{ fontSize: 12, fontWeight: 600, color: '#4f46e5', textTransform: 'uppercase', letterSpacing: '0.02em' }}>{viewingCom.autorCargo}</div>
-                    <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', marginTop: 2 }}>
-                      {(() => {
-                        const rawDate = viewingCom.dataEnvio || (viewingCom as any).data || (viewingCom as any).created_at || new Date().toISOString();
-                        try {
-                          const d = new Date(rawDate);
-                          if (isNaN(d.getTime())) {
-                            return new Date().toLocaleDateString('pt-BR') + ' às ' + new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-                          }
-                          return d.toLocaleDateString('pt-BR') + ' às ' + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-                        } catch (e) {
-                          return new Date().toLocaleDateString('pt-BR') + ' às ' + new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-                        }
-                      })()}
-                    </div>
-                  </div>
-                </div>
-                <button className="btn btn-ghost" onClick={() => setViewingCom(null)} style={{ padding: 8 }}><X size={24} /></button>
-              </div>
-
-              {/* Body */}
-              <div style={{ padding: 32, flex: 1, overflowY: 'auto' }}>
-                <div style={{ marginBottom: 20, padding: '12px 16px', background: 'rgba(79, 70, 229, 0.03)', borderRadius: 12, border: '1px solid rgba(79, 70, 229, 0.1)' }}>
-                  <div style={{ fontSize: 10, fontWeight: 900, color: '#4f46e5', textTransform: 'uppercase', marginBottom: 6, letterSpacing: '0.05em' }}>Para:</div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, maxHeight: '110px', overflowY: 'auto', paddingRight: 4 }}>
-                    {viewingCom.turmas && viewingCom.turmas.length > 0 && viewingCom.turmas.map((t: string) => (
-                      <span key={`t-${t}`} style={{ background: 'white', color: '#4f46e5', padding: '2px 8px', borderRadius: 6, fontSize: 11, fontWeight: 700, border: '1px solid rgba(79, 70, 229, 0.1)' }}>Turma: {t}</span>
-                    ))}
-                    {viewingCom.grupos && viewingCom.grupos.length > 0 && viewingCom.grupos.map((g: string) => (
-                      <span key={`g-${g}`} style={{ background: 'white', color: '#059669', padding: '2px 8px', borderRadius: 6, fontSize: 11, fontWeight: 700, border: '1px solid rgba(16, 185, 129, 0.1)' }}>Grupo: {g}</span>
-                    ))}
-                    {viewingCom.funcionariosIds && viewingCom.funcionariosIds.length > 0 && (
-                      <span style={{ background: 'white', color: '#f59e0b', padding: '2px 8px', borderRadius: 6, fontSize: 11, fontWeight: 700, border: '1px solid rgba(245, 158, 11, 0.1)' }}>{viewingCom.funcionariosIds.length} Colaborador(es)</span>
-                    )}
-                    {viewingCom.alunosIds && viewingCom.alunosIds.length > 0 && (
-                      <span style={{ background: 'white', color: '#3b82f6', padding: '2px 8px', borderRadius: 6, fontSize: 11, fontWeight: 700, border: '1px solid rgba(59, 130, 246, 0.1)' }}>{viewingCom.alunosIds.length} Aluno(s)</span>
-                    )}
-                    {(!(viewingCom.turmas?.length) && !(viewingCom.grupos?.length) && !(viewingCom.funcionariosIds?.length) && !(viewingCom.alunosIds?.length)) && (
-                      <span style={{ color: '#64748b', fontSize: 12, fontWeight: 600 }}>Toda a Escola (Global)</span>
-                    )}
-                  </div>
-                </div>
-
-                <h2 style={{ fontSize: 24, fontWeight: 900, color: '#1e293b', marginBottom: 20, lineHeight: 1.2 }}>{viewingCom.titulo}</h2>
-                
-                <div style={{ fontSize: 15, lineHeight: 1.8, color: '#334155', whiteSpace: 'pre-wrap', marginBottom: 24 }}>
-                  {renderConteudo(viewingCom.conteudo || (viewingCom as any).texto || '')}
-                </div>
-
-                {viewingCom.anexos && viewingCom.anexos.length > 0 && (
-                  <div style={{ marginTop: 24, display: 'flex', flexDirection: 'column', gap: 12 }}>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>Anexos e Mídia ({viewingCom.anexos.length})</div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                      {viewingCom.anexos.map((a, i) => {
-                        let name = '';
-                        let url = '';
-                        let mimeType = '';
-                        let size = '';
-                        if (typeof a === 'string') {
-                          if (a.endsWith('|report-payload')) {
-                            const firstPipe = a.indexOf('|');
-                            const lastPipe = a.lastIndexOf('|');
-                            name = a.substring(0, firstPipe);
-                            url = a.substring(firstPipe + 1, lastPipe);
-                            mimeType = 'report-payload';
-                          } else {
-                            const parts = a.split('|');
-                            name = parts[0];
-                            url = parts[1] || (parts[0].startsWith('http') ? parts[0] : '');
-                            mimeType = parts[2] || '';
-                            size = parts[3] || '';
-                          }
-                        } else if (a && typeof a === 'object') {
-                          name = a.nome || a.name || 'Anexo';
-                          url = a.url || '';
-                          mimeType = a.type || a.mimeType || (name.match(/\.(jpg|jpeg|png|webp|gif)$/i) ? 'image/' : '');
-                          size = a.size || '';
-                        } else {
-                          name = String(a);
-                        }
-                        
-                        const isImg = mimeType.startsWith('image/') || (url && (url.startsWith('data:image') || /\.(jpg|jpeg|png|webp|gif)$/i.test(name)));
-                        const isVid = mimeType.startsWith('video/') || (url && (url.startsWith('data:video') || /\.(mp4|webm|ogg|mov|quicktime)$/i.test(name)));
-                        const isReportPayload = mimeType === 'report-payload' || url.startsWith('payload:');
-
-                        if (isReportPayload) {
-                          let parsedPayload: any = null;
-                          try {
-                            const payloadStr = url.startsWith('payload:') ? url.substring(8) : url;
-                            parsedPayload = JSON.parse(payloadStr);
-                          } catch(e) {}
-
-                          return (
-                            <button 
-                              key={i} 
-                              onClick={() => {
-                                if (parsedPayload) {
-                                  setViewingReportPayload(`Relatório: ${name}|${url}`);
-                                }
-                              }}
-                              style={{ 
-                                background: 'rgba(139, 92, 246, 0.1)', 
-                                color: '#7c3aed', 
-                                fontSize: 13, display: 'inline-flex', gap: 6, alignItems: 'center', padding: '8px 14px', 
-                                borderRadius: 10, border: '1px solid rgba(139, 92, 246, 0.2)',
-                                cursor: 'pointer', fontWeight: 700,
-                                transition: 'all 0.2s',
-                                marginBottom: 6, marginRight: 6
-                              }}
-                              onMouseEnter={e => {
-                                e.currentTarget.style.background = 'rgba(139, 92, 246, 0.2)';
-                                e.currentTarget.style.transform = 'translateY(-1px)';
-                              }}
-                              onMouseLeave={e => {
-                                e.currentTarget.style.background = 'rgba(139, 92, 246, 0.1)';
-                                e.currentTarget.style.transform = 'translateY(0)';
-                              }}
-                            >
-                              <FileBarChart size={16} style={{ flexShrink: 0 }} />
-                              <MediaLabel name={name} url={url} initialSize={size} />
-                            </button>
-                          );
-                        }
-
-                        if (isImg && url) return (
-                          <div key={i} style={{ borderRadius: 16, overflow: 'hidden', border: '1px solid #e2e8f0', background: '#f8fafc' }}>
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={url} alt={name} style={{ width: '100%', height: 'auto', display: 'block', maxHeight: 600, objectFit: 'contain' }} />
-                            <div style={{ padding: '8px 16px', fontSize: 12, color: '#64748b', borderTop: '1px solid #e2e8f0' }}>
-                              <MediaLabel name={name} url={url} initialSize={size} />
-                            </div>
-                          </div>
-                        );
-
-                        if (isVid && url) return (
-                          <div key={i} style={{ borderRadius: 16, overflow: 'hidden', border: '1px solid #e2e8f0', background: '#000' }}>
-                            <video 
-                              src={url} 
-                              controls 
-                              playsInline
-                              preload="metadata"
-                              style={{ width: '100%', height: 'auto', display: 'block', maxHeight: 600 }} 
-                            />
-                            <div style={{ padding: '8px 16px', fontSize: 12, color: '#fff', background: 'rgba(15,23,42,0.85)', borderTop: '1px solid rgba(255,255,255,0.1)' }}>
-                              <MediaLabel name={name} url={url} initialSize={size} />
-                            </div>
-                          </div>
-                        );
-
-                        return (
-                          <div key={i} style={{ padding: '12px 16px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, fontSize: 13, display: 'flex', alignItems: 'center', gap: 12, fontWeight: 600 }}>
-                            <div style={{ width: 32, height: 32, borderRadius: 8, background: 'white', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                              <Paperclip size={16} color="#64748b" />
-                            </div>
-                            <div style={{ flex: 1, overflow: 'hidden' }}>
-                              <MediaLabel name={name} url={url} initialSize={size} />
-                            </div>
-                            {url && <button className="btn btn-ghost btn-sm" onClick={() => window.open(url, '_blank')}>Abrir</button>}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-
-
-              </div>
-
-              {/* Footer Actions */}
-              <div style={{ padding: '12px 14px', background: 'hsl(var(--bg-overlay))', borderTop: '1px solid hsl(var(--border-subtle))', display: 'flex', gap: 8 }}>
-                <button className="btn btn-secondary" style={{ flex: 1, minWidth: 0, gap: 6, height: 44, padding: '0 8px', fontSize: 14, whiteSpace: 'nowrap' }} onClick={() => { openEdit(viewingCom); setViewingCom(null); }}>
-                  <MoreHorizontal size={17} style={{ flexShrink: 0 }} /> Editar
-                </button>
-                <button className="btn btn-secondary" style={{ flex: 1, minWidth: 0, gap: 6, height: 44, padding: '0 8px', fontSize: 14, whiteSpace: 'nowrap' }} onClick={() => { handleReenviar(viewingCom); setViewingCom(null); }}>
-                  <SendIcon size={17} style={{ flexShrink: 0 }} /> Encaminhar
-                </button>
-                <button className="btn" style={{ flex: 1, minWidth: 0, gap: 6, height: 44, padding: '0 8px', fontSize: 14, whiteSpace: 'nowrap', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)' }} onClick={() => {
-                  adConfirm('Excluir este comunicado permanentemente?', 'Apagar', async () => {
-                    try {
-                      const res = await fetch(`/api/comunicados?id=${viewingCom.id}`, { method: 'DELETE' });
-                      if (res.ok) {
-                        if (setComunicadosLocally) {
-                          setComunicadosLocally(prev => prev.filter(x => x.id !== viewingCom.id));
-                        } else {
-                          setComunicados(prev => prev.filter(x => x.id !== viewingCom.id));
-                        }
-                        queryClient.invalidateQueries({ queryKey: ['agenda', 'comunicados'] });
-                        window.dispatchEvent(new CustomEvent('ad:comunicados-delete', { detail: { id: viewingCom.id, old: { id: viewingCom.id } } }));
-                        setViewingCom(null);
-                        adAlert('Comunicado excluído com sucesso.', 'Sucesso');
-                      } else {
-                        const data = await res.json().catch(() => ({ error: 'Erro desconhecido' }));
-                        adAlert(`Erro ao excluir: ${data.error || res.statusText}`, 'Erro');
-                      }
-                    } catch (err: any) {
-                      console.error("Erro ao deletar comunicado:", err);
-                      adAlert(`Erro ao excluir: ${err.message}`, 'Erro');
-                    }
-                  });
-                }}>
-                  <XCircle size={17} style={{ flexShrink: 0 }} /> Apagar
-                </button>
-              </div>
-            </motion.div>
-          </div>
-          </ClientPortal>
-        )}
-      </AnimatePresence>
+      {viewingCom && (
+        <ComunicadoViewModal
+          comunicado={viewingCom}
+          allComunicados={comunicados}
+          isAdminMode={true}
+          isStaff={true}
+          alunos={alunos}
+          colaboradores={colaboradores}
+          turmas={turmas}
+          currentUserSlug={currentUser?.id ? String(currentUser.id) : 'admin'}
+          currentUserName={currentUser?.nome || 'Administrador'}
+          currentUserAvatar={currentUser?.foto || undefined}
+          onCiencia={() => {}}
+          onClose={() => setViewingCom(null)}
+          onEdit={(c) => {
+            setViewingCom(null);
+            openEdit(c);
+          }}
+          onDelete={(id) => {
+            setViewingCom(null);
+            handleDeleteSingleComunicado(id);
+          }}
+          onForward={(c) => {
+            setViewingCom(null);
+            handleReenviar(c);
+          }}
+          setOpenedReportPayload={(str) => setViewingReportPayload(str)}
+        />
+      )}
 
       <ReportPayloadView
         isOpen={!!viewingReportPayload}

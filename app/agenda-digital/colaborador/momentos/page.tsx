@@ -113,15 +113,15 @@ export default function ADMomentosPage() {
   } = useQueryMomentos(endpointMomentos, 20, { enabled: true })
 
   const momentosFeed = useMemo(() => {
-    if (espelharColabId) {
-      return localMomentosData?.pages?.flat() || []
+    if (localMomentosData?.pages && localMomentosData.pages.length > 0) {
+      return localMomentosData.pages.flat();
     }
-    return globalMomentosFeed
-  }, [espelharColabId, localMomentosData?.pages, globalMomentosFeed])
+    return globalMomentosFeed || []
+  }, [localMomentosData?.pages, globalMomentosFeed])
 
-  const momentosLoading = espelharColabId ? (localMomentosLoading || localMomentosFetching) : false
-  const fetchNextPageMomentos = espelharColabId ? localFetchNextPageMomentos : globalFetchNextPageMomentos
-  const hasNextPageMomentos = espelharColabId ? localHasNextPageMomentos : globalHasNextPageMomentos
+  const momentosLoading = localMomentosLoading || localMomentosFetching
+  const fetchNextPageMomentos = localFetchNextPageMomentos || globalFetchNextPageMomentos
+  const hasNextPageMomentos = localHasNextPageMomentos ?? globalHasNextPageMomentos
   
   const [showModal, setShowModal] = useState(false)
   const [showDestModal, setShowDestModal] = useState(false)

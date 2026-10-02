@@ -384,13 +384,16 @@ export async function POST(request: Request) {
         
         if (comData) {
           const rawAutorId = comData.dados?.autorId;
-          let baseTargets: string[] = [];
-          if (rawAutorId) {
-            const resolvedIds = await getColaboradorIds([rawAutorId]);
-            baseTargets = resolvedIds.length > 0 ? resolvedIds : [rawAutorId];
+          const markedColabs = [
+            ...(comData.dados?.colaboradoresIds || []),
+            ...(comData.dados?.funcionariosIds || [])
+          ];
+          const allRelevantColabs = Array.from(new Set([rawAutorId, ...markedColabs].filter(Boolean)));
+          let targetUserIds: string[] = [];
+          if (allRelevantColabs.length > 0) {
+            const resolvedIds = await getColaboradorIds(allRelevantColabs);
+            targetUserIds = resolvedIds.length > 0 ? resolvedIds : allRelevantColabs.map(String);
           }
-          const masterAdminIds = await getInstitutionalMasterAdminIds();
-          const targetUserIds = Array.from(new Set([...baseTargets, ...masterAdminIds])).filter(Boolean);
           
           try {
             for (const uid of targetUserIds) {

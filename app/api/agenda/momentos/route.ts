@@ -28,6 +28,7 @@ export async function GET(request: Request) {
     const alunoId = searchParams.get('aluno_id')
     const idParam = searchParams.get('id')
     const colaboradorId = searchParams.get('colaborador_id') || searchParams.get('espelhar_colaborador')
+    const scopeParam = searchParams.get('scope') || searchParams.get('admin')
 
     // VERIFICAÇÃO DE PERFIL E IDOR
     const perfil = (user.user_metadata?.perfil || '').trim();
@@ -219,186 +220,178 @@ export async function GET(request: Request) {
       });
 
       query = query.or(conditions.join(','));
-    } else if (colaboradorId || !isAdmin) {
-       // Se for colaborador ou espelhamento de colaborador
-        const perfisMasterAdmin = ['administrador master', 'administrador', 'admin', 'diretor geral', 'diretora geral', 'master'];
-        const isSelfMasterAdmin = !colaboradorId && perfisMasterAdmin.some(p => p === perfil.toLowerCase() || p === cargo.toLowerCase());
-        
-        if (!isSelfMasterAdmin) {
-          const candidateUserIds = new Set<string>();
-          let userEmail = '';
-          let userNome = '';
+    } else if ((scopeParam === 'admin' || scopeParam === 'true') && isAdmin) {
+      // Escopo Administrativo Geral (/agenda-digital/admin/momentos):
+      // Administradores Master / Direção visualizam todos os momentos da instituição para gestão/auditoria.
+    } else if (colaboradorId || !isFamilyOrStudentProfile) {
+      // Feed do Colaborador (inclui Administrador Master acessando a agenda de colaborador):
+      // O Administrador Master não recebe tudo no feed; apenas o que foi MARCADO diretamente
+      // (colaboradoresIds, funcionariosIds), o que ele próprio criou (authorId), seus grupos/turmas, ou momentos globais.
+      const candidateUserIds = new Set<string>();
+      let userEmail = '';
+      let userNome = '';
 
-          if (colaboradorId) {
-            candidateUserIds.add(String(colaboradorId));
-            const { data: colabUsers } = await supabase
-              .from('system_users')
-              .select('id, email, nome, auth_id, dados')
-              .or(`id.eq."${colaboradorId}",auth_id.eq."${colaboradorId}"`)
-              .limit(5);
+      if (colaboradorId) {
+        candidateUserIds.add(String(colaboradorId));
+        const { data: colabUsers } = await supabase
+          .from('system_users')
+          .select('id, email, nome, auth_id, dados')
+          .or(`id.eq."${colaboradorId}",auth_id.eq."${colaboradorId}"`)
+          .limit(5);
 
-            if (colabUsers && colabUsers.length > 0) {
-              colabUsers.forEach((cu: any) => {
-                if (cu.id) candidateUserIds.add(String(cu.id));
-                if (cu.auth_id) candidateUserIds.add(String(cu.auth_id));
-                if (cu.email) userEmail = String(cu.email).trim().toLowerCase();
-                if (cu.nome) userNome = String(cu.nome).trim().toLowerCase();
-                if (cu.dados?.auth_id) candidateUserIds.add(String(cu.dados.auth_id));
-                if (cu.dados?.uid_legacy) candidateUserIds.add(String(cu.dados.uid_legacy));
-              });
-            }
-          } else {
-            candidateUserIds.add(String(user.id));
-            if (user.user_metadata?.uid_legacy) candidateUserIds.add(String(user.user_metadata.uid_legacy));
-            if (user.user_metadata?.id) candidateUserIds.add(String(user.user_metadata.id));
-            if (user.user_metadata?.colaborador_id) candidateUserIds.add(String(user.user_metadata.colaborador_id));
-            if (user.user_metadata?.system_user_id) candidateUserIds.add(String(user.user_metadata.system_user_id));
+        if (colabUsers && colabUsers.length > 0) {
+          colabUsers.forEach((cu: any) => {
+            if (cu.id) candidateUserIds.add(String(cu.id));
+            if (cu.auth_id) candidateUserIds.add(String(cu.auth_id));
+            if (cu.email) userEmail = String(cu.email).trim().toLowerCase();
+            if (cu.nome) userNome = String(cu.nome).trim().toLowerCase();
+            if (cu.dados?.auth_id) candidateUserIds.add(String(cu.dados.auth_id));
+            if (cu.dados?.uid_legacy) candidateUserIds.add(String(cu.dados.uid_legacy));
+          });
+        }
+      } else {
+        candidateUserIds.add(String(user.id));
+        if (user.user_metadata?.uid_legacy) candidateUserIds.add(String(user.user_metadata.uid_legacy));
+        if (user.user_metadata?.id) candidateUserIds.add(String(user.user_metadata.id));
+        if (user.user_metadata?.colaborador_id) candidateUserIds.add(String(user.user_metadata.colaborador_id));
+        if (user.user_metadata?.system_user_id) candidateUserIds.add(String(user.user_metadata.system_user_id));
 
-            userEmail = (user.email || user.user_metadata?.email || '').trim().toLowerCase();
-            userNome = (user.user_metadata?.nome || '').trim().toLowerCase();
+        userEmail = (user.email || user.user_metadata?.email || '').trim().toLowerCase();
+        userNome = (user.user_metadata?.nome || '').trim().toLowerCase();
 
-            let sysUserQuery = supabase.from('system_users').select('id, email, nome, dados');
-            if (userEmail) {
-              sysUserQuery = sysUserQuery.or(`id.eq."${user.id}",email.ilike."${userEmail}"`);
-            } else {
-              sysUserQuery = sysUserQuery.eq('id', user.id);
-            }
-            const { data: sysUsers } = await sysUserQuery.limit(5);
-            if (sysUsers && sysUsers.length > 0) {
-              sysUsers.forEach((su: any) => {
-                if (su.id) candidateUserIds.add(String(su.id));
-                if (su.dados?.auth_id) candidateUserIds.add(String(su.dados.auth_id));
-              });
-            }
+        let sysUserQuery = supabase.from('system_users').select('id, email, nome, dados');
+        if (userEmail) {
+          sysUserQuery = sysUserQuery.or(`id.eq."${user.id}",email.ilike."${userEmail}"`);
+        } else {
+          sysUserQuery = sysUserQuery.eq('id', user.id);
+        }
+        const { data: sysUsers } = await sysUserQuery.limit(5);
+        if (sysUsers && sysUsers.length > 0) {
+          sysUsers.forEach((su: any) => {
+            if (su.id) candidateUserIds.add(String(su.id));
+            if (su.dados?.auth_id) candidateUserIds.add(String(su.dados.auth_id));
+          });
+        }
+      }
+
+      const conditions: string[] = [];
+      // Momentos globais da escola e equipe escolar
+      conditions.push(`dados->targetClasses.cs.["Toda a escola"]`);
+      conditions.push(`dados->targetClasses.cs.["Toda a Escola"]`);
+      conditions.push(`dados->targetClasses.cs.["Todos"]`);
+      conditions.push(`dados->targetClasses.cs.["Todas"]`);
+      conditions.push(`dados->targetClasses.cs.["Equipe Escolar"]`);
+      conditions.push(`dados->targetClasses.cs.["Equipe"]`);
+      conditions.push(`dados->targetClasses.cs.["Institucional"]`);
+
+      candidateUserIds.forEach(cId => {
+        const clean = cId.replace(/^f_?/, '');
+        conditions.push(`dados->funcionariosIds.cs.["${cId}"]`);
+        conditions.push(`dados->funcionariosIds.cs.["${clean}"]`);
+        conditions.push(`dados->funcionariosIds.cs.["f_${clean}"]`);
+        conditions.push(`dados->colaboradoresIds.cs.["${cId}"]`);
+        conditions.push(`dados->colaboradoresIds.cs.["${clean}"]`);
+        conditions.push(`dados->colaboradoresIds.cs.["f_${clean}"]`);
+        conditions.push(`dados->>authorId.eq.${cId}`);
+        conditions.push(`dados->>authorId.eq.${clean}`);
+      });
+
+      // Buscar grupos da agenda e equipes para resolução em memória (robusta)
+      const [gruposRes, equipesRes] = await Promise.all([
+        supabase.from('agenda_grupos').select('id, dados'),
+        supabase.from('agenda_equipes').select('id, dados')
+      ]);
+
+      const allGroups = gruposRes.data || [];
+      const allEquipes = equipesRes.data || [];
+      const matchedGroupNames = new Set<string>();
+      const matchedGroupIds = new Set<string>();
+      const matchedSyncTurmaIds = new Set<string>();
+
+      allGroups.forEach((g: any) => {
+        const gDados = g.dados || {};
+        let colabs = gDados.colaboradoresIds || g.colaboradoresIds || [];
+        if (typeof colabs === 'string') {
+          try { colabs = JSON.parse(colabs); } catch { colabs = []; }
+        }
+        if (!Array.isArray(colabs)) colabs = [];
+
+        const isMember = colabs.some((cid: any) => {
+          const cleanC = String(typeof cid === 'object' ? (cid.id || cid.usuarioId || '') : cid).replace(/^f_?/, '').trim().toLowerCase();
+          const cNome = typeof cid === 'object' ? String(cid.nome || '').trim().toLowerCase() : '';
+          return Array.from(candidateUserIds).some(uid => {
+            const cleanUid = uid.replace(/^f_?/, '').trim().toLowerCase();
+            return cleanC === cleanUid || (userEmail && cleanC === userEmail);
+          }) || (userNome && cNome && cNome === userNome);
+        });
+
+        if (isMember) {
+          const gNome = gDados.nome || g.nome;
+          if (gNome) matchedGroupNames.add(gNome);
+          matchedGroupIds.add(String(g.id));
+
+          const syncId = String(gDados.syncId || g.syncId || g.id || '');
+          if (syncId.startsWith('sync-')) {
+            matchedSyncTurmaIds.add(syncId.replace('sync-', ''));
           }
+        }
+      });
 
-          const conditions: string[] = [];
-          // Momentos globais da escola e equipe escolar
-          conditions.push(`dados->targetClasses.cs.["Toda a escola"]`);
-          conditions.push(`dados->targetClasses.cs.["Toda a Escola"]`);
-          conditions.push(`dados->targetClasses.cs.["Todos"]`);
-          conditions.push(`dados->targetClasses.cs.["Todas"]`);
-          conditions.push(`dados->targetClasses.cs.["Equipe Escolar"]`);
-          conditions.push(`dados->targetClasses.cs.["Equipe"]`);
-          conditions.push(`dados->targetClasses.cs.["Institucional"]`);
+      allEquipes.forEach((e: any) => {
+        const eDados = e.dados || {};
+        let membros = eDados.membrosIds || eDados.colaboradoresIds || e.membrosIds || e.colaboradoresIds || [];
+        if (typeof membros === 'string') {
+          try { membros = JSON.parse(membros); } catch { membros = []; }
+        }
+        if (!Array.isArray(membros)) membros = [];
 
-          candidateUserIds.forEach(cId => {
-            const clean = cId.replace(/^f_?/, '');
-            conditions.push(`dados->funcionariosIds.cs.["${cId}"]`);
-            conditions.push(`dados->funcionariosIds.cs.["${clean}"]`);
-            conditions.push(`dados->funcionariosIds.cs.["f_${clean}"]`);
-            conditions.push(`dados->colaboradoresIds.cs.["${cId}"]`);
-            conditions.push(`dados->colaboradoresIds.cs.["${clean}"]`);
-            conditions.push(`dados->colaboradoresIds.cs.["f_${clean}"]`);
-            conditions.push(`dados->>authorId.eq.${cId}`);
-            conditions.push(`dados->>authorId.eq.${clean}`);
-          });
+        const isMember = membros.some((cid: any) => {
+          const cleanC = String(typeof cid === 'object' ? (cid.id || cid.usuarioId || '') : cid).replace(/^f_?/, '').trim().toLowerCase();
+          const cNome = typeof cid === 'object' ? String(cid.nome || '').trim().toLowerCase() : '';
+          return Array.from(candidateUserIds).some(uid => {
+            const cleanUid = uid.replace(/^f_?/, '').trim().toLowerCase();
+            return cleanC === cleanUid || (userEmail && cleanC === userEmail);
+          }) || (userNome && cNome && cNome === userNome);
+        });
 
-          // Buscar grupos da agenda e equipes para resolução em memória (robusta)
-          const [gruposRes, equipesRes] = await Promise.all([
-            supabase.from('agenda_grupos').select('id, dados'),
-            supabase.from('agenda_equipes').select('id, dados')
-          ]);
+        if (isMember) {
+          const eNome = eDados.nome || e.nome;
+          if (eNome) matchedGroupNames.add(eNome);
+          matchedGroupIds.add(String(e.id));
+        }
+      });
 
-          const allGroups = gruposRes.data || [];
-          const allEquipes = equipesRes.data || [];
-          let hasGlobalStaffAccess = false;
-          const matchedGroupNames = new Set<string>();
-          const matchedGroupIds = new Set<string>();
-          const matchedSyncTurmaIds = new Set<string>();
+      matchedGroupNames.forEach(nome => {
+        conditions.push(`dados->targetClasses.cs.["${nome}"]`);
+        conditions.push(`dados->grupos.cs.["${nome}"]`);
+        conditions.push(`dados->targetGrupos.cs.["${nome}"]`);
+      });
 
-          allGroups.forEach((g: any) => {
-            const gDados = g.dados || {};
-            let colabs = gDados.colaboradoresIds || g.colaboradoresIds || [];
-            if (typeof colabs === 'string') {
-              try { colabs = JSON.parse(colabs); } catch { colabs = []; }
-            }
-            if (!Array.isArray(colabs)) colabs = [];
+      matchedGroupIds.forEach(id => {
+        const cleanId = id.replace(/^[tg]_?/, '');
+        conditions.push(`dados->targetClassesIds.cs.["${id}"]`);
+        conditions.push(`dados->targetClassesIds.cs.["${cleanId}"]`);
+        conditions.push(`dados->targetClassesIds.cs.["g_${cleanId}"]`);
+        conditions.push(`dados->gruposIds.cs.["${id}"]`);
+        conditions.push(`dados->gruposIds.cs.["${cleanId}"]`);
+      });
 
-            const isMember = colabs.some((cid: any) => {
-              const cleanC = String(typeof cid === 'object' ? (cid.id || cid.usuarioId || '') : cid).replace(/^f_?/, '').trim().toLowerCase();
-              const cNome = typeof cid === 'object' ? String(cid.nome || '').trim().toLowerCase() : '';
-              return Array.from(candidateUserIds).some(uid => {
-                const cleanUid = uid.replace(/^f_?/, '').trim().toLowerCase();
-                return cleanC === cleanUid || (userEmail && cleanC === userEmail);
-              }) || (userNome && cNome && cNome === userNome);
-            });
-
-            const isGlobal = (gDados.isGlobalAccess === true || gDados.isGlobalAccess === 'true' || gDados.isGlobalAccess === 1) && (!gDados.ano && !gDados.anoLetivo);
-
-            if (isMember) {
-              if (isGlobal) hasGlobalStaffAccess = true;
-              const gNome = gDados.nome || g.nome;
-              if (gNome) matchedGroupNames.add(gNome);
-              matchedGroupIds.add(String(g.id));
-
-              const syncId = String(gDados.syncId || g.syncId || g.id || '');
-              if (syncId.startsWith('sync-')) {
-                matchedSyncTurmaIds.add(syncId.replace('sync-', ''));
-              }
+      if (matchedSyncTurmaIds.size > 0 || matchedGroupNames.size > 0) {
+        const { data: myTurmas } = await supabase.from('turmas').select('id, nome');
+        if (myTurmas) {
+          myTurmas.forEach(t => {
+            const tId = String(t.id);
+            const tNomeLower = String(t.nome).trim().toLowerCase();
+            if (matchedSyncTurmaIds.has(tId) || Array.from(matchedGroupNames).some(n => n.trim().toLowerCase() === tNomeLower)) {
+              conditions.push(`dados->targetClasses.cs.["${t.nome}"]`);
+              conditions.push(`dados->targetClassesIds.cs.["${t.id}"]`);
+              conditions.push(`dados->targetClassesIds.cs.["t_${t.id}"]`);
             }
           });
+        }
+      }
 
-          allEquipes.forEach((e: any) => {
-            const eDados = e.dados || {};
-            let membros = eDados.membrosIds || eDados.colaboradoresIds || e.membrosIds || e.colaboradoresIds || [];
-            if (typeof membros === 'string') {
-              try { membros = JSON.parse(membros); } catch { membros = []; }
-            }
-            if (!Array.isArray(membros)) membros = [];
-
-            const isMember = membros.some((cid: any) => {
-              const cleanC = String(typeof cid === 'object' ? (cid.id || cid.usuarioId || '') : cid).replace(/^f_?/, '').trim().toLowerCase();
-              const cNome = typeof cid === 'object' ? String(cid.nome || '').trim().toLowerCase() : '';
-              return Array.from(candidateUserIds).some(uid => {
-                const cleanUid = uid.replace(/^f_?/, '').trim().toLowerCase();
-                return cleanC === cleanUid || (userEmail && cleanC === userEmail);
-              }) || (userNome && cNome && cNome === userNome);
-            });
-
-            if (isMember) {
-              const eNome = eDados.nome || e.nome;
-              if (eNome) matchedGroupNames.add(eNome);
-              matchedGroupIds.add(String(e.id));
-            }
-          });
-
-          if (hasGlobalStaffAccess) {
-            conditions.push(`id.not.is.null`);
-          } else {
-            matchedGroupNames.forEach(nome => {
-              conditions.push(`dados->targetClasses.cs.["${nome}"]`);
-              conditions.push(`dados->grupos.cs.["${nome}"]`);
-              conditions.push(`dados->targetGrupos.cs.["${nome}"]`);
-            });
-
-            matchedGroupIds.forEach(id => {
-              const cleanId = id.replace(/^[tg]_?/, '');
-              conditions.push(`dados->targetClassesIds.cs.["${id}"]`);
-              conditions.push(`dados->targetClassesIds.cs.["${cleanId}"]`);
-              conditions.push(`dados->targetClassesIds.cs.["g_${cleanId}"]`);
-              conditions.push(`dados->gruposIds.cs.["${id}"]`);
-              conditions.push(`dados->gruposIds.cs.["${cleanId}"]`);
-            });
-
-            if (matchedSyncTurmaIds.size > 0 || matchedGroupNames.size > 0) {
-              const { data: myTurmas } = await supabase.from('turmas').select('id, nome');
-              if (myTurmas) {
-                myTurmas.forEach(t => {
-                  const tId = String(t.id);
-                  const tNomeLower = String(t.nome).trim().toLowerCase();
-                  if (matchedSyncTurmaIds.has(tId) || Array.from(matchedGroupNames).some(n => n.trim().toLowerCase() === tNomeLower)) {
-                    conditions.push(`dados->targetClasses.cs.["${t.nome}"]`);
-                    conditions.push(`dados->targetClassesIds.cs.["${t.id}"]`);
-                    conditions.push(`dados->targetClassesIds.cs.["t_${t.id}"]`);
-                  }
-                });
-              }
-            }
-          }
-
-          query = query.or(conditions.join(','));
-       }
+      query = query.or(conditions.join(','));
     }
 
     if (!alunoId && accessStartDate) {

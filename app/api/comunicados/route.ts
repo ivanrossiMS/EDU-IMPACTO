@@ -98,6 +98,10 @@ export async function GET(request: Request) {
   const cargoParam = searchParams.get('cargo');
   const statusParam = searchParams.get('status');
   const searchParam = searchParams.get('search');
+  const scopeParam = searchParams.get('scope') || searchParams.get('admin');
+  const temComentariosParam = searchParams.get('tem_comentarios') || searchParams.get('tem_conversas');
+  const tipoParam = searchParams.get('tipo');
+  const filtroRelatorioParam = searchParams.get('filtro_relatorio');
   
   // VERIFICAÇÃO DE PERFIL — usa user_metadata para evitar round-trip ao banco na maioria dos casos
   let isFamilyOrStudent = false;
@@ -133,8 +137,8 @@ export async function GET(request: Request) {
   }
 
   let isAdmin = false;
-  const perfisAdmin = ['Diretor Geral', 'Administrador', 'Admin'];
-  const cargosAdmin = ['Administrador Master', 'Diretor Geral'];
+  const perfisAdmin = ['Diretor Geral', 'Administrador', 'Admin', 'Coordenador', 'Gestor'];
+  const cargosAdmin = ['Administrador Master', 'Diretor Geral', 'Auxiliar Administrativo', 'Coordenador(a) Pedagógico(a)'];
   
   if (perfisAdmin.includes(perfil) || cargosAdmin.includes(cargo)) {
     isAdmin = true;
@@ -187,6 +191,50 @@ export async function GET(request: Request) {
     return NextResponse.json({ authors, roles }, {
       headers: {
         'Cache-Control': 'private, max-age=60, stale-while-revalidate=120'
+      }
+    });
+  }
+
+  if (typeParam === 'comentarios_ids') {
+    const { data: respRows, error: respErr } = await supabaseServer
+      .from('comunicados_respostas')
+      .select('comunicado_id');
+
+    if (respErr) {
+      return NextResponse.json({ error: respErr.message }, { status: 500 });
+    }
+
+    const allRespComIds = Array.from(new Set((respRows || []).map((r: any) => r.comunicado_id).filter(Boolean)));
+    const directIds = allRespComIds.filter(id => !id.startsWith('AD-COM-REL-STU-'));
+    const stuIds = allRespComIds.filter(id => id.startsWith('AD-COM-REL-STU-'));
+
+    const stuTimestamps = stuIds.map(id => {
+      const m = id.match(/AD-COM-REL-STU-(\d+)/);
+      return m ? parseInt(m[1], 10) : null;
+    }).filter((ts): ts is number => ts !== null);
+
+    let matchedColabs: string[] = [];
+    if (stuTimestamps.length > 0) {
+      const { data: colabs } = await supabaseServer
+        .from('comunicados')
+        .select('id')
+        .like('id', 'AD-COM-REL-COLAB-%');
+
+      (colabs || []).forEach((c: any) => {
+        const m = String(c.id).match(/AD-COM-REL-COLAB-(\d+)/);
+        if (m) {
+          const colabTs = parseInt(m[1], 10);
+          if (stuTimestamps.some(ts => Math.abs(ts - colabTs) < 180000)) {
+            matchedColabs.push(String(c.id));
+          }
+        }
+      });
+    }
+
+    const allCommentedIds = Array.from(new Set([...directIds, ...matchedColabs]));
+    return NextResponse.json({ ids: allCommentedIds }, {
+      headers: {
+        'Cache-Control': 'private, max-age=15, stale-while-revalidate=30'
       }
     });
   }
@@ -303,8 +351,13 @@ export async function GET(request: Request) {
       conditions.push(`dados->alunosIds.cs.["_ALU${alunoId}"]`);
     }
     query = query.or(conditions.join(','));
-  } else if (colaboradorId || (!isAdmin && !isFamilyOrStudent)) {
-    // Colaborador (ou Espelhar Colaborador): garante que comunicados direcionados diretamente a ele ou ao seu grupo/turma apareçam.
+  } else if ((scopeParam === 'admin' || scopeParam === 'true') && isAdmin) {
+    // Escopo Administrativo Geral (/agenda-digital/admin/comunicados):
+    // Administradores Master / Direção visualizam todos os comunicados da instituição para fins de gestão/auditoria.
+  } else if (!isFamilyOrStudent) {
+    // Feed do Colaborador (inclui Administrador Master acessando a agenda de colaborador):
+    // O Administrador Master não recebe tudo no feed; apenas o que foi MARCADO diretamente
+    // (colaboradoresIds, funcionariosIds), o que ele próprio criou (autorId), seus grupos/turmas, ou destino === 'todos'.
     const candidateUserIds = new Set<string>();
     let targetEmail = '';
 
@@ -381,7 +434,6 @@ export async function GET(request: Request) {
     const { allTurmas, allGrupos } = await getCachedTurmasAndGrupos();
     const matchedGroupNames = new Set<string>();
     const matchedTurmaSyncIds = new Set<string>();
-    let hasGlobalStaffAccess = false;
 
     if (allGrupos && allGrupos.length > 0) {
       allGrupos.forEach((g: any) => {
@@ -400,11 +452,7 @@ export async function GET(request: Request) {
           });
         });
 
-        const isGlobal = (gDados.isGlobalAccess === true || gDados.isGlobalAccess === 'true' || gDados.isGlobalAccess === 1) && (!gDados.ano && !gDados.anoLetivo);
         if (isMember) {
-          if (isGlobal) {
-            hasGlobalStaffAccess = true;
-          }
           const gNome = gDados.nome || g.nome;
           if (gNome) matchedGroupNames.add(gNome);
           
@@ -416,23 +464,19 @@ export async function GET(request: Request) {
       });
     }
 
-    if (hasGlobalStaffAccess) {
-      colaboradorConditions.push(`id.not.is.null`);
-    } else {
-      matchedGroupNames.forEach(gNome => {
-        colaboradorConditions.push(`dados->grupos.cs.["${gNome}"]`);
-      });
+    matchedGroupNames.forEach(gNome => {
+      colaboradorConditions.push(`dados->grupos.cs.["${gNome}"]`);
+    });
 
-      if (matchedTurmaSyncIds.size > 0 || matchedGroupNames.size > 0) {
-        if (allTurmas && allTurmas.length > 0) {
-          allTurmas.forEach((t: any) => {
-            const tId = String(t.id);
-            const tNomeLower = String(t.nome || '').trim().toLowerCase();
-            if (matchedTurmaSyncIds.has(tId) || Array.from(matchedGroupNames).some(gn => gn.trim().toLowerCase() === tNomeLower)) {
-              colaboradorConditions.push(`dados->turmas.cs.["${t.nome}"]`);
-            }
-          });
-        }
+    if (matchedTurmaSyncIds.size > 0 || matchedGroupNames.size > 0) {
+      if (allTurmas && allTurmas.length > 0) {
+        allTurmas.forEach((t: any) => {
+          const tId = String(t.id);
+          const tNomeLower = String(t.nome || '').trim().toLowerCase();
+          if (matchedTurmaSyncIds.has(tId) || Array.from(matchedGroupNames).some(gn => gn.trim().toLowerCase() === tNomeLower)) {
+            colaboradorConditions.push(`dados->turmas.cs.["${t.nome}"]`);
+          }
+        });
       }
     }
 
@@ -503,6 +547,71 @@ export async function GET(request: Request) {
   if (searchParam && searchParam.trim()) {
     const s = searchParam.trim().replace(/[%_"]/g, ' ');
     query = query.or(`titulo.ilike.%${s}%,texto.ilike.%${s}%,dados->>conteudo.ilike.%${s}%`);
+  }
+
+  const dateParam = searchParams.get('date') || searchParams.get('data_dia');
+  if (dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam.trim())) {
+    const dStr = dateParam.trim();
+    const startRange = `${dStr}T00:00:00.000Z`;
+    const nextDay = new Date(`${dStr}T12:00:00Z`);
+    nextDay.setDate(nextDay.getDate() + 1);
+    const yNext = nextDay.getFullYear();
+    const mNext = String(nextDay.getMonth() + 1).padStart(2, '0');
+    const dNext = String(nextDay.getDate()).padStart(2, '0');
+    const endRange = `${yNext}-${mNext}-${dNext}T04:59:59.999Z`;
+    query = query.gte('data', startRange).lte('data', endRange);
+  }
+
+  // No escopo administrativo (/agenda-digital/admin/comunicados), ocultar cópias individuais de alunos (STU) do Feed
+  // para que a paginação não seja consumida por cópias de alunos, preservando as cópias de resumo (COLAB / TURMA)
+  if (scopeParam === 'admin' || scopeParam === 'true') {
+    query = query.not('id', 'like', 'AD-COM-REL-STU-%');
+  }
+
+  // Filtro por relatórios: se tipo=relatorio ou filtro_relatorio=true
+  if (tipoParam === 'relatorio' || filtroRelatorioParam === 'true') {
+    query = query.or('id.like.AD-COM-REL-%,dados->>tipo.eq.relatorio,titulo.ilike.%relat%');
+  }
+
+  // Filtro por comentários/conversas
+  if (temComentariosParam === 'true') {
+    const { data: respRows } = await supabaseServer
+      .from('comunicados_respostas')
+      .select('comunicado_id');
+
+    const allRespComIds = Array.from(new Set((respRows || []).map((r: any) => r.comunicado_id).filter(Boolean)));
+    const directIds = allRespComIds.filter(id => !id.startsWith('AD-COM-REL-STU-'));
+    const stuIds = allRespComIds.filter(id => id.startsWith('AD-COM-REL-STU-'));
+
+    const stuTimestamps = stuIds.map(id => {
+      const m = id.match(/AD-COM-REL-STU-(\d+)/);
+      return m ? parseInt(m[1], 10) : null;
+    }).filter((ts): ts is number => ts !== null);
+
+    let matchedColabs: string[] = [];
+    if (stuTimestamps.length > 0) {
+      const { data: colabs } = await supabaseServer
+        .from('comunicados')
+        .select('id')
+        .like('id', 'AD-COM-REL-COLAB-%');
+
+      (colabs || []).forEach((c: any) => {
+        const m = String(c.id).match(/AD-COM-REL-COLAB-(\d+)/);
+        if (m) {
+          const colabTs = parseInt(m[1], 10);
+          if (stuTimestamps.some(ts => Math.abs(ts - colabTs) < 180000)) {
+            matchedColabs.push(String(c.id));
+          }
+        }
+      });
+    }
+
+    const allCommentedIds = Array.from(new Set([...directIds, ...matchedColabs]));
+    if (allCommentedIds.length > 0) {
+      query = query.in('id', allCommentedIds);
+    } else {
+      query = query.eq('id', '__nenhum_comunicado_com_comentario__');
+    }
   }
   
   query = query.order('data', { ascending: false }).order('id', { ascending: false });
@@ -836,7 +945,7 @@ export async function GET(request: Request) {
           (rowAutorNome && userStaffName && (rowAutorNome === userStaffName || userStaffName.includes(rowAutorNome) || rowAutorNome.includes(userStaffName)))
         );
 
-        const canManageConversas = Boolean(isAdmin || isAuthorOfRow);
+        const canManageConversas = Boolean(isAdmin || isAuthorOfRow || scopeParam === 'admin' || scopeParam === 'true');
 
         if (canManageConversas) {
           totalConversas = comRespostas.length;
@@ -948,7 +1057,7 @@ export async function GET(request: Request) {
           (rowAutorNome && userStaffName && (rowAutorNome === userStaffName || userStaffName.includes(rowAutorNome) || rowAutorNome.includes(userStaffName)))
         );
 
-        if (isAdmin || isAuthorOfRow) {
+        if (isAdmin || isAuthorOfRow || scopeParam === 'admin' || scopeParam === 'true') {
           merged.respostas = formattedRespostas;
         } else {
           // Colaborador que NÃO enviou o comunicado: só recebe sua própria conversa se tiver comentado
