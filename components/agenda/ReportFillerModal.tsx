@@ -8,6 +8,7 @@ import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 import { useData } from '@/lib/dataContext';
 import { isAlunoCursandoTurma } from '@/lib/studentTurmaUtils';
 import { getCachedStudentPhoto, fetchStudentPhotos } from '@/lib/studentPhotoCache';
+import { apiFetch } from '@/lib/api/apiClient';
 
 interface ReportFillerModalProps {
   isOpen: boolean
@@ -553,21 +554,42 @@ export function ReportFillerModal({ isOpen, anexoStr, onClose, onBack, currentUs
 
 
     try {
-      setComunicadosLocally?.((prev: any) => [...newComunicados, ...prev]);
+      // Separa o relatório consolidado da turma e os relatórios individuais de alunos
+      const colabCom = newComunicados.find(c => c.id?.startsWith('AD-COM-REL-COLAB-'))
+      const stuComs = newComunicados.filter(c => c.id?.startsWith('AD-COM-REL-STU-'))
 
-      await fetch('/api/comunicados', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newComunicados)
-      })
+      // Monta lotes seguros para envio (evitando payload excessivo em conexões móveis)
+      const batches: any[][] = []
+      if (colabCom) batches.push([colabCom])
+      
+      const BATCH_SIZE = 6
+      for (let i = 0; i < stuComs.length; i += BATCH_SIZE) {
+        batches.push(stuComs.slice(i, i + BATCH_SIZE))
+      }
+
+      for (const batch of batches) {
+        const res = await apiFetch('/api/comunicados', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(batch)
+        })
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}))
+          throw new Error(errData.error || `Erro HTTP ${res.status}`)
+        }
+      }
+
+      // Confirmação garantida: apenas atualiza o estado local e fecha quando o servidor confirmou o salvamento
+      setComunicadosLocally?.((prev: any) => [...newComunicados, ...prev])
       window.dispatchEvent(new CustomEvent('agenda-digital:unread-updated'))
-    } catch (e) {
+      adAlert('Relatórios enviados com sucesso para todos os alunos!', 'Sucesso')
+      onClose()
+    } catch (e: any) {
       console.error('Falha ao criar comunicados:', e)
+      adAlert(`Erro ao enviar relatórios: ${e.message || 'Falha de conexão com o servidor'}. Verifique sua internet e tente novamente.`, 'Atenção')
+    } finally {
+      setIsSubmitting(false)
     }
-
-    adAlert('Relatórios enviados com sucesso para todos os alunos!', 'Sucesso')
-    setIsSubmitting(false)
-    onClose()
   }
 
   // Render input based on field type

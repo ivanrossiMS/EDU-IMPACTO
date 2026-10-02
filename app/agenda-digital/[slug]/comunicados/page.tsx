@@ -487,21 +487,33 @@ export default function ADComunicadosPage({ params }: { params: any }) {
     setIsFetchingMore(true);
     try {
       const targetCount = visibleCount + 10;
-      let currentPages = comunicadosData?.pages || [];
-      let currentHasNext = Boolean(hasNextPage);
-      let currentFiltered = filterAndSortComunicados(currentPages.flat());
+      
+      // 1. Se já temos itens suficientes filtrados em memória, expande sem requisição extra
+      if (filteredComunicados.length >= targetCount) {
+        setVisibleCount(targetCount);
+        return;
+      }
 
-      // Busca na API em lotes de 10 em 10 até que tenhamos itens filtrados suficientes para exibir os próximos 10
-      while (currentFiltered.length < targetCount && currentHasNext && fetchNextPage) {
-        const res = await fetchNextPage();
-        if (!res || !res.data) break;
-        currentPages = res.data.pages || [];
-        currentHasNext = Boolean(res.hasNextPage);
-        const nextFiltered = filterAndSortComunicados(currentPages.flat());
-        if (nextFiltered.length <= currentFiltered.length && !currentHasNext) {
-          break;
+      // 2. Se precisamos de mais dados da API e há mais páginas:
+      if (hasNextPage && fetchNextPage) {
+        let currentPages = comunicadosData?.pages || [];
+        let attempts = 0;
+        const maxAttempts = 3;
+
+        while (attempts < maxAttempts && Boolean(hasNextPage)) {
+          attempts++;
+          const prevPagesCount = currentPages.length;
+          const res: any = await fetchNextPage();
+          if (!res || !res.data) break;
+
+          currentPages = res.data.pages || [];
+          if (currentPages.length <= prevPagesCount) break;
+
+          const nextFiltered = filterAndSortComunicados(currentPages.flat());
+          if (nextFiltered.length >= targetCount || !res.hasNextPage) {
+            break;
+          }
         }
-        currentFiltered = nextFiltered;
       }
 
       setVisibleCount(targetCount);
@@ -510,7 +522,7 @@ export default function ADComunicadosPage({ params }: { params: any }) {
     } finally {
       setIsFetchingMore(false);
     }
-  }, [isFetchingMore, isFetchingNextPage, visibleCount, comunicadosData?.pages, hasNextPage, fetchNextPage, filterAndSortComunicados]);
+  }, [isFetchingMore, isFetchingNextPage, visibleCount, filteredComunicados.length, comunicadosData?.pages, hasNextPage, fetchNextPage, filterAndSortComunicados]);
   
   const [openedFormStr, setOpenedFormStr] = useState<string | null>(null)
   const [openedReportPayloadStr, setOpenedReportPayloadStr] = useState<string | null>(null)

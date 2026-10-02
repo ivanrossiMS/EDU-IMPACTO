@@ -4,8 +4,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useSupabaseArray } from '@/lib/useSupabaseCollection';
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import Image from 'next/image'
 import { useAgendaDigital, ADComunicado } from '@/lib/agendaDigitalContext'
+import { useQueryComunicados } from '@/lib/hooks/useAgendaQueries'
 import { useData } from '@/lib/dataContext'
 import { useFormularios } from '@/lib/formulariosContext'
 import { useRelatorios } from '@/lib/relatoriosContext'
@@ -72,7 +72,7 @@ const MediaLabel = ({ name, url, initialSize }: { name: string, url: string, ini
 export default function ADAdminComunicados() {
   const queryClient = useQueryClient()
   const { currentUser } = useApp()
-  const { comunicados, setComunicados, setComunicadosLocally, adAlert, adConfirm, isDataLoading, fetchNextPageComunicados, hasNextPageComunicados, isFetchingNextPageComunicados, chatGroups } = useAgendaDigital()
+  const { setComunicados, setComunicadosLocally, adAlert, adConfirm, isDataLoading: isGlobalDataLoading, chatGroups } = useAgendaDigital()
   const { turmas = [] } = useData();
   const [alunos] = useSupabaseArray<any>('alunos/lightweight?limit=2000');
   const { forms, setDisparos } = useFormularios()
@@ -216,6 +216,12 @@ export default function ADAdminComunicados() {
 
   const [tab, setTab] = useState<'enviados' | 'agendados' | 'rascunhos'>('enviados')
   const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search), 300)
+    return () => clearTimeout(timer)
+  }, [search])
+
   const [selectedCom, setSelectedCom] = useState<ADComunicado | null>(null)
   const [editComId, setEditComId] = useState<string | null>(null)
   const [forwardComData, setForwardComData] = useState<any>(null)
@@ -244,35 +250,61 @@ export default function ADAdminComunicados() {
   const [reportAuthorFilter, setReportAuthorFilter] = useState<string>('todos');
   const [showMonthlyReport, setShowMonthlyReport] = useState(false);
   const [showEngagementDashboard, setShowEngagementDashboard] = useState(false);
-  const [colaboradores, setColaboradores] = useState<{nome: string}[]>([]);
+  const [colaboradores, setColaboradores] = useState<{id?: string, nome: string, cargo?: string, perfil?: string}[]>([]);
+  const [dbAuthors, setDbAuthors] = useState<string[]>([]);
+  const [dbRoles, setDbRoles] = useState<string[]>([]);
 
-  const [visibleCount, setVisibleCount] = useState(10);
   const [selectedComs, setSelectedComs] = useState<string[]>([]);
   const [isFetchingMore, setIsFetchingMore] = useState(false);
 
   useEffect(() => {
-    setVisibleCount(10);
-  }, [tab, search, authorFilter, attachmentFilter]);
+    setSelectedComs([]);
+  }, [tab, debouncedSearch, authorFilter, attachmentFilter]);
 
   useEffect(() => {
-    const fetchColaboradores = async () => {
+    const fetchColaboradoresAndAuthors = async () => {
       try {
-        const res = await fetch('/api/configuracoes/usuarios?type=colaboradores&limit=1000');
-        if (res.ok) {
-          const json = await res.json();
+        const [usersRes, authorsRes] = await Promise.allSettled([
+          fetch('/api/configuracoes/usuarios?type=colaboradores&limit=1000'),
+          fetch('/api/comunicados?type=autores')
+        ]);
+
+        let colabsList: any[] = [];
+        let extraAuthors: string[] = [];
+        let extraRoles: string[] = [];
+
+        if (usersRes.status === 'fulfilled' && usersRes.value.ok) {
+          const json = await usersRes.value.json();
           if (json && Array.isArray(json.data)) {
-            const validUsers = json.data.filter((u: any) => u && u.nome);
-            const uniqueUsers = Array.from(new Map(validUsers.map((u: any) => [u.nome, u])).values()) as any[];
-            // Ordenar alfabeticamente
-            uniqueUsers.sort((a: any, b: any) => a.nome.localeCompare(b.nome));
-            setColaboradores(uniqueUsers);
+            colabsList = json.data.filter((u: any) => u && u.nome);
           }
         }
+
+        if (authorsRes.status === 'fulfilled' && authorsRes.value.ok) {
+          const json = await authorsRes.value.json();
+          if (json && Array.isArray(json.authors)) {
+            extraAuthors = json.authors;
+          }
+          if (json && Array.isArray(json.roles)) {
+            extraRoles = json.roles;
+          }
+        }
+
+        const uniqueUsers = Array.from(new Map(colabsList.map((u: any) => [u.nome.trim().toLowerCase(), u])).values()) as any[];
+        uniqueUsers.sort((a: any, b: any) => a.nome.localeCompare(b.nome, 'pt-BR', { sensitivity: 'base' }));
+        setColaboradores(uniqueUsers);
+
+        if (extraAuthors.length > 0) {
+          setDbAuthors(extraAuthors);
+        }
+        if (extraRoles.length > 0) {
+          setDbRoles(extraRoles);
+        }
       } catch (e) {
-        console.error('Error fetching colaboradores:', e);
+        console.error('Error fetching colaboradores and authors:', e);
       }
     };
-    fetchColaboradores();
+    fetchColaboradoresAndAuthors();
   }, []);
 
   useEffect(() => {
@@ -284,9 +316,84 @@ export default function ADAdminComunicados() {
     return () => { document.body.style.overflow = 'unset'; }
   }, [viewingCom, viewingDestCom, viewingReportPayload, selectedCom]);
 
-  // Extração Dinâmica de Autores e Cargos
-  const availableRoles = Array.from(new Set(comunicados.map(c => c.autorCargo || (c as any).dados?.autorCargo).filter(Boolean))) as string[];
-  const availableAuthors = Array.from(new Set(comunicados.map(c => c.autor || (c as any).dados?.autor).filter(Boolean))) as string[];
+  const endpoint = useMemo(() => {
+    const params = new URLSearchParams();
+    if (tab) {
+      const statusValue = tab === 'enviados' ? 'enviado' : tab === 'agendados' ? 'agendado' : 'rascunho';
+      params.set('status', statusValue);
+    }
+    if (authorFilter && authorFilter !== 'todos') {
+      if (authorFilter === 'meus') {
+        if (currentUser?.id) params.set('autor_id', currentUser.id);
+        if (currentUser?.nome) params.set('autor', currentUser.nome);
+      } else if (authorFilter.startsWith('cargo:')) {
+        params.set('cargo', authorFilter.replace('cargo:', ''));
+      } else if (authorFilter.startsWith('autor:')) {
+        const aName = authorFilter.replace('autor:', '');
+        params.set('autor', aName);
+        const colab = colaboradores.find(c => c.nome?.trim().toLowerCase() === aName.trim().toLowerCase());
+        if (colab?.id) {
+          params.set('autor_id', colab.id);
+        }
+      }
+    }
+    if (debouncedSearch.trim()) {
+      params.set('search', debouncedSearch.trim());
+    }
+    const q = params.toString();
+    return q ? `/api/comunicados?${q}` : '/api/comunicados';
+  }, [tab, authorFilter, debouncedSearch, currentUser, colaboradores]);
+
+  const {
+    data: localQueryData,
+    isLoading: isLocalLoading,
+    isFetching: isLocalFetching,
+    refetch: refetchLocal,
+    hasNextPage: hasNextPageComunicados,
+    fetchNextPage: fetchNextPageComunicados,
+    isFetchingNextPage: isFetchingNextPageComunicados
+  } = useQueryComunicados(endpoint, 10, { enabled: true });
+
+  const comunicados = useMemo(() => localQueryData?.pages?.flat() || [], [localQueryData?.pages]);
+  const isDataLoading = isLocalLoading || isLocalFetching;
+
+  // Extração Dinâmica de Autores e Cargos unificando Colaboradores + Autores do Banco + Comunicados locais
+  const availableAuthors = useMemo(() => {
+    const map = new Map<string, string>();
+    colaboradores.forEach(c => {
+      if (c?.nome?.trim()) {
+        map.set(c.nome.trim().toLowerCase(), c.nome.trim());
+      }
+    });
+    dbAuthors.forEach(a => {
+      if (a?.trim() && !map.has(a.trim().toLowerCase())) {
+        map.set(a.trim().toLowerCase(), a.trim());
+      }
+    });
+    comunicados.forEach(c => {
+      const a = (c.autor || (c as any).dados?.autor || '').trim();
+      if (a && !map.has(a.toLowerCase())) {
+        map.set(a.toLowerCase(), a);
+      }
+    });
+    return Array.from(map.values()).sort((a, b) => a.localeCompare(b, 'pt-BR', { sensitivity: 'base' }));
+  }, [colaboradores, dbAuthors, comunicados]);
+
+  const availableRoles = useMemo(() => {
+    const roles = new Set<string>();
+    colaboradores.forEach(c => {
+      const cargo = (c.cargo || c.perfil || '').trim();
+      if (cargo && cargo !== 'Não definido') roles.add(cargo);
+    });
+    dbRoles.forEach(r => {
+      if (r?.trim()) roles.add(r.trim());
+    });
+    comunicados.forEach(c => {
+      const r = (c.autorCargo || (c as any).dados?.autorCargo || '').trim();
+      if (r) roles.add(r);
+    });
+    return Array.from(roles).sort((a, b) => a.localeCompare(b, 'pt-BR', { sensitivity: 'base' }));
+  }, [colaboradores, dbRoles, comunicados]);
 
   
   
@@ -475,6 +582,7 @@ export default function ADAdminComunicados() {
           }
           setSelectedComs([]);
           queryClient.invalidateQueries({ queryKey: ['agenda', 'comunicados'] });
+          refetchLocal();
           window.dispatchEvent(new CustomEvent('ad:comunicados-delete', { detail: { ids: selectedComs, old: selectedComs.map(id => ({ id })) } }));
           adAlert('Comunicados excluídos com sucesso.', 'Sucesso');
         } else {
@@ -487,75 +595,31 @@ export default function ADAdminComunicados() {
     });
   }
 
-  const filterComunicados = useCallback((list: any[]) => {
-    return (list || []).filter((c: any) => {
-      if (tab === 'enviados' && c.status !== 'enviado') return false
-      if (tab === 'agendados' && c.status !== 'agendado') return false
-      if (tab === 'rascunhos' && c.status !== 'rascunho') return false
-      
-      if (authorFilter !== 'todos') {
-        const cAutor = c.autor || (c as any).dados?.autor;
-        const cCargo = c.autorCargo || (c as any).dados?.autorCargo;
-        if (authorFilter === 'meus') {
-          if (c.autorId !== currentUser?.id && cAutor !== currentUser?.nome) return false;
-        } else if (authorFilter.startsWith('cargo:')) {
-          const roleTarget = authorFilter.split(':')[1];
-          if (cCargo !== roleTarget) return false;
-        } else if (authorFilter.startsWith('autor:')) {
-          const autorTarget = authorFilter.split(':')[1];
-          if (cAutor !== autorTarget) return false;
-        }
-      }
-
-      if (search) {
-        const searchLower = search.toLowerCase()
-        const titleMatch = (c.titulo || '').toLowerCase().includes(searchLower)
-        const contentMatch = (c.conteudo || (c as any).texto || '').toLowerCase().includes(searchLower)
-        return titleMatch || contentMatch
-      }
-      
+  const filtered = useMemo(() => {
+    return comunicados.filter((c: any) => {
       // Ocultar envios individuais de relatórios do Feed (Mostrando apenas a Cópia-Resumo da Turma)
-      if (c.id?.startsWith('AD-COM-REL-STU-')) return false
-      
-      return true
+      if (c.id?.startsWith('AD-COM-REL-STU-')) return false;
+      return true;
     }).sort((a: any, b: any) => {
       const timeA = new Date(a.dataEnvio || (a as any).data || (a as any).created_at || 0).getTime();
       const timeB = new Date(b.dataEnvio || (b as any).data || (b as any).created_at || 0).getTime();
       return timeB - timeA;
     });
-  }, [tab, authorFilter, search, currentUser]);
-
-  const filtered = useMemo(() => {
-    return filterComunicados(comunicados);
-  }, [filterComunicados, comunicados]);
+  }, [comunicados]);
 
   const handleLoadMore = useCallback(async () => {
     if (isFetchingMore || isFetchingNextPageComunicados) return;
     setIsFetchingMore(true);
     try {
-      const targetCount = visibleCount + 10;
-      let currentFiltered = filterComunicados(comunicados);
-      let currentHasNext = Boolean(hasNextPageComunicados);
-
-      // Busca na API em lotes de 10 em 10 até que tenhamos itens filtrados suficientes para exibir os próximos 10
-      while (currentFiltered.length < targetCount && currentHasNext && fetchNextPageComunicados) {
-        const res: any = await fetchNextPageComunicados();
-        if (!res || !res.data) break;
-        currentHasNext = Boolean(res.hasNextPage);
-        const allItems = res.data.pages ? res.data.pages.flat() : [];
-        const nextFiltered = filterComunicados(allItems);
-        if (nextFiltered.length <= currentFiltered.length && !currentHasNext) {
-          break;
-        }
-        currentFiltered = nextFiltered;
+      if (hasNextPageComunicados && fetchNextPageComunicados) {
+        await fetchNextPageComunicados();
       }
-      setVisibleCount(targetCount);
     } catch (err) {
       console.error('Erro ao carregar mais comunicados:', err);
     } finally {
       setIsFetchingMore(false);
     }
-  }, [isFetchingMore, isFetchingNextPageComunicados, visibleCount, comunicados, hasNextPageComunicados, fetchNextPageComunicados, filterComunicados]);
+  }, [isFetchingMore, isFetchingNextPageComunicados, hasNextPageComunicados, fetchNextPageComunicados]);
 
   return (
     <div className="ad-admin-page-container ad-mobile-optimized" style={{ display: 'flex', flexDirection: 'column', height: '100%', position: 'relative' }}>
@@ -709,14 +773,14 @@ export default function ADAdminComunicados() {
                 className="form-input" 
                 value={authorFilter}
                 onChange={e => setAuthorFilter(e.target.value)}
-                style={{ paddingLeft: 36, width: 200, appearance: 'none', cursor: 'pointer', fontWeight: 600, color: 'hsl(var(--text-main))' }}
+                style={{ paddingLeft: 36, width: 220, appearance: 'none', cursor: 'pointer', fontWeight: 600, color: 'hsl(var(--text-main))' }}
               >
                 <option value="todos">Todos os Autores</option>
                 <option value="meus">Meus Comunicados</option>
                 {availableRoles.length > 0 && <optgroup label="Filtrar por Cargo">
                   {availableRoles.map(role => <option key={`role-${role}`} value={`cargo:${role}`}>{role}</option>)}
                 </optgroup>}
-                {availableAuthors.length > 0 && <optgroup label="Filtrar por Usuário">
+                {availableAuthors.length > 0 && <optgroup label="Filtrar por Colaborador">
                   {availableAuthors.map(autor => <option key={`aut-${autor}`} value={`autor:${autor}`}>{autor}</option>)}
                 </optgroup>}
               </select>
@@ -772,16 +836,16 @@ export default function ADAdminComunicados() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <input 
             type="checkbox"
-            checked={filtered.length > 0 && selectedComs.length === Math.min(filtered.length, visibleCount)}
+            checked={filtered.length > 0 && selectedComs.length === filtered.length}
             onChange={(e) => {
               if (e.target.checked) {
-                setSelectedComs(filtered.slice(0, visibleCount).map(c => c.id));
+                setSelectedComs(filtered.map(c => c.id));
               } else {
                 setSelectedComs([]);
               }
             }}
             style={{ width: 18, height: 18, cursor: 'pointer', accentColor: '#4f46e5' }}
-            title="Selecionar todos os visíveis"
+            title="Selecionar todos os comunicados carregados"
           />
           <span style={{ fontSize: 13, fontWeight: 600, color: '#64748b' }}>
             {selectedComs.length > 0 ? `${selectedComs.length} selecionados` : 'Selecionar comunicados'}
@@ -811,7 +875,7 @@ export default function ADAdminComunicados() {
               <p style={{ color: 'hsl(var(--text-muted))', fontSize: 16, fontWeight: 500 }}>Nenhum comunicado encontrado nesta aba.</p>
             </div>
           )}
-          {filtered.slice(0, visibleCount).map(c => {
+          {filtered.map(c => {
              const isGlobal = c.destino === 'todos';
              let targetCount = 0;
              if (isGlobal) {
@@ -994,7 +1058,7 @@ export default function ADAdminComunicados() {
              )
           })}
 
-          {(filtered.length > visibleCount || hasNextPageComunicados) && (
+          {hasNextPageComunicados && (
             <div style={{ display: 'flex', justifyContent: 'center', marginTop: 16, marginBottom: 32 }}>
               <button 
                 onClick={handleLoadMore}
@@ -1031,7 +1095,7 @@ export default function ADAdminComunicados() {
               </button>
             </div>
           )}
-          {!(filtered.length > visibleCount || hasNextPageComunicados) && filtered.length >= 10 && (
+          {!hasNextPageComunicados && filtered.length > 0 && !isDataLoading && (
             <div style={{
               display: 'flex',
               alignItems: 'center',
@@ -1369,7 +1433,8 @@ export default function ADAdminComunicados() {
 
                         if (isImg && url) return (
                           <div key={i} style={{ borderRadius: 16, overflow: 'hidden', border: '1px solid #e2e8f0', background: '#f8fafc' }}>
-                            <Image src={url} alt={name} width={800} height={600} style={{ width: '100%', height: 'auto', display: 'block', maxHeight: 600, objectFit: 'contain' }} />
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={url} alt={name} style={{ width: '100%', height: 'auto', display: 'block', maxHeight: 600, objectFit: 'contain' }} />
                             <div style={{ padding: '8px 16px', fontSize: 12, color: '#64748b', borderTop: '1px solid #e2e8f0' }}>
                               <MediaLabel name={name} url={url} initialSize={size} />
                             </div>

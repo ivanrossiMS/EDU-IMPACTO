@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useRef, useMemo } from 'react'
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Paperclip, FileText, CheckCircle2, ShieldAlert, Calendar, Mic, Send, Share, Bookmark, MoreHorizontal, Edit2, Trash2, Loader2, CreditCard, Info, ExternalLink, Vote, Smile } from 'lucide-react'
 import Image from 'next/image'
@@ -125,6 +125,7 @@ interface ComunicadoViewModalProps {
   currentUserName: string
   currentUserAvatar?: string
   isAdminMode?: boolean
+  isStaff?: boolean
   setOpenedFormStr?: (anexo: string) => void
   setMaximizedImageStr?: (url: string) => void
   setMaximizedVideoStr?: (url: string) => void
@@ -148,6 +149,7 @@ export function ComunicadoViewModal({
   currentUserName,
   currentUserAvatar,
   isAdminMode = false,
+  isStaff = false,
   setOpenedFormStr,
   setMaximizedImageStr,
   setMaximizedVideoStr,
@@ -243,10 +245,21 @@ export function ComunicadoViewModal({
     }
   }, [comunicado?.anexos]);
 
+  const filterAuthorizedMessages = useCallback((rawMsgs: any[]) => {
+    if (!Array.isArray(rawMsgs)) return [];
+    if (isAdminMode) return rawMsgs;
+    const cleanSlug = String(currentUserSlug || '').trim().toLowerCase().replace(/^f_?/, '');
+    return rawMsgs.filter((m: any) => {
+      const rId = String(m.remetente_id || '').trim().toLowerCase().replace(/^f_?/, '');
+      const dId = String(m.destinatario_id || '').trim().toLowerCase().replace(/^f_?/, '');
+      return rId === cleanSlug || dId === cleanSlug;
+    });
+  }, [isAdminMode, currentUserSlug]);
+
   useEffect(() => {
     if ((!comunicado.conteudo && !comunicado.texto) && comunicado.id) {
       setIsLoadingFull(true)
-      const fetchUrl = isAdminMode
+      const fetchUrl = (isAdminMode || isStaff)
         ? `/api/comunicados?id=${comunicado.id}`
         : `/api/comunicados?id=${comunicado.id}${currentUserSlug && currentUserSlug !== 'admin' ? `&aluno_id=${currentUserSlug}` : ''}`
       
@@ -256,32 +269,36 @@ export function ComunicadoViewModal({
           if (data && data.length > 0) {
             setComunicado(data[0])
             if (Array.isArray(data[0].respostas) && data[0].respostas.length > 0) {
-              setMessages(data[0].respostas);
+              const authorized = filterAuthorizedMessages(data[0].respostas);
+              setMessages(authorized);
               setLoadingMsg(false);
-              setGlobalCachedMessages(data[0].id, data[0].respostas);
+              if (isAdminMode) {
+                setGlobalCachedMessages(data[0].id, data[0].respostas);
+              }
             }
           }
         })
         .finally(() => setIsLoadingFull(false))
     }
-  }, [comunicado.id])
+  }, [comunicado.id, isAdminMode, isStaff, currentUserSlug, filterAuthorizedMessages])
 
   const isGroupedReport = comunicado.id?.startsWith('AD-COM-REL-COLAB');
   const canReply = comunicado.permiteResposta || (isAdminMode && isGroupedReport) || comunicado.isSaudacao || comunicado.dados?.isSaudacao || comunicado.titulo === 'Mensagem de Boas-vindas' || comunicado.titulo === 'Mensagem de Saudação'
 
   const initialMessages = useMemo(() => {
+    let raw: any[] = [];
     if (Array.isArray(initialComunicado?.respostas) && initialComunicado.respostas.length > 0) {
-      return initialComunicado.respostas;
+      raw = initialComunicado.respostas;
+    } else if (Array.isArray(initialComunicado?.dados?.respostas) && initialComunicado.dados.respostas.length > 0) {
+      raw = initialComunicado.dados.respostas;
+    } else {
+      const cached = getGlobalCachedMessages(initialComunicado?.id);
+      if (Array.isArray(cached) && cached.length > 0) {
+        raw = cached;
+      }
     }
-    if (Array.isArray(initialComunicado?.dados?.respostas) && initialComunicado.dados.respostas.length > 0) {
-      return initialComunicado.dados.respostas;
-    }
-    const cached = getGlobalCachedMessages(initialComunicado?.id);
-    if (Array.isArray(cached) && cached.length > 0) {
-      return cached;
-    }
-    return [];
-  }, [initialComunicado]);
+    return filterAuthorizedMessages(raw);
+  }, [initialComunicado, filterAuthorizedMessages]);
 
   const hasKnownNoConversas = Boolean(
     initialComunicado?.conversas_info && 
@@ -294,15 +311,16 @@ export function ComunicadoViewModal({
   useEffect(() => {
     if (initialComunicado) {
       setComunicado(initialComunicado);
-      const seed = initialComunicado.respostas || initialComunicado.dados?.respostas || getGlobalCachedMessages(initialComunicado.id);
-      if (Array.isArray(seed) && seed.length > 0) {
+      const rawSeed = initialComunicado.respostas || initialComunicado.dados?.respostas || getGlobalCachedMessages(initialComunicado.id);
+      const seed = filterAuthorizedMessages(Array.isArray(rawSeed) ? rawSeed : []);
+      if (seed.length > 0) {
         setMessages(seed);
         setLoadingMsg(false);
-      } else if (initialComunicado?.conversas_info?.tem_conversas === false) {
+      } else if (initialComunicado?.conversas_info?.tem_conversas === false || !isAdminMode) {
         setLoadingMsg(false);
       }
     }
-  }, [initialComunicado])
+  }, [initialComunicado, filterAuthorizedMessages, isAdminMode])
   const [newMessage, setNewMessage] = useState('')
   const [isSending, setIsSending] = useState(false)
   const [isInputFocused, setIsInputFocused] = useState(false)
@@ -424,7 +442,7 @@ export function ComunicadoViewModal({
   const messagesToShow = isAdminMode ? (selectedThreadId ? adminThreads.find(t => t.studentId === selectedThreadId)?.messages || [] : []) : messages;
 
   const destinatariosStr = useMemo(() => {
-    if (!isAdminMode) return null;
+    if (!isAdminMode && !isStaff) return null;
     const destTurmas = comunicado.turmas || comunicado.dados?.turmas || [];
     let destAlunosIds = comunicado.alunosIds || comunicado.dados?.alunosIds || [];
     const destGrupos = comunicado.grupos || comunicado.dados?.grupos || [];
@@ -537,16 +555,20 @@ export function ComunicadoViewModal({
       if (res.ok) {
         const data = await res.json()
         if (Array.isArray(data)) {
-          const unique = Array.from(new Map(data.map((m: any) => [m.id, m])).values()) as ChatMessage[];
+          const authorized = filterAuthorizedMessages(data);
+          const unique = Array.from(new Map(authorized.map((m: any) => [m.id, m])).values()) as ChatMessage[];
           setMessages(unique);
-          setGlobalCachedMessages(comunicado.id, unique);
+          if (isAdminMode) {
+            setGlobalCachedMessages(comunicado.id, unique);
+          }
           if (typeof window !== 'undefined' && unique.length > 0) {
             window.dispatchEvent(new CustomEvent('agenda-digital:conversas-updated', {
               detail: { comunicadoId: comunicado.id, total: unique.length, messages: unique }
             }));
           }
         } else if (data) {
-          setMessages(data)
+          const authorized = filterAuthorizedMessages([data]);
+          setMessages(authorized);
         }
       }
     } catch (e) {
@@ -579,16 +601,22 @@ export function ComunicadoViewModal({
       if (!isRelated) return;
       
       if (eventType === 'INSERT' && newMsg) {
+        const authorized = filterAuthorizedMessages([newMsg]);
+        if (authorized.length === 0) return;
         setMessages(prev => {
           if (prev.some(m => m.id === newMsg.id)) return prev;
           const next = [...prev, newMsg];
-          setGlobalCachedMessages(comunicado.id, next);
+          if (isAdminMode) {
+            setGlobalCachedMessages(comunicado.id, next);
+          }
           return next;
         });
       } else if (eventType === 'DELETE' && oldMsg) {
         setMessages(prev => {
           const next = prev.filter(m => m.id !== oldMsg.id);
-          setGlobalCachedMessages(comunicado.id, next);
+          if (isAdminMode) {
+            setGlobalCachedMessages(comunicado.id, next);
+          }
           return next;
         });
       } else {
@@ -1212,7 +1240,7 @@ export function ComunicadoViewModal({
                   comunicadoId={String(comunicado.id)}
                   currentUser={{ id: currentUserSlug, nome: currentUserName, foto: currentUserAvatar }}
                   currentAluno={alunos && alunos.length === 1 ? alunos[0] : null}
-                  isAdminMode={isAdminMode}
+                  isAdminMode={isAdminMode || isStaff}
                   onVoteSuccess={(updatedEnquete) => {
                     setComunicado((prev: any) => ({
                       ...prev,
@@ -1235,7 +1263,7 @@ export function ComunicadoViewModal({
                   comunicadoId={String(comunicado.id)}
                   currentUser={{ id: currentUserSlug, nome: currentUserName, foto: currentUserAvatar }}
                   currentAluno={alunos && alunos.length === 1 ? alunos[0] : null}
-                  isAdminMode={isAdminMode}
+                  isAdminMode={isAdminMode || isStaff}
                   onUpdateSuccess={(updatedAut) => {
                     setComunicado((prev: any) => ({
                       ...prev,
@@ -1256,14 +1284,14 @@ export function ComunicadoViewModal({
               
               // Filter to charges relevant to user or show all for admin
               const relevantCobs = cobrancasList.filter(cob => {
-                if (isAdminMode) return true;
+                if (isAdminMode || isStaff) return true;
                 const dest = (cob.agenda_cobrancas_destinatarios || []).find((d: any) => 
                   String(d.destinatario_id).replace(/^(a_|_ALU)/, '') === cleanSlug
                 );
                 return !!dest;
               });
 
-              if (relevantCobs.length === 0 && !isAdminMode) return null;
+              if (relevantCobs.length === 0 && !isAdminMode && !isStaff) return null;
 
               const totalAmount = relevantCobs.reduce((acc, c) => acc + (Number(c.valor) || 0), 0);
 
@@ -1378,7 +1406,7 @@ export function ComunicadoViewModal({
 
                           {/* Right Column: Actions */}
                           <div style={{ flexShrink: 0, flex: '1 1 auto', display: 'flex', justifyContent: 'flex-end' }}>
-                             {isAdminMode ? (
+                             {isAdminMode || isStaff ? (
                                <div style={{ color: '#64748b', fontSize: 12, fontWeight: 500, maxWidth: 160, textAlign: 'right', padding: '8px 12px', background: '#f1f5f9', borderRadius: 8 }}>
                                   Visualização restrita do modo Admin.
                                </div>
@@ -1523,7 +1551,7 @@ export function ComunicadoViewModal({
                                 <> • <AttachmentSize url={parsed.url} initialSize={parsed.size} /></>
                               )}
                             </div>
-                           {isAdminMode && cienciaString && (
+                           {(isAdminMode || isStaff) && cienciaString && (
                              <div style={{ fontSize: 12, color: '#16a34a', fontWeight: 600, marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
                                <CheckCircle2 size={14} />
                                Ciência confirmada em {cienciaString}

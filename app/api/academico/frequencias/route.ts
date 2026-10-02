@@ -370,13 +370,18 @@ function buildRow(f: any, userName?: string, userId?: string) {
   const isHorarioIndefinido = Boolean(f.horarioIndefinido || mergedExtra.horarioIndefinido || horaRegistro === null || horaRegistro === 'indefinido')
   const finalHoraRegistro = isHorarioIndefinido
     ? null
-    : (horaRegistro || mergedExtra.horaRegistro || (presente ? new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : null))
+    : (horaRegistro || mergedExtra.horaRegistro || (presente ? new Date().toLocaleTimeString('pt-BR', { timeZone: 'America/Campo_Grande', hour: '2-digit', minute: '2-digit' }) : null))
+
+  const schoolTodayDate = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Campo_Grande',
+    year: 'numeric', month: '2-digit', day: '2-digit'
+  }).format(new Date())
 
   const row = {
     id: id || `FREQ-${alunoId || f.aluno_id}-${data}`,
     aluno_id: alunoId || f.aluno_id || '',
     turma_id: turmaId || f.turma_id || '',
-    data: data || new Date().toISOString().split('T')[0],
+    data: data || schoolTodayDate,
     presente: presente !== undefined ? Boolean(presente) : true,
     justificativa: justificativa || '',
     dados: {

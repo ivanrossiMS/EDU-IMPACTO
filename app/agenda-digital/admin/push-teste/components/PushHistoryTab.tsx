@@ -585,11 +585,25 @@ export function PushHistoryTab({ onSwitchToTesterWithPayload }: PushHistoryTabPr
               const Icon = catDef.icon
               const isSuccess = log.status === 'sent'
               const formattedDate = new Date(log.created_at).toLocaleString('pt-BR', {
+                timeZone: 'America/Campo_Grande',
                 day: '2-digit',
                 month: '2-digit',
                 hour: '2-digit',
                 minute: '2-digit',
               })
+
+              let eventRefDate: string | null = null
+              try {
+                const dateMatch = String(log.item_id || '').match(/(\d{4}-\d{2}-\d{2})/)
+                if (dateMatch) {
+                  const [y, m, d] = dateMatch[1].split('-')
+                  const regDatePart = formattedDate.split(',')[0].trim() // "02/10"
+                  const refShort = `${d}/${m}`
+                  if (refShort !== regDatePart) {
+                    eventRefDate = `${d}/${m}/${y}`
+                  }
+                }
+              } catch {}
 
               return (
                 <div
@@ -625,10 +639,29 @@ export function PushHistoryTab({ onSwitchToTesterWithPayload }: PushHistoryTabPr
                     </div>
                     <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
                       <Clock size={11} />
-                      <span title="Horário em que o evento e a notificação foram registrados no sistema">
+                      <span title="Horário em que o evento e a notificação foram registrados no sistema (Horário de MS)">
                         Registrado: {formattedDate}
                       </span>
                     </div>
+                    {eventRefDate && (
+                      <div
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 4,
+                          fontSize: 10,
+                          fontWeight: 700,
+                          padding: '2px 6px',
+                          borderRadius: 6,
+                          background: 'rgba(245, 158, 11, 0.12)',
+                          color: '#d97706',
+                          marginTop: 3,
+                        }}
+                        title={`Data da frequência escolar referenciada no evento: ${eventRefDate}`}
+                      >
+                        <span>📅 Evento de: {eventRefDate}</span>
+                      </div>
+                    )}
                     {log.isReminder && (
                       <div
                         style={{

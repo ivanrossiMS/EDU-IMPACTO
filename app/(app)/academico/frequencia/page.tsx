@@ -1441,7 +1441,7 @@ export default function FrequenciaPage() {
         }
 
         const isCatraca = !!portariaEv || existing?.origem === 'catraca' || String(existing?.registradoPor || '').toLowerCase().includes('catraca') || String(existing?.registradoPor || '').toLowerCase().includes('idface')
-        const nowTime = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+        const nowTime = new Date().toLocaleTimeString('pt-BR', { timeZone: 'America/Campo_Grande', hour: '2-digit', minute: '2-digit' })
         
         const customEntrada = horariosEntrada[String(a.id)]?.[dia]
         const customSaida = horariosSaida[String(a.id)]?.[dia]
@@ -1575,7 +1575,7 @@ export default function FrequenciaPage() {
       }
 
       const isCatraca = !!portariaEv || existingFreq?.origem === 'catraca' || String(existingFreq?.registradoPor || '').toLowerCase().includes('catraca') || String(existingFreq?.registradoPor || '').toLowerCase().includes('idface')
-      const nowTime = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+      const nowTime = new Date().toLocaleTimeString('pt-BR', { timeZone: 'America/Campo_Grande', hour: '2-digit', minute: '2-digit' })
 
       const manualHora = horariosEntrada[aluno.id]?.[registroManualData]
       const isHorarioIndefinido = manualHora === 'indefinido' || (manualHora === undefined && Boolean(existingFreq?.dados?.horarioIndefinido || existingFreq?.horarioIndefinido))

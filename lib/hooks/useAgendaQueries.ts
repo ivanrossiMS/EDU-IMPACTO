@@ -5,7 +5,7 @@ import { apiFetch } from '@/lib/api/apiClient'
 // --- COMUNICADOS ---
 export function useQueryComunicados(
   fetchUrl: string | null = '/api/comunicados',
-  pageSize: number = 10,
+  pageSize: number = 20,
   options?: { enabled?: boolean }
 ) {
   const { currentUser } = useApp()
@@ -28,7 +28,7 @@ export function useQueryComunicados(
       return Array.isArray(data) ? data : []
     },
     getNextPageParam: (lastPage, allPages, lastPageParam) => {
-      if (!lastPage || lastPage.length === 0) return undefined
+      if (!lastPage || !Array.isArray(lastPage) || lastPage.length < pageSize) return undefined
       return (typeof lastPageParam === 'number' ? lastPageParam : 0) + pageSize
     },
     staleTime: 1000 * 30, // 30s de retenção para estabilidade e navegação ágil
@@ -67,7 +67,7 @@ export function useQueryMomentos(
       return Array.isArray(data) ? data : []
     },
     getNextPageParam: (lastPage, allPages, lastPageParam) => {
-      if (!lastPage || lastPage.length === 0) return undefined
+      if (!lastPage || !Array.isArray(lastPage) || lastPage.length < pageSize) return undefined
       return (typeof lastPageParam === 'number' ? lastPageParam : 0) + pageSize
     },
     staleTime: 1000 * 30,

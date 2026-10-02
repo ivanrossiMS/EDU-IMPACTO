@@ -580,6 +580,21 @@ export async function POST(req: Request) {
         const localMin = String(eventDateObj.getUTCMinutes()).padStart(2, '0')
         const localTimeStr = `${localHour}:${localMin}`
 
+        // 2. Determinar a data oficial de HOJE na escola (America/Campo_Grande)
+        // CRÍTICO: Pushes de presença/saída são alertas ao vivo para os pais.
+        // Se o sistema estiver processando logs retroativos/históricos de dias anteriores (ex: reconexão após fim de semana ou catraca offline),
+        // a frequência e o evento são devidamente gravados no banco de dados,
+        // MAS o envio de notificação push deve ser suprimido para NÃO notificar pais sobre entradas de dias passados.
+        const schoolTodayParts = new Intl.DateTimeFormat('en-CA', {
+          timeZone: 'America/Campo_Grande',
+          year: 'numeric', month: '2-digit', day: '2-digit',
+          hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+        }).formatToParts(new Date())
+        const schoolTodayMap: Record<string, string> = {}
+        schoolTodayParts.forEach(p => schoolTodayMap[p.type] = p.value)
+        const todaySchoolDate = `${schoolTodayMap.year}-${schoolTodayMap.month}-${schoolTodayMap.day}`
+        const isEventFromToday = localDate === todaySchoolDate
+
         const currentYear = new Date().getFullYear().toString()
         const freqId = `FREQ-${alunoId}-${localDate}`
         const diarioId = alunoTurma ? `DIARIO-${alunoTurma}-${currentYear}` : `DIARIO-PORTARIA-${currentYear}`
@@ -700,7 +715,7 @@ export async function POST(req: Request) {
             const studentTargets = Array.from(new Set([String(alunoId), unpaddedId, unpaddedId.padStart(6, '0')].filter(Boolean)))
             const targetIds = await getResponsavelIdsForTargets({ targetStudents: studentTargets })
 
-            if (targetIds.length > 0) {
+            if (targetIds.length > 0 && isEventFromToday) {
               const pushItemId = `saida_catraca_${alunoId}_${localDate}_${localTimeStr.replace(':', '')}`
               await sendAgendaPushNotification({
                 type: 'saida',
@@ -718,6 +733,8 @@ export async function POST(req: Request) {
                 }
               })
               console.log(`✅ [Portaria Webhook] Push de Saída Confirmada disparado para ${nomeAmigavel} (${targetIds.length} destinatários)`)
+            } else if (!isEventFromToday) {
+              console.log(`ℹ️ [Portaria Webhook] Push de saída para ${nomeAmigavel} suprimido: evento histórico de data anterior (${localDate} vs hoje ${todaySchoolDate}).`)
             } else {
               console.warn(`⚠️ [Portaria Webhook] Nenhum responsável encontrado para envio de push de saída do aluno ${alunoNome} (ID: ${alunoId})`)
             }
@@ -786,10 +803,12 @@ export async function POST(req: Request) {
                   console.log(`✅ [Portaria Integration] Nova entrada (${localTimeStr}) registrada com sucesso para ${alunoNome} (Total: ${entradasExistentes.length})`)
 
                   // Disparo de Push Notification para os Pais na Agenda Digital
-                  if (alunoId) {
+                  if (alunoId && isEventFromToday) {
                     try {
                       const { sendAgendaPushNotification } = await import('@/lib/server/agendaNotifications')
                       const { getResponsavelIdsForTargets } = await import('@/lib/server/notificationHelper')
+                      const { formatFriendlyStudentName } = await import('@/lib/studentNameHelper')
+                      const nomeAmigavel = formatFriendlyStudentName(alunoNome)
                       const targetIds = await getResponsavelIdsForTargets({ targetStudents: [alunoId] })
 
                       if (targetIds.length > 0) {
@@ -798,7 +817,7 @@ export async function POST(req: Request) {
                           type: 'frequencia',
                           itemId: pushItemId,
                           title: '🎓 Nova Entrada Confirmada',
-                          message: `Nova entrada de ${alunoNome} foi confirmada na portaria às ${localTimeStr} via ${dispositivoNome || 'Catraca'}.`,
+                          message: `Nova entrada de ${nomeAmigavel} foi confirmada na portaria às ${localTimeStr} via ${dispositivoNome || 'Catraca'}.`,
                           targetUserIds: targetIds,
                           targetUrl: `/agenda-digital/${alunoId}/frequencia`,
                           metadata: {
@@ -809,11 +828,13 @@ export async function POST(req: Request) {
                             dispositivo: dispositivoNome || 'Catraca'
                           }
                         })
-                        console.log(`✅ [Portaria Webhook] Push de Nova Entrada disparado para ${alunoNome} (${targetIds.length} destinatários)`)
+                        console.log(`✅ [Portaria Webhook] Push de Nova Entrada disparado para ${nomeAmigavel} (${targetIds.length} destinatários)`)
                       }
                     } catch (e) {
                       console.error('[Push Multiplas Entradas Dispatch Error]', e)
                     }
+                  } else if (alunoId && !isEventFromToday) {
+                    console.log(`ℹ️ [Portaria Webhook] Push de reentrada para ${alunoNome} suprimido: evento histórico de data anterior (${localDate} vs hoje ${todaySchoolDate}).`)
                   }
                 }
               }
@@ -853,10 +874,12 @@ export async function POST(req: Request) {
               console.log(`✅ [Portaria Integration] Horário de entrada (${localTimeStr}) registrado com sucesso para ${alunoNome} em ${localDate}`)
               
               // 4. Disparo do Push Notification para os Pais na Agenda Digital
-              if (alunoId) {
+              if (alunoId && isEventFromToday) {
                 try {
                   const { sendAgendaPushNotification } = await import('@/lib/server/agendaNotifications')
                   const { getResponsavelIdsForTargets } = await import('@/lib/server/notificationHelper')
+                  const { formatFriendlyStudentName } = await import('@/lib/studentNameHelper')
+                  const nomeAmigavel = formatFriendlyStudentName(alunoNome)
                   const targetIds = await getResponsavelIdsForTargets({ targetStudents: [alunoId] })
                   
                   if (targetIds.length > 0) {
@@ -864,7 +887,7 @@ export async function POST(req: Request) {
                       type: 'frequencia',
                       itemId: String(freqId),
                       title: '✅ Presença Confirmada',
-                      message: `A presença de ${alunoNome} foi confirmada na escola (Entrada às ${localTimeStr}).`,
+                      message: `A presença de ${nomeAmigavel} foi confirmada na escola (Entrada às ${localTimeStr}).`,
                       targetUserIds: targetIds,
                       targetUrl: `/agenda-digital/${alunoId}/frequencia`,
                       metadata: {
@@ -872,10 +895,13 @@ export async function POST(req: Request) {
                         data: String(localDate)
                       }
                     })
+                    console.log(`✅ [Portaria Webhook] Push de Presença Confirmada disparado para ${nomeAmigavel} (${targetIds.length} destinatários)`)
                   }
                 } catch (e) {
                   console.error('[Push Dispatch Error]', e)
                 }
+              } else if (alunoId && !isEventFromToday) {
+                console.log(`ℹ️ [Portaria Webhook] Push de presença para ${alunoNome} suprimido: evento histórico de data anterior (${localDate} vs hoje ${todaySchoolDate}). Frequência salva no banco sem disparar push.`)
               }
             }
           }

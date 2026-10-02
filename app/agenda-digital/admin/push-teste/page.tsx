@@ -958,7 +958,7 @@ export default function ADAdminPushTestPage() {
   }, [title, recipientDisplayName, recipientTurmaOrRole])
 
   const previewMessage = useMemo(() => {
-    const agoraHora = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+    const agoraHora = new Date().toLocaleTimeString('pt-BR', { timeZone: 'America/Campo_Grande', hour: '2-digit', minute: '2-digit' })
     return message
       .replace(/{aluno}/gi, recipientDisplayName)
       .replace(/{turma}/gi, recipientTurmaOrRole)
@@ -2616,7 +2616,7 @@ export default function ADAdminPushTestPage() {
 
               {/* Status Bar */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11, color: '#94a3b8', padding: '0 10px 14px', fontWeight: 600 }}>
-                <span>{new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
+                <span>{new Date().toLocaleTimeString('pt-BR', { timeZone: 'America/Campo_Grande', hour: '2-digit', minute: '2-digit' })}</span>
                 <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                   <span>5G</span>
                   <div style={{ width: 18, height: 9, border: '1px solid #94a3b8', borderRadius: 3, padding: 1 }}>

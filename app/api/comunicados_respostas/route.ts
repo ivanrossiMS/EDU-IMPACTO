@@ -69,21 +69,29 @@ async function checkIsStaffOrAuthor({
     }
   }
 
-  if (isStaff) {
-    return { isStaff: true, isAuthor: true, canViewAllThreads: true };
-  }
+  const perfisAdmin = ['diretor geral', 'administrador', 'admin', 'master'];
+  const cargosAdmin = ['administrador master', 'diretor geral'];
+  const isAdmin = perfisAdmin.includes(pNorm) || cargosAdmin.includes(cNorm) || pNorm.includes('administrador master') || cNorm.includes('administrador master') || pNorm.includes('diretor geral') || cNorm.includes('diretor geral');
 
   let isAuthor = false;
   const userCandidateIds = new Set<string>([
     String(user.id),
+    String(user.id).replace(/^f_?/, ''),
     String(user.user_metadata?.colaborador_id || ''),
+    String(user.user_metadata?.colaborador_id || '').replace(/^f_?/, ''),
     String(user.user_metadata?.system_user_id || ''),
+    String(user.user_metadata?.system_user_id || '').replace(/^f_?/, ''),
     String(user.user_metadata?.uid_legacy || ''),
-    String(espelharColabId || '')
-  ].filter(Boolean));
+    String(user.user_metadata?.uid_legacy || '').replace(/^f_?/, ''),
+    String(espelharColabId || ''),
+    String(espelharColabId || '').replace(/^f_?/, '')
+  ].filter(Boolean).map(s => s.toLowerCase()));
 
-  if (groupedAutorId && userCandidateIds.has(String(groupedAutorId))) {
-    isAuthor = true;
+  if (groupedAutorId) {
+    const gClean = String(groupedAutorId).replace(/^f_?/, '').toLowerCase();
+    if (userCandidateIds.has(gClean)) {
+      isAuthor = true;
+    }
   }
 
   if (comunicadoId && !isAuthor) {
@@ -95,11 +103,11 @@ async function checkIsStaffOrAuthor({
         .maybeSingle();
 
       if (comData) {
-        const comAutorId = String(comData.dados?.autorId || '');
+        const comAutorId = String(comData.dados?.autorId || comData.dados?.autor_id || '').replace(/^f_?/, '').toLowerCase();
         if (comAutorId && userCandidateIds.has(comAutorId)) {
           isAuthor = true;
         }
-        const comAutorNome = normalizeRole(comData.autor || comData.dados?.autorNome);
+        const comAutorNome = normalizeRole(comData.autor || comData.dados?.autor || comData.dados?.autorNome);
         const userNome = normalizeRole(user.user_metadata?.nome || user.user_metadata?.name);
         if (comAutorNome && userNome && (comAutorNome === userNome || userNome.includes(comAutorNome) || comAutorNome.includes(userNome))) {
           isAuthor = true;
@@ -110,7 +118,9 @@ async function checkIsStaffOrAuthor({
     }
   }
 
-  return { isStaff, isAuthor, canViewAllThreads: isStaff || isAuthor };
+  const canViewAllThreads = Boolean(isAdmin || isAuthor);
+
+  return { isStaff, isAuthor, canViewAllThreads };
 }
 
 export async function GET(request: Request) {
@@ -191,17 +201,35 @@ export async function GET(request: Request) {
   }
 
   // Regra de privacidade:
-  // Se o usuário pode ver todas as threads (staff ou autor) e solicitou admin=true (ou não passou remetente_id):
+  // Se o usuário pode ver todas as threads (autor ou admin) e solicitou admin=true (ou não passou remetente_id):
   // -> Ele vê todas as threads (adminThreads).
-  // Se for Família/Aluno ou se um colaborador com perfil duplo passou remetente_id sem admin=true:
-  // -> Filtra apenas a conversa pertencente ao remetente.
+  // Se não puder ver todas as threads (família/aluno ou colaborador que NÃO é autor):
+  // -> Filtra apenas a conversa pertencente ao próprio usuário (remetente ou destinatário).
   if (!canViewAllThreads || (!adminParam && remetenteId)) {
-    if (remetenteId) {
-      query = query.eq('remetente_id', remetenteId);
-    } else {
-      const userSlug = user.user_metadata?.aluno_id || user.user_metadata?.responsavel_id || user.id;
-      query = query.eq('remetente_id', String(userSlug));
+    const userCandidateIds = new Set<string>([
+      String(user.id),
+      String(user.id).replace(/^f_?/, ''),
+      String(user.user_metadata?.aluno_id || ''),
+      String(user.user_metadata?.aluno_id || '').replace(/^f_?/, ''),
+      String(user.user_metadata?.responsavel_id || ''),
+      String(user.user_metadata?.responsavel_id || '').replace(/^f_?/, ''),
+      String(user.user_metadata?.colaborador_id || ''),
+      String(user.user_metadata?.colaborador_id || '').replace(/^f_?/, ''),
+      String(user.user_metadata?.system_user_id || ''),
+      String(user.user_metadata?.system_user_id || '').replace(/^f_?/, ''),
+      String(user.user_metadata?.uid_legacy || ''),
+      String(user.user_metadata?.uid_legacy || '').replace(/^f_?/, ''),
+      String(espelharColabId || ''),
+      String(espelharColabId || '').replace(/^f_?/, '')
+    ].filter(Boolean).map(s => s.toLowerCase()));
+
+    let effectiveRemetente = remetenteId;
+    if (!effectiveRemetente || (!canViewAllThreads && !userCandidateIds.has(effectiveRemetente.replace(/^f_?/, '').toLowerCase()))) {
+      effectiveRemetente = user.user_metadata?.aluno_id || user.user_metadata?.responsavel_id || user.user_metadata?.colaborador_id || espelharColabId || user.id;
     }
+
+    const cleanRemetente = String(effectiveRemetente).replace(/^f_?/, '');
+    query = query.or(`remetente_id.eq."${cleanRemetente}",remetente_id.eq."f_${cleanRemetente}",destinatario_id.eq."${cleanRemetente}",destinatario_id.eq."f_${cleanRemetente}"`);
   }
 
   const { data, error } = await query;

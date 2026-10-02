@@ -46,6 +46,15 @@ async function getCachedTurmasAndGrupos() {
   }
 }
 
+function normalizeText(str?: string | null): string {
+  if (!str) return '';
+  return str
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+}
+
 function normalizeRow(row: any) {
   const merged = { ...row, ...(row.dados || {}) }
   // Ensure critical fields are always safe types
@@ -84,6 +93,11 @@ export async function GET(request: Request) {
   const idParam = searchParams.get('id');
   const sinceParam = searchParams.get('since');
   const colaboradorId = searchParams.get('colaborador_id') || searchParams.get('espelhar_colaborador');
+  const autorParam = searchParams.get('autor');
+  const autorIdParam = searchParams.get('autor_id');
+  const cargoParam = searchParams.get('cargo');
+  const statusParam = searchParams.get('status');
+  const searchParam = searchParams.get('search');
   
   // VERIFICAÇÃO DE PERFIL — usa user_metadata para evitar round-trip ao banco na maioria dos casos
   let isFamilyOrStudent = false;
@@ -155,6 +169,26 @@ export async function GET(request: Request) {
     if (!isOwner) {
       return NextResponse.json({ error: 'Acesso negado: Você não tem permissão para visualizar dados deste aluno.' }, { status: 403 });
     }
+  }
+
+  const typeParam = searchParams.get('type');
+  if (typeParam === 'autores') {
+    const { data: comAuthors, error: authErr } = await supabaseServer
+      .from('comunicados')
+      .select('autor, dados->>autorCargo')
+      .not('id', 'like', 'AD-COM-REL-STU-%');
+
+    if (authErr) {
+      return NextResponse.json({ error: authErr.message }, { status: 500 });
+    }
+
+    const authors = Array.from(new Set((comAuthors || []).map((c: any) => (c.autor || '').trim()).filter(Boolean)));
+    const roles = Array.from(new Set((comAuthors || []).map((c: any) => (c['dados->>autorCargo'] || '').trim()).filter(Boolean)));
+    return NextResponse.json({ authors, roles }, {
+      headers: {
+        'Cache-Control': 'private, max-age=60, stale-while-revalidate=120'
+      }
+    });
   }
 
   // ── Resolução paralela de turma, grupos e data de acesso ──────────────────
@@ -424,6 +458,51 @@ export async function GET(request: Request) {
     query = query.not('id', 'like', 'AD-COM-REL-TURMA-%');
     query = query.neq('destino', 'interno');
     query = query.neq('destino', 'funcionarios');
+  }
+
+  // Filtros adicionais: autor, cargo, status, busca
+  if (autorParam || autorIdParam) {
+    const authorConds: string[] = [];
+    if (autorIdParam) {
+      const cleanId = String(autorIdParam).replace(/[^a-zA-Z0-9_-]/g, '').trim();
+      if (cleanId) {
+        authorConds.push(`dados->>autorId.eq."${cleanId}"`);
+        authorConds.push(`dados->>autorId.eq."f_${cleanId}"`);
+      }
+    }
+    if (autorParam) {
+      const cleanName = autorParam.trim().replace(/["\\]/g, '');
+      if (cleanName) {
+        authorConds.push(`autor.ilike."%${cleanName}%"`);
+        authorConds.push(`dados->>autor.ilike."%${cleanName}%"`);
+      }
+    }
+    if (authorConds.length > 0) {
+      query = query.or(authorConds.join(','));
+    }
+  }
+
+  if (cargoParam && cargoParam.trim()) {
+    const cleanCargo = cargoParam.trim().replace(/["\\]/g, '');
+    if (cleanCargo) {
+      query = query.ilike('dados->>autorCargo', `%${cleanCargo}%`);
+    }
+  }
+
+  if (statusParam && statusParam.trim()) {
+    const s = statusParam.trim().toLowerCase();
+    if (s === 'enviado') {
+      query = query.or('dados->>status.eq.enviado,dados->>status.is.null');
+    } else if (s === 'agendado') {
+      query = query.eq('dados->>status', 'agendado');
+    } else if (s === 'rascunho') {
+      query = query.eq('dados->>status', 'rascunho');
+    }
+  }
+
+  if (searchParam && searchParam.trim()) {
+    const s = searchParam.trim().replace(/[%_"]/g, ' ');
+    query = query.or(`titulo.ilike.%${s}%,texto.ilike.%${s}%,dados->>conteudo.ilike.%${s}%`);
   }
   
   query = query.order('data', { ascending: false }).order('id', { ascending: false });
@@ -735,30 +814,90 @@ export async function GET(request: Request) {
           }
         }
       } else {
-        const staffKeys = new Set([colabMetaId, userSlugMeta, currentUserId].filter(Boolean));
-        totalConversas = comRespostas.length;
-        temConversas = totalConversas > 0;
+        const userStaffCandidateIds = new Set<string>([
+          currentUserId,
+          currentUserId.replace(/^f_?/, ''),
+          colabMetaId,
+          colabMetaId.replace(/^f_?/, ''),
+          userSlugMeta,
+          userSlugMeta.replace(/^f_?/, ''),
+          String(user.user_metadata?.system_user_id || ''),
+          String(user.user_metadata?.system_user_id || '').replace(/^f_?/, ''),
+          String(user.user_metadata?.uid_legacy || ''),
+          String(user.user_metadata?.uid_legacy || '').replace(/^f_?/, '')
+        ].filter(Boolean).map(s => s.toLowerCase()));
 
-        if (temConversas) {
-          ultimaRespostaAt = comRespostas[comRespostas.length - 1].created_at;
-          let readTime = 0;
-          staffKeys.forEach(k => {
-            if (merged.leituras[k]) {
-              const t = new Date(merged.leituras[k]).getTime();
-              if (t > readTime) readTime = t;
-            }
-          });
+        const userStaffName = normalizeText(user.user_metadata?.nome || user.user_metadata?.name || '');
+        const rowAutorId = String(row.dados?.autorId || row.autorId || row.dados?.autor_id || '').replace(/^f_?/, '').trim().toLowerCase();
+        const rowAutorNome = normalizeText(row.autor || row.dados?.autor || row.dados?.autorNome || '');
 
-          const incomingMessages = comRespostas.filter(r => !r.is_admin);
-          const unreads = incomingMessages.filter(r => new Date(r.created_at).getTime() > readTime);
-          unreadCount = unreads.length;
-          hasUnread = unreadCount > 0;
+        const isAuthorOfRow = Boolean(
+          (rowAutorId && userStaffCandidateIds.has(rowAutorId)) ||
+          (rowAutorNome && userStaffName && (rowAutorNome === userStaffName || userStaffName.includes(rowAutorNome) || rowAutorNome.includes(userStaffName)))
+        );
 
-          if (hasUnread) {
+        const canManageConversas = Boolean(isAdmin || isAuthorOfRow);
+
+        if (canManageConversas) {
+          totalConversas = comRespostas.length;
+          temConversas = totalConversas > 0;
+
+          if (temConversas) {
+            ultimaRespostaAt = comRespostas[comRespostas.length - 1].created_at;
+            let readTime = 0;
+            const staffKeys = new Set([colabMetaId, userSlugMeta, currentUserId].filter(Boolean));
             staffKeys.forEach(k => {
-              delete merged.leituras[k];
+              if (merged.leituras[k]) {
+                const t = new Date(merged.leituras[k]).getTime();
+                if (t > readTime) readTime = t;
+              }
             });
-            merged._has_unread_reply = true;
+
+            const incomingMessages = comRespostas.filter(r => !r.is_admin);
+            const unreads = incomingMessages.filter(r => new Date(r.created_at).getTime() > readTime);
+            unreadCount = unreads.length;
+            hasUnread = unreadCount > 0;
+
+            if (hasUnread) {
+              staffKeys.forEach(k => {
+                delete merged.leituras[k];
+              });
+              merged._has_unread_reply = true;
+            }
+          }
+        } else {
+          // Colaborador que NÃO enviou o comunicado:
+          // A lógica de conversa individual deve aparecer somente para o colaborador que enviou e quem comentou
+          const myThreadMessages = comRespostas.filter(r => 
+            userStaffCandidateIds.has(String(r.remetente_id).replace(/^f_?/, '').toLowerCase()) ||
+            (r.is_admin && userStaffCandidateIds.has(String(r.destinatario_id || '').replace(/^f_?/, '').toLowerCase()))
+          );
+
+          totalConversas = myThreadMessages.length;
+          temConversas = totalConversas > 0;
+
+          if (temConversas) {
+            ultimaRespostaAt = myThreadMessages[myThreadMessages.length - 1].created_at;
+            let readTime = 0;
+            const staffKeys = new Set([colabMetaId, userSlugMeta, currentUserId].filter(Boolean));
+            staffKeys.forEach(k => {
+              if (merged.leituras[k]) {
+                const t = new Date(merged.leituras[k]).getTime();
+                if (t > readTime) readTime = t;
+              }
+            });
+
+            const incomingMessages = myThreadMessages.filter(r => r.is_admin);
+            const unreads = incomingMessages.filter(r => new Date(r.created_at).getTime() > readTime);
+            unreadCount = unreads.length;
+            hasUnread = unreadCount > 0;
+
+            if (hasUnread) {
+              staffKeys.forEach(k => {
+                delete merged.leituras[k];
+              });
+              merged._has_unread_reply = true;
+            }
           }
         }
       }
@@ -787,7 +926,37 @@ export async function GET(request: Request) {
           (r.is_admin && (!r.destinatario_id || studentKeys.has(String(r.destinatario_id))))
         );
       } else {
-        merged.respostas = formattedRespostas;
+        const userStaffCandidateIds = new Set<string>([
+          currentUserId,
+          currentUserId.replace(/^f_?/, ''),
+          colabMetaId,
+          colabMetaId.replace(/^f_?/, ''),
+          userSlugMeta,
+          userSlugMeta.replace(/^f_?/, ''),
+          String(user.user_metadata?.system_user_id || ''),
+          String(user.user_metadata?.system_user_id || '').replace(/^f_?/, ''),
+          String(user.user_metadata?.uid_legacy || ''),
+          String(user.user_metadata?.uid_legacy || '').replace(/^f_?/, '')
+        ].filter(Boolean).map(s => s.toLowerCase()));
+
+        const userStaffName = normalizeText(user.user_metadata?.nome || user.user_metadata?.name || '');
+        const rowAutorId = String(row.dados?.autorId || row.autorId || row.dados?.autor_id || '').replace(/^f_?/, '').trim().toLowerCase();
+        const rowAutorNome = normalizeText(row.autor || row.dados?.autor || row.dados?.autorNome || '');
+
+        const isAuthorOfRow = Boolean(
+          (rowAutorId && userStaffCandidateIds.has(rowAutorId)) ||
+          (rowAutorNome && userStaffName && (rowAutorNome === userStaffName || userStaffName.includes(rowAutorNome) || rowAutorNome.includes(userStaffName)))
+        );
+
+        if (isAdmin || isAuthorOfRow) {
+          merged.respostas = formattedRespostas;
+        } else {
+          // Colaborador que NÃO enviou o comunicado: só recebe sua própria conversa se tiver comentado
+          merged.respostas = formattedRespostas.filter((r: any) => 
+            userStaffCandidateIds.has(String(r.remetente_id).replace(/^f_?/, '').toLowerCase()) ||
+            (r.is_admin && userStaffCandidateIds.has(String(r.destinatario_id || '').replace(/^f_?/, '').toLowerCase()))
+          );
+        }
       }
 
       merged.conversas_info = {
@@ -834,10 +1003,12 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const { user, errorResponse } = await requireAuth()
+  const { user, errorResponse } = await requireAuth(request)
   if (errorResponse) return errorResponse
 
-  const authClient = await createProtectedClient();
+  const authHeader = request.headers.get('authorization') || ''
+  const bearerToken = authHeader.toLowerCase().startsWith('bearer ') ? authHeader.substring(7).trim() : undefined
+  const authClient = await createProtectedClient(bearerToken)
   const supabase = authClient;
 
   const perfil = user.user_metadata?.perfil || '';
@@ -857,10 +1028,14 @@ export async function POST(request: Request) {
       
       const builtRows = body.map(c => buildRow(c))
       const rows = await Promise.all(builtRows.map(async r => await enrichGruposRecipients(r)))
-      const { error: upsertError } = await supabase.from('comunicados').upsert(rows)
-      if (upsertError) {
-        console.error("==> UPSERT ERROR:", upsertError);
-        return NextResponse.json({ error: upsertError.message }, { status: 400 })
+      let upsertRes = await supabase.from('comunicados').upsert(rows)
+      if (upsertRes.error) {
+        console.warn("==> authClient upsert warning, tentando supabaseServer:", upsertRes.error.message)
+        upsertRes = await supabaseServer.from('comunicados').upsert(rows)
+      }
+      if (upsertRes.error) {
+        console.error("==> UPSERT ERROR:", upsertRes.error);
+        return NextResponse.json({ error: upsertRes.error.message }, { status: 400 })
       }
       console.log("==> UPSERT SUCCESS");
       

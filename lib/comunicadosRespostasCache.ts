@@ -152,7 +152,9 @@ export async function prefetchComunicadoMessages(
         const data = await res.json();
         if (Array.isArray(data)) {
           const unique = Array.from(new Map(data.map((m: any) => [m.id, m])).values()) as ChatMessage[];
-          setGlobalCachedMessages(key, unique);
+          if (isAdmin) {
+            setGlobalCachedMessages(key, unique);
+          }
           if (typeof window !== 'undefined' && unique.length > 0) {
             window.dispatchEvent(new CustomEvent('agenda-digital:conversas-updated', {
               detail: { comunicadoId: key, total: unique.length, messages: unique }

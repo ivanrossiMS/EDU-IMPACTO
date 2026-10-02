@@ -30,6 +30,7 @@ import { useLocalStorage } from '@/lib/useLocalStorage'
 import { uploadFileToSupabase } from '@/lib/upload/uploadClient'
 import { compressImage, compressVideo } from '@/lib/mediaCompressor'
 import { ComunicadoSkeleton } from '../../components/ComunicadoSkeleton'
+import { apiFetch } from '@/lib/api/apiClient'
 
 // Helper to abbreviate names for mobile
 function abbreviateName(name: string): string {
@@ -271,6 +272,56 @@ function ColaboradorComunicadosContent() {
     return !isTeacher && (effectiveUser.perfil === 'administrador' || effectiveUser.perfil === 'admin' || perfisAdmin.some(p => p.toLowerCase() === perfilStr.toLowerCase()) || cargosAdmin.some(c => c.toLowerCase() === cargoStr.toLowerCase()));
   }, [effectiveUser]);
 
+  const isUserAdmin = useMemo(() => {
+    const adminRoles = [
+      'administrador master',
+      'master',
+      'administrador',
+      'admin',
+      'diretor geral',
+      'diretora geral',
+      'diretor',
+      'diretora',
+      'direcao',
+      'diretoria'
+    ];
+    const check = (u: any) => {
+      if (!u) return false;
+      const p = String(u.perfil || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      const c = String(u.cargo || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      return adminRoles.some(r => p === r || c === r || p.includes('administrador') || c.includes('administrador master') || p.includes('diretor geral') || c.includes('diretor geral'));
+    };
+    return check(currentUser) || check(effectiveUser);
+  }, [currentUser, effectiveUser]);
+
+  const allUserIds = useMemo(() => {
+    return [
+      userSlug,
+      effectiveUser?.id,
+      (effectiveUser as any)?.auth_id,
+      (effectiveUser as any)?.uid_legacy,
+      currentUser?.id,
+      (currentUser as any)?.auth_id,
+      (currentUser as any)?.uid_legacy,
+      espelharColabId
+    ].filter(Boolean).map(id => String(id).replace(/^f_?/, '').trim().toLowerCase());
+  }, [userSlug, effectiveUser, currentUser, espelharColabId]);
+
+  const checkIsComunicadoAuthor = useCallback((comunicadoItem: any) => {
+    if (!comunicadoItem) return false;
+    const authorIdClean = String(comunicadoItem.autorId || comunicadoItem.dados?.autorId || comunicadoItem.dados?.autor_id || '').replace(/^f_?/, '').trim().toLowerCase();
+    const authorNameClean = String(comunicadoItem.autor || comunicadoItem.dados?.autor || comunicadoItem.dados?.autorNome || '').trim().toLowerCase();
+    const effNameClean = String(effectiveUser?.nome || '').trim().toLowerCase();
+    const curNameClean = String(currentUser?.nome || '').trim().toLowerCase();
+
+    return Boolean(
+      (authorIdClean && candidateColabIds.includes(authorIdClean)) ||
+      (authorIdClean && allUserIds.includes(authorIdClean)) ||
+      (authorNameClean && effNameClean && (authorNameClean === effNameClean || effNameClean.includes(authorNameClean) || authorNameClean.includes(effNameClean))) ||
+      (authorNameClean && curNameClean && (authorNameClean === curNameClean || curNameClean.includes(authorNameClean) || authorNameClean.includes(curNameClean)))
+    );
+  }, [candidateColabIds, allUserIds, effectiveUser?.nome, currentUser?.nome]);
+
   const turmaOptions = useMemo(() => {
     if (!effectiveUser?.id) return [];
     if (isMasterAdmin) return turmas;
@@ -364,7 +415,7 @@ function ColaboradorComunicadosContent() {
     hasNextPage: hasNextPageComunicados, 
     fetchNextPage: fetchNextPageComunicados, 
     isFetchingNextPage: isFetchingNextPageComunicados 
-  } = useQueryComunicados(endpoint, 10, { enabled: true })
+  } = useQueryComunicados(endpoint, 20, { enabled: true })
 
   const comunicados = useMemo(() => comunicadosData?.pages?.flat() || [], [comunicadosData?.pages])
   const comunicadosLoading = comunicadosLoadingLocal || comunicadosFetchingLocal
@@ -561,7 +612,7 @@ function ColaboradorComunicadosContent() {
       // Update directly via API to avoid sending the whole array
       const existingCom = comunicados.find((c: any) => c.id === editComId);
       if (existingCom) {
-        fetch('/api/comunicados', {
+        apiFetch('/api/comunicados', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ ...existingCom, ...updatedCom })
@@ -601,7 +652,7 @@ function ColaboradorComunicadosContent() {
       setComunicadosLocally?.((prev: any) => [newCom, ...prev])
       
       // 2) Persiste no servidor e substitui o ID temporário pelo ID real do banco
-      fetch('/api/comunicados', {
+      apiFetch('/api/comunicados', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newCom)
@@ -1035,12 +1086,28 @@ function ColaboradorComunicadosContent() {
     });
   }
 
-  const perfisAdminFeed = useMemo(() => ['Diretor Geral', 'Administrador', 'Admin', 'Coordenador', 'Coordenadora'], [])
-  const cargosAdminFeed = useMemo(() => ['Administrador Master', 'Diretor Geral', 'Coordenador', 'Coordenadora'], [])
-  const perfilStrFeed = effectiveUser?.perfil || ''
-  const cargoStrFeed = effectiveUser?.cargo || ''
-  const isTeacherFeed = cargoStrFeed.toUpperCase().includes('PROFESSOR') || perfilStrFeed.toUpperCase().includes('PROFESSOR')
-  const isMasterFeed = !isTeacherFeed && (perfisAdminFeed.some(p => p.toLowerCase() === perfilStrFeed.toLowerCase()) || cargosAdminFeed.some(c => c.toLowerCase() === cargoStrFeed.toLowerCase()))
+  const isMasterFeed = useMemo(() => {
+    if (!effectiveUser?.id) return false;
+    const perfilStr = String(effectiveUser?.perfil || '').toLowerCase();
+    const cargoStr = String(effectiveUser?.cargo || '').toLowerCase();
+    const isTeacher = cargoStr.includes('professor') || perfilStr.includes('professor');
+    if (isTeacher) return false;
+    
+    return (
+      perfilStr === 'administrador' ||
+      perfilStr === 'admin' ||
+      perfilStr.includes('diretor') ||
+      perfilStr.includes('coordenad') ||
+      perfilStr.includes('secretar') ||
+      perfilStr.includes('auxiliar administrativo') ||
+      cargoStr.includes('administrador') ||
+      cargoStr.includes('admin') ||
+      cargoStr.includes('diretor') ||
+      cargoStr.includes('coordenad') ||
+      cargoStr.includes('secretar') ||
+      cargoStr.includes('auxiliar administrativo')
+    );
+  }, [effectiveUser]);
   const myTurmaNamesFeed = useMemo(() => feedTurmaOptions.map((t: any) => t.nome), [feedTurmaOptions])
   const myGroupsFeed = useMemo(() => (chatGroups || []).filter((g: any) => {
     let colabs = g.colaboradoresIds;
@@ -1127,21 +1194,33 @@ function ColaboradorComunicadosContent() {
     setIsFetchingMore(true);
     try {
       const targetCount = visibleCount + 10;
-      let currentPages = comunicadosData?.pages || [];
-      let currentHasNext = Boolean(hasNextPageComunicados);
-      let currentFiltered = filterAndSortComunicados(currentPages.flat());
+      
+      // 1. Se já temos itens suficientes em memória, apenas expande a visualização sem requisição extra
+      if (filteredComunicados.length >= targetCount) {
+        setVisibleCount(targetCount);
+        return;
+      }
 
-      // Busca na API em lotes de 10 em 10 até que tenhamos itens filtrados suficientes para exibir os próximos 10
-      while (currentFiltered.length < targetCount && currentHasNext && fetchNextPageComunicados) {
-        const res = await fetchNextPageComunicados();
-        if (!res || !res.data) break;
-        currentPages = res.data.pages || [];
-        currentHasNext = Boolean(res.hasNextPage);
-        const nextFiltered = filterAndSortComunicados(currentPages.flat());
-        if (nextFiltered.length <= currentFiltered.length && !currentHasNext) {
-          break;
+      // 2. Se precisamos de mais dados da API e há mais páginas:
+      if (hasNextPageComunicados && fetchNextPageComunicados) {
+        let currentPages = comunicadosData?.pages || [];
+        let attempts = 0;
+        const maxAttempts = 3;
+
+        while (attempts < maxAttempts && Boolean(hasNextPageComunicados)) {
+          attempts++;
+          const prevPagesCount = currentPages.length;
+          const res: any = await fetchNextPageComunicados();
+          if (!res || !res.data) break;
+
+          currentPages = res.data.pages || [];
+          if (currentPages.length <= prevPagesCount) break;
+
+          const nextFiltered = filterAndSortComunicados(currentPages.flat());
+          if (nextFiltered.length >= targetCount || !res.hasNextPage) {
+            break;
+          }
         }
-        currentFiltered = nextFiltered;
       }
 
       setVisibleCount(targetCount);
@@ -1150,7 +1229,7 @@ function ColaboradorComunicadosContent() {
     } finally {
       setIsFetchingMore(false);
     }
-  }, [isFetchingMore, isFetchingNextPageComunicados, visibleCount, comunicadosData?.pages, hasNextPageComunicados, fetchNextPageComunicados, filterAndSortComunicados]);
+  }, [isFetchingMore, isFetchingNextPageComunicados, visibleCount, filteredComunicados.length, comunicadosData?.pages, hasNextPageComunicados, fetchNextPageComunicados, filterAndSortComunicados]);
 
   return (
     <>
@@ -1728,17 +1807,38 @@ function ColaboradorComunicadosContent() {
             const month = parsedDate.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '').toUpperCase();
             const time = parsedDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
             
-            const hasUnreadConversation = Boolean(
-              c.conversas_info?.has_unread || 
-              (c.conversas_info?.nao_lidas && c.conversas_info.nao_lidas > 0) ||
-              c._has_unread_reply
+            const isCardAuthor = checkIsComunicadoAuthor(c);
+            const isCardAdminOrAuthor = Boolean(isUserAdmin || isCardAuthor);
+
+            const userCleanSlug = String(userSlug || '').trim().toLowerCase();
+            const userCandidateIdSet = new Set([userCleanSlug, ...allUserIds]);
+            const userMessages = (c.respostas || []).filter((r: any) => 
+              userCandidateIdSet.has(String(r.remetente_id || '').replace(/^f_?/, '').trim().toLowerCase())
             );
-            const hasConversas = Boolean(
-              c.conversas_info?.tem_conversas || 
-              (c.conversas_info?.total && c.conversas_info.total > 0) ||
-              (Array.isArray(c.respostas) && c.respostas.length > 0) ||
-              (getGlobalCachedMessages(c.id)?.length)
-            );
+
+            const hasConversas = isCardAdminOrAuthor 
+              ? Boolean(
+                  c.conversas_info?.tem_conversas || 
+                  (c.conversas_info?.total && c.conversas_info.total > 0) ||
+                  (Array.isArray(c.respostas) && c.respostas.length > 0) ||
+                  (getGlobalCachedMessages(c.id)?.length)
+                )
+              : Boolean(
+                  (userMessages.length > 0) ||
+                  (c.conversas_info?.tem_conversas && (c.conversas_info?.total && c.conversas_info.total > 0))
+                );
+
+            const hasUnreadConversation = isCardAdminOrAuthor
+              ? Boolean(
+                  c.conversas_info?.has_unread || 
+                  (c.conversas_info?.nao_lidas && c.conversas_info.nao_lidas > 0) ||
+                  c._has_unread_reply
+                )
+              : Boolean(
+                  (c.conversas_info?.has_unread && userMessages.length > 0) || 
+                  (c.conversas_info?.nao_lidas && c.conversas_info.nao_lidas > 0 && userMessages.length > 0) ||
+                  (c._has_unread_reply && userMessages.length > 0)
+                );
 
             const isRead = !hasUnreadConversation && (locallyReadIds.has(String(c.id)) || !!(
               (c.leituras || {})[userSlug] ||
@@ -1832,7 +1932,7 @@ function ColaboradorComunicadosContent() {
                     overflow: 'hidden'
                   }}
                   onPointerDown={() => {
-                    prefetchComunicadoMessages(c, true, userSlug, espelharColabId);
+                    prefetchComunicadoMessages(c, isCardAdminOrAuthor, userSlug, espelharColabId);
                   }}
                   onClick={() => {
                     markComunicadoAsReadColab(c);
@@ -1943,7 +2043,7 @@ function ColaboradorComunicadosContent() {
                                  transition: 'all 0.25s ease'
                                }}
                                onPointerDown={() => {
-                                 prefetchComunicadoMessages(c, true, userSlug, espelharColabId);
+                                 prefetchComunicadoMessages(c, isCardAdminOrAuthor, userSlug, espelharColabId);
                                }}
                                onClick={(e) => {
                                  e.stopPropagation();
@@ -1970,7 +2070,7 @@ function ColaboradorComunicadosContent() {
                                  transition: 'all 0.25s ease'
                                }}
                                onPointerDown={() => {
-                                 prefetchComunicadoMessages(c, true, userSlug, espelharColabId);
+                                 prefetchComunicadoMessages(c, isCardAdminOrAuthor, userSlug, espelharColabId);
                                }}
                                onClick={(e) => {
                                  e.stopPropagation();
@@ -2229,12 +2329,7 @@ function ColaboradorComunicadosContent() {
           const isUserAdmin = checkAdmin(currentUser) || checkAdmin(effectiveUser);
 
           // Identificar se o usuário atual é quem enviou o comunicado (autor)
-          const isAuthor = Boolean(
-            (authorIdClean && candidateColabIds.includes(authorIdClean)) ||
-            (authorIdClean && allUserIds.includes(authorIdClean)) ||
-            (authorNameClean && effNameClean && (authorNameClean === effNameClean || effNameClean.includes(authorNameClean) || authorNameClean.includes(effNameClean))) ||
-            (authorNameClean && curNameClean && (authorNameClean === curNameClean || curNameClean.includes(authorNameClean) || authorNameClean.includes(curNameClean)))
-          );
+          const isAuthor = checkIsComunicadoAuthor(selectedComunicado);
 
           // Os botões de editar e excluir só devem aparecer para quem enviou o comunicado, e para o administrador
           const canDeleteSelected = Boolean(isUserAdmin || isAuthor);
@@ -2249,7 +2344,8 @@ function ColaboradorComunicadosContent() {
               currentUserSlug={userSlug}
               currentUserName={effectiveUser?.nome || 'Colaborador'}
               currentUserAvatar={effectiveUser?.foto || (effectiveUser as any)?.fotoUrl || (effectiveUser as any)?.foto_url}
-              isAdminMode={true}
+              isAdminMode={Boolean(isUserAdmin || isAuthor)}
+              isStaff={true}
               setOpenedFormStr={setOpenedFormStr}
               setMaximizedImageStr={setMaximizedImageStr}
               setMaximizedVideoStr={setMaximizedVideoStr}

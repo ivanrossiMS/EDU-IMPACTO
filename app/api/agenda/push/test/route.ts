@@ -1847,7 +1847,7 @@ export async function POST(request: Request) {
     const nomeAlvo = colabData?.nome ? colabData.nome : (studentData?.nome ? formatFriendlyStudentName(studentData.nome) : 'Destinatário')
     const matriculaAlvo = studentData?.matricula || (colabData ? (colabData.cargo || colabData.perfil || '') : '')
     const turmaAlvo = colabData ? (colabData.cargo || colabData.perfil || 'Equipe Escolar') : (studentData?.turma || '')
-    const agoraHora = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+    const agoraHora = new Date().toLocaleTimeString('pt-BR', { timeZone: 'America/Campo_Grande', hour: '2-digit', minute: '2-digit' })
 
     const finalTitle = title
       .replace(/{aluno}/gi, nomeAlvo)
