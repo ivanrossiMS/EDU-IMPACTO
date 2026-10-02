@@ -605,28 +605,48 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
 
     const subscribeChannel = (binding: typeof activeBindings[0]) => {
       if (!isMounted) return
-      if (binding.channel) {
-        try { supabase.removeChannel(binding.channel) } catch (_) {}
+
+      if (binding.retryTimer) {
+        clearTimeout(binding.retryTimer)
+        binding.retryTimer = undefined
       }
+
+      if (binding.channel) {
+        const oldChannel = binding.channel
+        binding.channel = null
+        try { supabase.removeChannel(oldChannel) } catch (_) {}
+      }
+
       const cName = `agenda-rt-${binding.table}-${identifier}-${Date.now()}`
       const c = supabase.channel(cName)
+      binding.channel = c
+
       c.on('postgres_changes', binding.filter, binding.handler)
         .subscribe((status: string) => {
           if (!isMounted) return
+          // Ignora callbacks de instâncias antigas que foram substituídas
+          if (binding.channel !== c) return
+
           if (status === 'SUBSCRIBED') {
             console.log(`✅ [Realtime] Conectado ao canal ${binding.table}`)
-          } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
-            console.warn(`⚠️ [Realtime] Canal ${binding.table} em estado ${status}. Agendando reconexão...`)
-            try { supabase.removeChannel(c) } catch (_) {}
-            if (isMounted) {
+            if (binding.retryTimer) {
               clearTimeout(binding.retryTimer)
+              binding.retryTimer = undefined
+            }
+          } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+            console.warn(`⚠️ [Realtime] Canal ${binding.table} em estado ${status}. Agendando reconexão...`)
+            // IMPORTANTE: NÃO chamar supabase.removeChannel(c) aqui dentro!
+            // O removeChannel dispara o evento 'CLOSED' de forma síncrona no canal,
+            // o que causava recursão infinita imediata (Maximum call stack size exceeded).
+            // A limpeza do canal antigo será feita de forma segura dentro de subscribeChannel quando o timer disparar.
+            if (isMounted && !binding.retryTimer) {
               binding.retryTimer = setTimeout(() => {
+                binding.retryTimer = undefined
                 if (isMounted) subscribeChannel(binding)
               }, 3000)
             }
           }
         })
-      binding.channel = c
     }
 
     const createBinding = (table: string, filter: any, handler: (payload: any) => void) => {
@@ -1069,9 +1089,14 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
     return () => {
       isMounted = false
       activeBindings.forEach(b => {
-        if (b.retryTimer) clearTimeout(b.retryTimer)
+        if (b.retryTimer) {
+          clearTimeout(b.retryTimer)
+          b.retryTimer = undefined
+        }
         if (b.channel) {
-          try { supabase.removeChannel(b.channel) } catch (_) {}
+          const ch = b.channel
+          b.channel = null
+          try { supabase.removeChannel(ch) } catch (_) {}
         }
       })
       if (typeof window !== 'undefined') {
