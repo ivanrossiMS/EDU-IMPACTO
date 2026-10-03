@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/server/authGuard'
 import { createAdminClient } from '@/lib/server/supabaseServerFactory'
-import { clearPerfilAcessoCache } from '../perfil-acesso/route'
+import { clearPerfilAcessoCache } from '@/lib/server/perfilAcessoCache'
 import { sendPushNotification } from '@/lib/server/pushService'
 
 export const dynamic = 'force-dynamic'

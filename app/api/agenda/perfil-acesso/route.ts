@@ -3,24 +3,10 @@ import { requireAuth } from '@/lib/server/authGuard'
 import { createProtectedClient } from '@/lib/server/supabaseServerFactory'
 import { isAlunoIntegralIntermediario } from '@/lib/studentTurmaUtils'
 import { getCachedTurmasAndGrupos } from '@/lib/server/turmasGruposCache'
+import { getPerfilAcessoCache, setPerfilAcessoCache, CACHE_TTL } from '@/lib/server/perfilAcessoCache'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
-
-const memCache = new Map<string, { value: any, timestamp: number }>();
-const CACHE_TTL = 300_000; // 5 minutos
-
-export function clearPerfilAcessoCache(slug?: string) {
-  if (!slug) {
-    memCache.clear();
-    return;
-  }
-  for (const key of memCache.keys()) {
-    if (key.includes(`-${slug}-`)) {
-      memCache.delete(key);
-    }
-  }
-}
 
 export async function GET(request: Request) {
   const { user, errorResponse } = await requireAuth(request)
@@ -49,7 +35,7 @@ export async function GET(request: Request) {
     }
 
     const cacheKey = `${user.id}-${slug}-${responsavel_id}-${isAlunoProfile}`;
-    const cached = memCache.get(cacheKey);
+    const cached = getPerfilAcessoCache(cacheKey);
     if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
        return NextResponse.json(cached.value, {
          headers: { 'Cache-Control': 'private, max-age=60, stale-while-revalidate=300' }
@@ -188,7 +174,7 @@ export async function GET(request: Request) {
       meusAlunos: meusAlunos
     };
 
-    memCache.set(cacheKey, { value: result, timestamp: Date.now() });
+    setPerfilAcessoCache(cacheKey, result);
 
     return NextResponse.json(result, {
       headers: { 'Cache-Control': 'private, max-age=60, stale-while-revalidate=300' }
