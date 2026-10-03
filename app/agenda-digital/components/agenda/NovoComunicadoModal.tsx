@@ -6,7 +6,7 @@ import {
   Bold, Italic, Underline, List, Link as LinkIcon, Smile, 
   ChevronRight, Save, UploadCloud, Users, Trash2, Calendar,
   Palette, BarChart2, CircleDollarSign, Shield, GraduationCap,
-  Vote, Check, FileCheck2
+  Vote, Check, FileCheck2, AlignLeft, AlignCenter, AlignRight, AlignJustify, Type
 } from 'lucide-react'
 import Image from 'next/image'
 import { UserAvatar } from '@/components/UserAvatar'
@@ -118,6 +118,68 @@ export default function NovoComunicadoModal({
   const [autorizacaoData, setAutorizacaoData] = useState<AutorizacaoData | null>(null)
 
   const editorRef = useRef<HTMLDivElement>(null)
+  const [showFontSizePicker, setShowFontSizePicker] = useState(false)
+  const [selectedFontSize, setSelectedFontSize] = useState('14px')
+  const [currentAlign, setCurrentAlign] = useState<'left' | 'center' | 'right' | 'justify'>('left')
+
+  const checkEditorState = () => {
+    if (typeof document === 'undefined') return;
+    try {
+      if (document.queryCommandState('justifyCenter')) setCurrentAlign('center');
+      else if (document.queryCommandState('justifyRight')) setCurrentAlign('right');
+      else if (document.queryCommandState('justifyFull')) setCurrentAlign('justify');
+      else setCurrentAlign('left');
+    } catch(e) {}
+  };
+
+  const applyAlignment = (align: 'left' | 'center' | 'right' | 'justify') => {
+    setCurrentAlign(align);
+    const cmdMap = {
+      left: 'justifyLeft',
+      center: 'justifyCenter',
+      right: 'justifyRight',
+      justify: 'justifyFull'
+    };
+    document.execCommand(cmdMap[align], false);
+    if (editorRef.current) {
+      setConteudo(editorRef.current.innerHTML);
+      editorRef.current.focus();
+    }
+  };
+
+  const applyFontSize = (sizePx: string) => {
+    setSelectedFontSize(sizePx);
+    const sel = typeof window !== 'undefined' ? window.getSelection() : null;
+    if (!sel || sel.rangeCount === 0 || sel.isCollapsed) {
+      if (editorRef.current) {
+        editorRef.current.style.fontSize = sizePx;
+      }
+      return;
+    }
+
+    document.execCommand('fontSize', false, '7');
+    if (editorRef.current) {
+      const fontTags = editorRef.current.getElementsByTagName('font');
+      for (let i = 0; i < fontTags.length; i++) {
+        if (fontTags[i].getAttribute('size') === '7') {
+          fontTags[i].removeAttribute('size');
+          fontTags[i].style.fontSize = sizePx;
+          fontTags[i].style.lineHeight = '1.5';
+        }
+      }
+      setConteudo(editorRef.current.innerHTML);
+      editorRef.current.focus();
+    }
+  };
+
+  const execCmd = (cmd: string, val: string | undefined = undefined) => {
+    document.execCommand(cmd, false, val);
+    if (editorRef.current) {
+      setConteudo(editorRef.current.innerHTML);
+      editorRef.current.focus();
+    }
+    checkEditorState();
+  };
   
   useEffect(() => {
     if (isOpen) {
@@ -507,11 +569,15 @@ export default function NovoComunicadoModal({
         .ad-nc-editor {
           min-height: 153px;
           outline: none;
-          font-size: 15px;
+          font-size: 14px;
           line-height: 1.6;
           color: #0F172A;
           padding-bottom: 12px;
         }
+        .ad-nc-editor [align="left"], .ad-nc-editor [style*="text-align: left"] { text-align: left; }
+        .ad-nc-editor [align="center"], .ad-nc-editor [style*="text-align: center"] { text-align: center; }
+        .ad-nc-editor [align="right"], .ad-nc-editor [style*="text-align: right"] { text-align: right; }
+        .ad-nc-editor [align="justify"], .ad-nc-editor [style*="text-align: justify"] { text-align: justify; text-justify: inter-word; }
         .ad-nc-editor:empty:before {
           content: attr(data-placeholder);
           color: #94A3B8;
@@ -522,12 +588,15 @@ export default function NovoComunicadoModal({
         .ad-nc-toolbar {
           display: flex;
           gap: 4px;
+          flex-wrap: wrap;
+          align-items: center;
           padding-top: 12px;
           border-top: 1px solid #E2E8F0;
         }
         .ad-nc-tool-btn {
-          width: 36px;
-          height: 36px;
+          min-width: 34px;
+          height: 34px;
+          padding: 0 6px;
           border-radius: 10px;
           display: flex;
           align-items: center;
@@ -541,6 +610,10 @@ export default function NovoComunicadoModal({
         .ad-nc-tool-btn:hover {
           background: #F1F5F9;
           color: #0F172A;
+        }
+        .ad-nc-tool-btn.active {
+          background: #EEF2FF;
+          color: #4F46E5;
         }
         
         .ad-nc-dropzone {
@@ -825,6 +898,8 @@ export default function NovoComunicadoModal({
                 className="ad-nc-editor"
                 data-placeholder="Escreva sua mensagem..."
                 onInput={e => setConteudo(e.currentTarget.innerHTML)}
+                onKeyUp={checkEditorState}
+                onMouseUp={checkEditorState}
               />
               
               <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
@@ -834,26 +909,167 @@ export default function NovoComunicadoModal({
               </div>
               
               <div className="ad-nc-toolbar">
-                <button className="ad-nc-tool-btn" onClick={() => { document.execCommand('bold', false); editorRef.current?.focus(); }}><Bold size={18}/></button>
-                <button className="ad-nc-tool-btn" onClick={() => { document.execCommand('italic', false); editorRef.current?.focus(); }}><Italic size={18}/></button>
-                <button className="ad-nc-tool-btn" onClick={() => { document.execCommand('underline', false); editorRef.current?.focus(); }}><Underline size={18}/></button>
-                <div style={{ width: 1, height: 20, background: '#E2E8F0', margin: 'auto 4px' }} />
-                <button className="ad-nc-tool-btn" onClick={() => { document.execCommand('insertUnorderedList', false); editorRef.current?.focus(); }}><List size={18}/></button>
-                <button className="ad-nc-tool-btn" onClick={() => { 
-                   const url = prompt('Digite o link:'); 
-                   if(url) document.execCommand('createLink', false, url); 
-                   editorRef.current?.focus(); 
-                }}><LinkIcon size={18}/></button>
-                <label className="ad-nc-tool-btn" style={{ position: 'relative', overflow: 'hidden' }}>
-                  <Palette size={18}/>
-                  <input type="color" onChange={(e) => { document.execCommand('foreColor', false, e.target.value); editorRef.current?.focus(); }} style={{ position: 'absolute', opacity: 0, width: '100%', height: '100%', cursor: 'pointer' }} />
-                </label>
+                <button type="button" className="ad-nc-tool-btn" onMouseDown={e => { e.preventDefault(); execCmd('bold'); }} title="Negrito"><Bold size={17}/></button>
+                <button type="button" className="ad-nc-tool-btn" onMouseDown={e => { e.preventDefault(); execCmd('italic'); }} title="Itálico"><Italic size={17}/></button>
+                <button type="button" className="ad-nc-tool-btn" onMouseDown={e => { e.preventDefault(); execCmd('underline'); }} title="Sublinhado"><Underline size={17}/></button>
+
+                <div style={{ width: 1, height: 20, background: '#E2E8F0', margin: 'auto 3px' }} />
+
+                {/* Tamanho da Fonte */}
                 <div style={{ position: 'relative' }}>
-                  <button className="ad-nc-tool-btn" onClick={() => setShowEmojiPicker(!showEmojiPicker)}><Smile size={18}/></button>
+                  <button
+                    type="button"
+                    className={`ad-nc-tool-btn ${showFontSizePicker ? 'active' : ''}`}
+                    onMouseDown={e => {
+                      e.preventDefault();
+                      setShowFontSizePicker(!showFontSizePicker);
+                      setShowEmojiPicker(false);
+                    }}
+                    title="Tamanho da Fonte"
+                    style={{
+                      width: 'auto',
+                      padding: '0 8px',
+                      gap: 4,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      fontSize: 12,
+                      fontWeight: 700,
+                      background: showFontSizePicker ? '#EEF2FF' : 'transparent',
+                      color: showFontSizePicker ? '#4F46E5' : '#64748B'
+                    }}
+                  >
+                    <Type size={16} />
+                    <span style={{ fontSize: 11.5 }}>{selectedFontSize}</span>
+                  </button>
+
+                  {showFontSizePicker && (
+                    <div style={{
+                      position: 'absolute',
+                      bottom: 45,
+                      left: 0,
+                      background: '#ffffff',
+                      border: '1px solid #E2E8F0',
+                      borderRadius: 14,
+                      padding: 6,
+                      boxShadow: '0 16px 36px -8px rgba(15, 23, 42, 0.18)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 2,
+                      zIndex: 110,
+                      minWidth: 155
+                    }}>
+                      {[
+                        { label: 'Pequeno', size: '12px' },
+                        { label: 'Normal (Padrão)', size: '14px' },
+                        { label: 'Médio', size: '16px' },
+                        { label: 'Grande', size: '18px' },
+                        { label: 'Título', size: '20px' },
+                        { label: 'Destaque', size: '24px' }
+                      ].map(item => (
+                        <button
+                          key={item.size}
+                          type="button"
+                          onMouseDown={e => {
+                            e.preventDefault();
+                            applyFontSize(item.size);
+                            setShowFontSizePicker(false);
+                          }}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '7px 12px',
+                            borderRadius: 8,
+                            border: 'none',
+                            background: selectedFontSize === item.size ? '#EEF2FF' : 'transparent',
+                            color: selectedFontSize === item.size ? '#4F46E5' : '#1E293B',
+                            cursor: 'pointer',
+                            fontWeight: selectedFontSize === item.size ? 700 : 500,
+                            textAlign: 'left'
+                          }}
+                          onMouseEnter={e => {
+                            if (selectedFontSize !== item.size) e.currentTarget.style.background = '#F1F5F9';
+                          }}
+                          onMouseLeave={e => {
+                            if (selectedFontSize !== item.size) e.currentTarget.style.background = 'transparent';
+                          }}
+                        >
+                          <span style={{ fontSize: item.size }}>{item.label}</span>
+                          <span style={{ fontSize: 11, color: '#94A3B8' }}>{item.size}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ width: 1, height: 20, background: '#E2E8F0', margin: 'auto 3px' }} />
+
+                {/* Alinhamento: Esquerda, Centralizado, Direita, Justificado */}
+                <button
+                  type="button"
+                  className={`ad-nc-tool-btn ${currentAlign === 'left' ? 'active' : ''}`}
+                  onMouseDown={e => {
+                    e.preventDefault();
+                    applyAlignment('left');
+                  }}
+                  title="Alinhar à Esquerda"
+                >
+                  <AlignLeft size={17} />
+                </button>
+                <button
+                  type="button"
+                  className={`ad-nc-tool-btn ${currentAlign === 'center' ? 'active' : ''}`}
+                  onMouseDown={e => {
+                    e.preventDefault();
+                    applyAlignment('center');
+                  }}
+                  title="Centralizar"
+                >
+                  <AlignCenter size={17} />
+                </button>
+                <button
+                  type="button"
+                  className={`ad-nc-tool-btn ${currentAlign === 'right' ? 'active' : ''}`}
+                  onMouseDown={e => {
+                    e.preventDefault();
+                    applyAlignment('right');
+                  }}
+                  title="Alinhar à Direita"
+                >
+                  <AlignRight size={17} />
+                </button>
+                <button
+                  type="button"
+                  className={`ad-nc-tool-btn ${currentAlign === 'justify' ? 'active' : ''}`}
+                  onMouseDown={e => {
+                    e.preventDefault();
+                    applyAlignment('justify');
+                  }}
+                  title="Justificado"
+                >
+                  <AlignJustify size={17} />
+                </button>
+
+                <div style={{ width: 1, height: 20, background: '#E2E8F0', margin: 'auto 3px' }} />
+
+                <button type="button" className="ad-nc-tool-btn" onMouseDown={e => { e.preventDefault(); execCmd('insertUnorderedList'); }} title="Lista"><List size={17}/></button>
+                <button type="button" className="ad-nc-tool-btn" onMouseDown={e => { 
+                   e.preventDefault();
+                   const url = prompt('Digite o link:'); 
+                   if(url) execCmd('createLink', url); 
+                }} title="Inserir Link"><LinkIcon size={17}/></button>
+
+                <label className="ad-nc-tool-btn" style={{ position: 'relative', overflow: 'hidden' }} title="Cor do Texto">
+                  <Palette size={17}/>
+                  <input type="color" onChange={(e) => { execCmd('foreColor', e.target.value); }} style={{ position: 'absolute', opacity: 0, width: '100%', height: '100%', cursor: 'pointer' }} />
+                </label>
+
+                <div style={{ position: 'relative' }}>
+                  <button type="button" className="ad-nc-tool-btn" onMouseDown={e => { e.preventDefault(); setShowEmojiPicker(!showEmojiPicker); setShowFontSizePicker(false); }} title="Emojis"><Smile size={17}/></button>
                   {showEmojiPicker && (
-                    <div style={{ position: 'absolute', bottom: 45, left: -50, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, padding: 12, boxShadow: '0 20px 40px -10px rgba(0,0,0,0.15)', display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8, zIndex: 100 }}>
+                    <div style={{ position: 'absolute', bottom: 45, left: -50, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, padding: 12, boxShadow: '0 20px 40px -10px rgba(0,0,0,0.15)', display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8, zIndex: 110 }}>
                       {EMOJIS.map(emoji => (
-                        <button key={emoji} onClick={() => { document.execCommand('insertText', false, emoji); setShowEmojiPicker(false); editorRef.current?.focus(); }} style={{ background: 'transparent', border: 0, fontSize: 22, cursor: 'pointer', padding: 6, borderRadius: 8, transition: 'transform 0.2s' }} onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.2)'} onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}>
+                        <button key={emoji} type="button" onMouseDown={e => { e.preventDefault(); execCmd('insertText', emoji); setShowEmojiPicker(false); }} style={{ background: 'transparent', border: 0, fontSize: 22, cursor: 'pointer', padding: 6, borderRadius: 8, transition: 'transform 0.2s' }} onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.2)'} onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}>
                           {emoji}
                         </button>
                       ))}

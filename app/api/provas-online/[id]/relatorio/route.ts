@@ -54,6 +54,34 @@ export async function GET(
   const tentativas = await dbGetTentativasByProvaId(provaId)
   const submittedTentativas = tentativas.filter(t => t.status === 'entregue' || t.status === 'expirada')
 
+  // Fetch occurrences / infractions for all attempts
+  const tentativaIds = tentativas.map(t => t.id)
+  let ocorrenciasDb: any[] = []
+  if (tentativaIds.length > 0) {
+    try {
+      const { data: ocData } = await adminClient
+        .from('provas_online_ocorrencias')
+        .select('*')
+        .in('tentativa_id', tentativaIds)
+        .order('created_at', { ascending: false })
+      if (ocData) ocorrenciasDb = ocData
+    } catch {}
+
+    if (ocorrenciasDb.length === 0) {
+      try {
+        const { data: recData } = await adminClient
+          .from('relatorios_records')
+          .select('dados')
+          .like('id', `provas_online_ocorrencias:%`)
+        if (recData) {
+          ocorrenciasDb = recData
+            .map((r: any) => r.dados)
+            .filter((o: any) => o && tentativaIds.includes(o.tentativaId))
+        }
+      } catch {}
+    }
+  }
+
   // 2. Overview Metrics
   const totalInscritos = validStudents.length || tentativas.length
   const totalParticipantes = new Set(tentativas.map(t => t.alunoId)).size
@@ -195,24 +223,42 @@ export async function GET(
   }))
 
   // 7. Lista Nominal de Alunos
+  const valorTotalProva = Number(prova.valorTotal || 10)
   const listaAlunos = validStudents.map((aluno: any) => {
-    const tList = submittedTentativas.filter(t => t.alunoId === aluno.id)
-    const ultima = tList[0] || null
+    const tList = tentativas.filter(t => t.alunoId === aluno.id)
+    const submittedList = submittedTentativas.filter(t => t.alunoId === aluno.id)
+    const ultima = submittedList[0] || tList[0] || null
 
     let situacao = 'ausente'
     if (ultima) situacao = ultima.status
+
+    const studentOcorrencias = ocorrenciasDb.filter((o: any) =>
+      (ultima && (o.tentativa_id === ultima.id || o.tentativaId === ultima.id)) ||
+      o.aluno_id === aluno.id || o.alunoId === aluno.id
+    )
+
+    const notaFinalNum = ultima && ultima.notaFinal !== undefined && ultima.notaFinal !== null ? Number(ultima.notaFinal) : null
+    const aproveitamento = notaFinalNum !== null && valorTotalProva > 0 ? Math.round((notaFinalNum / valorTotalProva) * 100) : null
 
     return {
       alunoId: aluno.id,
       alunoNome: aluno.nome,
       alunoMatricula: aluno.matricula,
+      matricula: aluno.matricula,
       turma: aluno.turma,
       situacao,
-      notaFinal: ultima ? ultima.notaFinal : null,
+      status: situacao,
+      notaFinal: notaFinalNum,
+      notaObjetiva: ultima && ultima.pontuacaoObjetiva !== undefined ? Number(ultima.pontuacaoObjetiva) : null,
       pontuacaoObjetiva: ultima ? ultima.pontuacaoObjetiva : null,
+      notaDissertativa: ultima && ultima.pontuacaoDissertativa !== undefined ? Number(ultima.pontuacaoDissertativa) : null,
       pontuacaoDissertativa: ultima ? ultima.pontuacaoDissertativa : null,
+      porcentagem: aproveitamento,
+      aproveitamento,
       entregueEm: ultima ? ultima.entregueEm : null,
-      comprovanteCodigo: ultima ? ultima.comprovanteCodigo : null
+      comprovanteCodigo: ultima ? ultima.comprovanteCodigo : null,
+      ocorrenciasCount: studentOcorrencias.length,
+      ocorrencias: studentOcorrencias
     }
   })
 
@@ -233,17 +279,22 @@ export async function GET(
     resumo: {
       totalInscritos,
       totalParticipantes,
+      totalEntregues: submittedTentativas.length,
       taxaParticipacao,
       mediaGeral,
       mediana,
       notaMaxima,
       notaMinima,
       tempoMedioMinutos,
+      totalOcorrencias: ocorrenciasDb.length,
+      alunosComOcorrencia: listaAlunos.filter(a => a.ocorrenciasCount > 0).length,
       pendenciasCorrecao: submittedTentativas.filter(t => t.statusCorrecao === 'pendente' || t.statusCorrecao === 'parcial').length
     },
     distribuicao,
     desempenhoPorTurma,
     analiseQuestoes,
-    listaAlunos
+    listaAlunos,
+    desempenhoAlunos: listaAlunos,
+    ocorrencias: ocorrenciasDb
   })
 }

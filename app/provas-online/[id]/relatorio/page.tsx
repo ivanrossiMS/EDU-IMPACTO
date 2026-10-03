@@ -8,7 +8,7 @@ import {
   FileText, ArrowLeft, Download, Printer, CheckCircle2,
   Users, BarChart3, TrendingUp, AlertTriangle, ArrowUpRight,
   RefreshCw, Check, Sparkles, HelpCircle, Layers, Scale,
-  BookOpen, Calculator, Database, Shield, Award
+  BookOpen, Calculator, Database, Shield, Award, X, Clock
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { HtmlContent } from '@/components/HtmlContent'
@@ -26,6 +26,7 @@ export default function RelatorioProvaPage() {
 
   // Search in student results
   const [studentSearch, setStudentSearch] = useState('')
+  const [selectedStudentLogs, setSelectedStudentLogs] = useState<any>(null)
 
   // Integration Modal
   const [integrationModalOpen, setIntegrationModalOpen] = useState(false)
@@ -466,6 +467,33 @@ export default function RelatorioProvaPage() {
           </div>
           <span style={{ fontSize: '11px', color: '#94a3b8' }}>Menor pontuação</span>
         </div>
+
+        {/* Integridade Digital & Ocorrências */}
+        <div style={{
+          background: '#ffffff',
+          border: `1px solid ${(resumo?.totalOcorrencias || 0) > 0 ? '#fecdd3' : '#e2e8f0'}`,
+          borderRadius: '16px',
+          padding: '18px 20px',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '8px'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: '11px', fontWeight: 700, color: (resumo?.totalOcorrencias || 0) > 0 ? '#be123c' : '#15803d', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+              Integridade Digital
+            </span>
+            <div style={{ width: '32px', height: '32px', borderRadius: '10px', background: (resumo?.totalOcorrencias || 0) > 0 ? '#fff1f2' : '#f0fdf4', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Shield size={16} color={(resumo?.totalOcorrencias || 0) > 0 ? '#e11d48' : '#16a34a'} />
+            </div>
+          </div>
+          <div style={{ fontSize: '28px', fontWeight: 800, color: (resumo?.totalOcorrencias || 0) > 0 ? '#e11d48' : '#16a34a', lineHeight: 1 }}>
+            {resumo?.totalOcorrencias || 0}
+          </div>
+          <span style={{ fontSize: '11px', color: (resumo?.totalOcorrencias || 0) > 0 ? '#be123c' : '#64748b' }}>
+            {(resumo?.totalOcorrencias || 0) === 0 ? 'Nenhuma infração registrada' : `${resumo?.alunosComOcorrencia || 0} aluno(s) com infrações`}
+          </span>
+        </div>
       </div>
 
       {/* 3. NAVIGATION TABS */}
@@ -751,6 +779,7 @@ export default function RelatorioProvaPage() {
                   <th className="py-3 px-4">Matrícula</th>
                   <th className="py-3 px-4">Turma</th>
                   <th className="py-3 px-4">Situação</th>
+                  <th className="py-3 px-4">Integridade / Infrações</th>
                   <th className="py-3 px-4 text-right">Nota Objetiva</th>
                   <th className="py-3 px-4 text-right">Nota Dissertativa</th>
                   <th className="py-3 px-4 text-right">Nota Final</th>
@@ -760,7 +789,7 @@ export default function RelatorioProvaPage() {
               <tbody className="divide-y divide-slate-100 text-slate-700">
                 {filteredStudents.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="py-12 text-center text-slate-400">
+                    <td colSpan={9} className="py-12 text-center text-slate-400">
                       Nenhum aluno encontrado.
                     </td>
                   </tr>
@@ -781,17 +810,35 @@ export default function RelatorioProvaPage() {
                           {s.status?.replace('_', ' ') || 'Entregue'}
                         </span>
                       </td>
-                      <td className="py-3.5 px-4 text-right font-mono text-slate-500">
-                        {s.notaObjetiva !== undefined ? s.notaObjetiva.toFixed(1) : '--'}
+                      <td className="py-3.5 px-4">
+                        {(s.ocorrenciasCount || 0) > 0 ? (
+                          <button
+                            type="button"
+                            onClick={() => setSelectedStudentLogs(s)}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100 transition-colors cursor-pointer"
+                            title="Clique para ver o log de infrações detectadas"
+                          >
+                            <AlertTriangle size={11} className="text-rose-600 shrink-0" />
+                            <span>{s.ocorrenciasCount} infração(ões)</span>
+                          </button>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            <CheckCircle2 size={11} className="text-emerald-600 shrink-0" />
+                            <span>Regular</span>
+                          </span>
+                        )}
                       </td>
                       <td className="py-3.5 px-4 text-right font-mono text-slate-500">
-                        {s.notaDissertativa !== undefined ? s.notaDissertativa.toFixed(1) : '--'}
+                        {s.notaObjetiva !== undefined && s.notaObjetiva !== null ? s.notaObjetiva.toFixed(1) : '--'}
+                      </td>
+                      <td className="py-3.5 px-4 text-right font-mono text-slate-500">
+                        {s.notaDissertativa !== undefined && s.notaDissertativa !== null ? s.notaDissertativa.toFixed(1) : '--'}
                       </td>
                       <td className="py-3.5 px-4 text-right font-mono font-bold text-sky-700">
-                        {s.notaFinal !== undefined ? s.notaFinal.toFixed(1) : '--'}
+                        {s.notaFinal !== undefined && s.notaFinal !== null ? s.notaFinal.toFixed(1) : '--'}
                       </td>
                       <td className="py-3.5 px-4 text-right font-mono text-emerald-700 font-semibold">
-                        {s.porcentagem !== undefined ? `${s.porcentagem}%` : '--'}
+                        {s.porcentagem !== undefined && s.porcentagem !== null ? `${s.porcentagem}%` : '--'}
                       </td>
                     </tr>
                   ))
@@ -886,12 +933,26 @@ export default function RelatorioProvaPage() {
             </div>
 
             {/* Texto Formal da Ata */}
-            <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-700 leading-relaxed mb-6">
+            <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-700 leading-relaxed mb-4">
               Aos <strong>{new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}</strong>, 
               sob supervisão da Coordenação Pedagógica do IMPACTO-EDU, foi realizada e homologada a avaliação digital da disciplina de 
               <strong> {prova?.disciplina}</strong>. Constatou-se a participação efetiva de <strong>{resumo?.totalEntregues || 0}</strong> estudantes 
               do total de <strong>{resumo?.totalParticipantes || 0}</strong> matriculados, registrando uma taxa de adesão de <strong>{resumo?.taxaParticipacao || 0}%</strong>.
               As notas foram apuradas conforme os critérios regulamentares da instituição e encontram-se discriminadas na relação nominal abaixo.
+            </div>
+
+            {/* Auditoria de Integridade Digital na Ata */}
+            <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-700 leading-relaxed mb-6">
+              <span className="font-bold text-slate-900 mb-1 flex items-center gap-1.5">
+                <Shield size={13} className="text-sky-600" />
+                Auditoria de Integridade Digital e Supervisão Eletrônica:
+              </span>
+              O exame contou com monitoramento digital ativo de integridade acadêmica. 
+              {(resumo?.totalOcorrencias || 0) === 0 ? (
+                <span> Durante toda a aplicação, <strong>não foram constatadas infrações digitais</strong> (como saídas de tela cheia ou alternância não autorizada de abas).</span>
+              ) : (
+                <span> Foram registradas <strong>{resumo?.totalOcorrencias} infração(ões)</strong> de integridade digital em <strong>{resumo?.alunosComOcorrencia} aluno(s)</strong>, auditadas e anexadas ao histórico eletrônico da avaliação para análise do corpo docente.</span>
+              )}
             </div>
 
             {/* Tabela Nominal da Ata */}
@@ -903,6 +964,7 @@ export default function RelatorioProvaPage() {
                     <th className="py-2.5 px-3">Estudante</th>
                     <th className="py-2.5 px-3">Matrícula</th>
                     <th className="py-2.5 px-3">Turma</th>
+                    <th className="py-2.5 px-3 text-center">Auditoria Digital</th>
                     <th className="py-2.5 px-3 text-center">Situação</th>
                     <th className="py-2.5 px-3 text-right">Nota Final</th>
                   </tr>
@@ -914,6 +976,17 @@ export default function RelatorioProvaPage() {
                       <td className="py-2 px-3 font-semibold text-slate-900">{aluno.alunoNome}</td>
                       <td className="py-2 px-3 font-mono text-slate-500">{aluno.matricula || 'S/M'}</td>
                       <td className="py-2 px-3">{aluno.turma}</td>
+                      <td className="py-2 px-3 text-center">
+                        {(aluno.ocorrenciasCount || 0) > 0 ? (
+                          <span className="font-semibold text-rose-600 font-mono text-[10px] bg-rose-50 px-2 py-0.5 rounded-full border border-rose-200">
+                            {aluno.ocorrenciasCount} infração(ões)
+                          </span>
+                        ) : (
+                          <span className="text-emerald-700 font-medium text-[10px] bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                            Sem ocorrências
+                          </span>
+                        )}
+                      </td>
                       <td className="py-2 px-3 text-center">
                         <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200 capitalize">
                           {aluno.status?.replace('_', ' ') || 'Entregue'}
@@ -1273,6 +1346,193 @@ export default function RelatorioProvaPage() {
                 >
                   {committingIntegration ? <RefreshCw size={15} className="animate-spin" /> : <Check size={16} />}
                   {committingIntegration ? 'Transferindo...' : 'Confirmar Transferência para Diário'}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* 8. MODAL: LOG DE INFRAÇÕES DO ALUNO */}
+      <AnimatePresence>
+        {selectedStudentLogs && (
+          <div
+            style={{
+              position: 'fixed',
+              inset: 0,
+              zIndex: 9999,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '16px',
+              background: 'rgba(15, 23, 42, 0.65)',
+              backdropFilter: 'blur(6px)',
+            }}
+            onClick={() => setSelectedStudentLogs(null)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              onClick={e => e.stopPropagation()}
+              style={{
+                width: '100%',
+                maxWidth: '600px',
+                maxHeight: '85vh',
+                overflowY: 'auto',
+                background: '#ffffff',
+                borderRadius: '24px',
+                border: '1px solid #e2e8f0',
+                boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+                padding: '24px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '16px',
+              }}
+            >
+              {/* Header */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #f1f5f9', paddingBottom: '14px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <div style={{
+                    width: '42px',
+                    height: '42px',
+                    borderRadius: '12px',
+                    background: '#fff1f2',
+                    color: '#e11d48',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    border: '1px solid #fecdd3',
+                    flexShrink: 0
+                  }}>
+                    <Shield size={20} />
+                  </div>
+                  <div>
+                    <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: '#0f172a' }}>
+                      Auditoria de Integridade Digital
+                    </h3>
+                    <p style={{ margin: '2px 0 0 0', fontSize: '12px', color: '#64748b' }}>
+                      {selectedStudentLogs.alunoNome} • {selectedStudentLogs.turma || 'Turma'}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedStudentLogs(null)}
+                  style={{
+                    background: '#f8fafc',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: '8px',
+                    color: '#64748b',
+                    cursor: 'pointer',
+                    padding: '6px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              {/* Summary banner */}
+              <div style={{
+                background: '#fff1f2',
+                border: '1px solid #fecdd3',
+                borderRadius: '14px',
+                padding: '12px 16px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <AlertTriangle size={18} className="text-rose-600 shrink-0" />
+                  <span style={{ fontSize: '13px', fontWeight: 700, color: '#9f1239' }}>
+                    {selectedStudentLogs.ocorrenciasCount || (selectedStudentLogs.ocorrencias?.length || 0)} infração(ões) detectada(s)
+                  </span>
+                </div>
+                <span style={{ fontSize: '11px', color: '#be123c', fontWeight: 600 }}>
+                  Matrícula: {selectedStudentLogs.matricula || 'S/M'}
+                </span>
+              </div>
+
+              {/* Occurrences list */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '350px', overflowY: 'auto' }}>
+                {(!selectedStudentLogs.ocorrencias || selectedStudentLogs.ocorrencias.length === 0) ? (
+                  <div style={{ textAlign: 'center', padding: '32px 16px', color: '#94a3b8', fontSize: '13px' }}>
+                    Nenhum detalhe adicional de infração foi armazenado no banco para este aluno.
+                  </div>
+                ) : (
+                  selectedStudentLogs.ocorrencias.map((item: any, idx: number) => {
+                    const tipoLabel = 
+                      item.tipo === 'saida_tela' ? 'Saída de Tela / Alternância de Aba' :
+                      item.tipo === 'saida_tela_cheia' ? 'Saída do Modo de Tela Cheia' :
+                      item.tipo === 'tentativa_colar' ? 'Tentativa de Copiar/Colar Conteúdo' :
+                      item.tipo || 'Infração'
+                    
+                    const timestampStr = item.created_at ? new Date(item.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '--:--:--'
+
+                    return (
+                      <div
+                        key={idx}
+                        style={{
+                          background: '#fafafa',
+                          border: '1px solid #f1f5f9',
+                          borderRadius: '12px',
+                          padding: '12px 14px',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '6px'
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <span style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            fontSize: '11px',
+                            fontWeight: 700,
+                            color: '#e11d48'
+                          }}>
+                            <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#e11d48' }} />
+                            {tipoLabel}
+                          </span>
+                          <span style={{ fontSize: '11px', fontFamily: 'monospace', color: '#64748b', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <Clock size={11} />
+                            {timestampStr}
+                          </span>
+                        </div>
+                        <p style={{ margin: 0, fontSize: '12px', color: '#334155', lineHeight: 1.4 }}>
+                          {item.descricao || 'Ocorrência registrada pelo mecanismo de supervisão de prova online.'}
+                        </p>
+                        {item.duracao_segundos ? (
+                          <span style={{ fontSize: '11px', color: '#94a3b8', fontStyle: 'italic' }}>
+                            Duração fora da prova: {item.duracao_segundos} segundo(s)
+                          </span>
+                        ) : null}
+                      </div>
+                    )
+                  })
+                )}
+              </div>
+
+              {/* Footer */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: '12px', borderTop: '1px solid #f1f5f9' }}>
+                <button
+                  type="button"
+                  onClick={() => setSelectedStudentLogs(null)}
+                  style={{
+                    padding: '8px 18px',
+                    borderRadius: '10px',
+                    background: '#0f172a',
+                    border: 'none',
+                    color: '#ffffff',
+                    fontSize: '12px',
+                    fontWeight: 700,
+                    cursor: 'pointer'
+                  }}
+                >
+                  Fechar Registro
                 </button>
               </div>
             </motion.div>

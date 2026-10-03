@@ -63,6 +63,33 @@ export async function GET(
   const totalQuestoes = (prova.questoes || []).length || 1
   const now = Date.now()
 
+  // Fetch occurrences for these attempts
+  const tentativaIds = tentativas.map(t => t.id)
+  let ocorrenciasDb: any[] = []
+  if (tentativaIds.length > 0) {
+    try {
+      const { data: ocData } = await adminClient
+        .from('provas_online_ocorrencias')
+        .select('*')
+        .in('tentativa_id', tentativaIds)
+      if (ocData) ocorrenciasDb = ocData
+    } catch {}
+
+    if (ocorrenciasDb.length === 0) {
+      try {
+        const { data: recData } = await adminClient
+          .from('relatorios_records')
+          .select('dados')
+          .like('id', `provas_online_ocorrencias:%`)
+        if (recData) {
+          ocorrenciasDb = recData
+            .map((r: any) => r.dados)
+            .filter((o: any) => o && tentativaIds.includes(o.tentativaId))
+        }
+      } catch {}
+    }
+  }
+
   // Process attempts with live connection estimates and time left
   const studentRows = validStudents.map((aluno: any) => {
     const studentTentativas = tentativas
@@ -71,6 +98,12 @@ export async function GET(
     const activeTentativa = studentTentativas.find(t => t.status === 'em_andamento')
     const submittedTentativa = studentTentativas.find(t => t.status === 'entregue' || t.status === 'expirada')
     const currentTentativa = activeTentativa || submittedTentativa || studentTentativas[0] || null
+
+    const ocList = ocorrenciasDb.filter(o => 
+      (currentTentativa && (o.tentativa_id === currentTentativa.id || o.tentativaId === currentTentativa.id)) ||
+      o.aluno_id === aluno.id || o.alunoId === aluno.id
+    )
+    const ocorrenciasCount = ocList.length
 
     if (!currentTentativa) {
       return {
@@ -168,6 +201,8 @@ export async function GET(
       totalQuestoes,
       percentualConcluido,
       tentativaId: currentTentativa.id,
+      ocorrenciasCount,
+      ocorrencias: ocList,
       comprovanteCodigo: currentTentativa.comprovanteCodigo,
       pontuacaoObjetiva: currentTentativa.pontuacaoObjetiva,
       notaFinal: currentTentativa.notaFinal,

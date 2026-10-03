@@ -11,7 +11,6 @@ import {
   AlertCircle,
   CheckCircle2,
   Award,
-  Search,
   RotateCw,
   Flame,
   FileText,
@@ -465,100 +464,65 @@ export default function ADProvasOnlineStudentPage() {
                   WebkitTextFillColor: 'transparent',
                   lineHeight: 1.2
                 }}>
-                  {isResponsavel ? 'Acompanhamento de Provas' : 'Provas Online'}
+                  Provas On-Line
                 </h1>
-                <span style={{
-                  fontSize: 10,
-                  fontWeight: 800,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.06em',
-                  padding: '3px 8px',
-                  borderRadius: 20,
-                  background: isResponsavel ? '#eff6ff' : '#f0fdf4',
-                  color: isResponsavel ? '#1d4ed8' : '#15803d',
-                  border: `1px solid ${isResponsavel ? '#bfdbfe' : '#bbf7d0'}`
-                }}>
-                  {isResponsavel ? 'Painel da Família' : 'Módulo Integrado'}
-                </span>
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{
+                    fontSize: 10,
+                    fontWeight: 800,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.06em',
+                    padding: '3px 8px',
+                    borderRadius: 20,
+                    background: isResponsavel ? '#eff6ff' : '#f0fdf4',
+                    color: isResponsavel ? '#1d4ed8' : '#15803d',
+                    border: `1px solid ${isResponsavel ? '#bfdbfe' : '#bbf7d0'}`
+                  }}>
+                    {isResponsavel ? 'Painel da Família' : 'Módulo Integrado'}
+                  </span>
+                  <button
+                    onClick={() => fetchProvas(true)}
+                    disabled={refreshing}
+                    title="Atualizar lista de provas"
+                    style={{
+                      width: 24,
+                      height: 24,
+                      borderRadius: 7,
+                      background: '#ffffff',
+                      border: '1.2px solid #cbd5e1',
+                      color: '#475569',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                      boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+                      padding: 0
+                    }}
+                    onMouseEnter={e => {
+                      e.currentTarget.style.borderColor = '#0284c7'
+                      e.currentTarget.style.color = '#0284c7'
+                    }}
+                    onMouseLeave={e => {
+                      e.currentTarget.style.borderColor = '#cbd5e1'
+                      e.currentTarget.style.color = '#475569'
+                    }}
+                  >
+                    <RotateCw size={12} className={refreshing ? 'animate-spin' : ''} />
+                  </button>
+                </div>
               </div>
-              <p style={{
-                margin: '4px 0 0',
-                fontSize: 13,
-                color: '#64748b',
-                fontWeight: 500
-              }}>
-                {isResponsavel
-                  ? `Acompanhe datas, prazos de entrega, comprovantes e notas de ${nomeEstudante}`
-                  : 'Relação de avaliações, simulados e testes digitais do Colégio Impacto'}
-              </p>
+              {!isResponsavel && (
+                <p style={{
+                  margin: '4px 0 0',
+                  fontSize: 13,
+                  color: '#64748b',
+                  fontWeight: 500
+                }}>
+                  Relação de avaliações, simulados e testes digitais do Colégio Impacto
+                </p>
+              )}
             </div>
-          </div>
-
-          {/* Quick Refresh & Search Bar */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-            <div style={{ position: 'relative' }}>
-              <Search size={15} color="#94a3b8" style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)' }} />
-              <input
-                type="text"
-                placeholder="Buscar avaliação ou matéria..."
-                value={searchTerm}
-                onChange={e => setSearchTerm(e.target.value)}
-                style={{
-                  width: 220,
-                  height: 38,
-                  paddingLeft: 34,
-                  paddingRight: 14,
-                  borderRadius: 9999,
-                  border: '1.5px solid #cbd5e1',
-                  background: '#f8fafc',
-                  fontSize: 12.5,
-                  fontWeight: 500,
-                  color: '#0f172a',
-                  outline: 'none',
-                  transition: 'all 0.2s ease'
-                }}
-                onFocus={e => {
-                  e.currentTarget.style.borderColor = '#0284c7'
-                  e.currentTarget.style.background = '#ffffff'
-                  e.currentTarget.style.boxShadow = '0 0 0 3px rgba(2, 132, 199, 0.12)'
-                }}
-                onBlur={e => {
-                  e.currentTarget.style.borderColor = '#cbd5e1'
-                  e.currentTarget.style.background = '#f8fafc'
-                  e.currentTarget.style.boxShadow = 'none'
-                }}
-              />
-            </div>
-
-            <button
-              onClick={() => fetchProvas(true)}
-              disabled={refreshing}
-              title="Atualizar lista de provas"
-              style={{
-                width: 38,
-                height: 38,
-                borderRadius: 12,
-                background: '#ffffff',
-                border: '1.5px solid #cbd5e1',
-                color: '#475569',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                cursor: 'pointer',
-                transition: 'all 0.2s',
-                boxShadow: '0 1px 2px rgba(0,0,0,0.04)'
-              }}
-              onMouseEnter={e => {
-                e.currentTarget.style.borderColor = '#0284c7'
-                e.currentTarget.style.color = '#0284c7'
-              }}
-              onMouseLeave={e => {
-                e.currentTarget.style.borderColor = '#cbd5e1'
-                e.currentTarget.style.color = '#475569'
-              }}
-            >
-              <RotateCw size={15} className={refreshing ? 'animate-spin' : ''} />
-            </button>
           </div>
         </div>
 
@@ -589,10 +553,10 @@ export default function ADProvasOnlineStudentPage() {
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
               <div style={{ fontSize: 13, fontWeight: 800, color: '#0369a1' }}>
-                Acompanhamento Pedagógico Familiar
+                Acompanhamento Pedagógico
               </div>
               <div style={{ fontSize: 12, color: '#475569', lineHeight: 1.45 }}>
-                Este módulo é exclusivo para acompanhamento dos pais e responsáveis. Aqui você consulta prazos, regras e notas de <strong>{nomeEstudante}</strong>. <em>A resolução e envio das provas devem ser feitas exclusivamente pelo acesso individual do aluno.</em>
+                Aqui você consulta prazos, regras e notas de <strong>{nomeEstudante}</strong>. <em>A resolução e envio das provas devem ser feitas exclusivamente pelo acesso individual do aluno.</em>
               </div>
             </div>
           </div>
@@ -602,7 +566,7 @@ export default function ADProvasOnlineStudentPage() {
         <div className="ad-provas-kpi-grid">
           {/* Disponíveis / Para Realizar */}
           <div
-            onClick={() => setActiveTab('disponiveis')}
+            onClick={() => setActiveTab(prev => prev === 'disponiveis' ? 'todas' : 'disponiveis')}
             className="ad-provas-kpi-card"
             style={{
               background: activeTab === 'disponiveis' ? '#ecfdf5' : '#f8fafc',
@@ -624,7 +588,7 @@ export default function ADProvasOnlineStudentPage() {
 
           {/* Em Andamento / Em Realização */}
           <div
-            onClick={() => setActiveTab('andamento')}
+            onClick={() => setActiveTab(prev => prev === 'andamento' ? 'todas' : 'andamento')}
             className="ad-provas-kpi-card"
             style={{
               background: activeTab === 'andamento' ? '#faf5ff' : '#f8fafc',
@@ -646,7 +610,7 @@ export default function ADProvasOnlineStudentPage() {
 
           {/* Entregues & Notas */}
           <div
-            onClick={() => setActiveTab('concluidas')}
+            onClick={() => setActiveTab(prev => prev === 'concluidas' ? 'todas' : 'concluidas')}
             className="ad-provas-kpi-card"
             style={{
               background: activeTab === 'concluidas' ? '#eff6ff' : '#f8fafc',
@@ -668,7 +632,7 @@ export default function ADProvasOnlineStudentPage() {
 
           {/* Agendadas */}
           <div
-            onClick={() => setActiveTab('agendadas')}
+            onClick={() => setActiveTab(prev => prev === 'agendadas' ? 'todas' : 'agendadas')}
             className="ad-provas-kpi-card"
             style={{
               background: activeTab === 'agendadas' ? '#fff7ed' : '#f8fafc',
@@ -689,176 +653,191 @@ export default function ADProvasOnlineStudentPage() {
           </div>
         </div>
 
-        {/* 3. TABS AND DROPDOWN FILTERS */}
+        {/* 3. FILTROS ORGANIZADOS: ANO LETIVO E BIMESTRE */}
         <div style={{
           display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          flexWrap: 'wrap',
-          gap: 12
+          flexDirection: 'column',
+          gap: 10,
+          background: '#ffffff',
+          padding: '12px 14px',
+          borderRadius: 16,
+          border: '1.5px solid #e2e8f0',
+          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.04)'
         }}>
-          {/* Navigation Tabs */}
           <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6,
-            background: '#f1f5f9',
-            padding: 4,
-            borderRadius: 14,
-            overflowX: 'auto',
-            maxWidth: '100%'
+            display: 'grid',
+            gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+            gap: 12,
+            width: '100%'
           }}>
-            {[
-              { id: 'todas', label: 'Todas', count: counts.todas },
-              { id: 'disponiveis', label: isResponsavel ? 'Pendentes do Aluno' : 'Disponíveis', count: counts.disponiveis, pulse: counts.disponiveis > 0 },
-              { id: 'andamento', label: isResponsavel ? 'Em Realização' : 'Em Andamento', count: counts.andamento, highlight: counts.andamento > 0 },
-              { id: 'concluidas', label: isResponsavel ? 'Entregues & Notas' : 'Entregues', count: counts.concluidas },
-              { id: 'agendadas', label: isResponsavel ? 'Próximas Agendadas' : 'Agendadas', count: counts.agendadas }
-            ].map(tab => {
-              const active = activeTab === tab.id
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id as any)}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 6,
-                    padding: '7px 13px',
-                    borderRadius: 10,
-                    fontSize: 12,
-                    fontWeight: active ? 800 : 600,
-                    border: 'none',
-                    cursor: 'pointer',
-                    background: active ? '#ffffff' : 'transparent',
-                    color: active ? '#0284c7' : '#64748b',
-                    boxShadow: active ? '0 2px 6px rgba(0, 0, 0, 0.06)' : 'none',
-                    whiteSpace: 'nowrap',
-                    transition: 'all 0.2s'
-                  }}
-                >
-                  {tab.pulse && (
-                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10b981', boxShadow: '0 0 6px #10b981' }} />
-                  )}
-                  {tab.highlight && (
-                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#a855f7', boxShadow: '0 0 6px #a855f7' }} />
-                  )}
-                  {tab.label}
-                  <span style={{
-                    fontSize: 10,
-                    fontWeight: 800,
-                    padding: '2px 5px',
-                    borderRadius: 8,
-                    background: active ? '#e0f2fe' : 'rgba(0,0,0,0.05)',
-                    color: active ? '#0284c7' : '#64748b'
-                  }}>
-                    {tab.count}
-                  </span>
-                </button>
-              )
-            })}
-          </div>
-
-          {/* Disciplina, Bimestre & Ano Letivo Selects */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            {/* Ano Letivo Filter */}
-            <select
-              value={filterAnoLetivo}
-              onChange={e => setFilterAnoLetivo(e.target.value)}
-              title="Filtrar por Ano Letivo"
-              style={{
-                height: 34,
-                padding: '0 10px',
-                borderRadius: 10,
-                background: '#f8fafc',
-                border: '1.2px solid #cbd5e1',
-                color: filterAnoLetivo ? '#0284c7' : '#475569',
-                fontSize: 12,
-                fontWeight: 600,
-                outline: 'none',
-                cursor: 'pointer'
-              }}
-            >
-              <option value="">Todos os Anos</option>
-              {anosLetivosDisponiveis.map(ano => (
-                <option key={ano} value={ano}>Ano Letivo {ano}</option>
-              ))}
-            </select>
-
-            {disciplinasDisponiveis.length > 0 && (
+            {/* Filtro Ano Letivo */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+              <label style={{
+                fontSize: 11,
+                fontWeight: 800,
+                color: '#475569',
+                textTransform: 'uppercase',
+                letterSpacing: '0.04em',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 5
+              }}>
+                <Calendar size={13} color="#0284c7" />
+                Ano Letivo
+              </label>
               <select
-                value={filterDisciplina}
-                onChange={e => setFilterDisciplina(e.target.value)}
+                value={filterAnoLetivo}
+                onChange={e => setFilterAnoLetivo(e.target.value)}
+                title="Filtrar por Ano Letivo"
                 style={{
-                  height: 34,
+                  width: '100%',
+                  height: 38,
                   padding: '0 10px',
                   borderRadius: 10,
                   background: '#f8fafc',
-                  border: '1.2px solid #cbd5e1',
-                  color: filterDisciplina ? '#0284c7' : '#475569',
-                  fontSize: 12,
+                  border: '1.5px solid #cbd5e1',
+                  color: filterAnoLetivo ? '#0284c7' : '#334155',
+                  fontSize: 12.5,
                   fontWeight: 600,
                   outline: 'none',
-                  cursor: 'pointer'
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease'
+                }}
+                onFocus={e => {
+                  e.currentTarget.style.borderColor = '#0284c7'
+                  e.currentTarget.style.background = '#ffffff'
+                }}
+                onBlur={e => {
+                  e.currentTarget.style.borderColor = '#cbd5e1'
+                  e.currentTarget.style.background = '#f8fafc'
                 }}
               >
-                <option value="">Todas as Disciplinas</option>
-                {disciplinasDisponiveis.map(d => (
-                  <option key={d} value={d}>{d}</option>
+                <option value="">Todos</option>
+                {anosLetivosDisponiveis.map(ano => (
+                  <option key={ano} value={ano}>{ano}</option>
                 ))}
               </select>
-            )}
+            </div>
 
-            <select
-              value={filterPeriodo}
-              onChange={e => setFilterPeriodo(e.target.value)}
-              style={{
-                height: 34,
-                padding: '0 10px',
-                borderRadius: 10,
-                background: '#f8fafc',
-                border: '1.2px solid #cbd5e1',
-                color: filterPeriodo ? '#0284c7' : '#475569',
-                fontSize: 12,
-                fontWeight: 600,
-                outline: 'none',
-                cursor: 'pointer'
-              }}
-            >
-              <option value="">Todos os Bimestres</option>
-              <option value="1">1º Bimestre</option>
-              <option value="2">2º Bimestre</option>
-              <option value="3">3º Bimestre</option>
-              <option value="4">4º Bimestre</option>
-            </select>
-
-            {(searchTerm || filterDisciplina || filterPeriodo || (filterAnoLetivo && filterAnoLetivo !== String(new Date().getFullYear()))) && (
-              <button
-                onClick={() => {
-                  setSearchTerm('')
-                  setFilterDisciplina('')
-                  setFilterPeriodo('')
-                  setFilterAnoLetivo(String(new Date().getFullYear()))
-                }}
+            {/* Filtro Bimestre */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+              <label style={{
+                fontSize: 11,
+                fontWeight: 800,
+                color: '#475569',
+                textTransform: 'uppercase',
+                letterSpacing: '0.04em',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 5
+              }}>
+                <Layers size={13} color="#0284c7" />
+                Bimestre
+              </label>
+              <select
+                value={filterPeriodo}
+                onChange={e => setFilterPeriodo(e.target.value)}
+                title="Filtrar por Bimestre"
                 style={{
-                  height: 34,
+                  width: '100%',
+                  height: 38,
                   padding: '0 10px',
                   borderRadius: 10,
-                  background: '#fee2e2',
-                  border: '1px solid #fca5a5',
-                  color: '#dc2626',
-                  fontSize: 11,
-                  fontWeight: 700,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 4,
-                  cursor: 'pointer'
+                  background: '#f8fafc',
+                  border: '1.5px solid #cbd5e1',
+                  color: filterPeriodo ? '#0284c7' : '#334155',
+                  fontSize: 12.5,
+                  fontWeight: 600,
+                  outline: 'none',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease'
+                }}
+                onFocus={e => {
+                  e.currentTarget.style.borderColor = '#0284c7'
+                  e.currentTarget.style.background = '#ffffff'
+                }}
+                onBlur={e => {
+                  e.currentTarget.style.borderColor = '#cbd5e1'
+                  e.currentTarget.style.background = '#f8fafc'
                 }}
               >
-                <X size={12} /> Limpar
-              </button>
-            )}
+                <option value="">Todos</option>
+                <option value="1">1º Bim</option>
+                <option value="2">2º Bim</option>
+                <option value="3">3º Bim</option>
+                <option value="4">4º Bim</option>
+              </select>
+            </div>
           </div>
+
+          {/* Ações complementares: Disciplina e Limpar Filtros */}
+          {(disciplinasDisponiveis.length > 0 || searchTerm || filterDisciplina || filterPeriodo || (filterAnoLetivo && filterAnoLetivo !== String(new Date().getFullYear())) || activeTab !== 'todas') && (
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 8,
+              paddingTop: 8,
+              borderTop: '1px solid #f1f5f9',
+              flexWrap: 'wrap'
+            }}>
+              {disciplinasDisponiveis.length > 0 && (
+                <div style={{ flex: 1, minWidth: 160 }}>
+                  <select
+                    value={filterDisciplina}
+                    onChange={e => setFilterDisciplina(e.target.value)}
+                    style={{
+                      width: '100%',
+                      height: 34,
+                      padding: '0 10px',
+                      borderRadius: 8,
+                      background: '#f8fafc',
+                      border: '1.2px solid #cbd5e1',
+                      color: filterDisciplina ? '#0284c7' : '#475569',
+                      fontSize: 12,
+                      fontWeight: 600,
+                      outline: 'none',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <option value="">Todas as Disciplinas</option>
+                    {disciplinasDisponiveis.map(d => (
+                      <option key={d} value={d}>{d}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {(searchTerm || filterDisciplina || filterPeriodo || (filterAnoLetivo && filterAnoLetivo !== String(new Date().getFullYear())) || activeTab !== 'todas') && (
+                <button
+                  onClick={() => {
+                    setSearchTerm('')
+                    setFilterDisciplina('')
+                    setFilterPeriodo('')
+                    setActiveTab('todas')
+                    setFilterAnoLetivo(String(new Date().getFullYear()))
+                  }}
+                  style={{
+                    height: 32,
+                    padding: '0 10px',
+                    borderRadius: 8,
+                    background: '#fee2e2',
+                    border: '1px solid #fca5a5',
+                    color: '#dc2626',
+                    fontSize: 11,
+                    fontWeight: 700,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 4,
+                    cursor: 'pointer',
+                    marginLeft: 'auto'
+                  }}
+                >
+                  <X size={12} /> Limpar Filtros
+                </button>
+              )}
+            </div>
+          )}
         </div>
       </div>
 

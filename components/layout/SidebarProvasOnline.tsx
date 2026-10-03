@@ -8,7 +8,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   LayoutDashboard, PlusCircle, Library, FileCheck2, LogOut,
   User, Loader2, Sparkles, ChevronLeft, ChevronRight, Award,
-  Clock, Shield, BookOpen, Layers, Users
+  Clock, Shield, BookOpen, Layers, Users, Activity, CheckSquare
 } from 'lucide-react'
 import { useIsMobile } from '@/lib/hooks/useIsMobile'
 import { useApp } from '@/lib/context'
@@ -19,6 +19,8 @@ interface NavItem {
   href: string
   icon: React.ReactNode
   badge?: string
+  badgeColor?: 'blue' | 'green' | 'amber'
+  isLivePulse?: boolean
 }
 
 export function SidebarProvasOnline() {
@@ -47,6 +49,35 @@ export function SidebarProvasOnline() {
     if (isMobile) setCollapsed(true)
   }, [isMobile])
 
+  const [liveCount, setLiveCount] = useState(0)
+  const [pendingCorrectionsCount, setPendingCorrectionsCount] = useState(0)
+
+  useEffect(() => {
+    if (isStudent || isResponsible) return
+    let isCancelled = false
+    const fetchCounts = async () => {
+      try {
+        const res = await fetch('/api/provas-online')
+        if (!res.ok) return
+        const data = await res.json()
+        if (Array.isArray(data) && !isCancelled) {
+          const live = data.filter((p: any) => p.status === 'em_aplicacao' || (p.stats && p.stats.emAndamento > 0)).length
+          const pending = data.reduce((acc: number, p: any) => acc + (p.stats?.correcaoPendente || 0), 0)
+          setLiveCount(live)
+          setPendingCorrectionsCount(pending)
+        }
+      } catch (e) {
+        // silent
+      }
+    }
+    fetchCounts()
+    const timer = setInterval(fetchCounts, 30000)
+    return () => {
+      isCancelled = true
+      clearInterval(timer)
+    }
+  }, [isStudent, isResponsible])
+
   const navItems: NavItem[] = isStudent
     ? [
         { label: 'Minhas Provas', shortLabel: 'Provas', href: '/provas-online', icon: <FileCheck2 size={20} /> },
@@ -59,6 +90,23 @@ export function SidebarProvasOnline() {
       ]
     : [
         { label: 'Dashboard', shortLabel: 'Início', href: '/provas-online', icon: <LayoutDashboard size={20} /> },
+        {
+          label: 'Supervisão',
+          shortLabel: 'Supervisão',
+          href: '/provas-online/supervisao',
+          icon: <Activity size={20} className={liveCount > 0 ? 'text-emerald-400' : ''} />,
+          badge: liveCount > 0 ? `${liveCount} ao vivo` : undefined,
+          badgeColor: 'green',
+          isLivePulse: liveCount > 0
+        },
+        {
+          label: 'Corrigir',
+          shortLabel: 'Corrigir',
+          href: '/provas-online/corrigir',
+          icon: <CheckSquare size={20} className={pendingCorrectionsCount > 0 ? 'text-amber-400' : ''} />,
+          badge: pendingCorrectionsCount > 0 ? String(pendingCorrectionsCount) : undefined,
+          badgeColor: 'amber'
+        },
         { label: 'Nova Avaliação', shortLabel: 'Nova', href: '/provas-online/nova', icon: <PlusCircle size={20} />, badge: 'Criar' },
       ]
 
@@ -108,21 +156,41 @@ export function SidebarProvasOnline() {
                   display: 'flex',
                   flexDirection: 'column',
                   alignItems: 'center',
-                  gap: 4,
+                  gap: 3,
                   textDecoration: 'none',
                   color: isActive ? '#38bdf8' : 'rgba(255, 255, 255, 0.55)',
-                  fontSize: 11,
+                  fontSize: 10,
                   fontWeight: isActive ? 800 : 600,
                   transition: 'all 0.2s',
-                  padding: '6px 12px',
+                  padding: '5px 8px',
                   borderRadius: 12,
                   background: isActive ? 'linear-gradient(135deg, rgba(14, 165, 233, 0.22) 0%, rgba(2, 132, 199, 0.1) 100%)' : 'transparent',
                   border: isActive ? '1px solid rgba(56, 189, 248, 0.35)' : '1px solid transparent',
-                  boxShadow: isActive ? '0 0 16px rgba(14, 165, 233, 0.25)' : 'none'
+                  boxShadow: isActive ? '0 0 16px rgba(14, 165, 233, 0.25)' : 'none',
+                  position: 'relative'
                 }}
               >
-                {item.icon}
-                <span>{item.shortLabel || item.label}</span>
+                <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  {item.icon}
+                  {item.badge && (
+                    <span style={{
+                      position: 'absolute',
+                      top: -6,
+                      right: -10,
+                      fontSize: 9,
+                      fontWeight: 900,
+                      padding: '1px 5px',
+                      borderRadius: 99,
+                      background: item.badgeColor === 'amber' ? '#f59e0b' : item.badgeColor === 'green' ? '#10b981' : '#0284c7',
+                      color: '#ffffff',
+                      boxShadow: '0 2px 6px rgba(0,0,0,0.4)',
+                      lineHeight: 1
+                    }}>
+                      {item.badge}
+                    </span>
+                  )}
+                </div>
+                <span style={{ whiteSpace: 'nowrap' }}>{item.shortLabel || item.label}</span>
               </Link>
             )
           })}
@@ -295,10 +363,16 @@ export function SidebarProvasOnline() {
                       fontWeight: 800,
                       padding: '2px 8px',
                       borderRadius: 12,
-                      background: 'rgba(14, 165, 233, 0.2)',
-                      color: '#38bdf8',
-                      border: '1px solid rgba(56, 189, 248, 0.4)'
+                      background: item.badgeColor === 'green' ? 'rgba(16, 185, 129, 0.2)' : item.badgeColor === 'amber' ? 'rgba(245, 158, 11, 0.25)' : 'rgba(14, 165, 233, 0.2)',
+                      color: item.badgeColor === 'green' ? '#34d399' : item.badgeColor === 'amber' ? '#fbbf24' : '#38bdf8',
+                      border: `1px solid ${item.badgeColor === 'green' ? 'rgba(52, 211, 153, 0.4)' : item.badgeColor === 'amber' ? 'rgba(251, 191, 36, 0.4)' : 'rgba(56, 189, 248, 0.4)'}`,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 5
                     }}>
+                      {item.isLivePulse && (
+                        <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#34d399', display: 'inline-block' }} className="animate-pulse" />
+                      )}
                       {item.badge}
                     </span>
                   )}

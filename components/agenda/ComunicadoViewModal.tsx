@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Paperclip, FileText, CheckCircle2, ShieldAlert, Calendar, Mic, Send, Share, Bookmark, MoreHorizontal, Edit2, Trash2, Loader2, CreditCard, Info, ExternalLink, Vote, Smile, MessageSquare, ChevronRight } from 'lucide-react'
+import { X, Paperclip, FileText, CheckCircle2, ShieldAlert, Calendar, Mic, Send, Share, Bookmark, MoreHorizontal, Edit2, Trash2, Loader2, CreditCard, Info, ExternalLink, Vote, Smile, MessageSquare, ChevronRight, Users, Maximize2 } from 'lucide-react'
 import Image from 'next/image'
 import Portal from '@/components/Portal'
 import { UserAvatar } from '@/components/UserAvatar'
@@ -12,6 +12,7 @@ import { getGlobalCachedMessages, setGlobalCachedMessages } from '@/lib/comunica
 import { EnqueteWidget } from '@/components/agenda/enquetes/EnqueteWidget'
 import { AutorizacaoWidget } from '@/components/agenda/autorizacoes/AutorizacaoWidget'
 import { triggerHaptic } from '@/lib/utils/haptics'
+import { ImagePinchZoomModal } from '@/components/agenda/ImagePinchZoomModal'
 
 // Helpers
 const parseAnexo = (anexoData: any) => {
@@ -91,6 +92,24 @@ function timeAgoShort(dateString: string) {
   return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
 }
 
+function formatShortName(fullName: string) {
+  if (!fullName) return ''
+  const parts = fullName.trim().split(/\s+/)
+  if (parts.length <= 2) return fullName
+  const first = parts[0]
+  const last = parts[parts.length - 1]
+  const middles = parts.slice(1, -1).map(p => {
+    const lower = p.toLowerCase()
+    if (['de', 'da', 'do', 'dos', 'das', 'e'].includes(lower)) return ''
+    return p.length > 2 ? p[0].toUpperCase() + '.' : p
+  }).filter(Boolean)
+  const assembled = [first, ...middles, last].join(' ')
+  if (assembled.length > 22 && parts.length > 1) {
+    return `${first} ${last}`
+  }
+  return assembled
+}
+
 const normalizeText = (text: any): string => {
   if (!text || typeof text !== 'string') return '';
   return text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
@@ -165,6 +184,7 @@ export function ComunicadoViewModal({
 }: ComunicadoViewModalProps) {
   const [comunicado, setComunicado] = useState<any>(initialComunicado)
   const [isLoadingFull, setIsLoadingFull] = useState(!initialComunicado.conteudo && !initialComunicado.texto)
+  const [internalMaximizedImage, setInternalMaximizedImage] = useState<string | null>(null)
   
   useEffect(() => {
     if (initialComunicado) {
@@ -930,7 +950,7 @@ export function ComunicadoViewModal({
   }
 
   const dateObj = new Date(comunicado.dataEnvio || comunicado.created_at || new Date())
-  const formattedDate = dateObj.toLocaleString('pt-BR', { dateStyle: 'long' })
+  const formattedDate = dateObj.toLocaleDateString('pt-BR')
   const formattedTime = dateObj.toLocaleString('pt-BR', { timeStyle: 'short' })
 
   return (
@@ -1120,11 +1140,23 @@ export function ComunicadoViewModal({
           {/* HEADER */}
           <div className="cvm-header">
             <div className="cvm-header-bg" />
-            <div style={{ display: 'flex', alignItems: 'center', gap: 16, zIndex: 1, position: 'relative' }}>
-              <div className="cvm-avatar-area">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16, zIndex: 1, position: 'relative', minWidth: 0, flex: 1, marginRight: 12 }}>
+              <div className="cvm-avatar-area" style={{ minWidth: 0 }}>
                 <UserAvatar userId={comunicado.autorId} name={comunicado.autor} fotoUrl={comunicado.autorFoto} size={58} />
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                  <span style={{ fontWeight: 800, fontSize: 18, lineHeight: 1.2 }}>{comunicado.autor}</span>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+                  <span 
+                    style={{ 
+                      fontWeight: 800, 
+                      fontSize: 18, 
+                      lineHeight: 1.2,
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis'
+                    }}
+                    title={comunicado.autor}
+                  >
+                    {formatShortName(comunicado.autor)}
+                  </span>
                   {comunicado.autorCargo && (
                     <span style={{ 
                       fontSize: 10, 
@@ -1137,30 +1169,23 @@ export function ComunicadoViewModal({
                       textTransform: 'uppercase', 
                       letterSpacing: 0.5,
                       width: 'fit-content',
-                      boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                      boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      maxWidth: '100%'
                     }}>
                       {comunicado.autorCargo}
                     </span>
                   )}
-                  <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.75)', fontWeight: 500, marginTop: 2 }}>
+                  <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.75)', fontWeight: 500, marginTop: 2, whiteSpace: 'nowrap' }}>
                     {formattedDate} às {formattedTime}
                   </span>
                 </div>
               </div>
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, zIndex: 1, position: 'relative' }}>
-              {onDelete && (
-                <button 
-                  onClick={(e) => { e.stopPropagation(); onDelete(comunicado.id); }}
-                  className="cvm-icon-btn"
-                  title="Excluir"
-                  aria-label="Excluir"
-                  style={{ background: 'rgba(239, 68, 68, 0.35)', color: '#fff' }}
-                >
-                  <Trash2 size={18} />
-                </button>
-              )}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, zIndex: 1, position: 'relative', flexShrink: 0 }}>
               <button 
                 onClick={onClose}
                 className="cvm-icon-btn"
@@ -1174,104 +1199,111 @@ export function ComunicadoViewModal({
           {/* BODY */}
           <div className="cvm-body" ref={bodyRef}>
             
-            {/* Title & Text Content Wrapped in Rounded Card */}
+            {/* Title & Text Content Wrapped in Rounded Card with 3D Borders & Shadow */}
             <div style={{
+              position: 'relative',
               background: '#ffffff',
               borderRadius: 24,
               padding: 28,
-              boxShadow: '0 4px 24px rgba(0,0,0,0.03)',
+              paddingTop: 32,
+              border: '1px solid rgba(226, 232, 240, 0.85)',
+              borderBottom: '3px solid rgba(203, 213, 225, 0.85)',
+              boxShadow: '0 12px 30px -6px rgba(15, 23, 42, 0.08), 0 4px 10px -2px rgba(15, 23, 42, 0.04), inset 0 1px 0 rgba(255, 255, 255, 0.9)',
               maxWidth: 800,
               width: '100%',
-              margin: '0 auto',
+              margin: '14px auto 0',
               display: 'flex',
               flexDirection: 'column',
               gap: 20
             }}>
-              {/* Title Block */}
-              <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
-                <div style={{ 
-                  position: 'relative',
-                  width: 46,
-                  height: 46,
-                  background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.08) 0%, rgba(139, 92, 246, 0.03) 100%)', 
-                  border: '1px solid rgba(99, 102, 241, 0.15)',
-                  backdropFilter: 'blur(12px)',
-                  WebkitBackdropFilter: 'blur(12px)',
-                  borderRadius: 14, 
-                  display: 'flex',
+              {/* Badge na Linha da Borda (Como Pasta Suspensa) */}
+              <div style={{
+                position: 'absolute',
+                top: 0,
+                left: 28,
+                transform: 'translateY(-50%)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 8,
+                zIndex: 10
+              }}>
+                <div style={{
+                  display: 'inline-flex',
                   alignItems: 'center',
-                  justifyContent: 'center',
-                  flexShrink: 0, 
-                  boxShadow: '0 8px 16px -4px rgba(99, 102, 241, 0.1), inset 0 2px 4px rgba(255, 255, 255, 0.6)' 
+                  gap: 6,
+                  padding: '4px 14px',
+                  borderRadius: 20,
+                  background: 'linear-gradient(135deg, #4338ca 0%, #4f46e5 50%, #6366f1 100%)',
+                  color: '#ffffff',
+                  boxShadow: '0 4px 14px -2px rgba(79, 70, 229, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.4)',
+                  border: '1px solid rgba(255, 255, 255, 0.35)',
+                  fontSize: 10.5,
+                  fontWeight: 800,
+                  letterSpacing: '0.08em',
+                  textTransform: 'uppercase'
                 }}>
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ filter: 'drop-shadow(0 2px 6px rgba(99,102,241,0.25))' }}>
-                    <path d="M21 15C21 15.5304 20.7893 16.0391 20.4142 16.4142C20.0391 16.7893 19.5304 17 19 17H7L3 21V5C3 4.46957 3.21071 3.96086 3.58579 3.58579C3.96086 3.21071 4.46957 3 5 3H19C19.5304 3 20.0391 3.21071 20.4142 3.58579C20.7893 3.96086 21 4.46957 21 5V15Z" fill="url(#comIconFill)" stroke="url(#comIconStroke)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                    <circle cx="16" cy="8" r="2.5" fill="#00D2FF" stroke="#ffffff" strokeWidth="1"/>
-                    <defs>
-                      <linearGradient id="comIconFill" x1="3" y1="3" x2="21" y2="21" gradientUnits="userSpaceOnUse">
-                        <stop stopColor="#6366f1" stopOpacity="0.15"/>
-                        <stop offset="1" stopColor="#8b5cf6" stopOpacity="0.05"/>
-                      </linearGradient>
-                      <linearGradient id="comIconStroke" x1="3" y1="3" x2="21" y2="21" gradientUnits="userSpaceOnUse">
-                        <stop stopColor="#6366f1"/>
-                        <stop offset="1" stopColor="#a855f7"/>
-                      </linearGradient>
-                    </defs>
-                  </svg>
+                  <span style={{
+                    width: 6,
+                    height: 6,
+                    borderRadius: '50%',
+                    background: '#38bdf8',
+                    boxShadow: '0 0 8px #38bdf8',
+                    display: 'inline-block'
+                  }} />
+                  <span>COMUNICADO OFICIAL</span>
                 </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <h1 style={{ fontSize: 24, fontWeight: 800, color: '#0f172a', margin: 0, lineHeight: 1.3, marginBottom: 8 }}>
-                    {comunicado.titulo}
-                  </h1>
-                  
-                  {/* Prioridade */}
-                  {(comunicado.prioridade === 'alta' || comunicado.prioridade === 'urgente') && (
-                    <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-                      {comunicado.prioridade === 'alta' && <span style={{ background: '#fee2e2', color: '#ef4444', padding: '4px 12px', borderRadius: 20, fontWeight: 700, fontSize: 12, border: '1px solid #fca5a5' }}>Prioridade Alta</span>}
-                      {comunicado.prioridade === 'urgente' && <span style={{ background: '#ffedd5', color: '#f97316', padding: '4px 12px', borderRadius: 20, fontWeight: 700, fontSize: 12, border: '1px solid #fdba74' }}>Urgente</span>}
-                    </div>
-                  )}
 
-                  {/* Destinatários */}
-                  {destinatariosStr && (
-                    <div style={{ marginTop: 12 }}>
-                      <button 
-                        onClick={() => setShowDestinatariosModal(true)}
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: 6,
-                          background: '#f8fafc',
-                          border: '1px solid #e2e8f0',
-                          borderRadius: 20,
-                          padding: '6px 14px',
-                          fontSize: 13,
-                          color: '#475569',
-                          cursor: 'pointer',
-                          fontWeight: 500,
-                          transition: 'all 0.2s ease',
-                        }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.background = '#f1f5f9';
-                          e.currentTarget.style.borderColor = '#cbd5e1';
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.background = '#f8fafc';
-                          e.currentTarget.style.borderColor = '#e2e8f0';
-                        }}
-                      >
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-                          <circle cx="9" cy="7" r="4"></circle>
-                          <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
-                          <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
-                        </svg>
-                        Ver Destinatários
-                      </button>
-                    </div>
-                  )}
-                </div>
+                {/* Prioridade ao lado do badge */}
+                {(comunicado.prioridade === 'alta' || comunicado.prioridade === 'urgente') && (
+                  <div style={{ display: 'inline-flex', gap: 6 }}>
+                    {comunicado.prioridade === 'alta' && (
+                      <span style={{ 
+                        background: '#ef4444', 
+                        color: '#ffffff', 
+                        padding: '4px 10px', 
+                        borderRadius: 20, 
+                        fontWeight: 800, 
+                        fontSize: 10.5, 
+                        border: '1px solid rgba(255, 255, 255, 0.35)',
+                        boxShadow: '0 4px 10px -2px rgba(239, 68, 68, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.35)',
+                        letterSpacing: '0.04em',
+                        textTransform: 'uppercase'
+                      }}>
+                        Prioridade Alta
+                      </span>
+                    )}
+                    {comunicado.prioridade === 'urgente' && (
+                      <span style={{ 
+                        background: '#f97316', 
+                        color: '#ffffff', 
+                        padding: '4px 10px', 
+                        borderRadius: 20, 
+                        fontWeight: 800, 
+                        fontSize: 10.5, 
+                        border: '1px solid rgba(255, 255, 255, 0.35)',
+                        boxShadow: '0 4px 10px -2px rgba(249, 115, 22, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.35)',
+                        letterSpacing: '0.04em',
+                        textTransform: 'uppercase'
+                      }}>
+                        Urgente
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
+
+              {/* Title (Largura total, limpo e imponente) */}
+              <h1 style={{ 
+                fontSize: 24, 
+                fontWeight: 800, 
+                color: '#0f172a', 
+                margin: 0, 
+                lineHeight: 1.3,
+                letterSpacing: '-0.02em',
+                paddingTop: 2
+              }}>
+                {comunicado.titulo}
+              </h1>
 
               {/* Text Content */}
               {isLoadingFull ? (
@@ -1280,8 +1312,254 @@ export function ComunicadoViewModal({
                 </div>
               ) : (
                 <>
-                  <div style={{ fontSize: 16, lineHeight: 1.7, color: '#334155', fontWeight: 500, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }} 
-                       dangerouslySetInnerHTML={{ __html: (comunicado.conteudo || comunicado.texto || '').replace(/\n/g, '<br/>') }} />
+                  {(comunicado.conteudo || comunicado.texto) && (() => {
+                    const rawHtml = comunicado.conteudo || comunicado.texto || '';
+                    const hasHtmlTags = /<[a-z][\s\S]*>/i.test(rawHtml);
+                    const formattedHtml = hasHtmlTags ? rawHtml : rawHtml.replace(/\n/g, '<br/>');
+
+                    return (
+                      <div 
+                        className="comunicado-conteudo-body"
+                        style={{ 
+                          fontSize: 15, 
+                          lineHeight: 1.65, 
+                          color: '#334155', 
+                          fontWeight: 500, 
+                          wordBreak: 'break-word',
+                          whiteSpace: hasHtmlTags ? 'normal' : 'pre-wrap'
+                        }} 
+                        dangerouslySetInnerHTML={{ __html: formattedHtml }} 
+                      />
+                    );
+                  })()}
+
+                  {/* Anexos Integrados Dentro do Card Principal */}
+                  {comunicado.anexos && comunicado.anexos.length > 0 && (() => {
+                    const validAnexos = comunicado.anexos.filter((anexo: string) => {
+                      const parsed = parseAnexo(anexo);
+                      if (!parsed) return false;
+                      if (parsed.name.startsWith('Enquete:') || parsed.url.startsWith('enquete:') || parsed.mime === 'enquete') return false;
+                      if (parsed.name.startsWith('Autorização:') || parsed.url.startsWith('autorizacao:') || parsed.mime === 'autorizacao') return false;
+                      if (parsed.name.startsWith('Cobrança:') || parsed.name.startsWith('Cobranca:') || parsed.url.startsWith('cobranca:') || parsed.mime === 'cobranca' || parsed.mime === 'cobrança') return false;
+                      return true;
+                    });
+
+                    if (validAnexos.length === 0) return null;
+
+                    return (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 14, width: '100%', marginTop: (comunicado.conteudo || comunicado.texto) ? 4 : 0 }}>
+                        {validAnexos.map((anexo: string, idx: number) => {
+                          const parsed = parseAnexo(anexo);
+                          if (!parsed) return null;
+
+                          const isForm = parsed.name.startsWith('Formulário: ') && parsed.url.startsWith('form:');
+                          const isRel = parsed.name.startsWith('Relatório: ') && parsed.url.startsWith('form:');
+                          const isReportTask = parsed.name.startsWith('Tarefa de Relatório:') && parsed.url.startsWith('report-task:');
+                          const isReportPayload = parsed.url.startsWith('payload:') || parsed.mime === 'report-payload';
+                          const isImg = parsed.url.startsWith('data:image/') || parsed.mime.startsWith('image/') || parsed.name.toLowerCase().endsWith('.png') || parsed.name.toLowerCase().endsWith('.jpg') || parsed.name.toLowerCase().endsWith('.jpeg') || parsed.name.toLowerCase().endsWith('.webp') || parsed.name.toLowerCase().endsWith('.gif');
+                          const isVid = parsed.mime.startsWith('video/') || parsed.url.includes('.mov') || parsed.url.includes('.mp4') || parsed.name.toLowerCase().endsWith('.mov') || parsed.name.toLowerCase().endsWith('.mp4');
+
+                          if (isImg || isVid) {
+                            return (
+                              <div
+                                key={idx}
+                                style={{
+                                  width: '100%',
+                                  borderRadius: 18,
+                                  overflow: 'hidden',
+                                  border: '1px solid rgba(226, 232, 240, 0.95)',
+                                  borderBottom: '3px solid rgba(203, 213, 225, 0.95)',
+                                  boxShadow: '0 12px 28px -4px rgba(15, 23, 42, 0.1), 0 4px 10px -2px rgba(15, 23, 42, 0.05), inset 0 1px 0 rgba(255, 255, 255, 0.9)',
+                                  cursor: 'pointer',
+                                  background: '#ffffff',
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                  transition: 'transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1)'
+                                }}
+                                onClick={() => {
+                                  if (isImg) {
+                                    if (setMaximizedImageStr) setMaximizedImageStr(parsed.url);
+                                    else setInternalMaximizedImage(parsed.url);
+                                  }
+                                  if (isVid && setMaximizedVideoStr) setMaximizedVideoStr(parsed.url);
+                                }}
+                                onTouchStart={(e) => {
+                                  if (isImg && e.touches.length === 2) {
+                                    e.preventDefault();
+                                    if (setMaximizedImageStr) setMaximizedImageStr(parsed.url);
+                                    else setInternalMaximizedImage(parsed.url);
+                                  }
+                                }}
+                              >
+                                <div style={{
+                                  width: '100%',
+                                  background: '#f8fafc',
+                                  display: 'flex',
+                                  justifyContent: 'center',
+                                  alignItems: 'center',
+                                  position: 'relative'
+                                }}>
+                                  {isImg ? (
+                                    <img
+                                      src={parsed.url}
+                                      alt={parsed.name}
+                                      style={{
+                                        width: '100%',
+                                        height: 'auto',
+                                        display: 'block',
+                                        maxHeight: 520,
+                                        objectFit: 'contain'
+                                      }}
+                                    />
+                                  ) : (
+                                    <video
+                                      src={parsed.url}
+                                      style={{
+                                        width: '100%',
+                                        maxHeight: 520,
+                                        objectFit: 'contain',
+                                        display: 'block'
+                                      }}
+                                      controls
+                                      preload="metadata"
+                                      onClick={e => e.stopPropagation()}
+                                    />
+                                  )}
+                                </div>
+
+                                {/* Campo inferior com informação pequena de ampliar */}
+                                <div style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  gap: 7,
+                                  padding: '9px 16px',
+                                  background: 'linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%)',
+                                  borderTop: '1px solid rgba(226, 232, 240, 0.95)',
+                                  color: '#475569',
+                                  fontSize: 12,
+                                  fontWeight: 700,
+                                  letterSpacing: '0.02em',
+                                  userSelect: 'none'
+                                }}>
+                                  <div style={{
+                                    width: 22,
+                                    height: 22,
+                                    borderRadius: 6,
+                                    background: '#e0e7ff',
+                                    color: '#4f46e5',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center'
+                                  }}>
+                                    <Maximize2 size={13} strokeWidth={2.5} />
+                                  </div>
+                                  <span>Toque para ampliar</span>
+                                </div>
+                              </div>
+                            );
+                          } else {
+                            let studentIdForCiencia = null;
+                            let reportStudentName = null;
+                            let reportStudentAvatar = null;
+                            if (isReportPayload && parsed.url.startsWith('payload:')) {
+                              try {
+                                const pay = JSON.parse(parsed.url.substring(8));
+                                studentIdForCiencia = pay?.studentInfo?.id || Object.keys(pay?.values || {})[0];
+                                reportStudentName = pay?.studentInfo?.name || null;
+                                reportStudentAvatar = pay?.studentInfo?.avatarUrl || null;
+                              } catch(e) {}
+                            }
+
+                            const cleanStuId = studentIdForCiencia ? String(studentIdForCiencia).replace(/^a_?/, '').replace(/^_*(ALU)?/, '') : null;
+                            const matchedAluno = cleanStuId && alunos ? alunos.find((a: any) => {
+                              const aId = String(a.id || '').replace(/^a_?/, '').replace(/^_*(ALU)?/, '');
+                              return aId === cleanStuId || (reportStudentName && String(a.nome || '').trim().toLowerCase() === String(reportStudentName).trim().toLowerCase());
+                            }) : null;
+
+                            const finalPhoto = reportStudentAvatar || (cleanStuId ? (studentPhotosMap[cleanStuId] || getCachedStudentPhoto(cleanStuId)) : null) || matchedAluno?.foto || matchedAluno?.foto_url || matchedAluno?.avatarUrl || matchedAluno?.dados?.foto || matchedAluno?.dados?.avatarUrl || null;
+
+                            const studentCienciaIso = studentIdForCiencia && comunicado.ciencias ? comunicado.ciencias[studentIdForCiencia] : null;
+                            let cienciaString = '';
+                            if (studentCienciaIso) {
+                              const cDate = new Date(studentCienciaIso);
+                              cienciaString = cDate.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }) + ' às ' + cDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+                            }
+
+                            const displayName = parsed.name.replace(/^(Formulário:|Relatório:|Tarefa de Relatório:)\s*/, '');
+                            const initialLetter = (reportStudentName || displayName.replace(/^Relatório Personalizado:\s*/, '') || 'A').trim().charAt(0).toUpperCase();
+
+                            return (
+                              <div
+                                key={idx}
+                                style={{
+                                  width: '100%',
+                                  padding: '14px 16px',
+                                  background: '#f8fafc',
+                                  borderRadius: 14,
+                                  border: '1px solid rgba(226, 232, 240, 0.95)',
+                                  borderBottom: '3px solid rgba(203, 213, 225, 0.9)',
+                                  boxShadow: '0 6px 16px -2px rgba(15, 23, 42, 0.05), inset 0 1px 0 rgba(255, 255, 255, 0.9)',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: 14,
+                                  cursor: 'pointer',
+                                  transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)'
+                                }}
+                                onClick={() => {
+                                  if (isReportTask && setOpenedReportTask) setOpenedReportTask(anexo);
+                                  else if (isReportPayload && setOpenedReportPayload) {
+                                    if (finalPhoto && cleanStuId) {
+                                      setCachedStudentPhoto(cleanStuId, finalPhoto);
+                                    }
+                                    setOpenedReportPayload(anexo);
+                                  }
+                                  else if ((isForm || isRel) && setOpenedFormStr) setOpenedFormStr(anexo);
+                                  else handleDownload(parsed);
+                                }}
+                              >
+                                {isReportPayload ? (
+                                  <div style={{ width: 44, height: 44, borderRadius: 12, overflow: 'hidden', flexShrink: 0, boxShadow: '0 2px 6px rgba(0,0,0,0.06)', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                    {finalPhoto ? (
+                                      <img
+                                        src={finalPhoto}
+                                        alt={displayName}
+                                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                      />
+                                    ) : (
+                                      <div style={{ width: '100%', height: '100%', background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)', color: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 16 }}>
+                                        {initialLetter}
+                                      </div>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <div style={{ width: 44, height: 44, borderRadius: 12, background: isReportTask ? '#ecfdf5' : '#f1f5f9', color: isReportTask ? '#10b981' : '#6366f1', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                    <FileText size={22} />
+                                  </div>
+                                )}
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                  <div style={{ fontWeight: 700, fontSize: 14, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{displayName}</div>
+                                  <div style={{ fontSize: 12.5, color: '#64748b' }}>
+                                    {isForm ? 'Formulário' : isRel ? 'Relatório' : isReportTask ? 'Tarefa de Relatório' : isReportPayload ? 'Relatório Individual do Aluno' : 'Documento anexo'}
+                                    {!isForm && !isRel && !isReportTask && !isReportPayload && (
+                                      <> • <AttachmentSize url={parsed.url} initialSize={parsed.size} /></>
+                                    )}
+                                  </div>
+                                  {(isAdminMode || isStaff) && cienciaString && (
+                                    <div style={{ fontSize: 11.5, color: '#16a34a', fontWeight: 600, marginTop: 3, display: 'flex', alignItems: 'center', gap: 4 }}>
+                                      <CheckCircle2 size={13} />
+                                      Ciência confirmada em {cienciaString}
+                                    </div>
+                                  )}
+                                </div>
+                                <ChevronRight size={18} color="#94a3b8" style={{ flexShrink: 0 }} />
+                              </div>
+                            );
+                          }
+                        })}
+                      </div>
+                    );
+                  })()}
                 </>
               )}
             </div>
@@ -1496,134 +1774,24 @@ export function ComunicadoViewModal({
               );
             })()}
 
-            {/* Attachments - Visual Order */}
-            {comunicado.anexos && comunicado.anexos.length > 0 && !isLoadingFull && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 16, width: '100%', maxWidth: 800, margin: '0 auto' }}>
-                {comunicado.anexos.map((anexo: string, idx: number) => {
-                  const parsed = parseAnexo(anexo)
-                  if (!parsed) return null
-                  
-                  const isEnquete = parsed.name.startsWith('Enquete:') || parsed.url.startsWith('enquete:') || parsed.mime === 'enquete'
-                  if (isEnquete) return null
-
-                  const isAutorizacao = parsed.name.startsWith('Autorização:') || parsed.url.startsWith('autorizacao:') || parsed.mime === 'autorizacao'
-                  if (isAutorizacao) return null
-
-                  const isCobranca = parsed.name.startsWith('Cobrança:') || parsed.name.startsWith('Cobranca:') || parsed.url.startsWith('cobranca:') || parsed.mime === 'cobranca' || parsed.mime === 'cobrança'
-                  if (isCobranca) return null
-
-                  const isForm = parsed.name.startsWith('Formulário: ') && parsed.url.startsWith('form:')
-                  const isRel = parsed.name.startsWith('Relatório: ') && parsed.url.startsWith('form:')
-                  const isReportTask = parsed.name.startsWith('Tarefa de Relatório:') && parsed.url.startsWith('report-task:')
-                  const isReportPayload = parsed.url.startsWith('payload:') || parsed.mime === 'report-payload'
-                  const isImg = parsed.url.startsWith('data:image/') || parsed.mime.startsWith('image/') || parsed.name.toLowerCase().endsWith('.png') || parsed.name.toLowerCase().endsWith('.jpg') || parsed.name.toLowerCase().endsWith('.jpeg') || parsed.name.toLowerCase().endsWith('.webp') || parsed.name.toLowerCase().endsWith('.gif')
-                  const isVid = parsed.mime.startsWith('video/') || parsed.url.includes('.mov') || parsed.url.includes('.mp4') || parsed.name.toLowerCase().endsWith('.mov') || parsed.name.toLowerCase().endsWith('.mp4')
-                  
-                  if (isImg || isVid) {
-                    // Modern Image/Video Card immediately following text
-                    return (
-                      <div key={idx} style={{ width: '100%', borderRadius: 24, overflow: 'hidden', border: '1px solid #e2e8f0', boxShadow: '0 12px 32px rgba(0,0,0,0.08)', cursor: 'pointer', maxWidth: 800, background: '#f1f5f9', display: 'flex', justifyContent: 'center' }} onClick={() => {
-                        if (isImg && setMaximizedImageStr) setMaximizedImageStr(parsed.url)
-                        if (isVid && setMaximizedVideoStr) setMaximizedVideoStr(parsed.url)
-                      }}>
-                        {isImg ? (
-                          <img src={parsed.url} alt={parsed.name} style={{ width: '100%', height: 'auto', display: 'block', maxHeight: 500, objectFit: 'contain' }} />
-                        ) : (
-                          <video src={parsed.url} style={{ width: '100%', maxHeight: 500, objectFit: 'contain', display: 'block' }} controls preload="metadata" onClick={e => e.stopPropagation()} />
-                        )}
-                      </div>
-                    )
-                  } else {
-                    let studentIdForCiencia = null;
-                    let reportStudentName = null;
-                    let reportStudentAvatar = null;
-                    if (isReportPayload && parsed.url.startsWith('payload:')) {
-                      try {
-                        const pay = JSON.parse(parsed.url.substring(8));
-                        studentIdForCiencia = pay?.studentInfo?.id || Object.keys(pay?.values || {})[0];
-                        reportStudentName = pay?.studentInfo?.name || null;
-                        reportStudentAvatar = pay?.studentInfo?.avatarUrl || null;
-                      } catch(e) {}
-                    }
-
-                    const cleanStuId = studentIdForCiencia ? String(studentIdForCiencia).replace(/^a_?/, '').replace(/^_*(ALU)?/, '') : null;
-                    const matchedAluno = cleanStuId && alunos ? alunos.find((a: any) => {
-                      const aId = String(a.id || '').replace(/^a_?/, '').replace(/^_*(ALU)?/, '');
-                      return aId === cleanStuId || (reportStudentName && String(a.nome || '').trim().toLowerCase() === String(reportStudentName).trim().toLowerCase());
-                    }) : null;
-
-                    const finalPhoto = reportStudentAvatar || (cleanStuId ? (studentPhotosMap[cleanStuId] || getCachedStudentPhoto(cleanStuId)) : null) || matchedAluno?.foto || matchedAluno?.foto_url || matchedAluno?.avatarUrl || matchedAluno?.dados?.foto || matchedAluno?.dados?.avatarUrl || null;
-
-                    const studentCienciaIso = studentIdForCiencia && comunicado.ciencias ? comunicado.ciencias[studentIdForCiencia] : null;
-                    let cienciaString = '';
-                    if (studentCienciaIso) {
-                      const cDate = new Date(studentCienciaIso);
-                      cienciaString = cDate.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }) + ' às ' + cDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-                    }
-
-                    const displayName = parsed.name.replace(/^(Formulário:|Relatório:|Tarefa de Relatório:)\s*/, '');
-                    const initialLetter = (reportStudentName || displayName.replace(/^Relatório Personalizado:\s*/, '') || 'A').trim().charAt(0).toUpperCase();
-
-                    // Document Card
-                    return (
-                      <div key={idx} style={{ maxWidth: 800, width: '100%', padding: '16px', background: '#ffffff', borderRadius: 16, border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: 16, cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,0,0,0.02)' }} 
-                           onClick={() => {
-                             if (isReportTask && setOpenedReportTask) setOpenedReportTask(anexo)
-                             else if (isReportPayload && setOpenedReportPayload) {
-                               if (finalPhoto && cleanStuId) {
-                                 setCachedStudentPhoto(cleanStuId, finalPhoto);
-                               }
-                               setOpenedReportPayload(anexo);
-                             }
-                             else if ((isForm || isRel) && setOpenedFormStr) setOpenedFormStr(anexo)
-                             else handleDownload(parsed)
-                           }}>
-                        {isReportPayload ? (
-                          <div style={{ width: 48, height: 48, borderRadius: 14, overflow: 'hidden', flexShrink: 0, boxShadow: '0 2px 8px rgba(0,0,0,0.08)', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            {finalPhoto ? (
-                              <img 
-                                src={finalPhoto} 
-                                alt={displayName} 
-                                style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
-                              />
-                            ) : (
-                              <div style={{ width: '100%', height: '100%', background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)', color: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 18 }}>
-                                {initialLetter}
-                              </div>
-                            )}
-                          </div>
-                        ) : (
-                          <div style={{ width: 48, height: 48, borderRadius: 12, background: isReportTask ? '#ecfdf5' : '#f1f5f9', color: isReportTask ? '#10b981' : '#6366f1', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                            <FileText size={24} />
-                          </div>
-                        )}
-                        <div style={{ flex: 1 }}>
-                           <div style={{ fontWeight: 700, fontSize: 15, color: '#0f172a' }}>{displayName}</div>
-                           <div style={{ fontSize: 13, color: '#64748b' }}>
-                              {isForm ? 'Formulário' : isRel ? 'Relatório' : isReportTask ? 'Tarefa de Relatório' : isReportPayload ? 'Relatório Individual do Aluno' : 'Documento anexo'}
-                              {!isForm && !isRel && !isReportTask && !isReportPayload && (
-                                <> • <AttachmentSize url={parsed.url} initialSize={parsed.size} /></>
-                              )}
-                            </div>
-                           {(isAdminMode || isStaff) && cienciaString && (
-                             <div style={{ fontSize: 12, color: '#16a34a', fontWeight: 600, marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
-                               <CheckCircle2 size={14} />
-                               Ciência confirmada em {cienciaString}
-                             </div>
-                           )}
-                        </div>
-                      </div>
-                    )
-                  }
-                })}
-              </div>
-            )}
 
             {/* Ciência */}
             {comunicado.exigeCiencia && !isAdminMode && (
               <div style={{ 
                 background: !!(comunicado.ciencias || {})[currentUserSlug] ? '#f0fdf4' : '#eff6ff', 
-                padding: '24px', borderRadius: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16, border: !!(comunicado.ciencias || {})[currentUserSlug] ? '1px solid #bbf7d0' : '1px solid #bfdbfe', maxWidth: 800, width: '100%', margin: '0 auto'
+                padding: '24px', 
+                borderRadius: 20, 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                alignItems: 'center', 
+                flexWrap: 'wrap', 
+                gap: 16, 
+                border: !!(comunicado.ciencias || {})[currentUserSlug] ? '1px solid #bbf7d0' : '1px solid #bfdbfe', 
+                borderBottom: !!(comunicado.ciencias || {})[currentUserSlug] ? '3px solid #86efac' : '3px solid #93c5fd',
+                boxShadow: '0 8px 24px -4px rgba(15, 23, 42, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.9)',
+                maxWidth: 800, 
+                width: '100%', 
+                margin: '0 auto'
               }}>
                 <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
                   {!!(comunicado.ciencias || {})[currentUserSlug] ? <CheckCircle2 size={28} color="#16a34a" /> : <ShieldAlert size={28} color="#3b82f6" />}
@@ -1653,9 +1821,6 @@ export function ComunicadoViewModal({
                         <h3 style={{ fontSize: 14, fontWeight: 800, color: '#334155', margin: 0, textTransform: 'uppercase', letterSpacing: 0.5, display: 'flex', alignItems: 'center', gap: 8 }}>
                           <MessageSquare size={16} color="#6366f1" /> Conversas Privadas ({adminThreads.length})
                         </h3>
-                        <span style={{ fontSize: 11, fontWeight: 700, color: '#4f46e5', background: 'rgba(99, 102, 241, 0.08)', padding: '3px 10px', borderRadius: 20 }}>
-                          Painel do Administrador
-                        </span>
                       </div>
                       {adminThreads.map(thread => (
                          <div 
@@ -1663,46 +1828,61 @@ export function ComunicadoViewModal({
                            onClick={() => setSelectedThreadId(thread.studentId)} 
                            style={{ 
                              background: '#ffffff', 
-                             border: '1px solid #e2e8f0', 
-                             borderRadius: 16, 
+                             border: '1px solid rgba(226, 232, 240, 0.85)', 
+                             borderBottom: '3px solid rgba(203, 213, 225, 0.85)', 
+                             borderRadius: 18, 
                              padding: '14px 18px', 
                              cursor: 'pointer', 
                              display: 'flex', 
                              justifyContent: 'space-between', 
                              alignItems: 'center', 
-                             boxShadow: '0 2px 8px rgba(0,0,0,0.02)',
+                             boxShadow: '0 6px 16px -2px rgba(15, 23, 42, 0.05), 0 2px 4px -1px rgba(15, 23, 42, 0.03), inset 0 1px 0 rgba(255, 255, 255, 0.9)',
                              transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)'
                            }}
                            onMouseEnter={e => {
                              e.currentTarget.style.borderColor = '#818cf8';
-                             e.currentTarget.style.boxShadow = '0 6px 18px rgba(99, 102, 241, 0.12)';
-                             e.currentTarget.style.transform = 'translateY(-1px)';
+                             e.currentTarget.style.borderBottomColor = '#6366f1';
+                             e.currentTarget.style.boxShadow = '0 10px 24px -2px rgba(99, 102, 241, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.9)';
+                             e.currentTarget.style.transform = 'translateY(-2px)';
                            }}
                            onMouseLeave={e => {
-                             e.currentTarget.style.borderColor = '#e2e8f0';
-                             e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.02)';
+                             e.currentTarget.style.borderColor = 'rgba(226, 232, 240, 0.85)';
+                             e.currentTarget.style.borderBottomColor = 'rgba(203, 213, 225, 0.85)';
+                             e.currentTarget.style.boxShadow = '0 6px 16px -2px rgba(15, 23, 42, 0.05), 0 2px 4px -1px rgba(15, 23, 42, 0.03), inset 0 1px 0 rgba(255, 255, 255, 0.9)';
                              e.currentTarget.style.transform = 'translateY(0)';
                            }}
                          >
-                           <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
+                           <div style={{ display: 'flex', gap: 14, alignItems: 'center', minWidth: 0, flex: 1, marginRight: 10 }}>
                              <UserAvatar 
                                userId={thread.studentId}
                                name={thread.studentName}
                                fotoUrl={thread.studentFoto}
                                size={46}
                              />
-                             <div>
-                               <div style={{ fontWeight: 800, fontSize: 15, color: '#0f172a' }}>{thread.studentName}</div>
-                               <div style={{ fontSize: 13, color: '#64748b', marginTop: 3 }}>
+                             <div style={{ minWidth: 0, flex: 1 }}>
+                               <div 
+                                 style={{ 
+                                   fontWeight: 800, 
+                                   fontSize: 15, 
+                                   color: '#0f172a',
+                                   whiteSpace: 'nowrap',
+                                   overflow: 'hidden',
+                                   textOverflow: 'ellipsis'
+                                 }}
+                                 title={thread.studentName}
+                               >
+                                 {formatShortName(thread.studentName)}
+                               </div>
+                               <div style={{ fontSize: 13, color: '#64748b', marginTop: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                  {thread.messages.length} {thread.messages.length === 1 ? 'mensagem' : 'mensagens'} nesta conversa
                                </div>
                              </div>
                            </div>
-                           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
                              <span style={{ fontSize: 12, color: '#94a3b8', fontWeight: 600 }}>
                                {timeAgoShort(thread.lastMessageAt)}
                              </span>
-                             <div style={{ width: 30, height: 30, borderRadius: 10, background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b' }}>
+                             <div style={{ width: 30, height: 30, borderRadius: 10, background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b', border: '1px solid #e2e8f0' }}>
                                <ChevronRight size={16} />
                              </div>
                            </div>
@@ -1711,7 +1891,7 @@ export function ComunicadoViewModal({
                     </div>
                   ) : loadingMsg ? (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '4px 0' }}>
-                      <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 16, padding: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div style={{ background: '#ffffff', border: '1px solid rgba(226, 232, 240, 0.85)', borderBottom: '3px solid rgba(203, 213, 225, 0.85)', borderRadius: 18, padding: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 6px 16px -2px rgba(15, 23, 42, 0.05)' }}>
                         <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
                           <div style={{ width: 44, height: 44, borderRadius: '50%', background: '#f1f5f9' }} />
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -1731,7 +1911,7 @@ export function ComunicadoViewModal({
                       </button>
                     )}
                     <div style={{ height: 1, background: '#e2e8f0', margin: '8px 0' }} />
-                    <h3 style={{ fontSize: 14, fontWeight: 700, color: '#64748b', margin: 0, textTransform: 'uppercase', letterSpacing: 0.5 }}>{isAdminMode ? `Conversa com ${adminThreads.find(t => t.studentId === selectedThreadId)?.studentName}` : 'Respostas Privadas ao Envio'}</h3>
+                    <h3 style={{ fontSize: 14, fontWeight: 700, color: '#64748b', margin: 0, textTransform: 'uppercase', letterSpacing: 0.5 }}>{isAdminMode ? `Conversa com ${formatShortName(adminThreads.find(t => t.studentId === selectedThreadId)?.studentName || '')}` : 'Respostas Privadas ao Envio'}</h3>
                     {messagesToShow.length > 0 ? messagesToShow.map((msg, idx) => {
                       const isMe = isAdminMode ? msg.is_admin : (msg.remetente_id === currentUserSlug && !msg.is_admin)
                       
@@ -1833,12 +2013,12 @@ export function ComunicadoViewModal({
                           <div>
                             <div style={{ display: 'flex', flexDirection: 'column', marginBottom: 6 }}>
                               <span style={{ fontSize: 14, fontWeight: 700, color: '#0f172a' }}>
-                                {msg.is_admin ? msg.remetente_nome : (isFromResponsavel && alunoObj ? alunoObj.nome : msg.remetente_nome)}
+                                {msg.is_admin ? msg.remetente_nome : formatShortName(isFromResponsavel && alunoObj ? alunoObj.nome : msg.remetente_nome)}
                               </span>
                               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
                                 {isFromResponsavel && (
                                   <span style={{ fontSize: 12, color: '#64748b', fontWeight: 500 }}>
-                                    Enviado por: <span style={{ fontWeight: 600, color: '#475569' }}>{msg.remetente_nome}</span> &bull;
+                                    Enviado por: <span style={{ fontWeight: 600, color: '#475569' }}>{formatShortName(msg.remetente_nome)}</span> &bull;
                                   </span>
                                 )}
                                 <span style={{ fontSize: 12, color: '#94a3b8' }}>{msgTimeStr}</span>
@@ -2092,7 +2272,7 @@ export function ComunicadoViewModal({
           )}
 
           {/* ACTIONS FOOTER */}
-          {(onEdit || onDelete || onForward) && (
+          {(onEdit || onDelete || onForward || destinatariosStr) && (
             <div style={{
               background: 'rgba(255, 255, 255, 0.95)',
               backdropFilter: 'blur(24px)',
@@ -2105,7 +2285,7 @@ export function ComunicadoViewModal({
               zIndex: 20,
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'space-between',
+              justifyContent: onForward ? 'space-between' : 'flex-end',
               gap: 8,
               boxShadow: '0 -10px 40px -10px rgba(0,0,0,0.06)'
             }}>
@@ -2116,13 +2296,14 @@ export function ComunicadoViewModal({
                   onClick={(e: any) => { e.stopPropagation(); onForward(comunicado); }} 
                   style={{ 
                     flex: 1, 
+                    height: 44,
                     minWidth: 0,
                     display: 'flex', 
                     alignItems: 'center', 
                     justifyContent: 'center', 
-                    gap: 6, 
-                    padding: '12px 8px', 
-                    borderRadius: 16, 
+                    gap: 8, 
+                    padding: '0 16px', 
+                    borderRadius: 14, 
                     border: '1px solid rgba(99, 102, 241, 0.2)', 
                     background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)', 
                     color: '#ffffff', 
@@ -2138,60 +2319,79 @@ export function ComunicadoViewModal({
                   <span>Encaminhar</span>
                 </motion.button>
               )}
-              {onEdit && (
+              {destinatariosStr && (
                 <motion.button 
-                  whileHover={{ scale: 1.02, y: -1, background: '#f8fafc' }}
-                  whileTap={{ scale: 0.96 }}
-                  onClick={(e: any) => { e.stopPropagation(); onEdit(comunicado); }} 
+                  whileHover={{ scale: 1.05, y: -1, background: '#f8fafc' }}
+                  whileTap={{ scale: 0.94 }}
+                  onClick={(e: any) => { e.stopPropagation(); setShowDestinatariosModal(true); }} 
+                  title="Ver Destinatários"
+                  aria-label="Ver Destinatários"
                   style={{ 
-                    flex: 1, 
-                    minWidth: 0,
+                    width: 44,
+                    height: 44,
+                    flexShrink: 0,
                     display: 'flex', 
                     alignItems: 'center', 
                     justifyContent: 'center', 
-                    gap: 6, 
-                    padding: '12px 8px', 
-                    borderRadius: 16, 
+                    borderRadius: 14, 
                     border: '1px solid #e2e8f0', 
                     background: '#ffffff', 
                     color: '#475569', 
-                    fontSize: 14, 
-                    fontWeight: 700, 
-                    whiteSpace: 'nowrap',
                     cursor: 'pointer',
                     boxShadow: '0 4px 12px -4px rgba(0,0,0,0.05)'
                   }}
                 >
-                  <Edit2 size={17} style={{ flexShrink: 0 }} />
-                  <span>Editar</span>
+                  <Users size={18} />
+                </motion.button>
+              )}
+              {onEdit && (
+                <motion.button 
+                  whileHover={{ scale: 1.05, y: -1, background: '#f8fafc' }}
+                  whileTap={{ scale: 0.94 }}
+                  onClick={(e: any) => { e.stopPropagation(); onEdit(comunicado); }} 
+                  title="Editar"
+                  aria-label="Editar"
+                  style={{ 
+                    width: 44,
+                    height: 44,
+                    flexShrink: 0,
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'center', 
+                    borderRadius: 14, 
+                    border: '1px solid #e2e8f0', 
+                    background: '#ffffff', 
+                    color: '#475569', 
+                    cursor: 'pointer',
+                    boxShadow: '0 4px 12px -4px rgba(0,0,0,0.05)'
+                  }}
+                >
+                  <Edit2 size={18} />
                 </motion.button>
               )}
               {onDelete && (
                 <motion.button 
-                  whileHover={{ scale: 1.02, y: -1, background: '#fef2f2', borderColor: '#fca5a5' }}
-                  whileTap={{ scale: 0.96 }}
+                  whileHover={{ scale: 1.05, y: -1, background: '#fef2f2', borderColor: '#fca5a5' }}
+                  whileTap={{ scale: 0.94 }}
                   onClick={(e: any) => { e.stopPropagation(); onDelete(comunicado.id); }} 
+                  title="Excluir"
+                  aria-label="Excluir"
                   style={{ 
-                    flex: 1, 
-                    minWidth: 0,
+                    width: 44,
+                    height: 44,
+                    flexShrink: 0,
                     display: 'flex', 
                     alignItems: 'center', 
                     justifyContent: 'center', 
-                    gap: 6, 
-                    padding: '12px 8px', 
-                    borderRadius: 16, 
+                    borderRadius: 14, 
                     border: '1px solid rgba(239, 68, 68, 0.25)', 
                     background: 'rgba(239, 68, 68, 0.08)', 
                     color: '#ef4444', 
-                    fontSize: 14, 
-                    fontWeight: 700, 
-                    whiteSpace: 'nowrap',
                     cursor: 'pointer',
                     boxShadow: '0 4px 12px -4px rgba(239, 68, 68, 0.15)'
                   }}
                 >
-                  <Trash2 size={17} style={{ flexShrink: 0 }} />
-                  <span>Excluir</span>
+                  <Trash2 size={18} />
                 </motion.button>
               )}
             </div>
@@ -2303,6 +2503,15 @@ export function ComunicadoViewModal({
               </div>
             </motion.div>
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {internalMaximizedImage && (
+          <ImagePinchZoomModal
+            src={internalMaximizedImage}
+            onClose={() => setInternalMaximizedImage(null)}
+          />
         )}
       </AnimatePresence>
     </Portal>

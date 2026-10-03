@@ -19,6 +19,7 @@ import { supabase } from '@/lib/supabase'
 import Portal from '@/components/Portal'
 import { ComunicadoChat } from '@/components/ComunicadoChat'
 import { ComunicadoViewModal } from '@/components/agenda/ComunicadoViewModal'
+import { ImagePinchZoomModal } from '@/components/agenda/ImagePinchZoomModal'
 import { seedComunicadosRespostasCache, prefetchComunicadoMessages, getGlobalCachedMessages } from '@/lib/comunicadosRespostasCache'
 import { ComunicadoSkeleton } from '../../components/ComunicadoSkeleton'
 import { ReportPayloadView } from '@/components/DynamicReports/ReportPayloadView'
@@ -1813,21 +1814,12 @@ export default function ADComunicadosPage({ params }: { params: any }) {
       </AnimatePresence>
 
       <AnimatePresence>
-        {/* Modal de Imagem Maximizada */}
+        {/* Modal de Imagem Maximizada com Pinch Zoom (Pinça) */}
         {maximizedImageStr && (
-          <Portal>
-          <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.9)', backdropFilter: 'none', zIndex: 100000, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'zoom-out' }} onClick={() => setMaximizedImageStr(null)}>
-            <button className="btn btn-secondary" style={{ position: 'absolute', top: 24, right: 24, width: 48, height: 48, padding: 0, borderRadius: '50%', background: 'rgba(15,23,42,0.85)', border: '2px solid rgba(255,255,255,0.8)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.2s', boxShadow: '0 4px 12px rgba(15,23,42,0.85)', zIndex: 100001 }} onMouseEnter={e => { e.currentTarget.style.background = 'rgba(0,0,0,0.8)'; e.currentTarget.style.borderColor = '#fff'; }} onMouseLeave={e => { e.currentTarget.style.background = 'rgba(15,23,42,0.85)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.8)'; }} onClick={(e) => { e.stopPropagation(); setMaximizedImageStr(null); }}>
-              <X size={24} />
-            </button>
-            <motion.img 
-              src={maximizedImageStr} 
-              initial={{scale:0.8, opacity:0}} animate={{scale:1, opacity:1}} exit={{scale:0.8, opacity:0}} transition={{ type: "spring", stiffness: 300, damping: 25 }}
-              style={{ maxWidth: '95vw', maxHeight: '95vh', objectFit: 'contain', borderRadius: 16, boxShadow: '0 32px 128px rgba(15,23,42,0.85)' }} 
-              onClick={e => e.stopPropagation()} 
-            />
-          </motion.div>
-          </Portal>
+          <ImagePinchZoomModal
+            src={maximizedImageStr}
+            onClose={() => setMaximizedImageStr(null)}
+          />
         )}
       </AnimatePresence>
 
