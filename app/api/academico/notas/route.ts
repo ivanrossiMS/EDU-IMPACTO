@@ -73,11 +73,6 @@ export async function POST(request: Request) {
     const body = await request.json()
     const payload = Array.isArray(body) ? body : [body]
     
-    // LOG TUDO PARA DEBUG!
-    try {
-      require('fs').writeFileSync('/tmp/notas_log.json', JSON.stringify({ payload, timestamp: new Date().toISOString() }, null, 2));
-    } catch (err) {}
-
     if (payload.length === 0) return NextResponse.json({ ok: true, count: 0 })
 
     const { error: errRpc } = await supabase.rpc('salvar_notas_em_lote', { p_dados: payload })

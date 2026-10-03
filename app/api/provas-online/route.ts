@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/server/authGuard'
 import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
-import { dbGetProvas, dbSaveProva, dbGetTentativasByProvaId } from '@/lib/provas-online/db'
+import { dbGetProvas, dbSaveProva, dbGetTentativasByProvaId, dbGetTentativasStatsByProvaIds } from '@/lib/provas-online/db'
 import { sanitizeExamForParticipant, shouldPublishResults } from '@/lib/provas-online/engine'
 import { ProvaOnline } from '@/types/provas-online'
 
@@ -297,25 +297,18 @@ export async function GET(request: Request) {
     filteredProvas = filteredProvas.filter(p => String(p.bimestre) === periodoParam)
   }
 
-  // Attach counts of submissions / in-progress attempts for teacher/admin dashboard cards
-  const enrichedProvas = await Promise.all(
-    filteredProvas.map(async p => {
-      const tentativas = await dbGetTentativasByProvaId(p.id)
-      const emAndamentoCount = tentativas.filter(t => t.status === 'em_andamento').length
-      const entreguesCount = tentativas.filter(t => t.status === 'entregue' || t.status === 'expirada').length
-      const correcaoPendenteCount = tentativas.filter(t => t.statusCorrecao === 'pendente' || t.statusCorrecao === 'parcial').length
-      
-      return {
-        ...p,
-        stats: {
-          totalTentativas: tentativas.length,
-          emAndamento: emAndamentoCount,
-          entregues: entreguesCount,
-          correcaoPendente: correcaoPendenteCount
-        }
-      }
-    })
-  )
+  // Attach counts of submissions / in-progress attempts via single ultra-fast batch query
+  const provaIds = filteredProvas.map(p => p.id)
+  const statsMap = await dbGetTentativasStatsByProvaIds(provaIds)
+  const enrichedProvas = filteredProvas.map(p => ({
+    ...p,
+    stats: statsMap[p.id] || {
+      totalTentativas: 0,
+      emAndamento: 0,
+      entregues: 0,
+      correcaoPendente: 0
+    }
+  }))
 
     return NextResponse.json(enrichedProvas)
   } catch (err: any) {

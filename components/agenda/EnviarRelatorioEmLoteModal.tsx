@@ -393,6 +393,29 @@ Colégio Impacto`
     }
   }
 
+  // Bloqueio rigoroso de rolagem vertical no fundo (body, html e container .ad-main-scroll)
+  useEffect(() => {
+    if (!isOpen) return
+
+    const origBodyOverflow = document.body.style.overflow
+    const origBodyOverscroll = document.body.style.overscrollBehavior
+    const origHtmlOverflow = document.documentElement.style.overflow
+    const mainScroll = document.querySelector('.ad-main-scroll') as HTMLElement | null
+    const origMainScrollOverflow = mainScroll?.style.overflow || ''
+
+    document.body.style.overflow = 'hidden'
+    document.body.style.overscrollBehavior = 'none'
+    document.documentElement.style.overflow = 'hidden'
+    if (mainScroll) mainScroll.style.overflow = 'hidden'
+
+    return () => {
+      document.body.style.overflow = origBodyOverflow
+      document.body.style.overscrollBehavior = origBodyOverscroll
+      document.documentElement.style.overflow = origHtmlOverflow
+      if (mainScroll) mainScroll.style.overflow = origMainScrollOverflow
+    }
+  }, [isOpen])
+
   if (!isOpen) return null
 
   const selectedTargets = enrichedColabs.filter(c => selectedNames.has(c.nome))
@@ -406,17 +429,37 @@ Colégio Impacto`
         style={{
           position: 'fixed',
           inset: 0,
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          width: '100vw',
+          height: '100dvh',
           zIndex: 999999,
           background: 'rgba(15, 23, 42, 0.75)',
           backdropFilter: 'blur(8px)',
+          WebkitBackdropFilter: 'blur(8px)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          padding: 16
+          padding: '20px 16px',
+          boxSizing: 'border-box',
+          overflow: 'hidden',
+          overscrollBehavior: 'none',
         }}
         onClick={(e) => {
           e.stopPropagation()
           if (!isProcessing) onClose()
+        }}
+        onTouchMove={(e) => {
+          if (e.target === e.currentTarget) {
+            e.preventDefault()
+          }
+        }}
+        onWheel={(e) => {
+          if (e.target === e.currentTarget) {
+            e.preventDefault()
+          }
         }}
       >
         <motion.div
@@ -430,12 +473,14 @@ Colégio Impacto`
             borderRadius: 24,
             width: '100%',
             maxWidth: 780,
-            maxHeight: '92vh',
+            maxHeight: 'min(92vh, 860px)',
             display: 'flex',
             flexDirection: 'column',
             overflow: 'hidden',
             boxShadow: '0 25px 60px -15px rgba(0, 0, 0, 0.4)',
-            border: '1px solid #e2e8f0'
+            border: '1px solid #e2e8f0',
+            margin: 'auto',
+            position: 'relative',
           }}
         >
           {/* Header Superior */}
@@ -524,7 +569,7 @@ Colégio Impacto`
           </div>
 
           {/* Seção Principal: Seleção ou Tela de Progresso */}
-          <div style={{ flex: 1, overflowY: 'auto', padding: '16px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '16px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
             {isProcessing || batchFinished ? (
               // TELA DE PROGRESSO DO DISPARO
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -1073,16 +1118,36 @@ Colégio Impacto`
           {showTemplateModal && (
             <div
               onClick={() => setShowTemplateModal(false)}
+              onTouchMove={(e) => {
+                if (e.target === e.currentTarget) {
+                  e.preventDefault()
+                }
+              }}
+              onWheel={(e) => {
+                if (e.target === e.currentTarget) {
+                  e.preventDefault()
+                }
+              }}
               style={{
                 position: 'fixed',
                 inset: 0,
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                width: '100vw',
+                height: '100dvh',
                 backgroundColor: 'rgba(15, 23, 42, 0.75)',
-                backdropFilter: 'blur(6px)',
+                backdropFilter: 'blur(8px)',
+                WebkitBackdropFilter: 'blur(8px)',
                 zIndex: 999999,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                padding: '16px'
+                padding: '20px 16px',
+                boxSizing: 'border-box',
+                overflow: 'hidden',
+                overscrollBehavior: 'none',
               }}
             >
               <motion.div
@@ -1094,14 +1159,16 @@ Colégio Impacto`
                 style={{
                   width: '100%',
                   maxWidth: 680,
-                  maxHeight: '90vh',
+                  maxHeight: 'min(90vh, 750px)',
                   background: '#ffffff',
                   borderRadius: 20,
                   boxShadow: '0 25px 60px -15px rgba(0, 0, 0, 0.4)',
                   display: 'flex',
                   flexDirection: 'column',
                   overflow: 'hidden',
-                  border: '1px solid #e2e8f0'
+                  border: '1px solid #e2e8f0',
+                  margin: 'auto',
+                  position: 'relative',
                 }}
               >
                 {/* Header da Prévia */}
@@ -1208,7 +1275,7 @@ Colégio Impacto`
                 </div>
 
                 {/* Conteúdo da Prévia (scrollável) */}
-                <div style={{ padding: '20px 24px', overflowY: 'auto', flex: 1, maxHeight: '55vh' }}>
+                <div style={{ padding: '20px 24px', overflowY: 'auto', flex: 1, minHeight: 0, maxHeight: '55vh' }}>
                   {/* Card Metadados */}
                   <div style={{
                     padding: '12px 16px',

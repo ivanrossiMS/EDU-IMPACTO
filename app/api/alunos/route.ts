@@ -7,6 +7,7 @@ import { NextResponse } from 'next/server'
 import { requireAuth, requireProfile } from '@/lib/server/authGuard'
 import { isValidStudentPhoto } from '@/lib/utils'
 import { isAlunoCursandoTurma, isAlunoIntegralIntermediario } from '@/lib/studentTurmaUtils'
+import { invalidateAlunosCache } from '@/lib/server/turmasGruposCache'
 
 export const dynamic = 'force-dynamic'
 
@@ -1092,6 +1093,7 @@ export async function POST(request: Request) {
       console.error('[Portaria Sync Error]', err.message)
     )
 
+    invalidateAlunosCache()
     return NextResponse.json(savedStudent, { status: 201 })
   } catch (e: any) {
     console.error(`[${new Date().toISOString()}] Error Alunos POST: ${e.message}\n`)
@@ -1568,6 +1570,7 @@ export async function PUT(request: Request) {
       }
     }
 
+    invalidateAlunosCache()
     return NextResponse.json(savedStudent)
   } catch (e: any) {
     console.error(`[${new Date().toISOString()}] Error Alunos PUT: ${e.message}\n`)
@@ -1837,6 +1840,7 @@ export async function DELETE(request: Request) {
       )
     }
 
+    invalidateAlunosCache()
     if (all) {
       // Get all student IDs in the database
       const { data: allStudents, error: fetchAllError } = await supabaseAdmin

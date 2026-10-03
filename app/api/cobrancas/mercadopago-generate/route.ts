@@ -14,6 +14,21 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Faltam dados obrigatórios' }, { status: 400 })
     }
 
+    // IDEMPOTÊNCIA: Verifica se já existe preferência de pagamento gerada para este destinatário
+    const { data: existingDest } = await supabase
+      .from('agenda_cobrancas_destinatarios')
+      .select('id, url_pagamento, status')
+      .eq('id', cobranca_destinatario_id)
+      .maybeSingle()
+
+    if (existingDest?.url_pagamento && existingDest.status !== 'pago') {
+      return NextResponse.json({ 
+        success: true, 
+        invoiceUrl: existingDest.url_pagamento,
+        pix: null
+      })
+    }
+
     const nome = user.user_metadata?.name || user.email?.split('@')[0] || 'Cliente'
     const email = user.email || 'email@naocadastrado.com'
 

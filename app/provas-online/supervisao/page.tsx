@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -22,6 +22,10 @@ export default function SupervisaoProvasPage() {
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date())
   const [copiedId, setCopiedId] = useState<string | null>(null)
 
+  // In-flight guard e sequência monotônica para impedir condições de corrida
+  const inFlightRef = useRef(false)
+  const reqSeqRef = useRef(0)
+
   // Quick Share / QR Modal
   const [shareModalProva, setShareModalProva] = useState<any | null>(null)
 
@@ -32,12 +36,16 @@ export default function SupervisaoProvasPage() {
   const [selectedDisciplina, setSelectedDisciplina] = useState('')
   const [selectedBimestre, setSelectedBimestre] = useState('')
 
-  // Fetch Exams
-  const fetchProvas = async (silent = false) => {
+  // Fetch Exams com blindagem contra out-of-order responses
+  const fetchProvas = useCallback(async (silent = false) => {
+    if (inFlightRef.current && silent) return
+    inFlightRef.current = true
+    const currentSeq = ++reqSeqRef.current
+
     try {
       if (!silent) setRefreshing(true)
       const res = await fetch('/api/provas-online')
-      if (res.ok) {
+      if (res.ok && currentSeq === reqSeqRef.current) {
         const data = await res.json()
         if (Array.isArray(data)) {
           setProvas(data)
@@ -48,16 +56,33 @@ export default function SupervisaoProvasPage() {
       console.error('Erro ao carregar provas na supervisão:', err)
       if (!silent) toast.error('Falha ao sincronizar dados das salas')
     } finally {
-      setLoading(false)
-      setRefreshing(false)
+      inFlightRef.current = false
+      if (currentSeq === reqSeqRef.current) {
+        setLoading(false)
+        setRefreshing(false)
+      }
     }
-  }
+  }, [])
 
   useEffect(() => {
     fetchProvas()
-  }, [])
 
-  // Auto-refresh interval (every 15s when active)
+    const handleVisibilityOrFocus = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        fetchProvas(true)
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityOrFocus)
+    window.addEventListener('focus', handleVisibilityOrFocus)
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityOrFocus)
+      window.removeEventListener('focus', handleVisibilityOrFocus)
+    }
+  }, [fetchProvas])
+
+  // Auto-refresh interval (every 15s when active and visible)
   useEffect(() => {
     if (!autoRefresh) return
     const interval = setInterval(() => {
@@ -66,7 +91,7 @@ export default function SupervisaoProvasPage() {
       }
     }, 15000)
     return () => clearInterval(interval)
-  }, [autoRefresh])
+  }, [autoRefresh, fetchProvas])
 
   // Copy Student Link Handler
   const handleCopyLink = async (prova: any) => {

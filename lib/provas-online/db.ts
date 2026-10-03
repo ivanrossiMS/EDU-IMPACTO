@@ -554,6 +554,78 @@ export async function dbSaveBancoQuestao(item: ItemBancoQuestoes): Promise<ItemB
 // TENTATIVAS (STUDENT ATTEMPTS)
 // ─────────────────────────────────────────────────────────────────────────────
 
+export interface ProvaOnlineStatsSummary {
+  totalTentativas: number
+  emAndamento: number
+  entregues: number
+  correcaoPendente: number
+}
+
+/**
+ * Agregação ultra-leve em lote das estatísticas de tentativas para dashboard/supervisão.
+ * Executa uma ÚNICA query trazendo apenas 4 colunas escalares (sem carregar JSONs pesados de respostas).
+ */
+export async function dbGetTentativasStatsByProvaIds(
+  provaIds: string[]
+): Promise<Record<string, ProvaOnlineStatsSummary>> {
+  const result: Record<string, ProvaOnlineStatsSummary> = {}
+  if (!provaIds || provaIds.length === 0) return result
+
+  provaIds.forEach(id => {
+    result[id] = { totalTentativas: 0, emAndamento: 0, entregues: 0, correcaoPendente: 0 }
+  })
+
+  const sb = getAdminClient()
+
+  // 1. Dedicated table com projeção restrita aos campos de status
+  try {
+    const { data, error } = await sb
+      .from('provas_online_tentativas')
+      .select('id, prova_id, status, status_correcao')
+      .in('prova_id', provaIds)
+
+    if (!error && Array.isArray(data)) {
+      for (const row of data) {
+        const pId = row.prova_id
+        if (!result[pId]) {
+          result[pId] = { totalTentativas: 0, emAndamento: 0, entregues: 0, correcaoPendente: 0 }
+        }
+        result[pId].totalTentativas++
+        if (row.status === 'em_andamento') {
+          result[pId].emAndamento++
+        } else if (row.status === 'entregue' || row.status === 'expirada') {
+          result[pId].entregues++
+        }
+        if (row.status_correcao === 'pendente' || row.status_correcao === 'parcial') {
+          result[pId].correcaoPendente++
+        }
+      }
+      return result
+    }
+  } catch (err: any) {
+    if (!isTableMissingError(err)) console.error('[dbGetTentativasStats dedicated error]', err)
+  }
+
+  // 2. Fallback resiliente
+  try {
+    await Promise.all(
+      provaIds.map(async pId => {
+        const tentativas = await dbGetTentativasByProvaId(pId)
+        result[pId] = {
+          totalTentativas: tentativas.length,
+          emAndamento: tentativas.filter(t => t.status === 'em_andamento').length,
+          entregues: tentativas.filter(t => t.status === 'entregue' || t.status === 'expirada').length,
+          correcaoPendente: tentativas.filter(t => t.statusCorrecao === 'pendente' || t.statusCorrecao === 'parcial').length
+        }
+      })
+    )
+  } catch (fallbackErr) {
+    console.error('[dbGetTentativasStats fallback error]', fallbackErr)
+  }
+
+  return result
+}
+
 export async function dbGetTentativasByProvaId(provaId: string): Promise<TentativaAluno[]> {
   const sb = getAdminClient()
 

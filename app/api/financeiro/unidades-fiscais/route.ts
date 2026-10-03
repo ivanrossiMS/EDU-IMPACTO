@@ -14,7 +14,7 @@ export async function GET(request: Request) {
     if (error) throw new Error(error.message)
     const result = (data || []).map(row => ({ ...row, ...(row.dados || {}) }))
     return NextResponse.json(result, {
-      headers: { 'Cache-Control': 'public, s-maxage=10, stale-while-revalidate=59' }
+      headers: { 'Cache-Control': 'private, max-age=10, stale-while-revalidate=59' }
     })
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 400 })

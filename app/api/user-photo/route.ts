@@ -3,19 +3,28 @@ import { requireAuth } from '@/lib/server/authGuard'
 import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 
+function returnPhoto(foto: string | null, status = 200) {
+  return NextResponse.json({ foto }, {
+    status,
+    headers: {
+      'Cache-Control': foto 
+        ? 'private, max-age=180, stale-while-revalidate=360' 
+        : 'private, max-age=30'
+    }
+  })
+}
+
 export async function GET(request: Request) {
   const { user, errorResponse } = await requireAuth()
   if (errorResponse) return errorResponse
 
   try {
-    // requireAuth já validou o usuário
-
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
     const name = searchParams.get('name')
     
     if (!id && !name) {
-      return NextResponse.json({ foto: null }, { status: 400 })
+      return returnPhoto(null, 400)
     }
 
     const supabaseAdmin = getAdminClient();
@@ -32,7 +41,7 @@ export async function GET(request: Request) {
         }
       }
       
-      if (authFoto) return NextResponse.json({ foto: authFoto });
+      if (authFoto) return returnPhoto(authFoto);
 
       // 2. Busca na tabela system_users (por id, auth_id ou email)
       const isIdUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
@@ -46,7 +55,7 @@ export async function GET(request: Request) {
         .maybeSingle();
 
       if (sysUser?.dados?.foto) {
-        return NextResponse.json({ foto: sysUser.dados.foto });
+        return returnPhoto(sysUser.dados.foto);
       }
 
       // 3. Se não encontrou, busca na tabela alunos (caso seja ID de aluno)
@@ -57,7 +66,7 @@ export async function GET(request: Request) {
         .maybeSingle();
         
       if (alunoData?.foto) {
-        return NextResponse.json({ foto: alunoData.foto });
+        return returnPhoto(alunoData.foto);
       }
 
       // 4. Busca na tabela responsaveis
@@ -68,7 +77,7 @@ export async function GET(request: Request) {
         .maybeSingle();
 
       if (respData?.dados?.foto) {
-        return NextResponse.json({ foto: respData.dados.foto });
+        return returnPhoto(respData.dados.foto);
       }
     }
 
@@ -83,7 +92,7 @@ export async function GET(request: Request) {
         .maybeSingle();
 
       if (sysByName?.dados?.foto) {
-        return NextResponse.json({ foto: sysByName.dados.foto });
+        return returnPhoto(sysByName.dados.foto);
       }
 
       const { data: alunoByName } = await supabaseAdmin
@@ -94,14 +103,14 @@ export async function GET(request: Request) {
         .maybeSingle();
 
       if (alunoByName?.foto) {
-        return NextResponse.json({ foto: alunoByName.foto });
+        return returnPhoto(alunoByName.foto);
       }
     }
 
     // Retorna 200 com foto: null em vez de 404 para evitar loops de requisição no cliente
-    return NextResponse.json({ foto: null });
+    return returnPhoto(null);
   } catch (err) {
-    return NextResponse.json({ foto: null }, { status: 500 });
+    return returnPhoto(null, 500);
   }
 }
 

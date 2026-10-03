@@ -15,21 +15,30 @@ export async function GET(request: Request) {
   const alunoId = searchParams.get('alunoId')
   const q = searchParams.get('q')
 
-  // Adicionado limite rigoroso para evitar sobrecarga de memória (OOM) no frontend e banco
-  let query = supabase.from('titulos').select('*')
+  const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10))
+  const limitParam = searchParams.get('limit')
+  const all = searchParams.get('all') === 'true'
+  const limit = all ? 10000 : (limitParam ? Math.min(10000, Math.max(1, parseInt(limitParam, 10))) : 1000)
+
+  let query = supabase.from('titulos').select('*', { count: 'exact' })
   
   const accessStartDate = await getLoggedUserAccessStartDate()
   if (accessStartDate) {
     query = query.gte('created_at', accessStartDate.toISOString())
   }
 
-  query = query.order('vencimento').limit(1000)
-
-  if (status && status !== 'Todos') query = query.eq('status', status)
+  if (status && status !== 'Todos' && status !== 'todos') query = query.eq('status', status)
   if (alunoId) query = query.or(`aluno.eq.${alunoId},dados->>alunoId.eq.${alunoId},dados->>aluno_id.eq.${alunoId}`)
   if (q) query = query.or(`aluno.ilike.%${q}%,descricao.ilike.%${q}%,codigo.ilike.%${q}%`)
 
-  const { data, error } = await query
+  query = query.order('vencimento', { ascending: false })
+  if (!all) {
+    const from = (page - 1) * limit
+    const to = from + limit - 1
+    query = query.range(from, to)
+  }
+
+  const { data, count, error } = await query
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
   const result = (data || []).map(row => ({
@@ -41,7 +50,14 @@ export async function GET(request: Request) {
     eventoDescricao: row.evento_descricao,
     dataNascimento: row.data_nascimento,
   }))
-  return NextResponse.json(result)
+  return NextResponse.json(result, {
+    headers: {
+      'Cache-Control': 'private, no-cache',
+      'X-Total-Count': String(count ?? result.length),
+      'X-Page': String(page),
+      'X-Limit': String(limit)
+    }
+  })
 }
 
 export async function POST(request: Request) {

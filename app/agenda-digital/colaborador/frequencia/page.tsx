@@ -76,16 +76,19 @@ export default function ColaboradorFrequenciaPage() {
     onDelete: () => queryClient.invalidateQueries({ queryKey: ['frequencias-colaborador'] })
   })
 
-  // Sincronização em tempo real de saídas
+  // Sincronização em tempo real de saídas via canal consolidado da agenda
   useEffect(() => {
-    const channel = supabase.channel('saida_calls_colab_freq_sync')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'saida_calls' }, () => {
-        queryClient.invalidateQueries({ queryKey: ['saida-calls-colaborador'] })
-      })
-      .subscribe()
+    const handleSync = () => {
+      queryClient.invalidateQueries({ queryKey: ['saida-calls-colaborador'] })
+    }
+    window.addEventListener('ad:saida_calls-insert', handleSync)
+    window.addEventListener('ad:saida_calls-update', handleSync)
+    window.addEventListener('ad:saida_calls-delete', handleSync)
 
     return () => {
-      supabase.removeChannel(channel)
+      window.removeEventListener('ad:saida_calls-insert', handleSync)
+      window.removeEventListener('ad:saida_calls-update', handleSync)
+      window.removeEventListener('ad:saida_calls-delete', handleSync)
     }
   }, [queryClient])
 

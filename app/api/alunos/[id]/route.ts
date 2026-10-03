@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/server/authGuard'
 import { supabaseServer as supabase } from '@/lib/supabaseServer'
+import { invalidateAlunosCache } from '@/lib/server/turmasGruposCache'
 
 export const dynamic = 'force-dynamic'
 
@@ -139,6 +140,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
 
     if (error) throw error
 
+    invalidateAlunosCache()
     return NextResponse.json({ data })
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 })

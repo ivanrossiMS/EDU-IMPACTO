@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { 
   Send, X, User, Crown, CheckCircle2, AlertCircle, 
@@ -191,6 +191,29 @@ export function EnviarRelatorioColaboradorModal({
     }
   }
 
+  // Bloqueio rigoroso de rolagem vertical no fundo (body, html e container .ad-main-scroll)
+  useEffect(() => {
+    if (!isOpen) return
+
+    const origBodyOverflow = document.body.style.overflow
+    const origBodyOverscroll = document.body.style.overscrollBehavior
+    const origHtmlOverflow = document.documentElement.style.overflow
+    const mainScroll = document.querySelector('.ad-main-scroll') as HTMLElement | null
+    const origMainScrollOverflow = mainScroll?.style.overflow || ''
+
+    document.body.style.overflow = 'hidden'
+    document.body.style.overscrollBehavior = 'none'
+    document.documentElement.style.overflow = 'hidden'
+    if (mainScroll) mainScroll.style.overflow = 'hidden'
+
+    return () => {
+      document.body.style.overflow = origBodyOverflow
+      document.body.style.overscrollBehavior = origBodyOverscroll
+      document.documentElement.style.overflow = origHtmlOverflow
+      if (mainScroll) mainScroll.style.overflow = origMainScrollOverflow
+    }
+  }, [isOpen])
+
   if (!isOpen) return null
 
   return (
@@ -199,6 +222,12 @@ export function EnviarRelatorioColaboradorModal({
         style={{
           position: 'fixed',
           inset: 0,
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          width: '100vw',
+          height: '100dvh',
           background: 'rgba(15, 23, 42, 0.75)',
           backdropFilter: 'blur(8px)',
           WebkitBackdropFilter: 'blur(8px)',
@@ -206,11 +235,24 @@ export function EnviarRelatorioColaboradorModal({
           display: 'flex',
           justifyContent: 'center',
           alignItems: 'center',
-          padding: '16px'
+          padding: '20px 16px',
+          boxSizing: 'border-box',
+          overflow: 'hidden',
+          overscrollBehavior: 'none',
         }}
         onClick={(e) => {
           e.stopPropagation()
           if (!isSubmitting) onClose()
+        }}
+        onTouchMove={(e) => {
+          if (e.target === e.currentTarget) {
+            e.preventDefault()
+          }
+        }}
+        onWheel={(e) => {
+          if (e.target === e.currentTarget) {
+            e.preventDefault()
+          }
         }}
       >
         <motion.div
@@ -221,13 +263,15 @@ export function EnviarRelatorioColaboradorModal({
           style={{
             width: 740,
             maxWidth: '100%',
-            maxHeight: '94vh',
+            maxHeight: 'min(92vh, 840px)',
             background: '#ffffff',
             borderRadius: 24,
             boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.35)',
             display: 'flex',
             flexDirection: 'column',
-            overflow: 'hidden'
+            overflow: 'hidden',
+            margin: 'auto',
+            position: 'relative',
           }}
           onClick={e => e.stopPropagation()}
         >
@@ -287,7 +331,7 @@ export function EnviarRelatorioColaboradorModal({
           </div>
 
           {/* Conteúdo com Scroll */}
-          <div style={{ padding: '22px 28px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: 18 }}>
+          <div style={{ padding: '22px 28px', overflowY: 'auto', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', gap: 18 }}>
             {/* Banner de Remetente (Administrador Master) e Destinatário */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 12 }}>
               {/* Remetente: Administrador Master */}

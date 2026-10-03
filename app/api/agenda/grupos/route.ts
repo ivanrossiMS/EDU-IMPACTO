@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/server/authGuard'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
+import { invalidateGruposCache } from '@/lib/server/turmasGruposCache'
 
 export const dynamic = 'force-dynamic'
 
@@ -20,7 +21,7 @@ export async function GET(request: Request) {
     const result = (data || []).map(row => ({ id: row.id, ...(row.dados || {}) }))
     
     return NextResponse.json(result, {
-      headers: { 'Cache-Control': 'public, max-age=120, stale-while-revalidate=300' }
+      headers: { 'Cache-Control': 'private, max-age=60, stale-while-revalidate=120' }
     })
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 400 })
@@ -61,6 +62,7 @@ export async function POST(request: Request) {
         if (error) throw new Error(error.message)
       }
       
+      invalidateGruposCache()
       return NextResponse.json({ ok: true, count: rows.length })
     }
 
@@ -68,6 +70,7 @@ export async function POST(request: Request) {
     const { data, error } = await supabase.from('agenda_grupos').upsert(row).select().single()
     if (error) throw new Error(error.message)
 
+    invalidateGruposCache()
     return NextResponse.json({ id: data.id, ...(data.dados || {}) }, { status: 201 })
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 400 })

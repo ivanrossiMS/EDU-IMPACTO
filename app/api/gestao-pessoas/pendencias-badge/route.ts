@@ -35,7 +35,7 @@ export async function GET(request: Request) {
     if (!errChk) total += (checklistsCount || 0)
 
     return NextResponse.json({ pendencias: total }, {
-      headers: { 'Cache-Control': 'public, s-maxage=10, stale-while-revalidate=59' }
+      headers: { 'Cache-Control': 'private, max-age=10, stale-while-revalidate=59' }
     })
   } catch (err: any) {
     return NextResponse.json({ pendencias: 0, error: err.message }, { status: 400 })

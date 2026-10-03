@@ -20,7 +20,7 @@ export async function GET(request: Request) {
     const result = (data || []).map(row => ({ id: row.id, ...(row.dados || {}) }))
     
     return NextResponse.json(result, {
-      headers: { 'Cache-Control': 'public, max-age=300, stale-while-revalidate=600' }
+      headers: { 'Cache-Control': 'private, max-age=60, stale-while-revalidate=120' }
     })
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 400 })

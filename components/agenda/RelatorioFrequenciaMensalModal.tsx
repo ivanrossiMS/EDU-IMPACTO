@@ -270,6 +270,29 @@ export function RelatorioFrequenciaMensalModal({
     }
   }
 
+  // Bloqueio rigoroso de rolagem vertical no fundo (body, html e container .ad-main-scroll)
+  useEffect(() => {
+    if (!isOpen) return
+
+    const origBodyOverflow = document.body.style.overflow
+    const origBodyOverscroll = document.body.style.overscrollBehavior
+    const origHtmlOverflow = document.documentElement.style.overflow
+    const mainScroll = document.querySelector('.ad-main-scroll') as HTMLElement | null
+    const origMainScrollOverflow = mainScroll?.style.overflow || ''
+
+    document.body.style.overflow = 'hidden'
+    document.body.style.overscrollBehavior = 'none'
+    document.documentElement.style.overflow = 'hidden'
+    if (mainScroll) mainScroll.style.overflow = 'hidden'
+
+    return () => {
+      document.body.style.overflow = origBodyOverflow
+      document.body.style.overscrollBehavior = origBodyOverscroll
+      document.documentElement.style.overflow = origHtmlOverflow
+      if (mainScroll) mainScroll.style.overflow = origMainScrollOverflow
+    }
+  }, [isOpen])
+
   if (!isOpen) return null
 
   return (
@@ -278,16 +301,35 @@ export function RelatorioFrequenciaMensalModal({
         style={{
           position: 'fixed',
           inset: 0,
-          background: 'rgba(15, 23, 42, 0.65)',
-          backdropFilter: 'blur(6px)',
-          WebkitBackdropFilter: 'blur(6px)',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          width: '100vw',
+          height: '100dvh',
+          background: 'rgba(15, 23, 42, 0.75)',
+          backdropFilter: 'blur(8px)',
+          WebkitBackdropFilter: 'blur(8px)',
           zIndex: 10005,
           display: 'flex',
           justifyContent: 'center',
           alignItems: 'center',
-          padding: '16px'
+          padding: '20px 16px',
+          boxSizing: 'border-box',
+          overflow: 'hidden',
+          overscrollBehavior: 'none',
         }}
         onClick={onClose}
+        onTouchMove={(e) => {
+          if (e.target === e.currentTarget) {
+            e.preventDefault()
+          }
+        }}
+        onWheel={(e) => {
+          if (e.target === e.currentTarget) {
+            e.preventDefault()
+          }
+        }}
       >
         <motion.div 
           initial={{ scale: 0.95, opacity: 0, y: 15 }}
@@ -297,14 +339,15 @@ export function RelatorioFrequenciaMensalModal({
           style={{ 
             width: 880, 
             maxWidth: '100%', 
-            maxHeight: '92vh',
+            maxHeight: 'min(92vh, 880px)',
             background: '#ffffff', 
             borderRadius: 24,
-            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(0, 0, 0, 0.05)',
-            display: 'flex',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(0, 0, 0, 0.08)',
+            display: 'flex', 
             flexDirection: 'column',
             overflow: 'hidden',
-            position: 'relative'
+            position: 'relative',
+            margin: 'auto'
           }}
           onClick={e => e.stopPropagation()}
         >
@@ -650,7 +693,7 @@ export function RelatorioFrequenciaMensalModal({
           </div>
 
           {/* Corpo do Modal com Scroll Customizado */}
-          <div style={{ padding: '20px 28px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: 20 }}>
+          <div style={{ padding: '20px 28px', overflowY: 'auto', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', gap: 20 }}>
             {/* DESTAQUE DO USUÁRIO SELECIONADO (Solicitação explícita do usuário) */}
             <AnimatePresence>
               {selectedUserObj && (

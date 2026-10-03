@@ -80,7 +80,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true, message: 'Avatar atualizado com sucesso', avatarUrl })
   } catch (err: any) {
     console.error('[API responsaveis/avatar]', err)
-    require('fs').writeFileSync('/tmp/avatar_err.log', String(err.stack || err.message))
-    return NextResponse.json({ error: err.message || 'Erro inesperado', stack: err.stack, full: String(err) }, { status: 500 })
+    return NextResponse.json({ error: err.message || 'Erro inesperado ao salvar avatar' }, { status: 500 })
   }
 }

@@ -1083,6 +1083,14 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
       }
     })
 
+    // ── SAÍDA DE ALUNOS / PORTARIA ───────────────────────────────────────
+    createBinding('saida_calls', { event: '*', schema: 'public', table: 'saida_calls' }, payload => {
+      const { eventType } = payload
+      window.dispatchEvent(new CustomEvent(`ad:saida_calls-${eventType.toLowerCase()}`, { detail: payload }))
+      queryClient.invalidateQueries({ queryKey: ['saida-calls-colaborador'] })
+      queryClient.invalidateQueries({ queryKey: ['agenda', 'saida'] })
+    })
+
     // Inicia subscrição no canal único consolidado com todas as tabelas registradas
     subscribeMainChannel()
 

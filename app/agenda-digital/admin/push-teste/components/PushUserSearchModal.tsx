@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import {
   Search, X, User, GraduationCap, Users, Briefcase,
   Crown, Check, ArrowRight, Shield, Smartphone, Loader2
@@ -36,6 +37,34 @@ export function PushUserSearchModal({
   const [results, setResults] = useState<SelectedHistoryUser[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  // Bloqueio rigoroso de rolagem vertical no fundo (body, html e container .ad-main-scroll)
+  useEffect(() => {
+    if (!isOpen) return
+
+    const origBodyOverflow = document.body.style.overflow
+    const origBodyOverscroll = document.body.style.overscrollBehavior
+    const origHtmlOverflow = document.documentElement.style.overflow
+    const mainScroll = document.querySelector('.ad-main-scroll') as HTMLElement | null
+    const origMainScrollOverflow = mainScroll?.style.overflow || ''
+
+    document.body.style.overflow = 'hidden'
+    document.body.style.overscrollBehavior = 'none'
+    document.documentElement.style.overflow = 'hidden'
+    if (mainScroll) mainScroll.style.overflow = 'hidden'
+
+    return () => {
+      document.body.style.overflow = origBodyOverflow
+      document.body.style.overscrollBehavior = origBodyOverscroll
+      document.documentElement.style.overflow = origHtmlOverflow
+      if (mainScroll) mainScroll.style.overflow = origMainScrollOverflow
+    }
+  }, [isOpen])
 
   useEffect(() => {
     if (isOpen) {
@@ -72,27 +101,47 @@ export function PushUserSearchModal({
     return () => clearTimeout(timer)
   }, [searchTerm, isOpen])
 
-  if (!isOpen) return null
+  if (!isOpen || !mounted || typeof document === 'undefined') return null
 
   const filteredResults = results.filter(item => {
     if (activeFilter === 'all') return true
     return item.tipo === activeFilter
   })
 
-  return (
+  return createPortal(
     <div
       style={{
         position: 'fixed',
         inset: 0,
-        background: 'rgba(15, 23, 42, 0.65)',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        width: '100vw',
+        height: '100dvh',
+        background: 'rgba(15, 23, 42, 0.75)',
         backdropFilter: 'blur(8px)',
+        WebkitBackdropFilter: 'blur(8px)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        zIndex: 99999,
-        padding: 16,
+        zIndex: 999999,
+        padding: '20px 16px',
+        boxSizing: 'border-box',
+        overflow: 'hidden',
+        overscrollBehavior: 'none',
       }}
       onClick={onClose}
+      onTouchMove={(e) => {
+        if (e.target === e.currentTarget) {
+          e.preventDefault()
+        }
+      }}
+      onWheel={(e) => {
+        if (e.target === e.currentTarget) {
+          e.preventDefault()
+        }
+      }}
     >
       <div
         style={{
@@ -101,12 +150,14 @@ export function PushUserSearchModal({
           borderRadius: 20,
           maxWidth: 580,
           width: '100%',
-          maxHeight: '85vh',
+          maxHeight: 'min(88vh, 760px)',
           display: 'flex',
           flexDirection: 'column',
-          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.35)',
+          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(0, 0, 0, 0.1)',
           overflow: 'hidden',
           animation: 'fadeInScale 0.2s ease-out',
+          margin: 'auto',
+          position: 'relative',
         }}
         onClick={e => e.stopPropagation()}
       >
@@ -224,7 +275,7 @@ export function PushUserSearchModal({
         </div>
 
         {/* Lista de Resultados */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 6 }}>
           {/* Opção Rápida: Visão Geral da Escola Inteira */}
           <div
             onClick={() => {
@@ -358,6 +409,7 @@ export function PushUserSearchModal({
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }

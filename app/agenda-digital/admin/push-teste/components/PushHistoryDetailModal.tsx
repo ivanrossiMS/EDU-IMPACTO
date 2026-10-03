@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import {
   X, CheckCircle2, AlertTriangle, Clock, Smartphone,
   ExternalLink, Copy, Check, Radio, Eye, RefreshCw, Send,
@@ -137,7 +138,35 @@ export function PushHistoryDetailModal({
     }
   }, [log, oneSignalId, detailsData])
 
-  if (!log) return null
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  // Bloqueio rigoroso de rolagem vertical no fundo (body, html e container .ad-main-scroll)
+  useEffect(() => {
+    if (!log) return
+
+    const origBodyOverflow = document.body.style.overflow
+    const origBodyOverscroll = document.body.style.overscrollBehavior
+    const origHtmlOverflow = document.documentElement.style.overflow
+    const mainScroll = document.querySelector('.ad-main-scroll') as HTMLElement | null
+    const origMainScrollOverflow = mainScroll?.style.overflow || ''
+
+    document.body.style.overflow = 'hidden'
+    document.body.style.overscrollBehavior = 'none'
+    document.documentElement.style.overflow = 'hidden'
+    if (mainScroll) mainScroll.style.overflow = 'hidden'
+
+    return () => {
+      document.body.style.overflow = origBodyOverflow
+      document.body.style.overscrollBehavior = origBodyOverscroll
+      document.documentElement.style.overflow = origHtmlOverflow
+      if (mainScroll) mainScroll.style.overflow = origMainScrollOverflow
+    }
+  }, [Boolean(log)])
+
+  if (!log || !mounted || typeof document === 'undefined') return null
 
   const isSuccess = log.status === 'sent'
   const isFailed = log.status === 'failed'
@@ -156,20 +185,40 @@ export function PushHistoryDetailModal({
   const recipientsList = detailsData?.recipients || []
   const targetAliasesList = detailsData?.targetAliases || []
 
-  return (
+  return createPortal(
     <div
       style={{
         position: 'fixed',
         inset: 0,
-        background: 'rgba(15, 23, 42, 0.7)',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        width: '100vw',
+        height: '100dvh',
+        background: 'rgba(15, 23, 42, 0.75)',
         backdropFilter: 'blur(8px)',
+        WebkitBackdropFilter: 'blur(8px)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        zIndex: 99999,
-        padding: 16,
+        zIndex: 999999,
+        padding: '20px 16px',
+        boxSizing: 'border-box',
+        overflow: 'hidden',
+        overscrollBehavior: 'none',
       }}
       onClick={onClose}
+      onTouchMove={(e) => {
+        if (e.target === e.currentTarget) {
+          e.preventDefault()
+        }
+      }}
+      onWheel={(e) => {
+        if (e.target === e.currentTarget) {
+          e.preventDefault()
+        }
+      }}
     >
       <div
         style={{
@@ -178,12 +227,14 @@ export function PushHistoryDetailModal({
           borderRadius: 22,
           maxWidth: 680,
           width: '100%',
-          maxHeight: '92vh',
+          maxHeight: 'min(90vh, 840px)',
           display: 'flex',
           flexDirection: 'column',
-          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.4)',
+          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(0, 0, 0, 0.1)',
           overflow: 'hidden',
           animation: 'fadeInScale 0.2s ease-out',
+          margin: 'auto',
+          position: 'relative',
         }}
         onClick={e => e.stopPropagation()}
       >
@@ -270,6 +321,8 @@ export function PushHistoryDetailModal({
           display: 'flex',
           flexDirection: 'column',
           gap: 18,
+          flex: 1,
+          minHeight: 0,
         }}>
           {/* Banner de Notificação Pausada */}
           {log.status === 'paused' && (
@@ -864,6 +917,7 @@ export function PushHistoryDetailModal({
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
