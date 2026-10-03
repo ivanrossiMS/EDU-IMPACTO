@@ -489,7 +489,15 @@ export async function POST(request: Request) {
             ...(comData.dados?.colaboradoresIds || []),
             ...(comData.dados?.funcionariosIds || [])
           ];
-          const allRelevantColabs = Array.from(new Set([rawAutorId, ...markedColabs].filter(Boolean)));
+          const currentSenderIds = new Set([
+            String(user.id),
+            String(user.user_metadata?.colaborador_id || ''),
+            String(user.user_metadata?.system_user_id || ''),
+            String(body.remetente_id || '')
+          ].filter(Boolean));
+
+          const allRelevantColabs = Array.from(new Set([rawAutorId, ...markedColabs].filter(Boolean)))
+            .filter(id => !currentSenderIds.has(String(id)));
           let targetUserIds: string[] = [];
           if (allRelevantColabs.length > 0) {
             const resolvedIds = await getColaboradorIds(allRelevantColabs);

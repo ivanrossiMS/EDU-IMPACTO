@@ -444,16 +444,69 @@ async function resolveLogFullDetails(logIdOrLog: string | any, supabase: any) {
     summary = `${aluno?.nome || 'Aluno'} (${resps.length} responsável(is) vinculado(s))`
   } else if (isColaborador) {
     // 2. Caso seja relativo a Colaborador
-    const targetColabIds = Array.from(targetAliases)
+    const rawAliases = Array.from(targetAliases)
+    const cleanColabIds = Array.from(new Set(rawAliases.map(id => id.replace(/^f_/, '').trim()).filter(Boolean)))
+    
     let colabQuery = supabase.from('system_users').select('id, nome, email, cargo, perfil, auth_id, dados')
-    if (targetColabIds.length > 0) {
-      colabQuery = colabQuery.in('id', targetColabIds)
+    if (cleanColabIds.length > 0) {
+      const orParts: string[] = []
+      const regularIds = cleanColabIds.filter(id => !id.includes('@'))
+      const uuidIds = regularIds.filter(id => isUUID(id))
+      const emailIds = cleanColabIds.filter(id => id.includes('@')).map(e => e.toLowerCase())
+      if (regularIds.length > 0) {
+        orParts.push(`id.in.(${regularIds.map(id => `"${id}"`).join(',')})`)
+      }
+      if (uuidIds.length > 0) {
+        orParts.push(`auth_id.in.(${uuidIds.map(id => `"${id}"`).join(',')})`)
+      }
+      if (emailIds.length > 0) {
+        orParts.push(`email.in.(${emailIds.map(e => `"${e}"`).join(',')})`)
+      }
+      if (orParts.length > 0) {
+        colabQuery = colabQuery.or(orParts.join(','))
+      }
     } else {
       colabQuery = colabQuery.limit(30)
     }
     const { data: colabs } = await colabQuery
 
     for (const c of colabs || []) {
+      const devices = await fetchDevicesForGuardian({
+        authId: c.auth_id,
+        colaborador_id: String(c.id),
+        system_user_id: String(c.id),
+        email: c.email,
+      })
+      const hasActive = devices.some((d: any) => d.isSubscribed)
+      const deviceModels = devices.map((d: any) => d.modelo || d.tipo).filter(Boolean)
+
+      let accountStatus: 'active_device' | 'never_activated' | 'no_email' | 'no_device' = 'no_device'
+      let accountStatusLabel = 'Sem Aparelho Ativo'
+      let accountStatusDetail = 'App desinstalado ou sem permissão'
+      let statusTone: 'success' | 'warning' | 'danger' | 'neutral' = 'danger'
+
+      if (hasActive) {
+        accountStatus = 'active_device'
+        accountStatusLabel = 'Push Ativo'
+        accountStatusDetail = deviceModels.join(', ') || 'Dispositivo conectado'
+        statusTone = 'success'
+      } else if (!c.email) {
+        accountStatus = 'no_email'
+        accountStatusLabel = 'Sem E-mail'
+        accountStatusDetail = 'Pendente cadastro na secretaria'
+        statusTone = 'neutral'
+      } else if (!c.auth_id) {
+        accountStatus = 'never_activated'
+        accountStatusLabel = 'Conta Não Ativada'
+        accountStatusDetail = 'Nunca fez o 1º Acesso no app'
+        statusTone = 'warning'
+      } else {
+        accountStatus = 'no_device'
+        accountStatusLabel = 'Sem Aparelho Ativo'
+        accountStatusDetail = 'App desinstalado ou sem permissão'
+        statusTone = 'danger'
+      }
+
       recipients.push({
         id: String(c.id),
         nome: c.nome || 'Colaborador',
@@ -461,7 +514,14 @@ async function resolveLogFullDetails(logIdOrLog: string | any, supabase: any) {
         tipoLabel: c.cargo || c.perfil || 'Colaborador',
         email: c.email || null,
         cargo: c.cargo || c.perfil || 'Equipe Escolar',
-        statusTone: 'neutral',
+        devicesCount: devices.length,
+        devices,
+        hasActiveDevice: hasActive,
+        deviceSummary: devices.length > 0 ? deviceModels.join(', ') : accountStatusDetail,
+        accountStatus,
+        accountStatusLabel,
+        accountStatusDetail,
+        statusTone,
       })
       targetAliases.add(String(c.id))
       if (c.email) targetAliases.add(c.email.toLowerCase().trim())
@@ -528,6 +588,7 @@ async function resolveLogFullDetails(logIdOrLog: string | any, supabase: any) {
 
       for (const c of sysUsers || []) {
         const devices = await fetchDevicesForGuardian({
+          authId: c.auth_id,
           system_user_id: String(c.id),
           colaborador_id: String(c.id),
           email: c.email,
@@ -545,8 +606,11 @@ async function resolveLogFullDetails(logIdOrLog: string | any, supabase: any) {
           devicesCount: devices.length,
           devices,
           hasActiveDevice: hasActive,
-          deviceSummary: devices.length > 0 ? deviceModels.join(', ') : 'Dispositivo conectado',
-          statusTone: hasActive ? 'success' : 'neutral',
+          deviceSummary: devices.length > 0 ? deviceModels.join(', ') : (hasActive ? 'Dispositivo conectado' : 'App desinstalado ou sem permissão'),
+          accountStatus: hasActive ? 'active_device' : 'no_device',
+          accountStatusLabel: hasActive ? 'Push Ativo' : 'Sem Aparelho Ativo',
+          accountStatusDetail: deviceModels.join(', ') || (hasActive ? 'Dispositivo conectado' : 'Sem permissão'),
+          statusTone: hasActive ? 'success' : 'danger',
         })
       }
     }

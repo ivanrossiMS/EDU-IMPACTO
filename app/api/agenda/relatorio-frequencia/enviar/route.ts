@@ -220,8 +220,20 @@ export async function POST(request: Request) {
 
     // 7. Disparar Notificação Push para o Colaborador
     try {
+      const pushTargets = new Set<string>(targetFuncs)
+      const { data: targetSysUser } = await supabase
+        .from('system_users')
+        .select('id, auth_id, email')
+        .or(`id.eq."${cleanColabId}",id.eq."${resolvedColabId}"`)
+        .maybeSingle()
+
+      if (targetSysUser) {
+        if (targetSysUser.auth_id) pushTargets.add(String(targetSysUser.auth_id).trim())
+        if (targetSysUser.email) pushTargets.add(String(targetSysUser.email).toLowerCase().trim())
+      }
+
       await sendAgendaPushNotification({
-        targetUserIds: targetFuncs,
+        targetUserIds: Array.from(pushTargets),
         title: `📊 Relatório de Frequência - ${mesNome}/${anoNum}`,
         message: `${masterAdminNome} enviou o seu relatório oficial de envios e frequência. Confira!`,
         targetUrl: `/agenda-digital/colaborador/comunicados?id=${newComId}`,
