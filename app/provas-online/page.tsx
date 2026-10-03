@@ -117,8 +117,21 @@ export default function ProvasOnlineDashboardPage() {
 
   useEffect(() => {
     fetchProvas()
-    const interval = setInterval(fetchProvas, 30000)
-    return () => clearInterval(interval)
+    const handleVisibility = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        fetchProvas()
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+    const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        fetchProvas()
+      }
+    }, 30000)
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility)
+      clearInterval(interval)
+    }
   }, [])
 
   useEffect(() => {

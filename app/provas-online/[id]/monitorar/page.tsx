@@ -218,8 +218,21 @@ export default function MonitoramentoProvaPage() {
 
   useEffect(() => {
     fetchData()
-    const interval = setInterval(() => fetchData(), 30000)
-    return () => clearInterval(interval)
+    const handleVisibility = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        fetchData()
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+    const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        fetchData()
+      }
+    }, 30000)
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility)
+      clearInterval(interval)
+    }
   }, [id])
 
   const handleAddTime = async () => {

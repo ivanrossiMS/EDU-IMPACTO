@@ -3,6 +3,7 @@ import { requireAuth } from '@/lib/server/authGuard'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 import { supabaseServer } from '@/lib/supabaseServer'
 import { isAlunoCursandoTurma, isAlunoIntegralIntermediario } from '@/lib/studentTurmaUtils'
+import { getCachedTurmasAndGrupos, getCachedActiveAlunos, invalidateTurmasCache } from '@/lib/server/turmasGruposCache'
 
 export const dynamic = 'force-dynamic'
 
@@ -59,22 +60,16 @@ export async function GET(request: Request) {
     let vagasOcupadasPercent = 0
 
     if (includeStats) {
-      // Buscar todos os alunos ativos para cálculo dos KPIs gerais (Alunos Matriculados e Alunos Integral/Intermediário)
-      const { data: alunosData } = await supabaseServer
-        .from('alunos')
-        .select('id, turma, status, dados')
+      // Buscar todos os alunos ativos e turmas com cache em memória (TTL 45-60s) para evitar scans repetidos
+      const [activeAlunos, { allTurmas }] = await Promise.all([
+        getCachedActiveAlunos(),
+        getCachedTurmasAndGrupos()
+      ])
 
-      const activeAlunos = (alunosData || []).filter((a: any) => a.status !== 'inativo' && a.status !== 'Inativo')
       totalAlunosMatriculados = activeAlunos.length
-
       totalAlunosIntegral = activeAlunos.filter((a: any) => isAlunoIntegralIntermediario(a)).length
 
-      // Buscar capacidade total de todas as turmas
-      const { data: allTurmasCap } = await supabaseServer
-        .from('turmas')
-        .select('capacidade')
-
-      capacidadeTotal = (allTurmasCap || []).reduce((acc: number, t: any) => acc + (parseInt(t.capacidade) || 30), 0)
+      capacidadeTotal = (allTurmas || []).reduce((acc: number, t: any) => acc + (parseInt(t.capacidade) || 30), 0)
       vagasOcupadasPercent = capacidadeTotal > 0 ? Math.round((totalAlunosMatriculados / capacidadeTotal) * 100) : 0
 
       // Calcular matriculados por turma em tempo real para os itens da tabela
@@ -158,6 +153,7 @@ export async function POST(request: Request) {
 
     if (error) throw error
 
+    invalidateTurmasCache()
     return NextResponse.json({ success: true, data: data?.[0] })
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 400 })
@@ -198,6 +194,7 @@ export async function PUT(request: Request) {
 
     if (error) throw error
 
+    invalidateTurmasCache()
     return NextResponse.json({ success: true, data: data?.[0] })
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 400 })
@@ -228,6 +225,7 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: 'Turma não encontrada ou já excluída.' }, { status: 404 })
     }
 
+    invalidateTurmasCache()
     return NextResponse.json({ success: true, data })
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 400 })

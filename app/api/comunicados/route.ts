@@ -9,42 +9,16 @@ import { getResponsavelIdsForTargets, getStudentTargetsForComunicados, checkResp
 import { deleteStorageFilesByUrls } from '@/lib/upload/storageServer'
 import { isAlunoCursandoTurma, getAlunoTodasTurmasEGruposComHistorico, canStudentReceiveTurmaContent } from '@/lib/studentTurmaUtils'
 import { formatFriendlyStudentName } from '@/lib/studentNameHelper'
+import { getCachedTurmasAndGrupos } from '@/lib/server/turmasGruposCache'
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 export const maxDuration = 30
-
-// Cache de memória para turmas e grupos da agenda (TTL 60s) para evitar consultas pesadas repetidas
-let turmasCache: { data: any[]; timestamp: number } | null = null
-let gruposCache: { data: any[]; timestamp: number } | null = null
 
 // Cache de resolução de relatórios individuais associados a relatórios consolidados (TTL 30 min)
 const colabToStuIdsCache = new Map<string, { stuIds: string[]; timestamp: number }>();
 
 // Cache de system_users por id/email (TTL 60s)
 const sysUsersCache = new Map<string, { users: any[]; timestamp: number }>();
-
-async function getCachedTurmasAndGrupos() {
-  const now = Date.now()
-  const fetchTurmas = (!turmasCache || now - turmasCache.timestamp > 60000)
-    ? Promise.resolve(supabaseServer.from('turmas').select('id, nome, codigo, ano, turno, dados'))
-    : Promise.resolve({ data: turmasCache.data })
-
-  const fetchGrupos = (!gruposCache || now - gruposCache.timestamp > 60000)
-    ? Promise.resolve(supabaseServer.from('agenda_grupos').select('id, dados'))
-    : Promise.resolve({ data: gruposCache.data })
-
-  const [tRes, gRes] = await Promise.all([fetchTurmas, fetchGrupos])
-  if (tRes.data && (!turmasCache || now - turmasCache.timestamp > 60000)) {
-    turmasCache = { data: tRes.data, timestamp: now }
-  }
-  if (gRes.data && (!gruposCache || now - gruposCache.timestamp > 60000)) {
-    gruposCache = { data: gRes.data, timestamp: now }
-  }
-  return {
-    allTurmas: turmasCache?.data || [],
-    allGrupos: gruposCache?.data || []
-  }
-}
 
 function normalizeText(str?: string | null): string {
   if (!str) return '';

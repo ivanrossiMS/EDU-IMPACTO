@@ -422,14 +422,27 @@ export default function ADComunicadosPage({ params }: { params: any }) {
     window.addEventListener('ad:comunicados-update', handleUpdateEvent)
     window.addEventListener('ad:comunicados-delete', handleDeleteEvent)
 
+    const handleVisibilityOrOnline = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        refetch()
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibilityOrOnline)
+    window.addEventListener('online', handleVisibilityOrOnline)
+
+    // Contingência leve a cada 60s apenas se a aba estiver visível e em primeiro plano
     const pollTimer = setInterval(() => {
-      refetch()
-    }, 15000)
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        refetch()
+      }
+    }, 60000)
 
     return () => {
       window.removeEventListener('ad:comunicados-insert', handleInsert)
       window.removeEventListener('ad:comunicados-update', handleUpdateEvent)
       window.removeEventListener('ad:comunicados-delete', handleDeleteEvent)
+      document.removeEventListener('visibilitychange', handleVisibilityOrOnline)
+      window.removeEventListener('online', handleVisibilityOrOnline)
       clearInterval(pollTimer)
     }
   }, [queryClient, refetch])

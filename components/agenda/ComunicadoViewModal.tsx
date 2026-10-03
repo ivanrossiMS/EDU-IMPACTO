@@ -210,9 +210,24 @@ export function ComunicadoViewModal({
          }
       }
       fetchCobrancas();
-      // Poll every 5 seconds to catch webhook updates in real-time
-      const cobInterval = setInterval(fetchCobrancas, 5000);
-      return () => clearInterval(cobInterval);
+      const handleVisibilityOrFocus = () => {
+        if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+          fetchCobrancas();
+        }
+      };
+      document.addEventListener('visibilitychange', handleVisibilityOrFocus);
+      window.addEventListener('focus', handleVisibilityOrFocus);
+      // Poll every 15 seconds while visible to catch webhook updates
+      const cobInterval = setInterval(() => {
+        if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+          fetchCobrancas();
+        }
+      }, 15000);
+      return () => {
+        document.removeEventListener('visibilitychange', handleVisibilityOrFocus);
+        window.removeEventListener('focus', handleVisibilityOrFocus);
+        clearInterval(cobInterval);
+      };
     }
   }, [comunicado.id, currentUserSlug, isAdminMode])
 
@@ -606,8 +621,22 @@ export function ComunicadoViewModal({
   useEffect(() => {
     if (canReply) {
       fetchMessages(true)
-      const interval = setInterval(() => fetchMessages(true), 10000)
-      return () => clearInterval(interval)
+      const handleVisibility = () => {
+        if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+          fetchMessages(true)
+        }
+      }
+      document.addEventListener('visibilitychange', handleVisibility)
+      // Contingência leve enquanto a janela estiver em primeiro plano (respostas chegam instantaneamente via Realtime 'agenda-digital:conversas-updated')
+      const interval = setInterval(() => {
+        if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+          fetchMessages(true)
+        }
+      }, 30000)
+      return () => {
+        document.removeEventListener('visibilitychange', handleVisibility)
+        clearInterval(interval)
+      }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [comunicado.id, currentUserSlug, isAdminMode, canReply])

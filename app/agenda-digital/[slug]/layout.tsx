@@ -12,7 +12,6 @@ import { useApp } from '@/lib/context'
 import { useData } from '@/lib/dataContext'
 import { useSaida } from '@/lib/saidaContext'
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
-import { useSupabaseArray } from '@/lib/useSupabaseCollection'
 import { SelectedStudentProvider } from '@/lib/selectedStudentContext'
 import { getAlunoTurnoDisplay, isAlunoIntegralIntermediario } from '@/lib/studentTurmaUtils'
 import { getInitials } from '@/lib/utils'
@@ -49,8 +48,7 @@ export default function ADInnerLayout({
   const [switcherOpen, setSwitcherOpen] = useState(false)
 
   const { turmas = [] } = useData()
-  const [grupos = []] = useSupabaseArray<any>('agenda/grupos')
-  const { adConfig, setAdLoading } = useAgendaDigital()
+  const { adConfig, setAdLoading, chatGroups: grupos = [] } = useAgendaDigital()
   const { currentUser, hydrated, setLoadingPath } = useApp()
   const { activeCalls = [] } = useSaida()
   

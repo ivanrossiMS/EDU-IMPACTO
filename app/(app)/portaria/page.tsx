@@ -58,13 +58,24 @@ export default function PortariaDashboardPage() {
     return map
   }, [alunos])
 
-  // Live polling automático a cada 5 segundos se estiver ativo
+  // Live polling automático a cada 5 segundos apenas se visível e em primeiro plano
   useEffect(() => {
     if (!liveMonitoring) return
+    const handleVisibility = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        refetchEventos()
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
     const interval = setInterval(() => {
-      refetchEventos()
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        refetchEventos()
+      }
     }, 5000)
-    return () => clearInterval(interval)
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility)
+      clearInterval(interval)
+    }
   }, [liveMonitoring, refetchEventos])
 
   // KPIs

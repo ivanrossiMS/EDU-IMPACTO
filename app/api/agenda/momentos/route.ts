@@ -9,6 +9,7 @@ import { getResponsavelIdsForTargets, getStudentTargetsForComunicados, checkResp
 import { deleteStorageFilesByUrls } from '@/lib/upload/storageServer'
 import { getAlunoTodasTurmasEGruposComHistorico, getAlunoVinculosComPeriodo, canStudentViewMomento, isAlunoCursandoTurma } from '@/lib/studentTurmaUtils'
 import { formatFriendlyStudentName } from '@/lib/studentNameHelper'
+import { getCachedTurmasAndGrupos } from '@/lib/server/turmasGruposCache'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -114,15 +115,12 @@ export async function GET(request: Request) {
 
     if (alunoId) {
       let resolvedTargets: string[] = [];
-      const [alunoRes, turmasRes, gruposRes] = await Promise.all([
+      const [alunoRes, { allTurmas, allGrupos }] = await Promise.all([
         supabase.from('alunos').select('id, turma, created_at, dados').eq('id', alunoId).maybeSingle(),
-        supabase.from('turmas').select('id, nome, codigo, ano, turno, dados'),
-        supabase.from('agenda_grupos').select('id, dados')
+        getCachedTurmasAndGrupos()
       ]);
 
       const alunoData = alunoRes.data;
-      const allTurmas = turmasRes.data || [];
-      const allGrupos = gruposRes.data || [];
       scopedAlunoData = alunoData;
       scopedAllTurmas = allTurmas;
 
@@ -377,7 +375,7 @@ export async function GET(request: Request) {
       });
 
       if (matchedSyncTurmaIds.size > 0 || matchedGroupNames.size > 0) {
-        const { data: myTurmas } = await supabase.from('turmas').select('id, nome');
+        const { allTurmas: myTurmas } = await getCachedTurmasAndGrupos();
         if (myTurmas) {
           myTurmas.forEach(t => {
             const tId = String(t.id);

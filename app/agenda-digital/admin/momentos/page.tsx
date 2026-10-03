@@ -199,9 +199,7 @@ export default function ADAdminMomentos() {
 
         if (isImage) {
           setUploadProgress(prev => ({ ...prev, [file.name]: 20 }))
-          if (file.size > 2 * 1024 * 1024) {
-            fileToUpload = await compressImage(file, { quality: 0.70, format: 'image/webp' })
-          }
+          fileToUpload = await compressImage(file, { quality: 0.75, format: 'image/webp' })
           setUploadProgress(prev => ({ ...prev, [file.name]: 50 }))
         } else if (isVideo) {
           setUploadProgress(prev => ({ ...prev, [file.name]: 10 }))

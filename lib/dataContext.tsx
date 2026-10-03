@@ -1342,14 +1342,14 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [tarefas, setTarefas] = useSupabaseArray<Tarefa>('tarefas')
   const [mantenedores, setMantenedores] = useSupabaseArray<Mantenedor>('configuracoes/mantenedores')
   const [eventosAgenda, setEventosAgenda, { setLocal: setLocalEventosAgenda }] = useSupabaseArray<EventoAgenda>('agenda/eventos')
-  const [ setRotinaItems] = useSupabaseArray<RotinaItem>('agenda/rotina')
+  const [rotinaItems, setRotinaItems] = useState<RotinaItem[]>([])
   const [ setAutorizacoes] = useState<AutorizacaoDigital[]>([])
   const [ setMomentos] = useState<MomentoItem[]>([])
   const [ setEnquetes] = useState<Enquete[]>([])
   const [ocorrencias, setOcorrencias] = useSupabaseArray<Ocorrencia>('ocorrencias')
   const [transferencias, setTransferencias] = useState<Transferencia[]>([])
-  const [frequencias, setFrequencias] = useSupabaseArray<RegistroFrequencia>('academico/frequencias')
-  const [lancamentosNota, setLancamentosNota] = useSupabaseArray<LancamentoNota>('academico/notas')
+  const [frequencias, setFrequencias] = useState<RegistroFrequencia[]>([])
+  const [lancamentosNota, setLancamentosNota] = useState<LancamentoNota[]>([])
   // Config Pedagógico
   // ── CONFIGURAÇÕES PEDAGÓGICAS — persistidas em Supabase (tabela configuracoes) ──
   const { data: cfgTurnos, setData: setCfgTurnos } = useConfigDb<ConfigTurno>('cfgTurnos')
@@ -1423,9 +1423,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const { data: cfgCalendarioLetivo, setData: setCfgCalendarioLetivo } = useConfigDb<ConfigCalendarioLetivo>('cfgCalendarioLetivo')
   // ── OPERAÇÕES FINANCEIRAS — persistidas no Supabase ────────────────
   const [movimentacoesManuais, setMovimentacoesManuais] = useState<MovimentacaoManual[]>([])
-  // caixasAbertos movido para SWR Direto na Tela de Caixas
-  
-  const [ setUnidadesFiscais] = useSupabaseArray<UnidadeFiscal>('financeiro/unidades-fiscais')
+  const [unidadesFiscais, setUnidadesFiscais] = useState<UnidadeFiscal[]>([])
   const [notasFiscais, setNotasFiscais] = useState<NotaFiscal[]>([])
   const [advertencias, setAdvertencias] = useSupabaseArray<Advertencia>('rh/advertencias')
   const [adiantamentos, setAdiantamentos] = useSupabaseArray<Adiantamento>('rh/adiantamentos')

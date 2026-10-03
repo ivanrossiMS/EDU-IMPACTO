@@ -601,68 +601,65 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
     }
 
     let isMounted = true
-    const activeBindings: Array<{ table: string; filter: any; handler: (payload: any) => void; channel: any; retryTimer?: any }> = []
+    const activeBindings: Array<{ table: string; filter: any; handler: (payload: any) => void }> = []
+    let mainChannel: any = null
+    let retryTimer: any = null
 
-    const subscribeChannel = (binding: typeof activeBindings[0]) => {
+    const subscribeMainChannel = () => {
       if (!isMounted) return
 
-      if (binding.retryTimer) {
-        clearTimeout(binding.retryTimer)
-        binding.retryTimer = undefined
+      if (retryTimer) {
+        clearTimeout(retryTimer)
+        retryTimer = null
       }
 
-      if (binding.channel) {
-        const oldChannel = binding.channel
-        binding.channel = null
+      if (mainChannel) {
+        const oldChannel = mainChannel
+        mainChannel = null
         try { supabase.removeChannel(oldChannel) } catch (_) {}
       }
 
-      const cName = `agenda-rt-${binding.table}-${identifier}-${Date.now()}`
+      const cName = `agenda-rt-main-${identifier}-${Date.now()}`
       const c = supabase.channel(cName)
-      binding.channel = c
+      mainChannel = c
 
-      c.on('postgres_changes', binding.filter, binding.handler)
-        .subscribe((status: string) => {
-          if (!isMounted) return
-          // Ignora callbacks de instâncias antigas que foram substituídas
-          if (binding.channel !== c) return
+      // Multiplexa todos os listeners de postgres_changes no mesmo canal
+      for (const binding of activeBindings) {
+        c.on('postgres_changes', binding.filter, binding.handler)
+      }
 
-          if (status === 'SUBSCRIBED') {
-            console.log(`✅ [Realtime] Conectado ao canal ${binding.table}`)
-            if (binding.retryTimer) {
-              clearTimeout(binding.retryTimer)
-              binding.retryTimer = undefined
-            }
-          } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-            console.warn(`⚠️ [Realtime] Canal ${binding.table} em estado ${status}. Agendando reconexão...`)
-            // IMPORTANTE: NÃO chamar supabase.removeChannel(c) aqui dentro!
-            // O removeChannel dispara o evento 'CLOSED' de forma síncrona no canal,
-            // o que causava recursão infinita imediata (Maximum call stack size exceeded).
-            // A limpeza do canal antigo será feita de forma segura dentro de subscribeChannel quando o timer disparar.
-            if (isMounted && !binding.retryTimer) {
-              binding.retryTimer = setTimeout(() => {
-                binding.retryTimer = undefined
-                if (isMounted) subscribeChannel(binding)
-              }, 3000)
-            }
+      c.subscribe((status: string) => {
+        if (!isMounted) return
+        if (mainChannel !== c) return
+
+        if (status === 'SUBSCRIBED') {
+          console.log(`✅ [Realtime] Conectado ao canal consolidado da agenda (${activeBindings.length} tabelas)`)
+          if (retryTimer) {
+            clearTimeout(retryTimer)
+            retryTimer = null
           }
-        })
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          console.warn(`⚠️ [Realtime] Canal consolidado da agenda em estado ${status}. Agendando reconexão...`)
+          if (isMounted && !retryTimer) {
+            retryTimer = setTimeout(() => {
+              retryTimer = null
+              if (isMounted) subscribeMainChannel()
+            }, 3000)
+          }
+        }
+      })
     }
 
     const createBinding = (table: string, filter: any, handler: (payload: any) => void) => {
-      const binding = { table, filter, handler, channel: null as any }
-      activeBindings.push(binding)
-      subscribeChannel(binding)
+      activeBindings.push({ table, filter, handler })
     }
 
     const handleAppResume = () => {
       if (!isMounted) return
-      console.log('🔄 [Realtime] App em primeiro plano. Verificando canais e sincronizando dados...')
-      activeBindings.forEach(b => {
-        if (!b.channel || b.channel.state !== 'joined') {
-          subscribeChannel(b)
-        }
-      })
+      console.log('🔄 [Realtime] App em primeiro plano. Verificando canal consolidado e sincronizando dados...')
+      if (!mainChannel || mainChannel.state !== 'joined') {
+        subscribeMainChannel()
+      }
       queryClient.invalidateQueries({ queryKey: ['agenda'], refetchType: 'all' })
     }
 
@@ -1086,19 +1083,20 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
       }
     })
 
+    // Inicia subscrição no canal único consolidado com todas as tabelas registradas
+    subscribeMainChannel()
+
     return () => {
       isMounted = false
-      activeBindings.forEach(b => {
-        if (b.retryTimer) {
-          clearTimeout(b.retryTimer)
-          b.retryTimer = undefined
-        }
-        if (b.channel) {
-          const ch = b.channel
-          b.channel = null
-          try { supabase.removeChannel(ch) } catch (_) {}
-        }
-      })
+      if (retryTimer) {
+        clearTimeout(retryTimer)
+        retryTimer = null
+      }
+      if (mainChannel) {
+        const ch = mainChannel
+        mainChannel = null
+        try { supabase.removeChannel(ch) } catch (_) {}
+      }
       if (typeof window !== 'undefined') {
         document.removeEventListener('visibilitychange', handleVisibilityChange)
         window.removeEventListener('focus', handleAppResume)
@@ -1107,7 +1105,7 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
       if (capListenerHandle && typeof capListenerHandle.remove === 'function') {
         capListenerHandle.remove()
       }
-      console.log(`🔌 [Realtime] Canais desconectados.`)
+      console.log(`🔌 [Realtime] Canal consolidado da agenda desconectado.`)
     }
   }, [currentUser?.id])
 

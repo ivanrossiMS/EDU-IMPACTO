@@ -234,9 +234,22 @@ export default function ADProvasOnlineStudentPage() {
 
   useEffect(() => {
     fetchProvas()
-    // Polling every 30 seconds for live updates
-    const interval = setInterval(() => fetchProvas(false), 30000)
-    return () => clearInterval(interval)
+    const handleVisibility = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        fetchProvas(false)
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+    // Polling a cada 30 segundos apenas se a aba estiver visível
+    const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        fetchProvas(false)
+      }
+    }, 30000)
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility)
+      clearInterval(interval)
+    }
   }, [fetchProvas])
 
   // Extract unique subjects for filter dropdown

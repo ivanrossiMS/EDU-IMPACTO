@@ -125,8 +125,9 @@ export function AutorizacaoWidget({
     }
     window.addEventListener('ad:comunicados-update', handleComunicadosUpdate)
 
-    // Polling heartbeat every 12 seconds
+    // Polling heartbeat a cada 30 segundos apenas se visível
     const interval = setInterval(async () => {
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return
       try {
         const { data } = await supabase
           .from('comunicados')
@@ -139,7 +140,7 @@ export function AutorizacaoWidget({
           setAutorizacao(remoteAut)
         }
       } catch (_) {}
-    }, 12000)
+    }, 30000)
 
     return () => {
       try { supabase.removeChannel(channel) } catch (_) {}

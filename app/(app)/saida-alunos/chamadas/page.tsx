@@ -2027,9 +2027,20 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
       }
     }
     fetchSpecialAuths()
-    const timer = setInterval(fetchSpecialAuths, 15000)
+    const handleVisibility = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        fetchSpecialAuths()
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+    const timer = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        fetchSpecialAuths()
+      }
+    }, 60000)
     return () => {
       isSubscribed = false
+      document.removeEventListener('visibilitychange', handleVisibility)
       clearInterval(timer)
     }
   }, [triggerSpecialAuthSound])

@@ -166,14 +166,27 @@ export default function ADAdminComunicados() {
     window.addEventListener('ad:comunicados-update', handleUpdate)
     window.addEventListener('ad:comunicados-delete', handleDelete)
 
+    const handleVisibilityOrOnline = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        queryClient.invalidateQueries({ queryKey: ['agenda', 'comunicados'] })
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibilityOrOnline)
+    window.addEventListener('online', handleVisibilityOrOnline)
+
+    // Contingência leve a cada 60s apenas se a aba estiver visível e em primeiro plano
     const pollTimer = setInterval(() => {
-      queryClient.invalidateQueries({ queryKey: ['agenda', 'comunicados'] })
-    }, 15000)
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        queryClient.invalidateQueries({ queryKey: ['agenda', 'comunicados'] })
+      }
+    }, 60000)
 
     return () => {
       window.removeEventListener('ad:comunicados-insert', handleInsert)
       window.removeEventListener('ad:comunicados-update', handleUpdate)
       window.removeEventListener('ad:comunicados-delete', handleDelete)
+      document.removeEventListener('visibilitychange', handleVisibilityOrOnline)
+      window.removeEventListener('online', handleVisibilityOrOnline)
       clearInterval(pollTimer)
     }
   }, [queryClient, setComunicadosLocally])

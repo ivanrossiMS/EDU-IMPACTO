@@ -2,7 +2,6 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { useRouter, useSearchParams, useParams } from 'next/navigation'
 import { useQueryMomentos } from '@/lib/hooks/useAgendaQueries';
-import { useSupabaseArray } from '@/lib/useSupabaseCollection';
 import { getAlunoTodasTurmasEGrupos, canStudentViewMomento, isAlunoCursandoTurma, getAlunoVinculosComPeriodo } from '@/lib/studentTurmaUtils';
 
 
@@ -24,7 +23,7 @@ import { PrivacyProtectionModal } from '@/components/agenda/PrivacyProtectionMod
 export default function ADMomentosPage({ params }: { params: Promise<{ slug: string }>}) {
   const queryClient = useQueryClient()
   // removido const { fetchMomentos } = useAgendaDigital()
-  const { adConfig } = useAgendaDigital()
+  const { adConfig, chatGroups: grupos = [] } = useAgendaDigital()
   const { aluno: contextAluno } = useSelectedStudent()
   const resolvedParams = useParams() as { slug: string }
   
@@ -51,7 +50,6 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
   const { data: fetchMomentosData, isLoading: loading, isError, error, refetch, hasNextPage, fetchNextPage } = useQueryMomentos(endpoint, 20)
   const fetchMomentos = fetchMomentosData?.pages?.flat() || []
   
-  const [grupos = []] = useSupabaseArray<any>('agenda/grupos');
   const dataCtx = useData();
   const turmas = dataCtx?.turmas || [];
 

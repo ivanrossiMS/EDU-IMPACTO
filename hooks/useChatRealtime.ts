@@ -54,7 +54,18 @@ export function useChatRealtime(alunoId?: string) {
     }
 
     fetchUnread()
-    const interval = setInterval(fetchUnread, 30_000)
+    const handleVisibility = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        fetchUnread()
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+
+    const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        fetchUnread()
+      }
+    }, 60_000)
 
     const handleUnreadSync = () => {
       fetchUnread()
@@ -65,6 +76,7 @@ export function useChatRealtime(alunoId?: string) {
 
     return () => {
       clearInterval(interval)
+      document.removeEventListener('visibilitychange', handleVisibility)
       window.removeEventListener('chat:unread-changed', handleUnreadSync)
       window.removeEventListener('chat:conversation-updated', handleUnreadSync)
     }

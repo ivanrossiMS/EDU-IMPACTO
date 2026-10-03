@@ -6,6 +6,7 @@ import { getResponsavelIdsForTargets, getStudentTargetsForComunicados } from '@/
 
 import { supabaseServer } from '@/lib/supabaseServer'
 import { isAlunoCursandoTurma } from '@/lib/studentTurmaUtils'
+import { getCachedTurmasAndGrupos, getCachedActiveAlunos } from '@/lib/server/turmasGruposCache'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30
@@ -48,8 +49,10 @@ export async function GET(request: Request) {
 
     turmaIds = rawTurmaIds
 
-    const { data: allTurmas } = await supabase.from('turmas').select('*')
-    const { data: allAlunos } = await supabase.from('alunos').select('id, turma, status, dados').or('status.neq.inativo,status.is.null')
+    const [{ allTurmas }, allAlunos] = await Promise.all([
+      getCachedTurmasAndGrupos(),
+      getCachedActiveAlunos()
+    ])
 
     const matchedTurmaObjs = (allTurmas || []).filter(t => 
       rawTurmaIds.some(tid => String(t.id) === tid || String(t.codigo) === tid || String(t.nome) === tid)

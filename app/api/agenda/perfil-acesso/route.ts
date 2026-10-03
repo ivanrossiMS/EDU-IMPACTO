@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/server/authGuard'
 import { createProtectedClient } from '@/lib/server/supabaseServerFactory'
 import { isAlunoIntegralIntermediario } from '@/lib/studentTurmaUtils'
+import { getCachedTurmasAndGrupos } from '@/lib/server/turmasGruposCache'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -60,13 +61,17 @@ export async function GET(request: Request) {
       return NextResponse.json({ aluno: null, vinculo: null, meusAlunos: [] })
     }
 
-    // 1.5. Resolver nome e turno da Turma
+    // 1.5. Resolver nome e turno da Turma e Modalidade Integral via cache
+    const { allTurmas, allGrupos } = await getCachedTurmasAndGrupos()
+    let allTurmasDbData: any[] = allTurmas || []
+    let allGruposDbData: any[] = allGrupos || []
+
     if (aluno.turma) {
-       const { data: turmaData } = await supabase
-         .from('turmas')
-         .select('nome, turno')
-         .or(`id.eq."${aluno.turma}",codigo.eq."${aluno.turma}",nome.eq."${aluno.turma}"`)
-         .maybeSingle()
+       const turmaData = (allTurmas || []).find((t: any) => 
+         String(t.id) === String(aluno.turma) || 
+         String(t.codigo) === String(aluno.turma) || 
+         t.nome === aluno.turma
+       )
        
        if (turmaData) {
          if (turmaData.nome) (aluno as any).turma_nome = turmaData.nome
@@ -78,24 +83,9 @@ export async function GET(request: Request) {
        (aluno as any).turma_nome = 'S/T'
     }
 
-    // Checar se o aluno tem vínculo com turmas ou grupos de modalidade Integral/Intermediário
-    let allTurmasDbData: any[] = []
-    let allGruposDbData: any[] = []
-
-    if (isAlunoIntegralIntermediario(aluno)) {
+    if (isAlunoIntegralIntermediario(aluno, allTurmasDbData, allGruposDbData)) {
       (aluno as any).turno_nome = 'Integral/Intermediário';
       (aluno as any).turno = 'Integral/Intermediário';
-    } else {
-      const [allTurmasRes, allGruposRes] = await Promise.all([
-        supabase.from('turmas').select('id, nome, turno, ano, dados'),
-        supabase.from('agenda_grupos').select('id, dados')
-      ]);
-      allTurmasDbData = allTurmasRes.data || [];
-      allGruposDbData = allGruposRes.data || [];
-      if (isAlunoIntegralIntermediario(aluno, allTurmasDbData, allGruposDbData)) {
-        (aluno as any).turno_nome = 'Integral/Intermediário';
-        (aluno as any).turno = 'Integral/Intermediário';
-      }
     }
 
     // 2. Buscar vínculos do aluno
@@ -155,41 +145,27 @@ export async function GET(request: Request) {
           if (meusLinks && meusLinks.length > 0) {
             meusAlunos = meusLinks.map((l: any) => l.alunos).filter(Boolean)
 
-            // Populate turma_nome for meusAlunos
-            const turmaIds = [...new Set(meusAlunos.map(a => a.turma).filter(Boolean))]
-            if (turmaIds.length > 0) {
-              const { data: turmasData } = await supabase
-                .from('turmas')
-                .select('id, codigo, nome')
-                .in('id', turmaIds)
-              
-              if (turmasData) {
-                if (allTurmasDbData.length === 0 && allGruposDbData.length === 0) {
-                  const [allTurmasRes, allGruposRes] = await Promise.all([
-                    supabase.from('turmas').select('id, nome, turno, ano, dados'),
-                    supabase.from('agenda_grupos').select('id, dados')
-                  ]);
-                  allTurmasDbData = allTurmasRes.data || [];
-                  allGruposDbData = allGruposRes.data || [];
+            // Populate turma_nome for meusAlunos via cached turmas
+            meusAlunos.forEach(a => {
+              const tData = (allTurmasDbData || []).find((t: any) => 
+                String(t.id) === String(a.turma) || 
+                String(t.codigo) === String(a.turma) || 
+                t.nome === a.turma
+              )
+              let baseNome = tData?.nome || a.turma_nome || a.turma || 'S/T'
+              const isIntegral = isAlunoIntegralIntermediario(a, allTurmasDbData, allGruposDbData)
+              if (isIntegral) {
+                a.isIntegralIntermediario = true
+                a.modalidade = 'INTEGRAL/INTERMEDIÁRIO'
+                a.turno_nome = 'Integral/Intermediário'
+                a.turno = 'Integral/Intermediário'
+                if (baseNome && !baseNome.toUpperCase().includes('INTEGRAL') && !baseNome.toUpperCase().includes('INTERMEDIÁRIO')) {
+                  baseNome = `${baseNome} - INTEGRAL/INTERMEDIÁRIO`
                 }
-                meusAlunos.forEach(a => {
-                  const tData = (turmasData || []).find(t => String(t.id) === String(a.turma) || String(t.codigo) === String(a.turma))
-                  let baseNome = tData?.nome || a.turma_nome || a.turma || 'S/T'
-                  const isIntegral = isAlunoIntegralIntermediario(a, allTurmasDbData, allGruposDbData)
-                  if (isIntegral) {
-                    a.isIntegralIntermediario = true
-                    a.modalidade = 'INTEGRAL/INTERMEDIÁRIO'
-                    a.turno_nome = 'Integral/Intermediário'
-                    a.turno = 'Integral/Intermediário'
-                    if (baseNome && !baseNome.toUpperCase().includes('INTEGRAL') && !baseNome.toUpperCase().includes('INTERMEDIÁRIO')) {
-                      baseNome = `${baseNome} - INTEGRAL/INTERMEDIÁRIO`
-                    }
-                  }
-                  a.turma_nome = baseNome
-                  a.turmaNome = baseNome
-                })
               }
-            }
+              a.turma_nome = baseNome
+              a.turmaNome = baseNome
+            })
           }
         }
     }

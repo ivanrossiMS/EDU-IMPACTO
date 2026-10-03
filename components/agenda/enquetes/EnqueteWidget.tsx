@@ -110,8 +110,9 @@ export function EnqueteWidget({
     }
     window.addEventListener('ad:comunicados-update', handleComunicadosUpdate)
 
-    // 3. Heartbeat polling every 12 seconds
+    // 3. Heartbeat polling a cada 30 segundos apenas se a página estiver visível
     const interval = setInterval(async () => {
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return
       try {
         const { data } = await supabase
           .from('comunicados')
@@ -124,7 +125,7 @@ export function EnqueteWidget({
           setEnquete(remoteEnquete)
         }
       } catch (_) {}
-    }, 12000)
+    }, 30000)
 
     return () => {
       try { supabase.removeChannel(channel) } catch (_) {}
