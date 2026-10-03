@@ -1084,9 +1084,9 @@ function RestrictedFinancialAccessView({
               }}
             />
             <p style={{ margin: 0, fontSize: 13, color: '#475569', lineHeight: 1.55 }}>
-              <strong style={{ color: '#1e293b' }}>Precisa de 2ª via ou código Pix?</strong> O(A) responsável
-              financeiro cadastrado pode entrar neste mesmo menu pelo aplicativo dele(a) para visualizar as parcelas,
-              copiar o código Pix ou baixar o boleto bancário instantaneamente.
+              <strong style={{ color: '#1e293b' }}>Deseja acessar as faturas e Pix?</strong> O(a) responsável
+              financeiro cadastrado ({respFinanceiroNome}) pode autorizar você a visualizar esta área financeira a
+              qualquer momento pelo aplicativo dele(a), acessando <strong>Meu Perfil &gt; Responsáveis &amp; Autorizações</strong> e ativando a sua permissão.
             </p>
           </div>
 
@@ -1102,8 +1102,8 @@ function RestrictedFinancialAccessView({
               }}
             />
             <p style={{ margin: 0, fontSize: 13, color: '#475569', lineHeight: 1.55 }}>
-              <strong style={{ color: '#1e293b' }}>Deseja assumir o vínculo financeiro?</strong> Caso você precise
-              alterar a titularidade financeira do contrato ou incluir seus dados para faturamento, solicite a
+              <strong style={{ color: '#1e293b' }}>Deseja assumir a titularidade do contrato?</strong> Caso você precise
+              alterar o titular pagador do contrato ou dados para faturamento, solicite a
               atualização diretamente junto à secretaria escolar.
             </p>
           </div>

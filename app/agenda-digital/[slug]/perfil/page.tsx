@@ -8,17 +8,25 @@ import { LoadingGlass } from '@/components/LoadingGlass'
 import { 
   UserCog, Phone, Mail, ShieldAlert, GraduationCap, MapPin, 
   Edit3, HeartPulse, ShieldCheck, Contact, FileText, Camera, 
-  Download, PlusCircle, AlertTriangle, Fingerprint, CalendarDays, Loader2
+  Download, PlusCircle, AlertTriangle, Fingerprint, CalendarDays, Loader2,
+  DollarSign, Lock, Clock, History, CheckCircle2
 } from 'lucide-react'
 import { getInitials, formatDate } from '@/lib/utils'
 import { useApiQuery } from '@/hooks/useApi'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
 import { uploadFileToSupabase } from '@/lib/upload/uploadClient'
 import { useApp } from '@/lib/context'
 import { apiFetch } from '@/lib/api/apiClient'
+import {
+  AutorizacaoFinanceiraModal,
+  TargetResponsavel
+} from '@/app/agenda-digital/components/AutorizacaoFinanceiraModal'
 
 export default function ADPerfilPage() {
+  const queryClient = useQueryClient()
   const { currentUser, setCurrentUser } = useApp()
-  const { aluno: basicAluno } = useSelectedStudent()
+  const { aluno: basicAluno, userAccessRole } = useSelectedStudent()
   const slug = basicAluno?.id
   
   const { data: responseData, isLoading, error, refetch } = useApiQuery<any>(
@@ -28,6 +36,105 @@ export default function ADPerfilPage() {
     { enabled: !!slug }
   )
   const aluno = responseData?.data || null
+
+  // Autorizações financeiras e histórico de auditoria
+  const { data: authData, refetch: refetchAuth } = useQuery({
+    queryKey: ['agenda', 'autorizacoes-financeiras', slug],
+    queryFn: async () => {
+      if (!slug) return null
+      const res = await apiFetch(`/api/agenda/autorizacoes-financeiras?aluno_id=${slug}`)
+      if (!res.ok) return null
+      return res.json()
+    },
+    enabled: !!slug
+  })
+
+  // Modal de autorização financeira
+  const [authModalOpen, setAuthModalOpen] = useState(false)
+  const [selectedTargetResp, setSelectedTargetResp] = useState<TargetResponsavel | null>(null)
+  const [authModalMode, setAuthModalMode] = useState<'AUTORIZAR' | 'REVOGAR' | 'HISTORICO'>('AUTORIZAR')
+
+  // Bloqueio rigoroso de rolagem vertical no fundo quando o modal estiver aberto
+  useEffect(() => {
+    if (authModalOpen) {
+      const prevBody = document.body.style.overflow
+      const prevHtml = document.documentElement.style.overflow
+      const prevOverscroll = document.body.style.overscrollBehavior
+
+      document.body.style.overflow = 'hidden'
+      document.body.style.overscrollBehavior = 'none'
+      document.documentElement.style.overflow = 'hidden'
+
+      return () => {
+        document.body.style.overflow = prevBody
+        document.body.style.overscrollBehavior = prevOverscroll
+        document.documentElement.style.overflow = prevHtml
+      }
+    }
+  }, [authModalOpen])
+
+  const isCallerStaff = currentUser?.perfil === 'Administrador' || currentUser?.perfil === 'Gestor' || currentUser?.perfil === 'Direção' || currentUser?.perfil === 'Secretaria'
+  const canManageFinancial = Boolean(authData?.canManage ?? (isCallerStaff || userAccessRole?.isFin))
+  const titularNome = authData?.titularNome || aluno?.responsavel_financeiro || aluno?.responsavel || 'Responsável Financeiro'
+  const currentLoggedUserName = currentUser?.nome || currentUser?.user_metadata?.nome || currentUser?.email || 'Você'
+
+  const handleToggleFinancialAccess = (targetResp: TargetResponsavel) => {
+    if (!canManageFinancial) {
+      toast.error(`Apenas o responsável financeiro titular (${titularNome}) pode conceder ou alterar autorizações.`)
+      return
+    }
+
+    setSelectedTargetResp(targetResp)
+    setAuthModalMode(targetResp.respFinanceiro ? 'REVOGAR' : 'AUTORIZAR')
+    setAuthModalOpen(true)
+  }
+
+  const handleOpenHistoryModal = (targetResp: TargetResponsavel) => {
+    setSelectedTargetResp(targetResp)
+    setAuthModalMode('HISTORICO')
+    setAuthModalOpen(true)
+  }
+
+  const handleConfirmAuthorization = async ({
+    acao,
+    responsavelId,
+    alunoId,
+    aplicarTodos
+  }: {
+    acao: 'AUTORIZAR' | 'REVOGAR'
+    responsavelId: string
+    alunoId: string
+    aplicarTodos: boolean
+  }) => {
+    const res = await apiFetch('/api/agenda/autorizacoes-financeiras', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        alunoId,
+        responsavelId,
+        acao,
+        aplicarTodosAlunos: aplicarTodos
+      })
+    })
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}))
+      throw new Error(err.error || 'Falha ao processar autorização')
+    }
+
+    toast.success(
+      acao === 'AUTORIZAR'
+        ? `Acesso financeiro concedido para ${selectedTargetResp?.nome || 'o responsável'}!`
+        : `Acesso financeiro de ${selectedTargetResp?.nome || 'o responsável'} foi revogado.`
+    )
+
+    await Promise.all([
+      refetch(),
+      refetchAuth(),
+      queryClient.invalidateQueries({ queryKey: ['aluno', slug] }),
+      queryClient.invalidateQueries({ queryKey: ['agenda', 'perfil-acesso'] })
+    ])
+  }
 
   const [uploadingAvatarId, setUploadingAvatarId] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -320,8 +427,11 @@ export default function ADPerfilPage() {
                 {/* Responsaveis Grid */}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16 }}>
                   {responsaveisList.map((resp: any, i: number) => {
-                    const isFin = resp.respFinanceiro || resp.financeiro || resp.tipo === 'Financeiro' || resp.tipo === 'Ambos'
-                    const isPed = resp.respPedagogico || resp.pedagogico || resp.tipo === 'Pedagógico' || resp.tipo === 'Ambos'
+                    const authResp = (authData?.responsaveis || []).find((ar: any) => String(ar.id).trim() === String(resp.id).trim())
+                    const isFin = Boolean(resp.respFinanceiro || resp.financeiro || authResp?.respFinanceiro || resp.tipo === 'Financeiro' || resp.tipo === 'Ambos')
+                    const isPed = Boolean(resp.respPedagogico || resp.pedagogico || authResp?.respPedagogico || resp.tipo === 'Pedagógico' || resp.tipo === 'Ambos')
+                    const latestAudit = authResp?.latestAudit || null
+                    const isTitular = Boolean(authResp?.isTitular || (titularNome && resp.nome && titularNome.toLowerCase().trim() === resp.nome.toLowerCase().trim()))
                     
                     // Se for o mesmo usuário logado, damos preferência à foto que já está na memória principal (sidebar)
                     const isSameUser = !isMirroring && ((resp.email && currentUser?.email && resp.email.toLowerCase() === currentUser.email.toLowerCase()) || 
@@ -399,15 +509,221 @@ export default function ADPerfilPage() {
                             </div>
                           </div>
                         </div>
+
                         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                          {isFin && <span style={{ fontSize: 10, fontWeight: 800, padding: '4px 10px', borderRadius: 8, background: '#dcfce7', color: '#166534' }}>FINANCEIRO</span>}
-                          {isPed && <span style={{ fontSize: 10, fontWeight: 800, padding: '4px 10px', borderRadius: 8, background: '#e0e7ff', color: '#3730a3' }}>PEDAGÓGICO</span>}
-                          {!isFin && !isPed && <span style={{ fontSize: 10, fontWeight: 800, padding: '4px 10px', borderRadius: 8, background: '#f1f5f9', color: '#475569' }}>AUTORIZADO</span>}
+                          {isTitular && (
+                            <span style={{ fontSize: 10, fontWeight: 800, padding: '4px 10px', borderRadius: 8, background: '#dcfce7', color: '#166534', border: '1px solid #bbf7d0' }}>
+                              TITULAR FINANCEIRO
+                            </span>
+                          )}
+                          {!isTitular && isFin && (
+                            <span style={{ fontSize: 10, fontWeight: 800, padding: '4px 10px', borderRadius: 8, background: '#dcfce7', color: '#166534' }}>
+                              FINANCEIRO
+                            </span>
+                          )}
+                          {isPed && (
+                            <span style={{ fontSize: 10, fontWeight: 800, padding: '4px 10px', borderRadius: 8, background: '#e0e7ff', color: '#3730a3' }}>
+                              PEDAGÓGICO
+                            </span>
+                          )}
+                          {!isFin && !isPed && (
+                            <span style={{ fontSize: 10, fontWeight: 800, padding: '4px 10px', borderRadius: 8, background: '#f1f5f9', color: '#475569' }}>
+                              AUTORIZADO
+                            </span>
+                          )}
                         </div>
+
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 16, borderTop: '1px solid hsl(var(--border-subtle))' }}>
                           {resp.telefone && <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'hsl(var(--text-main))', fontWeight: 600 }}><Phone size={14} color="#64748b" /> {resp.telefone}</div>}
                           {resp.email && <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'hsl(var(--text-main))', fontWeight: 600 }}><Mail size={14} color="#64748b" /> {resp.email}</div>}
                         </div>
+
+                        {/* Bloco de Gestão de Acesso Financeiro (Liga / Desliga) */}
+                        {isTitular ? (
+                          <div
+                            style={{
+                              marginTop: 4,
+                              padding: '12px 14px',
+                              borderRadius: 14,
+                              background: 'rgba(79, 70, 229, 0.05)',
+                              border: '1px solid rgba(79, 70, 229, 0.15)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 10
+                            }}
+                          >
+                            <ShieldCheck size={18} color="#4f46e5" style={{ flexShrink: 0 }} />
+                            <div style={{ fontSize: 12, fontWeight: 700, color: '#3730a3', lineHeight: 1.4 }}>
+                              Responsável titular cadastrado no contrato financeiro escolar
+                            </div>
+                          </div>
+                        ) : (
+                          <div
+                            style={{
+                              marginTop: 4,
+                              padding: '14px 16px',
+                              borderRadius: 16,
+                              background: isFin ? 'rgba(22, 163, 74, 0.05)' : '#f8fafc',
+                              border: `1.5px solid ${isFin ? 'rgba(22, 163, 74, 0.25)' : '#e2e8f0'}`,
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: 10,
+                              transition: 'all 0.2s'
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                <div
+                                  style={{
+                                    width: 32,
+                                    height: 32,
+                                    borderRadius: 10,
+                                    background: isFin ? '#dcfce7' : '#e2e8f0',
+                                    color: isFin ? '#16a34a' : '#64748b',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    flexShrink: 0
+                                  }}
+                                >
+                                  <DollarSign size={18} />
+                                </div>
+                                <div>
+                                  <div style={{ fontSize: 13, fontWeight: 800, color: '#0f172a' }}>
+                                    Acesso ao Financeiro
+                                  </div>
+                                  <div style={{ fontSize: 11, fontWeight: 600, color: isFin ? '#15803d' : '#64748b' }}>
+                                    {isFin ? 'Autorizado para visualizar faturas e Pix' : 'Acesso bloqueado a este responsável'}
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Botão Liga / Desliga (Switch) */}
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleToggleFinancialAccess({
+                                    id: resp.id,
+                                    nome: resp.nome,
+                                    parentesco: resp.parentesco,
+                                    email: resp.email,
+                                    telefone: resp.telefone,
+                                    foto: resp.foto || resp.dados?.foto,
+                                    respFinanceiro: isFin,
+                                    respPedagogico: isPed,
+                                    isTitular: false,
+                                    latestAudit
+                                  })
+                                }
+                                disabled={!canManageFinancial}
+                                title={
+                                  canManageFinancial
+                                    ? isFin
+                                      ? 'Clique para desativar o acesso financeiro'
+                                      : 'Clique para autorizar o acesso financeiro'
+                                    : `Apenas o titular (${titularNome}) pode alterar esta autorização`
+                                }
+                                style={{
+                                  position: 'relative',
+                                  width: 50,
+                                  height: 28,
+                                  borderRadius: 100,
+                                  border: 'none',
+                                  background: isFin ? '#16a34a' : '#cbd5e1',
+                                  cursor: canManageFinancial ? 'pointer' : 'not-allowed',
+                                  opacity: canManageFinancial ? 1 : 0.65,
+                                  transition: 'background-color 0.25s, box-shadow 0.25s',
+                                  outline: 'none',
+                                  padding: 0,
+                                  flexShrink: 0,
+                                  boxShadow: isFin ? '0 2px 10px rgba(22, 163, 74, 0.35)' : 'none'
+                                }}
+                              >
+                                <motion.div
+                                  layout
+                                  transition={{ type: 'spring', stiffness: 500, damping: 32 }}
+                                  style={{
+                                    position: 'absolute',
+                                    top: 3,
+                                    left: isFin ? 25 : 3,
+                                    width: 22,
+                                    height: 22,
+                                    borderRadius: '50%',
+                                    background: '#ffffff',
+                                    boxShadow: '0 2px 6px rgba(0,0,0,0.22)',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center'
+                                  }}
+                                >
+                                  {!canManageFinancial ? (
+                                    <Lock size={10} color="#94a3b8" />
+                                  ) : isFin ? (
+                                    <CheckCircle2 size={12} color="#16a34a" />
+                                  ) : null}
+                                </motion.div>
+                              </button>
+                            </div>
+
+                            {/* Detalhe de Auditoria / Último registro */}
+                            {latestAudit ? (
+                              <div
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'space-between',
+                                  paddingTop: 8,
+                                  borderTop: `1px dashed ${isFin ? 'rgba(22, 163, 74, 0.25)' : '#e2e8f0'}`,
+                                  fontSize: 11,
+                                  color: '#64748b'
+                                }}
+                              >
+                                <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                  <Clock size={12} />
+                                  {latestAudit.acao === 'AUTORIZAR_FINANCEIRO' ? 'Autorizado por' : 'Revogado por'}{' '}
+                                  <strong style={{ color: '#334155' }}>{latestAudit.autorizado_por_nome}</strong>
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleOpenHistoryModal({
+                                      id: resp.id,
+                                      nome: resp.nome,
+                                      parentesco: resp.parentesco,
+                                      email: resp.email,
+                                      telefone: resp.telefone,
+                                      foto: resp.foto || resp.dados?.foto,
+                                      respFinanceiro: isFin,
+                                      respPedagogico: isPed,
+                                      isTitular: false,
+                                      latestAudit
+                                    })
+                                  }
+                                  style={{
+                                    background: 'none',
+                                    border: 'none',
+                                    color: '#4f46e5',
+                                    cursor: 'pointer',
+                                    fontWeight: 700,
+                                    fontSize: 11,
+                                    padding: 0,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 4
+                                  }}
+                                >
+                                  <History size={12} /> Histórico
+                                </button>
+                              </div>
+                            ) : (
+                              !canManageFinancial && (
+                                <div style={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic' }}>
+                                  Apenas o titular ({titularNome}) pode autorizar.
+                                </div>
+                              )
+                            )}
+                          </div>
+                        )}
                       </div>
                     )
                   })}
@@ -465,6 +781,24 @@ export default function ADPerfilPage() {
         style={{ display: 'none' }} 
         onChange={handleAvatarChange} 
       />
+
+      {/* Modal de Autorização Financeira com Registro de Auditoria */}
+      <AnimatePresence>
+        {authModalOpen && (
+          <AutorizacaoFinanceiraModal
+            isOpen={authModalOpen}
+            onClose={() => setAuthModalOpen(false)}
+            targetResponsavel={selectedTargetResp}
+            aluno={{ id: aluno.id, nome: aluno.nome }}
+            titularNome={titularNome}
+            currentLoggedUserName={currentLoggedUserName}
+            outrosAlunos={authData?.outrosAlunosEmComum || []}
+            historico={authData?.historico || []}
+            initialMode={authModalMode}
+            onConfirm={handleConfirmAuthorization}
+          />
+        )}
+      </AnimatePresence>
 
       <style dangerouslySetInnerHTML={{__html: `
         /* Adicionando hover ao overlay de edição do avatar */

@@ -10,6 +10,18 @@ export const revalidate = 0
 const memCache = new Map<string, { value: any, timestamp: number }>();
 const CACHE_TTL = 300_000; // 5 minutos
 
+export function clearPerfilAcessoCache(slug?: string) {
+  if (!slug) {
+    memCache.clear();
+    return;
+  }
+  for (const key of memCache.keys()) {
+    if (key.includes(`-${slug}-`)) {
+      memCache.delete(key);
+    }
+  }
+}
+
 export async function GET(request: Request) {
   const { user, errorResponse } = await requireAuth(request)
   if (errorResponse) return errorResponse

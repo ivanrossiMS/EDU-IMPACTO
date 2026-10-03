@@ -76,6 +76,52 @@ export async function GET(request: Request) {
             { status: 403 }
           )
         }
+
+        // Blindagem de Segurança Financeira: Usuário deve ter resp_financeiro ativo ou ser titular
+        let hasFinancialPermission = false
+        const cleanAlunoId = String(alunoIdParam).trim()
+
+        const { data: alunoData } = await supabase
+          .from('alunos')
+          .select('responsavel_financeiro, responsavel')
+          .eq('id', cleanAlunoId)
+          .maybeSingle()
+
+        const userEmail = user?.email?.toLowerCase().trim()
+        let respIdToMatch = checkId
+
+        if (!respIdToMatch && userEmail) {
+          const { data: r } = await supabase.from('responsaveis').select('id').ilike('email', userEmail).maybeSingle()
+          if (r?.id) respIdToMatch = r.id
+        }
+
+        if (respIdToMatch) {
+          const { data: linkFin } = await supabase
+            .from('aluno_responsavel')
+            .select('resp_financeiro')
+            .eq('aluno_id', cleanAlunoId)
+            .eq('responsavel_id', respIdToMatch)
+            .maybeSingle()
+
+          if (linkFin?.resp_financeiro === true) {
+            hasFinancialPermission = true
+          }
+        }
+
+        if (!hasFinancialPermission && alunoData) {
+          const titular = (alunoData.responsavel_financeiro || alunoData.responsavel || '').toLowerCase().trim()
+          const myName = (user?.user_metadata?.nome || user?.user_metadata?.name || '').toLowerCase().trim()
+          if (titular && myName && titular === myName) {
+            hasFinancialPermission = true
+          }
+        }
+
+        if (!hasFinancialPermission) {
+          return NextResponse.json(
+            { error: 'Acesso restrito: Você não possui autorização financeira para este aluno. Solicite ao responsável financeiro titular para liberar o acesso no perfil.' },
+            { status: 403 }
+          )
+        }
       }
 
       if (responsavelIdParam) {
