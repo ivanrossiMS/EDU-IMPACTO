@@ -19,6 +19,8 @@ export interface ChatMessage {
   is_admin: boolean;
   created_at: string;
   reacoes?: ChatMessageReaction[];
+  autor_foto?: string | null;
+  autor_id?: string | null;
 }
 
 const MAX_CACHE_SIZE = 150;

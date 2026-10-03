@@ -133,6 +133,8 @@ interface ChatMessage {
   is_admin: boolean
   created_at: string
   reacoes?: ChatMessageReaction[]
+  autor_foto?: string | null
+  autor_id?: string | null
 }
 
 interface ComunicadoViewModalProps {
@@ -716,7 +718,9 @@ export function ComunicadoViewModal({
         remetente_nome: currentUserName,
         conteudo: newMessage.trim(),
         anexos: pendingAnexos,
-        is_admin: isAdminMode
+        is_admin: isAdminMode,
+        autor_foto: currentUserAvatar || undefined,
+        autor_id: currentUserSlug || undefined
       };
 
       if (typeof window !== 'undefined') {
@@ -1950,8 +1954,14 @@ export function ComunicadoViewModal({
                         const normAutor = normalizeText(comunicado.autor || comunicado.dados?.autor || comunicado.autorNome || comunicado.dados?.autorNome);
                         const normCurrentUser = normalizeText(currentUserName);
 
+                        // 0. Se a mensagem já traz autor_foto do backend / metadata
+                        if (msg.autor_foto) {
+                          avatarToUse = msg.autor_foto;
+                          avatarUserId = msg.autor_id || undefined;
+                        }
+
                         // 1. Se remetente_nome for o autor do comunicado, usa a foto e ID do autor
-                        if (normMsgSender && normAutor && (normMsgSender === normAutor || normAutor.includes(normMsgSender) || normMsgSender.includes(normAutor))) {
+                        if (!avatarToUse && normMsgSender && normAutor && (normMsgSender === normAutor || normAutor.includes(normMsgSender) || normMsgSender.includes(normAutor))) {
                           avatarToUse = comunicado.autorFoto || comunicado.dados?.autorFoto || (comunicado as any).autorAvatar;
                           avatarUserId = comunicado.autorId || comunicado.dados?.autorId;
                         }
@@ -1981,11 +1991,8 @@ export function ComunicadoViewModal({
                           avatarUserId = currentUserSlug;
                         }
 
-                        // 4. Fallback padrão para a foto do autor do comunicado (pois foi enviado no contexto institucional deste comunicado)
-                        if (!avatarToUse) {
-                          avatarToUse = comunicado.autorFoto || comunicado.dados?.autorFoto || currentUserAvatar;
-                          avatarUserId = comunicado.autorId || comunicado.dados?.autorId || currentUserSlug;
-                        }
+                        // NUNCA usar comunicado.autorFoto como fallback se o remetente não for o autor do comunicado!
+                        // Deixar avatarToUse e avatarUserId como undefined para que o UserAvatar busque a foto real do usuário pelo nome.
                       }
                       
                       const msgDate = new Date(msg.created_at);
@@ -2005,7 +2012,7 @@ export function ComunicadoViewModal({
                       return (
                         <div key={`${msg.id}-${idx}`} style={{ display: 'flex', gap: 12 }}>
                           <UserAvatar
-                            userId={avatarUserId || msg.remetente_id}
+                            userId={avatarUserId || (msg.is_admin ? undefined : msg.remetente_id)}
                             name={msg.is_admin ? msg.remetente_nome : (alunoObj?.nome || msg.remetente_nome)}
                             fotoUrl={avatarToUse}
                             size={36}

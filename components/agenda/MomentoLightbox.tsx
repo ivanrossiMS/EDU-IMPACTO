@@ -11,8 +11,12 @@ import {
   ZoomOut, 
   RotateCcw,
   ShieldAlert,
-  Loader2
+  Loader2,
+  Download
 } from 'lucide-react'
+import { toast } from 'sonner'
+import { useAgendaDigital } from '@/lib/agendaDigitalContext'
+import { downloadMediaFile } from '@/lib/utils'
 import { useScreenshotProtection } from '@/hooks/useScreenshotProtection'
 import { PrivacyProtectionModal } from './PrivacyProtectionModal'
 
@@ -28,6 +32,7 @@ export interface MomentoLightboxProps {
   initialIndex?: number
   author?: string
   description?: string
+  isProtected?: boolean
 }
 
 export function MomentoLightbox({
@@ -36,7 +41,8 @@ export function MomentoLightbox({
   media,
   initialIndex = 0,
   author,
-  description
+  description,
+  isProtected
 }: MomentoLightboxProps) {
   const [mounted, setMounted] = useState(false)
   const [currentIndex, setCurrentIndex] = useState(initialIndex)
@@ -56,6 +62,11 @@ export function MomentoLightbox({
   const [isImageLoading, setIsImageLoading] = useState(false)
   const loadedUrlsRef = useRef<Set<string>>(new Set())
 
+  const { adConfig } = useAgendaDigital()
+  const isContentProtected = isProtected !== undefined
+    ? isProtected
+    : (adConfig?.permissoes?.ambienteSeguroMomentos !== false)
+
   // Proteção contra capturas de tela, gravações e prints
   const {
     isModalOpen: isPrivacyModalOpen,
@@ -63,7 +74,7 @@ export function MomentoLightbox({
     triggerModal: triggerPrivacyModal,
     handleContextMenu,
     handleDragStart
-  } = useScreenshotProtection({ enabled: isOpen, autoEnablePrivacyScreen: true })
+  } = useScreenshotProtection({ enabled: isOpen && isContentProtected, autoEnablePrivacyScreen: isContentProtected })
 
   // Drag tracking refs
   const dragStartRef = useRef({ x: 0, y: 0 })
@@ -506,45 +517,91 @@ export function MomentoLightbox({
 
           {/* Action buttons on top right */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, pointerEvents: 'auto', flexShrink: 0 }}>
-            {/* SELO / BOTÃO DE AMBIENTE PROTEGIDO */}
-            <button
-              onClick={(e) => {
-                e.stopPropagation()
-                triggerPrivacyModal()
-              }}
-              title="Informações de Privacidade e Proteção contra Prints"
-              className="ad-lightbox-btn-protect"
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 6,
-                height: 44,
-                borderRadius: 22,
-                background: 'rgba(99, 102, 241, 0.22)',
-                border: '1px solid rgba(165, 180, 252, 0.35)',
-                color: '#e0e7ff',
-                fontSize: 12.5,
-                fontWeight: 700,
-                cursor: 'pointer',
-                backdropFilter: 'blur(8px)',
-                WebkitBackdropFilter: 'blur(8px)',
-                boxShadow: '0 4px 14px rgba(0,0,0,0.3)',
-                transition: 'all 0.2s ease',
-                flexShrink: 0
-              }}
-              onMouseEnter={e => {
-                e.currentTarget.style.background = 'rgba(99, 102, 241, 0.38)'
-                e.currentTarget.style.transform = 'scale(1.04)'
-              }}
-              onMouseLeave={e => {
-                e.currentTarget.style.background = 'rgba(99, 102, 241, 0.22)'
-                e.currentTarget.style.transform = 'scale(1)'
-              }}
-            >
-              <ShieldAlert size={18} color="#a5b4fc" />
-              <span className="hidden sm:inline">Ambiente Protegido</span>
-            </button>
+            {/* SELO / BOTÃO DE AMBIENTE PROTEGIDO OU BOTÃO DE DOWNLOAD */}
+            {isContentProtected ? (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  triggerPrivacyModal()
+                }}
+                title="Informações de Privacidade e Proteção contra Prints"
+                className="ad-lightbox-btn-protect"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 6,
+                  height: 44,
+                  padding: '0 14px',
+                  borderRadius: 22,
+                  background: 'rgba(99, 102, 241, 0.22)',
+                  border: '1px solid rgba(165, 180, 252, 0.35)',
+                  color: '#e0e7ff',
+                  fontSize: 12.5,
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  backdropFilter: 'blur(8px)',
+                  WebkitBackdropFilter: 'blur(8px)',
+                  boxShadow: '0 4px 14px rgba(0,0,0,0.3)',
+                  transition: 'all 0.2s ease',
+                  flexShrink: 0
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.background = 'rgba(99, 102, 241, 0.38)'
+                  e.currentTarget.style.transform = 'scale(1.04)'
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.background = 'rgba(99, 102, 241, 0.22)'
+                  e.currentTarget.style.transform = 'scale(1)'
+                }}
+              >
+                <ShieldAlert size={18} color="#a5b4fc" />
+                <span className="hidden sm:inline">Ambiente Protegido</span>
+              </button>
+            ) : (
+              <button
+                onClick={async (e) => {
+                  e.stopPropagation()
+                  if (currentItem?.url) {
+                    toast.success('Iniciando download da mídia...')
+                    await downloadMediaFile(currentItem.url, `momento-${currentIndex + 1}`)
+                  }
+                }}
+                title="Baixar esta foto ou vídeo"
+                className="ad-lightbox-btn-download"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 6,
+                  height: 44,
+                  padding: '0 16px',
+                  borderRadius: 22,
+                  background: 'rgba(16, 185, 129, 0.25)',
+                  border: '1px solid rgba(52, 211, 153, 0.45)',
+                  color: '#ffffff',
+                  fontSize: 13,
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  backdropFilter: 'blur(8px)',
+                  WebkitBackdropFilter: 'blur(8px)',
+                  boxShadow: '0 4px 14px rgba(0,0,0,0.3)',
+                  transition: 'all 0.2s ease',
+                  flexShrink: 0
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.background = 'rgba(16, 185, 129, 0.4)'
+                  e.currentTarget.style.transform = 'scale(1.04)'
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.background = 'rgba(16, 185, 129, 0.25)'
+                  e.currentTarget.style.transform = 'scale(1)'
+                }}
+              >
+                <Download size={18} color="#a7f3d0" />
+                <span>Baixar {isVideo ? 'Vídeo' : 'Foto'}</span>
+              </button>
+            )}
 
             <button
               onClick={(e) => {
@@ -736,11 +793,11 @@ export function MomentoLightbox({
             <video
               src={currentItem.url}
               controls
-              controlsList="nodownload"
+              controlsList={isContentProtected ? "nodownload" : undefined}
               autoPlay
               playsInline
               preload="metadata"
-              onContextMenu={handleContextMenu}
+              onContextMenu={isContentProtected ? handleContextMenu : undefined}
               style={{
                 maxWidth: '92vw',
                 maxHeight: '85vh',
@@ -771,9 +828,9 @@ export function MomentoLightbox({
                 src={currentItem.url}
                 alt={description || 'Momento'}
                 decoding="async"
-                draggable={false}
-                onDragStart={handleDragStart}
-                onContextMenu={handleContextMenu}
+                draggable={!isContentProtected}
+                onDragStart={isContentProtected ? handleDragStart : undefined}
+                onContextMenu={isContentProtected ? handleContextMenu : undefined}
                 onLoad={() => {
                   loadedUrlsRef.current.add(currentItem.url)
                   setIsImageLoading(false)
@@ -787,10 +844,10 @@ export function MomentoLightbox({
                   objectFit: 'contain',
                   borderRadius: 12,
                   boxShadow: '0 20px 60px rgba(0,0,0,0.7)',
-                  pointerEvents: 'none', // Let container receive mouse and touch events
-                  userSelect: 'none',
-                  WebkitUserSelect: 'none',
-                  WebkitTouchCallout: 'none',
+                  pointerEvents: isContentProtected ? 'none' : 'auto',
+                  userSelect: isContentProtected ? 'none' : 'auto',
+                  WebkitUserSelect: isContentProtected ? 'none' : 'auto',
+                  WebkitTouchCallout: isContentProtected ? 'none' : 'default',
                   opacity: isImageLoading ? 0.35 : 1,
                   filter: isImageLoading ? 'blur(8px)' : 'none',
                   transition: isDragging
@@ -977,7 +1034,7 @@ export function MomentoLightbox({
 
         {/* MODAL ULTRA MODERNO DE PRIVACIDADE CONTRA PRINTS */}
         <PrivacyProtectionModal
-          isOpen={isPrivacyModalOpen}
+          isOpen={isPrivacyModalOpen && isContentProtected}
           onClose={closePrivacyModal}
         />
       </motion.div>

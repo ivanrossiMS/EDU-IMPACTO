@@ -120,13 +120,21 @@ SSL_CTX.verify_mode = ssl.CERT_NONE
 STATE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "catraca_state.json")
 def garantir_instancia_unica():
     """
-    Garante que processos zumbis em segundo plano (pythonw.exe) não fiquem presos em paralelo.
-    Nunca encerra o launcher (python.exe), não utiliza PowerShell e nunca aborta a execução.
+    Garante que processos em segundo plano não fiquem duplicados.
+    Se estiver rodando como console interativo (python.exe), encerra processos ocultos (pythonw.exe).
+    Se estiver rodando em segundo plano (pythonw.exe), NÃO encerra a si próprio!
     """
     if sys.platform == "win32":
         try:
-            # Encerra apenas instâncias ocultas sem console (pythonw.exe), liberando as catracas para esta janela
-            subprocess.run(["taskkill", "/F", "/IM", "pythonw.exe"], capture_output=True)
+            exe_name = os.path.basename(sys.executable).lower()
+            my_pid = os.getpid()
+            if "pythonw" not in exe_name:
+                # Se estamos abrindo uma janela interativa (python.exe), encerra processos ocultos (pythonw.exe)
+                subprocess.run(["taskkill", "/F", "/IM", "pythonw.exe"], capture_output=True)
+            else:
+                # Se estamos rodando como pythonw.exe, mata apenas OUTROS processos pythonw, nunca a si mesmo
+                cmd = f'powershell -NoProfile -Command "Get-Process pythonw -ErrorAction SilentlyContinue | Where-Object {{ $_.Id -ne {my_pid} }} | Stop-Process -Force"'
+                subprocess.run(cmd, shell=True, capture_output=True)
         except Exception:
             pass
 
@@ -910,10 +918,97 @@ def desinstalar_no_windows():
 
 
 # ══════════════════════════════════════════════════════════════
+#  VERIFICAÇÃO DE STATUS
+# ══════════════════════════════════════════════════════════════
+def checar_status():
+    _raw_print("=" * 65)
+    _raw_print("   🔍 STATUS DO SINCRONIZADOR DE CATRACAS CONTROL ID")
+    _raw_print("=" * 65)
+
+    # 1. Processos em execução
+    rodando = []
+    if sys.platform == "win32":
+        try:
+            out = subprocess.run(["tasklist", "/FO", "CSV", "/NH"], capture_output=True, text=True, errors="replace").stdout
+            for line in out.splitlines():
+                l_lower = line.lower()
+                if "python.exe" in l_lower or "pythonw.exe" in l_lower:
+                    parts = [p.strip().replace('"', '') for p in line.split(',')]
+                    if len(parts) >= 2:
+                        p_name = parts[0]
+                        p_pid = parts[1]
+                        p_mem = parts[4] if len(parts) > 4 else ""
+                        rodando.append(f"{p_name} (PID: {p_pid} | Mem: {p_mem})")
+        except Exception as e:
+            _raw_print(f"  [AVISO] Erro ao listar processos: {e}")
+    else:
+        try:
+            out = subprocess.run(["pgrep", "-fl", "Sincronizar_Catraca"], capture_output=True, text=True).stdout
+            rodando = [l for l in out.splitlines() if str(os.getpid()) not in l]
+        except Exception:
+            pass
+
+    if rodando:
+        _raw_print(f"\n  [PROCESSO EM EXECUÇÃO] ✅ ATIVO ({len(rodando)} processo(s) detectado(s)):")
+        for p in rodando:
+            _raw_print(f"     🟢 {p}")
+    else:
+        _raw_print("\n  [PROCESSO EM EXECUÇÃO] ❌ PARADO (Nenhum processo Python detectado).")
+
+    # 2. Inicialização automática (Startup)
+    if sys.platform == "win32":
+        try:
+            startup_folder = os.path.join(os.environ.get("APPDATA", ""), "Microsoft", "Windows", "Start Menu", "Programs", "Startup")
+            shortcut_path = os.path.join(startup_folder, "Sincronizacao_Catraca.lnk")
+            shortcut_bat = os.path.join(startup_folder, "INICIAR_CATRACA.lnk")
+            if os.path.exists(shortcut_path) or os.path.exists(shortcut_bat):
+                _raw_print(f"\n  [INICIALIZAÇÃO NO BOOT] ✅ CONFIGURADA:")
+                _raw_print(f"     Atalho encontrado em: {startup_folder}")
+            else:
+                _raw_print(f"\n  [INICIALIZAÇÃO NO BOOT] ⚠️ NÃO CONFIGURADA:")
+                _raw_print(f"     Nenhum atalho encontrado na pasta Inicializar ({startup_folder}).")
+        except Exception:
+            pass
+
+    # 3. Últimos registros de Log
+    if os.path.exists(LOG_FILE):
+        _raw_print(f"\n  [ÚLTIMAS ATIVIDADES NO LOG] ({LOG_FILE}):")
+        try:
+            with open(LOG_FILE, "r", encoding="utf-8", errors="replace") as f:
+                linhas = [l.strip() for l in f.readlines() if l.strip() and not l.startswith("=")]
+                ultimas = linhas[-6:] if len(linhas) >= 6 else linhas
+                for l in ultimas:
+                    _raw_print(f"     📄 {l}")
+        except Exception as e:
+            _raw_print(f"     Erro ao ler log: {e}")
+    else:
+        _raw_print(f"\n  [LOG] Nenhum log gerado ainda ({LOG_FILE}).")
+
+    # 4. Teste de conectividade com as catracas
+    _raw_print(f"\n  [TESTE DE CONECTIVIDADE COM AS CATRACAS]:")
+    for cat in CATRACAS:
+        ip = cat["ip"]
+        nome = cat["nome"]
+        try:
+            url, sess = autenticar_catraca(cat)
+            if sess:
+                _raw_print(f"     ✅ {nome} ({ip}): Online e Autenticada!")
+            else:
+                _raw_print(f"     ⚠️ {nome} ({ip}): Sem resposta (verifique cabo de rede / IP).")
+        except Exception as e:
+            _raw_print(f"     ❌ {nome} ({ip}): Inacessível ({e})")
+
+    _raw_print("\n" + "=" * 65)
+
+
+# ══════════════════════════════════════════════════════════════
 #  LOOP PRINCIPAL
 # ══════════════════════════════════════════════════════════════
 def main():
-    if "--install" in sys.argv:
+    if "--status" in sys.argv:
+        checar_status()
+        sys.exit(0)
+    elif "--install" in sys.argv:
         instalar_no_windows()
         sys.exit(0)
     elif "--uninstall" in sys.argv:

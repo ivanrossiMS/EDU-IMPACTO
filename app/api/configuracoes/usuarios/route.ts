@@ -80,7 +80,7 @@ export async function GET(req: Request) {
 
       let query = supabase.from('system_users').select(
         isDropdownMode 
-          ? 'id, nome, email, cargo, perfil, status' // campos mínimos para dropdowns
+          ? 'id, nome, email, cargo, perfil, status, dados' // campos mínimos para dropdowns incluindo dados.foto
           : '*',
         { count: 'exact' }
       )
@@ -102,6 +102,7 @@ export async function GET(req: Request) {
           cargo: u.cargo || 'Não definido',
           perfil: u.perfil || 'Colaborador',
           status: u.status || 'ativo',
+          foto: u.dados?.foto || null,
           ultimoAcesso: 'N/A'
         }))
         const result = { data: mappedDropdown, total: count || 0, page: 1, limit }

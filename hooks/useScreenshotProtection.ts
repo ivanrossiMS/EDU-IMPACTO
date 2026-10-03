@@ -13,6 +13,7 @@ export function useScreenshotProtection(options: UseScreenshotProtectionOptions 
   const [isModalOpen, setIsModalOpen] = useState(false)
 
   const triggerModal = useCallback(() => {
+    if (!enabled) return
     // Feedback háptico em smartphones compatíveis
     if (typeof window !== 'undefined' && 'vibrate' in navigator) {
       try {
@@ -22,7 +23,7 @@ export function useScreenshotProtection(options: UseScreenshotProtectionOptions 
       }
     }
     setIsModalOpen(true)
-  }, [])
+  }, [enabled])
 
   const closeModal = useCallback(() => {
     setIsModalOpen(false)
@@ -30,7 +31,12 @@ export function useScreenshotProtection(options: UseScreenshotProtectionOptions 
 
   // Gerenciamento do PrivacyScreen no Capacitor (iOS & Android)
   useEffect(() => {
-    if (!enabled || !autoEnablePrivacyScreen) return
+    if (!enabled || !autoEnablePrivacyScreen) {
+      if (typeof window !== 'undefined' && (window as any).Capacitor?.isNativePlatform?.()) {
+        PrivacyScreen.disable().catch(() => {})
+      }
+      return
+    }
 
     let isScreenProtected = false
     const enablePrivacy = async () => {
@@ -170,17 +176,19 @@ export function useScreenshotProtection(options: UseScreenshotProtectionOptions 
 
   // Handler para bloquear clique com botão direito (Salvar imagem como...)
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
+    if (!enabled) return
     e.preventDefault()
     e.stopPropagation()
     triggerModal()
-  }, [triggerModal])
+  }, [enabled, triggerModal])
 
   // Handler para bloquear arrastar e soltar fotos/vídeos para a área de trabalho
   const handleDragStart = useCallback((e: React.DragEvent) => {
+    if (!enabled) return
     e.preventDefault()
     e.stopPropagation()
     triggerModal()
-  }, [triggerModal])
+  }, [enabled, triggerModal])
 
   return {
     isModalOpen,

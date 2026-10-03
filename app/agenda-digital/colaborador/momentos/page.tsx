@@ -50,6 +50,8 @@ export default function ADMomentosPage() {
     adConfig 
   } = useAgendaDigital()
   
+  const isProtected = adConfig?.permissoes?.ambienteSeguroMomentos !== false
+
   // Proteção ultra moderna contra prints, capturas e gravações de tela
   const {
     isModalOpen: isPrivacyModalOpen,
@@ -57,7 +59,7 @@ export default function ADMomentosPage() {
     triggerModal: triggerPrivacyModal,
     handleContextMenu,
     handleDragStart
-  } = useScreenshotProtection({ enabled: true, autoEnablePrivacyScreen: true })
+  } = useScreenshotProtection({ enabled: isProtected, autoEnablePrivacyScreen: isProtected })
   const { currentUser } = useApp()
 
   const searchParams = useSearchParams()
@@ -1594,15 +1596,36 @@ export default function ADMomentosPage() {
 
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-                <button
-                  type="button"
-                  onClick={triggerPrivacyModal}
-                  title="Informações de Privacidade e Proteção contra Prints"
-                  className="ad-badge-ambiente-protegido"
-                >
-                  <ShieldAlert size={11} strokeWidth={2.5} />
-                  <span>Ambiente Protegido</span>
-                </button>
+                {isProtected ? (
+                  <button
+                    type="button"
+                    onClick={triggerPrivacyModal}
+                    title="Informações de Privacidade e Proteção contra Prints"
+                    className="ad-badge-ambiente-protegido"
+                  >
+                    <ShieldAlert size={11} strokeWidth={2.5} />
+                    <span>Ambiente Protegido</span>
+                  </button>
+                ) : (
+                  <div
+                    title="O salvamento de fotos/vídeos e capturas de tela foram liberados pela administração escolar"
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      padding: '3px 8px',
+                      borderRadius: 12,
+                      background: 'rgba(16, 185, 129, 0.1)',
+                      border: '1px solid rgba(16, 185, 129, 0.3)',
+                      color: '#059669',
+                      fontSize: 11,
+                      fontWeight: 700
+                    }}
+                  >
+                    <Download size={11} strokeWidth={2.5} />
+                    <span>Downloads & Prints Liberados</span>
+                  </div>
+                )}
               </div>
 
               <h2 className="ad-momentos-title">
@@ -2069,11 +2092,12 @@ export default function ADMomentosPage() {
         onClose={() => setLightboxOpen(false)}
         media={lightboxMedia}
         initialIndex={lightboxIndex}
+        isProtected={isProtected}
       />
 
       {/* MODAL ULTRA MODERNO DE PRIVACIDADE CONTRA PRINTS */}
       <PrivacyProtectionModal
-        isOpen={isPrivacyModalOpen}
+        isOpen={isPrivacyModalOpen && isProtected}
         onClose={closePrivacyModal}
       />
 

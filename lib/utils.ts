@@ -808,3 +808,50 @@ export function getSimuladoPrintOrderedQuestoes(
   })
 }
 
+/**
+ * Dispara o download de arquivos de mídia (imagens e vídeos) no navegador ou app móvel.
+ */
+export async function downloadMediaFile(url: string, defaultName: string = 'momento-escolar'): Promise<void> {
+  if (!url || typeof window === 'undefined') return
+  try {
+    const res = await fetch(url, { mode: 'cors' })
+    if (!res.ok) throw new Error(`HTTP error ${res.status}`)
+    const blob = await res.blob()
+    const blobUrl = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = blobUrl
+
+    let filename = defaultName
+    try {
+      const urlObj = new URL(url, window.location.href)
+      const pathname = urlObj.pathname
+      const parts = pathname.split('/')
+      const lastPart = parts[parts.length - 1]
+      if (lastPart && lastPart.includes('.')) {
+        filename = decodeURIComponent(lastPart)
+      } else {
+        const mime = blob.type || ''
+        const ext = mime.includes('video') ? 'mp4' : mime.includes('png') ? 'png' : mime.includes('webp') ? 'webp' : 'jpg'
+        filename = `${defaultName}.${ext}`
+      }
+    } catch {
+      filename = defaultName
+    }
+
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 2000)
+  } catch {
+    // Fallback direto via elemento âncora
+    const a = document.createElement('a')
+    a.href = url
+    a.target = '_blank'
+    a.rel = 'noopener noreferrer'
+    a.download = defaultName
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+  }
+}

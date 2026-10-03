@@ -38,6 +38,18 @@ async function fetchUserPhoto(userId?: string, name?: string): Promise<string | 
         }
       }
 
+      if (!foto && name && typeof name === 'string' && name.trim() !== '') {
+        try {
+          const res = await fetch(`/api/user-photo?name=${encodeURIComponent(name.trim())}`);
+          if (res.ok) {
+            const json = await res.json();
+            if (json && json.foto) foto = json.foto;
+          }
+        } catch {
+          // Falha de rede silenciosa
+        }
+      }
+
       if (foto) {
         photoCache[cacheKey] = foto;
         if (userId) {

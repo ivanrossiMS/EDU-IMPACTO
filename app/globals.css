@@ -2912,8 +2912,8 @@ sup {
 
   /* Bloqueio de Privacidade para fotos e vídeos dos Momentos */
   .momentos-protected-content,
-  .ad-momentos-feed-container,
-  .polaroid-card {
+  .momentos-protected-content .polaroid-card,
+  .ad-momentos-feed-container.momentos-protected-content .polaroid-card {
     display: none !important;
     visibility: hidden !important;
   }

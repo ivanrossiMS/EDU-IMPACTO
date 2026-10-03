@@ -16,6 +16,8 @@ interface ChatMessage {
   is_admin: boolean
   created_at: string
   is_pending?: boolean
+  autor_foto?: string | null
+  autor_id?: string | null
 }
 
 interface ComunicadoChatProps {
@@ -234,7 +236,7 @@ export function ComunicadoChat({ comunicadoId, remetenteId, remetenteNome, remet
               const isMe = msg.remetente_id === remetenteId && msg.is_admin === isAdmin
               const isLast = idx === messages.length - 1
               
-              const avatarToUse = (!isMe && adminAvatar && msg.is_admin) ? adminAvatar : (isMe && remetenteAvatar ? remetenteAvatar : null)
+              const avatarToUse = msg.is_admin ? (msg.autor_foto || (!isMe ? adminAvatar : remetenteAvatar)) : (isMe && remetenteAvatar ? remetenteAvatar : null)
               
               return (
                 <div key={msg.id} style={{ display: 'flex', gap: 10, position: 'relative' }}>

@@ -238,6 +238,47 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
+  // Coleta nomes de administradores/colaboradores para buscar as fotos reais deles na tabela system_users
+  const adminNames = Array.from(new Set(
+    (data || [])
+      .filter((r: any) => r.is_admin && r.remetente_nome)
+      .map((r: any) => r.remetente_nome.trim())
+  ));
+
+  const systemUsersMap = new Map<string, { foto: string | null; id: string }>();
+  if (adminNames.length > 0) {
+    try {
+      const { data: sysUsers } = await supabase
+        .from('system_users')
+        .select('id, nome, dados');
+      
+      if (sysUsers && Array.isArray(sysUsers)) {
+        sysUsers.forEach((su: any) => {
+          if (su && su.nome) {
+            const foto = su.dados?.foto || null;
+            systemUsersMap.set(normalizeRole(su.nome), { foto, id: su.id });
+          }
+        });
+      }
+    } catch (e) {
+      console.warn('Erro ao buscar fotos de administradores em system_users:', e);
+    }
+  }
+
+  const findAdminPhoto = (name?: string | null) => {
+    if (!name) return null;
+    const norm = normalizeRole(name);
+    if (systemUsersMap.has(norm)) {
+      return systemUsersMap.get(norm);
+    }
+    for (const [sNorm, sData] of systemUsersMap.entries()) {
+      if (sNorm && norm && (sNorm.includes(norm) || norm.includes(sNorm))) {
+        return sData;
+      }
+    }
+    return null;
+  };
+
   const formattedData = (data || []).map((row: any) => {
     let reacoes = Array.isArray(row.reacoes) ? row.reacoes : [];
     let anexos = Array.isArray(row.anexos) ? row.anexos : [];
@@ -249,12 +290,28 @@ export async function GET(request: Request) {
       }
     }
 
-    const cleanAnexos = anexos.filter((a: any) => !(typeof a === 'object' && a !== null && a.__reactions__));
+    const authorItem = anexos.find((a: any) => typeof a === 'object' && a !== null && a.__author__);
+    const authorMeta = authorItem?.__author__;
+
+    const cleanAnexos = anexos.filter((a: any) => !(typeof a === 'object' && a !== null && (a.__reactions__ || a.__author__)));
+
+    let autorFoto = authorMeta?.foto || null;
+    let autorId = authorMeta?.id || null;
+
+    if (!autorFoto && row.is_admin && row.remetente_nome) {
+      const adminInfo = findAdminPhoto(row.remetente_nome);
+      if (adminInfo) {
+        autorFoto = adminInfo.foto || null;
+        autorId = adminInfo.id || null;
+      }
+    }
 
     return {
       ...row,
       anexos: cleanAnexos,
-      reacoes
+      reacoes,
+      autor_foto: autorFoto,
+      autor_id: autorId
     };
   });
 
@@ -350,12 +407,56 @@ export async function POST(request: Request) {
       }
     }
 
+    let authorFoto: string | null = null;
+    let authorId: string = user.id;
+
+    if (serverIsAdmin) {
+      authorFoto = user.user_metadata?.foto || user.user_metadata?.fotoUrl || null;
+      if (!authorFoto) {
+        try {
+          const { data: sysU } = await supabase
+            .from('system_users')
+            .select('id, dados')
+            .or(`id.eq."${user.id}",auth_id.eq."${user.id}"${user.email ? `,email.ilike."${user.email}"` : ''}`)
+            .maybeSingle();
+          if (sysU?.dados?.foto) {
+            authorFoto = sysU.dados.foto;
+            authorId = sysU.id;
+          }
+        } catch {}
+      }
+      if (!authorFoto && body.remetente_nome) {
+        try {
+          const { data: sysByName } = await supabase
+            .from('system_users')
+            .select('id, dados')
+            .ilike('nome', `%${body.remetente_nome.trim()}%`)
+            .maybeSingle();
+          if (sysByName?.dados?.foto) {
+            authorFoto = sysByName.dados.foto;
+            authorId = sysByName.id;
+          }
+        } catch {}
+      }
+    }
+
+    const rawAnexos = Array.isArray(body.anexos) ? [...body.anexos] : [];
+    if (serverIsAdmin) {
+      rawAnexos.push({
+        __author__: {
+          id: authorId,
+          nome: body.remetente_nome || user.user_metadata?.nome || 'Administrador',
+          foto: authorFoto
+        }
+      });
+    }
+
     const row = {
       comunicado_id: finalComunicadoId,
       remetente_id: body.remetente_id,
       remetente_nome: body.remetente_nome || 'Usuário',
       conteudo: body.conteudo,
-      anexos: Array.isArray(body.anexos) ? body.anexos : [],
+      anexos: rawAnexos,
       is_admin: serverIsAdmin  // Determinado pelo servidor, não pelo cliente
     };
 
@@ -586,7 +687,17 @@ export async function POST(request: Request) {
       console.error("Erro ao resetar status LIDO:", resetErr);
     }
 
-    return NextResponse.json({ ...data, reacoes: [] }, { status: 201 });
+    const cleanAnexos = Array.isArray(data.anexos)
+      ? data.anexos.filter((a: any) => !(typeof a === 'object' && a !== null && (a.__reactions__ || a.__author__)))
+      : [];
+
+    return NextResponse.json({
+      ...data,
+      anexos: cleanAnexos,
+      reacoes: [],
+      autor_foto: authorFoto,
+      autor_id: authorId
+    }, { status: 201 });
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 400 });
   }

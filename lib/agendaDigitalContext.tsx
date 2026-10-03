@@ -116,6 +116,7 @@ export interface ADConfig {
     visualizarOcorrencias?: boolean
     visualizarProvasOnline?: boolean
     chamadaAlunoPortaria?: boolean
+    ambienteSeguroMomentos?: boolean
   }
   horarios: { inicio: string; fim: string; msgAusencia: string }
   notificacoes: { 
@@ -201,7 +202,7 @@ const AgendaDigitalContext = createContext<ADContextState>({
   bannerUrl: null,
   setBannerUrl: () => {},
   adConfig: {
-    permissoes: { chat: false, comentariosMural: false, visualizarAniversariantes: true, visualizarRelatorios: false, confirmarPresencaEventos: false, visualizarFinanceiro: true, visualizarNotas: true, visualizarFrequencia: true, visualizarOcorrencias: true, chamadaAlunoPortaria: true },
+    permissoes: { chat: false, comentariosMural: false, visualizarAniversariantes: true, visualizarRelatorios: false, confirmarPresencaEventos: false, visualizarFinanceiro: true, visualizarNotas: true, visualizarFrequencia: true, visualizarOcorrencias: true, chamadaAlunoPortaria: true, ambienteSeguroMomentos: true },
     horarios: { inicio: '07:00', fim: '18:00', msgAusencia: 'Fora do horário amigão' },
     notificacoes: { pushComunicados: true, pushMomentos: true, pushFinanceiro: true, pushCalendario: true, pushMensagemChat: false, pushRelatorios: false, pushAlteracaoCalendario: true },
     saudacao: { ativa: false, titulo: 'Bem-vindo à nossa escola!', mensagem: 'Olá {nome_responsavel},\n\nÉ com muita alegria que recebemos o(a) aluno(a) {nome_aluno} em nossa instituição.', imagemUrl: '' },
@@ -376,7 +377,7 @@ export function AgendaDigitalProvider({ children, isFamily = false }: { children
   }
 
   const defaultInitialConfig: ADConfig = {
-    permissoes: { chat: true, comentariosMural: true, visualizarAniversariantes: true, visualizarRelatorios: false, confirmarPresencaEventos: false, visualizarFinanceiro: true, visualizarNotas: true, visualizarFrequencia: true, visualizarOcorrencias: true, chamadaAlunoPortaria: true },
+    permissoes: { chat: true, comentariosMural: true, visualizarAniversariantes: true, visualizarRelatorios: false, confirmarPresencaEventos: false, visualizarFinanceiro: true, visualizarNotas: true, visualizarFrequencia: true, visualizarOcorrencias: true, chamadaAlunoPortaria: true, ambienteSeguroMomentos: true },
     horarios: { inicio: '07:00', fim: '18:00', msgAusencia: 'Olá!\nNosso horário de atendimento encerrou.' },
     notificacoes: { pushComunicados: true, pushMomentos: true, pushFinanceiro: true, pushCalendario: true, pushAlteracaoCalendario: true, pushFrequencia: true, pushOcorrencias: true, pushNotas: true, pushSaidaPortaria: true, pushMensagemChat: true, pushRelatorios: false },
     saudacao: { ativa: false, titulo: 'Bem-vindo à nossa escola!', mensagem: 'Olá {nome_responsavel},\n\nÉ com muita alegria que recebemos o(a) aluno(a) {nome_aluno} em nossa instituição.', imagemUrl: '' }
@@ -479,6 +480,7 @@ export function AgendaDigitalProvider({ children, isFamily = false }: { children
                 visualizarFrequencia: true,
                 visualizarOcorrencias: true,
                 chamadaAlunoPortaria: true,
+                ambienteSeguroMomentos: true,
                 ...(db.ad_config.permissoes || {}),
                 chat: true,
                 visualizarRelatorios: false,

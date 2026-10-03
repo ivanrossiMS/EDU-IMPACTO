@@ -340,6 +340,65 @@ export default function ADAdminAjustes() {
                     </label>
                   </div>
 
+                  {/* 2. Ambiente Seguro / Salvar fotos/vídeos e prints nos Momentos */}
+                  <div className="ad-ajustes-toggle-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 20, border: '1px solid hsl(var(--border-subtle))', borderRadius: 12, background: localConfig.permissoes.ambienteSeguroMomentos !== false ? 'transparent' : 'rgba(16, 185, 129, 0.02)' }}>
+                    <div style={{ paddingRight: 16 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 4 }}>
+                        <div className="ad-ajustes-toggle-title" style={{ fontWeight: 600, fontSize: 16 }}>
+                          Ambiente Seguro nos Momentos (Bloquear Prints e Downloads)
+                        </div>
+                        <span style={{
+                          fontSize: 11,
+                          fontWeight: 700,
+                          padding: '3px 10px',
+                          borderRadius: 12,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 5,
+                          background: localConfig.permissoes.ambienteSeguroMomentos !== false ? 'rgba(79, 70, 229, 0.1)' : 'rgba(16, 185, 129, 0.12)',
+                          color: localConfig.permissoes.ambienteSeguroMomentos !== false ? '#4f46e5' : '#059669',
+                          border: `1px solid ${localConfig.permissoes.ambienteSeguroMomentos !== false ? 'rgba(79, 70, 229, 0.25)' : 'rgba(16, 185, 129, 0.3)'}`
+                        }}>
+                          {localConfig.permissoes.ambienteSeguroMomentos !== false ? '🛡️ Ambiente Seguro Ativo' : '🔓 Salvar & Prints Liberados'}
+                        </span>
+                      </div>
+                      <div className="ad-ajustes-toggle-desc" style={{ fontSize: 13, color: 'hsl(var(--text-muted))', lineHeight: 1.5 }}>
+                        {localConfig.permissoes.ambienteSeguroMomentos !== false
+                          ? 'Bloqueia capturas de tela (prints), gravações e download de fotos e vídeos pelos familiares (em conformidade com a LGPD). Desative esta opção para desativar o ambiente seguro e permitir que as famílias salvem fotos/vídeos e tirem prints livremente.'
+                          : 'Ambiente seguro desativado: Os familiares têm permissão para salvar fotos, baixar vídeos e realizar capturas de tela (prints) das publicações dos momentos escolares.'}
+                      </div>
+                    </div>
+                    <label style={{ position: 'relative', display: 'inline-block', width: 44, height: 24, flexShrink: 0 }}>
+                       <input 
+                         type="checkbox" 
+                         style={{ opacity: 0, width: 0, height: 0 }} 
+                         checked={localConfig.permissoes.ambienteSeguroMomentos !== false} 
+                         onChange={e => updatePerm('ambienteSeguroMomentos', e.target.checked)} 
+                       />
+                       <span style={{ 
+                         position: 'absolute', 
+                         cursor: 'pointer', 
+                         inset: 0, 
+                         background: localConfig.permissoes.ambienteSeguroMomentos !== false ? '#10b981' : 'hsl(var(--border-subtle))', 
+                         borderRadius: 24, 
+                         transition: '.4s' 
+                       }}>
+                          <span style={{ 
+                            position: 'absolute', 
+                            content: '""', 
+                            height: 18, 
+                            width: 18, 
+                            left: 3, 
+                            bottom: 3, 
+                            background: 'white', 
+                            transition: '.4s', 
+                            borderRadius: '50%', 
+                            transform: localConfig.permissoes.ambienteSeguroMomentos !== false ? 'translateX(20px)' : 'none' 
+                          }}></span>
+                       </span>
+                    </label>
+                  </div>
+
                   {/* 2. Aniversariantes */}
                   <div className="ad-ajustes-toggle-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 20, border: '1px solid hsl(var(--border-subtle))', borderRadius: 12 }}>
                     <div>

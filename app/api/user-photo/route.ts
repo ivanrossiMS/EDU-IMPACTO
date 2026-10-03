@@ -12,60 +12,90 @@ export async function GET(request: Request) {
 
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
+    const name = searchParams.get('name')
     
-    if (!id) {
+    if (!id && !name) {
       return NextResponse.json({ foto: null }, { status: 400 })
     }
 
     const supabaseAdmin = getAdminClient();
     let authFoto = null;
-    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
 
-    // 1. Se for UUID, busca no Supabase Auth
-    if (isUuid) {
-      const { data, error } = await supabaseAdmin.auth.admin.getUserById(id);
-      if (!error && data?.user) {
-        authFoto = data.user.user_metadata?.foto || data.user.user_metadata?.fotoUrl || null;
+    if (id) {
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+
+      // 1. Se for UUID, busca no Supabase Auth
+      if (isUuid) {
+        const { data, error } = await supabaseAdmin.auth.admin.getUserById(id);
+        if (!error && data?.user) {
+          authFoto = data.user.user_metadata?.foto || data.user.user_metadata?.fotoUrl || null;
+        }
+      }
+      
+      if (authFoto) return NextResponse.json({ foto: authFoto });
+
+      // 2. Busca na tabela system_users (por id, auth_id ou email)
+      const isIdUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+      const sysUserFilter = isIdUuid
+        ? `id.eq.${id},auth_id.eq.${id},email.eq.${id}`
+        : `id.eq.${id},email.eq.${id}`;
+      const { data: sysUser } = await supabaseAdmin
+        .from('system_users')
+        .select('dados')
+        .or(sysUserFilter)
+        .maybeSingle();
+
+      if (sysUser?.dados?.foto) {
+        return NextResponse.json({ foto: sysUser.dados.foto });
+      }
+
+      // 3. Se não encontrou, busca na tabela alunos (caso seja ID de aluno)
+      const { data: alunoData } = await supabaseAdmin
+        .from('alunos')
+        .select('foto')
+        .eq('id', id)
+        .maybeSingle();
+        
+      if (alunoData?.foto) {
+        return NextResponse.json({ foto: alunoData.foto });
+      }
+
+      // 4. Busca na tabela responsaveis
+      const { data: respData } = await supabaseAdmin
+        .from('responsaveis')
+        .select('dados')
+        .eq('id', id)
+        .maybeSingle();
+
+      if (respData?.dados?.foto) {
+        return NextResponse.json({ foto: respData.dados.foto });
       }
     }
-    
-    if (authFoto) return NextResponse.json({ foto: authFoto });
 
-    // 2. Busca na tabela system_users (por id, auth_id ou email)
-    const isIdUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
-    const sysUserFilter = isIdUuid
-      ? `id.eq.${id},auth_id.eq.${id},email.eq.${id}`
-      : `id.eq.${id},email.eq.${id}`;
-    const { data: sysUser } = await supabaseAdmin
-      .from('system_users')
-      .select('dados')
-      .or(sysUserFilter)
-      .maybeSingle();
+    // 5. Se foi passado name, busca na tabela system_users por nome
+    if (name && typeof name === 'string' && name.trim()) {
+      const trimmedName = name.trim();
+      const { data: sysByName } = await supabaseAdmin
+        .from('system_users')
+        .select('dados')
+        .ilike('nome', `%${trimmedName}%`)
+        .limit(1)
+        .maybeSingle();
 
-    if (sysUser?.dados?.foto) {
-      return NextResponse.json({ foto: sysUser.dados.foto });
-    }
+      if (sysByName?.dados?.foto) {
+        return NextResponse.json({ foto: sysByName.dados.foto });
+      }
 
-    // 3. Se não encontrou, busca na tabela alunos (caso seja ID de aluno)
-    const { data: alunoData } = await supabaseAdmin
-      .from('alunos')
-      .select('foto')
-      .eq('id', id)
-      .maybeSingle();
-      
-    if (alunoData?.foto) {
-      return NextResponse.json({ foto: alunoData.foto });
-    }
+      const { data: alunoByName } = await supabaseAdmin
+        .from('alunos')
+        .select('foto')
+        .ilike('nome', `%${trimmedName}%`)
+        .limit(1)
+        .maybeSingle();
 
-    // 4. Busca na tabela responsaveis
-    const { data: respData } = await supabaseAdmin
-      .from('responsaveis')
-      .select('dados')
-      .eq('id', id)
-      .maybeSingle();
-
-    if (respData?.dados?.foto) {
-      return NextResponse.json({ foto: respData.dados.foto });
+      if (alunoByName?.foto) {
+        return NextResponse.json({ foto: alunoByName.foto });
+      }
     }
 
     // Retorna 200 com foto: null em vez de 404 para evitar loops de requisição no cliente

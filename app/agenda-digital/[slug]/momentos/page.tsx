@@ -8,12 +8,13 @@ import { getAlunoTodasTurmasEGrupos, canStudentViewMomento, isAlunoCursandoTurma
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 import { useData } from '@/lib/dataContext'
 import React, { use, useState, useEffect, useMemo, useRef } from 'react'
-import { Image as ImageIcon, Heart, MessageCircle, Send, Sparkles, Star, Smile, Camera, Loader2, ChevronLeft, ChevronRight, X, Maximize2, ShieldAlert, AlertCircle, RotateCw } from 'lucide-react'
+import { Image as ImageIcon, Heart, MessageCircle, Send, Sparkles, Star, Smile, Camera, Loader2, ChevronLeft, ChevronRight, X, Maximize2, ShieldAlert, AlertCircle, RotateCw, Download } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { createPortal } from 'react-dom'
+import { toast } from 'sonner'
 import { useApp } from '@/lib/context'
 import { EmptyStateCard } from '../../components/EmptyStateCard'
-import { getInitials, formatDateTime } from '@/lib/utils'
+import { getInitials, formatDateTime, downloadMediaFile } from '@/lib/utils'
 import { useSelectedStudent } from '@/lib/selectedStudentContext'
 import { MomentoSkeleton } from '../../components/MomentoSkeleton'
 import { MomentoLightbox } from '@/components/agenda/MomentoLightbox'
@@ -30,6 +31,8 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
   const { currentUser } = useApp()
   const aluno = contextAluno
   
+  const isProtected = adConfig?.permissoes?.ambienteSeguroMomentos !== false
+
   // Proteção ultra moderna contra prints, capturas e gravações de tela
   const {
     isModalOpen: isPrivacyModalOpen,
@@ -37,7 +40,7 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
     triggerModal: triggerPrivacyModal,
     handleContextMenu,
     handleDragStart
-  } = useScreenshotProtection({ enabled: true, autoEnablePrivacyScreen: true })
+  } = useScreenshotProtection({ enabled: isProtected, autoEnablePrivacyScreen: isProtected })
   
 
   
@@ -633,37 +636,59 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
               <h2 className="ad-familiar-momentos-title" style={{ margin: 0 }}>
                 Fotos/Vídeos da Turma
               </h2>
-              <button
-                type="button"
-                onClick={triggerPrivacyModal}
-                title="Informações de Privacidade e Proteção contra Prints"
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  padding: '5px 12px',
-                  borderRadius: 20,
-                  background: 'rgba(99, 102, 241, 0.1)',
-                  border: '1px solid rgba(99, 102, 241, 0.25)',
-                  color: '#4f46e5',
-                  fontSize: 12,
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease',
-                  boxShadow: '0 2px 8px rgba(99, 102, 241, 0.08)'
-                }}
-                onMouseEnter={e => {
-                  e.currentTarget.style.background = 'rgba(99, 102, 241, 0.18)'
-                  e.currentTarget.style.transform = 'scale(1.03)'
-                }}
-                onMouseLeave={e => {
-                  e.currentTarget.style.background = 'rgba(99, 102, 241, 0.1)'
-                  e.currentTarget.style.transform = 'scale(1)'
-                }}
-              >
-                <ShieldAlert size={14} color="#4f46e5" />
-                <span>Ambiente Protegido</span>
-              </button>
+              {isProtected ? (
+                <button
+                  type="button"
+                  onClick={triggerPrivacyModal}
+                  title="Informações de Privacidade e Proteção contra Prints"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    padding: '5px 12px',
+                    borderRadius: 20,
+                    background: 'rgba(99, 102, 241, 0.1)',
+                    border: '1px solid rgba(99, 102, 241, 0.25)',
+                    color: '#4f46e5',
+                    fontSize: 12,
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                    boxShadow: '0 2px 8px rgba(99, 102, 241, 0.08)'
+                  }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.background = 'rgba(99, 102, 241, 0.18)'
+                    e.currentTarget.style.transform = 'scale(1.03)'
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.background = 'rgba(99, 102, 241, 0.1)'
+                    e.currentTarget.style.transform = 'scale(1)'
+                  }}
+                >
+                  <ShieldAlert size={14} color="#4f46e5" />
+                  <span>Ambiente Protegido</span>
+                </button>
+              ) : (
+                <div
+                  title="O salvamento de fotos/vídeos e capturas de tela foram liberados pela administração escolar"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    padding: '5px 12px',
+                    borderRadius: 20,
+                    background: 'rgba(16, 185, 129, 0.1)',
+                    border: '1px solid rgba(16, 185, 129, 0.3)',
+                    color: '#059669',
+                    fontSize: 12,
+                    fontWeight: 700,
+                    boxShadow: '0 2px 8px rgba(16, 185, 129, 0.08)'
+                  }}
+                >
+                  <Download size={14} color="#059669" />
+                  <span>Downloads & Prints Liberados</span>
+                </div>
+              )}
             </div>
             <p className="ad-familiar-momentos-desc">
               Acompanhe o dia a dia, sorrisos e as atividades incríveis.
@@ -814,8 +839,8 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
           </div>
         ) : (
           <div 
-            className="ad-momentos-feed-container momentos-protected-content" 
-            onContextMenu={handleContextMenu}
+            className={`ad-momentos-feed-container ${isProtected ? 'momentos-protected-content' : ''}`}
+            onContextMenu={isProtected ? handleContextMenu : undefined}
             style={{ 
               display: 'flex', 
               flexDirection: 'column',
@@ -966,8 +991,10 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
                                       src={med.url} 
                                       style={{ width: '100%', height: '100%', objectFit: 'contain' }} 
                                       controls 
+                                      controlsList={isProtected ? "nodownload" : undefined}
                                       playsInline 
                                       preload="metadata"
+                                      onContextMenu={isProtected ? handleContextMenu : undefined}
                                       onClick={(e) => e.stopPropagation()} 
                                     />
                                     <button
@@ -1015,6 +1042,9 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
                                     alt="Momento Escolar" 
                                     loading="lazy"
                                     decoding="async"
+                                    draggable={!isProtected}
+                                    onDragStart={isProtected ? handleDragStart : undefined}
+                                    onContextMenu={isProtected ? handleContextMenu : undefined}
                                     style={{ width: '100%', height: '100%', objectFit: 'contain', transition: 'transform 0.5s ease' }} 
                                     onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.06)'}
                                     onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
@@ -1068,23 +1098,67 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
                        {m.desc}
                     </div>
 
-                    <div style={{ display: 'flex', gap: 16, marginBottom: 12 }}>
-                       <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 6 }}>
-                         <Heart 
-                           size={20} 
-                           color={(m.likes || []).includes(currentUser?.nome || 'Você') ? '#ef4444' : '#64748b'} 
-                           fill={(m.likes || []).includes(currentUser?.nome || 'Você') ? '#ef4444' : 'none'}
-                           cursor="pointer" 
-                           onClick={() => handleLike(m.id)}
-                           style={{ transition: 'all 0.2s', filter: (m.likes || []).includes(currentUser?.nome || 'Você') ? 'drop-shadow(0 4px 6px rgba(239,68,68,0.3))' : 'none' }}
-                         />
-                         <span style={{ fontSize: 13, fontWeight: 700, color: '#64748b' }}>{(m.likes || []).length}</span>
-                       </div>
-                       {canComment && (
-                         <div style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }} onClick={() => { document.getElementById(`comment-input-${m.id}`)?.focus() }}>
-                           <MessageCircle size={20} color="#64748b" />
-                           <span style={{ fontSize: 13, fontWeight: 700, color: '#64748b' }}>{(m.comments || []).length}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
+                       <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                         <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 6 }}>
+                           <Heart 
+                             size={20} 
+                             color={(m.likes || []).includes(currentUser?.nome || 'Você') ? '#ef4444' : '#64748b'} 
+                             fill={(m.likes || []).includes(currentUser?.nome || 'Você') ? '#ef4444' : 'none'}
+                             cursor="pointer" 
+                             onClick={() => handleLike(m.id)}
+                             style={{ transition: 'all 0.2s', filter: (m.likes || []).includes(currentUser?.nome || 'Você') ? 'drop-shadow(0 4px 6px rgba(239,68,68,0.3))' : 'none' }}
+                           />
+                           <span style={{ fontSize: 13, fontWeight: 700, color: '#64748b' }}>{(m.likes || []).length}</span>
                          </div>
+                         {canComment && (
+                           <div style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }} onClick={() => { document.getElementById(`comment-input-${m.id}`)?.focus() }}>
+                             <MessageCircle size={20} color="#64748b" />
+                             <span style={{ fontSize: 13, fontWeight: 700, color: '#64748b' }}>{(m.comments || []).length}</span>
+                           </div>
+                         )}
+                       </div>
+
+                       {!isProtected && (
+                         <button
+                           type="button"
+                           onClick={(e) => {
+                             e.stopPropagation()
+                             const mediaList = m.media || []
+                             const activeIdx = currentMediaIndex[m.id] || 0
+                             const med = mediaList[activeIdx]
+                             if (med?.url) {
+                               toast.success('Iniciando download da mídia...')
+                               downloadMediaFile(med.url, `momento-${m.id}-${activeIdx + 1}`)
+                             }
+                           }}
+                           title="Baixar esta foto/vídeo para seu dispositivo"
+                           style={{
+                             display: 'inline-flex',
+                             alignItems: 'center',
+                             gap: 5,
+                             background: 'rgba(16, 185, 129, 0.08)',
+                             color: '#059669',
+                             border: '1px solid rgba(16, 185, 129, 0.25)',
+                             borderRadius: 16,
+                             padding: '4px 10px',
+                             fontSize: 12,
+                             fontWeight: 700,
+                             cursor: 'pointer',
+                             transition: 'all 0.2s'
+                           }}
+                           onMouseEnter={e => {
+                             e.currentTarget.style.background = 'rgba(16, 185, 129, 0.16)'
+                             e.currentTarget.style.transform = 'scale(1.03)'
+                           }}
+                           onMouseLeave={e => {
+                             e.currentTarget.style.background = 'rgba(16, 185, 129, 0.08)'
+                             e.currentTarget.style.transform = 'scale(1)'
+                           }}
+                         >
+                           <Download size={14} />
+                           <span>Salvar Mídia</span>
+                         </button>
                        )}
                     </div>
 
@@ -1178,11 +1252,12 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
         onClose={() => setLightboxOpen(false)}
         media={lightboxMedia}
         initialIndex={lightboxIndex}
+        isProtected={isProtected}
       />
 
       {/* MODAL ULTRA MODERNO DE PRIVACIDADE CONTRA PRINTS */}
       <PrivacyProtectionModal
-        isOpen={isPrivacyModalOpen}
+        isOpen={isPrivacyModalOpen && isProtected}
         onClose={closePrivacyModal}
       />
     </div>
