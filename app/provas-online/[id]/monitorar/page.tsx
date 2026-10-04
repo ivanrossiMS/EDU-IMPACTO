@@ -312,7 +312,12 @@ export default function MonitoramentoProvaPage() {
     try {
       const res = await fetch(`/api/provas-online/tentativas/${aluno.tentativaId}/ocorrencias`)
       const data = await res.json()
-      setIncidentLogsModal(prev => ({ ...prev, logs: data.ocorrencias || [], loading: false }))
+      const rawLogs = Array.isArray(data) ? data : (data.ocorrencias || data.data || [])
+      const validLogs = rawLogs.filter((l: any) => {
+        const desc = String(l.descricao || '')
+        return !desc.includes('iniciada pelo aluno') && !desc.includes('finalizada e entregue')
+      })
+      setIncidentLogsModal(prev => ({ ...prev, logs: validLogs, loading: false }))
     } catch { setIncidentLogsModal(prev => ({ ...prev, loading: false })) }
   }
 
@@ -1019,17 +1024,47 @@ export default function MonitoramentoProvaPage() {
                   </div>
                 ) : incidentLogsModal.logs.length === 0 ? (
                   <p style={{ textAlign: 'center', color: '#94a3b8', fontSize: 12, padding: '32px 0' }}>Nenhuma ocorrência registrada.</p>
-                ) : incidentLogsModal.logs.map((log: any, idx: number) => (
-                  <div key={log.id || idx} style={{ padding: '12px 14px', borderRadius: 12, background: '#f8fafc', border: '1px solid #e2e8f0' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                      <span style={{ fontSize: 12, fontWeight: 700, color: '#be123c', textTransform: 'capitalize' }}>{log.tipo?.replace('_', ' ')}</span>
-                      <span style={{ fontSize: 11, color: '#94a3b8', fontFamily: 'monospace' }}>
-                        {log.createdAt ? new Date(log.createdAt).toLocaleTimeString('pt-BR') : '--'}
-                      </span>
+                ) : incidentLogsModal.logs.map((log: any, idx: number) => {
+                  const desc = log.descricao || ''
+                  const tipo = log.tipo || ''
+                  const isFraud = !['reconexao', 'retomada', 'desconexao'].includes(tipo.toLowerCase()) &&
+                    !desc.includes('iniciada pelo aluno') && !desc.includes('finalizada e entregue')
+                  
+                  const tipoLabel = 
+                    tipo === 'saida_tela' || tipo === 'troca_aba' ? 'Saída de Tela / Alternância de Aba' :
+                    tipo === 'saida_tela_cheia' ? 'Saída do Modo de Tela Cheia' :
+                    tipo === 'tentativa_colar' || tipo === 'tentativa_cola' ? 'Tentativa de Copiar/Colar Conteúdo' :
+                    tipo === 'perda_foco' ? 'Perda de Foco da Janela' :
+                    tipo === 'suspensao' ? 'Tentativa Suspensa' :
+                    tipo === 'desconexao' ? 'Queda de Conexão' :
+                    tipo === 'reconexao' ? 'Reconexão à Sessão' :
+                    tipo === 'retomada' ? 'Retomada de Sessão' :
+                    tipo ? String(tipo).replace(/_/g, ' ') : 'Ocorrência'
+
+                  const dateVal = log.createdAt || log.created_at
+                  const timeFormatted = dateVal ? new Date(dateVal).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '--:--:--'
+                  const duracao = log.duracaoSegundos || log.duracao_segundos
+
+                  return (
+                    <div key={log.id || idx} style={{ padding: '12px 14px', borderRadius: 12, background: isFraud ? '#fff1f2' : '#f8fafc', border: `1px solid ${isFraud ? '#fecdd3' : '#e2e8f0'}` }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: isFraud ? '#be123c' : '#475569', display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{ width: 6, height: 6, borderRadius: '50%', background: isFraud ? '#e11d48' : '#64748b' }} />
+                          {tipoLabel}
+                        </span>
+                        <span style={{ fontSize: 11, color: '#94a3b8', fontFamily: 'monospace' }}>
+                          {timeFormatted}
+                        </span>
+                      </div>
+                      <p style={{ fontSize: 12, color: '#475569', margin: 0, lineHeight: 1.5 }}>{log.descricao}</p>
+                      {duracao ? (
+                        <span style={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic', marginTop: 4, display: 'block' }}>
+                          Duração fora da prova: {duracao} segundo(s)
+                        </span>
+                      ) : null}
                     </div>
-                    <p style={{ fontSize: 12, color: '#475569', margin: 0, lineHeight: 1.5 }}>{log.descricao}</p>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
 
               <div style={{ paddingTop: 12, borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'flex-end' }}>

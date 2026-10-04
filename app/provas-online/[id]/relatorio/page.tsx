@@ -1436,85 +1436,119 @@ export default function RelatorioProvaPage() {
               </div>
 
               {/* Summary banner */}
-              <div style={{
-                background: '#fff1f2',
-                border: '1px solid #fecdd3',
-                borderRadius: '14px',
-                padding: '12px 16px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between'
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <AlertTriangle size={18} className="text-rose-600 shrink-0" />
-                  <span style={{ fontSize: '13px', fontWeight: 700, color: '#9f1239' }}>
-                    {selectedStudentLogs.ocorrenciasCount || (selectedStudentLogs.ocorrencias?.length || 0)} infração(ões) detectada(s)
-                  </span>
-                </div>
-                <span style={{ fontSize: '11px', color: '#be123c', fontWeight: 600 }}>
-                  Matrícula: {selectedStudentLogs.matricula || 'S/M'}
-                </span>
-              </div>
+              {(() => {
+                const validItems = (selectedStudentLogs.ocorrencias || []).filter((item: any) => {
+                  const desc = String(item.descricao || '')
+                  return !desc.includes('iniciada pelo aluno') && !desc.includes('finalizada e entregue')
+                })
+                const infractionsCount = validItems.filter((item: any) => {
+                  const tipo = (item.tipo || '').toLowerCase()
+                  const desc = String(item.descricao || '').toLowerCase()
+                  return !['reconexao', 'retomada', 'desconexao', 'inicio', 'entrega'].includes(tipo) &&
+                    !desc.includes('iniciada pelo aluno') && !desc.includes('finalizada e entregue')
+                }).length
 
-              {/* Occurrences list */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '350px', overflowY: 'auto' }}>
-                {(!selectedStudentLogs.ocorrencias || selectedStudentLogs.ocorrencias.length === 0) ? (
-                  <div style={{ textAlign: 'center', padding: '32px 16px', color: '#94a3b8', fontSize: '13px' }}>
-                    Nenhum detalhe adicional de infração foi armazenado no banco para este aluno.
-                  </div>
-                ) : (
-                  selectedStudentLogs.ocorrencias.map((item: any, idx: number) => {
-                    const tipoLabel = 
-                      item.tipo === 'saida_tela' ? 'Saída de Tela / Alternância de Aba' :
-                      item.tipo === 'saida_tela_cheia' ? 'Saída do Modo de Tela Cheia' :
-                      item.tipo === 'tentativa_colar' ? 'Tentativa de Copiar/Colar Conteúdo' :
-                      item.tipo || 'Infração'
-                    
-                    const timestampStr = item.created_at ? new Date(item.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '--:--:--'
-
-                    return (
-                      <div
-                        key={idx}
-                        style={{
-                          background: '#fafafa',
-                          border: '1px solid #f1f5f9',
-                          borderRadius: '12px',
-                          padding: '12px 14px',
-                          display: 'flex',
-                          flexDirection: 'column',
-                          gap: '6px'
-                        }}
-                      >
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                          <span style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '6px',
-                            fontSize: '11px',
-                            fontWeight: 700,
-                            color: '#e11d48'
-                          }}>
-                            <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#e11d48' }} />
-                            {tipoLabel}
-                          </span>
-                          <span style={{ fontSize: '11px', fontFamily: 'monospace', color: '#64748b', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                            <Clock size={11} />
-                            {timestampStr}
-                          </span>
-                        </div>
-                        <p style={{ margin: 0, fontSize: '12px', color: '#334155', lineHeight: 1.4 }}>
-                          {item.descricao || 'Ocorrência registrada pelo mecanismo de supervisão de prova online.'}
-                        </p>
-                        {item.duracao_segundos ? (
-                          <span style={{ fontSize: '11px', color: '#94a3b8', fontStyle: 'italic' }}>
-                            Duração fora da prova: {item.duracao_segundos} segundo(s)
-                          </span>
-                        ) : null}
+                return (
+                  <>
+                    {/* Header Banner */}
+                    <div style={{
+                      background: infractionsCount > 0 ? '#fff1f2' : '#ecfdf5',
+                      border: `1px solid ${infractionsCount > 0 ? '#fecdd3' : '#a7f3d0'}`,
+                      borderRadius: '14px',
+                      padding: '12px 16px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        {infractionsCount > 0 ? (
+                          <AlertTriangle size={18} className="text-rose-600 shrink-0" />
+                        ) : (
+                          <CheckCircle2 size={18} className="text-emerald-600 shrink-0" />
+                        )}
+                        <span style={{ fontSize: '13px', fontWeight: 700, color: infractionsCount > 0 ? '#9f1239' : '#065f46' }}>
+                          {infractionsCount > 0 ? `${infractionsCount} infração(ões) detectada(s)` : 'Nenhuma infração de integridade registrada'}
+                        </span>
                       </div>
-                    )
-                  })
-                )}
-              </div>
+                      <span style={{ fontSize: '11px', color: infractionsCount > 0 ? '#be123c' : '#047857', fontWeight: 600 }}>
+                        Matrícula: {selectedStudentLogs.matricula || 'S/M'}
+                      </span>
+                    </div>
+
+                    {/* Occurrences list */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '350px', overflowY: 'auto' }}>
+                      {validItems.length === 0 ? (
+                        <div style={{ textAlign: 'center', padding: '32px 16px', color: '#94a3b8', fontSize: '13px' }}>
+                          Nenhum registro de infração foi detectado durante a realização da prova deste estudante.
+                        </div>
+                      ) : (
+                        validItems.map((item: any, idx: number) => {
+                          const tipo = item.tipo || ''
+                          const desc = item.descricao || ''
+                          const isFraud = !['reconexao', 'retomada', 'desconexao'].includes(tipo.toLowerCase()) &&
+                            !desc.includes('iniciada pelo aluno') && !desc.includes('finalizada e entregue')
+
+                          const tipoLabel = 
+                            tipo === 'saida_tela' || tipo === 'troca_aba' ? 'Saída de Tela / Alternância de Aba' :
+                            tipo === 'saida_tela_cheia' ? 'Saída do Modo de Tela Cheia' :
+                            tipo === 'tentativa_colar' || tipo === 'tentativa_cola' ? 'Tentativa de Copiar/Colar Conteúdo' :
+                            tipo === 'perda_foco' ? 'Perda de Foco da Janela' :
+                            tipo === 'suspensao' ? 'Tentativa Suspensa' :
+                            tipo === 'desconexao' ? 'Queda de Conexão' :
+                            tipo === 'reconexao' ? 'Reconexão à Prova' :
+                            tipo === 'retomada' ? 'Retomada de Sessão' :
+                            tipo ? String(tipo).replace(/_/g, ' ') : 'Ocorrência'
+                          
+                          const dateVal = item.created_at || item.createdAt
+                          const timestampStr = dateVal ? new Date(dateVal).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '--:--:--'
+                          const duracao = item.duracao_segundos || item.duracaoSegundos
+
+                          return (
+                            <div
+                              key={idx}
+                              style={{
+                                background: isFraud ? '#fff1f2' : '#f8fafc',
+                                border: `1px solid ${isFraud ? '#fecdd3' : '#f1f5f9'}`,
+                                borderRadius: '12px',
+                                padding: '12px 14px',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '6px'
+                              }}
+                            >
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                <span style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '6px',
+                                  fontSize: '11px',
+                                  fontWeight: 700,
+                                  color: isFraud ? '#e11d48' : '#475569'
+                                }}>
+                                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: isFraud ? '#e11d48' : '#64748b' }} />
+                                  {tipoLabel}
+                                </span>
+                                <span style={{ fontSize: '11px', fontFamily: 'monospace', color: '#64748b', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                  <Clock size={11} />
+                                  {timestampStr}
+                                </span>
+                              </div>
+                              <p style={{ margin: 0, fontSize: '12px', color: '#334155', lineHeight: 1.4 }}>
+                                {item.descricao || 'Ocorrência registrada pelo mecanismo de supervisão de prova online.'}
+                              </p>
+                              {duracao ? (
+                                <span style={{ fontSize: '11px', color: '#94a3b8', fontStyle: 'italic' }}>
+                                  Duração fora da prova: {duracao} segundo(s)
+                                </span>
+                              ) : null}
+                            </div>
+                          )
+                        })
+                      )}
+                    </div>
+                  </>
+                )
+              })()}
 
               {/* Footer */}
               <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: '12px', borderTop: '1px solid #f1f5f9' }}>

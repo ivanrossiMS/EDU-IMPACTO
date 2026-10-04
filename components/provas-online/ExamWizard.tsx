@@ -25,6 +25,7 @@ import {
 } from '@/types/provas-online'
 import { QuestionEditorModal } from './QuestionEditorModal'
 import { ImportQuestionsModal } from './ImportQuestionsModal'
+import { toLocalDateTimeInputValue, toUtcIsoString } from '@/lib/provas-online/dateTimeUtils'
 
 interface ExamWizardProps {
   initialExam?: ProvaOnline | null
@@ -69,7 +70,12 @@ export function ExamWizard({ initialExam, isEditing = false }: ExamWizardProps) 
         }
         return clean
       })
-      return { ...initialExam, questoes: cleanQuestoes }
+      return {
+        ...initialExam,
+        questoes: cleanQuestoes,
+        dataAbertura: toLocalDateTimeInputValue(initialExam.dataAbertura),
+        dataEncerramento: toLocalDateTimeInputValue(initialExam.dataEncerramento)
+      }
     }
 
     const now = new Date()
@@ -96,8 +102,8 @@ export function ExamWizard({ initialExam, isEditing = false }: ExamWizardProps) 
       valorTotal: 10.0,
       quantidadeTentativas: 1,
       politicaTentativas: 'maior_nota',
-      dataAbertura: tomorrow.toISOString().slice(0, 16),
-      dataEncerramento: nextWeek.toISOString().slice(0, 16),
+      dataAbertura: toLocalDateTimeInputValue(tomorrow),
+      dataEncerramento: toLocalDateTimeInputValue(nextWeek),
       duracaoMinutos: 60,
       codigoLiberacao: '',
       configuracaoLayout: {
@@ -409,6 +415,8 @@ export function ExamWizard({ initialExam, isEditing = false }: ExamWizardProps) 
       const hasPinCode = Boolean(exam.codigoLiberacao && exam.codigoLiberacao.trim() !== '')
       const payload: ProvaOnline = {
         ...exam,
+        dataAbertura: toUtcIsoString(exam.dataAbertura),
+        dataEncerramento: toUtcIsoString(exam.dataEncerramento),
         codigoLiberacao: hasPinCode && exam.codigoLiberacao ? exam.codigoLiberacao.trim().toUpperCase() : '',
         exigeCodigoAcesso: hasPinCode,
         series: derivedSeries.length > 0 ? derivedSeries : (exam.series || []),
@@ -1884,7 +1892,7 @@ export function ExamWizard({ initialExam, isEditing = false }: ExamWizardProps) 
                     <AlertCircle size={16} className="text-rose-600 shrink-0" />
                   )}
                   <div className="truncate">
-                    <strong>Prazos:</strong> {isDatesInvalid ? 'Datas Inválidas' : `${exam.duracaoMinutos} min • ${new Date(exam.dataAbertura).toLocaleDateString('pt-BR')} até ${new Date(exam.dataEncerramento).toLocaleDateString('pt-BR')}`}
+                    <strong>Prazos:</strong> {isDatesInvalid ? 'Datas Inválidas' : `${exam.duracaoMinutos} min • ${new Date(exam.dataAbertura).toLocaleDateString('pt-BR')} às ${new Date(exam.dataAbertura).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} até ${new Date(exam.dataEncerramento).toLocaleDateString('pt-BR')} às ${new Date(exam.dataEncerramento).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`}
                   </div>
                 </div>
 

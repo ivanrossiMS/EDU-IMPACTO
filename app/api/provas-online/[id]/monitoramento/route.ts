@@ -9,7 +9,8 @@ import {
   dbGetOcorrenciasByTentativaId,
   dbSendMessage,
   dbGetMessages,
-  dbSaveExcecao
+  dbSaveExcecao,
+  isInfraction
 } from '@/lib/provas-online/db'
 import { autoGradeTentativa } from '@/lib/provas-online/engine'
 
@@ -99,11 +100,25 @@ export async function GET(
     const submittedTentativa = studentTentativas.find(t => t.status === 'entregue' || t.status === 'expirada')
     const currentTentativa = activeTentativa || submittedTentativa || studentTentativas[0] || null
 
-    const ocList = ocorrenciasDb.filter(o => 
-      (currentTentativa && (o.tentativa_id === currentTentativa.id || o.tentativaId === currentTentativa.id)) ||
-      o.aluno_id === aluno.id || o.alunoId === aluno.id
-    )
-    const ocorrenciasCount = ocList.length
+    const ocList = ocorrenciasDb
+      .filter(o => 
+        (currentTentativa && (o.tentativa_id === currentTentativa.id || o.tentativaId === currentTentativa.id)) ||
+        o.aluno_id === aluno.id || o.alunoId === aluno.id
+      )
+      .filter(o => {
+        const desc = String(o.descricao || '')
+        return !desc.includes('iniciada pelo aluno') && !desc.includes('finalizada e entregue')
+      })
+      .map(o => ({
+        ...o,
+        createdAt: o.created_at || o.createdAt,
+        created_at: o.created_at || o.createdAt,
+        duracaoSegundos: o.duracaoSegundos || o.duracao_segundos,
+        duracao_segundos: o.duracaoSegundos || o.duracao_segundos
+      }))
+
+    const realInfractions = ocList.filter(o => isInfraction(o.tipo, o.descricao))
+    const ocorrenciasCount = realInfractions.length
 
     if (!currentTentativa) {
       return {

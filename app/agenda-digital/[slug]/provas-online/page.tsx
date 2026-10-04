@@ -43,6 +43,8 @@ import { EmptyStateCard } from '../../components/EmptyStateCard'
 import { apiFetch } from '@/lib/api/apiClient'
 import { HtmlContent } from '@/components/HtmlContent'
 import { cleanAlternativeText } from '@/lib/provas-online/textSanitizer'
+import { formatExamDisplayDate } from '@/lib/provas-online/dateTimeUtils'
+import { GabaritoPrintDocument } from './GabaritoPrintDocument'
 
 interface ProvaStudentView {
   id: string
@@ -186,6 +188,35 @@ export default function ADProvasOnlineStudentPage() {
 
     return () => { active = false }
   }, [selectedGabaritoProva, resolvedAlunoId])
+
+  // Disparo otimizado para impressão do Gabarito & Devolutiva Oficial
+  const handlePrintGabarito = useCallback(() => {
+    if (loadingGabarito) {
+      toast.info('Carregando os critérios detalhados da avaliação... Aguarde um instante.')
+      return
+    }
+
+    if (typeof window === 'undefined') return
+
+    // Desbloqueia temporariamente o overflow do body para que o motor do Safari e Chrome pagine livremente
+    const originalBodyOverflow = document.body.style.overflow
+    const originalHtmlOverflow = document.documentElement.style.overflow
+    document.body.style.overflow = 'visible'
+    document.documentElement.style.overflow = 'visible'
+
+    const restoreOverflow = () => {
+      document.body.style.overflow = originalBodyOverflow || 'hidden'
+      document.documentElement.style.overflow = originalHtmlOverflow || ''
+      window.removeEventListener('afterprint', restoreOverflow)
+    }
+
+    window.addEventListener('afterprint', restoreOverflow)
+
+    setTimeout(() => {
+      window.print()
+      setTimeout(restoreOverflow, 1200)
+    }, 120)
+  }, [loadingGabarito])
 
   // Travar a rolagem da página (fundo estático) quando qualquer modal estiver aberto
   const isAnyModalOpen = Boolean(selectedBriefingProva || selectedVoucherProva || selectedGabaritoProva)
@@ -1321,13 +1352,13 @@ export default function ADProvasOnlineStudentPage() {
                     <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748b' }}>
                       <span>Abertura:</span>
                       <strong style={{ color: '#0f172a' }}>
-                        {openDate.toLocaleDateString('pt-BR')} às {openDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                        {formatExamDisplayDate(prova.dataAbertura)}
                       </strong>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748b' }}>
                       <span>Encerramento:</span>
                       <strong style={{ color: '#0f172a' }}>
-                        {closeDate.toLocaleDateString('pt-BR')} às {closeDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                        {formatExamDisplayDate(prova.dataEncerramento)}
                       </strong>
                     </div>
                   </div>
@@ -1769,6 +1800,7 @@ export default function ADProvasOnlineStudentPage() {
         <AnimatePresence>
           {selectedBriefingProva && (
             <div
+              className="no-print"
               style={{
                 position: 'fixed',
                 top: 0,
@@ -2081,6 +2113,7 @@ export default function ADProvasOnlineStudentPage() {
         <AnimatePresence>
           {selectedVoucherProva && (
             <div
+              className="no-print"
               style={{
                 position: 'fixed',
                 top: 0,
@@ -2344,9 +2377,11 @@ export default function ADProvasOnlineStudentPage() {
     <ModalPortal>
       <AnimatePresence>
         {selectedGabaritoProva && (
-          <div
-            style={{
-              position: 'fixed',
+          <>
+            <div
+              className="ad-gabarito-modal-overlay no-print"
+              style={{
+                position: 'fixed',
               top: 0,
               left: 0,
               right: 0,
@@ -2857,35 +2892,45 @@ export default function ADProvasOnlineStudentPage() {
                 flexShrink: 0
               }}>
                 <button
-                  onClick={() => window.print()}
+                  onClick={handlePrintGabarito}
+                  disabled={loadingGabarito}
                   style={{
-                    padding: '9px 16px',
-                    borderRadius: 10,
-                    background: '#ffffff',
-                    border: '1.2px solid #cbd5e1',
-                    color: '#334155',
-                    fontSize: 12,
-                    fontWeight: 700,
-                    cursor: 'pointer',
+                    padding: '10px 18px',
+                    borderRadius: 12,
+                    background: loadingGabarito ? '#f1f5f9' : '#ffffff',
+                    border: '1.5px solid #0284c7',
+                    color: loadingGabarito ? '#94a3b8' : '#0284c7',
+                    fontSize: 12.5,
+                    fontWeight: 800,
+                    cursor: loadingGabarito ? 'not-allowed' : 'pointer',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: 6
+                    gap: 8,
+                    boxShadow: '0 2px 6px rgba(2, 132, 199, 0.08)',
+                    transition: 'all 0.15s ease'
                   }}
                 >
-                  <Printer size={14} /> Imprimir Gabarito
+                  {loadingGabarito ? (
+                    <RotateCw size={14} className="animate-spin" />
+                  ) : (
+                    <Printer size={15} />
+                  )}
+                  {loadingGabarito ? 'Carregando Gabarito...' : 'Imprimir Gabarito & Devolutiva'}
                 </button>
 
                 <button
                   onClick={() => setSelectedGabaritoProva(null)}
                   style={{
-                    padding: '9px 20px',
-                    borderRadius: 10,
+                    padding: '10px 22px',
+                    borderRadius: 12,
                     background: '#0284c7',
                     border: 'none',
                     color: '#ffffff',
                     fontSize: 12.5,
                     fontWeight: 800,
-                    cursor: 'pointer'
+                    cursor: 'pointer',
+                    boxShadow: '0 2px 6px rgba(2, 132, 199, 0.25)',
+                    transition: 'all 0.15s ease'
                   }}
                 >
                   Fechar
@@ -2893,7 +2938,18 @@ export default function ADProvasOnlineStudentPage() {
               </div>
             </motion.div>
           </div>
-        )}
+
+          {/* FOLHA OFICIAL DE GABARITO & DEVOLUTIVA PEDAGÓGICA (PARA IMPRESSÃO A4) */}
+          <GabaritoPrintDocument
+            prova={detailedGabaritoProva || selectedGabaritoProva}
+            aluno={aluno}
+            nomeEstudante={nomeEstudante}
+            resolvedAlunoId={resolvedAlunoId}
+            adConfig={adConfig}
+            isResponsavel={isResponsavel}
+          />
+        </>
+      )}
       </AnimatePresence>
     </ModalPortal>
     </div>

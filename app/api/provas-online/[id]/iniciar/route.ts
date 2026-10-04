@@ -94,17 +94,6 @@ export async function POST(
 
     // If deadline has not passed, resume attempt
     if (now <= deadline) {
-      // Record resumption occurrence
-      void dbRecordOcorrencia({
-        id: crypto.randomUUID(),
-        tentativaId: existingActive.id,
-        alunoId,
-        alunoNome,
-        tipo: 'retomada',
-        descricao: 'Aluno retomou a tentativa ativa em andamento.',
-        createdAt: new Date().toISOString()
-      }).catch(() => {})
-
       return NextResponse.json({
         tentativa: existingActive,
         retomada: true,
@@ -206,17 +195,6 @@ export async function POST(
   }
 
   const saved = await dbSaveTentativa(novaTentativa)
-
-  // Log start occurrence
-  void dbRecordOcorrencia({
-    id: crypto.randomUUID(),
-    tentativaId,
-    alunoId,
-    alunoNome,
-    tipo: 'reconexao',
-    descricao: `Tentativa nº ${novaTentativa.numeroTentativa} iniciada pelo aluno.`,
-    createdAt: nowIso
-  }).catch(() => {})
 
   return NextResponse.json({
     tentativa: saved,

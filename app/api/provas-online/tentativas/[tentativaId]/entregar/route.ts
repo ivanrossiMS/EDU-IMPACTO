@@ -124,17 +124,6 @@ export async function POST(
 
   const savedTentativa = await dbSaveTentativa(tentativa)
 
-  // Log delivery occurrence
-  void dbRecordOcorrencia({
-    id: crypto.randomUUID(),
-    tentativaId,
-    alunoId: tentativa.alunoId,
-    alunoNome: tentativa.alunoNome,
-    tipo: 'retomada',
-    descricao: `Prova finalizada e entregue pelo aluno. Comprovante gerado: ${comprovanteCodigo}`,
-    createdAt: nowIso
-  }).catch(() => {})
-
   return NextResponse.json({
     ok: true,
     tentativa: savedTentativa,

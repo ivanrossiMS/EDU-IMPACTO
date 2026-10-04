@@ -16,6 +16,7 @@ import {
 import { toast } from 'sonner'
 import { useApp } from '@/lib/context'
 import { ProvaOnline } from '@/types/provas-online'
+import { formatExamDisplayDate } from '@/lib/provas-online/dateTimeUtils'
 
 export default function ProvasOnlineDashboardPage() {
   const router = useRouter()
@@ -1240,13 +1241,13 @@ export default function ProvasOnlineDashboardPage() {
                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                       <span>Abertura:</span>
                       <strong style={{ color: '#1e293b' }}>
-                        {openDate.toLocaleDateString('pt-BR')} às {openDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                        {formatExamDisplayDate(prova.dataAbertura)}
                       </strong>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                       <span>Encerramento:</span>
                       <strong style={{ color: '#1e293b' }}>
-                        {closeDate.toLocaleDateString('pt-BR')} às {closeDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                        {formatExamDisplayDate(prova.dataEncerramento)}
                       </strong>
                     </div>
                   </div>

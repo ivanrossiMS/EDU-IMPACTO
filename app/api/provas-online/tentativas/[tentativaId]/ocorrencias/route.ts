@@ -20,7 +20,7 @@ export async function GET(
 
   const { tentativaId } = await params
   const ocorrencias = await dbGetOcorrenciasByTentativaId(tentativaId)
-  return NextResponse.json(ocorrencias)
+  return NextResponse.json({ ok: true, ocorrencias, total: ocorrencias.length })
 }
 
 export async function POST(

@@ -9,6 +9,7 @@ import {
   ExcecaoAutorizada
 } from '@/types/provas-online'
 import { repairExamQuestoes } from './textSanitizer'
+import { toUtcIsoString } from './dateTimeUtils'
 
 /**
  * Resilient Database Repository for Provas Online.
@@ -179,8 +180,8 @@ export async function dbSaveProva(prova: Partial<ProvaOnline> & { id: string }):
     valorTotal: Number(prova.valorTotal || 10),
     quantidadeTentativas: Number(prova.quantidadeTentativas || 1),
     politicaTentativas: prova.politicaTentativas || 'maior_nota',
-    dataAbertura: prova.dataAbertura || now,
-    dataEncerramento: prova.dataEncerramento || new Date(Date.now() + 86400000 * 7).toISOString(),
+    dataAbertura: toUtcIsoString(prova.dataAbertura) || now,
+    dataEncerramento: toUtcIsoString(prova.dataEncerramento) || new Date(Date.now() + 86400000 * 7).toISOString(),
     duracaoMinutos: Number(prova.duracaoMinutos || 60),
     configuracaoLayout: prova.configuracaoLayout || {
       questaoPorPagina: false,
@@ -559,6 +560,7 @@ export interface ProvaOnlineStatsSummary {
   emAndamento: number
   entregues: number
   correcaoPendente: number
+  ocorrenciasCount: number
 }
 
 /**
@@ -572,7 +574,7 @@ export async function dbGetTentativasStatsByProvaIds(
   if (!provaIds || provaIds.length === 0) return result
 
   provaIds.forEach(id => {
-    result[id] = { totalTentativas: 0, emAndamento: 0, entregues: 0, correcaoPendente: 0 }
+    result[id] = { totalTentativas: 0, emAndamento: 0, entregues: 0, correcaoPendente: 0, ocorrenciasCount: 0 }
   })
 
   const sb = getAdminClient()
@@ -585,10 +587,12 @@ export async function dbGetTentativasStatsByProvaIds(
       .in('prova_id', provaIds)
 
     if (!error && Array.isArray(data)) {
+      const tentativaMapToProva: Record<string, string> = {}
       for (const row of data) {
         const pId = row.prova_id
+        tentativaMapToProva[row.id] = pId
         if (!result[pId]) {
-          result[pId] = { totalTentativas: 0, emAndamento: 0, entregues: 0, correcaoPendente: 0 }
+          result[pId] = { totalTentativas: 0, emAndamento: 0, entregues: 0, correcaoPendente: 0, ocorrenciasCount: 0 }
         }
         result[pId].totalTentativas++
         if (row.status === 'em_andamento') {
@@ -600,6 +604,46 @@ export async function dbGetTentativasStatsByProvaIds(
           result[pId].correcaoPendente++
         }
       }
+
+      // Count proctoring infractions
+      const allTentativaIds = Object.keys(tentativaMapToProva)
+      if (allTentativaIds.length > 0) {
+        try {
+          const { data: ocRows } = await sb
+            .from('provas_online_ocorrencias')
+            .select('tentativa_id, tipo, descricao')
+            .in('tentativa_id', allTentativaIds)
+          if (Array.isArray(ocRows) && ocRows.length > 0) {
+            for (const oc of ocRows) {
+              if (isInfraction(oc.tipo, oc.descricao)) {
+                const pId = tentativaMapToProva[oc.tentativa_id]
+                if (pId && result[pId]) {
+                  result[pId].ocorrenciasCount++
+                }
+              }
+            }
+          }
+        } catch {}
+
+        try {
+          const { data: recData } = await sb
+            .from('relatorios_records')
+            .select('dados')
+            .like('id', 'provas_online_ocorrencias:%')
+          if (Array.isArray(recData)) {
+            for (const r of recData) {
+              const d = r.dados
+              if (d && allTentativaIds.includes(d.tentativaId) && isInfraction(d.tipo, d.descricao)) {
+                const pId = tentativaMapToProva[d.tentativaId]
+                if (pId && result[pId]) {
+                  result[pId].ocorrenciasCount++
+                }
+              }
+            }
+          }
+        } catch {}
+      }
+
       return result
     }
   } catch (err: any) {
@@ -615,7 +659,8 @@ export async function dbGetTentativasStatsByProvaIds(
           totalTentativas: tentativas.length,
           emAndamento: tentativas.filter(t => t.status === 'em_andamento').length,
           entregues: tentativas.filter(t => t.status === 'entregue' || t.status === 'expirada').length,
-          correcaoPendente: tentativas.filter(t => t.statusCorrecao === 'pendente' || t.statusCorrecao === 'parcial').length
+          correcaoPendente: tentativas.filter(t => t.statusCorrecao === 'pendente' || t.statusCorrecao === 'parcial').length,
+          ocorrenciasCount: 0
         }
       })
     )
@@ -815,6 +860,33 @@ export async function dbSaveTentativa(tentativa: TentativaAluno): Promise<Tentat
 // OCORRÊNCIAS & MONITORAMENTO (PROCTORING INCIDENTS)
 // ─────────────────────────────────────────────────────────────────────────────
 
+export function isInfraction(tipo?: string, descricao?: string): boolean {
+  if (!tipo) return false
+  const t = tipo.toLowerCase()
+  if (t === 'reconexao' || t === 'retomada' || t === 'desconexao' || t === 'inicio' || t === 'entrega') {
+    return false
+  }
+  const desc = (descricao || '').toLowerCase()
+  if (desc.includes('iniciada pelo aluno') || desc.includes('finalizada e entregue')) {
+    return false
+  }
+  return true
+}
+
+export function formatOcorrenciaTipo(tipo?: string): string {
+  if (!tipo) return 'Ocorrência'
+  const t = tipo.toLowerCase()
+  if (t === 'saida_tela' || t === 'troca_aba') return 'Saída de Tela / Alternância de Aba'
+  if (t === 'saida_tela_cheia') return 'Saída do Modo de Tela Cheia'
+  if (t === 'tentativa_colar' || t === 'tentativa_cola') return 'Tentativa de Copiar/Colar Conteúdo'
+  if (t === 'perda_foco') return 'Perda de Foco da Janela'
+  if (t === 'suspensao') return 'Tentativa Suspensa'
+  if (t === 'desconexao') return 'Queda de Conexão'
+  if (t === 'reconexao') return 'Reconexão de Rede'
+  if (t === 'retomada') return 'Retomada de Prova'
+  return tipo.replace(/_/g, ' ')
+}
+
 export async function dbRecordOcorrencia(ocorrencia: OcorrenciaMonitoramento): Promise<OcorrenciaMonitoramento> {
   const sb = getAdminClient()
   const id = ocorrencia.id || crypto.randomUUID()
@@ -868,17 +940,24 @@ export async function dbGetOcorrenciasByTentativaId(tentativaId: string): Promis
       .order('created_at', { ascending: false })
 
     if (!error && Array.isArray(data)) {
-      return data.map(r => ({
-        id: r.id,
-        tentativaId: r.tentativa_id,
-        alunoId: r.aluno_id,
-        alunoNome: r.aluno_nome,
-        tipo: r.tipo,
-        descricao: r.descricao,
-        duracaoSegundos: r.duracao_segundos,
-        detalhes: r.detalhes,
-        createdAt: r.created_at
-      }))
+      return data
+        .filter(r => {
+          const desc = String(r.descricao || '')
+          return !desc.includes('iniciada pelo aluno') && !desc.includes('finalizada e entregue')
+        })
+        .map(r => ({
+          id: r.id,
+          tentativaId: r.tentativa_id,
+          alunoId: r.aluno_id,
+          alunoNome: r.aluno_nome,
+          tipo: r.tipo,
+          descricao: r.descricao,
+          duracaoSegundos: r.duracao_segundos,
+          duracao_segundos: r.duracao_segundos,
+          detalhes: r.detalhes,
+          createdAt: r.created_at,
+          created_at: r.created_at
+        })) as any
     }
   } catch (err: any) {
     if (!isTableMissingError(err)) console.error('[dbGetOcorrencias dedicated error]', err)
@@ -892,11 +971,23 @@ export async function dbGetOcorrenciasByTentativaId(tentativaId: string): Promis
       .like('id', `provas_online_ocorrencias:${tentativaId}:%`)
       .order('created_at', { ascending: false })
 
-    return (data || []).map((r: any) => ({
-      ...r.dados,
-      id: r.id.split(':').pop(),
-      createdAt: r.created_at
-    }))
+    return (data || [])
+      .filter((r: any) => {
+        const desc = String(r.dados?.descricao || '')
+        return !desc.includes('iniciada pelo aluno') && !desc.includes('finalizada e entregue')
+      })
+      .map((r: any) => {
+        const d = r.dados || {}
+        const createdDate = d.createdAt || d.created_at || r.created_at
+        return {
+          ...d,
+          id: r.id.split(':').pop(),
+          createdAt: createdDate,
+          created_at: createdDate,
+          duracaoSegundos: d.duracaoSegundos || d.duracao_segundos,
+          duracao_segundos: d.duracaoSegundos || d.duracao_segundos
+        }
+      })
   } catch {
     return []
   }

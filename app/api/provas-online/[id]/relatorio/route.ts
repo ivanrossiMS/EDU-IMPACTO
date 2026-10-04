@@ -3,7 +3,8 @@ import { requireAuth } from '@/lib/server/authGuard'
 import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 import {
   dbGetProvaById,
-  dbGetTentativasByProvaId
+  dbGetTentativasByProvaId,
+  isInfraction
 } from '@/lib/provas-online/db'
 
 export const dynamic = 'force-dynamic'
@@ -232,10 +233,25 @@ export async function GET(
     let situacao = 'ausente'
     if (ultima) situacao = ultima.status
 
-    const studentOcorrencias = ocorrenciasDb.filter((o: any) =>
-      (ultima && (o.tentativa_id === ultima.id || o.tentativaId === ultima.id)) ||
-      o.aluno_id === aluno.id || o.alunoId === aluno.id
-    )
+    const studentOcorrencias = ocorrenciasDb
+      .filter((o: any) =>
+        (ultima && (o.tentativa_id === ultima.id || o.tentativaId === ultima.id)) ||
+        o.aluno_id === aluno.id || o.alunoId === aluno.id
+      )
+      .filter((o: any) => {
+        const desc = String(o.descricao || '')
+        return !desc.includes('iniciada pelo aluno') && !desc.includes('finalizada e entregue')
+      })
+      .map((o: any) => ({
+        ...o,
+        createdAt: o.created_at || o.createdAt,
+        created_at: o.created_at || o.createdAt,
+        duracaoSegundos: o.duracaoSegundos || o.duracao_segundos,
+        duracao_segundos: o.duracaoSegundos || o.duracao_segundos
+      }))
+
+    const realInfractions = studentOcorrencias.filter((o: any) => isInfraction(o.tipo, o.descricao))
+    const ocorrenciasCount = realInfractions.length
 
     const notaFinalNum = ultima && ultima.notaFinal !== undefined && ultima.notaFinal !== null ? Number(ultima.notaFinal) : null
     const aproveitamento = notaFinalNum !== null && valorTotalProva > 0 ? Math.round((notaFinalNum / valorTotalProva) * 100) : null
@@ -257,10 +273,13 @@ export async function GET(
       aproveitamento,
       entregueEm: ultima ? ultima.entregueEm : null,
       comprovanteCodigo: ultima ? ultima.comprovanteCodigo : null,
-      ocorrenciasCount: studentOcorrencias.length,
+      ocorrenciasCount,
       ocorrencias: studentOcorrencias
     }
   })
+
+  const totalInfractionsAll = listaAlunos.reduce((acc: number, a: any) => acc + (a.ocorrenciasCount || 0), 0)
+  const alunosWithInfractions = listaAlunos.filter((a: any) => (a.ocorrenciasCount || 0) > 0).length
 
   return NextResponse.json({
     prova: {
@@ -286,8 +305,8 @@ export async function GET(
       notaMaxima,
       notaMinima,
       tempoMedioMinutos,
-      totalOcorrencias: ocorrenciasDb.length,
-      alunosComOcorrencia: listaAlunos.filter(a => a.ocorrenciasCount > 0).length,
+      totalOcorrencias: totalInfractionsAll,
+      alunosComOcorrencia: alunosWithInfractions,
       pendenciasCorrecao: submittedTentativas.filter(t => t.statusCorrecao === 'pendente' || t.statusCorrecao === 'parcial').length
     },
     distribuicao,
