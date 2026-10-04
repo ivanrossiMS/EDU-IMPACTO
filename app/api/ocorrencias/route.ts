@@ -23,7 +23,7 @@ export async function GET(request: Request) {
   let query = supabase.from('ocorrencias').select('*')
   
   const accessStartDate = await getLoggedUserAccessStartDate()
-  if (accessStartDate) {
+  if (accessStartDate && !alunoId && !alunoIds) {
     query = query.gte('created_at', accessStartDate.toISOString())
   }
 

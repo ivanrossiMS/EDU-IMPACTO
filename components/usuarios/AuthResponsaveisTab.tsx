@@ -159,8 +159,11 @@ export function AuthResponsaveisTab() {
       if(g.tipos.size === 0) g.tipos.add('Outro')
     }
 
-    return { ...g, auth }
+    const colabUser = searchEmail ? (usersData || []).find((u: any) => u.email && u.email.toLowerCase() === searchEmail && u.cargo !== 'Responsáveis' && u.cargo !== 'Alunos') : null
+
+    return { ...g, auth, colabUser }
   })
+
 
   const saveEdit = async () => {
     if (!editModal) return
@@ -330,7 +333,27 @@ export function AuthResponsaveisTab() {
                               {Array.from(g.tipos || [g.tipo || 'Outro']).map((t: any) => (
                                 <span key={t} style={{ padding: '2px 6px', background: 'hsl(var(--bg-overlay))', color: 'hsl(var(--text-secondary))', borderRadius: 4, fontWeight: 600 }}>{t}</span>
                               ))}
+                              {g.colabUser && (
+                                <span 
+                                  style={{ 
+                                    padding: '2px 7px', 
+                                    background: 'rgba(59, 130, 246, 0.15)', 
+                                    color: '#3b82f6', 
+                                    border: '1px solid rgba(59, 130, 246, 0.3)', 
+                                    borderRadius: 4, 
+                                    fontWeight: 700, 
+                                    fontSize: 10,
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: 3
+                                  }}
+                                  title={`Papel Duplo: Este responsável também é Colaborador (${g.colabUser.perfil || g.colabUser.cargo})`}
+                                >
+                                  👔 Colaborador: {g.colabUser.perfil || g.colabUser.cargo || 'Ativo'}
+                                </span>
+                              )}
                             </div>
+
                           </div>
                         </div>
                       </td>

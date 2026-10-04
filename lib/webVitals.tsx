@@ -77,25 +77,9 @@ function flushMetrics() {
     console.groupEnd()
   })
 
-  // Persist to system_logs API (fire-and-forget, non-blocking)
-  if (typeof fetch !== 'undefined') {
-    fetch('/api/system-logs/batch', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify([{
-        modulo: 'Performance',
-        acao: 'WEB_VITALS',
-        descricao: `Web Vitals batch (${batch.length} metrics)`,
-        detalhes: batch.map(m => ({
-          name: m.name,
-          value: m.value,
-          rating: m.rating,
-          route: m.route,
-          timestamp: m.timestamp,
-        })),
-      }]),
-    }).catch(() => {})
-  }
+  // NOTE: Web Vitals are logged to client console only in development.
+  // Persisting client performance metrics into business audit log is disabled to prevent database bloating.
+  return
 }
 
 function reportMetric(metric: WebVitalMetric) {

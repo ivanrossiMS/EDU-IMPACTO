@@ -123,7 +123,9 @@ const PerfisSkeleton = () => (
 interface SysUser {
   id: string; nome: string; email: string; cargo: string
   perfil: string; status: 'ativo' | 'inativo'; twofa: boolean; ultimoAcesso: string
+  hasDualRole?: boolean; dados?: any
 }
+
 
 
 // ALL_MODULOS is computed per-render from activeModules (see below)
@@ -154,12 +156,12 @@ const ModernSwitch = ({ checked, onChange, disabled, color }: { checked: boolean
   </div>
 )
 
-function Modal({ title, onClose, children, wide }: { title: string; onClose: () => void; children: React.ReactNode; wide?: boolean }) {
+function Modal({ title, onClose, children, wide, zIndex = 1000 }: { title: string; onClose: () => void; children: React.ReactNode; wide?: boolean; zIndex?: number }) {
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', zIndex: 1000, padding: '24px 20px', overflowY: 'auto', backdropFilter: 'blur(4px)' }}>
-      <div style={{ background: 'hsl(var(--bg-surface))', borderRadius: 18, width: '100%', maxWidth: wide ? 760 : 580, border: '1px solid hsl(var(--border-default))', boxShadow: '0 24px 80px rgba(0,0,0,0.5)', marginBottom: 24 }}>
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', zIndex, padding: '24px 20px', overflowY: 'auto', backdropFilter: 'blur(4px)' }}>
+      <div style={{ background: 'hsl(var(--bg-surface))', borderRadius: 18, width: '100%', maxWidth: wide ? 760 : 580, border: '1px solid hsl(var(--border-default))', boxShadow: '0 24px 80px rgba(0,0,0,0.5)', marginBottom: 24, color: 'hsl(var(--text-primary))' }}>
         <div style={{ padding: '18px 24px', borderBottom: '1px solid hsl(var(--border-subtle))', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, background: 'hsl(var(--bg-surface))', zIndex: 1, borderRadius: '18px 18px 0 0' }}>
-          <div style={{ fontWeight: 800, fontSize: 16 }}>{title}</div>
+          <div style={{ fontWeight: 800, fontSize: 16, color: 'hsl(var(--text-primary))' }}>{title}</div>
           <button onClick={onClose} className="btn btn-ghost btn-icon"><X size={16} /></button>
         </div>
         <div style={{ padding: '24px' }}>{children}</div>
@@ -244,6 +246,11 @@ export default function UsuariosPage() {
   const [deletePerfilId, setDeletePerfilId] = useState<string | null>(null)
   const [perfilForm, setPerfilForm] = useState<Omit<Perfil, 'id'>>({ nome: '', cor: '#3b82f6', descricao: '', permissoes: [], bloqueadoGestaoEscolar: false, bloqueadoAgendaDigital: false, bloqueadoGestaoPessoas: false, bloqueadoSimulados: false, bloqueadoProvasOnline: false })
   const [expandedModulos, setExpandedModulos] = useState<string[]>([])
+  const [perfilModalTab, setPerfilModalTab] = useState<'permissoes' | 'usuarios'>('permissoes')
+  const [perfilUserSearch, setPerfilUserSearch] = useState('')
+  const [isVincularOpen, setIsVincularOpen] = useState(false)
+  const [selectedUserIdToLink, setSelectedUserIdToLink] = useState('')
+  const [isLinkingUser, setIsLinkingUser] = useState(false)
 
   /* ── User actions ── */
   const openAddUser = () => { setUserForm(BLANK_USER); setUserModal('add') }
@@ -262,13 +269,14 @@ export default function UsuariosPage() {
       queryClient.invalidateQueries({ queryKey: ['usuarios'] })
       logSystemAction('Config (Usuários)', 'Cadastro', `Novo usuário: ${userForm.nome}`, { registroId: uId, detalhesDepois: userForm })
     } else if (editingUserId) {
+      const uAntigo = users.find(u => u.id === editingUserId)
       try {
         const res = await fetch(`/api/configuracoes/usuarios/${editingUserId}`, { method: 'PUT', body: JSON.stringify(userForm) })
         if (!res.ok) { const err = await res.json(); alert('Erro na nuvem (Netlify/Local): ' + err.error); setIsSavingUser(false); return; }
       } catch(e) { alert('Erro critico ao atualizar'); setIsSavingUser(false); return; }
 
       queryClient.invalidateQueries({ queryKey: ['usuarios'] })
-      logSystemAction('Config (Usuários)', 'Edição', `Atualização do usuário ${userForm.nome}`, { registroId: editingUserId, detalhesDepois: userForm })
+      logSystemAction('Config (Usuários)', 'Edição', `Atualização do usuário ${userForm.nome}`, { registroId: editingUserId, nomeRelacionado: userForm.nome, detalhesAntes: uAntigo, detalhesDepois: userForm })
     }
     setUserModal(null); setEditingUserId(null); setIsSavingUser(false)
   }
@@ -285,7 +293,7 @@ export default function UsuariosPage() {
 
 
       queryClient.invalidateQueries({ queryKey: ['usuarios'] })
-      logSystemAction('Config (Usuários)', 'Exclusão', `Exclusão do usuário ${uDel?.nome}`, { registroId: deleteUserId, detalhesAntes: uDel })
+      logSystemAction('Config (Usuários)', 'Exclusão', `Exclusão do usuário ${uDel?.nome}`, { registroId: deleteUserId, nomeRelacionado: uDel?.nome, detalhesAntes: uDel })
       setDeleteUserId(null)
     }
   }
@@ -311,17 +319,45 @@ export default function UsuariosPage() {
   }
 
   /* ── Perfil actions ── */
-  const openAddPerfil = () => { setPerfilForm({ nome: '', cor: '#3b82f6', descricao: '', permissoes: [], bloqueadoGestaoEscolar: false, bloqueadoAgendaDigital: false, bloqueadoGestaoPessoas: false, bloqueadoSimulados: false, bloqueadoProvasOnline: false }); setPerfilModal('add') }
-  const openEditPerfil = (p: any) => { setPerfilForm({ nome: p.nome, cor: p.cor, descricao: p.descricao, permissoes: p.permissoes || [], bloqueadoGestaoEscolar: p.bloqueadoGestaoEscolar || false, bloqueadoAgendaDigital: p.bloqueadoAgendaDigital || false, bloqueadoGestaoPessoas: p.bloqueadoGestaoPessoas || false, bloqueadoSimulados: p.bloqueadoSimulados || false, bloqueadoProvasOnline: p.bloqueadoProvasOnline || false }); setEditingPerfilId(p.id); setPerfilModal('edit') }
+  /* ── Perfil actions ── */
+  const openAddPerfil = () => {
+    setPerfilForm({ nome: '', cor: '#3b82f6', descricao: '', permissoes: [], bloqueadoGestaoEscolar: false, bloqueadoAgendaDigital: false, bloqueadoGestaoPessoas: false, bloqueadoSimulados: false, bloqueadoProvasOnline: false })
+    setEditingPerfilId(null)
+    setPerfilModalTab('permissoes')
+    setPerfilUserSearch('')
+    setIsVincularOpen(false)
+    setSelectedUserIdToLink('')
+    setPerfilModal('add')
+  }
+  const openEditPerfil = (p: any, defaultTab: 'permissoes' | 'usuarios' = 'permissoes') => {
+    setPerfilForm({
+      nome: p.nome,
+      cor: p.cor,
+      descricao: p.descricao,
+      permissoes: p.permissoes || [],
+      bloqueadoGestaoEscolar: p.bloqueadoGestaoEscolar || false,
+      bloqueadoAgendaDigital: p.bloqueadoAgendaDigital || false,
+      bloqueadoGestaoPessoas: p.bloqueadoGestaoPessoas || false,
+      bloqueadoSimulados: p.bloqueadoSimulados || false,
+      bloqueadoProvasOnline: p.bloqueadoProvasOnline || false
+    })
+    setEditingPerfilId(p.id)
+    setPerfilModalTab(defaultTab)
+    setPerfilUserSearch('')
+    setIsVincularOpen(false)
+    setSelectedUserIdToLink('')
+    setPerfilModal('edit')
+  }
   const savePerfil = () => {
     if (!perfilForm.nome.trim()) return
     if (perfilModal === 'add') {
       const pId = newId('PERF')
       setPerfis(prev => [...prev, { ...perfilForm, id: pId } as Perfil])
-      logSystemAction('Config (Usuários)', 'Cadastro', `Novo perfil: ${perfilForm.nome}`, { registroId: pId, detalhesDepois: perfilForm })
+      logSystemAction('Config (Usuários)', 'Cadastro', `Novo perfil: ${perfilForm.nome}`, { registroId: pId, nomeRelacionado: perfilForm.nome, detalhesDepois: perfilForm })
     } else if (editingPerfilId) {
+      const pAntigo = (perfis || []).find(p => p.id === editingPerfilId)
       setPerfis(prev => prev.map(p => p.id === editingPerfilId ? { ...perfilForm, id: editingPerfilId } as Perfil : p))
-      logSystemAction('Config (Usuários)', 'Edição', `Atualização do perfil ${perfilForm.nome}`, { registroId: editingPerfilId, detalhesDepois: perfilForm })
+      logSystemAction('Config (Usuários)', 'Edição', `Atualização do perfil ${perfilForm.nome}`, { registroId: editingPerfilId, nomeRelacionado: perfilForm.nome, detalhesAntes: pAntigo, detalhesDepois: perfilForm })
     }
     setPerfilModal(null); setEditingPerfilId(null)
   }
@@ -331,6 +367,113 @@ export default function UsuariosPage() {
       setPerfis(prev => (prev || []).filter(p => p.id !== deletePerfilId))
       logSystemAction('Config (Usuários)', 'Exclusão', `Exclusão do perfil ${pDel?.nome}`, { registroId: deletePerfilId, detalhesAntes: pDel })
       setDeletePerfilId(null)
+    }
+  }
+
+  const originalEditingPerfil = useMemo(() => {
+    if (!editingPerfilId) return null
+    return (perfis || []).find(p => p.id === editingPerfilId) || null
+  }, [editingPerfilId, perfis])
+
+  const targetPerfilNome = perfilForm.nome || originalEditingPerfil?.nome || ''
+  const isTargetFamilia = isFamiliaPerfil(targetPerfilNome)
+
+  const linkedColabs = useMemo(() => {
+    if (!targetPerfilNome.trim()) return []
+    return (allUsers || []).filter(u => 
+      matchesPerfil(u.perfil, targetPerfilNome) ||
+      (originalEditingPerfil?.nome && matchesPerfil(u.perfil, originalEditingPerfil.nome))
+    )
+  }, [allUsers, targetPerfilNome, originalEditingPerfil?.nome])
+
+  const filteredLinkedColabs = useMemo(() => {
+    const q = normalizeString(perfilUserSearch)
+    if (!q) return linkedColabs
+    return linkedColabs.filter(u =>
+      normalizeString(u.nome).includes(q) ||
+      normalizeString(u.email).includes(q) ||
+      normalizeString(u.cargo).includes(q) ||
+      normalizeString(u.perfil).includes(q)
+    )
+  }, [linkedColabs, perfilUserSearch])
+
+  const filteredFamiliaAlunos = useMemo(() => {
+    if (!isTargetFamilia) return []
+    const q = normalizeString(perfilUserSearch)
+    if (!q) return []
+    return (alunos || []).filter(a =>
+      normalizeString(a.nome).includes(q) ||
+      normalizeString(a.matricula || '').includes(q) ||
+      normalizeString(a.responsavel || '').includes(q) ||
+      normalizeString(a.turma || '').includes(q)
+    ).slice(0, 40)
+  }, [isTargetFamilia, perfilUserSearch, alunos])
+
+  const totalLinkedCount = isTargetFamilia
+    ? linkedColabs.length + totalFamiliaUsuarios
+    : linkedColabs.length
+
+  const availableColabsToLink = useMemo(() => {
+    if (!targetPerfilNome.trim()) return []
+    return (allUsers || []).filter(u =>
+      !matchesPerfil(u.perfil, targetPerfilNome) &&
+      (!originalEditingPerfil?.nome || !matchesPerfil(u.perfil, originalEditingPerfil.nome))
+    )
+  }, [allUsers, targetPerfilNome, originalEditingPerfil?.nome])
+
+  const vincularUsuarioAoPerfil = async () => {
+    if (!selectedUserIdToLink || isLinkingUser || !targetPerfilNome.trim()) return
+    const targetUser = allUsers.find(u => u.id === selectedUserIdToLink)
+    if (!targetUser) return
+    setIsLinkingUser(true)
+    try {
+      const res = await fetch(`/api/configuracoes/usuarios/${selectedUserIdToLink}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ perfil: targetPerfilNome })
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        alert('Erro ao vincular: ' + (err.error || 'Falha na resposta do servidor'))
+        setIsLinkingUser(false)
+        return
+      }
+      queryClient.invalidateQueries({ queryKey: ['usuarios'] })
+      logSystemAction('Config (Usuários)', 'Edição', `Usuário ${targetUser.nome} vinculado ao perfil ${targetPerfilNome}`, {
+        registroId: selectedUserIdToLink,
+        nomeRelacionado: targetUser.nome,
+        detalhesDepois: { perfil: targetPerfilNome }
+      })
+      setSelectedUserIdToLink('')
+      setIsVincularOpen(false)
+    } catch (e: any) {
+      alert('Erro ao conectar com servidor.')
+    } finally {
+      setIsLinkingUser(false)
+    }
+  }
+
+  const desvincularUsuarioDoPerfil = async (u: SysUser) => {
+    if (!confirm(`Deseja desvincular ${u.nome} do perfil "${targetPerfilNome}"? O perfil dele será alterado para "Colaborador".`)) return
+    try {
+      const res = await fetch(`/api/configuracoes/usuarios/${u.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ perfil: 'Colaborador' })
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        alert('Erro ao desvincular: ' + (err.error || 'Falha na resposta do servidor'))
+        return
+      }
+      queryClient.invalidateQueries({ queryKey: ['usuarios'] })
+      logSystemAction('Config (Usuários)', 'Edição', `Usuário ${u.nome} desvinculado do perfil ${targetPerfilNome}`, {
+        registroId: u.id,
+        nomeRelacionado: u.nome,
+        detalhesDepois: { perfil: 'Colaborador' }
+      })
+    } catch (e) {
+      alert('Erro ao conectar com servidor.')
     }
   }
   const togglePermissao = (key: string) => {
@@ -394,9 +537,9 @@ export default function UsuariosPage() {
 
       {/* ── USUÁRIOS ── */}
       {tab === 'usuarios' && (
-        isUsersLoading ? (
+        isUsersLoading && !colabSearch ? (
           <TableSkeleton />
-        ) : users.length === 0 ? (
+        ) : allUsers.length === 0 && !colabSearch && !debouncedColabSearch ? (
           <div style={{ textAlign: 'center', padding: '60px', color: 'hsl(var(--text-muted))' }}>
             <div style={{ fontSize: 40, marginBottom: 12 }}>👤</div>
             <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 8 }}>Nenhum usuário cadastrado</div>
@@ -405,7 +548,7 @@ export default function UsuariosPage() {
           </div>
         ) : (
           <div>
-          <div className="usuarios-toolbar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+            <div className="usuarios-toolbar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
               <div className="usuarios-toolbar-search-wrap" style={{ position: 'relative' }}>
                 <Search size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
                 <input
@@ -413,8 +556,18 @@ export default function UsuariosPage() {
                   placeholder="Buscar colaborador..."
                   value={colabSearch}
                   onChange={(e) => { setColabSearch(e.target.value); setColabPage(1); }}
-                  style={{ padding: '8px 12px 8px 32px', borderRadius: 8, border: '1px solid #cbd5e1', background: '#ffffff', color: '#0f172a', fontSize: 13, width: 250, fontWeight: 500 }}
+                  style={{ padding: '8px 32px 8px 32px', borderRadius: 8, border: '1px solid #cbd5e1', background: '#ffffff', color: '#0f172a', fontSize: 13, width: 260, fontWeight: 500 }}
                 />
+                {colabSearch && (
+                  <button
+                    type="button"
+                    onClick={() => { setColabSearch(''); setColabPage(1); }}
+                    style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: 2, display: 'flex', alignItems: 'center' }}
+                    title="Limpar busca"
+                  >
+                    <X size={13} />
+                  </button>
+                )}
               </div>
               <div className="usuarios-toolbar-actions" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 <select 
@@ -435,17 +588,64 @@ export default function UsuariosPage() {
             <table>
               <thead><tr><th>Usuário</th><th>Cargo</th><th>Perfil</th><th>Último Acesso</th><th>2FA</th><th>Status</th><th>Ações</th></tr></thead>
               <tbody>
-                {users.length === 0 ? (
-                  <tr><td colSpan={7} style={{ textAlign: 'center', padding: '30px' }}>Nenhum colaborador real cadastrado.</td></tr>
+                {isUsersLoading ? (
+                  <tr>
+                    <td colSpan={7} style={{ textAlign: 'center', padding: '40px', color: 'hsl(var(--text-muted))' }}>
+                      Buscando colaboradores...
+                    </td>
+                  </tr>
+                ) : users.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} style={{ textAlign: 'center', padding: '40px 20px', color: 'hsl(var(--text-muted))' }}>
+                      <div style={{ fontSize: 28, marginBottom: 8 }}>🔍</div>
+                      <div style={{ fontWeight: 700, fontSize: 14, color: 'hsl(var(--text-primary))', marginBottom: 4 }}>
+                        {colabSearch ? `Nenhum colaborador encontrado para "${colabSearch}"` : 'Nenhum colaborador encontrado.'}
+                      </div>
+                      <div style={{ fontSize: 12, color: 'hsl(var(--text-muted))', marginBottom: colabSearch ? 12 : 0 }}>
+                        {colabSearch ? 'Tente verificar a ortografia ou buscar por cargo/e-mail.' : 'Adicione novos colaboradores usando o botão acima.'}
+                      </div>
+                      {colabSearch && (
+                        <button 
+                          type="button"
+                          className="btn btn-ghost btn-sm" 
+                          onClick={() => { setColabSearch(''); setColabPage(1); }}
+                        >
+                          Limpar busca
+                        </button>
+                      )}
+                    </td>
+                  </tr>
                 ) : (
                   users.map(u => {
                     const p = perfilByName(u.perfil)
                   return (
                     <tr key={u.id}>
                       <td>
-                        <div style={{ fontSize: 13, fontWeight: 600 }}>{u.nome}</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: 13, fontWeight: 600 }}>{u.nome}</span>
+                          {(u.hasDualRole || (u as any).dados?.responsavel_id) && (
+                            <span 
+                              style={{ 
+                                padding: '2px 7px', 
+                                background: 'rgba(168, 85, 247, 0.15)', 
+                                color: '#c084fc', 
+                                border: '1px solid rgba(168, 85, 247, 0.3)', 
+                                borderRadius: 6, 
+                                fontWeight: 700, 
+                                fontSize: 10, 
+                                display: 'inline-flex', 
+                                alignItems: 'center', 
+                                gap: 3 
+                              }} 
+                              title="Papel Duplo: Este colaborador também possui cadastro ativo como Responsável por aluno(s)"
+                            >
+                              <Users size={10} /> + Responsável
+                            </span>
+                          )}
+                        </div>
                         <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>{u.email}</div>
                       </td>
+
                       <td style={{ fontSize: 12 }}>{u.cargo || '—'}</td>
                       <td>
                         <span className="badge badge-primary" style={{ background: p ? `${p.cor}20` : undefined, color: p?.cor }}>{u.perfil}</span>
@@ -579,7 +779,19 @@ export default function UsuariosPage() {
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
               {(perfis || []).map(p => (
-                <div key={p.id} className="card" style={{ padding: 0, overflow: 'hidden', border: '1px solid hsl(var(--border-subtle))', background: 'linear-gradient(180deg, hsl(var(--bg-surface)) 0%, hsl(var(--bg-base)) 100%)' }}>
+                <div 
+                  key={p.id} 
+                  className="card" 
+                  onClick={() => openEditPerfil(p, 'permissoes')}
+                  style={{ 
+                    padding: 0, 
+                    overflow: 'hidden', 
+                    border: '1px solid hsl(var(--border-subtle))', 
+                    background: 'linear-gradient(180deg, hsl(var(--bg-surface)) 0%, hsl(var(--bg-base)) 100%)',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s',
+                  }}
+                >
                    <div style={{ height: 4, background: p.cor }} />
                    <div style={{ padding: '24px' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
@@ -587,15 +799,32 @@ export default function UsuariosPage() {
                           <Shield size={22} color={p.cor} />
                         </div>
                         <div style={{ display: 'flex', gap: 4, background: 'hsl(var(--bg-elevated))', borderRadius: 8, padding: 4, border: '1px solid hsl(var(--border-subtle))' }}>
-                          <button className="btn btn-ghost btn-icon btn-sm" onClick={() => openEditPerfil(p)}><Pencil size={13} /></button>
-                          <button className="btn btn-ghost btn-icon btn-sm" style={{ color: '#ef4444' }} onClick={() => setDeletePerfilId(p.id)}><Trash2 size={13} /></button>
+                          <button 
+                            className="btn btn-ghost btn-icon btn-sm" 
+                            title="Editar Perfil"
+                            onClick={(e) => { e.stopPropagation(); openEditPerfil(p, 'permissoes'); }}
+                          >
+                            <Pencil size={13} />
+                          </button>
+                          <button 
+                            className="btn btn-ghost btn-icon btn-sm" 
+                            style={{ color: '#ef4444' }} 
+                            title="Excluir Perfil"
+                            onClick={(e) => { e.stopPropagation(); setDeletePerfilId(p.id); }}
+                          >
+                            <Trash2 size={13} />
+                          </button>
                         </div>
                       </div>
                       <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 4, color: 'hsl(var(--text-primary))' }}>{p.nome}</div>
                       <div style={{ fontSize: 13, color: 'hsl(var(--text-secondary))', lineHeight: 1.5, marginBottom: 20 }}>{p.descricao}</div>
                       
                       <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px', background: 'hsl(var(--bg-elevated))', borderRadius: 10, border: '1px solid hsl(var(--border-subtle))' }}>
-                          <div style={{ flex: 1 }}>
+                          <div 
+                            style={{ flex: 1, cursor: 'pointer' }}
+                            title="Clique para ver usuários vinculados"
+                            onClick={(e) => { e.stopPropagation(); openEditPerfil(p, 'usuarios'); }}
+                          >
                              <div style={{ fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-muted))', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Membros</div>
                              <div style={{ fontSize: 20, fontWeight: 900, color: p.cor, display: 'flex', alignItems: 'center', gap: 8 }}>
                                {allUsers.filter(u => matchesPerfil(u.perfil, p.nome)).length + (isFamiliaPerfil(p.nome) ? totalFamiliaUsuarios : 0)}
@@ -648,7 +877,7 @@ export default function UsuariosPage() {
       {/* ── MODALS ── */}
       {/* User Add/Edit */}
       {userModal && (
-        <Modal title={userModal === 'add' ? 'Novo Usuário' : 'Editar Usuário'} onClose={() => setUserModal(null)}>
+        <Modal title={userModal === 'add' ? 'Novo Usuário' : 'Editar Usuário'} onClose={() => setUserModal(null)} zIndex={1100}>
           <div style={{ display: 'grid', gap: 14 }}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <div><label className="form-label">Nome completo *</label><input className="form-input" value={userForm.nome} onChange={e => setUserForm(p => ({ ...p, nome: e.target.value }))} placeholder="Ex: Dr. João Silva" /></div>
@@ -685,261 +914,725 @@ export default function UsuariosPage() {
 
       {/* Perfil Add/Edit */}
       {perfilModal && (
-        <Modal title={perfilModal === 'add' ? 'Novo Perfil de Acesso' : 'Editar Perfil'} onClose={() => setPerfilModal(null)} wide>
-          <div style={{ display: 'grid', gap: 14 }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 12, alignItems: 'end' }}>
-              <div><label className="form-label">Nome do perfil *</label><input className="form-input" value={perfilForm.nome} onChange={e => setPerfilForm(p => ({ ...p, nome: e.target.value }))} placeholder="Ex: Coordenador Pedagógico" /></div>
-              <div><label className="form-label">Cor</label><input type="color" value={perfilForm.cor} onChange={e => setPerfilForm(p => ({ ...p, cor: e.target.value }))} style={{ width: 48, height: 40, borderRadius: 8, border: 'none', cursor: 'pointer', padding: 2, background: 'transparent' }} /></div>
-            </div>
-            <div><label className="form-label">Descrição</label><input className="form-input" value={perfilForm.descricao} onChange={e => setPerfilForm(p => ({ ...p, descricao: e.target.value }))} placeholder="Resumo das permissões..." /></div>
-            
-            {/* Toggles de Acesso aos Módulos Principais */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {/* Gestão Escolar (ERP) */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', background: 'rgba(255,255,255,0.03)', borderRadius: 14, border: '1px solid hsl(var(--border-subtle))' }}>
-                <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
-                  <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg, #3b82f6, #2563eb)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, boxShadow: '0 8px 16px rgba(59,130,246,0.3)' }}>
-                    🏢
+        <Modal 
+          title={perfilModal === 'add' ? 'Novo Perfil de Acesso' : (perfilForm.nome ? `Perfil: ${perfilForm.nome}` : 'Editar Perfil')} 
+          onClose={() => setPerfilModal(null)} 
+          wide
+        >
+          {/* Navegação por Abas do Perfil */}
+          <div style={{
+            display: 'flex',
+            gap: 8,
+            padding: 4,
+            background: 'hsl(var(--bg-base))',
+            borderRadius: 12,
+            marginBottom: 20,
+            border: '1px solid hsl(var(--border-subtle))'
+          }}>
+            <button
+              type="button"
+              onClick={() => setPerfilModalTab('permissoes')}
+              style={{
+                flex: 1,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
+                padding: '10px 16px',
+                borderRadius: 9,
+                fontSize: 13,
+                fontWeight: perfilModalTab === 'permissoes' ? 700 : 500,
+                border: 'none',
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+                background: perfilModalTab === 'permissoes' ? 'hsl(var(--bg-surface))' : 'transparent',
+                color: perfilModalTab === 'permissoes' ? 'hsl(var(--text-primary))' : 'hsl(var(--text-secondary))',
+                boxShadow: perfilModalTab === 'permissoes' ? '0 2px 8px rgba(0,0,0,0.08)' : 'none',
+              }}
+            >
+              <Shield size={15} color={perfilModalTab === 'permissoes' ? perfilForm.cor : undefined} />
+              <span>Permissões & Módulos</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setPerfilModalTab('usuarios')}
+              style={{
+                flex: 1,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
+                padding: '10px 16px',
+                borderRadius: 9,
+                fontSize: 13,
+                fontWeight: perfilModalTab === 'usuarios' ? 700 : 500,
+                border: 'none',
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+                background: perfilModalTab === 'usuarios' ? 'hsl(var(--bg-surface))' : 'transparent',
+                color: perfilModalTab === 'usuarios' ? 'hsl(var(--text-primary))' : 'hsl(var(--text-secondary))',
+                boxShadow: perfilModalTab === 'usuarios' ? '0 2px 8px rgba(0,0,0,0.08)' : 'none',
+              }}
+            >
+              <Users size={15} color={perfilModalTab === 'usuarios' ? perfilForm.cor : undefined} />
+              <span>Usuários Vinculados</span>
+              <span style={{
+                fontSize: 11,
+                fontWeight: 700,
+                padding: '2px 8px',
+                borderRadius: 10,
+                background: perfilModalTab === 'usuarios' ? `${perfilForm.cor}20` : 'hsl(var(--bg-overlay))',
+                color: perfilModalTab === 'usuarios' ? perfilForm.cor : 'hsl(var(--text-muted))'
+              }}>
+                {totalLinkedCount}
+              </span>
+            </button>
+          </div>
+
+          {/* ── ABA 1: PERMISSÕES & MÓDULOS ── */}
+          {perfilModalTab === 'permissoes' && (
+            <>
+              <div style={{ display: 'grid', gap: 14 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 12, alignItems: 'end' }}>
+                  <div><label className="form-label">Nome do perfil *</label><input className="form-input" value={perfilForm.nome} onChange={e => setPerfilForm(p => ({ ...p, nome: e.target.value }))} placeholder="Ex: Coordenador Pedagógico" /></div>
+                  <div><label className="form-label">Cor</label><input type="color" value={perfilForm.cor} onChange={e => setPerfilForm(p => ({ ...p, cor: e.target.value }))} style={{ width: 48, height: 40, borderRadius: 8, border: 'none', cursor: 'pointer', padding: 2, background: 'transparent' }} /></div>
+                </div>
+                <div><label className="form-label">Descrição</label><input className="form-input" value={perfilForm.descricao} onChange={e => setPerfilForm(p => ({ ...p, descricao: e.target.value }))} placeholder="Resumo das permissões..." /></div>
+                
+                {/* Toggles de Acesso aos Módulos Principais */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {/* Gestão Escolar (ERP) */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', background: 'rgba(255,255,255,0.03)', borderRadius: 14, border: '1px solid hsl(var(--border-subtle))' }}>
+                    <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
+                      <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg, #3b82f6, #2563eb)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, boxShadow: '0 8px 16px rgba(59,130,246,0.3)' }}>
+                        🏢
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 15, fontWeight: 800, color: 'hsl(var(--text-primary))', marginBottom: 2 }}>Acesso ao Gestão Escolar (ERP)</div>
+                        <div style={{ fontSize: 12, color: 'hsl(var(--text-secondary))' }}>Se desativado, o colaborador não poderá acessar o sistema principal.</div>
+                      </div>
+                    </div>
+                    <ModernSwitch
+                      checked={!perfilForm.bloqueadoGestaoEscolar}
+                      onChange={() => setPerfilForm(p => ({ ...p, bloqueadoGestaoEscolar: !p.bloqueadoGestaoEscolar }))}
+                      color="#10b981"
+                    />
                   </div>
-                  <div>
-                    <div style={{ fontSize: 15, fontWeight: 800, color: 'hsl(var(--text-primary))', marginBottom: 2 }}>Acesso ao Gestão Escolar (ERP)</div>
-                    <div style={{ fontSize: 12, color: 'hsl(var(--text-secondary))' }}>Se desativado, o colaborador não poderá acessar o sistema principal.</div>
+
+                  {/* Agenda Digital */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', background: 'rgba(255,255,255,0.03)', borderRadius: 14, border: '1px solid hsl(var(--border-subtle))' }}>
+                    <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
+                      <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg, #a855f7, #9333ea)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, boxShadow: '0 8px 16px rgba(168,85,247,0.3)' }}>
+                        📱
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 15, fontWeight: 800, color: 'hsl(var(--text-primary))', marginBottom: 2 }}>Acesso à Agenda Digital</div>
+                        <div style={{ fontSize: 12, color: 'hsl(var(--text-secondary))' }}>Controle de acesso ao módulo de comunicação e agenda.</div>
+                      </div>
+                    </div>
+                    <ModernSwitch
+                      checked={!perfilForm.bloqueadoAgendaDigital}
+                      onChange={() => setPerfilForm(p => ({ ...p, bloqueadoAgendaDigital: !p.bloqueadoAgendaDigital }))}
+                      color="#10b981"
+                    />
+                  </div>
+
+                  {/* Gestão de Pessoas */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', background: 'rgba(255,255,255,0.03)', borderRadius: 14, border: '1px solid hsl(var(--border-subtle))' }}>
+                    <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
+                      <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg, #10b981, #059669)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, boxShadow: '0 8px 16px rgba(168,85,247,0.3)' }}>
+                        👥
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 15, fontWeight: 800, color: 'hsl(var(--text-primary))', marginBottom: 2 }}>Acesso à Gestão de Pessoas</div>
+                        <div style={{ fontSize: 12, color: 'hsl(var(--text-secondary))' }}>Controle de acesso ao módulo de SST, treinamentos e colaboradores.</div>
+                      </div>
+                    </div>
+                    <ModernSwitch
+                      checked={!perfilForm.bloqueadoGestaoPessoas}
+                      onChange={() => setPerfilForm(p => ({ ...p, bloqueadoGestaoPessoas: !p.bloqueadoGestaoPessoas }))}
+                      color="#10b981"
+                    />
+                  </div>
+
+                  {/* SIMULADOS */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', background: 'rgba(255,255,255,0.03)', borderRadius: 14, border: '1px solid hsl(var(--border-subtle))' }}>
+                    <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
+                      <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg, #f43f5e, #be123c)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, boxShadow: '0 8px 16px rgba(244,63,94,0.3)' }}>
+                        📝
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 15, fontWeight: 800, color: 'hsl(var(--text-primary))', marginBottom: 2 }}>Acesso ao Módulo de Provas/Simulados</div>
+                        <div style={{ fontSize: 12, color: 'hsl(var(--text-secondary))' }}>Controle de acesso à geração e gestão de provas e simulados.</div>
+                      </div>
+                    </div>
+                    <ModernSwitch
+                      checked={!perfilForm.bloqueadoSimulados}
+                      onChange={() => setPerfilForm(p => ({ ...p, bloqueadoSimulados: !p.bloqueadoSimulados }))}
+                      color="#10b981"
+                    />
+                  </div>
+
+                  {/* PROVAS ONLINE */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', background: 'rgba(255,255,255,0.03)', borderRadius: 14, border: '1px solid hsl(var(--border-subtle))' }}>
+                    <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
+                      <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg, #06b6d4, #0284c7)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, boxShadow: '0 8px 16px rgba(6,182,212,0.3)' }}>
+                        💻
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 15, fontWeight: 800, color: 'hsl(var(--text-primary))', marginBottom: 2 }}>Acesso ao Módulo de Provas Online</div>
+                        <div style={{ fontSize: 12, color: 'hsl(var(--text-secondary))' }}>Controle de acesso à realização, aplicação e gestão de avaliações digitais.</div>
+                      </div>
+                    </div>
+                    <ModernSwitch
+                      checked={!perfilForm.bloqueadoProvasOnline}
+                      onChange={() => setPerfilForm(p => ({ ...p, bloqueadoProvasOnline: !p.bloqueadoProvasOnline }))}
+                      color="#10b981"
+                    />
                   </div>
                 </div>
-                <ModernSwitch
-                  checked={!perfilForm.bloqueadoGestaoEscolar}
-                  onChange={() => setPerfilForm(p => ({ ...p, bloqueadoGestaoEscolar: !p.bloqueadoGestaoEscolar }))}
-                  color="#10b981"
-                />
-              </div>
 
-              {/* Agenda Digital */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', background: 'rgba(255,255,255,0.03)', borderRadius: 14, border: '1px solid hsl(var(--border-subtle))' }}>
-                <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
-                  <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg, #a855f7, #9333ea)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, boxShadow: '0 8px 16px rgba(168,85,247,0.3)' }}>
-                    📱
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <label className="form-label">Permissões por Módulo e Página</label>
+                    {isDiretorGeral && (
+                      <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+                        <button 
+                          type="button"
+                          className="btn btn-ghost btn-sm" 
+                          style={{ fontSize: 11, padding: '2px 8px' }}
+                          onClick={() => {
+                              const allKeys = MODULES_CONFIG.flatMap((m: any) => [m.key, ...m.pages.map((p: any) => p.key)])
+                              setPerfilForm(p => ({ ...p, permissoes: allKeys }))
+                          }}
+                        >
+                          Marcar Todas
+                        </button>
+                        <button 
+                          type="button"
+                          className="btn btn-ghost btn-sm" 
+                          style={{ fontSize: 11, padding: '2px 8px', color: '#ef4444' }}
+                          onClick={() => setPerfilForm(p => ({ ...p, permissoes: [] }))}
+                        >
+                          Desmarcar Todas
+                        </button>
+                      </div>
+                    )}
                   </div>
-                  <div>
-                    <div style={{ fontSize: 15, fontWeight: 800, color: 'hsl(var(--text-primary))', marginBottom: 2 }}>Acesso à Agenda Digital</div>
-                    <div style={{ fontSize: 12, color: 'hsl(var(--text-secondary))' }}>Controle de acesso ao módulo de comunicação e agenda.</div>
+                  {!isDiretorGeral && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)', borderRadius: 8, marginBottom: 10, fontSize: 12, color: '#fbbf24' }}>
+                      <Lock size={12} /> Apenas o Diretor Geral pode editar permissões de módulo.
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 12 }}>
+                    {MODULES_CONFIG.map((m: any) => {
+                      const allKeys = [m.key, ...m.pages.map((p: any) => p.key)]
+                      const allChecked = allKeys.every(k => perfilForm.permissoes.includes(k))
+                      const someChecked = allKeys.some(k => perfilForm.permissoes.includes(k)) && !allChecked
+                      const checkedCount = allKeys.filter(k => perfilForm.permissoes.includes(k)).length
+                      const isExpanded = expandedModulos.includes(m.key)
+                      const toggleExpand = () => setExpandedModulos(prev => prev.includes(m.key) ? prev.filter(k => k !== m.key) : [...prev, m.key])
+                      
+                      return (
+                        <div key={m.key} style={{
+                          border: `1px solid ${allChecked ? perfilForm.cor + '40' : someChecked ? perfilForm.cor + '20' : 'hsl(var(--border-subtle))'}`,
+                          borderRadius: 14,
+                          background: allChecked ? `${perfilForm.cor}06` : someChecked ? `${perfilForm.cor}03` : 'hsl(var(--bg-elevated))',
+                          overflow: 'hidden',
+                          boxShadow: allChecked ? `0 4px 12px ${perfilForm.cor}10` : '0 2px 8px rgba(0,0,0,0.02)',
+                          transition: 'all 0.2s',
+                        }}>
+                          {/* Header do módulo */}
+                          <div
+                            onClick={toggleExpand}
+                            style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 18px', cursor: 'pointer', userSelect: 'none' }}
+                          >
+                            {/* Toggle master */}
+                            <div onClick={e => e.stopPropagation()}>
+                              <ModernSwitch 
+                                checked={allChecked} 
+                                onChange={() => isDiretorGeral && toggleModulo(m)} 
+                                disabled={!isDiretorGeral} 
+                                color={perfilForm.cor}
+                              />
+                            </div>
+                            
+                            {/* Ícone */}
+                            <div style={{ 
+                              width: 32, height: 32, borderRadius: 8, 
+                              background: allChecked ? `${perfilForm.cor}15` : 'hsl(var(--bg-overlay))',
+                              color: allChecked ? perfilForm.cor : 'hsl(var(--text-muted))',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              fontSize: 16, transition: 'all 0.2s'
+                            }}>
+                              {m.icon}
+                            </div>
+
+                            {/* Nome do módulo */}
+                            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                              <span style={{ fontSize: 14, fontWeight: 700, color: allChecked ? perfilForm.cor : 'hsl(var(--text-primary))' }}>{m.label}</span>
+                              <span style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>
+                                {allChecked ? 'Acesso Integrado' : someChecked ? 'Acesso Parcial' : 'Sem Acesso'}
+                              </span>
+                            </div>
+
+                            {/* Contador */}
+                            <span style={{
+                              fontSize: 12, fontWeight: 700,
+                              padding: '4px 10px', borderRadius: 20,
+                              background: checkedCount > 0 ? `${perfilForm.cor}15` : 'hsl(var(--bg-overlay))',
+                              color: checkedCount > 0 ? perfilForm.cor : 'hsl(var(--text-muted))',
+                              minWidth: 50, textAlign: 'center'
+                            }}>{checkedCount} / {allKeys.length}</span>
+
+                            {/* Chevron */}
+                            <span style={{ color: 'hsl(var(--text-muted))', flexShrink: 0, display: 'flex', paddingLeft: 6 }}>
+                              {isExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+                            </span>
+                          </div>
+
+                          {/* Sub-páginas */}
+                          {isExpanded && m.pages.length > 0 && (
+                            <div style={{
+                              borderTop: `1px solid ${perfilForm.cor}15`,
+                              padding: '16px 18px',
+                              background: 'hsl(var(--bg-base))',
+                              display: 'flex',
+                              flexWrap: 'wrap',
+                              gap: 12
+                            }}>
+                              {m.pages.map((p: any) => {
+                                const isChecked = perfilForm.permissoes.includes(p.key)
+                                return (
+                                  <div
+                                    key={p.key}
+                                    onClick={() => isDiretorGeral && togglePermissao(p.key)}
+                                    style={{
+                                      flex: '1 1 180px',
+                                      minWidth: 180,
+                                      display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+                                      padding: '10px 14px', borderRadius: 10,
+                                      cursor: isDiretorGeral ? 'pointer' : 'not-allowed',
+                                      background: isChecked ? `${perfilForm.cor}10` : 'hsl(var(--bg-overlay))',
+                                      border: `1px solid ${isChecked ? perfilForm.cor + '30' : 'transparent'}`,
+                                      transition: 'all 0.15s ease-out'
+                                    }}
+                                  >
+                                    <span style={{ fontSize: 13, fontWeight: isChecked ? 600 : 500, color: isChecked ? perfilForm.cor : 'hsl(var(--text-secondary))', lineHeight: 1.2, flex: 1 }}>
+                                      {p.label.split(' > ').pop()}
+                                    </span>
+                                    <ModernSwitch 
+                                      checked={isChecked} 
+                                      onChange={() => {}} 
+                                      disabled={!isDiretorGeral} 
+                                      color={perfilForm.cor}
+                                    />
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
                   </div>
                 </div>
-                <ModernSwitch
-                  checked={!perfilForm.bloqueadoAgendaDigital}
-                  onChange={() => setPerfilForm(p => ({ ...p, bloqueadoAgendaDigital: !p.bloqueadoAgendaDigital }))}
-                  color="#10b981"
-                />
               </div>
+              <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 20 }}>
+                <button type="button" className="btn btn-ghost" onClick={() => setPerfilModal(null)}>Cancelar</button>
+                <button type="button" className="btn btn-primary" onClick={savePerfil} disabled={!isDiretorGeral}><Save size={13} />{perfilModal === 'add' ? 'Criar Perfil' : 'Salvar Perfil'}</button>
+              </div>
+            </>
+          )}
 
-              {/* Gestão de Pessoas */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', background: 'rgba(255,255,255,0.03)', borderRadius: 14, border: '1px solid hsl(var(--border-subtle))' }}>
-                <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
-                  <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg, #10b981, #059669)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, boxShadow: '0 8px 16px rgba(16,185,129,0.3)' }}>
-                    👥
+          {/* ── ABA 2: USUÁRIOS VINCULADOS ── */}
+          {perfilModalTab === 'usuarios' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              {/* Header do perfil e resumo */}
+              <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                padding: '14px 18px',
+                borderRadius: 14,
+                background: 'hsl(var(--bg-base))',
+                border: '1px solid hsl(var(--border-subtle))',
+                flexWrap: 'wrap',
+                gap: 12
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: 12,
+                    background: `${perfilForm.cor}18`,
+                    border: `1.5px solid ${perfilForm.cor}40`,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0
+                  }}>
+                    <Users size={18} color={perfilForm.cor} />
                   </div>
                   <div>
-                    <div style={{ fontSize: 15, fontWeight: 800, color: 'hsl(var(--text-primary))', marginBottom: 2 }}>Acesso à Gestão de Pessoas</div>
-                    <div style={{ fontSize: 12, color: 'hsl(var(--text-secondary))' }}>Controle de acesso ao módulo de SST, treinamentos e colaboradores.</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontSize: 15, fontWeight: 800, color: 'hsl(var(--text-primary))' }}>
+                        {perfilForm.nome || 'Perfil'}
+                      </span>
+                      <span style={{
+                        fontSize: 11,
+                        fontWeight: 700,
+                        padding: '2px 8px',
+                        borderRadius: 12,
+                        background: `${perfilForm.cor}20`,
+                        color: perfilForm.cor
+                      }}>
+                        {totalLinkedCount} {totalLinkedCount === 1 ? 'vinculado' : 'vinculados'}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: 12, color: 'hsl(var(--text-muted))', marginTop: 1 }}>
+                      {isTargetFamilia
+                        ? 'Membros ativos com acesso ao Portal da Família (alunos e responsáveis)'
+                        : 'Colaboradores com este perfil de acesso atribuído'}
+                    </div>
                   </div>
                 </div>
-                <ModernSwitch
-                  checked={!perfilForm.bloqueadoGestaoPessoas}
-                  onChange={() => setPerfilForm(p => ({ ...p, bloqueadoGestaoPessoas: !p.bloqueadoGestaoPessoas }))}
-                  color="#10b981"
-                />
-              </div>
 
-              {/* SIMULADOS */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', background: 'rgba(255,255,255,0.03)', borderRadius: 14, border: '1px solid hsl(var(--border-subtle))' }}>
-                <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
-                  <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg, #f43f5e, #be123c)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, boxShadow: '0 8px 16px rgba(244,63,94,0.3)' }}>
-                    📝
-                  </div>
-                  <div>
-                    <div style={{ fontSize: 15, fontWeight: 800, color: 'hsl(var(--text-primary))', marginBottom: 2 }}>Acesso ao Módulo de Provas/Simulados</div>
-                    <div style={{ fontSize: 12, color: 'hsl(var(--text-secondary))' }}>Controle de acesso à geração e gestão de provas e simulados.</div>
-                  </div>
-                </div>
-                <ModernSwitch
-                  checked={!perfilForm.bloqueadoSimulados}
-                  onChange={() => setPerfilForm(p => ({ ...p, bloqueadoSimulados: !p.bloqueadoSimulados }))}
-                  color="#10b981"
-                />
-              </div>
-
-              {/* PROVAS ONLINE */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', background: 'rgba(255,255,255,0.03)', borderRadius: 14, border: '1px solid hsl(var(--border-subtle))' }}>
-                <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
-                  <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg, #06b6d4, #0284c7)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, boxShadow: '0 8px 16px rgba(6,182,212,0.3)' }}>
-                    💻
-                  </div>
-                  <div>
-                    <div style={{ fontSize: 15, fontWeight: 800, color: 'hsl(var(--text-primary))', marginBottom: 2 }}>Acesso ao Módulo de Provas Online</div>
-                    <div style={{ fontSize: 12, color: 'hsl(var(--text-secondary))' }}>Controle de acesso à realização, aplicação e gestão de avaliações digitais.</div>
-                  </div>
-                </div>
-                <ModernSwitch
-                  checked={!perfilForm.bloqueadoProvasOnline}
-                  onChange={() => setPerfilForm(p => ({ ...p, bloqueadoProvasOnline: !p.bloqueadoProvasOnline }))}
-                  color="#10b981"
-                />
-              </div>
-            </div>
-
-            <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <label className="form-label">Permissões por Módulo e Página</label>
-                {isDiretorGeral && (
-                  <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
-                    <button 
-                      className="btn btn-ghost btn-sm" 
-                      style={{ fontSize: 11, padding: '2px 8px' }}
-                      onClick={() => {
-                          const allKeys = MODULES_CONFIG.flatMap((m: any) => [m.key, ...m.pages.map((p: any) => p.key)])
-                          setPerfilForm(p => ({ ...p, permissoes: allKeys }))
-                      }}
-                    >
-                      Marcar Todas
-                    </button>
-                    <button 
-                      className="btn btn-ghost btn-sm" 
-                      style={{ fontSize: 11, padding: '2px 8px', color: '#ef4444' }}
-                      onClick={() => setPerfilForm(p => ({ ...p, permissoes: [] }))}
-                    >
-                      Desmarcar Todas
-                    </button>
-                  </div>
+                {isDiretorGeral && !isTargetFamilia && (
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm"
+                    style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}
+                    onClick={() => setIsVincularOpen(v => !v)}
+                  >
+                    <Plus size={13} />
+                    {isVincularOpen ? 'Fechar Seleção' : 'Vincular Colaborador'}
+                  </button>
                 )}
               </div>
-                      {!isDiretorGeral && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)', borderRadius: 8, marginBottom: 10, fontSize: 12, color: '#fbbf24' }}>
-                  <Lock size={12} /> Apenas o Diretor Geral pode editar permissões de módulo.
+
+              {/* Bloco de Vincular Colaborador */}
+              {isVincularOpen && (
+                <div style={{
+                  padding: '16px 18px',
+                  borderRadius: 12,
+                  background: 'hsl(var(--bg-elevated))',
+                  border: `1px solid ${perfilForm.cor}40`,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 10
+                }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: 'hsl(var(--text-primary))' }}>
+                    Selecionar colaborador para vincular ao perfil "{perfilForm.nome}":
+                  </div>
+                  {availableColabsToLink.length === 0 ? (
+                    <div style={{ fontSize: 12, color: 'hsl(var(--text-muted))' }}>
+                      Todos os colaboradores cadastrados já possuem este perfil ou não há outros colaboradores disponíveis.
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+                      <select
+                        className="form-input"
+                        style={{ flex: 1, minWidth: 260, fontSize: 13 }}
+                        value={selectedUserIdToLink}
+                        onChange={e => setSelectedUserIdToLink(e.target.value)}
+                      >
+                        <option value="">-- Selecione um colaborador ({availableColabsToLink.length} disponíveis) --</option>
+                        {availableColabsToLink.map(u => (
+                          <option key={u.id} value={u.id}>
+                            {u.nome} ({u.cargo || 'Sem cargo'} — Perfil atual: {u.perfil})
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        className="btn btn-primary btn-sm"
+                        disabled={!selectedUserIdToLink || isLinkingUser}
+                        onClick={vincularUsuarioAoPerfil}
+                        style={{ padding: '8px 16px', fontWeight: 700 }}
+                      >
+                        {isLinkingUser ? 'Vinculando...' : 'Confirmar Vínculo'}
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm"
+                        onClick={() => { setIsVincularOpen(false); setSelectedUserIdToLink(''); }}
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 12 }}>
-                {MODULES_CONFIG.map((m: any) => {
-                  const allKeys = [m.key, ...m.pages.map((p: any) => p.key)]
-                  const allChecked = allKeys.every(k => perfilForm.permissoes.includes(k))
-                  const someChecked = allKeys.some(k => perfilForm.permissoes.includes(k)) && !allChecked
-                  const checkedCount = allKeys.filter(k => perfilForm.permissoes.includes(k)).length
-                  const isExpanded = expandedModulos.includes(m.key)
-                  const toggleExpand = () => setExpandedModulos(prev => prev.includes(m.key) ? prev.filter(k => k !== m.key) : [...prev, m.key])
-                  
-                  return (
-                    <div key={m.key} style={{
-                      border: `1px solid ${allChecked ? perfilForm.cor + '40' : someChecked ? perfilForm.cor + '20' : 'hsl(var(--border-subtle))'}`,
-                      borderRadius: 14,
-                      background: allChecked ? `${perfilForm.cor}06` : someChecked ? `${perfilForm.cor}03` : 'hsl(var(--bg-elevated))',
-                      overflow: 'hidden',
-                      boxShadow: allChecked ? `0 4px 12px ${perfilForm.cor}10` : '0 2px 8px rgba(0,0,0,0.02)',
-                      transition: 'all 0.2s',
-                    }}>
-                      {/* Header do módulo */}
-                      <div
-                        onClick={toggleExpand}
-                        style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 18px', cursor: 'pointer', userSelect: 'none' }}
-                      >
-                        {/* Toggle master */}
-                        <div onClick={e => e.stopPropagation()}>
-                          <ModernSwitch 
-                            checked={allChecked} 
-                            onChange={() => isDiretorGeral && toggleModulo(m)} 
-                            disabled={!isDiretorGeral} 
-                            color={perfilForm.cor}
-                          />
-                        </div>
-                        
-                        {/* Ícone */}
-                        <div style={{ 
-                          width: 32, height: 32, borderRadius: 8, 
-                          background: allChecked ? `${perfilForm.cor}15` : 'hsl(var(--bg-overlay))',
-                          color: allChecked ? perfilForm.cor : 'hsl(var(--text-muted))',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          fontSize: 16, transition: 'all 0.2s'
-                        }}>
-                          {m.icon}
-                        </div>
 
-                        {/* Nome do módulo */}
-                        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
-                          <span style={{ fontSize: 14, fontWeight: 700, color: allChecked ? perfilForm.cor : 'hsl(var(--text-primary))' }}>{m.label}</span>
-                          <span style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>
-                            {allChecked ? 'Acesso Integrado' : someChecked ? 'Acesso Parcial' : 'Sem Acesso'}
-                          </span>
-                        </div>
+              {/* Campo de Busca */}
+              <div style={{ position: 'relative', width: '100%' }}>
+                <Search size={15} style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: 'hsl(var(--text-muted))' }} />
+                <input
+                  type="text"
+                  placeholder="Buscar usuário vinculado por nome, e-mail ou cargo..."
+                  value={perfilUserSearch}
+                  onChange={e => setPerfilUserSearch(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '10px 38px 10px 40px',
+                    borderRadius: 12,
+                    border: '1px solid hsl(var(--border-default))',
+                    background: 'hsl(var(--bg-base))',
+                    color: 'hsl(var(--text-primary))',
+                    fontSize: 13,
+                    fontWeight: 500,
+                    outline: 'none',
+                    transition: 'all 0.2s',
+                    boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.03)'
+                  }}
+                />
+                {perfilUserSearch && (
+                  <button
+                    type="button"
+                    onClick={() => setPerfilUserSearch('')}
+                    style={{
+                      position: 'absolute',
+                      right: 12,
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      color: 'hsl(var(--text-muted))',
+                      padding: 4,
+                      display: 'flex',
+                      alignItems: 'center'
+                    }}
+                    title="Limpar busca"
+                  >
+                    <X size={14} />
+                  </button>
+                )}
+              </div>
 
-                        {/* Contador */}
-                        <span style={{
-                          fontSize: 12, fontWeight: 700,
-                          padding: '4px 10px', borderRadius: 20,
-                          background: checkedCount > 0 ? `${perfilForm.cor}15` : 'hsl(var(--bg-overlay))',
-                          color: checkedCount > 0 ? perfilForm.cor : 'hsl(var(--text-muted))',
-                          minWidth: 50, textAlign: 'center'
-                        }}>{checkedCount} / {allKeys.length}</span>
+              {/* Banner informativo caso seja o perfil Família */}
+              {isTargetFamilia && (
+                <div style={{
+                  padding: '14px 18px',
+                  borderRadius: 12,
+                  background: 'rgba(139,92,246,0.08)',
+                  border: '1px solid rgba(139,92,246,0.25)',
+                  color: 'hsl(var(--text-primary))',
+                  fontSize: 12.5,
+                  lineHeight: 1.5
+                }}>
+                  <div style={{ fontWeight: 700, color: '#8b5cf6', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <Users size={14} /> Perfil do Portal da Família
+                  </div>
+                  <div>
+                    Este perfil engloba <strong>{totalFamiliaUsuarios}</strong> acessos ativos de Alunos e Responsáveis.
+                    {perfilUserSearch ? ' Mostrando resultados correspondentes entre alunos e colaboradores vinculados:' : ' Use o campo de busca acima para pesquisar qualquer aluno ou responsável, ou visualize-os nas abas "Alunos" e "Responsáveis".'}
+                  </div>
+                </div>
+              )}
 
-                        {/* Chevron */}
-                        <span style={{ color: 'hsl(var(--text-muted))', flexShrink: 0, display: 'flex', paddingLeft: 6 }}>
-                          {isExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
-                        </span>
-                      </div>
-
-                      {/* Sub-páginas */}
-                      {isExpanded && m.pages.length > 0 && (
-                        <div style={{
-                          borderTop: `1px solid ${perfilForm.cor}15`,
-                          padding: '16px 18px',
-                          background: 'hsl(var(--bg-base))',
-                          display: 'flex',
-                          flexWrap: 'wrap',
-                          gap: 12
-                        }}>
-                          {m.pages.map((p: any) => {
-                            const isChecked = perfilForm.permissoes.includes(p.key)
-                            return (
-                              <div
-                                key={p.key}
-                                onClick={() => isDiretorGeral && togglePermissao(p.key)}
-                                style={{
-                                  flex: '1 1 180px',
-                                  minWidth: 180,
-                                  display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
-                                  padding: '10px 14px', borderRadius: 10,
-                                  cursor: isDiretorGeral ? 'pointer' : 'not-allowed',
-                                  background: isChecked ? `${perfilForm.cor}10` : 'hsl(var(--bg-overlay))',
-                                  border: `1px solid ${isChecked ? perfilForm.cor + '30' : 'transparent'}`,
-                                  transition: 'all 0.15s ease-out'
-                                }}
-                              >
-                                <span style={{ fontSize: 13, fontWeight: isChecked ? 600 : 500, color: isChecked ? perfilForm.cor : 'hsl(var(--text-secondary))', lineHeight: 1.2, flex: 1 }}>
-                                  {p.label.split(' > ').pop()}
-                                </span>
-                                <ModernSwitch 
-                                  checked={isChecked} 
-                                  onChange={() => {}} // Handle inside parent onClick
-                                  disabled={!isDiretorGeral} 
-                                  color={perfilForm.cor}
-                                />
-                              </div>
-                            )
-                          })}
-                        </div>
-                      )}
+              {/* Lista de Usuários Vinculados */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 380, overflowY: 'auto', paddingRight: 4 }}>
+                {filteredLinkedColabs.length === 0 && (!isTargetFamilia || filteredFamiliaAlunos.length === 0) ? (
+                  <div style={{ textAlign: 'center', padding: '40px 20px', color: 'hsl(var(--text-muted))', background: 'hsl(var(--bg-base))', borderRadius: 14, border: '1px solid hsl(var(--border-subtle))' }}>
+                    <div style={{ fontSize: 32, marginBottom: 8 }}>👥</div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: 'hsl(var(--text-primary))', marginBottom: 4 }}>
+                      {perfilUserSearch ? 'Nenhum usuário encontrado' : 'Nenhum usuário vinculado'}
                     </div>
-                  )
-                })}
+                    <div style={{ fontSize: 12, maxWidth: 360, margin: '0 auto 14px', lineHeight: 1.5 }}>
+                      {perfilUserSearch
+                        ? `Não encontramos nenhum usuário correspondente à pesquisa "${perfilUserSearch}".`
+                        : `Ainda não há colaboradores vinculados ao perfil "${perfilForm.nome}".`}
+                    </div>
+                    {perfilUserSearch ? (
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm"
+                        onClick={() => setPerfilUserSearch('')}
+                      >
+                        Limpar busca
+                      </button>
+                    ) : isDiretorGeral && availableColabsToLink.length > 0 && !isTargetFamilia ? (
+                      <button
+                        type="button"
+                        className="btn btn-primary btn-sm"
+                        onClick={() => setIsVincularOpen(true)}
+                      >
+                        <Plus size={13} /> Vincular Colaborador
+                      </button>
+                    ) : null}
+                  </div>
+                ) : (
+                  <>
+                    {/* Colaboradores Vinculados */}
+                    {filteredLinkedColabs.map(u => (
+                      <div
+                        key={u.id}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          gap: 12,
+                          padding: '12px 16px',
+                          borderRadius: 12,
+                          background: 'hsl(var(--bg-elevated))',
+                          border: '1px solid hsl(var(--border-subtle))',
+                          transition: 'all 0.15s'
+                        }}
+                      >
+                        {/* Avatar & Detalhes */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0, flex: 1 }}>
+                          <div style={{
+                            width: 38,
+                            height: 38,
+                            borderRadius: 10,
+                            background: (u as any).foto ? undefined : `${perfilForm.cor}18`,
+                            border: `1.5px solid ${perfilForm.cor}30`,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            overflow: 'hidden',
+                            flexShrink: 0
+                          }}>
+                            {(u as any).foto ? (
+                              <img src={(u as any).foto} alt={u.nome} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            ) : (
+                              <span style={{ fontSize: 13, fontWeight: 800, color: perfilForm.cor }}>
+                                {u.nome ? u.nome.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase() : '?'}
+                              </span>
+                            )}
+                          </div>
+
+                          <div style={{ minWidth: 0, flex: 1 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                              <span style={{ fontSize: 13.5, fontWeight: 700, color: 'hsl(var(--text-primary))', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                {u.nome}
+                              </span>
+                              <span className={`badge ${u.status === 'ativo' ? 'badge-success' : 'badge-neutral'}`} style={{ fontSize: 10, padding: '1px 6px' }}>
+                                {u.status}
+                              </span>
+                              {u.twofa && (
+                                <span className="badge badge-success" style={{ fontSize: 9, padding: '1px 5px', display: 'flex', alignItems: 'center', gap: 2 }}>
+                                  <Shield size={8} /> 2FA
+                                </span>
+                              )}
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2, fontSize: 12, color: 'hsl(var(--text-muted))', flexWrap: 'wrap' }}>
+                              <span>{u.email}</span>
+                              {u.cargo && (
+                                <>
+                                  <span>•</span>
+                                  <span style={{ color: 'hsl(var(--text-secondary))', fontWeight: 500 }}>{u.cargo}</span>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Ações */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-icon btn-sm"
+                            title="Ver detalhes"
+                            onClick={() => setShowUser(u)}
+                          >
+                            <Eye size={13} />
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-icon btn-sm"
+                            title="Editar usuário"
+                            onClick={() => openEditUser(u)}
+                          >
+                            <Pencil size={13} />
+                          </button>
+                          {isDiretorGeral && (
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-icon btn-sm"
+                              style={{ color: '#ef4444' }}
+                              title="Desvincular deste perfil"
+                              onClick={() => desvincularUsuarioDoPerfil(u)}
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+
+                    {/* Alunos encontrados na busca (caso Perfil Família) */}
+                    {isTargetFamilia && filteredFamiliaAlunos.map(a => (
+                      <div
+                        key={a.id}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          gap: 12,
+                          padding: '10px 16px',
+                          borderRadius: 12,
+                          background: 'hsl(var(--bg-elevated))',
+                          border: '1px solid rgba(139,92,246,0.15)',
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: 1 }}>
+                          <div style={{
+                            width: 34,
+                            height: 34,
+                            borderRadius: 8,
+                            background: 'rgba(139,92,246,0.1)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: 16,
+                            flexShrink: 0
+                          }}>
+                            🎓
+                          </div>
+                          <div style={{ minWidth: 0, flex: 1 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <span style={{ fontSize: 13, fontWeight: 700, color: 'hsl(var(--text-primary))' }}>
+                                {a.nome}
+                              </span>
+                              <span className="badge badge-neutral" style={{ fontSize: 10 }}>Aluno</span>
+                            </div>
+                            <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', marginTop: 2 }}>
+                              Matrícula: {a.matricula || a.id} {a.responsavel ? `• Resp: ${a.responsavel}` : ''}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </>
+                )}
+              </div>
+
+              {/* Rodapé da aba de usuários vinculados */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12, color: 'hsl(var(--text-muted))', paddingTop: 8, borderTop: '1px solid hsl(var(--border-subtle))' }}>
+                <span>
+                  Mostrando {filteredLinkedColabs.length + (isTargetFamilia ? filteredFamiliaAlunos.length : 0)} de {totalLinkedCount} vinculados
+                </span>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  style={{ fontSize: 12 }}
+                  onClick={() => setPerfilModal(null)}
+                >
+                  Fechar
+                </button>
               </div>
             </div>
-          </div>
-          <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 20 }}>
-            <button className="btn btn-ghost" onClick={() => setPerfilModal(null)}>Cancelar</button>
-            <button className="btn btn-primary" onClick={savePerfil} disabled={!isDiretorGeral}><Save size={13} />{perfilModal === 'add' ? 'Criar Perfil' : 'Salvar Perfil'}</button>
-          </div>
+          )}
         </Modal>
       )}
 
       {/* User details view */}
       {showUser && (
-        <Modal title="Detalhes do usuário" onClose={() => setShowUser(null)}>
+        <Modal title="Detalhes do usuário" onClose={() => setShowUser(null)} zIndex={1100}>
           <div style={{ display: 'grid', gap: 12 }}>
             {[['Nome', showUser.nome], ['E-mail', showUser.email], ['Cargo', showUser.cargo || '—'], ['Perfil', showUser.perfil], ['Status', showUser.status], ['2FA', showUser.twofa ? 'Ativo' : 'Inativo'], ['Último acesso', showUser.ultimoAcesso || '—']].map(([k, v]) => (
               <div key={k} style={{ display: 'flex', gap: 12, alignItems: 'center', padding: '8px 0', borderBottom: '1px solid hsl(var(--border-subtle))' }}>

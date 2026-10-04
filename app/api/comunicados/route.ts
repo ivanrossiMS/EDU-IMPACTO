@@ -81,30 +81,36 @@ export async function GET(request: Request) {
   let isFamilyOrStudent = false;
   const perfil = user.user_metadata?.perfil || '';
   const cargo = user.user_metadata?.cargo || '';
+  const hasDualRole = Boolean(user.user_metadata?.hasDualRole || user.user_metadata?.responsavel_id);
+
   if (
     perfil === 'Família' || 
     perfil === 'Responsável' || 
     cargo === 'Responsável' || 
     cargo === 'Aluno' || 
-    perfil === 'Aluno'
+    perfil === 'Aluno' ||
+    (Boolean(alunoId) && hasDualRole)
   ) {
     isFamilyOrStudent = true;
   } else if (!perfil && !cargo) {
     // Só consulta o banco se os metadados estão vazios (caso raro)
     const { data: dbUser } = await supabase
       .from('system_users')
-      .select('perfil, cargo')
+      .select('perfil, cargo, dados')
       .eq('id', user.id)
       .maybeSingle();
     
     const dbPerfil = dbUser?.perfil || '';
     const dbCargo = dbUser?.cargo || '';
+    const dbHasResp = Boolean(dbUser?.dados?.responsavel_id || dbUser?.dados?.responsavelId);
+
     if (
       dbPerfil === 'Família' || 
       dbPerfil === 'Responsável' || 
       dbCargo === 'Responsável' || 
       dbCargo === 'Aluno' || 
-      dbPerfil === 'Aluno'
+      dbPerfil === 'Aluno' ||
+      (Boolean(alunoId) && dbHasResp)
     ) {
       isFamilyOrStudent = true;
     }
@@ -269,10 +275,11 @@ export async function GET(request: Request) {
       if (earliestDateStr) {
         const studentEntryDate = new Date(earliestDateStr);
         if (!isNaN(studentEntryDate.getTime())) {
-          if (accessStartDate === null || studentEntryDate > accessStartDate) {
-            accessStartDate = studentEntryDate;
-          }
+          // Quando alunoId é fornecido, a data de início da consulta é exclusivamente a do aluno
+          accessStartDate = studentEntryDate;
         }
+      } else {
+        accessStartDate = null;
       }
 
       // 3. Resolver grupos do aluno em agenda_grupos

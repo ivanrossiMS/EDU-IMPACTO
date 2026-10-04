@@ -23,7 +23,7 @@ export async function GET(request: Request) {
   let query = supabase.from('titulos').select('*', { count: 'exact' })
   
   const accessStartDate = await getLoggedUserAccessStartDate()
-  if (accessStartDate) {
+  if (accessStartDate && !alunoId) {
     query = query.gte('created_at', accessStartDate.toISOString())
   }
 

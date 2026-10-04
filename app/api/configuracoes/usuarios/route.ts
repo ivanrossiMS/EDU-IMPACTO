@@ -2,34 +2,12 @@ import { NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/server/authGuard'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
-import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
+import { getAdminClient, findAuthUserByEmail } from '@/lib/server/supabaseAdminSingleton'
+import { getCachedColaboradores, setCachedColaboradores, invalidateColaboradoresCache } from '@/lib/server/colaboradoresCache'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30
 
-// ── Cache em memória para lista de colaboradores (TTL = 2 minutos) ──────────
-// Evita N chamadas ao Supabase Auth por cada page mount nos 16+ locais do app.
-const _colaboradoresCache = new Map<string, { data: any; ts: number }>()
-const CACHE_TTL_MS = 2 * 60 * 1000 // 2 minutos
-
-function getCachedColaboradores(key: string) {
-  const entry = _colaboradoresCache.get(key)
-  if (!entry) return null
-  if (Date.now() - entry.ts > CACHE_TTL_MS) {
-    _colaboradoresCache.delete(key)
-    return null
-  }
-  return entry.data
-}
-
-function setCachedColaboradores(key: string, data: any) {
-  _colaboradoresCache.set(key, { data, ts: Date.now() })
-}
-
-// Nota: não exportar funções não-handler de route files (Next.js App Router)
-function invalidateColaboradoresCache() {
-  _colaboradoresCache.clear()
-}
 
 export async function GET(req: Request) {
   try {
@@ -85,7 +63,7 @@ export async function GET(req: Request) {
         { count: 'exact' }
       )
       if (search) {
-        query = query.or(`nome.ilike.%${search}%,email.ilike.%${search}%`)
+        query = query.or(`nome.ilike.%${search}%,email.ilike.%${search}%,cargo.ilike.%${search}%,perfil.ilike.%${search}%`)
       }
       
       const { data: sysUsers, count } = await query
@@ -118,20 +96,35 @@ export async function GET(req: Request) {
       // Modo administração (limit <= 20): enriquecer com dados do Supabase Auth
       const supabaseAdmin = getAdminClient()
       const authMap = new Map<string, any>()
-      if (sysUsers && sysUsers.length > 0) {
+      const usersList: any[] = (sysUsers as any[]) || []
+      if (usersList.length > 0) {
         // Busca em paralelo apenas os usuários desta página (máx 20 por vez)
+        // Prioriza auth_id caso seja diferente de id
         const authResults = await Promise.allSettled(
-          sysUsers.map((u: any) => supabaseAdmin.auth.admin.getUserById(u.id))
+          usersList.map((u: any) => {
+            const targetId = u.auth_id || u.id
+            return supabaseAdmin.auth.admin.getUserById(targetId)
+          })
         )
         authResults.forEach((result) => {
           if (result.status === 'fulfilled' && result.value.data?.user) {
             const au = result.value.data.user
-            if (au.email) authMap.set(au.email.toLowerCase(), au)
+            if (au.email) authMap.set(au.email.toLowerCase().trim(), au)
           }
         })
+
+        // Fallback: se algum usuário desta página não foi localizado pelo ID (ex: id desatualizado), busca por e-mail
+        for (const u of usersList) {
+          const email = (u.email || '').trim().toLowerCase()
+          if (email && !authMap.has(email)) {
+            const au = await findAuthUserByEmail(email)
+            if (au) authMap.set(email, au)
+          }
+        }
       }
 
-      const mappedSys = (sysUsers || []).map((u: any) => {
+
+      const mappedSys = usersList.map((u: any) => {
         const email = (u.email || '').trim().toLowerCase()
         const authUser = authMap.get(email)
 
@@ -152,6 +145,10 @@ export async function GET(req: Request) {
           email: email,
           cargo: u.cargo || 'Não definido',
           perfil: perfilStr,
+          status: u.status || 'ativo',
+          twofa: u.twofa || false,
+          hasDualRole: Boolean(authUser?.user_metadata?.hasDualRole || u.dados?.responsavel_id),
+          responsavel_id: authUser?.user_metadata?.responsavel_id || u.dados?.responsavel_id || null,
           foto: authUser?.user_metadata?.foto || u.dados?.foto || u.foto || null,
           dados: u.dados || {},
           telefone: u.dados?.telefone || u.telefone || '',
@@ -164,6 +161,7 @@ export async function GET(req: Request) {
 
       return NextResponse.json({ data: mappedSys, total: count || 0, page, limit })
     }
+
 
 
     // Fallback logic for general users fetch (legacy support)
@@ -350,32 +348,22 @@ export async function POST(req: Request) {
 
     // ── Provision Supabase Auth user for EVERY new system_user ─────────────────
     
+    let respMatch: any = null
     if (singleBody?.email) {
       const email = singleBody.email.trim().toLowerCase()
       
-      // Check if Auth user already exists for this email
-      // Usa system_users e getUserById em vez de listUsers
-      let existingAuthUser: any = null
-      const { data: sysMatch } = await supabaseAdmin
-        .from('system_users')
-        .select('id')
-        .eq('email', email)
+      // Checa se já existe como responsável (papel duplo Família + Colaborador)
+      const { data: rm } = await supabaseAdmin
+        .from('responsaveis')
+        .select('id, nome, email')
+        .ilike('email', email)
         .maybeSingle()
+      respMatch = rm
+
+      // Check if Auth user already exists for this email
+      let existingAuthUser: any = await findAuthUserByEmail(email)
       
-      if (sysMatch?.id) {
-        const { data: { user } } = await supabaseAdmin.auth.admin.getUserById(sysMatch.id).catch(() => ({ data: { user: null } }))
-        existingAuthUser = user
-      }
       if (!existingAuthUser) {
-         // Fallback para caso não esteja sincronizado
-         const { data: listData } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 50 })
-         existingAuthUser = listData?.users?.find((u: any) => u.email?.toLowerCase() === email)
-      }
-      
-      if (existingAuthUser) {
-        // Already in Auth — just link the ID
-        authUserIdToLink = existingAuthUser.id
-      } else {
         // Create Auth user with the provided password, or a temporary placeholder if none is provided
         const userPass = singleBody.senha || singleBody.password || `EduTemp_${Math.random().toString(36).slice(2, 10)}!`
         try {
@@ -383,15 +371,42 @@ export async function POST(req: Request) {
             email,
             password: userPass,
             email_confirm: true,   // skip email confirmation — admin-provisioned
+            user_metadata: {
+              nome: singleBody.nome,
+              cargo: singleBody.cargo,
+              perfil: singleBody.perfil
+            }
           })
-          if (authErr && !authErr.message.toLowerCase().includes('already')) {
-            console.error('[POST /api/configuracoes/usuarios] Auth user creation failed:', authErr.message)
-          } else if (authData?.user?.id) {
+          if (authData?.user?.id) {
+            existingAuthUser = authData.user
             authUserIdToLink = authData.user.id
+          } else if (authErr?.message?.toLowerCase().includes('already')) {
+            existingAuthUser = await findAuthUserByEmail(email)
+            if (existingAuthUser?.id) authUserIdToLink = existingAuthUser.id
           }
         } catch (e: any) {
           console.error('[POST /api/configuracoes/usuarios] Auth provision error:', e.message)
         }
+      } else {
+        authUserIdToLink = existingAuthUser.id
+      }
+
+      // Se encontrou usuário no Auth (inclusive pré-existente como Responsável), atualiza metadados com dual role
+      if (authUserIdToLink) {
+        const existingMeta = existingAuthUser?.user_metadata || {}
+        const hasDual = Boolean(respMatch?.id || existingMeta.responsavel_id)
+        await supabaseAdmin.auth.admin.updateUserById(authUserIdToLink, {
+          user_metadata: {
+            ...existingMeta,
+            nome: singleBody.nome || existingMeta.nome,
+            cargo: singleBody.cargo || existingMeta.cargo,
+            perfil: singleBody.perfil || existingMeta.perfil,
+            colaborador_id: authUserIdToLink,
+            system_user_id: authUserIdToLink,
+            ...(respMatch?.id ? { responsavel_id: String(respMatch.id) } : {}),
+            hasDualRole: hasDual,
+          }
+        }).catch((err: any) => console.warn('[POST /api/configuracoes/usuarios] Erro ao atualizar metadata:', err?.message))
       }
     }
 
@@ -402,20 +417,38 @@ export async function POST(req: Request) {
     if (authUserIdToLink) {
       fixedBodyList[0].id = authUserIdToLink
       fixedBodyList[0].auth_id = authUserIdToLink
+      if (respMatch?.id) {
+        fixedBodyList[0].dados = {
+          ...(fixedBodyList[0].dados || {}),
+          responsavel_id: String(respMatch.id)
+        }
+      }
+    } else {
+      // Se não há Auth UUID, garantir ID UUID válido para não quebrar constraints
+      const validUuid = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : null
+      if (validUuid) fixedBodyList[0].id = validUuid
+      fixedBodyList[0].auth_id = null
     }
 
-    // Upsert into system_users
-    const { data, error } = await supabaseClientToUse.from('system_users').upsert(fixedBodyList).select()
+    // Upsert into system_users (usar supabaseAdmin para consistência de novos colaboradores)
+    const { data, error } = await supabaseAdmin.from('system_users').upsert(fixedBodyList).select()
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+    // Invalida cache de colaboradores
+    invalidateColaboradoresCache()
 
     // Sync to funcionarios
     for (const row of (data || [])) {
       if (row.email && row.status !== undefined) {
-        await supabaseAdmin.from('funcionarios').update({ status: row.status }).eq('email', row.email)
+        await supabaseAdmin.from('funcionarios').update({
+          status: row.status,
+          ...(row.perfil ? { perfil_sistema: row.perfil } : {})
+        }).ilike('email', row.email)
       }
     }
 
     return NextResponse.json(Array.isArray(body) ? data : data[0])
+
   } catch (err: any) {
     console.error('[API POST configuracoes/usuarios]', err)
     return NextResponse.json({ error: err.message || 'Internal Server Error' }, { status: 500 })

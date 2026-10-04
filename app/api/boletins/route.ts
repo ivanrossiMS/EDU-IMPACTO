@@ -19,7 +19,7 @@ export async function GET(request: Request) {
     let query = supabase.from('boletins').select('*')
     
     const accessStartDate = await getLoggedUserAccessStartDate()
-    if (accessStartDate) {
+    if (accessStartDate && !aluno_id) {
       query = query.gte('created_at', accessStartDate.toISOString())
     }
     

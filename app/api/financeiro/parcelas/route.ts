@@ -48,7 +48,7 @@ export async function GET(request: Request) {
     }
     
     const accessStartDate = await getLoggedUserAccessStartDate()
-    if (accessStartDate) {
+    if (accessStartDate && !aluno_id) {
         query = query.gte('criado_em', accessStartDate.toISOString())
     }
     

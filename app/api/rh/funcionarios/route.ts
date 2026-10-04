@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/server/authGuard'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
-import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
+import { getAdminClient, findAuthUserByEmail } from '@/lib/server/supabaseAdminSingleton'
+import { invalidateColaboradoresCache } from '@/lib/server/colaboradoresCache'
 
 export const dynamic = 'force-dynamic'
 
@@ -152,66 +153,126 @@ async function syncFuncionarioAccess(
   if (newEmail) {
     const { data: existing } = await supabaseAdmin
       .from('system_users')
-      .select('id, auth_id, email, perfil')
+      .select('id, auth_id, email, perfil, dados')
+      .ilike('email', newEmail)
+      .maybeSingle();
+
+    // Verifica se já existe como responsável (papel duplo Família + Colaborador)
+    const { data: respMatch } = await supabaseAdmin
+      .from('responsaveis')
+      .select('id, nome, email')
       .ilike('email', newEmail)
       .maybeSingle();
 
     if (row.perfil_sistema) {
       if (existing) {
+        const updatedDados = {
+          ...(existing.dados || {}),
+          ...(respMatch?.id ? { responsavel_id: String(respMatch.id) } : {}),
+          funcionario_id: row.id,
+        };
+
         await supabaseAdmin
           .from('system_users')
           .update({
-            status: row.status,
+            status: row.status || 'ativo',
             perfil: row.perfil_sistema,
             nome: row.nome,
-            cargo: row.cargo
+            cargo: row.cargo,
+            dados: updatedDados
           })
           .eq('id', existing.id);
 
         const authId = existing.auth_id || existing.id;
-        if (authId && authId.length > 10) {
+        const isAuthUuid = authId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(authId);
+        if (isAuthUuid) {
+          const { data: authUserRes } = await supabaseAdmin.auth.admin.getUserById(authId).catch(() => ({ data: { user: null } }));
+          const existingMeta = authUserRes?.user?.user_metadata || {};
+          const hasDual = Boolean(respMatch?.id || existingMeta.responsavel_id);
+
           await supabaseAdmin.auth.admin.updateUserById(authId, {
+            user_metadata: {
+              ...existingMeta,
+              nome: row.nome,
+              cargo: row.cargo,
+              perfil: row.perfil_sistema,
+              colaborador_id: authId,
+              system_user_id: authId,
+              ...(respMatch?.id ? { responsavel_id: String(respMatch.id) } : {}),
+              hasDualRole: hasDual || Boolean(existingMeta.hasDualRole),
+            }
+          }).catch(() => {});
+        }
+      } else {
+        // Tenta localizar conta já existente no Supabase Auth (ex: era apenas Responsável)
+        let foundAuthUser: any = await findAuthUserByEmail(newEmail);
+        let authUserId = foundAuthUser?.id;
+
+        if (!authUserId) {
+          // Criar novo usuário no Auth
+          const tempPass = `Impacto@${Math.random().toString(36).slice(-8)}`;
+          const { data: authData, error: authErr } = await supabaseAdmin.auth.admin.createUser({
+            email: newEmail,
+            password: tempPass,
+            email_confirm: true,
             user_metadata: {
               nome: row.nome,
               cargo: row.cargo,
               perfil: row.perfil_sistema
             }
-          }).catch(() => {});
-        }
-      } else {
-        // Criar novo usuário apenas se realmente não existia nenhum acesso
-        const tempPass = `Impacto@${Math.random().toString(36).slice(-8)}`;
-        const { data: authData, error: authErr } = await supabaseAdmin.auth.admin.createUser({
-          email: newEmail,
-          password: tempPass,
-          email_confirm: true,
-          user_metadata: {
-            nome: row.nome,
-            cargo: row.cargo,
-            perfil: row.perfil_sistema
+          });
+
+          if (authData?.user?.id) {
+            authUserId = authData.user.id;
+            foundAuthUser = authData.user;
+          } else if (authErr?.message?.toLowerCase().includes('already')) {
+            foundAuthUser = await findAuthUserByEmail(newEmail);
+            if (foundAuthUser?.id) authUserId = foundAuthUser.id;
           }
-        });
-
-        let authUserId = authData?.user?.id;
-        if (!authUserId && authErr?.message?.toLowerCase().includes('already')) {
-          const { data: listData } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 50 });
-          const matched = listData?.users?.find((u: any) => u.email?.toLowerCase() === newEmail);
-          if (matched) authUserId = matched.id;
         }
 
-        const newUserId = authUserId || `U${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
+        const isAuthUuid = authUserId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(authUserId);
+        const targetId = isAuthUuid ? authUserId : (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `U${Date.now()}-${Math.random().toString(36).substr(2, 6)}`);
+        const targetAuthId = isAuthUuid ? authUserId : null; // Nunca inserir string não-UUID no campo auth_id
+
+        const hasDual = Boolean(respMatch?.id || foundAuthUser?.user_metadata?.responsavel_id);
+
+        if (isAuthUuid) {
+          const existingMeta = foundAuthUser?.user_metadata || {};
+          await supabaseAdmin.auth.admin.updateUserById(authUserId, {
+            user_metadata: {
+              ...existingMeta,
+              nome: row.nome,
+              cargo: row.cargo,
+              perfil: row.perfil_sistema,
+              colaborador_id: authUserId,
+              system_user_id: authUserId,
+              ...(respMatch?.id ? { responsavel_id: String(respMatch.id) } : {}),
+              hasDualRole: hasDual,
+            }
+          }).catch((err: any) => console.warn('[syncFuncionarioAccess] Auth metadata update failed:', err?.message));
+        }
+
         await supabaseAdmin.from('system_users').upsert({
-          id: newUserId,
-          auth_id: authUserId || newUserId,
+          id: targetId,
+          ...(targetAuthId ? { auth_id: targetAuthId } : {}),
           email: newEmail,
           nome: row.nome,
           cargo: row.cargo,
           perfil: row.perfil_sistema,
-          status: row.status
+          status: row.status || 'ativo',
+          dados: {
+            ...(respMatch?.id ? { responsavel_id: String(respMatch.id) } : {}),
+            funcionario_id: row.id,
+          }
         });
       }
+
+      // Limpar cache de colaboradores
+      invalidateColaboradoresCache();
     } else if (existing) {
       await supabaseAdmin.from('system_users').update({ status: row.status }).eq('id', existing.id);
+      invalidateColaboradoresCache();
     }
 
     // 3. Auto-reconciliação: se existirem duplicatas com mesmo nome mas e-mail órfão

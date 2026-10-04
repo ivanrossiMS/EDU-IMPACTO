@@ -72,3 +72,44 @@ export async function lookupAuthUserByEmail(email: string) {
     return null
   }
 }
+
+/**
+ * Helper: busca um usuário no Supabase Auth por email de forma completa e resiliente.
+ * 1. Primeiro tenta na tabela system_users (O(1)).
+ * 2. Se não encontrar, faz fallback paginado na API admin.listUsers do Supabase Auth (perPage: 1000).
+ */
+export async function findAuthUserByEmail(email: string) {
+  if (!email) return null
+  const admin = getAdminClient()
+  const cleanEmail = email.toLowerCase().trim()
+
+  // 1. Tenta lookup rápido via system_users
+  const { data: su } = await admin
+    .from('system_users')
+    .select('id, auth_id')
+    .ilike('email', cleanEmail)
+    .maybeSingle()
+
+  const candidateId = su?.auth_id || su?.id
+  const isUuid = candidateId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(candidateId)
+  if (isUuid) {
+    try {
+      const { data: { user } } = await admin.auth.admin.getUserById(candidateId)
+      if (user) return user
+    } catch {}
+  }
+
+  // 2. Fallback: varre auth.users usando perPage: 1000
+  let page = 1
+  while (true) {
+    const { data, error } = await admin.auth.admin.listUsers({ page, perPage: 1000 }).catch(() => ({ data: null, error: true }))
+    if (error || !data?.users || data.users.length === 0) break
+    const match = data.users.find(u => u.email?.toLowerCase().trim() === cleanEmail)
+    if (match) return match
+    if (data.users.length < 1000) break
+    page++
+  }
+
+  return null
+}
+

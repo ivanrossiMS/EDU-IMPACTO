@@ -10,10 +10,15 @@ export async function GET(request: Request) {
   if (errorResponse) return errorResponse
 
   try {
+    const { searchParams } = new URL(request.url)
+    const turma = searchParams.get('turma') || searchParams.get('turma_id')
     const supabase = await createProtectedClient()
     const accessStartDate = await getLoggedUserAccessStartDate()
     let query = supabase.from('rotina_items').select('*')
-    if (accessStartDate) {
+    if (turma) {
+      query = query.eq('turma', turma)
+    }
+    if (accessStartDate && !turma) {
       query = query.gte('created_at', accessStartDate.toISOString())
     }
     const { data, error } = await query

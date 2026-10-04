@@ -143,6 +143,7 @@ export const ALL_NAV_GROUPS: NavGroup[] = [
       { label: 'CONFIG DO SISTEMA', href: '/configuracoes', icon: <Settings size={16} /> },
       { label: 'MULTI-UNIDADES', href: '/configuracoes/unidades', icon: <Building size={16} /> },
       { label: 'PRIVACIDADE', href: '/privacidade', icon: <ShieldCheck size={16} /> },
+      { label: 'AUDITORIA E LOGS', href: '/configuracoes/logs', icon: <History size={16} /> },
       {
         label: 'CONFIG. FINANCEIRO', icon: <Landmark size={16} />,
         children: [

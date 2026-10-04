@@ -24,12 +24,14 @@ export async function GET(request: Request) {
 
     const perfil = user.user_metadata?.perfil || ''
     const cargo  = user.user_metadata?.cargo  || ''
+    const hasDualRole = Boolean(user.user_metadata?.hasDualRole || user.user_metadata?.responsavel_id)
     const isFamilyOrStudent =
       perfil === 'Família'     ||
       perfil === 'Responsável' ||
       perfil === 'Aluno'       ||
       cargo  === 'Responsável' ||
-      cargo  === 'Aluno'
+      cargo  === 'Aluno'       ||
+      hasDualRole
 
     // ─── Admins/Colaboradores: acesso por aluno_id explícito (opcional) ────────
     const url = new URL(request.url)

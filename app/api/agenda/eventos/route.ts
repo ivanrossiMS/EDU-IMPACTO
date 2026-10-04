@@ -27,7 +27,7 @@ export async function GET(request: Request) {
     
     let query = supabase.from('eventos_agenda').select('*')
     
-    if (accessStartDate) {
+    if (accessStartDate && !alunoId) {
       const accessStartDateStr = accessStartDate.toISOString().substring(0, 10)
       query = query.gte('data', accessStartDateStr)
     }
@@ -35,7 +35,8 @@ export async function GET(request: Request) {
     // Filtragem Segura no Backend para Família/Aluno
     const perfil = user.user_metadata?.perfil || '';
     const cargo = user.user_metadata?.cargo || '';
-    const isFamilyOrStudent = ['Família', 'Responsável', 'Aluno'].includes(perfil) || ['Responsável', 'Aluno'].includes(cargo);
+    const hasDualRole = Boolean(user.user_metadata?.hasDualRole || user.user_metadata?.responsavel_id);
+    const isFamilyOrStudent = ['Família', 'Responsável', 'Aluno'].includes(perfil) || ['Responsável', 'Aluno'].includes(cargo) || hasDualRole;
     
     if (isFamilyOrStudent && alunoId) {
       let resolvedTurma = null;

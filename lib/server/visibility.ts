@@ -12,6 +12,10 @@ import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 const accessStartDateCache = new Map<string, { date: Date | null; expiry: number }>()
 const CACHE_DURATION_MS = 10 * 60 * 1000 // 10 minutes cache TTL
 
+export function invalidateAccessStartDateCache() {
+  accessStartDateCache.clear()
+}
+
 export async function getLoggedUserAccessStartDate(strictMomentos = false): Promise<Date | null> {
   try {
     const authClient = await createProtectedClient()
@@ -82,8 +86,17 @@ async function fetchLoggedUserAccessStartDate(user: any, strictMomentos: boolean
       return new Date(dbUser?.created_at || user.created_at)
     }
 
-    // 3. FAMÍLIA: Visualização total do histórico do aluno, exceto para momentos restritos
-    if (perfil === 'Família' || cargo === 'Responsável' || perfil === 'Responsável') {
+    // 3. FAMÍLIA OU PAPEL DUPLO: Visualização total do histórico do aluno, exceto para momentos restritos
+    const isFamilyOrResp = (
+      perfil === 'Família' ||
+      cargo === 'Responsável' ||
+      perfil === 'Responsável' ||
+      Boolean(user.user_metadata?.hasDualRole) ||
+      Boolean(user.user_metadata?.responsavel_id) ||
+      Boolean(dbUser?.dados?.responsavel_id)
+    )
+
+    if (isFamilyOrResp) {
       if (!strictMomentos) return null
       
       const responsavelId = user.user_metadata?.responsavel_id || dbUser?.dados?.responsavel_id

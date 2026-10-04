@@ -50,12 +50,15 @@ export async function GET(request: Request) {
     const perfisMasterAdmin = ['administrador master', 'administrador', 'admin', 'diretor geral', 'diretora geral', 'master'];
     const isAdmin = perfisMasterAdmin.some(p => p === effectivePerfil.toLowerCase() || p === effectiveCargo.toLowerCase());
 
+    const hasDualRole = Boolean(user.user_metadata?.hasDualRole || user.user_metadata?.responsavel_id || dbUser?.dados?.responsavel_id);
+
     const isFamilyOrStudentProfile = (
       effectivePerfil === 'Família' || 
       effectivePerfil === 'Responsável' || 
       effectiveCargo === 'Responsável' || 
       effectiveCargo === 'Aluno' || 
-      effectivePerfil === 'Aluno'
+      effectivePerfil === 'Aluno' ||
+      (Boolean(alunoId) && hasDualRole)
     );
 
     // BLINDAGEM IDOR: Se for perfil de família ou aluno, validar obrigatoriamente a relação

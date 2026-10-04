@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/server/authGuard'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
+import { invalidateColaboradoresCache } from '@/lib/server/colaboradoresCache'
 
 export const dynamic = 'force-dynamic'
 
@@ -24,6 +25,8 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
 
   const { data, error } = await supabase.from('system_users').update(fixedBody).eq('id', id).select().single()
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  invalidateColaboradoresCache()
 
   const supabaseAdmin = getAdminClient()
   const oldEmail = (oldUser?.email || '').trim().toLowerCase()
@@ -56,7 +59,10 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
       }).ilike('email', oldEmail)
     }
   } else if (data?.email && fixedBody.status !== undefined) {
-    await supabaseAdmin.from('funcionarios').update({ status: fixedBody.status }).ilike('email', data.email)
+    await supabaseAdmin.from('funcionarios').update({
+      status: fixedBody.status,
+      ...(fixedBody.perfil ? { perfil_sistema: fixedBody.perfil } : {})
+    }).ilike('email', data.email)
   }
 
   return NextResponse.json(data)
@@ -79,10 +85,34 @@ export async function DELETE(req: Request, context: { params: Promise<{ id: stri
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
+  invalidateColaboradoresCache()
+
   const supabaseAdmin = getAdminClient()
   
+  // Verifica se o usuário também é Responsável ou Aluno (para não excluir a conta de acesso da família)
+  let isResponsavelOrAluno = false
+  if (userRow?.email) {
+    const emailLower = userRow.email.trim().toLowerCase()
+    const { data: respCheck } = await supabaseAdmin.from('responsaveis').select('id').ilike('email', emailLower).limit(1)
+    const { data: alunoCheck } = await supabaseAdmin.from('alunos').select('id').ilike('email', emailLower).limit(1)
+    isResponsavelOrAluno = Boolean((respCheck && respCheck.length > 0) || (alunoCheck && alunoCheck.length > 0))
+  }
+
   if (id.length > 10) {
-    await supabaseAdmin.auth.admin.deleteUser(id).catch((e: any) => console.error(e))
+    if (isResponsavelOrAluno) {
+      // Preserva a conta no Auth (usada como Responsável/Aluno), apenas remove acesso de colaborador
+      await supabaseAdmin.auth.admin.updateUserById(id, {
+        user_metadata: {
+          colaborador_id: null,
+          system_user_id: null,
+          hasDualRole: false,
+          perfil: 'Família',
+          cargo: 'Responsável'
+        }
+      }).catch((e: any) => console.error(e))
+    } else {
+      await supabaseAdmin.auth.admin.deleteUser(id).catch((e: any) => console.error(e))
+    }
   }
 
   if (userRow?.email) {
@@ -92,3 +122,4 @@ export async function DELETE(req: Request, context: { params: Promise<{ id: stri
 
   return NextResponse.json({ success: true })
 }
+
