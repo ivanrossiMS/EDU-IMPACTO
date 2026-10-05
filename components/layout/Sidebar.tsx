@@ -493,7 +493,14 @@ export function Sidebar() {
         {/* Navigation */}
         <div style={{ flex: 1, padding: '0 16px', overflowY: 'auto' }} className="no-scrollbar">
           {(() => {
-            const userPerfilObj = (perfis || []).find((p: any) => p.nome === currentUserPerfil)
+            const normalize = (s: string) => (s || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim()
+            const activePerfilName = currentUserPerfil || currentUser?.perfil || currentUser?.cargo || ''
+            const userPerfilObj = (perfis || []).find((p: any) => 
+              p.nome === activePerfilName || 
+              normalize(p.nome) === normalize(activePerfilName) ||
+              (currentUser?.perfil && (p.nome === currentUser.perfil || normalize(p.nome) === normalize(currentUser.perfil))) ||
+              (currentUser?.cargo && (p.nome === currentUser.cargo || normalize(p.nome) === normalize(currentUser.cargo)))
+            )
             const isAgendaBlocked = !!userPerfilObj?.bloqueadoAgendaDigital
             const isGestaoPessoasBlocked = !!userPerfilObj?.bloqueadoGestaoPessoas
             const isCredImpactoBlocked = !!userPerfilObj?.bloqueadoCredImpacto
@@ -509,11 +516,26 @@ export function Sidebar() {
                 }
               }
 
-              if (group.title === 'FINANCEIRO' || group.title === 'RH') {
+              if (group.title === 'FINANCEIRO') {
                 return {
                   ...group,
                   items: group.items.filter(item => {
-                    if (item.label === 'CREDIMPACTO' && isCredImpactoBlocked) return false
+                    // O CredImpacto é um módulo independente e NUNCA deve aparecer em Financeiro
+                    const lbl = (item.label || '').toUpperCase()
+                    const hrf = (item.href || '').toLowerCase()
+                    if (lbl.includes('CREDIMPACTO') || hrf.includes('credimpacto')) return false
+                    return true
+                  })
+                }
+              }
+
+              if (group.title === 'RH') {
+                return {
+                  ...group,
+                  items: group.items.filter(item => {
+                    const lbl = (item.label || '').toUpperCase()
+                    const hrf = (item.href || '').toLowerCase()
+                    if (lbl.includes('CREDIMPACTO') || hrf.includes('credimpacto')) return false
                     return true
                   })
                 }
@@ -692,7 +714,14 @@ export function Sidebar() {
               )}
             </AnimatePresence>
             {(() => {
-              const userPerfilObj = (perfis || []).find((p: any) => p.nome === currentUserPerfil)
+              const normalize = (s: string) => (s || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim()
+              const activePerfilName = currentUserPerfil || currentUser?.perfil || currentUser?.cargo || ''
+              const userPerfilObj = (perfis || []).find((p: any) => 
+                p.nome === activePerfilName || 
+                normalize(p.nome) === normalize(activePerfilName) ||
+                (currentUser?.perfil && (p.nome === currentUser.perfil || normalize(p.nome) === normalize(currentUser.perfil))) ||
+                (currentUser?.cargo && (p.nome === currentUser.cargo || normalize(p.nome) === normalize(currentUser.cargo)))
+              )
               const isAgendaBlocked = !!userPerfilObj?.bloqueadoAgendaDigital
               const isGestaoPessoasBlocked = !!userPerfilObj?.bloqueadoGestaoPessoas
               const isSimuladosBlocked = !!userPerfilObj?.bloqueadoSimulados

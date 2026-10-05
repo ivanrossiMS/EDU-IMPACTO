@@ -33,18 +33,29 @@ export default function CredImpactoPage() {
 }
 
 function CredImpactoContent() {
-  const { currentUser } = useApp()
-  const { perfis } = useData()
+  const { currentUser, currentUserPerfil } = useApp()
+  const { perfis, perfisLoading } = useData()
   const router = useRouter()
   const searchParams = useSearchParams()
   const tabParam = searchParams.get('tab') as TabId | null
 
-  // Verificação de bloqueio no perfil
-  const userPerfilObj = (perfis || []).find((p: any) => p.nome === currentUser?.perfil || p.nome === currentUser?.cargo)
-  const isBlocked = userPerfilObj?.bloqueadoCredImpacto === true
+  const effectivePerfil = currentUserPerfil || currentUser?.perfil || currentUser?.cargo || ''
+  const effectiveCargo = currentUser?.cargo || ''
+
+  // Verificação de bloqueio no perfil com fallback resiliente e normalização
+  const normalize = (s: string) => (s || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim()
+  const userPerfilObj = (perfis || []).find((p: any) => 
+    p.nome === effectivePerfil || 
+    p.nome === currentUser?.perfil || 
+    p.nome === currentUser?.cargo ||
+    (effectivePerfil && normalize(p.nome) === normalize(effectivePerfil)) ||
+    (currentUser?.perfil && normalize(p.nome) === normalize(currentUser.perfil)) ||
+    (currentUser?.cargo && normalize(p.nome) === normalize(currentUser.cargo))
+  )
+  const isBlocked = !perfisLoading && userPerfilObj?.bloqueadoCredImpacto === true
 
   // Identificação do Perfil e Privilégios: SOMENTE Admin e Diretor Geral têm acesso à Gestão
-  const isAdminOrFinance = isCredImpactoAdmin(currentUser?.perfil, currentUser?.cargo)
+  const isAdminOrFinance = isCredImpactoAdmin(effectivePerfil, effectiveCargo)
 
   // Estado da Visão: apenas admin/diretor geral pode acessar 'admin'; todos os demais acessam 'colaborador'
   const [viewMode, setViewMode] = useState<'admin' | 'colaborador'>(isAdminOrFinance ? 'admin' : 'colaborador')
@@ -183,11 +194,11 @@ function CredImpactoContent() {
   ).length
 
   const totalEmprestadoAtivo = emprestimos
-    .filter((e) => ['ativo', 'aguardando_liberacao', 'aguardando_assinatura'].includes(e.status))
+    .filter((e) => e.status === 'ativo')
     .reduce((acc, e) => acc + (e.valorAprovado || 0), 0)
 
   const saldoDevedorTotal = emprestimos
-    .filter((e) => ['ativo', 'aguardando_liberacao', 'aguardando_assinatura'].includes(e.status))
+    .filter((e) => e.status === 'ativo')
     .reduce((acc, e) => acc + (e.saldoDevedorAtual || 0), 0)
 
   const handleToggleViewMode = (mode: 'admin' | 'colaborador') => {
@@ -220,6 +231,14 @@ function CredImpactoContent() {
 
   const handleOpenNewLoan = () => {
     setActiveTab('simular')
+  }
+
+  if (perfisLoading && !userPerfilObj) {
+    return (
+      <div className="min-h-[70vh] flex items-center justify-center p-6">
+        <div className="w-8 h-8 rounded-full border-2 border-emerald-500/20 border-t-emerald-500 animate-spin" />
+      </div>
+    )
   }
 
   if (isBlocked) {
@@ -265,7 +284,7 @@ function CredImpactoContent() {
 
       {/* ÁREA DE CONTEÚDO PRINCIPAL (COM SCROLL INDEPENDENTE) */}
       <div className="flex-1 min-w-0 h-screen overflow-y-auto">
-        <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6 pb-28 md:pb-12">
+        <div className="p-4 sm:p-6 lg:px-7 lg:py-6 max-w-[1536px] mx-auto space-y-6 pb-28 md:pb-12">
           {/* CABEÇALHO SUPERIOR */}
           <CredImpactoHeader
             isAdminOrFinance={isAdminOrFinance}

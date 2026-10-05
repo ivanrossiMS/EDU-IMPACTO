@@ -12,7 +12,11 @@ import {
   Info,
   Calendar,
   DollarSign,
-  UserCheck
+  UserCheck,
+  Clock,
+  Sparkles,
+  ArrowRight,
+  X
 } from 'lucide-react'
 import {
   MetodoCalculo,
@@ -87,6 +91,20 @@ export function SimuladorEmprestimo({
   const [showMemoria, setShowMemoria] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showConfirmationModal, setShowConfirmationModal] = useState(false)
+  const [showSuccessModal, setShowSuccessModal] = useState(false)
+  const [successData, setSuccessData] = useState<{
+    codigoOperacao: string
+    valor: number
+    parcelas: number
+    isConcessaoPelaEscola: boolean
+  } | null>(null)
+
+  const handleCloseSuccessModal = () => {
+    setShowSuccessModal(false)
+    if (onRequestSubmitted) {
+      onRequestSubmitted()
+    }
+  }
 
   // Sincroniza CPF inicial do usuário logado se chegar após carregamento
   useEffect(() => {
@@ -162,15 +180,25 @@ export function SimuladorEmprestimo({
     }
 
     const cleanCpfDigits = (cpfInput || '').replace(/\D/g, '')
-    if (cleanCpfDigits.length > 0 && cleanCpfDigits.length !== 11) {
-      toast.error('O CPF informado deve conter 11 dígitos, ou pode ser deixado em branco para preenchimento no momento do aceite.')
+    if (!cleanCpfDigits || cleanCpfDigits.length !== 11) {
+      toast.error('O CPF é obrigatório e deve conter 11 dígitos para prosseguir com a solicitação.')
       return
+    }
+
+    // Se ainda não preencheu chave PIX, sugere o próprio CPF
+    if (!dadosBancarios.chavePix) {
+      setDadosBancarios((prev) => ({ ...prev, chavePix: formatCpfMask(cleanCpfDigits) }))
     }
 
     setShowConfirmationModal(true)
   }
 
   const handleSubmitRequest = async () => {
+    if (!dadosBancarios.chavePix || !dadosBancarios.chavePix.trim()) {
+      toast.error('Informe a Chave PIX para crédito do valor.')
+      return
+    }
+
     setIsSubmitting(true)
     try {
       const isConcessaoPelaEscola = isAdminOrFinance && viewMode === 'admin' && Boolean(targetColaboradorId)
@@ -183,7 +211,10 @@ export function SimuladorEmprestimo({
         metodoCalculo: metodo,
         justificativaSolicitacao: justificativa,
         finalidade,
-        dadosBancarios,
+        dadosBancarios: {
+          chavePix: dadosBancarios.chavePix.trim(),
+          tipoConta: 'corrente'
+        },
         criadoPorFinanceiro: isConcessaoPelaEscola,
         colaboradorCpf: formattedCpf
       }
@@ -213,7 +244,13 @@ export function SimuladorEmprestimo({
       )
 
       setShowConfirmationModal(false)
-      if (onRequestSubmitted) onRequestSubmitted()
+      setSuccessData({
+        codigoOperacao: data.codigoOperacao || 'CRED-2026',
+        valor,
+        parcelas,
+        isConcessaoPelaEscola
+      })
+      setShowSuccessModal(true)
     } catch (err: any) {
       toast.error(err.message || 'Falha ao enviar proposta.')
     } finally {
@@ -225,19 +262,19 @@ export function SimuladorEmprestimo({
     <div className="space-y-6">
       {/* SIMULADOR CARD PRINCIPAL */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-6 shadow-sm relative overflow-hidden">
-        <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800 mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100 dark:border-slate-800 mb-6">
           <div>
             <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
               <Calculator size={18} className="text-emerald-600 dark:text-emerald-400" />
               Simulador Financeiro de Empréstimo
             </h2>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
               Ajuste as condições desejadas e visualize a composição exata das parcelas e juros.
             </p>
           </div>
-          <div className="text-right">
-            <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Taxa Aplicada:</span>
-            <div className="text-emerald-600 dark:text-emerald-400 font-extrabold text-sm">{taxa.toFixed(2)}% a.m.</div>
+          <div className="inline-flex items-center gap-2 self-start sm:self-center px-3 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200/80 dark:border-emerald-800/60 shrink-0 shadow-sm">
+            <span className="text-[11px] font-semibold text-emerald-800 dark:text-emerald-300">Taxa Aplicada:</span>
+            <span className="text-emerald-700 dark:text-emerald-400 font-extrabold text-sm font-mono">{taxa.toFixed(2)}% a.m.</span>
           </div>
         </div>
 
@@ -302,17 +339,14 @@ export function SimuladorEmprestimo({
               {/* CAMPO DE CPF COM MÁSCARA E SALVAMENTO NO CADASTRO */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-2 flex items-center justify-between">
-                  <span className="flex items-center gap-1.5">
-                    <span>CPF do Colaborador</span>
-                    <span className="text-[10px] text-slate-400 font-normal lowercase">(opcional agora)</span>
-                  </span>
+                  <span>CPF do Colaborador</span>
                   {currentUserCpf ? (
                     <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold lowercase">
-                      cadastrado
+                      vinculado ao cadastro
                     </span>
                   ) : (
-                    <span className="text-[10px] text-slate-500 dark:text-slate-400 font-normal lowercase">
-                      ou preencha no aceite
+                    <span className="text-[10px] text-rose-500 dark:text-rose-400 font-semibold lowercase">
+                      * obrigatório
                     </span>
                   )}
                 </label>
@@ -322,12 +356,11 @@ export function SimuladorEmprestimo({
                   value={cpfInput}
                   onChange={(e) => setCpfInput(formatCpfMask(e.target.value))}
                   placeholder="000.000.000-00"
+                  required
                   className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2 text-xs text-slate-900 dark:text-white font-mono font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 shadow-sm"
                 />
                 <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1">
-                  {currentUserCpf
-                    ? 'CPF obtido do seu cadastro funcional e vinculado ao contrato.'
-                    : 'Pode ser preenchido agora ou no momento do aceite/assinatura digital.'}
+                  Obrigatório para emissão do contrato e averbação em folha.
                 </p>
               </div>
             </div>
@@ -387,27 +420,29 @@ export function SimuladorEmprestimo({
               </div>
             </div>
 
-            {/* MÉTODO DE CÁLCULO */}
-            <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-2">
-                Método de Cálculo e Amortização
-              </label>
-              <select
-                value={metodo}
-                onChange={(e) => setMetodo(e.target.value as MetodoCalculo)}
-                disabled={!isAdminOrFinance && config.metodosPermitidos?.length <= 1}
-                className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 disabled:opacity-75"
-              >
-                {config.metodosPermitidos.map((m) => (
-                  <option key={m} value={m}>
-                    {METODOS_LABELS[m]?.nome || m}
-                  </option>
-                ))}
-              </select>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1.5 italic">
-                {METODOS_LABELS[metodo]?.descricao}
-              </p>
-            </div>
+            {/* MÉTODO DE CÁLCULO (VISÍVEL APENAS PARA ADMIN CONCEDENDO PELA ESCOLA) */}
+            {isAdminOrFinance && viewMode === 'admin' && (
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-2">
+                  Método de Cálculo e Amortização
+                </label>
+                <select
+                  value={metodo}
+                  onChange={(e) => setMetodo(e.target.value as MetodoCalculo)}
+                  disabled={config.metodosPermitidos?.length <= 1}
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 disabled:opacity-75"
+                >
+                  {config.metodosPermitidos.map((m) => (
+                    <option key={m} value={m}>
+                      {METODOS_LABELS[m]?.nome || m}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1.5 italic">
+                  {METODOS_LABELS[metodo]?.descricao}
+                </p>
+              </div>
+            )}
 
             {/* TAXA MENSAL (APENAS EDITÁVEL POR ADMIN EM CONCESSÃO PELA ESCOLA) */}
             {isAdminOrFinance && viewMode === 'admin' && (
@@ -433,10 +468,12 @@ export function SimuladorEmprestimo({
             <div className="grid grid-cols-2 gap-3">
               <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800 rounded-xl p-4">
                 <span className="text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400">
-                  {metodo === 'JUROS_SIMPLES_SALDO' ? '1ª Parcela (Maior)' : 'Valor da Parcela'}
+                  {metodo === 'JUROS_SIMPLES_SALDO' && simulacao.valorPrimeiraParcela !== simulacao.valorUltimaParcela
+                    ? '1ª Parcela (Decrescente)'
+                    : 'Valor da Parcela'}
                 </span>
-                <div className="text-xl font-black text-slate-900 dark:text-white font-mono mt-1">
-                  {formatBrl(simulacao.valorPrimeiraParcela)}
+                <div className="text-base sm:text-xl font-black text-slate-900 dark:text-white font-mono mt-1 tracking-tight">
+                  {parcelas}x de {formatBrl(simulacao.valorPrimeiraParcela)}
                 </div>
                 {metodo === 'JUROS_SIMPLES_SALDO' && simulacao.valorPrimeiraParcela !== simulacao.valorUltimaParcela && (
                   <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
@@ -529,27 +566,27 @@ export function SimuladorEmprestimo({
                 <table className="w-full text-xs text-left">
                   <thead className="bg-slate-50 dark:bg-slate-800/50 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider border-b border-slate-200/80 dark:border-slate-800">
                     <tr>
-                      <th className="py-2.5 px-3 text-center">Nº</th>
-                      <th className="py-2.5 px-3">Competência</th>
-                      <th className="py-2.5 px-3">Vencimento</th>
-                      <th className="py-2.5 px-3 text-right">Amortização</th>
-                      <th className="py-2.5 px-3 text-right">Juros</th>
-                      <th className="py-2.5 px-3 text-right">Total Parcela</th>
-                      <th className="py-2.5 px-3 text-right">Saldo Devedor</th>
+                      <th className="py-2.5 px-2 text-center w-9 whitespace-nowrap">Nº</th>
+                      <th className="py-2.5 px-2 text-center whitespace-nowrap">Competência</th>
+                      <th className="py-2.5 px-2 text-center whitespace-nowrap">Vencimento</th>
+                      <th className="py-2.5 px-2 text-right whitespace-nowrap">Amortização</th>
+                      <th className="py-2.5 px-2 text-right whitespace-nowrap">Juros</th>
+                      <th className="py-2.5 px-2 text-right whitespace-nowrap">Total Parcela</th>
+                      <th className="py-2.5 px-2 text-right whitespace-nowrap">Saldo Devedor</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80 font-mono text-[11px]">
                     {simulacao.parcelas.map((p) => (
                       <tr key={p.numero} className="hover:bg-slate-50/70 dark:hover:bg-white/5 transition-colors">
-                        <td className="py-2 px-3 text-center font-bold text-slate-700 dark:text-slate-300">{p.numero}</td>
-                        <td className="py-2 px-3 text-slate-700 dark:text-slate-300">{p.competencia}</td>
-                        <td className="py-2 px-3 text-slate-500 dark:text-slate-400">
+                        <td className="py-2 px-2 text-center font-bold text-slate-700 dark:text-slate-300 w-9">{p.numero}</td>
+                        <td className="py-2 px-2 text-center text-slate-700 dark:text-slate-300 whitespace-nowrap">{p.competencia}</td>
+                        <td className="py-2 px-2 text-center text-slate-500 dark:text-slate-400 whitespace-nowrap">
                           {new Date(p.dataVencimento + 'T12:00:00Z').toLocaleDateString('pt-BR')}
                         </td>
-                        <td className="py-2 px-3 text-right text-slate-700 dark:text-slate-200">{formatBrl(p.valorAmortizacao)}</td>
-                        <td className="py-2 px-3 text-right text-slate-500 dark:text-slate-400">{formatBrl(p.valorJuros)}</td>
-                        <td className="py-2 px-3 text-right font-bold text-emerald-600 dark:text-emerald-400">{formatBrl(p.valorTotal)}</td>
-                        <td className="py-2 px-3 text-right font-bold text-slate-900 dark:text-cyan-400">{formatBrl(p.saldoDevedorApos)}</td>
+                        <td className="py-2 px-2 text-right text-slate-700 dark:text-slate-200 whitespace-nowrap">{formatBrl(p.valorAmortizacao)}</td>
+                        <td className="py-2 px-2 text-right text-slate-500 dark:text-slate-400 whitespace-nowrap">{formatBrl(p.valorJuros)}</td>
+                        <td className="py-2 px-2 text-right font-bold text-emerald-600 dark:text-emerald-400 whitespace-nowrap">{formatBrl(p.valorTotal)}</td>
+                        <td className="py-2 px-2 text-right font-bold text-slate-900 dark:text-cyan-400 whitespace-nowrap">{formatBrl(p.saldoDevedorApos)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -606,8 +643,12 @@ export function SimuladorEmprestimo({
                 <span className="text-slate-900 dark:text-white font-medium">{parcelas}x parcelas em folha</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-500 dark:text-slate-400 font-sans">Taxa / Método:</span>
-                <span className="text-cyan-700 dark:text-cyan-300 font-bold">{taxa}% a.m. • {METODOS_LABELS[metodo]?.nome}</span>
+                <span className="text-slate-500 dark:text-slate-400 font-sans">
+                  {isAdminOrFinance && viewMode === 'admin' ? 'Taxa / Método:' : 'Taxa Mensal:'}
+                </span>
+                <span className="text-cyan-700 dark:text-cyan-300 font-bold">
+                  {taxa}% a.m. {isAdminOrFinance && viewMode === 'admin' ? `• ${METODOS_LABELS[metodo]?.nome}` : ''}
+                </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-500 dark:text-slate-400 font-sans">Total com Juros:</span>
@@ -648,50 +689,27 @@ export function SimuladorEmprestimo({
                 />
               </div>
 
-              {/* DADOS BANCÁRIOS PARA LIBERAÇÃO */}
-              <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                  <Building size={14} className="text-emerald-600 dark:text-emerald-400" />
-                  Dados Bancários para Crédito do Valor (PIX ou Conta)
+              {/* CHAVE PIX PARA LIBERAÇÃO DO VALOR (EXCLUSIVO E OBRIGATÓRIO) */}
+              <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-1.5">
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <Building size={14} className="text-emerald-600 dark:text-emerald-400" />
+                    <span>Chave PIX para Recebimento</span>
+                  </span>
+                  <span className="text-[10px] text-rose-500 font-bold lowercase">
+                    * obrigatório
+                  </span>
                 </label>
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div>
-                    <input
-                      type="text"
-                      placeholder="Chave PIX (CPF, E-mail, Celular)"
-                      value={dadosBancarios.chavePix}
-                      onChange={(e) => setDadosBancarios({ ...dadosBancarios, chavePix: e.target.value })}
-                      className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white placeholder:text-slate-400 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-                    />
-                  </div>
-                  <div>
-                    <input
-                      type="text"
-                      placeholder="Nome do Banco (ex: Nubank, BB)"
-                      value={dadosBancarios.banco}
-                      onChange={(e) => setDadosBancarios({ ...dadosBancarios, banco: e.target.value })}
-                      className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white placeholder:text-slate-400 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-                    />
-                  </div>
-                  <div>
-                    <input
-                      type="text"
-                      placeholder="Agência"
-                      value={dadosBancarios.agencia}
-                      onChange={(e) => setDadosBancarios({ ...dadosBancarios, agencia: e.target.value })}
-                      className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white placeholder:text-slate-400 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-                    />
-                  </div>
-                  <div>
-                    <input
-                      type="text"
-                      placeholder="Conta com dígito"
-                      value={dadosBancarios.conta}
-                      onChange={(e) => setDadosBancarios({ ...dadosBancarios, conta: e.target.value })}
-                      className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white placeholder:text-slate-400 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-                    />
-                  </div>
-                </div>
+                <input
+                  type="text"
+                  placeholder="Informe sua Chave PIX (CPF, Celular, E-mail ou Aleatória)"
+                  value={dadosBancarios.chavePix}
+                  onChange={(e) => setDadosBancarios({ ...dadosBancarios, chavePix: e.target.value })}
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 font-mono shadow-sm"
+                />
+                <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                  O valor de {formatBrl(valor)} será transferido via PIX para esta chave após aprovação e assinatura digital.
+                </p>
               </div>
             </div>
 
@@ -719,6 +737,95 @@ export function SimuladorEmprestimo({
                 )}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE SUCESSO ULTRA MODERNO: PROPOSTA ENVIADA */}
+      {showSuccessModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-md animate-in fade-in duration-300">
+          <div className="relative w-full max-w-md bg-white dark:bg-slate-900 border border-emerald-500/30 dark:border-emerald-500/20 rounded-3xl p-6 sm:p-8 shadow-2xl shadow-emerald-500/10 dark:shadow-none overflow-hidden text-center animate-in zoom-in-95 duration-300">
+            {/* LUZ AMBIENTE SUPERIOR (AURORA GLOW) */}
+            <div className="absolute -top-24 left-1/2 -translate-x-1/2 w-72 h-72 bg-emerald-500/20 rounded-full blur-3xl pointer-events-none" />
+
+            {/* LISTRA SUPERIOR GRADIENTE */}
+            <div className="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-emerald-500 via-teal-400 to-cyan-500" />
+
+            {/* BOTÃO DE FECHAR */}
+            <button
+              onClick={handleCloseSuccessModal}
+              className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors p-1.5 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800"
+              title="Fechar"
+            >
+              <X size={18} />
+            </button>
+
+            {/* ÍCONE HERO MODERNO COM ANEL DE BRILHO */}
+            <div className="relative mx-auto mb-4 w-20 h-20 rounded-3xl bg-gradient-to-tr from-emerald-500 via-teal-500 to-cyan-400 p-0.5 shadow-xl shadow-emerald-500/25 flex items-center justify-center">
+              <div className="w-full h-full rounded-3xl bg-gradient-to-br from-emerald-500 to-teal-700 flex items-center justify-center text-white">
+                <CheckCircle2 size={38} className="animate-in zoom-in duration-500" />
+              </div>
+            </div>
+
+            {/* BADGE DE PROTOCOLO */}
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border border-emerald-200/80 dark:border-emerald-800/60 mb-2 font-mono">
+              <span>Protocolo:</span>
+              <span className="font-extrabold">{successData?.codigoOperacao}</span>
+            </div>
+
+            {/* TÍTULO */}
+            <h3 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight">
+              Proposta Enviada com Sucesso!
+            </h3>
+
+            {/* DESCRIÇÃO PRINCIPAL */}
+            <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 mt-2 leading-relaxed">
+              Sua solicitação de empréstimo foi registrada no sistema com sucesso.
+            </p>
+
+            {/* CARD DESTACADO: STATUS DA ANÁLISE PELO SETOR RESPONSÁVEL */}
+            <div className="my-5 p-4 rounded-2xl bg-slate-50/90 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60 text-left space-y-3">
+              <div className="flex items-start gap-3">
+                <div className="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0 mt-0.5">
+                  <Clock size={16} />
+                </div>
+                <div>
+                  <div className="text-xs font-bold text-slate-900 dark:text-white">
+                    Análise pelo Setor Responsável
+                  </div>
+                  <div className="text-[11px] text-slate-600 dark:text-slate-300 mt-1 leading-relaxed">
+                    A sua proposta será analisada pela comissão de crédito e pelo setor responsável. Em breve você receberá o retorno com os próximos passos.
+                  </div>
+                </div>
+              </div>
+
+              {/* DADOS DA PROPOSTA EM RESUMO */}
+              <div className="grid grid-cols-2 gap-2 pt-2.5 border-t border-slate-200/60 dark:border-slate-700/60 text-xs font-mono">
+                <div>
+                  <span className="text-[10px] text-slate-400 block font-sans uppercase">Valor Solicitado</span>
+                  <span className="font-bold text-slate-900 dark:text-white">{formatBrl(successData?.valor || valor)}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-400 block font-sans uppercase">Parcelamento</span>
+                  <span className="font-bold text-cyan-600 dark:text-cyan-400">{successData?.parcelas || parcelas}x em folha</span>
+                </div>
+              </div>
+            </div>
+
+            {/* DICA DE PRÓXIMO PASSO */}
+            <div className="flex items-center justify-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400 mb-6">
+              <Sparkles size={13} className="text-emerald-500 shrink-0" />
+              <span>Assim que aprovada, você receberá a via digital para assinatura.</span>
+            </div>
+
+            {/* BOTÃO DE AÇÃO PRINCIPAL */}
+            <button
+              onClick={handleCloseSuccessModal}
+              className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-sm shadow-lg shadow-emerald-600/25 transition-all transform active:scale-98 flex items-center justify-center gap-2"
+            >
+              <span>Entendido, Acompanhar Proposta</span>
+              <ArrowRight size={16} />
+            </button>
           </div>
         </div>
       )}

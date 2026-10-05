@@ -98,13 +98,13 @@ export function AuditoriaTab() {
           <table className="w-full text-xs text-left">
             <thead className="bg-slate-50/80 dark:bg-slate-800/50 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider border-b border-slate-200/80 dark:border-slate-800">
               <tr>
-                <th className="py-3 px-4">Data / Hora</th>
-                <th className="py-3 px-4">Ação</th>
-                <th className="py-3 px-4">Responsável</th>
-                <th className="py-3 px-4">Entidade / ID</th>
-                <th className="py-3 px-4">Justificativa / Detalhe</th>
-                <th className="py-3 px-4 text-center">IP</th>
-                <th className="py-3 px-4 text-right">Ver</th>
+                <th className="py-2.5 px-3 whitespace-nowrap">Data / Hora</th>
+                <th className="py-2.5 px-2 text-center whitespace-nowrap">Ação</th>
+                <th className="py-2.5 px-3 min-w-[130px]">Responsável</th>
+                <th className="py-2.5 px-3 min-w-[120px]">Entidade / ID</th>
+                <th className="py-2.5 px-3">Justificativa / Detalhe</th>
+                <th className="py-2.5 px-2 text-center whitespace-nowrap">IP</th>
+                <th className="py-2.5 px-2 text-center whitespace-nowrap w-12">Ver</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80 font-mono text-[11px]">
@@ -117,34 +117,34 @@ export function AuditoriaTab() {
               ) : (
                 filteredLogs.map((log) => (
                   <tr key={log.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors">
-                    <td className="py-3 px-4 text-slate-500 dark:text-slate-400">
+                    <td className="py-2.5 px-3 text-slate-500 dark:text-slate-400 whitespace-nowrap">
                       {new Date(log.createdAt).toLocaleString('pt-BR')}
                     </td>
-                    <td className="py-3 px-4">
-                      <span className={`text-[9px] font-bold uppercase px-2 py-0.5 rounded-full border ${getAcaoBadge(log.acao)}`}>
+                    <td className="py-2.5 px-2 text-center whitespace-nowrap">
+                      <span className={`text-[9px] font-bold uppercase px-2 py-0.5 rounded-full border whitespace-nowrap ${getAcaoBadge(log.acao)}`}>
                         {log.acao}
                       </span>
                     </td>
-                    <td className="py-3 px-4 font-sans text-slate-900 dark:text-white font-semibold">
-                      {log.autorNome}
-                      <span className="text-[10px] text-slate-500 dark:text-slate-400 block font-normal">
+                    <td className="py-2.5 px-3 font-sans text-slate-900 dark:text-white font-semibold">
+                      <div className="truncate max-w-[150px]" title={log.autorNome}>{log.autorNome}</div>
+                      <span className="text-[10px] text-slate-500 dark:text-slate-400 block font-normal truncate max-w-[150px]">
                         {log.autorPerfil || 'Usuário'}
                       </span>
                     </td>
-                    <td className="py-3 px-4 text-slate-700 dark:text-slate-300">
+                    <td className="py-2.5 px-3 text-slate-700 dark:text-slate-300">
                       <span className="text-[10px] text-slate-400 dark:text-slate-500 font-sans uppercase block">{log.entidadeTipo}</span>
-                      <span className="truncate max-w-[120px] inline-block font-medium">{log.entidadeId}</span>
+                      <span className="truncate max-w-[130px] inline-block font-medium">{log.entidadeId}</span>
                     </td>
-                    <td className="py-3 px-4 font-sans text-slate-600 dark:text-slate-300 max-w-xs truncate">
+                    <td className="py-2.5 px-3 font-sans text-slate-600 dark:text-slate-300 max-w-xs truncate" title={log.justificativa}>
                       {log.justificativa || '-'}
                     </td>
-                    <td className="py-3 px-4 text-center text-slate-500 dark:text-slate-400 text-[10px]">
+                    <td className="py-2.5 px-2 text-center text-slate-500 dark:text-slate-400 text-[10px] whitespace-nowrap">
                       {log.ipAddress || '-'}
                     </td>
-                    <td className="py-3 px-4 text-right">
+                    <td className="py-2.5 px-2 text-center whitespace-nowrap">
                       <button
                         onClick={() => setSelectedLog(log)}
-                        className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition-colors"
+                        className="p-1 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition-colors inline-flex items-center justify-center"
                         title="Inspecionar Payload de Auditoria"
                       >
                         <Eye size={13} />

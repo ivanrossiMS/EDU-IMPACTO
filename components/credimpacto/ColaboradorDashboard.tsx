@@ -37,12 +37,12 @@ export function ColaboradorDashboard({
   const [selectedLoanForContra, setSelectedLoanForContra] = useState<CredImpactoEmprestimo | null>(null)
   const [isAnsweringContra, setIsAnsweringContra] = useState(false)
 
-  // Cálculos consolidados para o colaborador
-  const emprestimosAtivos = emprestimos.filter((e) => ['ativo', 'aguardando_liberacao', 'aguardando_assinatura'].includes(e.status))
+  // Cálculos consolidados para o colaborador - estritamente contratos ativos e formalizados
+  const emprestimosAtivos = emprestimos.filter((e) => e.status === 'ativo')
   const saldoDevedorTotal = emprestimosAtivos.reduce((acc, e) => acc + (e.saldoDevedorAtual || 0), 0)
   const totalAmortizadoGeral = emprestimos.reduce((acc, e) => acc + (e.totalAmortizado || 0), 0)
 
-  // Encontra a próxima parcela prevista a vencer entre todos os empréstimos ativos
+  // Encontra a próxima parcela prevista a vencer entre empréstimos efetivamente ativos
   let proximaParcela: (CredImpactoParcela & { codigoOperacao: string }) | null = null
   for (const emp of emprestimosAtivos) {
     for (const p of emp.parcelas || []) {
@@ -106,68 +106,131 @@ export function ColaboradorDashboard({
     }
   }
 
+  const getStatusCardStyles = (status: string) => {
+    switch (status) {
+      case 'solicitado':
+      case 'em_analise':
+        return {
+          headerBg: 'bg-gradient-to-r from-amber-500/15 via-orange-500/10 to-amber-500/5 dark:from-amber-950/40 dark:via-orange-950/20 dark:to-slate-900',
+          topStripe: 'bg-gradient-to-r from-amber-500 to-orange-500',
+          iconBg: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border-amber-200/80 dark:border-amber-800/60'
+        }
+      case 'contraproposta':
+        return {
+          headerBg: 'bg-gradient-to-r from-purple-500/15 via-violet-500/10 to-purple-500/5 dark:from-purple-950/40 dark:via-violet-950/20 dark:to-slate-900',
+          topStripe: 'bg-gradient-to-r from-purple-500 to-violet-500',
+          iconBg: 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300 border-purple-200/80 dark:border-purple-800/60'
+        }
+      case 'aguardando_assinatura':
+        return {
+          headerBg: 'bg-gradient-to-r from-blue-500/15 via-sky-500/10 to-blue-500/5 dark:from-blue-950/40 dark:via-sky-950/20 dark:to-slate-900',
+          topStripe: 'bg-gradient-to-r from-blue-500 to-cyan-500',
+          iconBg: 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 border-blue-200/80 dark:border-blue-800/60'
+        }
+      case 'aguardando_liberacao':
+        return {
+          headerBg: 'bg-gradient-to-r from-cyan-500/15 via-teal-500/10 to-cyan-500/5 dark:from-cyan-950/40 dark:via-teal-950/20 dark:to-slate-900',
+          topStripe: 'bg-gradient-to-r from-cyan-500 to-teal-500',
+          iconBg: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-950 dark:text-cyan-300 border-cyan-200/80 dark:border-cyan-800/60'
+        }
+      case 'ativo':
+        return {
+          headerBg: 'bg-gradient-to-r from-emerald-500/15 via-teal-500/10 to-emerald-500/5 dark:from-emerald-950/40 dark:via-teal-950/20 dark:to-slate-900',
+          topStripe: 'bg-gradient-to-r from-emerald-500 to-teal-500',
+          iconBg: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border-emerald-200/80 dark:border-emerald-800/60'
+        }
+      case 'quitado':
+        return {
+          headerBg: 'bg-gradient-to-r from-slate-200/60 via-slate-100/40 to-slate-50 dark:from-slate-800/60 dark:via-slate-800/30 dark:to-slate-900',
+          topStripe: 'bg-gradient-to-r from-slate-400 to-slate-500',
+          iconBg: 'bg-slate-200 text-slate-800 dark:bg-slate-800 dark:text-slate-300 border-slate-300 dark:border-slate-700'
+        }
+      case 'recusado':
+      case 'cancelado':
+        return {
+          headerBg: 'bg-gradient-to-r from-rose-500/15 via-rose-500/10 to-rose-500/5 dark:from-rose-950/40 dark:via-rose-950/20 dark:to-slate-900',
+          topStripe: 'bg-gradient-to-r from-rose-500 to-red-500',
+          iconBg: 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 border-rose-200/80 dark:border-rose-800/60'
+        }
+      default:
+        return {
+          headerBg: 'bg-gradient-to-r from-slate-100 via-slate-50 to-transparent dark:from-slate-800/40 dark:via-slate-800/20 dark:to-slate-900',
+          topStripe: 'bg-gradient-to-r from-slate-300 to-slate-400',
+          iconBg: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border-slate-200 dark:border-slate-700'
+        }
+    }
+  }
+
   return (
     <div className="space-y-6">
       {/* KPI CARDS DO COLABORADOR */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-4 sm:p-4.5 shadow-sm relative overflow-hidden transition-all hover:shadow-md">
+        {/* CARD 1: SALDO DEVEDOR */}
+        <div className="bg-gradient-to-br from-emerald-50 via-teal-50/30 to-white dark:from-emerald-950/40 dark:via-slate-900 dark:to-slate-900 border border-emerald-200/90 dark:border-emerald-800/70 rounded-2xl p-4 sm:p-4.5 shadow-sm relative overflow-hidden transition-all hover:shadow-md">
+          <div className="h-1.5 w-full bg-gradient-to-r from-emerald-500 to-teal-500 absolute top-0 left-0" />
           <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 mb-2">
-            <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider">Meu Saldo Devedor</span>
-            <div className="p-1.5 sm:p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400">
+            <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-emerald-900/80 dark:text-emerald-300">Meu Saldo Devedor</span>
+            <div className="p-1.5 sm:p-2 rounded-xl bg-emerald-100 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300">
               <Wallet size={16} />
             </div>
           </div>
-          <div className="text-lg sm:text-2xl font-black text-slate-900 dark:text-white font-mono">
+          <div className="text-lg sm:text-2xl font-black text-emerald-700 dark:text-emerald-400 font-mono">
             {formatBrl(saldoDevedorTotal)}
           </div>
-          <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 font-medium">
+          <div className="text-[11px] text-emerald-800/80 dark:text-emerald-400/80 mt-1 font-semibold">
             {emprestimosAtivos.length} {emprestimosAtivos.length === 1 ? 'operação ativa' : 'operações ativas'}
           </div>
         </div>
 
-        <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-4 sm:p-4.5 shadow-sm relative overflow-hidden transition-all hover:shadow-md">
+        {/* CARD 2: PRÓXIMA PARCELA */}
+        <div className="bg-gradient-to-br from-cyan-50 via-sky-50/30 to-white dark:from-cyan-950/40 dark:via-slate-900 dark:to-slate-900 border border-cyan-200/90 dark:border-cyan-800/70 rounded-2xl p-4 sm:p-4.5 shadow-sm relative overflow-hidden transition-all hover:shadow-md">
+          <div className="h-1.5 w-full bg-gradient-to-r from-cyan-500 to-blue-500 absolute top-0 left-0" />
           <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 mb-2">
-            <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider">Próxima Parcela</span>
-            <div className="p-1.5 sm:p-2 rounded-xl bg-cyan-50 dark:bg-cyan-950/40 text-cyan-600 dark:text-cyan-400">
+            <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-cyan-900/80 dark:text-cyan-300">Próxima Parcela</span>
+            <div className="p-1.5 sm:p-2 rounded-xl bg-cyan-100 dark:bg-cyan-950/70 text-cyan-700 dark:text-cyan-300">
               <Clock size={16} />
             </div>
           </div>
-          <div className="text-lg sm:text-2xl font-black text-cyan-600 dark:text-cyan-400 font-mono">
+          <div className="text-lg sm:text-2xl font-black text-cyan-700 dark:text-cyan-400 font-mono">
             {proximaParcela ? formatBrl(proximaParcela.valorTotal) : 'R$ 0,00'}
           </div>
-          <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 truncate font-medium">
+          <div className="text-[11px] text-cyan-800/80 dark:text-cyan-400/80 mt-1 truncate font-semibold">
             {proximaParcela
               ? `Vence ${new Date(proximaParcela.dataVencimento + 'T12:00:00Z').toLocaleDateString('pt-BR')} (${proximaParcela.competencia})`
               : 'Nenhum desconto agendado'}
           </div>
         </div>
 
-        <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-4.5 shadow-sm relative overflow-hidden transition-all hover:shadow-md">
+        {/* CARD 3: TOTAL AMORTIZADO */}
+        <div className="bg-gradient-to-br from-blue-50 via-indigo-50/30 to-white dark:from-blue-950/40 dark:via-slate-900 dark:to-slate-900 border border-blue-200/90 dark:border-blue-800/70 rounded-2xl p-4 sm:p-4.5 shadow-sm relative overflow-hidden transition-all hover:shadow-md">
+          <div className="h-1.5 w-full bg-gradient-to-r from-blue-500 to-indigo-500 absolute top-0 left-0" />
           <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 mb-2">
-            <span className="text-[11px] font-bold uppercase tracking-wider">Total Amortizado</span>
-            <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400">
+            <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-blue-900/80 dark:text-blue-300">Total Amortizado</span>
+            <div className="p-1.5 sm:p-2 rounded-xl bg-blue-100 dark:bg-blue-950/70 text-blue-700 dark:text-blue-300">
               <TrendingDown size={16} />
             </div>
           </div>
-          <div className="text-2xl font-black text-emerald-600 dark:text-emerald-400 font-mono">
+          <div className="text-lg sm:text-2xl font-black text-blue-700 dark:text-blue-400 font-mono">
             {formatBrl(totalAmortizadoGeral)}
           </div>
-          <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 font-medium">
+          <div className="text-[11px] text-blue-800/80 dark:text-blue-400/80 mt-1 font-semibold">
             Principal já descontado e abatido
           </div>
         </div>
 
-        <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-4.5 shadow-sm relative overflow-hidden transition-all hover:shadow-md">
+        {/* CARD 4: HISTÓRICO */}
+        <div className="bg-gradient-to-br from-purple-50 via-violet-50/30 to-white dark:from-purple-950/40 dark:via-slate-900 dark:to-slate-900 border border-purple-200/90 dark:border-purple-800/70 rounded-2xl p-4 sm:p-4.5 shadow-sm relative overflow-hidden transition-all hover:shadow-md">
+          <div className="h-1.5 w-full bg-gradient-to-r from-purple-500 to-violet-500 absolute top-0 left-0" />
           <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 mb-2">
-            <span className="text-[11px] font-bold uppercase tracking-wider">Histórico</span>
-            <div className="p-2 rounded-xl bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400">
+            <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-purple-900/80 dark:text-purple-300">Histórico</span>
+            <div className="p-1.5 sm:p-2 rounded-xl bg-purple-100 dark:bg-purple-950/70 text-purple-700 dark:text-purple-300">
               <FileCheck2 size={16} />
             </div>
           </div>
-          <div className="text-2xl font-black text-slate-900 dark:text-white font-mono">
+          <div className="text-lg sm:text-2xl font-black text-purple-700 dark:text-purple-400 font-mono">
             {emprestimos.length}
           </div>
-          <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 font-medium">
+          <div className="text-[11px] text-purple-800/80 dark:text-purple-400/80 mt-1 font-semibold">
             {emprestimos.filter((e) => e.status === 'quitado').length} operações quitadas
           </div>
         </div>
@@ -192,6 +255,7 @@ export function ColaboradorDashboard({
           <div className="grid grid-cols-1 gap-4">
             {emprestimos.map((loan) => {
               const badge = getStatusBadge(loan.status)
+              const cardStyle = getStatusCardStyles(loan.status)
               const percentAmortizado = loan.valorAprovado > 0
                 ? Math.min(100, Math.round(((loan.totalAmortizado || 0) / loan.valorAprovado) * 100))
                 : 0
@@ -202,15 +266,19 @@ export function ColaboradorDashboard({
               return (
                 <div
                   key={loan.id}
-                  className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-5 shadow-sm space-y-4 hover:border-slate-300 dark:hover:border-slate-700 transition-all"
+                  className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl shadow-sm hover:border-slate-300 dark:hover:border-slate-700 transition-all overflow-hidden relative"
                 >
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-3.5">
+                  {/* LISTRA SUPERIOR COLORIDA COM GRADIENTE DO STATUS */}
+                  <div className={`h-1.5 w-full ${cardStyle.topStripe} absolute top-0 left-0 right-0`} />
+
+                  {/* CABEÇALHO DO CARD COM GRADIENTE */}
+                  <div className={`p-4 sm:p-5 ${cardStyle.headerBg} border-b border-slate-100 dark:border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3`}>
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center font-mono font-bold text-slate-700 dark:text-slate-200 text-xs">
+                      <div className={`w-10 h-10 rounded-xl ${cardStyle.iconBg} border flex items-center justify-center font-mono font-bold text-xs shrink-0 shadow-xs`}>
                         {loan.codigoOperacao.split('-')[2] || 'CRED'}
                       </div>
                       <div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-mono font-bold text-slate-900 dark:text-white text-sm">
                             {loan.codigoOperacao}
                           </span>
@@ -266,37 +334,40 @@ export function ColaboradorDashboard({
                     </div>
                   </div>
 
-                  {/* CARDS COM DETALHES DE VALORES */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs font-mono">
-                    <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 rounded-xl p-3">
-                      <span className="text-[10px] text-slate-500 dark:text-slate-400 uppercase font-sans font-semibold">Valor Concedido</span>
-                      <div className="text-sm font-bold text-slate-900 dark:text-white mt-0.5">{formatBrl(loan.valorAprovado)}</div>
+                  {/* CORPO DO CARD COM DETALHES DE VALORES E PROGRESSO */}
+                  <div className="p-4 sm:p-5 space-y-4">
+                    {/* CARDS COM DETALHES DE VALORES */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs font-mono">
+                      <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 rounded-xl p-3">
+                        <span className="text-[10px] text-slate-500 dark:text-slate-400 uppercase font-sans font-semibold">Valor Concedido</span>
+                        <div className="text-sm font-bold text-slate-900 dark:text-white mt-0.5">{formatBrl(loan.valorAprovado)}</div>
+                      </div>
+                      <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 rounded-xl p-3">
+                        <span className="text-[10px] text-slate-500 dark:text-slate-400 uppercase font-sans font-semibold">Saldo Restante</span>
+                        <div className="text-sm font-bold text-emerald-600 dark:text-emerald-400 mt-0.5">{formatBrl(loan.saldoDevedorAtual)}</div>
+                      </div>
+                      <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 rounded-xl p-3">
+                        <span className="text-[10px] text-slate-500 dark:text-slate-400 uppercase font-sans font-semibold">Parcelas Pagas</span>
+                        <div className="text-sm font-bold text-slate-900 dark:text-white mt-0.5">{parcelasPagas} / {totalParcelas}</div>
+                      </div>
+                      <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 rounded-xl p-3">
+                        <span className="text-[10px] text-slate-500 dark:text-slate-400 uppercase font-sans font-semibold">Juros Contratados</span>
+                        <div className="text-sm font-bold text-amber-600 dark:text-amber-400 mt-0.5">{formatBrl(loan.totalJuros)}</div>
+                      </div>
                     </div>
-                    <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 rounded-xl p-3">
-                      <span className="text-[10px] text-slate-500 dark:text-slate-400 uppercase font-sans font-semibold">Saldo Restante</span>
-                      <div className="text-sm font-bold text-emerald-600 dark:text-emerald-400 mt-0.5">{formatBrl(loan.saldoDevedorAtual)}</div>
-                    </div>
-                    <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 rounded-xl p-3">
-                      <span className="text-[10px] text-slate-500 dark:text-slate-400 uppercase font-sans font-semibold">Parcelas Pagas</span>
-                      <div className="text-sm font-bold text-slate-900 dark:text-white mt-0.5">{parcelasPagas} / {totalParcelas}</div>
-                    </div>
-                    <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 rounded-xl p-3">
-                      <span className="text-[10px] text-slate-500 dark:text-slate-400 uppercase font-sans font-semibold">Juros Contratados</span>
-                      <div className="text-sm font-bold text-amber-600 dark:text-amber-400 mt-0.5">{formatBrl(loan.totalJuros)}</div>
-                    </div>
-                  </div>
 
-                  {/* BARRA DE PROGRESSO DE AMORTIZAÇÃO */}
-                  <div>
-                    <div className="flex justify-between text-[11px] text-slate-500 dark:text-slate-400 mb-1.5 font-medium">
-                      <span>Progresso da Quitação do Principal</span>
-                      <span className="font-mono font-bold text-slate-900 dark:text-slate-200">{percentAmortizado}%</span>
-                    </div>
-                    <div className="w-full h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                      <div
-                        className="h-full bg-gradient-to-r from-emerald-500 to-teal-400 transition-all duration-500 rounded-full"
-                        style={{ width: `${percentAmortizado}%` }}
-                      />
+                    {/* BARRA DE PROGRESSO DE AMORTIZAÇÃO */}
+                    <div>
+                      <div className="flex justify-between text-[11px] text-slate-500 dark:text-slate-400 mb-1.5 font-medium">
+                        <span>Progresso da Quitação do Principal</span>
+                        <span className="font-mono font-bold text-slate-900 dark:text-slate-200">{percentAmortizado}%</span>
+                      </div>
+                      <div className="w-full h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                        <div
+                          className="h-full bg-gradient-to-r from-emerald-500 to-teal-400 transition-all duration-500 rounded-full"
+                          style={{ width: `${percentAmortizado}%` }}
+                        />
+                      </div>
                     </div>
                   </div>
                 </div>

@@ -286,7 +286,7 @@ function AccessDeniedPage({ pathname, isFamilyOrStudent }: { pathname: string, i
 export function RouteGuard({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const { perfis, perfisLoading } = useData()
-  const { currentUserPerfil, hydrated } = useApp()
+  const { currentUserPerfil, currentUser, hydrated } = useApp()
   const [showDenied, setShowDenied] = useState(false)
   const [isPerfisLoadingTimeout, setIsPerfisLoadingTimeout] = useState(false)
 
@@ -331,8 +331,42 @@ export function RouteGuard({ children }: { children: React.ReactNode }) {
     )
   }
 
-  const userPerfilObj = (perfis || []).find(p => p.nome === currentUserPerfil)
+  const normalize = (s: string) => (s || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim()
+  const activePerfilName = currentUserPerfil || currentUser?.perfil || currentUser?.cargo || ''
+  const userPerfilObj = (perfis || []).find(p => 
+    p.nome === activePerfilName || 
+    normalize(p.nome) === normalize(activePerfilName) ||
+    (currentUser?.perfil && (p.nome === currentUser.perfil || normalize(p.nome) === normalize(currentUser.perfil))) ||
+    (currentUser?.cargo && (p.nome === currentUser.cargo || normalize(p.nome) === normalize(currentUser.cargo)))
+  )
   const userPerms = userPerfilObj?.permissoes || []
+
+  // ── Step 2.4: Check for CredImpacto Module Access ──
+  const isCredImpactoRoute = pathname.startsWith('/credimpacto')
+  if (isCredImpactoRoute) {
+    if (userPerfilObj?.bloqueadoCredImpacto) {
+      if (!showDenied) {
+        return (
+          <div style={{
+            position: 'fixed', inset: 0, zIndex: 9998,
+            background: 'linear-gradient(160deg, #08101e 0%, #090d1f 50%, #0a0e1c 100%)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <div style={{
+              width: 28, height: 28, borderRadius: '50%',
+              border: '2px solid rgba(255,255,255,0.08)',
+              borderTopColor: 'rgba(59,130,246,0.7)',
+              animation: 'spin 0.8s linear infinite',
+            }} />
+            <style>{`@keyframes spin { 100% { transform: rotate(360deg); } }`}</style>
+          </div>
+        )
+      }
+      return <AccessDeniedPage pathname={pathname} />
+    }
+    // Quando marcado / liberado no perfil, o acesso é garantido
+    return <>{children}</>
+  }
 
   // ── Step 1: Collect ALL protected hrefs from sidebar definition ────────────
   const protectedRoutes: string[] = []
@@ -360,11 +394,16 @@ export function RouteGuard({ children }: { children: React.ReactNode }) {
     .sort((a, b) => b.length - a.length)[0]
 
   // ── Step 2.5: Check for Gestão Escolar Block (Applies to all ERP routes) ──
-  // Exceptions: /simulados, /provas, and /redacao-enem are separate modules. /meu-perfil is global.
-  const isSimuladosRoute = pathname.startsWith('/simulados') || pathname.startsWith('/provas') || pathname.startsWith('/redacao-enem') || pathname.startsWith('/provas-online')
+  // Exceptions: /simulados, /provas, /redacao-enem, /provas-online, /credimpacto are separate modules. /meu-perfil is global.
+  const isStandaloneModuleRoute = 
+    pathname.startsWith('/simulados') || 
+    pathname.startsWith('/provas') || 
+    pathname.startsWith('/redacao-enem') || 
+    pathname.startsWith('/provas-online') ||
+    pathname.startsWith('/credimpacto')
   const isMeuPerfilRoute = pathname.startsWith('/meu-perfil')
   
-  if (userPerfilObj?.bloqueadoGestaoEscolar && !isSimuladosRoute && !isMeuPerfilRoute) {
+  if (userPerfilObj?.bloqueadoGestaoEscolar && !isStandaloneModuleRoute && !isMeuPerfilRoute) {
     if (!showDenied) {
       return (
         <div style={{

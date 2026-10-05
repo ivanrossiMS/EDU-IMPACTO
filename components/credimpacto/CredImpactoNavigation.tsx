@@ -264,8 +264,7 @@ export function CredImpactoSidebar({
 
   // Menus do Colaborador
   const colabNavItems: NavItem[] = [
-    { id: 'meus_emprestimos' as TabId, label: 'Meu Espaço', desc: '', icon: Wallet },
-    { id: 'simular' as TabId, label: 'Simular & Solicitar', desc: '', icon: Calculator }
+    { id: 'meus_emprestimos' as TabId, label: 'Meu Espaço', desc: '', icon: Wallet }
   ]
 
   // Menus Completos do Administrador organizados por grupo funcional
@@ -352,7 +351,7 @@ export function CredImpactoSidebar({
             className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white text-xs font-bold shadow-lg shadow-emerald-500/25 flex items-center justify-center gap-2 active:scale-98 transition-all"
           >
             <Plus size={15} />
-            <span>{isAdminOrFinance && viewMode === 'admin' ? 'Conceder Empréstimo' : 'Solicitar Empréstimo'}</span>
+            <span>{isAdminOrFinance && viewMode === 'admin' ? 'Conceder Empréstimo' : 'Simular Empréstimo'}</span>
           </button>
         </div>
 
@@ -587,7 +586,7 @@ export function CredImpactoBottomBar({
               <span className="text-[10px] mt-0.5">Meu Espaço</span>
             </button>
 
-            {/* Botão Central de Nova Solicitação */}
+            {/* Botão Central de Nova Simulação */}
             <button
               onClick={onNewLoanClick}
               className="flex flex-col items-center justify-center -mt-5"
@@ -595,21 +594,7 @@ export function CredImpactoBottomBar({
               <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-emerald-600 via-emerald-500 to-teal-400 text-white flex items-center justify-center shadow-lg shadow-emerald-500/40 active:scale-95 transition-all ring-4 ring-[#081522]">
                 <Plus size={22} className="drop-shadow-sm" />
               </div>
-              <span className="text-[10px] font-bold text-emerald-400 mt-1">Solicitar</span>
-            </button>
-
-            <button
-              onClick={() => onTabChange('simular')}
-              className={`flex flex-col items-center justify-center py-1 px-3 rounded-xl transition-all ${
-                activeTab === 'simular'
-                  ? 'text-emerald-400 font-bold'
-                  : 'text-slate-400'
-              }`}
-            >
-              <div className={`p-1.5 rounded-xl ${activeTab === 'simular' ? 'bg-emerald-500/20 border border-emerald-500/40 text-emerald-300' : ''}`}>
-                <Calculator size={19} />
-              </div>
-              <span className="text-[10px] mt-0.5">Simulador</span>
+              <span className="text-[10px] font-bold text-emerald-400 mt-1">Simular</span>
             </button>
 
             <button

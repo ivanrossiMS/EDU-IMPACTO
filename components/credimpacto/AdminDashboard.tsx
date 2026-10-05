@@ -18,7 +18,10 @@ import {
   Calendar,
   UserX,
   FileText,
-  Trash2
+  Trash2,
+  Copy,
+  DollarSign,
+  CreditCard
 } from 'lucide-react'
 import { CredImpactoEmprestimo, StatusEmprestimo } from '@/types/credimpacto'
 import { formatBrl, METODOS_LABELS } from '@/lib/credimpacto/engine'
@@ -75,6 +78,11 @@ export function AdminDashboard({
   const [loanToDelete, setLoanToDelete] = useState<CredImpactoEmprestimo | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
 
+  const copyToClipboard = (text: string, label: string) => {
+    navigator.clipboard.writeText(text)
+    toast.success(`${label} copiado!`)
+  }
+
   const handleDeleteLoan = async () => {
     if (!loanToDelete) return
     setIsDeleting(true)
@@ -94,22 +102,35 @@ export function AdminDashboard({
     }
   }
 
-  // Cálculos de KPIs Globais
-  const ativos = emprestimos.filter((e) => ['ativo', 'aguardando_liberacao', 'aguardando_assinatura'].includes(e.status))
+  // Cálculos de KPIs Globais - APENAS empréstimos efetivamente ativos
+  const ativos = emprestimos.filter((e) => e.status === 'ativo')
   const totalEmprestadoAtivo = ativos.reduce((acc, e) => acc + (e.valorAprovado || 0), 0)
   const totalSaldoAReceber = ativos.reduce((acc, e) => acc + (e.saldoDevedorAtual || 0), 0)
   const totalLiquidadoGeral = emprestimos.filter((e) => e.status === 'quitado').reduce((acc, e) => acc + (e.valorAprovado || 0), 0)
+
+  // Empréstimos elegíveis para acompanhamento de parcelas (apenas ativos ou quitados)
+  const emprestimosConcedidos = emprestimos.filter((e) => ['ativo', 'quitado'].includes(e.status))
+
+  // Métricas específicas de Liberações TED
+  const pendentesLiberacao = emprestimos.filter((e) => e.status === 'aguardando_liberacao')
+  const totalALiberar = pendentesLiberacao.reduce((acc, e) => acc + (e.valorAprovado || 0), 0)
+
+  // Métricas específicas de Análise
+  const pendentesAnalise = emprestimos.filter((e) => e.status === 'solicitado' || e.status === 'em_analise')
+  const totalSolicitadoAnalise = pendentesAnalise.reduce((acc, e) => acc + (e.valorSolicitado || 0), 0)
+  const emContraproposta = emprestimos.filter((e) => e.status === 'contraproposta')
+  const aguardandoAssinatura = emprestimos.filter((e) => e.status === 'aguardando_assinatura')
 
   // Competência Atual
   const hoje = new Date()
   const compAtual = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`
 
-  // Parcelas do Mês
+  // Parcelas do Mês (apenas de empréstimos concedidos)
   let parcelasMesPrevistas = 0
   let parcelasMesRecebidas = 0
   let parcelasEmAtraso = 0
 
-  for (const emp of emprestimos) {
+  for (const emp of emprestimosConcedidos) {
     for (const p of emp.parcelas || []) {
       if (p.competencia === compAtual) {
         parcelasMesPrevistas += p.valorTotal
@@ -266,15 +287,15 @@ export function AdminDashboard({
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'solicitado':
-        return { label: 'Nova Solicitação', bg: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20' }
+        return { label: 'Solicitado', bg: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20' }
       case 'em_analise':
         return { label: 'Em Análise', bg: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20' }
       case 'contraproposta':
         return { label: 'Contraproposta', bg: 'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-500/10 dark:text-purple-400 dark:border-purple-500/20' }
       case 'aguardando_assinatura':
-        return { label: 'Aguardando Assinatura', bg: 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-500/10 dark:text-blue-400 dark:border-blue-500/20' }
+        return { label: 'Ag. Assinatura', bg: 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-500/10 dark:text-blue-400 dark:border-blue-500/20' }
       case 'aguardando_liberacao':
-        return { label: 'Aguardando Liberação', bg: 'bg-cyan-50 text-cyan-700 border-cyan-200 dark:bg-cyan-500/10 dark:text-cyan-400 dark:border-cyan-500/20' }
+        return { label: 'Ag. Liberação', bg: 'bg-cyan-50 text-cyan-700 border-cyan-200 dark:bg-cyan-500/10 dark:text-cyan-400 dark:border-cyan-500/20' }
       case 'ativo':
         return { label: 'Ativo', bg: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20' }
       case 'quitado':
@@ -316,72 +337,225 @@ export function AdminDashboard({
 
       {/* KPI DASHBOARD CARDS */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
-        <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-4 shadow-sm shadow-slate-200/50 dark:shadow-none relative overflow-hidden transition-all hover:shadow-md">
-          <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 mb-2">
-            <span className="text-[10px] font-bold uppercase tracking-wider">Ativos Concedidos</span>
-            <div className="w-7 h-7 rounded-lg bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 flex items-center justify-center">
-              <Banknote size={15} />
+        {viewModeTab === 'liberacoes' ? (
+          <>
+            <div className="bg-gradient-to-br from-cyan-50 via-sky-50/30 to-white dark:from-cyan-950/40 dark:via-slate-900 dark:to-slate-900 border border-cyan-200/90 dark:border-cyan-800/70 rounded-2xl p-4 shadow-sm relative overflow-hidden transition-all hover:shadow-md">
+              <div className="h-1.5 w-full bg-gradient-to-r from-cyan-500 to-blue-500 absolute top-0 left-0" />
+              <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 mb-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider truncate text-cyan-900/80 dark:text-cyan-300">Aguardando TED</span>
+                <div className="w-7 h-7 rounded-lg bg-cyan-100 dark:bg-cyan-950 text-cyan-700 dark:text-cyan-300 flex items-center justify-center shrink-0">
+                  <Clock size={15} />
+                </div>
+              </div>
+              <div className="text-lg sm:text-xl font-black text-cyan-700 dark:text-cyan-400 font-mono truncate">
+                {pendentesLiberacao.length}
+              </div>
+              <div className="text-[11px] font-semibold text-cyan-700 dark:text-cyan-400 mt-1 truncate">Contratos assinados</div>
             </div>
-          </div>
-          <div className="text-lg sm:text-xl font-black text-slate-900 dark:text-white font-mono">
-            {formatBrl(totalEmprestadoAtivo)}
-          </div>
-          <div className="text-[11px] font-semibold text-blue-600 dark:text-blue-400 mt-1">{ativos.length} contratos ativos</div>
-        </div>
 
-        <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-4 shadow-sm shadow-slate-200/50 dark:shadow-none relative overflow-hidden transition-all hover:shadow-md">
-          <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 mb-2">
-            <span className="text-[10px] font-bold uppercase tracking-wider">Saldo a Receber</span>
-            <div className="w-7 h-7 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
-              <TrendingUp size={15} />
+            <div className="bg-gradient-to-br from-emerald-50 via-teal-50/30 to-white dark:from-emerald-950/40 dark:via-slate-900 dark:to-slate-900 border border-emerald-200/90 dark:border-emerald-800/70 rounded-2xl p-4 shadow-sm relative overflow-hidden transition-all hover:shadow-md">
+              <div className="h-1.5 w-full bg-gradient-to-r from-emerald-500 to-teal-500 absolute top-0 left-0" />
+              <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 mb-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider truncate text-emerald-900/80 dark:text-emerald-300">Volume a Transferir</span>
+                <div className="w-7 h-7 rounded-lg bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 flex items-center justify-center shrink-0">
+                  <Banknote size={15} />
+                </div>
+              </div>
+              <div className="text-lg sm:text-xl font-black text-emerald-700 dark:text-emerald-400 font-mono truncate">
+                {formatBrl(totalALiberar)}
+              </div>
+              <div className="text-[11px] font-semibold text-emerald-800/80 dark:text-emerald-400/80 mt-1 truncate">Total a pagar via TED/PIX</div>
             </div>
-          </div>
-          <div className="text-lg sm:text-xl font-black text-emerald-600 dark:text-emerald-400 font-mono">
-            {formatBrl(totalSaldoAReceber)}
-          </div>
-          <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">Principal em aberto</div>
-        </div>
 
-        <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-4 shadow-sm shadow-slate-200/50 dark:shadow-none relative overflow-hidden transition-all hover:shadow-md">
-          <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 mb-2">
-            <span className="text-[10px] font-bold uppercase tracking-wider">Parcelas do Mês</span>
-            <div className="w-7 h-7 rounded-lg bg-cyan-50 dark:bg-cyan-950/40 text-cyan-600 dark:text-cyan-400 flex items-center justify-center">
-              <Clock size={15} />
+            <div className="bg-gradient-to-br from-blue-50 via-indigo-50/30 to-white dark:from-blue-950/40 dark:via-slate-900 dark:to-slate-900 border border-blue-200/90 dark:border-blue-800/70 rounded-2xl p-4 shadow-sm relative overflow-hidden transition-all hover:shadow-md">
+              <div className="h-1.5 w-full bg-gradient-to-r from-blue-500 to-indigo-500 absolute top-0 left-0" />
+              <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 mb-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider truncate text-blue-900/80 dark:text-blue-300">Liberados / Ativos</span>
+                <div className="w-7 h-7 rounded-lg bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 flex items-center justify-center shrink-0">
+                  <CheckCircle2 size={15} />
+                </div>
+              </div>
+              <div className="text-lg sm:text-xl font-black text-blue-700 dark:text-blue-400 font-mono truncate">
+                {ativos.length}
+              </div>
+              <div className="text-[11px] font-semibold text-blue-700 dark:text-blue-400 mt-1 truncate">Recursos já liberados</div>
             </div>
-          </div>
-          <div className="text-lg sm:text-xl font-black text-cyan-700 dark:text-cyan-400 font-mono">
-            {formatBrl(parcelasMesPrevistas)}
-          </div>
-          <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">Ref: {compAtual}</div>
-        </div>
 
-        <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-4 shadow-sm shadow-slate-200/50 dark:shadow-none relative overflow-hidden transition-all hover:shadow-md">
-          <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 mb-2">
-            <span className="text-[10px] font-bold uppercase tracking-wider">Recebido Efetivo</span>
-            <div className="w-7 h-7 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
-              <CheckCircle2 size={15} />
+            <div className="bg-gradient-to-br from-purple-50 via-violet-50/30 to-white dark:from-purple-950/40 dark:via-slate-900 dark:to-slate-900 border border-purple-200/90 dark:border-purple-800/70 rounded-2xl p-4 shadow-sm relative overflow-hidden transition-all hover:shadow-md">
+              <div className="h-1.5 w-full bg-gradient-to-r from-purple-500 to-violet-500 absolute top-0 left-0" />
+              <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 mb-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider truncate text-purple-900/80 dark:text-purple-300">Carteira Concedida</span>
+                <div className="w-7 h-7 rounded-lg bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 flex items-center justify-center shrink-0">
+                  <TrendingUp size={15} />
+                </div>
+              </div>
+              <div className="text-lg sm:text-xl font-black text-purple-700 dark:text-purple-400 font-mono truncate">
+                {formatBrl(totalEmprestadoAtivo)}
+              </div>
+              <div className="text-[11px] font-semibold text-purple-800/80 dark:text-purple-400/80 mt-1 truncate">Ativos em folha</div>
             </div>
-          </div>
-          <div className="text-lg sm:text-xl font-black text-emerald-600 dark:text-emerald-400 font-mono">
-            {formatBrl(parcelasMesRecebidas)}
-          </div>
-          <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">Confirmado em folha</div>
-        </div>
 
-        <div className="col-span-2 lg:col-span-1 bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-4 shadow-sm shadow-slate-200/50 dark:shadow-none relative overflow-hidden transition-all hover:shadow-md">
-          <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 mb-2">
-            <span className="text-[10px] font-bold uppercase tracking-wider">Atrasos / Alertas</span>
-            <div className="w-7 h-7 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 flex items-center justify-center">
-              <AlertTriangle size={15} />
+            <div className="col-span-2 lg:col-span-1 bg-gradient-to-br from-teal-50 via-emerald-50/30 to-white dark:from-teal-950/40 dark:via-slate-900 dark:to-slate-900 border border-teal-200/90 dark:border-teal-800/70 rounded-2xl p-4 shadow-sm relative overflow-hidden transition-all hover:shadow-md">
+              <div className="h-1.5 w-full bg-gradient-to-r from-teal-500 to-emerald-500 absolute top-0 left-0" />
+              <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 mb-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider truncate text-teal-900/80 dark:text-teal-300">Saldo a Receber</span>
+                <div className="w-7 h-7 rounded-lg bg-teal-100 dark:bg-teal-950 text-teal-700 dark:text-teal-300 flex items-center justify-center shrink-0">
+                  <DollarSign size={15} />
+                </div>
+              </div>
+              <div className="text-lg sm:text-xl font-black text-teal-700 dark:text-teal-400 font-mono truncate">
+                {formatBrl(totalSaldoAReceber)}
+              </div>
+              <div className="text-[11px] font-semibold text-teal-800/80 dark:text-teal-400/80 mt-1 truncate">Principal restante</div>
             </div>
-          </div>
-          <div className={`text-lg sm:text-xl font-black font-mono ${parcelasEmAtraso > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-900 dark:text-white'}`}>
-            {parcelasEmAtraso}
-          </div>
-          <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
-            {parcelasEmAtraso > 0 ? 'Pendência de conciliação' : '100% regular'}
-          </div>
-        </div>
+          </>
+        ) : viewModeTab === 'analise' ? (
+          <>
+            <div className="bg-gradient-to-br from-amber-50 via-orange-50/30 to-white dark:from-amber-950/40 dark:via-slate-900 dark:to-slate-900 border border-amber-200/90 dark:border-amber-800/70 rounded-2xl p-4 shadow-sm relative overflow-hidden transition-all hover:shadow-md">
+              <div className="h-1.5 w-full bg-gradient-to-r from-amber-500 to-orange-500 absolute top-0 left-0" />
+              <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 mb-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider truncate text-amber-900/80 dark:text-amber-300">Novas Solicitações</span>
+                <div className="w-7 h-7 rounded-lg bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 flex items-center justify-center shrink-0">
+                  <Clock size={15} />
+                </div>
+              </div>
+              <div className="text-lg sm:text-xl font-black text-amber-700 dark:text-amber-400 font-mono truncate">
+                {pendentesAnalise.length}
+              </div>
+              <div className="text-[11px] font-semibold text-amber-800/80 dark:text-amber-400/80 mt-1 truncate">Aguardando deliberação</div>
+            </div>
+
+            <div className="bg-gradient-to-br from-orange-50 via-amber-50/30 to-white dark:from-orange-950/40 dark:via-slate-900 dark:to-slate-900 border border-orange-200/90 dark:border-orange-800/70 rounded-2xl p-4 shadow-sm relative overflow-hidden transition-all hover:shadow-md">
+              <div className="h-1.5 w-full bg-gradient-to-r from-orange-500 to-amber-500 absolute top-0 left-0" />
+              <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 mb-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider truncate text-orange-900/80 dark:text-orange-300">Volume Solicitado</span>
+                <div className="w-7 h-7 rounded-lg bg-orange-100 dark:bg-orange-950 text-orange-700 dark:text-orange-300 flex items-center justify-center shrink-0">
+                  <Banknote size={15} />
+                </div>
+              </div>
+              <div className="text-lg sm:text-xl font-black text-orange-700 dark:text-orange-400 font-mono truncate">
+                {formatBrl(totalSolicitadoAnalise)}
+              </div>
+              <div className="text-[11px] font-semibold text-orange-800/80 dark:text-orange-400/80 mt-1 truncate">Demandado em propostas</div>
+            </div>
+
+            <div className="bg-gradient-to-br from-purple-50 via-violet-50/30 to-white dark:from-purple-950/40 dark:via-slate-900 dark:to-slate-900 border border-purple-200/90 dark:border-purple-800/70 rounded-2xl p-4 shadow-sm relative overflow-hidden transition-all hover:shadow-md">
+              <div className="h-1.5 w-full bg-gradient-to-r from-purple-500 to-violet-500 absolute top-0 left-0" />
+              <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 mb-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider truncate text-purple-900/80 dark:text-purple-300">Em Contraproposta</span>
+                <div className="w-7 h-7 rounded-lg bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 flex items-center justify-center shrink-0">
+                  <TrendingUp size={15} />
+                </div>
+              </div>
+              <div className="text-lg sm:text-xl font-black text-purple-700 dark:text-purple-400 font-mono truncate">
+                {emContraproposta.length}
+              </div>
+              <div className="text-[11px] font-semibold text-purple-800/80 dark:text-purple-400/80 mt-1 truncate">Aguardando aceite</div>
+            </div>
+
+            <div className="bg-gradient-to-br from-blue-50 via-sky-50/30 to-white dark:from-blue-950/40 dark:via-slate-900 dark:to-slate-900 border border-blue-200/90 dark:border-blue-800/70 rounded-2xl p-4 shadow-sm relative overflow-hidden transition-all hover:shadow-md">
+              <div className="h-1.5 w-full bg-gradient-to-r from-blue-500 to-indigo-500 absolute top-0 left-0" />
+              <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 mb-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider truncate text-blue-900/80 dark:text-blue-300">Ag. Assinatura</span>
+                <div className="w-7 h-7 rounded-lg bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 flex items-center justify-center shrink-0">
+                  <FileText size={15} />
+                </div>
+              </div>
+              <div className="text-lg sm:text-xl font-black text-blue-700 dark:text-blue-400 font-mono truncate">
+                {aguardandoAssinatura.length}
+              </div>
+              <div className="text-[11px] font-semibold text-blue-700 dark:text-blue-400 mt-1 truncate">Aprovados pelo financeiro</div>
+            </div>
+
+            <div className="col-span-2 lg:col-span-1 bg-gradient-to-br from-emerald-50 via-teal-50/30 to-white dark:from-emerald-950/40 dark:via-slate-900 dark:to-slate-900 border border-emerald-200/90 dark:border-emerald-800/70 rounded-2xl p-4 shadow-sm relative overflow-hidden transition-all hover:shadow-md">
+              <div className="h-1.5 w-full bg-gradient-to-r from-emerald-500 to-teal-500 absolute top-0 left-0" />
+              <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 mb-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider truncate text-emerald-900/80 dark:text-emerald-300">Contratos Ativos</span>
+                <div className="w-7 h-7 rounded-lg bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 flex items-center justify-center shrink-0">
+                  <CheckCircle2 size={15} />
+                </div>
+              </div>
+              <div className="text-lg sm:text-xl font-black text-emerald-700 dark:text-emerald-400 font-mono truncate">
+                {ativos.length}
+              </div>
+              <div className="text-[11px] font-semibold text-emerald-800/80 dark:text-emerald-400/80 mt-1 truncate">{formatBrl(totalEmprestadoAtivo)}</div>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="bg-gradient-to-br from-blue-50 via-indigo-50/30 to-white dark:from-blue-950/40 dark:via-slate-900 dark:to-slate-900 border border-blue-200/90 dark:border-blue-800/70 rounded-2xl p-4 shadow-sm relative overflow-hidden transition-all hover:shadow-md">
+              <div className="h-1.5 w-full bg-gradient-to-r from-blue-500 to-indigo-500 absolute top-0 left-0" />
+              <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 mb-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider truncate text-blue-900/80 dark:text-blue-300">Ativos Concedidos</span>
+                <div className="w-7 h-7 rounded-lg bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 flex items-center justify-center shrink-0">
+                  <Banknote size={15} />
+                </div>
+              </div>
+              <div className="text-lg sm:text-xl font-black text-blue-700 dark:text-blue-400 font-mono truncate">
+                {formatBrl(totalEmprestadoAtivo)}
+              </div>
+              <div className="text-[11px] font-semibold text-blue-700 dark:text-blue-400 mt-1 truncate">{ativos.length} contratos ativos</div>
+            </div>
+
+            <div className="bg-gradient-to-br from-emerald-50 via-teal-50/30 to-white dark:from-emerald-950/40 dark:via-slate-900 dark:to-slate-900 border border-emerald-200/90 dark:border-emerald-800/70 rounded-2xl p-4 shadow-sm relative overflow-hidden transition-all hover:shadow-md">
+              <div className="h-1.5 w-full bg-gradient-to-r from-emerald-500 to-teal-500 absolute top-0 left-0" />
+              <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 mb-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider truncate text-emerald-900/80 dark:text-emerald-300">Saldo a Receber</span>
+                <div className="w-7 h-7 rounded-lg bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 flex items-center justify-center shrink-0">
+                  <TrendingUp size={15} />
+                </div>
+              </div>
+              <div className="text-lg sm:text-xl font-black text-emerald-700 dark:text-emerald-400 font-mono truncate">
+                {formatBrl(totalSaldoAReceber)}
+              </div>
+              <div className="text-[11px] font-semibold text-emerald-800/80 dark:text-emerald-400/80 mt-1 truncate">Principal em aberto</div>
+            </div>
+
+            <div className="bg-gradient-to-br from-cyan-50 via-sky-50/30 to-white dark:from-cyan-950/40 dark:via-slate-900 dark:to-slate-900 border border-cyan-200/90 dark:border-cyan-800/70 rounded-2xl p-4 shadow-sm relative overflow-hidden transition-all hover:shadow-md">
+              <div className="h-1.5 w-full bg-gradient-to-r from-cyan-500 to-blue-500 absolute top-0 left-0" />
+              <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 mb-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider truncate text-cyan-900/80 dark:text-cyan-300">Parcelas do Mês</span>
+                <div className="w-7 h-7 rounded-lg bg-cyan-100 dark:bg-cyan-950 text-cyan-700 dark:text-cyan-300 flex items-center justify-center shrink-0">
+                  <Clock size={15} />
+                </div>
+              </div>
+              <div className="text-lg sm:text-xl font-black text-cyan-700 dark:text-cyan-400 font-mono truncate">
+                {formatBrl(parcelasMesPrevistas)}
+              </div>
+              <div className="text-[11px] font-semibold text-cyan-800/80 dark:text-cyan-400/80 mt-1 truncate">Ref: {compAtual}</div>
+            </div>
+
+            <div className="bg-gradient-to-br from-teal-50 via-emerald-50/30 to-white dark:from-teal-950/40 dark:via-slate-900 dark:to-slate-900 border border-teal-200/90 dark:border-teal-800/70 rounded-2xl p-4 shadow-sm relative overflow-hidden transition-all hover:shadow-md">
+              <div className="h-1.5 w-full bg-gradient-to-r from-teal-500 to-emerald-500 absolute top-0 left-0" />
+              <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 mb-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider truncate text-teal-900/80 dark:text-teal-300">Recebido Efetivo</span>
+                <div className="w-7 h-7 rounded-lg bg-teal-100 dark:bg-teal-950 text-teal-700 dark:text-teal-300 flex items-center justify-center shrink-0">
+                  <CheckCircle2 size={15} />
+                </div>
+              </div>
+              <div className="text-lg sm:text-xl font-black text-teal-700 dark:text-teal-400 font-mono truncate">
+                {formatBrl(parcelasMesRecebidas)}
+              </div>
+              <div className="text-[11px] font-semibold text-teal-800/80 dark:text-teal-400/80 mt-1 truncate">Confirmado em folha</div>
+            </div>
+
+            <div className="col-span-2 lg:col-span-1 bg-gradient-to-br from-amber-50 via-rose-50/30 to-white dark:from-amber-950/40 dark:via-slate-900 dark:to-slate-900 border border-amber-200/90 dark:border-amber-800/70 rounded-2xl p-4 shadow-sm relative overflow-hidden transition-all hover:shadow-md">
+              <div className="h-1.5 w-full bg-gradient-to-r from-amber-500 to-rose-500 absolute top-0 left-0" />
+              <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 mb-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider truncate text-amber-900/80 dark:text-amber-300">Atrasos / Alertas</span>
+                <div className="w-7 h-7 rounded-lg bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 flex items-center justify-center shrink-0">
+                  <AlertTriangle size={15} />
+                </div>
+              </div>
+              <div className={`text-lg sm:text-xl font-black font-mono truncate ${parcelasEmAtraso > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-800 dark:text-slate-200'}`}>
+                {parcelasEmAtraso}
+              </div>
+              <div className="text-[11px] font-semibold text-amber-800/80 dark:text-amber-400/80 mt-1 truncate">
+                {parcelasEmAtraso > 0 ? 'Pendência de conciliação' : '100% regular'}
+              </div>
+            </div>
+          </>
+        )}
       </div>
 
       {/* FILTROS E BUSCA */}
@@ -404,33 +578,62 @@ export function AdminDashboard({
             onChange={(e) => setStatusFilter(e.target.value)}
             className="bg-slate-50 dark:bg-slate-950 border border-slate-200/80 dark:border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 font-medium transition-all"
           >
-            <option value="todos">Todos os Status</option>
-            <option value="solicitado">Novas Solicitações</option>
-            <option value="aguardando_assinatura">Aguardando Assinatura</option>
-            <option value="aguardando_liberacao">Aguardando Liberação TED</option>
-            <option value="ativo">Ativos em Folha</option>
-            <option value="quitado">Quitados</option>
-            <option value="contraproposta">Em Contraproposta</option>
-            <option value="recusado">Recusados</option>
-            <option value="cancelado">Cancelados</option>
+            {viewModeTab === 'liberacoes' ? (
+              <>
+                <option value="aguardando_liberacao">Aguardando Liberação TED (Pendentes)</option>
+                <option value="ativo">Já Liberados (Ativos)</option>
+                <option value="todos">Todos os Status</option>
+              </>
+            ) : viewModeTab === 'analise' ? (
+              <>
+                <option value="solicitado">Aguardando Análise (Novas)</option>
+                <option value="contraproposta">Em Contraproposta</option>
+                <option value="aguardando_assinatura">Aguardando Assinatura</option>
+                <option value="todos">Todos os Status</option>
+              </>
+            ) : (
+              <>
+                <option value="todos">Todos os Status</option>
+                <option value="solicitado">Novas Solicitações</option>
+                <option value="aguardando_assinatura">Aguardando Assinatura</option>
+                <option value="aguardando_liberacao">Aguardando Liberação TED</option>
+                <option value="ativo">Ativos em Folha</option>
+                <option value="quitado">Quitados</option>
+                <option value="contraproposta">Em Contraproposta</option>
+                <option value="recusado">Recusados</option>
+                <option value="cancelado">Cancelados</option>
+              </>
+            )}
           </select>
         </div>
       </div>
 
-      {/* TABELA DE OPERAÇÕES */}
+      {/* TABELA DE OPERAÇÕES (DESKTOP: hidden md:block para não duplicar no mobile) */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm">
-        <div className="overflow-x-auto">
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-xs text-left">
-            <thead className="bg-slate-50/80 dark:bg-slate-800/50 text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider border-b border-slate-200/80 dark:border-slate-800">
-              <tr>
-                <th className="py-3 px-4">Operação</th>
-                <th className="py-3 px-4">Colaborador</th>
-                <th className="py-3 px-4 text-right">Valor Concedido</th>
-                <th className="py-3 px-4 text-center">Parcelas</th>
-                <th className="py-3 px-4 text-right">Saldo Devedor</th>
-                <th className="py-3 px-4 text-center">Status</th>
-                <th className="py-3 px-4 text-right">Ações</th>
-              </tr>
+            <thead className="bg-slate-50/80 dark:bg-slate-800/50 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider border-b border-slate-200/80 dark:border-slate-800">
+              {viewModeTab === 'liberacoes' ? (
+                <tr>
+                  <th className="py-2.5 px-3 whitespace-nowrap">Operação</th>
+                  <th className="py-2.5 px-3 min-w-[150px]">Colaborador</th>
+                  <th className="py-2.5 px-3 min-w-[200px]">Dados Bancários / Chave PIX</th>
+                  <th className="py-2.5 px-3 text-right whitespace-nowrap">Valor a Liberar</th>
+                  <th className="py-2.5 px-2 text-center whitespace-nowrap w-[60px]">Prazo</th>
+                  <th className="py-2.5 px-2 text-center whitespace-nowrap">Status</th>
+                  <th className="py-2.5 px-3 text-right whitespace-nowrap">Ações</th>
+                </tr>
+              ) : (
+                <tr>
+                  <th className="py-2.5 px-3 whitespace-nowrap">Operação</th>
+                  <th className="py-2.5 px-3 min-w-[150px]">Colaborador</th>
+                  <th className="py-2.5 px-3 text-right whitespace-nowrap">Valor Concedido</th>
+                  <th className="py-2.5 px-2 text-center whitespace-nowrap w-[60px]">Parcelas</th>
+                  <th className="py-2.5 px-3 text-right whitespace-nowrap">Saldo Devedor</th>
+                  <th className="py-2.5 px-2 text-center whitespace-nowrap">Status</th>
+                  <th className="py-2.5 px-3 text-right whitespace-nowrap">Ações</th>
+                </tr>
+              )}
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {filteredEmprestimos.length === 0 ? (
@@ -445,50 +648,168 @@ export function AdminDashboard({
                   const isPendingAnalysis = loan.status === 'solicitado' || loan.status === 'em_analise'
                   const isPendingDisbursement = loan.status === 'aguardando_liberacao'
 
+                  if (viewModeTab === 'liberacoes') {
+                    return (
+                      <tr key={loan.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors">
+                        <td className="py-2.5 px-3 font-mono font-bold text-slate-900 dark:text-white whitespace-nowrap">
+                          <div className="text-xs">{loan.codigoOperacao}</div>
+                          <div className="text-[10px] text-slate-400 font-sans font-normal">
+                            {new Date(loan.createdAt).toLocaleDateString('pt-BR')}
+                          </div>
+                        </td>
+
+                        <td className="py-2.5 px-3 min-w-[150px] max-w-[200px]">
+                          <div className="font-bold text-slate-900 dark:text-white truncate" title={loan.colaboradorNome}>
+                            {loan.colaboradorNome}
+                          </div>
+                          <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate">
+                            {loan.colaboradorCargo || 'Colaborador'} • CPF: {loan.colaboradorCpf}
+                          </div>
+                        </td>
+
+                        <td className="py-2.5 px-3 min-w-[200px]">
+                          {loan.dadosBancarios?.chavePix ? (
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[9px] uppercase font-bold px-1.5 py-0.5 rounded bg-cyan-100 dark:bg-cyan-950 text-cyan-800 dark:text-cyan-300 font-mono">PIX</span>
+                              <span className="font-mono text-xs font-semibold text-slate-900 dark:text-white truncate max-w-[140px]" title={loan.dadosBancarios.chavePix}>
+                                {loan.dadosBancarios.chavePix}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => copyToClipboard(loan.dadosBancarios!.chavePix!, 'Chave PIX')}
+                                className="text-slate-400 hover:text-cyan-600 transition-colors"
+                                title="Copiar Chave PIX"
+                              >
+                                <Copy size={12} />
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[9px] uppercase font-bold px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-mono">CPF</span>
+                              <span className="font-mono text-xs text-slate-700 dark:text-slate-300">
+                                {loan.colaboradorCpf}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => copyToClipboard(loan.colaboradorCpf, 'CPF')}
+                                className="text-slate-400 hover:text-cyan-600 transition-colors"
+                                title="Copiar CPF"
+                              >
+                                <Copy size={12} />
+                              </button>
+                            </div>
+                          )}
+                          {loan.dadosBancarios?.banco && (
+                            <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
+                              {loan.dadosBancarios.banco} • Ag: {loan.dadosBancarios.agencia} • Cc: {loan.dadosBancarios.conta}
+                            </div>
+                          )}
+                        </td>
+
+                        <td className="py-2.5 px-3 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
+                          <div className="text-xs">{formatBrl(loan.valorAprovado)}</div>
+                          <div className="text-[10px] text-slate-400 font-sans font-normal">
+                            TED / Transferência
+                          </div>
+                        </td>
+
+                        <td className="py-2.5 px-2 text-center font-mono font-semibold text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                          {loan.quantidadeParcelas}x
+                        </td>
+
+                        <td className="py-2.5 px-2 text-center whitespace-nowrap">
+                          <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full border whitespace-nowrap ${badge.bg}`}>
+                            {badge.label}
+                          </span>
+                        </td>
+
+                        <td className="py-2.5 px-3 text-right whitespace-nowrap">
+                          <div className="flex items-center justify-end gap-1.5">
+                            {isPendingDisbursement ? (
+                              <button
+                                onClick={() => {
+                                  setDisbursingLoan(loan)
+                                  setComprovanteUrl(loan.comprovanteLiberacaoUrl || '')
+                                }}
+                                className="px-2.5 py-1 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-[11px] shadow-sm flex items-center gap-1.5 transition-all"
+                                title="Registrar Liberação Financeira"
+                              >
+                                <Banknote size={13} />
+                                <span>Liberar TED</span>
+                              </button>
+                            ) : (
+                              <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1 mr-1">
+                                <CheckCircle2 size={12} /> Liberado
+                              </span>
+                            )}
+
+                            <button
+                              onClick={() => onOpenDetails(loan)}
+                              className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition-all"
+                              title="Ver Detalhes"
+                            >
+                              <Eye size={14} />
+                            </button>
+
+                            <button
+                              onClick={() => setLoanToDelete(loan)}
+                              className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/40 text-rose-600 dark:text-rose-400 border border-rose-200/60 dark:border-rose-800/40 transition-all"
+                              title="Excluir"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  }
+
                   return (
                     <tr key={loan.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors">
-                      <td className="py-3.5 px-4 font-mono font-bold text-slate-900 dark:text-white">
-                        <div>{loan.codigoOperacao}</div>
+                      <td className="py-2.5 px-3 font-mono font-bold text-slate-900 dark:text-white whitespace-nowrap">
+                        <div className="text-xs">{loan.codigoOperacao}</div>
                         <div className="text-[10px] text-slate-400 font-sans font-normal">
                           {new Date(loan.createdAt).toLocaleDateString('pt-BR')}
                         </div>
                       </td>
 
-                      <td className="py-3.5 px-4">
-                        <div className="font-bold text-slate-900 dark:text-white">{loan.colaboradorNome}</div>
-                        <div className="text-[10px] text-slate-500 dark:text-slate-400">
+                      <td className="py-2.5 px-3 min-w-[150px] max-w-[220px]">
+                        <div className="font-bold text-slate-900 dark:text-white truncate" title={loan.colaboradorNome}>
+                          {loan.colaboradorNome}
+                        </div>
+                        <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate">
                           {loan.colaboradorCargo || 'Colaborador'} • CPF: {loan.colaboradorCpf}
                         </div>
                       </td>
 
-                      <td className="py-3.5 px-4 text-right font-mono font-bold text-slate-900 dark:text-white">
-                        {formatBrl(loan.valorAprovado)}
+                      <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900 dark:text-white whitespace-nowrap">
+                        <div>{formatBrl(loan.valorAprovado || loan.valorSolicitado)}</div>
                         <div className="text-[10px] text-slate-400 font-sans font-normal">
                           {loan.taxaMensal}% a.m.
                         </div>
                       </td>
 
-                      <td className="py-3.5 px-4 text-center font-mono font-semibold text-slate-700 dark:text-slate-300">
+                      <td className="py-2.5 px-2 text-center font-mono font-semibold text-slate-700 dark:text-slate-300 whitespace-nowrap">
                         {loan.quantidadeParcelas}x
                       </td>
 
-                      <td className="py-3.5 px-4 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                      <td className="py-2.5 px-3 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
                         {formatBrl(loan.saldoDevedorAtual)}
                       </td>
 
-                      <td className="py-3.5 px-4 text-center">
-                        <span className={`text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full border ${badge.bg}`}>
+                      <td className="py-2.5 px-2 text-center whitespace-nowrap">
+                        <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full border whitespace-nowrap ${badge.bg}`}>
                           {badge.label}
                         </span>
                       </td>
 
-                      <td className="py-3.5 px-4 text-right">
+                      <td className="py-2.5 px-3 text-right whitespace-nowrap">
                         <div className="flex items-center justify-end gap-1.5">
                           {/* Ação 1: Analisar */}
                           {isPendingAnalysis && (
                             <button
                               onClick={() => handleOpenAnalysisModal(loan)}
-                              className="px-2.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-bold text-[11px] shadow-sm flex items-center gap-1 transition-all"
+                              className="px-2 py-1 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-bold text-[11px] shadow-sm flex items-center gap-1 transition-all"
                               title="Analisar Proposta"
                             >
                               <span>Analisar</span>
@@ -502,7 +823,7 @@ export function AdminDashboard({
                                 setDisbursingLoan(loan)
                                 setComprovanteUrl(loan.comprovanteLiberacaoUrl || '')
                               }}
-                              className="px-2.5 py-1 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-[11px] shadow-sm flex items-center gap-1 transition-all"
+                              className="px-2 py-1 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-[11px] shadow-sm flex items-center gap-1 transition-all"
                               title="Registrar Liberação Financeira"
                             >
                               <Banknote size={12} />
@@ -537,7 +858,7 @@ export function AdminDashboard({
           </table>
         </div>
 
-        {/* LISTAGEM EM CARDS PARA DISPOSITIVOS MÓVEIS */}
+        {/* LISTAGEM EM CARDS PARA DISPOSITIVOS MÓVEIS (ÚNICA VISÃO NO MOBILE) */}
         <div className="block md:hidden divide-y divide-slate-100 dark:divide-slate-800">
           {filteredEmprestimos.length === 0 ? (
             <div className="py-12 text-center text-slate-400 dark:text-slate-500 text-xs">
@@ -568,56 +889,135 @@ export function AdminDashboard({
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-3 gap-2 bg-slate-50 dark:bg-slate-800/50 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800 text-center font-mono">
-                    <div>
-                      <div className="text-[9px] uppercase font-sans text-slate-400 font-semibold">Concedido</div>
-                      <div className="font-bold text-slate-900 dark:text-white text-xs mt-0.5">{formatBrl(loan.valorAprovado)}</div>
-                    </div>
-                    <div>
-                      <div className="text-[9px] uppercase font-sans text-slate-400 font-semibold">Parcelas</div>
-                      <div className="font-bold text-slate-700 dark:text-slate-300 text-xs mt-0.5">{loan.quantidadeParcelas}x</div>
-                    </div>
-                    <div>
-                      <div className="text-[9px] uppercase font-sans text-slate-400 font-semibold">Saldo Devedor</div>
-                      <div className="font-bold text-emerald-600 dark:text-emerald-400 text-xs mt-0.5">{formatBrl(loan.saldoDevedorAtual)}</div>
-                    </div>
-                  </div>
+                  {/* SE FOR LIBERAÇÃO TED: Card específico com PIX e dados bancários */}
+                  {(viewModeTab === 'liberacoes' || isPendingDisbursement) && (
+                    <div className="bg-cyan-50/60 dark:bg-cyan-950/20 p-3 rounded-xl border border-cyan-200/60 dark:border-cyan-800/40 text-xs space-y-2">
+                      <div className="flex justify-between items-center">
+                        <span className="text-[10px] uppercase font-bold text-cyan-800 dark:text-cyan-300">Valor a Transferir</span>
+                        <span className="font-mono font-black text-emerald-600 dark:text-emerald-400 text-sm">
+                          {formatBrl(loan.valorAprovado)}
+                        </span>
+                      </div>
 
-                  <div className="flex items-center gap-2 pt-1">
+                      {loan.dadosBancarios?.chavePix ? (
+                        <div className="flex items-center justify-between bg-white dark:bg-slate-900 p-2 rounded-lg border border-cyan-200/60 dark:border-cyan-800/40">
+                          <div className="truncate mr-2">
+                            <span className="text-[9px] uppercase font-bold text-cyan-600 dark:text-cyan-400 mr-1.5 font-mono">PIX:</span>
+                            <span className="font-mono text-xs text-slate-900 dark:text-white">{loan.dadosBancarios.chavePix}</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => copyToClipboard(loan.dadosBancarios!.chavePix!, 'Chave PIX')}
+                            className="text-slate-400 hover:text-cyan-600 p-1 transition-colors shrink-0"
+                            title="Copiar PIX"
+                          >
+                            <Copy size={13} />
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-between bg-white dark:bg-slate-900 p-2 rounded-lg border border-cyan-200/60 dark:border-cyan-800/40">
+                          <div className="truncate mr-2">
+                            <span className="text-[9px] uppercase font-bold text-slate-500 mr-1.5 font-mono">PIX (CPF):</span>
+                            <span className="font-mono text-xs text-slate-900 dark:text-white">{loan.colaboradorCpf}</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => copyToClipboard(loan.colaboradorCpf, 'CPF')}
+                            className="text-slate-400 hover:text-cyan-600 p-1 transition-colors shrink-0"
+                            title="Copiar CPF"
+                          >
+                            <Copy size={13} />
+                          </button>
+                        </div>
+                      )}
+
+                      {loan.dadosBancarios?.banco && (
+                        <div className="text-[11px] text-slate-600 dark:text-slate-300">
+                          <strong>Banco:</strong> {loan.dadosBancarios.banco} • <strong>Ag:</strong> {loan.dadosBancarios.agencia} • <strong>Cc:</strong> {loan.dadosBancarios.conta}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* SE FOR ANÁLISE PENDENTE: Card de proposta solicitada */}
+                  {isPendingAnalysis && viewModeTab !== 'liberacoes' && (
+                    <div className="space-y-2">
+                      <div className="grid grid-cols-2 gap-2 bg-amber-50/60 dark:bg-amber-950/20 p-2.5 rounded-xl border border-amber-200/60 dark:border-amber-900/30 text-center font-mono">
+                        <div>
+                          <div className="text-[9px] uppercase font-sans text-amber-700 dark:text-amber-400 font-semibold">Valor Solicitado</div>
+                          <div className="font-bold text-slate-900 dark:text-white text-xs mt-0.5">{formatBrl(loan.valorSolicitado)}</div>
+                        </div>
+                        <div>
+                          <div className="text-[9px] uppercase font-sans text-amber-700 dark:text-amber-400 font-semibold">Prazo Desejado</div>
+                          <div className="font-bold text-slate-700 dark:text-slate-300 text-xs mt-0.5">{loan.quantidadeParcelas}x parcelas</div>
+                        </div>
+                      </div>
+                      {loan.justificativaSolicitacao && (
+                        <div className="text-[11px] text-slate-600 dark:text-slate-400 italic bg-slate-50 dark:bg-slate-800/40 p-2 rounded-lg">
+                          &ldquo;{loan.justificativaSolicitacao}&rdquo;
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* SE FOR CONTRATO ATIVO/QUITADO: Grid tradicional com 3 colunas */}
+                  {!isPendingAnalysis && !isPendingDisbursement && viewModeTab !== 'liberacoes' && (
+                    <div className="grid grid-cols-3 gap-2 bg-slate-50 dark:bg-slate-800/50 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800 text-center font-mono">
+                      <div>
+                        <div className="text-[9px] uppercase font-sans text-slate-400 font-semibold">Concedido</div>
+                        <div className="font-bold text-slate-900 dark:text-white text-xs mt-0.5">{formatBrl(loan.valorAprovado)}</div>
+                      </div>
+                      <div>
+                        <div className="text-[9px] uppercase font-sans text-slate-400 font-semibold">Parcelas</div>
+                        <div className="font-bold text-slate-700 dark:text-slate-300 text-xs mt-0.5">{loan.quantidadeParcelas}x</div>
+                      </div>
+                      <div>
+                        <div className="text-[9px] uppercase font-sans text-slate-400 font-semibold">Saldo Devedor</div>
+                        <div className="font-bold text-emerald-600 dark:text-emerald-400 text-xs mt-0.5">{formatBrl(loan.saldoDevedorAtual)}</div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* AÇÕES MOBILE */}
+                  <div className="flex flex-col gap-2 pt-1">
                     {isPendingAnalysis && (
                       <button
                         onClick={() => handleOpenAnalysisModal(loan)}
-                        className="flex-1 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm active:scale-98 transition-all"
+                        className="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm active:scale-98 transition-all"
                       >
-                        <span>Analisar</span>
+                        <span>Analisar Proposta de Crédito</span>
                       </button>
                     )}
+
                     {isPendingDisbursement && (
                       <button
                         onClick={() => {
                           setDisbursingLoan(loan)
                           setComprovanteUrl(loan.comprovanteLiberacaoUrl || '')
                         }}
-                        className="flex-1 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm active:scale-98 transition-all"
+                        className="w-full py-2.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm active:scale-98 transition-all"
                       >
-                        <Banknote size={14} />
-                        <span>Liberar</span>
+                        <Banknote size={15} />
+                        <span>Liberar TED & Anexar Comprovante</span>
                       </button>
                     )}
-                    <button
-                      onClick={() => onOpenDetails(loan)}
-                      className="flex-1 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs flex items-center justify-center gap-1.5 transition-all"
-                    >
-                      <Eye size={14} />
-                      <span>Detalhes</span>
-                    </button>
-                    <button
-                      onClick={() => setLoanToDelete(loan)}
-                      className="p-2 rounded-xl bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border border-rose-200/60 dark:border-rose-800/40 transition-all"
-                      title="Excluir"
-                    >
-                      <Trash2 size={15} />
-                    </button>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => onOpenDetails(loan)}
+                        className="flex-1 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs flex items-center justify-center gap-1.5 transition-all"
+                      >
+                        <Eye size={14} />
+                        <span>Ver Detalhes</span>
+                      </button>
+                      <button
+                        onClick={() => setLoanToDelete(loan)}
+                        className="p-2 rounded-xl bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border border-rose-200/60 dark:border-rose-800/40 transition-all"
+                        title="Excluir"
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
                   </div>
                 </div>
               )
@@ -801,24 +1201,49 @@ export function AdminDashboard({
               Confirme a transferência ou PIX efetuado para o colaborador no valor líquido contratado:
             </p>
 
-            <div className="bg-cyan-50/70 dark:bg-cyan-950/30 border border-cyan-200/80 dark:border-cyan-800/40 rounded-xl p-3.5 text-xs font-mono space-y-1.5">
-              <div className="flex justify-between">
+            <div className="bg-cyan-50/70 dark:bg-cyan-950/30 border border-cyan-200/80 dark:border-cyan-800/40 rounded-xl p-3.5 text-xs font-mono space-y-2">
+              <div className="flex justify-between items-center">
                 <span className="text-slate-600 dark:text-slate-400 font-sans">Favorecido:</span>
                 <span className="font-bold text-slate-900 dark:text-white">{disbursingLoan.colaboradorNome}</span>
               </div>
-              <div className="flex justify-between">
+              <div className="flex justify-between items-center">
                 <span className="text-slate-600 dark:text-slate-400 font-sans">Valor a Liberar:</span>
-                <span className="font-bold text-emerald-600 dark:text-emerald-400">{formatBrl(disbursingLoan.valorAprovado)}</span>
+                <span className="font-black text-emerald-600 dark:text-emerald-400 text-sm">{formatBrl(disbursingLoan.valorAprovado)}</span>
               </div>
-              {disbursingLoan.dadosBancarios?.chavePix && (
-                <div className="flex justify-between">
-                  <span className="text-slate-600 dark:text-slate-400 font-sans">Chave PIX:</span>
-                  <span className="text-cyan-700 dark:text-cyan-300 font-bold">{disbursingLoan.dadosBancarios.chavePix}</span>
+              {disbursingLoan.dadosBancarios?.chavePix ? (
+                <div className="flex justify-between items-center bg-white dark:bg-slate-900 p-2 rounded-lg border border-cyan-200/60 dark:border-cyan-800/40">
+                  <span className="text-slate-600 dark:text-slate-400 font-sans text-[11px]">Chave PIX:</span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-cyan-700 dark:text-cyan-300 font-bold">{disbursingLoan.dadosBancarios.chavePix}</span>
+                    <button
+                      type="button"
+                      onClick={() => copyToClipboard(disbursingLoan.dadosBancarios!.chavePix!, 'Chave PIX')}
+                      className="text-slate-400 hover:text-cyan-600 p-1"
+                      title="Copiar PIX"
+                    >
+                      <Copy size={13} />
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex justify-between items-center bg-white dark:bg-slate-900 p-2 rounded-lg border border-cyan-200/60 dark:border-cyan-800/40">
+                  <span className="text-slate-600 dark:text-slate-400 font-sans text-[11px]">PIX (CPF):</span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-cyan-700 dark:text-cyan-300 font-bold">{disbursingLoan.colaboradorCpf}</span>
+                    <button
+                      type="button"
+                      onClick={() => copyToClipboard(disbursingLoan.colaboradorCpf, 'CPF')}
+                      className="text-slate-400 hover:text-cyan-600 p-1"
+                      title="Copiar CPF"
+                    >
+                      <Copy size={13} />
+                    </button>
+                  </div>
                 </div>
               )}
               {disbursingLoan.dadosBancarios?.banco && (
-                <div className="flex justify-between">
-                  <span className="text-slate-600 dark:text-slate-400 font-sans">Banco / Ag / Conta:</span>
+                <div className="flex justify-between items-center text-[11px]">
+                  <span className="text-slate-600 dark:text-slate-400 font-sans">Banco / Ag / Cc:</span>
                   <span className="text-slate-700 dark:text-slate-300">
                     {disbursingLoan.dadosBancarios.banco} • Ag: {disbursingLoan.dadosBancarios.agencia} • Cc: {disbursingLoan.dadosBancarios.conta}
                   </span>

@@ -167,7 +167,8 @@ export function getUserModuleAccess(user: any, perfilObj?: any): UserModuleAcces
 
   // Fallback seguro usando perfis padrão conhecidos
   const userPerfilName = user.perfil || user.cargo || ''
-  const defaultFound = DEFAULT_PERFIS.find(p => p.nome === userPerfilName)
+  const clean = (s: string) => (s || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim()
+  const defaultFound = DEFAULT_PERFIS.find(p => p.nome === userPerfilName || clean(p.nome) === clean(userPerfilName))
 
   const hasGestaoEscolar = defaultFound ? !defaultFound.bloqueadoGestaoEscolar : true
   const hasAgendaDigital = defaultFound ? !defaultFound.bloqueadoAgendaDigital : true

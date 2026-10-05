@@ -4,6 +4,7 @@ import { createContext, useContext, useCallback, useEffect, useMemo, useState } 
 import { useLocalStorage } from './useLocalStorage'
 import { useSupabaseArray, invalidateAllCache } from './useSupabaseCollection'
 import { useConfigDb, invalidateConfigCache } from './useConfigDb'
+import { setCachedPerfis } from './auth/moduleRouting'
 
 // ─── Data version — bump to force-clear all stored data ───────────
 const DATA_VERSION = '17'
@@ -1622,6 +1623,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       setPerfis: (val: any) => {
         const next = typeof val === 'function' ? val(resolvedPerfis) : val
         setPerfisRaw(next)
+        if (Array.isArray(next)) {
+          setCachedPerfis(next)
+        }
       },
       perfisLoading, wipeAll, logSystemAction, loading: false
     }

@@ -132,41 +132,48 @@ export async function POST(request: Request) {
       } catch (e) {}
     }
 
-    // Formata o CPF (000.000.000-00) e sincroniza no cadastro do colaborador (funcionarios e system_users)
+    // Valida CPF obrigatório com 11 dígitos
     const cleanDigitsCpf = (colabCpf || '').replace(/\D/g, '').slice(0, 11)
-    let formattedCpf = colabCpf
-    if (cleanDigitsCpf.length === 11) {
-      formattedCpf = `${cleanDigitsCpf.slice(0, 3)}.${cleanDigitsCpf.slice(3, 6)}.${cleanDigitsCpf.slice(6, 9)}-${cleanDigitsCpf.slice(9, 11)}`
-      colabCpf = formattedCpf
+    if (!cleanDigitsCpf || cleanDigitsCpf.length !== 11) {
+      return NextResponse.json({ error: 'O CPF do colaborador é obrigatório e deve conter 11 dígitos.' }, { status: 400 })
+    }
 
-      try {
-        const funcIdToUpdate = criadoPorFinanceiro && targetColaboradorId ? targetColaboradorId : resolved.funcionarioId
-        if (funcIdToUpdate) {
-          await sb.from('funcionarios').update({
-            cpf: formattedCpf,
-            updated_at: new Date().toISOString()
-          }).eq('id', funcIdToUpdate)
-        } else if (colabEmail) {
-          await sb.from('funcionarios').update({
-            cpf: formattedCpf,
-            updated_at: new Date().toISOString()
-          }).ilike('email', colabEmail)
-        }
+    // Valida Chave PIX obrigatória
+    if (!dadosBancarios?.chavePix || !String(dadosBancarios.chavePix).trim()) {
+      return NextResponse.json({ error: 'A Chave PIX é obrigatória para o crédito do empréstimo.' }, { status: 400 })
+    }
 
-        if (resolved.systemUserId || resolved.id) {
-          await sb.from('system_users').update({
-            cpf: formattedCpf,
-            updated_at: new Date().toISOString()
-          }).or(`id.eq.${resolved.systemUserId || resolved.id},auth_id.eq.${resolved.id}`)
-        } else if (colabEmail) {
-          await sb.from('system_users').update({
-            cpf: formattedCpf,
-            updated_at: new Date().toISOString()
-          }).ilike('email', colabEmail)
-        }
-      } catch (errSync) {
-        console.warn('[Sync CPF error]', errSync)
+    // Formata o CPF (000.000.000-00) e sincroniza no cadastro do colaborador (funcionarios e system_users)
+    let formattedCpf = `${cleanDigitsCpf.slice(0, 3)}.${cleanDigitsCpf.slice(3, 6)}.${cleanDigitsCpf.slice(6, 9)}-${cleanDigitsCpf.slice(9, 11)}`
+    colabCpf = formattedCpf
+
+    try {
+      const funcIdToUpdate = criadoPorFinanceiro && targetColaboradorId ? targetColaboradorId : resolved.funcionarioId
+      if (funcIdToUpdate) {
+        await sb.from('funcionarios').update({
+          cpf: formattedCpf,
+          updated_at: new Date().toISOString()
+        }).eq('id', funcIdToUpdate)
+      } else if (colabEmail) {
+        await sb.from('funcionarios').update({
+          cpf: formattedCpf,
+          updated_at: new Date().toISOString()
+        }).ilike('email', colabEmail)
       }
+
+      if (resolved.systemUserId || resolved.id) {
+        await sb.from('system_users').update({
+          cpf: formattedCpf,
+          updated_at: new Date().toISOString()
+        }).or(`id.eq.${resolved.systemUserId || resolved.id},auth_id.eq.${resolved.id}`)
+      } else if (colabEmail) {
+        await sb.from('system_users').update({
+          cpf: formattedCpf,
+          updated_at: new Date().toISOString()
+        }).ilike('email', colabEmail)
+      }
+    } catch (errSync) {
+      console.warn('[Sync CPF error]', errSync)
     }
 
     // Define taxa e método

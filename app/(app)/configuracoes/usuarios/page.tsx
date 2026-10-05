@@ -13,6 +13,7 @@ import { useApp } from '@/lib/context'
 import { AuthAlunosTab } from '@/components/usuarios/AuthAlunosTab'
 import { AuthResponsaveisTab } from '@/components/usuarios/AuthResponsaveisTab'
 import { ALL_NAV_GROUPS } from '@/components/layout/Sidebar'
+import { setCachedPerfis } from '@/lib/auth/moduleRouting'
 
 interface ModulePage { key: string; label: string }
 interface ModuleGroup { key: string; label: string; icon: React.ReactNode; pages: ModulePage[] }
@@ -46,12 +47,27 @@ const MODULES_CONFIG: ModuleGroup[] = ALL_NAV_GROUPS.map(g => ({
   key: toSlug(g.title),
   label: g.title,
   icon: g.icon,
-  pages: g.items.flatMap(item => {
-    if (item.children) {
-      return item.children.map(child => ({ key: child.href || toSlug(child.label), label: `${item.label} > ${child.label}` }))
-    }
-    return [{ key: item.href || toSlug(item.label), label: item.label }]
-  })
+  pages: g.items
+    .filter(item => {
+      const lbl = (item.label || '').toUpperCase()
+      const hrf = (item.href || '').toLowerCase()
+      // CredImpacto é um módulo master independente e nunca deve constar dentro de Financeiro
+      if (lbl.includes('CREDIMPACTO') || hrf.includes('credimpacto')) return false
+      return true
+    })
+    .flatMap(item => {
+      if (item.children) {
+        return item.children
+          .filter(child => {
+            const cLbl = (child.label || '').toUpperCase()
+            const cHrf = (child.href || '').toLowerCase()
+            if (cLbl.includes('CREDIMPACTO') || cHrf.includes('credimpacto')) return false
+            return true
+          })
+          .map(child => ({ key: child.href || toSlug(child.label), label: `${item.label} > ${child.label}` }))
+      }
+      return [{ key: item.href || toSlug(item.label), label: item.label }]
+    })
 }))
 /* ── Skeletons e Estilos Premium de Carregamento ── */
 const TableSkeleton = () => (
@@ -351,21 +367,29 @@ export default function UsuariosPage() {
   }
   const savePerfil = () => {
     if (!perfilForm.nome.trim()) return
+    let updatedList: Perfil[] = []
     if (perfilModal === 'add') {
       const pId = newId('PERF')
-      setPerfis(prev => [...prev, { ...perfilForm, id: pId } as Perfil])
+      updatedList = [...(perfis || []), { ...perfilForm, id: pId } as Perfil]
+      setPerfis(updatedList)
       logSystemAction('Config (Usuários)', 'Cadastro', `Novo perfil: ${perfilForm.nome}`, { registroId: pId, nomeRelacionado: perfilForm.nome, detalhesDepois: perfilForm })
     } else if (editingPerfilId) {
       const pAntigo = (perfis || []).find(p => p.id === editingPerfilId)
-      setPerfis(prev => prev.map(p => p.id === editingPerfilId ? { ...perfilForm, id: editingPerfilId } as Perfil : p))
+      updatedList = (perfis || []).map(p => p.id === editingPerfilId ? { ...perfilForm, id: editingPerfilId } as Perfil : p)
+      setPerfis(updatedList)
       logSystemAction('Config (Usuários)', 'Edição', `Atualização do perfil ${perfilForm.nome}`, { registroId: editingPerfilId, nomeRelacionado: perfilForm.nome, detalhesAntes: pAntigo, detalhesDepois: perfilForm })
+    }
+    if (updatedList.length > 0) {
+      setCachedPerfis(updatedList)
     }
     setPerfilModal(null); setEditingPerfilId(null)
   }
   const deletePerfil = () => {
     if (deletePerfilId) {
       const pDel = (perfis || []).find(p => p.id === deletePerfilId)
-      setPerfis(prev => (prev || []).filter(p => p.id !== deletePerfilId))
+      const updatedList = (perfis || []).filter(p => p.id !== deletePerfilId)
+      setPerfis(updatedList)
+      setCachedPerfis(updatedList)
       logSystemAction('Config (Usuários)', 'Exclusão', `Exclusão do perfil ${pDel?.nome}`, { registroId: deletePerfilId, detalhesAntes: pDel })
       setDeletePerfilId(null)
     }

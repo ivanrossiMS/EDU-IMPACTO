@@ -29,17 +29,18 @@ export function RelatoriosTab({
 }: RelatoriosTabProps) {
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear().toString())
 
-  // Métricas Consolidadas
-  const totalOperacoes = emprestimos.length
-  const totalPrincipalConcedido = emprestimos.reduce((acc, e) => acc + (e.valorAprovado || 0), 0)
-  const totalSaldoDevedorGeral = emprestimos.reduce((acc, e) => acc + (e.saldoDevedorAtual || 0), 0)
+  // Métricas Consolidadas - apenas operações formalizadas e liberadas
+  const concedidos = useMemo(() => emprestimos.filter((e) => ['ativo', 'quitado'].includes(e.status)), [emprestimos])
+  const totalOperacoes = concedidos.length
+  const totalPrincipalConcedido = concedidos.reduce((acc, e) => acc + (e.valorAprovado || 0), 0)
+  const totalSaldoDevedorGeral = emprestimos.filter((e) => e.status === 'ativo').reduce((acc, e) => acc + (e.saldoDevedorAtual || 0), 0)
   
-  // Total de juros projetados e total de juros já pagos
+  // Total de juros projetados e total de juros já pagos (apenas de operações concedidas)
   let totalJurosProjetados = 0
   let totalJurosRecebidos = 0
   let totalPrincipalAmortizado = 0
 
-  for (const emp of emprestimos) {
+  for (const emp of concedidos) {
     for (const p of emp.parcelas || []) {
       totalJurosProjetados += p.valorJuros || 0
       if (p.status === 'descontada' || p.status === 'paga_avulso') {
@@ -49,10 +50,10 @@ export function RelatoriosTab({
     }
   }
 
-  // Agrupamento por Método de Cálculo
+  // Agrupamento por Método de Cálculo (apenas concedidos)
   const distribuicaoPorMetodo = useMemo(() => {
     const acc: Record<string, { count: number; volume: number }> = {}
-    for (const emp of emprestimos) {
+    for (const emp of concedidos) {
       const met = emp.metodoCalculo || 'JUROS_SIMPLES_SALDO'
       if (!acc[met]) acc[met] = { count: 0, volume: 0 }
       acc[met].count += 1
@@ -64,7 +65,7 @@ export function RelatoriosTab({
       count: data.count,
       volume: data.volume
     }))
-  }, [emprestimos])
+  }, [concedidos])
 
   // Agrupamento por Status
   const distribuicaoPorStatus = useMemo(() => {

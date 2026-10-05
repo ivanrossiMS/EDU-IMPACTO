@@ -71,7 +71,7 @@ export function EmprestimoDetalhesModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in">
-      <div className="bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-2xl max-w-4xl w-full h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-2xl max-w-5xl w-full h-[90vh] flex flex-col shadow-2xl overflow-hidden">
         {/* HEADER DO MODAL */}
         <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0 bg-slate-50/60 dark:bg-slate-950/60">
           <div className="flex items-center gap-3">
@@ -289,15 +289,15 @@ export function EmprestimoDetalhesModal({
                 <table className="w-full text-xs text-left">
                   <thead className="bg-slate-50 dark:bg-slate-800/50 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider border-b border-slate-200/80 dark:border-slate-800">
                     <tr>
-                      <th className="py-2.5 px-3 text-center">Nº</th>
-                      <th className="py-2.5 px-3">Competência</th>
-                      <th className="py-2.5 px-3">Vencimento</th>
-                      <th className="py-2.5 px-3 text-right">Amortização</th>
-                      <th className="py-2.5 px-3 text-right">Juros</th>
-                      <th className="py-2.5 px-3 text-right">Total Parcela</th>
-                      <th className="py-2.5 px-3 text-right">Saldo Devedor</th>
-                      <th className="py-2.5 px-3 text-center">Situação</th>
-                      <th className="py-2.5 px-3 text-right">Comprovante</th>
+                      <th className="py-2.5 px-2 text-center w-9 whitespace-nowrap">Nº</th>
+                      <th className="py-2.5 px-2 text-center whitespace-nowrap">Competência</th>
+                      <th className="py-2.5 px-2 text-center whitespace-nowrap">Vencimento</th>
+                      <th className="py-2.5 px-2 text-right whitespace-nowrap">Amortização</th>
+                      <th className="py-2.5 px-2 text-right whitespace-nowrap">Juros</th>
+                      <th className="py-2.5 px-2 text-right whitespace-nowrap">Total Parcela</th>
+                      <th className="py-2.5 px-2 text-right whitespace-nowrap">Saldo Devedor</th>
+                      <th className="py-2.5 px-2 text-center whitespace-nowrap">Situação</th>
+                      <th className="py-2.5 px-2 text-center whitespace-nowrap w-24">Comprovante</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80 font-mono text-[11px]">
@@ -306,18 +306,18 @@ export function EmprestimoDetalhesModal({
 
                       return (
                         <tr key={p.numero} className="hover:bg-slate-50/70 dark:hover:bg-white/5 transition-colors">
-                          <td className="py-2 px-3 text-center font-bold text-slate-700 dark:text-slate-300">{p.numero}</td>
-                          <td className="py-2 px-3 text-slate-700 dark:text-slate-300">{p.competencia}</td>
-                          <td className="py-2 px-3 text-slate-500 dark:text-slate-400">
+                          <td className="py-2 px-2 text-center font-bold text-slate-700 dark:text-slate-300 w-9">{p.numero}</td>
+                          <td className="py-2 px-2 text-center text-slate-700 dark:text-slate-300 whitespace-nowrap">{p.competencia}</td>
+                          <td className="py-2 px-2 text-center text-slate-500 dark:text-slate-400 whitespace-nowrap">
                             {new Date(p.dataVencimento + 'T12:00:00Z').toLocaleDateString('pt-BR')}
                           </td>
-                          <td className="py-2 px-3 text-right text-slate-700 dark:text-slate-200">{formatBrl(p.valorAmortizacao)}</td>
-                          <td className="py-2 px-3 text-right text-slate-500 dark:text-slate-400">{formatBrl(p.valorJuros)}</td>
-                          <td className="py-2 px-3 text-right font-bold text-slate-900 dark:text-white">{formatBrl(p.valorTotal)}</td>
-                          <td className="py-2 px-3 text-right font-bold text-cyan-700 dark:text-cyan-400">{formatBrl(p.saldoDevedorApos)}</td>
-                          <td className="py-2 px-3 text-center">
+                          <td className="py-2 px-2 text-right text-slate-700 dark:text-slate-200 whitespace-nowrap">{formatBrl(p.valorAmortizacao)}</td>
+                          <td className="py-2 px-2 text-right text-slate-500 dark:text-slate-400 whitespace-nowrap">{formatBrl(p.valorJuros)}</td>
+                          <td className="py-2 px-2 text-right font-bold text-slate-900 dark:text-white whitespace-nowrap">{formatBrl(p.valorTotal)}</td>
+                          <td className="py-2 px-2 text-right font-bold text-cyan-700 dark:text-cyan-400 whitespace-nowrap">{formatBrl(p.saldoDevedorApos)}</td>
+                          <td className="py-2 px-2 text-center whitespace-nowrap">
                             <span
-                              className={`text-[9px] font-bold uppercase px-2 py-0.5 rounded-full border ${
+                              className={`text-[9px] font-bold uppercase px-2 py-0.5 rounded-full border whitespace-nowrap ${
                                 isPaid
                                   ? 'bg-emerald-50 text-emerald-700 border-emerald-200/80 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800/40'
                                   : p.status === 'atrasada'
@@ -325,21 +325,21 @@ export function EmprestimoDetalhesModal({
                                   : 'bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300'
                               }`}
                             >
-                              {p.status}
+                              {p.status === 'descontada' ? 'Descontada' : p.status === 'paga_avulso' ? 'Paga Avulso' : p.status === 'atrasada' ? 'Em Atraso' : 'A Vencer'}
                             </span>
                           </td>
-                          <td className="py-2 px-3 text-right font-sans">
+                          <td className="py-2 px-2 text-center font-sans whitespace-nowrap">
                             {p.comprovanteUrl ? (
                               <a
                                 href={p.comprovanteUrl}
                                 target="_blank"
                                 rel="noreferrer"
-                                className="text-cyan-700 dark:text-cyan-400 font-semibold hover:underline"
+                                className="text-cyan-700 dark:text-cyan-400 font-semibold hover:underline text-xs"
                               >
                                 Ver
                               </a>
                             ) : (
-                              <span className="text-slate-400">-</span>
+                              <span className="text-slate-400 text-xs">-</span>
                             )}
                           </td>
                         </tr>

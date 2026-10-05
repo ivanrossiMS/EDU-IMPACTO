@@ -63,7 +63,9 @@ const ModernLoadingSpinner = () => (
     
     <style>{`@keyframes spin { 100% { transform: rotate(360deg); } }`}</style>
   </div>
-);
+)
+
+const cleanPerfil = (s: string) => (s || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim()
 
 export default function LoginPage() {
   const router = useRouter()
@@ -410,7 +412,7 @@ export default function LoginPage() {
           try {
             const perfisList = await fetchPerfisWithCache(1200)
             const targetPerfilName = storedUser.perfil || storedUser.cargo || ''
-            userPerfilObj = (perfisList || []).find(p => p.nome === targetPerfilName) || null
+            userPerfilObj = (perfisList || []).find(p => p.nome === targetPerfilName || cleanPerfil(p.nome) === cleanPerfil(targetPerfilName)) || null
           } catch (e) {}
 
           const access = getUserModuleAccess(storedUser, userPerfilObj)
@@ -465,7 +467,7 @@ export default function LoginPage() {
              perfisList = data
           }
           // Caso não ache, garante um objeto vazio para pelo menos exibir os acessos padrão (liberados)
-          const pData = perfisList.find(x => x.nome === pendingAuth.perfil) || ({} as any)
+          const pData = perfisList.find(x => x.nome === pendingAuth.perfil || cleanPerfil(x.nome) === cleanPerfil(pendingAuth.perfil)) || ({} as any)
           setProfileData(pData)
 
           // Se o perfil configurado tiver apenas 1 módulo liberado, redireciona diretamente
@@ -702,7 +704,12 @@ export default function LoginPage() {
       let userPerfilObj: any = null
       try {
         const perfisList = await fetchPerfisWithCache(1200)
-        userPerfilObj = (perfisList || []).find(p => p.nome === perfilReal || p.nome === cargoReal) || null
+        userPerfilObj = (perfisList || []).find(p => 
+          p.nome === perfilReal || 
+          p.nome === cargoReal || 
+          cleanPerfil(p.nome) === cleanPerfil(perfilReal) || 
+          cleanPerfil(p.nome) === cleanPerfil(cargoReal)
+        ) || null
       } catch (e) {}
 
       const access = getUserModuleAccess({ perfil: perfilReal, cargo: cargoReal, ...meta }, userPerfilObj)

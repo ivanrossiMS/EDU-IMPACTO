@@ -35,9 +35,9 @@ export function RescisaoDesligamentoTab({
   const [observacoes, setObservacoes] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  // Empréstimos com saldo em aberto
+  // Empréstimos com saldo em aberto (apenas ativos)
   const emprestimosComDivida = useMemo(() => {
-    return emprestimos.filter((e) => ['ativo', 'aguardando_liberacao'].includes(e.status) && e.saldoDevedorAtual > 0)
+    return emprestimos.filter((e) => e.status === 'ativo' && e.saldoDevedorAtual > 0)
   }, [emprestimos])
 
   const selectedLoan = useMemo(() => {

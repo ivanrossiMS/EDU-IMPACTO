@@ -394,14 +394,14 @@ export function ConciliacaoFolhaTab({ onRefresh }: ConciliacaoFolhaTabProps) {
           <table className="w-full text-xs text-left">
             <thead className="bg-slate-50/80 dark:bg-slate-800/50 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider border-b border-slate-200/80 dark:border-slate-800">
               <tr>
-                <th className="py-3 px-4">Colaborador</th>
-                <th className="py-3 px-4">Operação</th>
-                <th className="py-3 px-4 text-center">Parcela</th>
-                <th className="py-3 px-4 text-right">Amortização</th>
-                <th className="py-3 px-4 text-right">Juros</th>
-                <th className="py-3 px-4 text-right">Valor Desconto</th>
-                <th className="py-3 px-4 text-center">Status</th>
-                <th className="py-3 px-4 text-right">Ações</th>
+                <th className="py-2.5 px-3 min-w-[150px]">Colaborador</th>
+                <th className="py-2.5 px-3 whitespace-nowrap">Operação</th>
+                <th className="py-2.5 px-2 text-center whitespace-nowrap w-[50px]">Parcela</th>
+                <th className="py-2.5 px-2 text-right whitespace-nowrap">Amortização</th>
+                <th className="py-2.5 px-2 text-right whitespace-nowrap">Juros</th>
+                <th className="py-2.5 px-2 text-right whitespace-nowrap">Valor Desconto</th>
+                <th className="py-2.5 px-2 text-center whitespace-nowrap">Status</th>
+                <th className="py-2.5 px-3 text-right whitespace-nowrap">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80 font-mono">
@@ -417,36 +417,38 @@ export function ConciliacaoFolhaTab({ onRefresh }: ConciliacaoFolhaTabProps) {
 
                   return (
                     <tr key={p.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors">
-                      <td className="py-3 px-4 font-sans">
-                        <div className="font-bold text-slate-900 dark:text-white">{p.colaboradorNome}</div>
-                        <div className="text-[10px] text-slate-500 dark:text-slate-400">
+                      <td className="py-2.5 px-3 min-w-[150px] max-w-[200px] font-sans">
+                        <div className="font-bold text-slate-900 dark:text-white truncate" title={p.colaboradorNome}>
+                          {p.colaboradorNome}
+                        </div>
+                        <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate">
                           Matrícula: {p.colaboradorMatricula || 'N/A'} • CPF: {p.colaboradorCpf}
                         </div>
                       </td>
 
-                      <td className="py-3 px-4 font-bold text-slate-700 dark:text-slate-300">
+                      <td className="py-2.5 px-3 font-bold text-slate-700 dark:text-slate-300 whitespace-nowrap">
                         {p.codigoOperacao}
                       </td>
 
-                      <td className="py-3 px-4 text-center text-slate-700 dark:text-slate-300">
+                      <td className="py-2.5 px-2 text-center text-slate-700 dark:text-slate-300 whitespace-nowrap">
                         {p.numero}
                       </td>
 
-                      <td className="py-3 px-4 text-right text-slate-700 dark:text-slate-300">
+                      <td className="py-2.5 px-2 text-right text-slate-700 dark:text-slate-300 whitespace-nowrap">
                         {formatBrl(p.valorAmortizacao)}
                       </td>
 
-                      <td className="py-3 px-4 text-right text-slate-500 dark:text-slate-400">
+                      <td className="py-2.5 px-2 text-right text-slate-500 dark:text-slate-400 whitespace-nowrap">
                         {formatBrl(p.valorJuros)}
                       </td>
 
-                      <td className="py-3 px-4 text-right font-bold text-slate-900 dark:text-white">
+                      <td className="py-2.5 px-2 text-right font-bold text-slate-900 dark:text-white whitespace-nowrap">
                         {formatBrl(p.valorTotal)}
                       </td>
 
-                      <td className="py-3 px-4 text-center">
+                      <td className="py-2.5 px-2 text-center whitespace-nowrap">
                         <span
-                          className={`text-[9px] font-bold uppercase px-2 py-0.5 rounded-full font-sans border ${
+                          className={`text-[9px] font-bold uppercase px-2 py-0.5 rounded-full font-sans border whitespace-nowrap ${
                             isPaid
                               ? 'bg-emerald-50 text-emerald-700 border-emerald-200/80 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800/40'
                               : p.status === 'atrasada'
@@ -464,7 +466,7 @@ export function ConciliacaoFolhaTab({ onRefresh }: ConciliacaoFolhaTabProps) {
                         </span>
                       </td>
 
-                      <td className="py-3 px-4 text-right font-sans">
+                      <td className="py-2.5 px-3 text-right font-sans whitespace-nowrap">
                         <div className="flex items-center justify-end gap-1.5">
                           {!isPaid ? (
                             <button
