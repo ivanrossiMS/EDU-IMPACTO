@@ -199,10 +199,14 @@ export async function dbSaveProva(prova: Partial<ProvaOnline> & { id: string }):
       embaralharQuestoes: false,
       embaralharAlternativas: false
     },
-    configuracaoMonitoramento: prova.configuracaoMonitoramento || {
+    configuracaoMonitoramento: prova.configuracaoMonitoramento ? {
+      bloquearPrint: true,
+      ...prova.configuracaoMonitoramento
+    } : {
       solicitarTelaCheia: false,
       registrarSaidaTela: true,
       bloquearColar: true,
+      bloquearPrint: true,
       acaoOcorrencia: 'suspender'
     },
     configuracaoDivulgacao: prova.configuracaoDivulgacao || {

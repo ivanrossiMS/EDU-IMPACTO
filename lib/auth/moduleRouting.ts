@@ -6,9 +6,10 @@ export interface UserModuleAccess {
   hasGestaoPessoas: boolean
   hasSimulados: boolean
   hasProvasOnline: boolean
+  hasCredImpacto: boolean
   totalModules: number
   onlyAgendaDigital: boolean
-  availableModules: ('gestao-escolar' | 'agenda-digital' | 'gestao-pessoas' | 'simulados' | 'provas-online')[]
+  availableModules: ('gestao-escolar' | 'agenda-digital' | 'gestao-pessoas' | 'simulados' | 'provas-online' | 'credimpacto')[]
 }
 
 const NORMALIZE = (s?: string) =>
@@ -88,6 +89,7 @@ export function getUserModuleAccess(user: any, perfilObj?: any): UserModuleAcces
       hasGestaoPessoas: false,
       hasSimulados: false,
       hasProvasOnline: false,
+      hasCredImpacto: false,
       totalModules: 0,
       onlyAgendaDigital: false,
       availableModules: []
@@ -107,6 +109,7 @@ export function getUserModuleAccess(user: any, perfilObj?: any): UserModuleAcces
       hasGestaoPessoas: false,
       hasSimulados: false,
       hasProvasOnline: false,
+      hasCredImpacto: false,
       totalModules: 1,
       onlyAgendaDigital: true,
       availableModules: ['agenda-digital']
@@ -121,6 +124,7 @@ export function getUserModuleAccess(user: any, perfilObj?: any): UserModuleAcces
       hasGestaoPessoas: false,
       hasSimulados: false,
       hasProvasOnline: true,
+      hasCredImpacto: false,
       totalModules: 2,
       onlyAgendaDigital: false,
       availableModules: ['agenda-digital', 'provas-online']
@@ -135,13 +139,15 @@ export function getUserModuleAccess(user: any, perfilObj?: any): UserModuleAcces
     const hasGestaoPessoas = !perfilObj.bloqueadoGestaoPessoas
     const hasSimulados = !perfilObj.bloqueadoSimulados
     const hasProvasOnline = !perfilObj.bloqueadoProvasOnline
+    const hasCredImpacto = !perfilObj.bloqueadoCredImpacto
 
-    const availableModules: ('gestao-escolar' | 'agenda-digital' | 'gestao-pessoas' | 'simulados' | 'provas-online')[] = []
+    const availableModules: ('gestao-escolar' | 'agenda-digital' | 'gestao-pessoas' | 'simulados' | 'provas-online' | 'credimpacto')[] = []
     if (hasGestaoEscolar) availableModules.push('gestao-escolar')
     if (hasAgendaDigital) availableModules.push('agenda-digital')
     if (hasGestaoPessoas) availableModules.push('gestao-pessoas')
     if (hasSimulados) availableModules.push('simulados')
     if (hasProvasOnline) availableModules.push('provas-online')
+    if (hasCredImpacto) availableModules.push('credimpacto')
 
     const totalModules = availableModules.length
     const onlyAgendaDigital = hasAgendaDigital && totalModules === 1
@@ -152,6 +158,7 @@ export function getUserModuleAccess(user: any, perfilObj?: any): UserModuleAcces
       hasGestaoPessoas,
       hasSimulados,
       hasProvasOnline,
+      hasCredImpacto,
       totalModules,
       onlyAgendaDigital,
       availableModules
@@ -167,13 +174,15 @@ export function getUserModuleAccess(user: any, perfilObj?: any): UserModuleAcces
   const hasGestaoPessoas = defaultFound ? !defaultFound.bloqueadoGestaoPessoas : true
   const hasSimulados = defaultFound ? !defaultFound.bloqueadoSimulados : true
   const hasProvasOnline = defaultFound ? !defaultFound.bloqueadoProvasOnline : true
+  const hasCredImpacto = defaultFound ? !defaultFound.bloqueadoCredImpacto : true
 
-  const availableModules: ('gestao-escolar' | 'agenda-digital' | 'gestao-pessoas' | 'simulados' | 'provas-online')[] = []
+  const availableModules: ('gestao-escolar' | 'agenda-digital' | 'gestao-pessoas' | 'simulados' | 'provas-online' | 'credimpacto')[] = []
   if (hasGestaoEscolar) availableModules.push('gestao-escolar')
   if (hasAgendaDigital) availableModules.push('agenda-digital')
   if (hasGestaoPessoas) availableModules.push('gestao-pessoas')
   if (hasSimulados) availableModules.push('simulados')
   if (hasProvasOnline) availableModules.push('provas-online')
+  if (hasCredImpacto) availableModules.push('credimpacto')
 
   const totalModules = availableModules.length
   const onlyAgendaDigital = hasAgendaDigital && totalModules === 1
@@ -184,6 +193,7 @@ export function getUserModuleAccess(user: any, perfilObj?: any): UserModuleAcces
     hasGestaoPessoas,
     hasSimulados,
     hasProvasOnline,
+    hasCredImpacto,
     totalModules,
     onlyAgendaDigital,
     availableModules
@@ -210,6 +220,7 @@ export function getInitialRouteForUser(user: any, perfilObj?: any): string {
     if (access.hasGestaoPessoas) return '/gestao-pessoas'
     if (access.hasSimulados) return '/simulados'
     if (access.hasProvasOnline) return '/provas-online'
+    if (access.hasCredImpacto) return '/credimpacto'
   }
 
   // 3. Tem múltiplos módulos (ex.: Gestão Escolar + Agenda Digital)

@@ -129,6 +129,7 @@ export interface ConfigMonitoramentoProva {
   solicitarTelaCheia: boolean
   registrarSaidaTela: boolean
   bloquearColar: boolean
+  bloquearPrint?: boolean
   acaoOcorrencia: 'registrar' | 'alertar' | 'suspender' | 'cancelar'
 }
 
@@ -204,6 +205,7 @@ export interface ProvaOnline {
   exigeCodigoAcesso?: boolean
   exigirTelaCheia?: boolean
   bloquearColar?: boolean
+  bloquearPrint?: boolean
   bloquearRetorno?: boolean
 
   // Configurações
@@ -322,6 +324,7 @@ export interface OcorrenciaMonitoramento {
     | 'saida_tela_cheia'
     | 'perda_foco'
     | 'tentativa_colar'
+    | 'captura_tela'
     | 'desconexao'
     | 'reconexao'
     | 'suspensao'

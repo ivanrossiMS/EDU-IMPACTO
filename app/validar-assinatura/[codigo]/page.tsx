@@ -41,6 +41,72 @@ export default async function ValidarCodigoPage({ params }: Props) {
   }
 
   let initialDossier = null
+
+  if (!contrato) {
+    try {
+      const { dbGetEmprestimos } = await import('@/lib/credimpacto/db')
+      const allLoans = await dbGetEmprestimos()
+      const foundLoan = allLoans.find(
+        (l) =>
+          l.codigoOperacao === decoded ||
+          l.codigoVerificacaoAssinatura === decoded ||
+          l.contratoHashSha256 === decoded ||
+          l.id === decoded
+      )
+      if (foundLoan) {
+        const isAssinado = Boolean(foundLoan.assinadoEm)
+        const isCancelado = foundLoan.status === 'cancelado'
+        initialDossier = {
+          valido: isAssinado && !isCancelado,
+          status: foundLoan.status,
+          statusDescricao: isAssinado
+            ? 'Contrato de Mútuo CredImpacto Assinado e Verificado'
+            : isCancelado
+            ? 'Empréstimo Cancelado'
+            : 'Empréstimo Emitido / Aguardando Assinatura',
+          protocolo: foundLoan.codigoOperacao,
+          tituloDocumento: 'Contrato de Empréstimo e Desconto em Folha (CredImpacto)',
+          anoLetivo: new Date(foundLoan.createdAt).getFullYear().toString(),
+          alunoNome: foundLoan.colaboradorNome,
+          alunoCpfMascarado: maskCpf(foundLoan.colaboradorCpf),
+          alunoSerieTurma: foundLoan.colaboradorCargo || 'Colaborador',
+          responsavelNomeMascarado: maskName(foundLoan.colaboradorNome),
+          responsavelCpfMascarado: maskCpf(foundLoan.colaboradorCpf),
+          responsavelEmailMascarado: maskEmail(foundLoan.colaboradorEmail || ''),
+          responsavelTelefoneMascarado: '***',
+          responsavelParentesco: 'Colaborador(a) Mutuário(a)',
+          dataCriacao: foundLoan.createdAt,
+          dataAssinatura: foundLoan.assinadoEm || foundLoan.updatedAt,
+          documentoOriginalHash: foundLoan.contratoHashSha256 || 'N/A',
+          documentoAssinadoHash: foundLoan.contratoHashSha256 || 'Aguardando Assinatura',
+          trilhaAuditoriaHash: foundLoan.contratoHashSha256 || 'N/A',
+          logoUrl: '/logo-impacto-clean.png',
+          escolaRepresentante: {
+            nome: 'COLÉGIO IMPACTO',
+            cargo: 'Diretoria / Gestão Financeira',
+            razaoSocial: 'COLÉGIO IMPACTO EDUCAÇÃO E CULTURA LTDA',
+            cnpj: '04.395.789/0001-88',
+          },
+          trilhaAuditoria: [
+            {
+              timestamp: foundLoan.createdAt,
+              evento: 'PROPOSTA_CRIADA',
+              descricao: `Operação ${foundLoan.codigoOperacao} gerada no valor de R$ ${foundLoan.valorAprovado.toFixed(2)}.`,
+              hash: foundLoan.id,
+            },
+            ...(foundLoan.assinadoEm ? [{
+              timestamp: foundLoan.assinadoEm,
+              evento: 'ASSINATURA_ELETRONICA_CONFIRMADA',
+              descricao: `Assinatura eletrônica realizada via IP ${foundLoan.assinanteIp || 'Servidor'}.`,
+              hash: foundLoan.contratoHashSha256 || '',
+            }] : [])
+          ],
+          downloadDisponivel: false,
+          pdfBase64: null,
+        }
+      }
+    } catch (e) {}
+  }
   if (contrato) {
     const isAssinado = contrato.status === 'assinado'
     const isCancelado = contrato.status === 'cancelado'

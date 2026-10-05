@@ -471,6 +471,7 @@ export default function LogsAuditoriaPage() {
   const formatFieldName = (key: string): { label: string; raw: string } => {
     const map: Record<string, string> = {
       bloqueadoProvasOnline: 'Bloqueio: Provas Online',
+      bloqueadoCredImpacto: 'Bloqueio: CredImpacto',
       bloqueadoSimulados: 'Bloqueio: Simulados',
       bloqueadoAgendaDigital: 'Bloqueio: Agenda Digital',
       bloqueadoGestaoEscolar: 'Bloqueio: Gestão Escolar',

@@ -9,7 +9,8 @@ import {
   Maximize2, Minimize2, FileCheck2, AlertCircle, HelpCircle,
   Hash, Calendar, User, BookOpen, Printer, Check, Info, Bell,
   Calculator, Copy, CheckCheck, X, ArrowLeft, Flame, Sparkles,
-  FileText, AlertOctagon, LogOut, RotateCcw, XCircle
+  FileText, AlertOctagon, LogOut, RotateCcw, XCircle,
+  CameraOff, ShieldAlert, EyeOff
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { HtmlContent } from '@/components/HtmlContent'
@@ -103,6 +104,26 @@ const ExamRoomStyles = () => (
     }
     .er-question-card, .exam-room-grid {
       overflow-anchor: none !important;
+    }
+
+    /* Print & Screenshot Security Protection */
+    @media print {
+      body * {
+        visibility: hidden !important;
+        display: none !important;
+      }
+      body::before {
+        content: "ATENÇÃO: A captura de tela e a impressão desta avaliação estão estritamente bloqueadas por diretrizes de integridade acadêmica.";
+        visibility: visible !important;
+        display: block !important;
+        text-align: center !important;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+        font-size: 18px !important;
+        font-weight: 800 !important;
+        color: #e11d48 !important;
+        padding: 100px 24px !important;
+        background: #ffffff !important;
+      }
     }
 
     /* Responsive Global Rules for ExamRoom */
@@ -389,6 +410,303 @@ const ExamRoomStyles = () => (
   `}} />
 )
 
+interface PrintBlockedModalProps {
+  isOpen: boolean
+  onClose: () => void
+  triggerSource: string
+  timestamp: string
+}
+
+function PrintBlockedModal({ isOpen, onClose, triggerSource, timestamp }: PrintBlockedModalProps) {
+  useEffect(() => {
+    if (!isOpen) return
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' || e.key === 'Enter') {
+        onClose()
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [isOpen, onClose])
+
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 10005,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '16px',
+            background: 'rgba(15, 23, 42, 0.78)',
+            backdropFilter: 'blur(14px)',
+            WebkitBackdropFilter: 'blur(14px)'
+          }}
+          onClick={onClose}
+        >
+          <motion.div
+            initial={{ opacity: 0, scale: 0.92, y: 16 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.94, y: -10 }}
+            transition={{ type: 'spring', damping: 25, stiffness: 350 }}
+            onClick={e => e.stopPropagation()}
+            style={{
+              width: '100%',
+              maxWidth: '520px',
+              background: '#ffffff',
+              borderRadius: '26px',
+              border: '1.5px solid rgba(244, 63, 94, 0.28)',
+              boxShadow: '0 25px 65px -12px rgba(15, 23, 42, 0.45), 0 0 0 1px rgba(225, 29, 72, 0.08)',
+              padding: '30px 26px 24px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '18px',
+              position: 'relative',
+              overflow: 'hidden'
+            }}
+          >
+            {/* Top decorative accent gradient */}
+            <div style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              height: '5px',
+              background: 'linear-gradient(90deg, #e11d48 0%, #f43f5e 50%, #f59e0b 100%)'
+            }} />
+
+            {/* Close button */}
+            <button
+              type="button"
+              onClick={onClose}
+              style={{
+                position: 'absolute',
+                top: '16px',
+                right: '16px',
+                width: '32px',
+                height: '32px',
+                borderRadius: '50%',
+                border: '1px solid #e2e8f0',
+                background: '#f8fafc',
+                color: '#64748b',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease'
+              }}
+              title="Fechar aviso"
+            >
+              <X size={16} />
+            </button>
+
+            {/* Central Icon */}
+            <div style={{
+              width: '68px',
+              height: '68px',
+              borderRadius: '22px',
+              background: 'linear-gradient(135deg, #fff1f2 0%, #ffe4e6 100%)',
+              border: '1.5px solid #fecdd3',
+              color: '#e11d48',
+              margin: '2px auto 0',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxShadow: '0 10px 25px -4px rgba(225, 29, 72, 0.22)',
+              position: 'relative'
+            }}>
+              <CameraOff size={34} strokeWidth={2.2} />
+              <div style={{
+                position: 'absolute',
+                bottom: '-4px',
+                right: '-4px',
+                width: '24px',
+                height: '24px',
+                borderRadius: '50%',
+                background: '#be123c',
+                color: '#ffffff',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                border: '2px solid #ffffff'
+              }}>
+                <ShieldAlert size={13} strokeWidth={2.6} />
+              </div>
+            </div>
+
+            {/* Title & Badge */}
+            <div style={{ textAlign: 'center' }}>
+              <div style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                fontSize: '11px',
+                fontWeight: 800,
+                textTransform: 'uppercase',
+                letterSpacing: '0.08em',
+                color: '#be123c',
+                background: '#ffe4e6',
+                border: '1px solid #fecdd3',
+                padding: '3px 12px',
+                borderRadius: '20px',
+                marginBottom: '10px'
+              }}>
+                <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#e11d48', animation: 'pulse 1.8s infinite' }} />
+                Segurança Anti-Fraude Ativa
+              </div>
+
+              <h2 style={{
+                fontSize: '20px',
+                fontWeight: 900,
+                color: '#0f172a',
+                margin: '0 0 6px',
+                letterSpacing: '-0.02em',
+                lineHeight: 1.25
+              }}>
+                Captura de Tela Bloqueada
+              </h2>
+
+              <p style={{
+                fontSize: '13px',
+                color: '#64748b',
+                margin: 0,
+                lineHeight: 1.5
+              }}>
+                A captura de imagem (print screen) e a impressão desta avaliação foram desabilitadas pela coordenação para preservar a confidencialidade e a integridade da prova.
+              </p>
+            </div>
+
+            {/* Organized Telemetry & Audit Box */}
+            <div style={{
+              background: '#f8fafc',
+              border: '1px solid #e2e8f0',
+              borderRadius: '18px',
+              padding: '14px 16px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '10px'
+            }}>
+              <div style={{
+                fontSize: '11px',
+                fontWeight: 800,
+                textTransform: 'uppercase',
+                letterSpacing: '0.05em',
+                color: '#475569',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between'
+              }}>
+                <span>Auditoria da Sessão</span>
+                <span style={{
+                  fontFamily: 'monospace',
+                  fontSize: '11px',
+                  color: '#be123c',
+                  background: '#fff1f2',
+                  padding: '2px 8px',
+                  borderRadius: '6px',
+                  border: '1px solid #fecdd3'
+                }}>
+                  {timestamp || '--:--:--'}
+                </span>
+              </div>
+
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(2, 1fr)',
+                gap: '8px'
+              }}>
+                <div style={{
+                  background: '#ffffff',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: '12px',
+                  padding: '10px 12px'
+                }}>
+                  <span style={{ fontSize: '10px', color: '#64748b', display: 'block', fontWeight: 600 }}>Gatilho Detectado</span>
+                  <span style={{ fontSize: '12px', color: '#0f172a', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '5px', marginTop: '2px' }}>
+                    <EyeOff size={13} className="text-rose-500 shrink-0" />
+                    {triggerSource}
+                  </span>
+                </div>
+
+                <div style={{
+                  background: '#ffffff',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: '12px',
+                  padding: '10px 12px'
+                }}>
+                  <span style={{ fontSize: '10px', color: '#64748b', display: 'block', fontWeight: 600 }}>Status do Exame</span>
+                  <span style={{ fontSize: '12px', color: '#059669', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '5px', marginTop: '2px' }}>
+                    <CheckCircle2 size={13} className="text-emerald-500 shrink-0" />
+                    Respostas Salvas
+                  </span>
+                </div>
+              </div>
+
+              <div style={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: '8px',
+                padding: '9px 11px',
+                borderRadius: '10px',
+                background: '#fffbeb',
+                border: '1px solid #fef3c7',
+                fontSize: '11.5px',
+                color: '#92400e',
+                lineHeight: 1.45
+              }}>
+                <AlertTriangle size={15} className="text-amber-600 shrink-0 mt-0.5" />
+                <span>
+                  O registro de infração foi encaminhado ao painel de supervisão do professor. Mantenha o foco exclusivo na realização das questões.
+                </span>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <button
+                type="button"
+                onClick={onClose}
+                style={{
+                  width: '100%',
+                  height: '46px',
+                  borderRadius: '14px',
+                  background: 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)',
+                  border: 'none',
+                  color: '#ffffff',
+                  fontSize: '13.5px',
+                  fontWeight: 800,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 14px rgba(2, 132, 199, 0.35)',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                <Check size={18} strokeWidth={2.6} />
+                <span>Entendi e Desejo Continuar a Prova</span>
+              </button>
+
+              <p style={{
+                fontSize: '11px',
+                color: '#94a3b8',
+                textAlign: 'center',
+                margin: 0
+              }}>
+                Pressione <kbd style={{ padding: '2px 5px', borderRadius: '4px', background: '#f1f5f9', border: '1px solid #cbd5e1', fontSize: '10px', fontFamily: 'monospace' }}>ESC</kbd> ou clique no botão para voltar.
+              </p>
+            </div>
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
+  )
+}
+
 export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, returnUrl }: ExamRoomProps) {
   const router = useRouter()
 
@@ -485,6 +803,12 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
   const [submitting, setSubmitting] = useState(false)
   const [exitModalOpen, setExitModalOpen] = useState(false)
 
+  // Print & Screenshot Block Modal
+  const [printBlockedModalOpen, setPrintBlockedModalOpen] = useState(false)
+  const [lastPrintSource, setLastPrintSource] = useState('PrintScreen / Captura')
+  const [lastPrintTimestamp, setLastPrintTimestamp] = useState('')
+  const lastPrintTriggerRef = useRef(0)
+
   const handleExitExam = useCallback(() => {
     if (typeof document !== 'undefined' && document.fullscreenElement && document.exitFullscreen) {
       document.exitFullscreen().catch(() => {})
@@ -500,6 +824,7 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
   const requiresFullscreen = Boolean(prova.configuracaoMonitoramento?.solicitarTelaCheia || prova.exigirTelaCheia)
   const monitorTabSwitch = prova.configuracaoMonitoramento?.registrarSaidaTela !== false
   const blockCopyPaste = Boolean(prova.configuracaoMonitoramento?.bloquearColar || prova.bloquearColar)
+  const blockPrint = prova.configuracaoMonitoramento?.bloquearPrint !== false && (prova as any).bloquearPrint !== false
   const actionOnIncident = prova.configuracaoMonitoramento?.acaoOcorrencia || 'alertar'
   const hasPinRequirement = Boolean(
     (prova.codigoLiberacao && String(prova.codigoLiberacao).trim() !== '') ||
@@ -840,6 +1165,90 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
     }
   }, [tentativa, started, actionOnIncident, prova.id, prova.questoes?.length, respostas])
 
+  // Handler for print & screenshot blocking attempt
+  const handlePrintAttempt = useCallback((triggerSource: string = 'PrintScreen / Captura') => {
+    if (!blockPrint) return
+    const now = Date.now()
+    if (now - lastPrintTriggerRef.current < 1200) return
+    lastPrintTriggerRef.current = now
+
+    // Wipe clipboard to prevent pasting captured image
+    if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText('Conteúdo protegido contra captura de tela. - EDU IMPACTO').catch(() => {})
+    }
+
+    const timeStr = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    setLastPrintSource(triggerSource)
+    setLastPrintTimestamp(timeStr)
+    setPrintBlockedModalOpen(true)
+
+    if (tentativa?.id) {
+      recordIncident('captura_tela', `Tentativa de captura de tela/print bloqueada. [Gatilho: ${triggerSource}]`)
+    }
+  }, [blockPrint, tentativa?.id, recordIncident])
+
+  // Setup Dedicated Screenshot & Print Blocking Listeners
+  useEffect(() => {
+    if (!blockPrint) return
+
+    function handleKeyDown(e: KeyboardEvent) {
+      // 1. PrintScreen key
+      if (e.key === 'PrintScreen' || e.code === 'PrintScreen' || e.key === 'Snapshot') {
+        e.preventDefault()
+        e.stopPropagation()
+        handlePrintAttempt('Tecla PrintScreen')
+        return
+      }
+
+      // 2. Windows Snipping / Capture: Win + Shift + S or Ctrl + Shift + S
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 's' || e.key === 'S')) {
+        e.preventDefault()
+        e.stopPropagation()
+        handlePrintAttempt('Atalho de Recorte (Shift+S)')
+        return
+      }
+
+      // 3. macOS screenshot: Cmd + Shift + 3, 4, 5
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && ['3', '4', '5'].includes(e.key)) {
+        e.preventDefault()
+        e.stopPropagation()
+        handlePrintAttempt('Atalho de Captura macOS')
+        return
+      }
+
+      // 4. Print shortcut: Ctrl + P / Cmd + P
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'p' || e.key === 'P')) {
+        e.preventDefault()
+        e.stopPropagation()
+        handlePrintAttempt('Atalho de Impressão (Ctrl+P)')
+        return
+      }
+    }
+
+    function handleKeyUp(e: KeyboardEvent) {
+      if (e.key === 'PrintScreen' || e.code === 'PrintScreen' || e.key === 'Snapshot') {
+        e.preventDefault()
+        e.stopPropagation()
+        handlePrintAttempt('Tecla PrintScreen')
+      }
+    }
+
+    function handleBeforePrint(e: Event) {
+      e.preventDefault()
+      handlePrintAttempt('Impressão do Navegador')
+    }
+
+    window.addEventListener('keydown', handleKeyDown, true)
+    window.addEventListener('keyup', handleKeyUp, true)
+    window.addEventListener('beforeprint', handleBeforePrint)
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown, true)
+      window.removeEventListener('keyup', handleKeyUp, true)
+      window.removeEventListener('beforeprint', handleBeforePrint)
+    }
+  }, [blockPrint, handlePrintAttempt])
+
   // Setup Anti-Cheat Listeners
   useEffect(() => {
     if (!started || !tentativa || tentativa.status !== 'em_andamento') return
@@ -870,9 +1279,6 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
       setIsFullscreen(isFull)
       if (!isFull && requiresFullscreen) {
         recordIncident('saida_tela_cheia', 'Aluno saiu do modo de tela cheia obrigatório.')
-        if (actionOnIncident === 'alertar') {
-          toast.error('Você saiu do modo tela cheia. Retorne para prosseguir.')
-        }
       }
     }
 
@@ -897,7 +1303,7 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
     }
 
     function handleContextMenu(e: MouseEvent) {
-      if (blockCopyPaste) {
+      if (blockCopyPaste || blockPrint) {
         e.preventDefault()
       }
     }
@@ -917,7 +1323,7 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
       window.removeEventListener('paste', handlePaste)
       window.removeEventListener('contextmenu', handleContextMenu)
     }
-  }, [started, tentativa, requiresFullscreen, blockCopyPaste, monitorTabSwitch, actionOnIncident, recordIncident])
+  }, [started, tentativa, requiresFullscreen, blockCopyPaste, blockPrint, monitorTabSwitch, actionOnIncident, recordIncident])
 
   // Request Fullscreen helper
   const enterFullscreen = async () => {
@@ -2101,6 +2507,12 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
                     <span>Proteção de integridade: cópia e colagem de conteúdo bloqueadas nesta prova.</span>
                   </div>
                 )}
+                {blockPrint && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Check size={14} color="#0284c7" strokeWidth={3} />
+                    <span>Bloqueio de Captura: capturas de tela (Print Screen), atalhos de gravação e impressão estão desabilitadas por segurança.</span>
+                  </div>
+                )}
                 {actionOnIncident === 'suspender' && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#b45309' }}>
                     <AlertTriangle size={14} color="#d97706" />
@@ -2360,6 +2772,13 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
             </button>
           </div>
         </motion.div>
+        {/* Modal Ultra Moderno de Bloqueio de Print Screen */}
+        <PrintBlockedModal
+          isOpen={printBlockedModalOpen}
+          onClose={() => setPrintBlockedModalOpen(false)}
+          triggerSource={lastPrintSource}
+          timestamp={lastPrintTimestamp}
+        />
       </div>
     )
   }
@@ -4174,6 +4593,14 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
           </div>
         )}
       </AnimatePresence>
+
+      {/* 5.2 MODAL ULTRA MODERNO DE BLOQUEIO DE CAPTURA DE PRINT */}
+      <PrintBlockedModal
+        isOpen={printBlockedModalOpen}
+        onClose={() => setPrintBlockedModalOpen(false)}
+        triggerSource={lastPrintSource}
+        timestamp={lastPrintTimestamp}
+      />
 
       {/* 6. POPUP FLOATING CALCULATOR */}
       {calculatorOpen && (

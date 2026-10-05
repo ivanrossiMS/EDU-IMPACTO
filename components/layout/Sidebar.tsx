@@ -496,6 +496,7 @@ export function Sidebar() {
             const userPerfilObj = (perfis || []).find((p: any) => p.nome === currentUserPerfil)
             const isAgendaBlocked = !!userPerfilObj?.bloqueadoAgendaDigital
             const isGestaoPessoasBlocked = !!userPerfilObj?.bloqueadoGestaoPessoas
+            const isCredImpactoBlocked = !!userPerfilObj?.bloqueadoCredImpacto
 
             const filteredGroups = ALL_NAV_GROUPS.map(group => {
               if (group.title === 'PRINCIPAL') {
@@ -503,6 +504,16 @@ export function Sidebar() {
                   ...group,
                   items: group.items.filter(item => {
                     if (item.label === 'AGENDA DIGITAL' && isAgendaBlocked) return false
+                    return true
+                  })
+                }
+              }
+
+              if (group.title === 'FINANCEIRO' || group.title === 'RH') {
+                return {
+                  ...group,
+                  items: group.items.filter(item => {
+                    if (item.label === 'CREDIMPACTO' && isCredImpactoBlocked) return false
                     return true
                   })
                 }
@@ -680,16 +691,15 @@ export function Sidebar() {
                 </motion.div>
               )}
             </AnimatePresence>
-            <div 
-              style={{ 
-                display: 'grid', 
-                gridTemplateColumns: effectiveCollapsed ? '1fr' : 'repeat(4, 1fr)', 
-                gap: effectiveCollapsed ? 10 : 6, 
-                width: '100%',
-                alignItems: 'start'
-              }}
-            >
-              {[
+            {(() => {
+              const userPerfilObj = (perfis || []).find((p: any) => p.nome === currentUserPerfil)
+              const isAgendaBlocked = !!userPerfilObj?.bloqueadoAgendaDigital
+              const isGestaoPessoasBlocked = !!userPerfilObj?.bloqueadoGestaoPessoas
+              const isSimuladosBlocked = !!userPerfilObj?.bloqueadoSimulados
+              const isProvasOnlineBlocked = !!userPerfilObj?.bloqueadoProvasOnline
+              const isCredImpactoBlocked = !!userPerfilObj?.bloqueadoCredImpacto
+
+              const availableBottomModules = [
                 {
                   id: 'agenda-digital',
                   href: '/agenda-digital',
@@ -700,7 +710,8 @@ export function Sidebar() {
                   gradient: 'linear-gradient(135deg, #a855f7 0%, #7e22ce 100%)',
                   shadow: '0 4px 14px rgba(168, 85, 247, 0.35)',
                   glow: 'rgba(168, 85, 247, 0.45)',
-                  activeBorder: 'rgba(168, 85, 247, 0.8)'
+                  activeBorder: 'rgba(168, 85, 247, 0.8)',
+                  blocked: isAgendaBlocked
                 },
                 {
                   id: 'gestao-pessoas',
@@ -712,7 +723,8 @@ export function Sidebar() {
                   gradient: 'linear-gradient(135deg, #10b981 0%, #047857 100%)',
                   shadow: '0 4px 14px rgba(16, 185, 129, 0.35)',
                   glow: 'rgba(16, 185, 129, 0.45)',
-                  activeBorder: 'rgba(16, 185, 129, 0.8)'
+                  activeBorder: 'rgba(16, 185, 129, 0.8)',
+                  blocked: isGestaoPessoasBlocked
                 },
                 {
                   id: 'simulados',
@@ -724,7 +736,8 @@ export function Sidebar() {
                   gradient: 'linear-gradient(135deg, #f43f5e 0%, #be123c 100%)',
                   shadow: '0 4px 14px rgba(244, 63, 94, 0.35)',
                   glow: 'rgba(244, 63, 94, 0.45)',
-                  activeBorder: 'rgba(244, 63, 94, 0.8)'
+                  activeBorder: 'rgba(244, 63, 94, 0.8)',
+                  blocked: isSimuladosBlocked
                 },
                 {
                   id: 'provas-online',
@@ -736,9 +749,37 @@ export function Sidebar() {
                   gradient: 'linear-gradient(135deg, #06b6d4 0%, #0284c7 100%)',
                   shadow: '0 4px 14px rgba(6, 182, 212, 0.4)',
                   glow: 'rgba(6, 182, 212, 0.5)',
-                  activeBorder: 'rgba(6, 182, 212, 0.8)'
+                  activeBorder: 'rgba(6, 182, 212, 0.8)',
+                  blocked: isProvasOnlineBlocked
+                },
+                {
+                  id: 'credimpacto',
+                  href: '/credimpacto',
+                  title: 'CredImpacto - Empréstimos e Consignado',
+                  line1: 'Cred',
+                  line2: 'Impacto',
+                  icon: Landmark,
+                  gradient: 'linear-gradient(135deg, #059669 0%, #047857 100%)',
+                  shadow: '0 4px 14px rgba(5, 150, 105, 0.35)',
+                  glow: 'rgba(5, 150, 105, 0.45)',
+                  activeBorder: 'rgba(16, 185, 129, 0.8)',
+                  blocked: isCredImpactoBlocked
                 }
-              ].map((mod) => {
+              ].filter(m => !m.blocked)
+
+              if (availableBottomModules.length === 0) return null
+
+              return (
+                <div 
+                  style={{ 
+                    display: 'grid', 
+                    gridTemplateColumns: effectiveCollapsed ? '1fr' : `repeat(${availableBottomModules.length}, 1fr)`, 
+                    gap: effectiveCollapsed ? 10 : 4, 
+                    width: '100%',
+                    alignItems: 'start'
+                  }}
+                >
+                  {availableBottomModules.map((mod) => {
                 const isActive = pathname?.startsWith(mod.href)
                 const IconComp = mod.icon
 
@@ -840,7 +881,9 @@ export function Sidebar() {
                 )
               })}
             </div>
-          </div>
+          )
+        })()}
+      </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             <motion.div 

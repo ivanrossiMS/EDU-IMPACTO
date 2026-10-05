@@ -9,7 +9,7 @@ import {
   Layers, Users, HelpCircle, CheckCircle2, AlertCircle, X,
   ChevronDown, ChevronUp, GripVertical, FileText, Image as ImageIcon,
   Calculator, AlertTriangle, RefreshCw, Search, UserCheck, Link2,
-  UploadCloud, Edit3, Loader2
+  UploadCloud, Edit3, Loader2, CameraOff
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { HtmlContent } from '@/components/HtmlContent'
@@ -84,10 +84,16 @@ export function ExamWizard({ initialExam, isEditing = false }: ExamWizardProps) 
           embaralharQuestoes: false,
           embaralharAlternativas: false
         },
-        configuracaoMonitoramento: initialExam.configuracaoMonitoramento ? { ...initialExam.configuracaoMonitoramento } : {
+        configuracaoMonitoramento: initialExam.configuracaoMonitoramento ? {
+          ...initialExam.configuracaoMonitoramento,
+          bloquearPrint: initialExam.configuracaoMonitoramento.bloquearPrint !== undefined
+            ? initialExam.configuracaoMonitoramento.bloquearPrint
+            : true
+        } : {
           solicitarTelaCheia: false,
           registrarSaidaTela: true,
           bloquearColar: true,
+          bloquearPrint: true,
           acaoOcorrencia: 'suspender'
         },
         questoes: cleanQuestoes,
@@ -134,6 +140,7 @@ export function ExamWizard({ initialExam, isEditing = false }: ExamWizardProps) 
         solicitarTelaCheia: false,
         registrarSaidaTela: true,
         bloquearColar: true,
+        bloquearPrint: true,
         acaoOcorrencia: 'suspender'
       },
       configuracaoDivulgacao: {
@@ -1584,18 +1591,58 @@ export function ExamWizard({ initialExam, isEditing = false }: ExamWizardProps) 
                     </div>
                   </div>
 
-                  {/* 4. Ação ao detectar ocorrência */}
-                  <div className="p-3.5 sm:p-4 rounded-xl bg-white border border-slate-200 flex flex-col justify-between gap-1.5 shadow-2xs">
-                    <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                      <AlertTriangle size={14} className="text-amber-500" /> Ação ao Detectar Infração
-                    </label>
+                  {/* 4. Bloquear Captura de Tela (Print) */}
+                  <div
+                    onClick={() => setExam(p => ({
+                      ...p,
+                      configuracaoMonitoramento: { 
+                        ...p.configuracaoMonitoramento, 
+                        bloquearPrint: p.configuracaoMonitoramento.bloquearPrint !== false ? false : true 
+                      }
+                    }))}
+                    className={`p-3.5 sm:p-4 rounded-xl border transition-all cursor-pointer flex items-center justify-between gap-3 select-none ${
+                      exam.configuracaoMonitoramento.bloquearPrint !== false
+                        ? 'bg-sky-50/80 border-sky-300 ring-2 ring-sky-100 shadow-2xs'
+                        : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50/50'
+                    }`}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                        <CameraOff size={14} className={exam.configuracaoMonitoramento.bloquearPrint !== false ? 'text-sky-600' : 'text-slate-400'} />
+                        Bloquear Captura de Tela (Print)
+                        <span className="text-[10px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-sky-100 text-sky-700 ml-1">Padrão</span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 mt-0.5 leading-relaxed">
+                        Impede PrintScreen, atalhos de recorte e impressão, exibindo modal moderno de aviso ao aluno.
+                      </p>
+                    </div>
+                    {/* iOS Switch */}
+                    <div className={`w-11 h-6 rounded-full transition-colors relative shrink-0 p-0.5 ${
+                      exam.configuracaoMonitoramento.bloquearPrint !== false ? 'bg-sky-600' : 'bg-slate-300'
+                    }`}>
+                      <div className={`w-5 h-5 rounded-full bg-white shadow-sm transition-transform ${
+                        exam.configuracaoMonitoramento.bloquearPrint !== false ? 'translate-x-5' : 'translate-x-0'
+                      }`} />
+                    </div>
+                  </div>
+
+                  {/* 5. Ação ao detectar ocorrência */}
+                  <div className="sm:col-span-2 p-3.5 sm:p-4 rounded-xl bg-white border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
+                    <div>
+                      <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                        <AlertTriangle size={14} className="text-amber-500" /> Ação ao Detectar Infração
+                      </label>
+                      <p className="text-[11px] text-slate-500 mt-0.5">
+                        Define a consequência caso o aluno saia da tela cheia ou cometa infrações graves de segurança.
+                      </p>
+                    </div>
                     <select
                       value={exam.configuracaoMonitoramento.acaoOcorrencia}
                       onChange={e => setExam(p => ({
                         ...p,
                         configuracaoMonitoramento: { ...p.configuracaoMonitoramento, acaoOcorrencia: e.target.value as any }
                       }))}
-                      className="w-full h-11 px-3.5 rounded-xl bg-slate-50/60 border border-slate-200 text-slate-900 text-xs font-semibold focus:outline-none focus:border-sky-500 focus:bg-white focus:ring-2 focus:ring-sky-100 cursor-pointer transition-all"
+                      className="w-full sm:w-auto min-w-[280px] h-10 px-3.5 rounded-xl bg-slate-50/60 border border-slate-200 text-slate-900 text-xs font-semibold focus:outline-none focus:border-sky-500 focus:bg-white focus:ring-2 focus:ring-sky-100 cursor-pointer transition-all"
                     >
                       <option value="registrar">Apenas Registrar no Relatório</option>
                       <option value="alertar">Registrar e Alertar o Aluno em Tela</option>

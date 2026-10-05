@@ -1492,6 +1492,7 @@ export default function RelatorioProvaPage() {
                             tipo === 'saida_tela' || tipo === 'troca_aba' ? 'Saída de Tela / Alternância de Aba' :
                             tipo === 'saida_tela_cheia' ? 'Saída do Modo de Tela Cheia' :
                             tipo === 'tentativa_colar' || tipo === 'tentativa_cola' ? 'Tentativa de Copiar/Colar Conteúdo' :
+                            tipo === 'captura_tela' || tipo === 'tentativa_print' ? 'Tentativa de Captura de Tela (Print)' :
                             tipo === 'perda_foco' ? 'Perda de Foco da Janela' :
                             tipo === 'suspensao' ? 'Tentativa Suspensa' :
                             tipo === 'desconexao' ? 'Queda de Conexão' :

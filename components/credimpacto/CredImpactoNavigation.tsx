@@ -1,0 +1,961 @@
+'use client'
+
+import React, { useState, useEffect } from 'react'
+import {
+  LayoutDashboard,
+  Calculator,
+  FileText,
+  FileSpreadsheet,
+  UserX,
+  Settings,
+  ShieldAlert,
+  Wallet,
+  Landmark,
+  Plus,
+  RefreshCw,
+  ShieldCheck,
+  UserCheck,
+  MoreHorizontal,
+  X,
+  ChevronRight,
+  Sparkles,
+  LogOut,
+  Sun,
+  Moon,
+  Grid,
+  Users,
+  BookHeart,
+  ClipboardPenLine,
+  Laptop,
+  ExternalLink,
+  Banknote,
+  Receipt,
+  BarChart3,
+  Clock
+} from 'lucide-react'
+import { formatBrl } from '@/lib/credimpacto/engine'
+import { performLogout } from '@/lib/auth/logout'
+import { useApp } from '@/lib/context'
+import { UserAvatar } from '@/components/UserAvatar'
+
+export type TabId =
+  | 'dashboard'
+  | 'meus_emprestimos'
+  | 'emprestimos'
+  | 'analise'
+  | 'liberacoes'
+  | 'parcelas'
+  | 'folha'
+  | 'rescisao'
+  | 'simular'
+  | 'relatorios'
+  | 'configuracoes'
+  | 'auditoria'
+
+export interface CredImpactoNavigationProps {
+  activeTab: TabId
+  onTabChange: (tab: TabId) => void
+  viewMode: 'admin' | 'colaborador'
+  onToggleViewMode: (mode: 'admin' | 'colaborador') => void
+  isAdminOrFinance: boolean
+  pendingRequestsCount?: number
+  pendingDisbursementCount?: number
+  onNewLoanClick: () => void
+  onRefresh: () => void
+  isRefreshing?: boolean
+  totalAtivo?: number
+  saldoDevedor?: number
+  currentMe?: any
+}
+
+interface NavItem {
+  id: TabId
+  label: string
+  desc: string
+  icon: any
+  badge?: string
+  badgeColor?: string
+}
+
+interface NavGroup {
+  group: string
+  items: NavItem[]
+}
+
+/**
+ * MODAL ULTRA-MODERNO: CENTRAL DE MÓDULOS (TROCAR DE MÓDULO)
+ */
+export function ModuleSwitchModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    if (isOpen) {
+      window.addEventListener('keydown', handleKeyDown)
+    }
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [isOpen, onClose])
+
+  if (!isOpen) return null
+
+  const modules = [
+    {
+      id: 'dashboard',
+      href: '/dashboard',
+      title: 'ERP Principal',
+      subtitle: 'Painel Central, Gestão Escolar & Financeiro',
+      icon: LayoutDashboard,
+      gradient: 'from-blue-600 to-indigo-600',
+      badge: 'Principal'
+    },
+    {
+      id: 'agenda-digital',
+      href: '/agenda-digital',
+      title: 'Agenda Digital',
+      subtitle: 'Comunicação, Família & Recados',
+      icon: BookHeart,
+      gradient: 'from-purple-600 to-violet-600',
+      badge: 'Comunicação'
+    },
+    {
+      id: 'gestao-pessoas',
+      href: '/gestao-pessoas',
+      title: 'Gestão de Pessoas',
+      subtitle: 'Colaboradores, Ponto & Folha RH',
+      icon: Users,
+      gradient: 'from-emerald-600 to-teal-600',
+      badge: 'RH'
+    },
+    {
+      id: 'simulados',
+      href: '/simulados',
+      title: 'Simulados e Provas',
+      subtitle: 'Elaboração, Banco de Questões & Gabaritos',
+      icon: ClipboardPenLine,
+      gradient: 'from-rose-600 to-pink-600',
+      badge: 'Pedagógico'
+    },
+    {
+      id: 'provas-online',
+      href: '/provas-online',
+      title: 'Provas Online',
+      subtitle: 'Aplicação de Avaliações Digitais',
+      icon: Laptop,
+      gradient: 'from-cyan-600 to-sky-600',
+      badge: 'Digital'
+    }
+  ]
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-md p-4 animate-in fade-in"
+      onClick={onClose}
+    >
+      <div
+        className="relative overflow-hidden bg-gradient-to-b from-[#090d16] via-[#081522] to-[#041d18] border border-emerald-500/30 rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-5 animate-in zoom-in-95 backdrop-blur-2xl text-white"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Specular top glow line */}
+        <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-emerald-400 to-transparent pointer-events-none" />
+
+        <div className="flex items-center justify-between pb-3 border-b border-white/10">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-emerald-600 via-emerald-500 to-teal-400 text-white flex items-center justify-center shadow-md shadow-emerald-500/30">
+              <Grid size={20} />
+            </div>
+            <div>
+              <h3 className="text-base font-extrabold text-white">Central de Módulos</h3>
+              <p className="text-xs text-slate-400">Selecione para onde deseja navegar no Impacto EDU</p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-[60vh] overflow-y-auto pr-1">
+          {modules.map((m) => {
+            const Icon = m.icon
+            return (
+              <a
+                key={m.id}
+                href={m.href}
+                className="group p-3.5 rounded-2xl border border-white/10 bg-white/[0.04] hover:bg-white/[0.08] hover:border-emerald-500/50 hover:shadow-lg transition-all flex flex-col justify-between text-left"
+              >
+                <div className="flex items-start justify-between mb-2">
+                  <div className={`w-9 h-9 rounded-xl bg-gradient-to-tr ${m.gradient} text-white flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform`}>
+                    <Icon size={18} />
+                  </div>
+                  <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-md bg-white/10 text-slate-300 border border-white/10">
+                    {m.badge}
+                  </span>
+                </div>
+                <div>
+                  <div className="text-xs font-bold text-white group-hover:text-emerald-400 transition-colors">
+                    {m.title}
+                  </div>
+                  <div className="text-[11px] text-slate-400 font-medium line-clamp-1 mt-0.5">
+                    {m.subtitle}
+                  </div>
+                </div>
+              </a>
+            )
+          })}
+        </div>
+
+        <div className="pt-2 border-t border-white/10 flex items-center justify-between gap-3">
+          <a
+            href="/login?step=choose_system"
+            className="text-xs font-bold text-slate-300 hover:text-emerald-400 flex items-center gap-1.5 transition-colors"
+          >
+            <span>Tela Completa de Seleção</span>
+            <ExternalLink size={13} />
+          </a>
+          <button
+            onClick={onClose}
+            className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-white text-xs font-bold transition-colors"
+          >
+            Fechar
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * SIDEBAR ULTRA-MODERNA DEDICADA DO CREDIMPACTO (DESKTOP)
+ * Apresenta acabamento refinado com gradiente escuro profissional,
+ * combinando com o design master do Impacto EDU.
+ */
+export function CredImpactoSidebar({
+  activeTab,
+  onTabChange,
+  viewMode,
+  onToggleViewMode,
+  isAdminOrFinance,
+  pendingRequestsCount = 0,
+  pendingDisbursementCount = 0,
+  onNewLoanClick,
+  onRefresh,
+  isRefreshing = false,
+  totalAtivo = 0,
+  saldoDevedor = 0,
+  currentMe
+}: CredImpactoNavigationProps) {
+  const { currentUser, theme, setTheme, setLoadingPath } = useApp()
+  const [showSwitchModuleModal, setShowSwitchModuleModal] = useState(false)
+  const [isLoggingOut, setIsLoggingOut] = useState(false)
+
+  const handleLogout = async () => {
+    if (confirm('Deseja realmente encerrar a sessão no Impacto EDU?')) {
+      try {
+        setIsLoggingOut(true)
+        setLoadingPath('logout')
+        await performLogout(currentUser?.id || currentMe?.id)
+      } catch (err) {
+        window.location.replace('/login')
+      }
+    }
+  }
+
+  // Menus do Colaborador
+  const colabNavItems: NavItem[] = [
+    { id: 'meus_emprestimos' as TabId, label: 'Meu Espaço', desc: '', icon: Wallet },
+    { id: 'simular' as TabId, label: 'Simular & Solicitar', desc: '', icon: Calculator }
+  ]
+
+  // Menus Completos do Administrador organizados por grupo funcional
+  const adminNavGroups: NavGroup[] = [
+    {
+      group: 'Visão Geral & Operações',
+      items: [
+        { id: 'dashboard' as TabId, label: 'Visão Geral', desc: '', icon: LayoutDashboard },
+        {
+          id: 'analise' as TabId,
+          label: 'Fila de Aprovação',
+          desc: '',
+          icon: ShieldCheck,
+          badge: pendingRequestsCount > 0 ? String(pendingRequestsCount) : undefined,
+          badgeColor: 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+        },
+        {
+          id: 'liberacoes' as TabId,
+          label: 'Liberações TED',
+          desc: '',
+          icon: Banknote,
+          badge: pendingDisbursementCount > 0 ? String(pendingDisbursementCount) : undefined,
+          badgeColor: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40'
+        }
+      ]
+    },
+    {
+      group: 'Controle Financeiro & Folha',
+      items: [
+        { id: 'parcelas' as TabId, label: 'Controle de Parcelas', desc: '', icon: Receipt },
+        { id: 'folha' as TabId, label: 'Conciliação em Folha', desc: '', icon: FileSpreadsheet },
+        { id: 'rescisao' as TabId, label: 'Rescisão CLT', desc: '', icon: UserX }
+      ]
+    },
+    {
+      group: 'Concessão & Inteligência',
+      items: [
+        { id: 'simular' as TabId, label: 'Conceder pela Escola', desc: '', icon: Calculator },
+        { id: 'relatorios' as TabId, label: 'Relatórios & DRE', desc: '', icon: BarChart3 }
+      ]
+    },
+    {
+      group: 'Governança & Compliance',
+      items: [
+        { id: 'configuracoes' as TabId, label: 'Parâmetros & Regras', desc: '', icon: Settings },
+        { id: 'auditoria' as TabId, label: 'Auditoria & Logs', desc: '', icon: ShieldAlert }
+      ]
+    }
+  ]
+
+  const userName = currentUser?.nome || currentMe?.nome || 'Colaborador'
+  const userCargo = currentMe?.cargo || currentUser?.cargo || currentMe?.perfil || currentUser?.perfil || 'Colaborador'
+  const userUnidade = currentMe?.unidade || currentUser?.unidade || ''
+
+  return (
+    <>
+      <aside className="hidden md:flex flex-col w-72 shrink-0 h-screen sticky top-0 relative overflow-hidden bg-gradient-to-b from-[#090d16] via-[#081522] to-[#041d18] text-white border-r border-emerald-500/20 z-30 select-none shadow-[4px_0_35px_rgba(0,0,0,0.6)]">
+        {/* AMBIENT GLOWS & SPECULAR ACCENTS */}
+        <div className="absolute top-0 left-0 right-0 h-48 bg-gradient-to-b from-emerald-500/10 via-teal-500/5 to-transparent pointer-events-none" />
+        <div className="absolute -top-16 -left-16 w-48 h-48 rounded-full bg-emerald-500/10 blur-3xl pointer-events-none" />
+        <div className="absolute bottom-0 left-0 right-0 h-40 bg-gradient-to-t from-emerald-950/30 to-transparent pointer-events-none" />
+        <div className="absolute top-0 right-0 bottom-0 w-[1px] bg-gradient-to-b from-emerald-500/30 via-teal-500/15 to-emerald-500/30 pointer-events-none z-10" />
+
+        {/* BRAND HEADER DO MÓDULO */}
+        <div className="relative p-4 pb-3.5 border-b border-white/10 bg-white/[0.02] backdrop-blur-md space-y-3 shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="relative w-10 h-10 rounded-2xl bg-gradient-to-tr from-emerald-600 via-emerald-500 to-teal-400 flex items-center justify-center text-white shadow-lg shadow-emerald-500/25 shrink-0 ring-1 ring-emerald-400/30">
+              <Landmark size={20} className="relative z-10 drop-shadow-sm" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5">
+                <h2 className="text-sm font-extrabold text-white tracking-tight">CredImpacto</h2>
+                <span className="text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-xs">
+                  PRO
+                </span>
+              </div>
+              <p className="text-[11px] text-emerald-400/80 truncate font-medium">Crédito & Consignado</p>
+            </div>
+          </div>
+
+          {/* BOTAO DE AÇÃO PRINCIPAL */}
+          <button
+            onClick={onNewLoanClick}
+            className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white text-xs font-bold shadow-lg shadow-emerald-500/25 flex items-center justify-center gap-2 active:scale-98 transition-all"
+          >
+            <Plus size={15} />
+            <span>{isAdminOrFinance && viewMode === 'admin' ? 'Conceder Empréstimo' : 'Solicitar Empréstimo'}</span>
+          </button>
+        </div>
+
+        {/* LISTA DE PÁGINAS / MENUS COM SCROLL INDEPENDENTE */}
+        <nav className="relative flex-1 p-3 space-y-3 overflow-y-auto no-scrollbar">
+          {viewMode === 'colaborador' ? (
+            <div className="space-y-1">
+              <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-400/90 px-3 pt-1 pb-1">
+                Área do Colaborador
+              </div>
+              {colabNavItems.map((item) => {
+                const Icon = item.icon
+                const isActive = activeTab === item.id
+
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => onTabChange(item.id)}
+                    className={`w-full text-left flex items-center justify-between py-2.5 px-3 rounded-xl transition-all group ${
+                      isActive
+                        ? 'bg-emerald-500/20 text-white font-semibold border border-emerald-500/40 shadow-sm shadow-emerald-950/40'
+                        : 'text-slate-300 hover:bg-white/[0.06] hover:text-white'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div
+                        className={`w-6 h-6 rounded-lg flex items-center justify-center transition-colors shrink-0 ${
+                          isActive
+                            ? 'bg-gradient-to-tr from-emerald-600 to-teal-500 text-white shadow-xs'
+                            : 'text-slate-400 group-hover:text-emerald-300'
+                        }`}
+                      >
+                        <Icon size={15} />
+                      </div>
+                      <span className="text-xs truncate tracking-tight">{item.label}</span>
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+          ) : (
+            adminNavGroups.map((group) => (
+              <div key={group.group} className="space-y-1">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400/80 px-3 pt-1.5 pb-1">
+                  {group.group}
+                </div>
+
+                {group.items.map((item) => {
+                  const Icon = item.icon
+                  const isActive = activeTab === item.id
+
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => onTabChange(item.id)}
+                      className={`w-full text-left flex items-center justify-between py-2 px-3 rounded-xl transition-all group ${
+                        isActive
+                          ? 'bg-emerald-500/20 text-white font-semibold border border-emerald-500/35 shadow-xs shadow-emerald-950/40'
+                          : 'text-slate-300/90 hover:bg-white/[0.06] hover:text-white'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div
+                          className={`w-6 h-6 rounded-lg flex items-center justify-center transition-colors shrink-0 ${
+                            isActive
+                              ? 'bg-emerald-500/25 text-emerald-300'
+                              : 'text-slate-400 group-hover:text-slate-200'
+                          }`}
+                        >
+                          <Icon size={15} />
+                        </div>
+                        <span className="text-xs truncate tracking-tight">{item.label}</span>
+                      </div>
+
+                      {item.badge && (
+                        <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold border ${item.badgeColor || 'bg-amber-500/20 text-amber-300 border-amber-500/40'}`}>
+                          {item.badge}
+                        </span>
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+            ))
+          )}
+        </nav>
+
+        {/* FOOTER DO SIDEBAR: KPI + PROFILE + TROCAR MÓDULO + LOGOUT */}
+        <div className="relative p-3 border-t border-white/10 space-y-2.5 bg-gradient-to-b from-transparent to-[#041a15] shrink-0">
+          {/* WIDGET RESUMO FINANCEIRO */}
+          <div className="p-2.5 rounded-xl bg-white/[0.05] border border-white/10 shadow-inner backdrop-blur-md">
+            <div className="flex items-center justify-between text-slate-400 text-[10px] font-bold uppercase">
+              <span>{viewMode === 'admin' ? 'Total Concedido' : 'Meu Saldo Restante'}</span>
+              <button
+                onClick={onRefresh}
+                disabled={isRefreshing}
+                className="hover:text-emerald-300 transition-colors p-0.5 rounded"
+                title="Atualizar dados"
+              >
+                <RefreshCw size={12} className={isRefreshing ? 'animate-spin text-emerald-400' : ''} />
+              </button>
+            </div>
+            <div className="text-sm font-black text-white font-mono mt-0.5">
+              {formatBrl(viewMode === 'admin' ? totalAtivo : saldoDevedor)}
+            </div>
+          </div>
+
+          {/* USER PROFILE CARD */}
+          <div className="p-2.5 rounded-2xl bg-white/[0.06] border border-white/10 shadow-inner backdrop-blur-md">
+            <div className="flex items-center gap-2.5">
+              <div className="relative shrink-0">
+                <UserAvatar
+                  userId={currentUser?.id || currentMe?.id}
+                  name={userName}
+                  fotoUrl={currentUser?.foto}
+                  size={36}
+                  className="rounded-xl border border-white/20 shadow-sm"
+                />
+                <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-400 border-2 border-[#090d16] shadow-xs" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="text-xs font-bold text-white truncate">
+                  {userName}
+                </div>
+                <div className="text-[10px] text-slate-300 font-medium truncate">
+                  {userCargo}
+                </div>
+                {userUnidade && (
+                  <div className="text-[9.5px] text-emerald-400 font-semibold truncate flex items-center gap-1 mt-0.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+                    <span>{userUnidade}</span>
+                  </div>
+                )}
+              </div>
+              {/* THEME TOGGLE */}
+              <button
+                onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+                className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white transition-all shrink-0"
+                title={theme === 'dark' ? 'Mudar para tema claro' : 'Mudar para tema escuro'}
+              >
+                {theme === 'dark' ? <Sun size={13} className="text-amber-400" /> : <Moon size={13} className="text-indigo-400" />}
+              </button>
+            </div>
+          </div>
+
+          {/* ACTION BUTTONS: TROCAR MÓDULO & SAIR */}
+          <div className="grid grid-cols-2 gap-1.5 pt-0.5">
+            <button
+              onClick={() => setShowSwitchModuleModal(true)}
+              className="py-2 px-2 rounded-xl bg-white/10 hover:bg-white/15 border border-white/10 text-white text-[11px] font-bold flex items-center justify-center gap-1.5 transition-all active:scale-98"
+              title="Trocar de Módulo"
+            >
+              <Grid size={13} className="text-emerald-400" />
+              <span className="truncate">Trocar Módulo</span>
+            </button>
+
+            <button
+              onClick={handleLogout}
+              disabled={isLoggingOut}
+              className="py-2 px-2 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 text-rose-300 text-[11px] font-bold flex items-center justify-center gap-1.5 transition-all active:scale-98 disabled:opacity-50"
+              title="Sair do sistema"
+            >
+              <LogOut size={13} className={isLoggingOut ? 'animate-spin' : ''} />
+              <span>{isLoggingOut ? 'Saindo...' : 'Sair'}</span>
+            </button>
+          </div>
+        </div>
+      </aside>
+
+      {/* MODAL DE TROCAR MÓDULO */}
+      <ModuleSwitchModal
+        isOpen={showSwitchModuleModal}
+        onClose={() => setShowSwitchModuleModal(false)}
+      />
+    </>
+  )
+}
+
+/**
+ * RODAPÉ ULTRA-MODERNO (DOCK MOBILE < 768px)
+ * Com gradiente escuro profissional, reflexo especular
+ * e botões ergonomicamente posicionados para uso em smartphone.
+ */
+export function CredImpactoBottomBar({
+  activeTab,
+  onTabChange,
+  viewMode,
+  onToggleViewMode,
+  isAdminOrFinance,
+  pendingRequestsCount = 0,
+  pendingDisbursementCount = 0,
+  onNewLoanClick,
+  currentMe
+}: CredImpactoNavigationProps) {
+  const { currentUser, setLoadingPath } = useApp()
+  const [showMoreMenu, setShowMoreMenu] = useState(false)
+  const [showSwitchModuleModal, setShowSwitchModuleModal] = useState(false)
+  const [isLoggingOut, setIsLoggingOut] = useState(false)
+
+  const handleLogout = async () => {
+    if (confirm('Deseja realmente encerrar a sessão no Impacto EDU?')) {
+      try {
+        setIsLoggingOut(true)
+        setLoadingPath('logout')
+        await performLogout(currentUser?.id || currentMe?.id)
+      } catch (err) {
+        window.location.replace('/login')
+      }
+    }
+  }
+
+  // Itens para o Colaborador
+  if (viewMode === 'colaborador') {
+    return (
+      <>
+        <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-gradient-to-r from-[#090d16]/98 via-[#081522]/98 to-[#041d18]/98 backdrop-blur-2xl border-t border-emerald-500/25 shadow-[0_-10px_35px_rgba(0,0,0,0.7)] px-2 py-1.5 pb-[max(0.6rem,env(safe-area-inset-bottom))] overflow-hidden text-white">
+          {/* Top specular glow line */}
+          <div className="absolute top-0 left-0 right-0 h-[1.5px] bg-gradient-to-r from-transparent via-emerald-400 to-transparent pointer-events-none" />
+
+          <div className="relative flex items-center justify-around">
+            <button
+              onClick={() => onTabChange('meus_emprestimos')}
+              className={`flex flex-col items-center justify-center py-1 px-3 rounded-xl transition-all ${
+                activeTab === 'meus_emprestimos'
+                  ? 'text-emerald-400 font-bold'
+                  : 'text-slate-400'
+              }`}
+            >
+              <div className={`p-1.5 rounded-xl ${activeTab === 'meus_emprestimos' ? 'bg-emerald-500/20 border border-emerald-500/40 text-emerald-300' : ''}`}>
+                <Wallet size={19} />
+              </div>
+              <span className="text-[10px] mt-0.5">Meu Espaço</span>
+            </button>
+
+            {/* Botão Central de Nova Solicitação */}
+            <button
+              onClick={onNewLoanClick}
+              className="flex flex-col items-center justify-center -mt-5"
+            >
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-emerald-600 via-emerald-500 to-teal-400 text-white flex items-center justify-center shadow-lg shadow-emerald-500/40 active:scale-95 transition-all ring-4 ring-[#081522]">
+                <Plus size={22} className="drop-shadow-sm" />
+              </div>
+              <span className="text-[10px] font-bold text-emerald-400 mt-1">Solicitar</span>
+            </button>
+
+            <button
+              onClick={() => onTabChange('simular')}
+              className={`flex flex-col items-center justify-center py-1 px-3 rounded-xl transition-all ${
+                activeTab === 'simular'
+                  ? 'text-emerald-400 font-bold'
+                  : 'text-slate-400'
+              }`}
+            >
+              <div className={`p-1.5 rounded-xl ${activeTab === 'simular' ? 'bg-emerald-500/20 border border-emerald-500/40 text-emerald-300' : ''}`}>
+                <Calculator size={19} />
+              </div>
+              <span className="text-[10px] mt-0.5">Simulador</span>
+            </button>
+
+            <button
+              onClick={() => setShowMoreMenu(true)}
+              className="flex flex-col items-center justify-center py-1 px-3 rounded-xl text-slate-400"
+            >
+              <div className="p-1.5 rounded-xl bg-white/10">
+                <MoreHorizontal size={19} />
+              </div>
+              <span className="text-[10px] mt-0.5 font-medium">Mais</span>
+            </button>
+          </div>
+        </nav>
+
+        {/* DRAWER / BOTTOM SHEET DO MENU "MAIS" PARA COLABORADOR */}
+        {showMoreMenu && (
+          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/75 backdrop-blur-md animate-in fade-in">
+            <div className="relative overflow-hidden bg-gradient-to-b from-[#090d16] via-[#081522] to-[#041d18] border border-emerald-500/30 rounded-t-3xl sm:rounded-3xl max-w-md w-full p-5 shadow-2xl space-y-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] animate-in slide-in-from-bottom backdrop-blur-2xl text-white">
+              {/* Specular top glow line */}
+              <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-emerald-400 to-transparent" />
+
+              <div className="flex items-center justify-between pb-3 border-b border-white/10">
+                <div className="flex items-center gap-2">
+                  <Sparkles size={16} className="text-emerald-400" />
+                  <h3 className="text-sm font-bold text-white">Opções • CredImpacto</h3>
+                </div>
+                <button
+                  onClick={() => setShowMoreMenu(false)}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-white"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="space-y-2 text-xs">
+                <button
+                  onClick={() => {
+                    setShowMoreMenu(false)
+                    setShowSwitchModuleModal(true)
+                  }}
+                  className="w-full p-3 rounded-2xl bg-white/10 hover:bg-white/15 border border-white/10 text-white font-bold flex items-center justify-between"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <Grid size={18} className="text-emerald-400" />
+                    <span>Trocar de Módulo (Central)</span>
+                  </div>
+                  <ChevronRight size={15} />
+                </button>
+
+                <button
+                  onClick={handleLogout}
+                  disabled={isLoggingOut}
+                  className="w-full p-3 rounded-2xl bg-rose-500/20 border border-rose-500/40 text-rose-300 font-bold flex items-center justify-between"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <LogOut size={18} />
+                    <span>{isLoggingOut ? 'Saindo da Conta...' : 'Sair da Conta'}</span>
+                  </div>
+                  <ChevronRight size={15} />
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <ModuleSwitchModal
+          isOpen={showSwitchModuleModal}
+          onClose={() => setShowSwitchModuleModal(false)}
+        />
+      </>
+    )
+  }
+
+  // Itens para o Administrador no Mobile
+  return (
+    <>
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-gradient-to-r from-[#090d16]/98 via-[#081522]/98 to-[#041d18]/98 backdrop-blur-2xl border-t border-emerald-500/25 shadow-[0_-10px_35px_rgba(0,0,0,0.7)] px-2 py-1.5 pb-[max(0.6rem,env(safe-area-inset-bottom))] overflow-hidden text-white">
+        {/* Top specular glow line */}
+        <div className="absolute top-0 left-0 right-0 h-[1.5px] bg-gradient-to-r from-transparent via-emerald-400 to-transparent pointer-events-none" />
+
+        <div className="relative flex items-center justify-around">
+          <button
+            onClick={() => onTabChange('dashboard')}
+            className={`flex flex-col items-center justify-center py-1 px-2.5 rounded-xl transition-all ${
+              activeTab === 'dashboard'
+                ? 'text-emerald-400 font-bold'
+                : 'text-slate-400'
+            }`}
+          >
+            <div className={`p-1.5 rounded-xl ${activeTab === 'dashboard' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' : ''}`}>
+              <LayoutDashboard size={18} />
+            </div>
+            <span className="text-[10px] mt-0.5">Painel</span>
+          </button>
+
+          <button
+            onClick={() => onTabChange('analise')}
+            className={`relative flex flex-col items-center justify-center py-1 px-2.5 rounded-xl transition-all ${
+              activeTab === 'analise'
+                ? 'text-emerald-400 font-bold'
+                : 'text-slate-400'
+            }`}
+          >
+            <div className={`p-1.5 rounded-xl ${activeTab === 'analise' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' : ''}`}>
+              <ShieldCheck size={18} />
+            </div>
+            <span className="text-[10px] mt-0.5">Fila</span>
+            {pendingRequestsCount > 0 && (
+              <span className="absolute top-1 right-2 w-4 h-4 rounded-full bg-amber-500 text-black text-[9px] font-black flex items-center justify-center shadow-xs">
+                {pendingRequestsCount}
+              </span>
+            )}
+          </button>
+
+          {/* Botão Central de Conceder Empréstimo */}
+          <button
+            onClick={onNewLoanClick}
+            className="flex flex-col items-center justify-center -mt-5"
+          >
+            <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-emerald-600 via-emerald-500 to-teal-400 text-white flex items-center justify-center shadow-lg shadow-emerald-500/40 active:scale-95 transition-all ring-4 ring-[#081522]">
+              <Plus size={20} className="drop-shadow-sm" />
+            </div>
+            <span className="text-[9px] font-bold text-emerald-400 mt-1">Conceder</span>
+          </button>
+
+          <button
+            onClick={() => onTabChange('parcelas')}
+            className={`flex flex-col items-center justify-center py-1 px-2.5 rounded-xl transition-all ${
+              activeTab === 'parcelas'
+                ? 'text-emerald-400 font-bold'
+                : 'text-slate-400'
+            }`}
+          >
+            <div className={`p-1.5 rounded-xl ${activeTab === 'parcelas' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' : ''}`}>
+              <Receipt size={18} />
+            </div>
+            <span className="text-[10px] mt-0.5">Parcelas</span>
+          </button>
+
+          <button
+            onClick={() => setShowMoreMenu(true)}
+            className={`flex flex-col items-center justify-center py-1 px-2.5 rounded-xl transition-all ${
+              ['liberacoes', 'folha', 'rescisao', 'simular', 'relatorios', 'configuracoes', 'auditoria'].includes(activeTab)
+                ? 'text-emerald-400 font-bold'
+                : 'text-slate-400'
+            }`}
+          >
+            <div className="p-1.5 rounded-xl bg-white/10">
+              <MoreHorizontal size={18} />
+            </div>
+            <span className="text-[10px] mt-0.5">Mais</span>
+          </button>
+        </div>
+      </nav>
+
+      {/* DRAWER / BOTTOM SHEET DO MENU "MAIS" PARA ADMIN */}
+      {showMoreMenu && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/75 backdrop-blur-md animate-in fade-in">
+          <div className="relative overflow-hidden bg-gradient-to-b from-[#090d16] via-[#081522] to-[#041d18] border border-emerald-500/30 rounded-t-3xl sm:rounded-3xl max-w-md w-full p-5 shadow-2xl space-y-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] animate-in slide-in-from-bottom backdrop-blur-2xl text-white">
+            {/* Specular top glow line */}
+            <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-emerald-400 to-transparent" />
+
+            <div className="flex items-center justify-between pb-3 border-b border-white/10">
+              <div className="flex items-center gap-2">
+                <Sparkles size={16} className="text-emerald-400" />
+                <h3 className="text-sm font-bold text-white">Mais Módulos & Páginas • CredImpacto</h3>
+              </div>
+              <button
+                onClick={() => setShowMoreMenu(false)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-white"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 gap-2 text-xs max-h-[60vh] overflow-y-auto pr-1">
+              {/* Liberações TED */}
+              <button
+                onClick={() => {
+                  onTabChange('liberacoes')
+                  setShowMoreMenu(false)
+                }}
+                className={`p-3 rounded-2xl flex items-center justify-between border transition-all ${
+                  activeTab === 'liberacoes'
+                    ? 'bg-cyan-500/20 border-cyan-500/40 text-cyan-300 font-bold'
+                    : 'bg-white/[0.04] border-white/10 text-slate-200 hover:bg-white/[0.08]'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <Banknote size={18} className="text-cyan-400" />
+                  <span className="font-semibold text-xs">Liberações TED (Tesouraria)</span>
+                </div>
+                {pendingDisbursementCount > 0 && (
+                  <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">
+                    {pendingDisbursementCount}
+                  </span>
+                )}
+              </button>
+
+              {/* Conciliação em Folha */}
+              <button
+                onClick={() => {
+                  onTabChange('folha')
+                  setShowMoreMenu(false)
+                }}
+                className={`p-3 rounded-2xl flex items-center justify-between border transition-all ${
+                  activeTab === 'folha'
+                    ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300 font-bold'
+                    : 'bg-white/[0.04] border-white/10 text-slate-200 hover:bg-white/[0.08]'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <FileSpreadsheet size={18} className="text-emerald-400" />
+                  <span className="font-semibold text-xs">Conciliação em Folha</span>
+                </div>
+                <ChevronRight size={15} className="text-slate-400" />
+              </button>
+
+              {/* Rescisão CLT */}
+              <button
+                onClick={() => {
+                  onTabChange('rescisao')
+                  setShowMoreMenu(false)
+                }}
+                className={`p-3 rounded-2xl flex items-center justify-between border transition-all ${
+                  activeTab === 'rescisao'
+                    ? 'bg-purple-500/20 border-purple-500/40 text-purple-300 font-bold'
+                    : 'bg-white/[0.04] border-white/10 text-slate-200 hover:bg-white/[0.08]'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <UserX size={18} className="text-purple-400" />
+                  <span className="font-semibold text-xs">Rescisão CLT & Desligamento</span>
+                </div>
+                <ChevronRight size={15} className="text-slate-400" />
+              </button>
+
+              {/* Relatórios & DRE */}
+              <button
+                onClick={() => {
+                  onTabChange('relatorios')
+                  setShowMoreMenu(false)
+                }}
+                className={`p-3 rounded-2xl flex items-center justify-between border transition-all ${
+                  activeTab === 'relatorios'
+                    ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300 font-bold'
+                    : 'bg-white/[0.04] border-white/10 text-slate-200 hover:bg-white/[0.08]'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <BarChart3 size={18} className="text-emerald-400" />
+                  <span className="font-semibold text-xs">Relatórios & DRE Contábil</span>
+                </div>
+                <ChevronRight size={15} className="text-slate-400" />
+              </button>
+
+              {/* Conceder pela Escola */}
+              <button
+                onClick={() => {
+                  onTabChange('simular')
+                  setShowMoreMenu(false)
+                }}
+                className={`p-3 rounded-2xl flex items-center justify-between border transition-all ${
+                  activeTab === 'simular'
+                    ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300 font-bold'
+                    : 'bg-white/[0.04] border-white/10 text-slate-200 hover:bg-white/[0.08]'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <Calculator size={18} className="text-emerald-400" />
+                  <span className="font-semibold text-xs">Conceder Empréstimo</span>
+                </div>
+                <ChevronRight size={15} className="text-slate-400" />
+              </button>
+
+              {/* Parâmetros & Regras */}
+              <button
+                onClick={() => {
+                  onTabChange('configuracoes')
+                  setShowMoreMenu(false)
+                }}
+                className={`p-3 rounded-2xl flex items-center justify-between border transition-all ${
+                  activeTab === 'configuracoes'
+                    ? 'bg-cyan-500/20 border-cyan-500/40 text-cyan-300 font-bold'
+                    : 'bg-white/[0.04] border-white/10 text-slate-200 hover:bg-white/[0.08]'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <Settings size={18} className="text-cyan-400" />
+                  <span className="font-semibold text-xs">Parâmetros & Regras</span>
+                </div>
+                <ChevronRight size={15} className="text-slate-400" />
+              </button>
+
+              {/* Auditoria & Logs */}
+              <button
+                onClick={() => {
+                  onTabChange('auditoria')
+                  setShowMoreMenu(false)
+                }}
+                className={`p-3 rounded-2xl flex items-center justify-between border transition-all ${
+                  activeTab === 'auditoria'
+                    ? 'bg-amber-500/20 border-amber-500/40 text-amber-300 font-bold'
+                    : 'bg-white/[0.04] border-white/10 text-slate-200 hover:bg-white/[0.08]'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <ShieldAlert size={18} className="text-amber-400" />
+                  <span className="font-semibold text-xs">Auditoria & Logs</span>
+                </div>
+                <ChevronRight size={15} className="text-slate-400" />
+              </button>
+            </div>
+
+            <div className="pt-2 border-t border-white/10">
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => {
+                    setShowMoreMenu(false)
+                    setShowSwitchModuleModal(true)
+                  }}
+                  className="py-2.5 rounded-xl bg-white/10 hover:bg-white/15 text-white font-bold text-xs flex items-center justify-center gap-2 transition-all border border-white/10"
+                >
+                  <Grid size={15} className="text-emerald-400" />
+                  <span>Trocar Módulo</span>
+                </button>
+
+                <button
+                  onClick={handleLogout}
+                  disabled={isLoggingOut}
+                  className="py-2.5 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 font-bold text-xs flex items-center justify-center gap-2 transition-all border border-rose-500/40"
+                >
+                  <LogOut size={15} />
+                  <span>{isLoggingOut ? 'Saindo...' : 'Sair'}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE TROCAR MÓDULO */}
+      <ModuleSwitchModal
+        isOpen={showSwitchModuleModal}
+        onClose={() => setShowSwitchModuleModal(false)}
+      />
+    </>
+  )
+}

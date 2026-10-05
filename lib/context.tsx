@@ -99,6 +99,8 @@ export interface CurrentUser {
   colaborador_id?: string
   system_user_id?: string
   hasDualRole?: boolean
+  cpf?: string
+  unidade?: string
   user_metadata?: Record<string, any>
 }
 

@@ -18,9 +18,9 @@ export async function GET(request: Request) {
     const q = searchParams.get('q')
     const lightweight = searchParams.get('lightweight') === 'true'
 
-    // Lightweight: apenas campos essenciais para seleção de funcionários em dropdowns
+    // Lightweight: campos essenciais para seleção de funcionários em dropdowns
     // NOTA: coluna 'foto' não existe na tabela funcionarios; usar dados->>'foto' como fallback
-    const queryFields = lightweight ? 'id, nome, status, dados' : '*'
+    const queryFields = lightweight ? 'id, nome, status, email, cpf, cargo, unidade, salario, dados' : '*'
     let query = supabase.from('funcionarios').select(queryFields as any).order('nome')
     
     if (status && status !== 'Todos') query = query.eq('status', status)
@@ -37,6 +37,11 @@ export async function GET(request: Request) {
         id: r.id,
         nome: r.nome,
         status: r.status,
+        email: r.email,
+        cpf: r.cpf,
+        cargo: r.cargo,
+        unidade: r.unidade,
+        salario: r.salario ? Number(r.salario) : (r.dados?.salario ? Number(r.dados.salario) : undefined),
         foto: r.dados?.foto || r.dados?.fotoUrl || r.dados?.avatarUrl || null
       })))
     }

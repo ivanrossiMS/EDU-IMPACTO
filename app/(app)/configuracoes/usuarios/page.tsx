@@ -244,7 +244,7 @@ export default function UsuariosPage() {
   const [perfilModal, setPerfilModal] = useState<'add' | 'edit' | null>(null)
   const [editingPerfilId, setEditingPerfilId] = useState<string | null>(null)
   const [deletePerfilId, setDeletePerfilId] = useState<string | null>(null)
-  const [perfilForm, setPerfilForm] = useState<Omit<Perfil, 'id'>>({ nome: '', cor: '#3b82f6', descricao: '', permissoes: [], bloqueadoGestaoEscolar: false, bloqueadoAgendaDigital: false, bloqueadoGestaoPessoas: false, bloqueadoSimulados: false, bloqueadoProvasOnline: false })
+  const [perfilForm, setPerfilForm] = useState<Omit<Perfil, 'id'>>({ nome: '', cor: '#3b82f6', descricao: '', permissoes: [], bloqueadoGestaoEscolar: false, bloqueadoAgendaDigital: false, bloqueadoGestaoPessoas: false, bloqueadoSimulados: false, bloqueadoProvasOnline: false, bloqueadoCredImpacto: false })
   const [expandedModulos, setExpandedModulos] = useState<string[]>([])
   const [perfilModalTab, setPerfilModalTab] = useState<'permissoes' | 'usuarios'>('permissoes')
   const [perfilUserSearch, setPerfilUserSearch] = useState('')
@@ -321,7 +321,7 @@ export default function UsuariosPage() {
   /* ── Perfil actions ── */
   /* ── Perfil actions ── */
   const openAddPerfil = () => {
-    setPerfilForm({ nome: '', cor: '#3b82f6', descricao: '', permissoes: [], bloqueadoGestaoEscolar: false, bloqueadoAgendaDigital: false, bloqueadoGestaoPessoas: false, bloqueadoSimulados: false, bloqueadoProvasOnline: false })
+    setPerfilForm({ nome: '', cor: '#3b82f6', descricao: '', permissoes: [], bloqueadoGestaoEscolar: false, bloqueadoAgendaDigital: false, bloqueadoGestaoPessoas: false, bloqueadoSimulados: false, bloqueadoProvasOnline: false, bloqueadoCredImpacto: false })
     setEditingPerfilId(null)
     setPerfilModalTab('permissoes')
     setPerfilUserSearch('')
@@ -339,7 +339,8 @@ export default function UsuariosPage() {
       bloqueadoAgendaDigital: p.bloqueadoAgendaDigital || false,
       bloqueadoGestaoPessoas: p.bloqueadoGestaoPessoas || false,
       bloqueadoSimulados: p.bloqueadoSimulados || false,
-      bloqueadoProvasOnline: p.bloqueadoProvasOnline || false
+      bloqueadoProvasOnline: p.bloqueadoProvasOnline || false,
+      bloqueadoCredImpacto: p.bloqueadoCredImpacto || false
     })
     setEditingPerfilId(p.id)
     setPerfilModalTab(defaultTab)
@@ -1088,6 +1089,24 @@ export default function UsuariosPage() {
                     <ModernSwitch
                       checked={!perfilForm.bloqueadoProvasOnline}
                       onChange={() => setPerfilForm(p => ({ ...p, bloqueadoProvasOnline: !p.bloqueadoProvasOnline }))}
+                      color="#10b981"
+                    />
+                  </div>
+
+                  {/* CREDIMPACTO */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', background: 'rgba(255,255,255,0.03)', borderRadius: 14, border: '1px solid hsl(var(--border-subtle))' }}>
+                    <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
+                      <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg, #059669, #047857)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, boxShadow: '0 8px 16px rgba(5,150,105,0.3)' }}>
+                        🏛️
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 15, fontWeight: 800, color: 'hsl(var(--text-primary))', marginBottom: 2 }}>Acesso ao CredImpacto</div>
+                        <div style={{ fontSize: 12, color: 'hsl(var(--text-secondary))' }}>Controle de acesso ao módulo de empréstimos, consignado e quitação.</div>
+                      </div>
+                    </div>
+                    <ModernSwitch
+                      checked={!perfilForm.bloqueadoCredImpacto}
+                      onChange={() => setPerfilForm(p => ({ ...p, bloqueadoCredImpacto: !p.bloqueadoCredImpacto }))}
                       color="#10b981"
                     />
                   </div>

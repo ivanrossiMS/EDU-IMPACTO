@@ -373,13 +373,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     )
   }
 
-  // Agenda Digital manages its own navigation — suppress global ERP sidebar/topbar there
+  // Agenda Digital & CredImpacto manage their own navigation — suppress global ERP sidebar/topbar there
   const isAgendaDigital = pathname?.startsWith('/agenda-digital')
   const isSimulados = pathname?.startsWith('/simulados')
   const isProvas = pathname?.startsWith('/provas')
   const isRedacaoEnem = pathname?.startsWith('/redacao-enem')
   const isAjuda = pathname?.startsWith('/ajuda')
-  const hideGlobalSidebar = isAgendaDigital || isSimulados || isProvas || isRedacaoEnem || isAjuda
+  const isCredImpacto = pathname?.startsWith('/credimpacto')
+  const hideGlobalSidebar = isAgendaDigital || isSimulados || isProvas || isRedacaoEnem || isAjuda || isCredImpacto
 
   return (
     <DataProvider>

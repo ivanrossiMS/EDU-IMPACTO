@@ -43,6 +43,7 @@ export async function POST(
   const tipo: OcorrenciaMonitoramento['tipo'] =
     rawTipo === 'troca_aba' ? 'saida_tela' :
     rawTipo === 'tentativa_cola' ? 'tentativa_colar' :
+    rawTipo === 'tentativa_print' ? 'captura_tela' :
     (body.tipo as OcorrenciaMonitoramento['tipo'])
   const descricao = body.descricao || 'Ocorrência registrada durante a aplicação'
   const duracaoSegundos = Number(body.duracaoSegundos || 0)
