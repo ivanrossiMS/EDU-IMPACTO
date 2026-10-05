@@ -83,17 +83,20 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Quantidade de parcelas inválida.' }, { status: 400 })
     }
 
-    // Valida limites das políticas
-    if (valor < config.valorMinimoEmprestimo || valor > config.valorMaximoEmprestimo) {
-      return NextResponse.json({
-        error: `O valor deve estar entre R$ ${config.valorMinimoEmprestimo.toFixed(2)} e R$ ${config.valorMaximoEmprestimo.toFixed(2)} conforme política escolar.`
-      }, { status: 400 })
-    }
+    // Valida limites das políticas (apenas para colaboradores solicitando por conta própria; admin tem liberdade total)
+    const isMasterOrAdminConcession = Boolean(resolved.isAdminOrFinance || criadoPorFinanceiro)
+    if (!isMasterOrAdminConcession) {
+      if (valor < config.valorMinimoEmprestimo || valor > config.valorMaximoEmprestimo) {
+        return NextResponse.json({
+          error: `O valor deve estar entre R$ ${config.valorMinimoEmprestimo.toFixed(2)} e R$ ${config.valorMaximoEmprestimo.toFixed(2)} conforme política escolar.`
+        }, { status: 400 })
+      }
 
-    if (parcelasCount < config.prazoMinimoParcelas || parcelasCount > config.prazoMaximoParcelas) {
-      return NextResponse.json({
-        error: `O prazo deve estar entre ${config.prazoMinimoParcelas} e ${config.prazoMaximoParcelas} parcelas.`
-      }, { status: 400 })
+      if (parcelasCount < config.prazoMinimoParcelas || parcelasCount > config.prazoMaximoParcelas) {
+        return NextResponse.json({
+          error: `O prazo deve estar entre ${config.prazoMinimoParcelas} e ${config.prazoMaximoParcelas} parcelas.`
+        }, { status: 400 })
+      }
     }
 
     const { getAdminClient } = await import('@/lib/server/supabaseAdminSingleton')

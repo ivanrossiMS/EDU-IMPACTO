@@ -110,6 +110,8 @@ export function SimuladorEmprestimo({
   // Abas do cronograma inferior: 'parcelas' ou 'memoria'
   const [activeTabBottom, setActiveTabBottom] = useState<'parcelas' | 'memoria'>('parcelas')
   const [isEditingValor, setIsEditingValor] = useState(false)
+  const [isEditingParcelas, setIsEditingParcelas] = useState(false)
+  const [parcelasInput, setParcelasInput] = useState('')
   const [showMethodModal, setShowMethodModal] = useState(false)
   const [showRateModal, setShowRateModal] = useState(false)
 
@@ -198,16 +200,29 @@ export function SimuladorEmprestimo({
     )
   }, [valor, parcelas, taxa, metodo, effectiveSalary, config.diaPadraoDescontoFolha])
 
+  const isAdmin = Boolean(isAdminOrFinance && viewMode === 'admin')
+
   const handleOpenModal = () => {
-    if (valor < (config.valorMinimoEmprestimo || 200) || valor > (config.valorMaximoEmprestimo || 3000)) {
-      toast.error(`Valor deve estar entre ${formatBrl(config.valorMinimoEmprestimo || 200)} e ${formatBrl(config.valorMaximoEmprestimo || 3000)}.`)
-      return
+    if (!isAdmin) {
+      if (valor < (config.valorMinimoEmprestimo || 200) || valor > (config.valorMaximoEmprestimo || 3000)) {
+        toast.error(`Valor deve estar entre ${formatBrl(config.valorMinimoEmprestimo || 200)} e ${formatBrl(config.valorMaximoEmprestimo || 3000)}.`)
+        return
+      }
+      if (parcelas < (config.prazoMinimoParcelas || 1) || parcelas > (config.prazoMaximoParcelas || 10)) {
+        toast.error(`Prazo deve estar entre ${config.prazoMinimoParcelas || 1} e ${config.prazoMaximoParcelas || 10} parcelas.`)
+        return
+      }
+    } else {
+      if (valor <= 0) {
+        toast.error('Informe um valor de empréstimo válido maior que zero.')
+        return
+      }
+      if (parcelas < 1) {
+        toast.error('Informe ao menos 1 parcela.')
+        return
+      }
     }
-    if (parcelas < (config.prazoMinimoParcelas || 1) || parcelas > (config.prazoMaximoParcelas || 10)) {
-      toast.error(`Prazo deve estar entre ${config.prazoMinimoParcelas || 1} e ${config.prazoMaximoParcelas || 10} parcelas.`)
-      return
-    }
-    if (isAdminOrFinance && viewMode === 'admin' && !targetColaboradorId) {
+    if (isAdmin && !targetColaboradorId) {
       toast.error('Selecione o colaborador beneficiário para prosseguir com a concessão.')
       return
     }
@@ -296,14 +311,22 @@ export function SimuladorEmprestimo({
   const displayCollaboratorCargo = selectedColaborador?.cargo || currentUserCargo || 'Auxiliar administrativo'
   const displayCollaboratorUnidade = selectedColaborador?.unidade || currentUserUnidade || 'Colégio Impacto'
 
-  const minValor = config.valorMinimoEmprestimo || 200
-  const maxValor = config.valorMaximoEmprestimo || 3000
-  const minParcelas = config.prazoMinimoParcelas || 1
-  const maxParcelas = config.prazoMaximoParcelas || 10
+  const minValor = isAdmin ? 10 : (config.valorMinimoEmprestimo || 200)
+  const maxValor = isAdmin
+    ? Math.max(100000, valor * 1.5, config.valorMaximoEmprestimo || 3000)
+    : (config.valorMaximoEmprestimo || 3000)
+  const minParcelas = 1
+  const maxParcelas = isAdmin
+    ? Math.max(72, parcelas + 12, config.prazoMaximoParcelas || 10)
+    : (config.prazoMaximoParcelas || 10)
 
   // Cálculo percentual exato para preencher as barras dos sliders com cores sólidas
-  const percentValor = Math.min(100, Math.max(0, ((valor - minValor) / (maxValor - minValor)) * 100))
-  const percentParcelas = Math.min(100, Math.max(0, ((parcelas - minParcelas) / (maxParcelas - minParcelas)) * 100))
+  const percentValor = maxValor > minValor
+    ? Math.min(100, Math.max(0, ((valor - minValor) / (maxValor - minValor)) * 100))
+    : 0
+  const percentParcelas = maxParcelas > minParcelas
+    ? Math.min(100, Math.max(0, ((parcelas - minParcelas) / (maxParcelas - minParcelas)) * 100))
+    : 0
 
   return (
     <div className="space-y-6">
@@ -404,7 +427,7 @@ export function SimuladorEmprestimo({
                   Valor desejado
                 </span>
                 <span className="text-slate-400 dark:text-slate-500 font-medium">
-                  Entre {formatBrl(minValor)} e {formatBrl(maxValor)}
+                  {isAdmin ? 'Sem teto de valor (Administrador)' : `Entre ${formatBrl(minValor)} e ${formatBrl(maxValor)}`}
                 </span>
               </div>
 
@@ -418,7 +441,14 @@ export function SimuladorEmprestimo({
                     onBlur={() => {
                       setIsEditingValor(false)
                       if (valor < minValor) setValor(minValor)
-                      if (valor > maxValor) setValor(maxValor)
+                      if (!isAdmin && valor > maxValor) setValor(maxValor)
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        setIsEditingValor(false)
+                        if (valor < minValor) setValor(minValor)
+                        if (!isAdmin && valor > maxValor) setValor(maxValor)
+                      }
                     }}
                     autoFocus
                     className="text-xl font-black text-slate-900 dark:text-white font-mono bg-transparent outline-none w-full"
@@ -449,7 +479,7 @@ export function SimuladorEmprestimo({
                   onValueChange={([val]) => setValor(val)}
                   max={maxValor}
                   min={minValor}
-                  step={50}
+                  step={isAdmin ? 100 : 50}
                 >
                   <Slider.Track className="bg-slate-200 dark:bg-slate-700 relative grow rounded-full h-2.5 overflow-hidden">
                     <Slider.Range className="absolute bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-500 rounded-full h-full" />
@@ -461,7 +491,7 @@ export function SimuladorEmprestimo({
                 </Slider.Root>
                 <div className="flex justify-between text-xs text-slate-400 dark:text-slate-500 mt-2 font-mono">
                   <span>{formatBrl(minValor)} (mínimo)</span>
-                  <span>{formatBrl(maxValor)} (máximo)</span>
+                  <span>{isAdmin ? 'Sem teto de valor' : `${formatBrl(maxValor)} (máximo)`}</span>
                 </div>
               </div>
             </div>
@@ -472,10 +502,50 @@ export function SimuladorEmprestimo({
                 <span className="font-bold text-slate-800 dark:text-slate-200">
                   Número de parcelas
                 </span>
-                {/* Texto em Azul */}
-                <span className="font-bold text-blue-600 dark:text-blue-400">
-                  {parcelas}x mensais
-                </span>
+                {/* Texto em Azul com Edição Direta */}
+                <div className="flex items-center gap-1.5">
+                  {isEditingParcelas ? (
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="number"
+                        min={1}
+                        value={parcelasInput}
+                        onChange={(e) => setParcelasInput(e.target.value)}
+                        onBlur={() => {
+                          const p = parseInt(parcelasInput, 10)
+                          if (!isNaN(p) && p > 0) {
+                            setParcelas(p)
+                          }
+                          setIsEditingParcelas(false)
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            const p = parseInt(parcelasInput, 10)
+                            if (!isNaN(p) && p > 0) {
+                              setParcelas(p)
+                            }
+                            setIsEditingParcelas(false)
+                          }
+                        }}
+                        className="w-16 px-1.5 py-0.5 rounded-lg border border-blue-400 text-sm font-bold text-blue-600 dark:text-blue-400 bg-white dark:bg-slate-900 focus:outline-none"
+                        autoFocus
+                      />
+                      <span className="text-xs font-semibold text-blue-600">x</span>
+                    </div>
+                  ) : (
+                    <div
+                      onClick={() => {
+                        setParcelasInput(String(parcelas))
+                        setIsEditingParcelas(true)
+                      }}
+                      className="font-bold text-blue-600 dark:text-blue-400 cursor-pointer hover:underline flex items-center gap-1"
+                      title="Clique para digitar a quantidade de parcelas"
+                    >
+                      <span>{parcelas}x mensais</span>
+                      <Pencil size={12} className="text-slate-400 hover:text-blue-500 transition-colors ml-0.5" />
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* BARRA DE ROLAGEM COM COR AZUL PREENCHIDA (RADIX UI SLIDER) */}
@@ -498,7 +568,7 @@ export function SimuladorEmprestimo({
                 </Slider.Root>
                 <div className="flex justify-between text-xs text-slate-400 dark:text-slate-500 mt-2 font-mono">
                   <span>{minParcelas}x (mínimo)</span>
-                  <span>{maxParcelas}x (máximo)</span>
+                  <span>{isAdmin ? 'Sem teto de parcelas' : `${maxParcelas}x (máximo)`}</span>
                 </div>
               </div>
             </div>
