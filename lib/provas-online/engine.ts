@@ -115,13 +115,14 @@ export function sanitizeExamForParticipant(
     return safeQ
   })
 
-  const hasPin = Boolean((prova.codigoLiberacao && String(prova.codigoLiberacao).trim() !== '') || prova.exigeCodigoAcesso)
+  const hasPin = Boolean(prova.codigoLiberacao && String(prova.codigoLiberacao).trim() !== '')
 
   return {
     ...prova,
     questoes: sanitizedQuestoes,
     exigeCodigoAcesso: hasPin,
-    codigoLiberacao: undefined // Never send release PIN to student browser
+    codigoLiberacao: undefined, // Never send release PIN to student browser
+    materiaisPermitidos: undefined
   }
 }
 

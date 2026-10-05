@@ -5,8 +5,10 @@ import {
   dbSaveTentativa,
   dbRecordOcorrencia,
   dbGetOcorrenciasByTentativaId,
-  dbGetProvaById
+  dbGetProvaById,
+  dbSaveExcecao
 } from '@/lib/provas-online/db'
+import { autoGradeTentativa } from '@/lib/provas-online/engine'
 import { OcorrenciaMonitoramento } from '@/types/provas-online'
 
 export const dynamic = 'force-dynamic'
@@ -71,13 +73,61 @@ export async function POST(
 
   await dbRecordOcorrencia(novaOcorrencia)
 
-  // Check if exam config mandates suspension on incident
+  // Check if exam config mandates cancellation or suspension on incident
   const prova = await dbGetProvaById(tentativa.provaId)
   let suspensa = false
+  let cancelada = false
 
   const acaoConfig = prova?.configuracaoMonitoramento?.acaoOcorrencia || (prova as any)?.acaoOcorrencia || 'alertar'
 
-  if (acaoConfig === 'suspender') {
+  if (acaoConfig === 'cancelar' && prova) {
+    const isCancellationIncident = 
+      tipo === 'saida_tela' || 
+      tipo === 'saida_tela_cheia' || 
+      tipo === 'perda_foco' ||
+      tipo === 'tentativa_colar'
+
+    if (isCancellationIncident) {
+      if (body.respostas && typeof body.respostas === 'object') {
+        tentativa.respostas = { ...tentativa.respostas, ...body.respostas }
+      }
+      const nowIso = new Date().toISOString()
+      tentativa.status = 'entregue'
+      tentativa.entregueEm = nowIso
+      tentativa.motivoCancelamento = `Prova encerrada e cancelada por infringir a regra de não minimizar ou sair da tela da avaliação.`
+      const graded = autoGradeTentativa(prova, tentativa)
+      tentativa.pontuacaoObjetiva = graded.pontuacaoObjetiva
+      tentativa.notaFinal = graded.notaFinal
+      tentativa.statusCorrecao = graded.statusCorrecao
+      tentativa.comprovanteCodigo = graded.comprovanteCodigo
+      tentativa.respostas = graded.respostas
+      tentativa.comprovanteEntrega = {
+        hash: graded.comprovanteCodigo,
+        provaId: prova.id,
+        alunoId: tentativa.alunoId,
+        alunoNome: tentativa.alunoNome,
+        matricula: tentativa.alunoMatricula || '',
+        dataHoraEntrega: nowIso,
+        totalQuestoes: prova.questoes?.length || 0,
+        totalRespostasRegistradas: Object.keys(tentativa.respostas || {}).length,
+        protocolo: graded.comprovanteCodigo
+      }
+      tentativa.updatedAt = nowIso
+      await dbSaveTentativa(tentativa)
+      cancelada = true
+
+      await dbSaveExcecao({
+        id: crypto.randomUUID(),
+        provaId: prova.id,
+        alunoId: tentativa.alunoId,
+        alunoNome: tentativa.alunoNome,
+        tipoExcecao: 'encerramento_antecipado',
+        justificativa: `Cancelamento automático por infringir regras de integridade (não minimizar): ${descricao}`,
+        autorizadoPor: 'Supervisão Automática (Sistema)',
+        createdAt: nowIso
+      }).catch(() => {})
+    }
+  } else if (acaoConfig === 'suspender') {
     const isSuspensionIncident = 
       tipo === 'saida_tela' || 
       tipo === 'saida_tela_cheia' || 
@@ -95,6 +145,8 @@ export async function POST(
     ok: true,
     ocorrencia: novaOcorrencia,
     acao: acaoConfig,
-    suspensa
+    suspensa,
+    cancelada,
+    tentativa: cancelada ? tentativa : undefined
   }, { status: 201 })
 }

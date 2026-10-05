@@ -22,6 +22,7 @@ import {
   Check,
   Copy,
   ExternalLink,
+  RotateCcw,
   Shield,
   Layers,
   UserCheck,
@@ -73,6 +74,7 @@ interface ProvaStudentView {
     tentativasRealizadas: number
     tentativasPermitidas: number
     tentativaAtivaId: string | null
+    statusTentativaAtiva?: string | null
     ultimaTentativa: any | null
     submetida: boolean
     resultadoLiberado: boolean
@@ -959,8 +961,8 @@ export default function ADProvasOnlineStudentPage() {
                 onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-2px)'}
                 onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
               >
-                Continuar Prova Agora
-                <ArrowRight size={14} />
+                <RotateCcw size={14} />
+                Retornar à Prova
               </button>
             )
           })()}
@@ -1159,12 +1161,25 @@ export default function ADProvasOnlineStudentPage() {
                         fontWeight: 800,
                         padding: '3px 9px',
                         borderRadius: 20,
-                        background: '#f3e8ff',
-                        color: '#7e22ce',
-                        border: '1px solid #d8b4fe'
+                        background: (studentInfo?.statusTentativaAtiva === 'suspensa' || studentInfo?.ultimaTentativa?.status === 'suspensa')
+                          ? '#ffe4e6'
+                          : '#f3e8ff',
+                        color: (studentInfo?.statusTentativaAtiva === 'suspensa' || studentInfo?.ultimaTentativa?.status === 'suspensa')
+                          ? '#e11d48'
+                          : '#7e22ce',
+                        border: `1px solid ${(studentInfo?.statusTentativaAtiva === 'suspensa' || studentInfo?.ultimaTentativa?.status === 'suspensa') ? '#fecdd3' : '#d8b4fe'}`
                       }}>
-                        <Timer size={12} className="animate-pulse" />
-                        {isResponsavel ? 'Em Realização pelo Aluno' : 'Em Andamento'}
+                        {(studentInfo?.statusTentativaAtiva === 'suspensa' || studentInfo?.ultimaTentativa?.status === 'suspensa') ? (
+                          <>
+                            <Shield size={12} />
+                            Sessão Suspensa
+                          </>
+                        ) : (
+                          <>
+                            <Timer size={12} className="animate-pulse" />
+                            {isResponsavel ? 'Em Realização pelo Aluno' : 'Em Andamento'}
+                          </>
+                        )}
                       </span>
                     ) : canTakeExam ? (
                       <span style={{
@@ -1643,7 +1658,9 @@ export default function ADProvasOnlineStudentPage() {
                           width: '100%',
                           padding: '11px',
                           borderRadius: 12,
-                          background: 'linear-gradient(135deg, #a855f7, #7e22ce)',
+                          background: (studentInfo?.statusTentativaAtiva === 'suspensa' || studentInfo?.ultimaTentativa?.status === 'suspensa')
+                            ? 'linear-gradient(135deg, #e11d48, #be123c)'
+                            : 'linear-gradient(135deg, #a855f7, #7e22ce)',
                           border: 'none',
                           color: '#ffffff',
                           fontWeight: 800,
@@ -1653,14 +1670,18 @@ export default function ADProvasOnlineStudentPage() {
                           justifyContent: 'center',
                           gap: 8,
                           cursor: 'pointer',
-                          boxShadow: '0 4px 14px rgba(168, 85, 247, 0.35)',
+                          boxShadow: (studentInfo?.statusTentativaAtiva === 'suspensa' || studentInfo?.ultimaTentativa?.status === 'suspensa')
+                            ? '0 4px 14px rgba(225, 29, 72, 0.35)'
+                            : '0 4px 14px rgba(168, 85, 247, 0.35)',
                           transition: 'transform 0.15s ease'
                         }}
                         onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-2px)'}
                         onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
                       >
-                        <Timer size={15} />
-                        Continuar Avaliação Agora
+                        <RotateCcw size={15} />
+                        {(studentInfo?.statusTentativaAtiva === 'suspensa' || studentInfo?.ultimaTentativa?.status === 'suspensa')
+                          ? 'Retornar à Avaliação Suspensa'
+                          : 'Retornar à Avaliação'}
                       </button>
                     ) : canTakeExam ? (
                       <button

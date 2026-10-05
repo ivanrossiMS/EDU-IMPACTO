@@ -9,7 +9,7 @@ import {
   Maximize2, Minimize2, FileCheck2, AlertCircle, HelpCircle,
   Hash, Calendar, User, BookOpen, Printer, Check, Info, Bell,
   Calculator, Copy, CheckCheck, X, ArrowLeft, Flame, Sparkles,
-  FileText
+  FileText, AlertOctagon, LogOut, RotateCcw, XCircle
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { HtmlContent } from '@/components/HtmlContent'
@@ -95,12 +95,308 @@ function safeRemoveOfflineQueue(key: string): void {
   try { sessionStorage.removeItem(key) } catch {}
 }
 
+const ExamRoomStyles = () => (
+  <style dangerouslySetInnerHTML={{__html: `
+    /* Global Rules for ExamRoom */
+    html, body {
+      overflow-x: clip !important;
+    }
+    .er-question-card, .exam-room-grid {
+      overflow-anchor: none !important;
+    }
+
+    /* Responsive Global Rules for ExamRoom */
+    @media (max-width: 640px) {
+      .er-briefing-wrap {
+        padding: 12px 10px 48px !important;
+      }
+      .er-briefing-card {
+        padding: 16px 14px !important;
+        border-radius: 18px !important;
+        gap: 16px !important;
+      }
+      .er-briefing-header {
+        gap: 12px !important;
+        padding-bottom: 16px !important;
+      }
+      .er-briefing-logo {
+        width: 40px !important;
+        height: 40px !important;
+        border-radius: 12px !important;
+        padding: 4px !important;
+      }
+      .er-briefing-title {
+        font-size: 18px !important;
+        line-height: 1.3 !important;
+        margin-bottom: 4px !important;
+      }
+      .er-valor-total-card {
+        width: 100% !important;
+        min-width: 100% !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: space-between !important;
+        padding: 8px 14px !important;
+        border-radius: 12px !important;
+        text-align: left !important;
+        margin-top: 4px !important;
+      }
+      .er-valor-total-card .er-valor-label {
+        margin: 0 !important;
+        font-size: 10.5px !important;
+      }
+      .er-valor-total-card .er-valor-num {
+        font-size: 18px !important;
+        margin-top: 0 !important;
+      }
+      .er-metrics-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+        gap: 8px !important;
+      }
+      .er-metric-box {
+        padding: 10px 10px !important;
+        border-radius: 12px !important;
+        gap: 8px !important;
+      }
+      .er-metric-icon {
+        width: 32px !important;
+        height: 32px !important;
+        border-radius: 9px !important;
+      }
+      .er-metric-icon svg {
+        width: 16px !important;
+        height: 16px !important;
+      }
+      .er-metric-label {
+        font-size: 10px !important;
+        margin-bottom: 1px !important;
+      }
+      .er-metric-val {
+        font-size: 13px !important;
+      }
+      .er-banner {
+        padding: 12px 12px !important;
+        border-radius: 14px !important;
+        gap: 10px !important;
+        font-size: 12px !important;
+      }
+      .er-banner-icon {
+        width: 30px !important;
+        height: 30px !important;
+        border-radius: 9px !important;
+      }
+      .er-banner-icon svg {
+        width: 16px !important;
+        height: 16px !important;
+      }
+      .er-instructions-box {
+        padding: 14px 14px !important;
+        border-radius: 14px !important;
+      }
+      .er-pledge-card {
+        padding: 12px 12px !important;
+        border-radius: 14px !important;
+        gap: 10px !important;
+      }
+      .er-briefing-actions {
+        flex-direction: row !important;
+        gap: 8px !important;
+      }
+      .er-briefing-btn-back {
+        height: 44px !important;
+        padding: 0 16px !important;
+        font-size: 13px !important;
+      }
+      .er-briefing-btn-start {
+        height: 44px !important;
+        padding: 0 14px !important;
+        font-size: 13.5px !important;
+        flex: 1 !important;
+        justify-content: center !important;
+      }
+
+      /* Active Exam Room Topbar */
+      .er-topbar {
+        padding: 8px 10px !important;
+      }
+      .er-topbar-inner {
+        gap: 8px !important;
+      }
+      .er-topbar-logo {
+        width: 32px !important;
+        height: 32px !important;
+        border-radius: 8px !important;
+        padding: 2px !important;
+      }
+      .er-topbar-title {
+        font-size: 13px !important;
+        max-width: 120px !important;
+      }
+      .er-topbar-subtitle {
+        font-size: 10.5px !important;
+        max-width: 105px !important;
+      }
+      .er-topbar-save-status {
+        padding: 4px 8px !important;
+        font-size: 11px !important;
+      }
+      .er-topbar-timer {
+        padding: 4px 8px !important;
+        font-size: 12px !important;
+        border-radius: 8px !important;
+      }
+      .er-topbar-btn-exit {
+        padding: 6px 8px !important;
+        font-size: 11.5px !important;
+        border-radius: 8px !important;
+      }
+      .er-topbar-btn-deliver {
+        padding: 6px 10px !important;
+        font-size: 11.5px !important;
+        border-radius: 8px !important;
+      }
+
+      /* Active Exam Room Question Card */
+      .er-question-card {
+        padding: 14px 12px !important;
+        border-radius: 16px !important;
+        min-height: auto !important;
+      }
+      .er-question-header {
+        padding-bottom: 12px !important;
+        gap: 8px !important;
+      }
+      .er-qnum-badge {
+        width: 30px !important;
+        height: 30px !important;
+        border-radius: 9px !important;
+        font-size: 13px !important;
+      }
+      .er-qbtn-review {
+        padding: 5px 8px !important;
+        font-size: 11px !important;
+        border-radius: 8px !important;
+      }
+      .er-enunciado {
+        padding: 14px 0 !important;
+        font-size: 14px !important;
+        line-height: 1.55 !important;
+      }
+      .er-enunciado img {
+        max-width: 100% !important;
+        height: auto !important;
+        border-radius: 10px !important;
+        display: block !important;
+        margin: 10px auto !important;
+        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.06);
+      }
+      .er-enunciado svg {
+        max-width: 100% !important;
+        height: auto !important;
+      }
+      .er-enunciado table {
+        display: block !important;
+        max-width: 100% !important;
+        overflow-x: auto !important;
+      }
+      .er-alt-row {
+        padding: 10px 12px !important;
+        border-radius: 12px !important;
+        gap: 10px !important;
+      }
+      .er-alt-letter {
+        width: 26px !important;
+        height: 26px !important;
+        border-radius: 7px !important;
+        font-size: 12px !important;
+      }
+      .er-vf-row {
+        flex-direction: column !important;
+        align-items: stretch !important;
+        padding: 12px 12px !important;
+        gap: 10px !important;
+      }
+      .er-vf-actions {
+        display: grid !important;
+        grid-template-columns: 1fr 1fr !important;
+        gap: 8px !important;
+        width: 100% !important;
+      }
+      .er-vf-actions button {
+        justify-content: center !important;
+        padding: 8px !important;
+        font-size: 12px !important;
+      }
+      .er-pagination-bar {
+        padding-top: 14px !important;
+        gap: 8px !important;
+      }
+      .er-pagination-bar button {
+        height: 38px !important;
+        padding: 0 12px !important;
+        font-size: 12px !important;
+        border-radius: 10px !important;
+      }
+      .er-pagination-pill {
+        padding: 4px 10px !important;
+        font-size: 11px !important;
+      }
+
+      /* Navigation Sidebar on Mobile */
+      .er-nav-card {
+        padding: 14px 12px !important;
+        border-radius: 16px !important;
+      }
+      .er-nav-qbtn {
+        width: 36px !important;
+        height: 36px !important;
+        border-radius: 9px !important;
+        font-size: 12px !important;
+      }
+
+      /* Modals on Mobile */
+      .er-modal-box {
+        padding: 18px 16px !important;
+        border-radius: 18px !important;
+        max-width: calc(100vw - 24px) !important;
+      }
+
+      /* Voucher Card on Mobile */
+      .er-voucher-wrap {
+        padding: 12px 10px 48px !important;
+      }
+      .er-voucher-box {
+        padding: 16px 14px !important;
+        border-radius: 18px !important;
+      }
+      .er-voucher-grid {
+        grid-template-columns: 1fr !important;
+        gap: 10px !important;
+      }
+    }
+
+    @media (max-width: 1024px) {
+      .exam-room-grid {
+        grid-template-columns: 1fr !important;
+        gap: 16px !important;
+        padding: 12px 12px 40px !important;
+      }
+      .exam-room-sidebar {
+        position: static !important;
+        order: 2;
+      }
+    }
+  `}} />
+)
+
 export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, returnUrl }: ExamRoomProps) {
   const router = useRouter()
 
   // Briefing vs Taking vs Submitted
   const [tentativa, setTentativa] = useState<TentativaAluno | null>(initialTentativa || null)
-  const [started, setStarted] = useState<boolean>(!!initialTentativa && initialTentativa.status === 'em_andamento')
+  const [started, setStarted] = useState<boolean>(
+    !!initialTentativa && (initialTentativa.status === 'em_andamento' || initialTentativa.status === 'suspensa')
+  )
   const [submittedVoucher, setSubmittedVoucher] = useState<ComprovanteEntrega | null>(
     initialTentativa?.comprovanteEntrega || null
   )
@@ -179,10 +475,23 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
     initialTentativa?.status === 'suspensa' ? (initialTentativa.motivoSuspensao || 'Sessão suspensa pelo professor.') : null
   )
   const [teacherBroadcast, setTeacherBroadcast] = useState<string | null>(null)
+  const [cancelledModalOpen, setCancelledModalOpen] = useState(false)
+  const [cancellationReason, setCancellationReason] = useState<string | null>(
+    initialTentativa?.motivoCancelamento || null
+  )
 
-  // Submission Modal
+  // Submission & Exit Modals
   const [submitModalOpen, setSubmitModalOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [exitModalOpen, setExitModalOpen] = useState(false)
+
+  const handleExitExam = useCallback(() => {
+    if (typeof document !== 'undefined' && document.fullscreenElement && document.exitFullscreen) {
+      document.exitFullscreen().catch(() => {})
+    }
+    const targetUrl = returnUrl || '/agenda-digital'
+    router.push(targetUrl)
+  }, [returnUrl, router])
 
   // Derived Exam Configuration Properties
   const isSingleQuestionPage = prova.configuracaoLayout?.questaoPorPagina !== false
@@ -192,7 +501,10 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
   const monitorTabSwitch = prova.configuracaoMonitoramento?.registrarSaidaTela !== false
   const blockCopyPaste = Boolean(prova.configuracaoMonitoramento?.bloquearColar || prova.bloquearColar)
   const actionOnIncident = prova.configuracaoMonitoramento?.acaoOcorrencia || 'alertar'
-  const hasPinRequirement = Boolean(prova.exigeCodigoAcesso || (prova.codigoLiberacao && String(prova.codigoLiberacao).trim() !== ''))
+  const hasPinRequirement = Boolean(
+    (prova.codigoLiberacao && String(prova.codigoLiberacao).trim() !== '') ||
+    (prova.exigeCodigoAcesso === true && (prova.codigoLiberacao === undefined || String(prova.codigoLiberacao).trim() !== ''))
+  )
 
   // Pedagogical & Accessibility Enhancements
   const [pledgeAccepted, setPledgeAccepted] = useState(false)
@@ -431,9 +743,25 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
               toast.success('Sua prova foi liberada pelo professor!')
             }
 
-            // Check if teacher forced submission
-            if (data.tentativa.status === 'entregue' && !submittedVoucher) {
-              setSubmittedVoucher(data.tentativa.comprovanteEntrega || null)
+            // Check if teacher forced submission / ended exam
+            if ((data.tentativa.status === 'entregue' || data.tentativa.status === 'expirada') && !submittedVoucher) {
+              setTentativa(data.tentativa)
+              setSubmittedVoucher(data.tentativa.comprovanteEntrega || {
+                hash: data.tentativa.comprovanteCodigo || `COMP-${(data.tentativa.id || '').slice(0, 16)}`,
+                provaId: prova.id,
+                alunoId: data.tentativa.alunoId,
+                alunoNome: data.tentativa.alunoNome,
+                matricula: data.tentativa.alunoMatricula || '',
+                dataHoraEntrega: data.tentativa.entregueEm || new Date().toISOString(),
+                totalQuestoes: prova.questoes?.length || 0,
+                totalRespostasRegistradas: Object.keys(data.tentativa.respostas || {}).length,
+                protocolo: data.tentativa.comprovanteCodigo || `PRT-${Date.now().toString(36).toUpperCase()}`
+              })
+              setSuspensionAlert(null)
+              if (data.tentativa.motivoCancelamento) {
+                setCancellationReason(data.tentativa.motivoCancelamento)
+                setCancelledModalOpen(true)
+              }
               setStarted(false)
             }
           }
@@ -467,9 +795,42 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
       const res = await fetch(`/api/provas-online/tentativas/${tentativa.id}/ocorrencias`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tipo, descricao })
+        body: JSON.stringify({
+          tipo,
+          descricao,
+          respostas
+        })
       })
       const data = await res.json()
+
+      if (data.cancelada || actionOnIncident === 'cancelar') {
+        const updatedAttempt: TentativaAluno = data.tentativa || {
+          ...tentativa,
+          status: 'entregue',
+          entregueEm: new Date().toISOString(),
+          motivoCancelamento: 'Prova encerrada e cancelada por infringir a regra de não minimizar ou sair da tela da avaliação.'
+        }
+        setTentativa(updatedAttempt)
+        setSubmittedVoucher(updatedAttempt.comprovanteEntrega || {
+          hash: updatedAttempt.comprovanteCodigo || `COMP-${(updatedAttempt.id || '').slice(0, 16)}`,
+          provaId: prova.id,
+          alunoId: updatedAttempt.alunoId,
+          alunoNome: updatedAttempt.alunoNome,
+          matricula: updatedAttempt.alunoMatricula || '',
+          dataHoraEntrega: updatedAttempt.entregueEm || new Date().toISOString(),
+          totalQuestoes: prova.questoes?.length || 0,
+          totalRespostasRegistradas: Object.keys(updatedAttempt.respostas || respostas || {}).length,
+          protocolo: updatedAttempt.comprovanteCodigo || `PRT-${Date.now().toString(36).toUpperCase()}`
+        })
+        setCancellationReason(
+          updatedAttempt.motivoCancelamento ||
+          'A prova foi encerrada porque você minimizou a janela ou trocou de aba durante a avaliação.'
+        )
+        setCancelledModalOpen(true)
+        setSuspensionAlert(null)
+        setStarted(false)
+        return
+      }
 
       if (data.suspensa || actionOnIncident === 'suspender') {
         setSuspensionAlert('Prova suspensa automaticamente pela supervisão da prova.')
@@ -477,20 +838,30 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
     } catch (err) {
       // Ignore network errors in incident logging
     }
-  }, [tentativa, started, actionOnIncident])
+  }, [tentativa, started, actionOnIncident, prova.id, prova.questoes?.length, respostas])
 
   // Setup Anti-Cheat Listeners
   useEffect(() => {
     if (!started || !tentativa || tentativa.status !== 'em_andamento') return
 
     function handleVisibilityChange() {
-      if (!monitorTabSwitch) return
+      if (!monitorTabSwitch && actionOnIncident !== 'cancelar') return
       if (document.hidden) {
         recordIncident('saida_tela', 'Aluno saiu da aba ou minimizou a janela da prova.')
       } else {
         if (actionOnIncident === 'alertar') {
           toast.warning('Atenção: A mudança de aba durante a prova foi registrada pela supervisão.')
         }
+      }
+    }
+
+    function handleWindowBlur() {
+      if (actionOnIncident === 'cancelar') {
+        setTimeout(() => {
+          if (!document.hasFocus() || document.hidden) {
+            recordIncident('saida_tela', 'Aluno minimizou a janela ou perdeu o foco da tela da avaliação.')
+          }
+        }, 300)
       }
     }
 
@@ -532,6 +903,7 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
     }
 
     document.addEventListener('visibilitychange', handleVisibilityChange)
+    window.addEventListener('blur', handleWindowBlur)
     document.addEventListener('fullscreenchange', handleFullscreenChange)
     window.addEventListener('copy', handleCopy)
     window.addEventListener('paste', handlePaste)
@@ -539,6 +911,7 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
 
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange)
+      window.removeEventListener('blur', handleWindowBlur)
       document.removeEventListener('fullscreenchange', handleFullscreenChange)
       window.removeEventListener('copy', handleCopy)
       window.removeEventListener('paste', handlePaste)
@@ -721,6 +1094,17 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
     scheduleAutosave()
   }
 
+  // Scroll utility to guarantee the view starts at the very top of the question
+  const scrollToExamTop = () => {
+    if (typeof window === 'undefined') return
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior })
+    if (document.scrollingElement) {
+      document.scrollingElement.scrollTop = 0
+    }
+    document.documentElement.scrollTop = 0
+    document.body.scrollTop = 0
+  }
+
   // Switch Question (triggers immediate save of previous)
   const goToQuestion = (index: number) => {
     if (index < 0 || index >= orderedQuestions.length) return
@@ -739,8 +1123,21 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
     if (!isSingleQuestionPage) {
       const el = document.getElementById(`question-card-${index}`)
       if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    } else {
+      scrollToExamTop()
     }
   }
+
+  // Sempre reiniciar a barra de rolagem no início do topo ao mudar de pergunta no modo pergunta única
+  useEffect(() => {
+    if (started && isSingleQuestionPage) {
+      scrollToExamTop()
+      const raf = requestAnimationFrame(() => {
+        scrollToExamTop()
+      })
+      return () => cancelAnimationFrame(raf)
+    }
+  }, [currentIndex, started, isSingleQuestionPage])
 
   // --- Final Delivery Submit Handler ---
   const handleFinalSubmit = async () => {
@@ -779,6 +1176,53 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
     } catch (err: any) {
       toast.error(err.message || 'Falha na entrega da prova')
     } finally {
+      setSubmitting(false)
+    }
+  }
+
+  // --- Confirm Exit & Finalize Early Handler ---
+  const handleConfirmExitAndSubmit = async () => {
+    if (!tentativa) {
+      handleExitExam()
+      return
+    }
+    setSubmitting(true)
+
+    try {
+      const revisaoArray = Array.from(flaggedIds)
+
+      const res = await fetch(`/api/provas-online/tentativas/${tentativa.id}/entregar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          respostas: respostas,
+          questoesRevisao: revisaoArray,
+          tempoGastoSegundos: Math.max(0, (prova.duracaoMinutos * 60) - timeRemainingSeconds),
+          motivoEntrega: 'saida_antecipada'
+        })
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Erro ao finalizar avaliação')
+      }
+
+      setSubmittedVoucher(data.comprovante)
+      setStarted(false)
+      setExitModalOpen(false)
+      safeRemoveOfflineQueue(storageQueueKey)
+
+      if (typeof document !== 'undefined' && document.fullscreenElement && document.exitFullscreen) {
+        document.exitFullscreen().catch(() => {})
+      }
+
+      toast.info('Avaliação finalizada com sucesso! Suas respostas foram salvas e consolidadas.')
+
+      const targetUrl = returnUrl || '/agenda-digital'
+      router.push(targetUrl)
+    } catch (err: any) {
+      toast.error(err.message || 'Falha ao encerrar a avaliação')
       setSubmitting(false)
     }
   }
@@ -829,14 +1273,174 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
   // =========================================================================
   // VIEW 1: VOUCHER / SUBMITTED RECEIPT (COMPROVANTE DIGITAL DE ENTREGA)
   // =========================================================================
-  if (submittedVoucher || (initialTentativa && (initialTentativa.status === 'entregue' || initialTentativa.status === 'expirada'))) {
-    const voucher = submittedVoucher || initialTentativa?.comprovanteEntrega
+  if (submittedVoucher || (tentativa && (tentativa.status === 'entregue' || tentativa.status === 'expirada')) || (initialTentativa && (initialTentativa.status === 'entregue' || initialTentativa.status === 'expirada'))) {
+    const voucher: ComprovanteEntrega = submittedVoucher || tentativa?.comprovanteEntrega || initialTentativa?.comprovanteEntrega || {
+      hash: tentativa?.comprovanteCodigo || initialTentativa?.comprovanteCodigo || `COMP-${(tentativa?.id || initialTentativa?.id || '').slice(0, 16)}`,
+      provaId: prova.id,
+      alunoId: tentativa?.alunoId || initialTentativa?.alunoId || '',
+      alunoNome: tentativa?.alunoNome || initialTentativa?.alunoNome || '',
+      matricula: tentativa?.alunoMatricula || initialTentativa?.alunoMatricula || '',
+      dataHoraEntrega: tentativa?.entregueEm || initialTentativa?.entregueEm || new Date().toISOString(),
+      totalQuestoes: prova.questoes?.length || 0,
+      totalRespostasRegistradas: Object.keys(tentativa?.respostas || initialTentativa?.respostas || {}).length,
+      protocolo: tentativa?.comprovanteCodigo || initialTentativa?.comprovanteCodigo || `PRT-${Date.now().toString(36).toUpperCase()}`
+    }
+
+    const isCancelled = Boolean(tentativa?.motivoCancelamento || initialTentativa?.motivoCancelamento)
 
     return (
-      <div style={{ maxWidth: '840px', margin: '0 auto', padding: '40px 20px' }}>
+      <div className="er-voucher-wrap" style={{ maxWidth: '840px', margin: '0 auto', padding: '40px 20px' }}>
+        <ExamRoomStyles />
+        {/* MODAL DE ENCERRAMENTO POR INFRAÇÃO (NÃO MINIMIZAR) */}
+        <AnimatePresence>
+          {cancelledModalOpen && (
+            <div style={{
+              position: 'fixed',
+              inset: 0,
+              zIndex: 99999,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '20px',
+              background: 'rgba(15, 23, 42, 0.75)',
+              backdropFilter: 'blur(10px)',
+              WebkitBackdropFilter: 'blur(10px)'
+            }}>
+              <motion.div
+                initial={{ opacity: 0, scale: 0.92, y: 16 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: -10 }}
+                className="er-modal-box"
+                style={{
+                  width: '100%',
+                  maxWidth: '520px',
+                  background: '#ffffff',
+                  borderRadius: '24px',
+                  border: '2px solid #fecdd3',
+                  boxShadow: '0 25px 60px rgba(0, 0, 0, 0.35)',
+                  padding: '32px 28px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '20px',
+                  textAlign: 'center'
+                }}
+              >
+                <div style={{
+                  width: '64px',
+                  height: '64px',
+                  borderRadius: '20px',
+                  background: '#fff1f2',
+                  border: '1.5px solid #fecdd3',
+                  color: '#e11d48',
+                  margin: '0 auto',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  boxShadow: '0 8px 20px rgba(225, 29, 72, 0.15)'
+                }}>
+                  <AlertOctagon size={34} />
+                </div>
+
+                <div>
+                  <span style={{
+                    fontSize: '11px',
+                    fontWeight: 800,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.08em',
+                    color: '#e11d48',
+                    background: '#ffe4e6',
+                    padding: '4px 12px',
+                    borderRadius: '20px',
+                    display: 'inline-block',
+                    marginBottom: '10px'
+                  }}>
+                    Infração de Regra Detectada
+                  </span>
+                  <h2 style={{ fontSize: '20px', fontWeight: 900, color: '#0f172a', margin: '0 0 8px', letterSpacing: '-0.02em' }}>
+                    Avaliação Encerrada Automaticamente
+                  </h2>
+                  <p style={{ fontSize: '13.5px', color: '#64748b', margin: 0, lineHeight: 1.55 }}>
+                    Você minimizou a janela do navegador, trocou de aba ou perdeu o foco da tela durante a realização da prova.
+                  </p>
+                </div>
+
+                {/* Card informativo de respostas computadas */}
+                <div style={{
+                  background: '#f8fafc',
+                  border: '1.5px solid #e2e8f0',
+                  borderRadius: '16px',
+                  padding: '18px 20px',
+                  textAlign: 'left',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '10px'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#059669', fontSize: '13px', fontWeight: 700 }}>
+                    <CheckCircle2 size={16} color="#059669" />
+                    <span>Suas respostas foram contabilizadas até onde você parou:</span>
+                  </div>
+
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: '1fr 1fr',
+                    gap: '12px',
+                    marginTop: '4px',
+                    padding: '12px',
+                    background: '#ffffff',
+                    borderRadius: '12px',
+                    border: '1px solid #e2e8f0'
+                  }}>
+                    <div>
+                      <span style={{ fontSize: '11px', color: '#64748b', display: 'block' }}>Respostas Computadas</span>
+                      <strong style={{ fontSize: '16px', color: '#059669' }}>
+                        {voucher?.totalRespostasRegistradas || answeredCount} registradas
+                      </strong>
+                    </div>
+                    <div>
+                      <span style={{ fontSize: '11px', color: '#64748b', display: 'block' }}>Total da Avaliação</span>
+                      <strong style={{ fontSize: '16px', color: '#0f172a' }}>
+                        {(prova.questoes || []).length} questões
+                      </strong>
+                    </div>
+                  </div>
+
+                  <p style={{ fontSize: '12px', color: '#64748b', margin: '4px 0 0', lineHeight: 1.45 }}>
+                    {cancellationReason || tentativa?.motivoCancelamento || 'Conforme a regra configurada pelo colégio, o encerramento foi concluído e as respostas assinaladas até o momento da infração foram preservadas e enviadas para correção.'}
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setCancelledModalOpen(false)}
+                  style={{
+                    width: '100%',
+                    padding: '13px 20px',
+                    borderRadius: '14px',
+                    background: 'linear-gradient(135deg, #0284c7, #0369a1)',
+                    border: 'none',
+                    color: '#ffffff',
+                    fontSize: '13.5px',
+                    fontWeight: 800,
+                    cursor: 'pointer',
+                    boxShadow: '0 4px 14px rgba(2, 132, 199, 0.35)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px'
+                  }}
+                >
+                  <FileText size={16} />
+                  Entendido, Ver Comprovante da Avaliação
+                </button>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+
         <motion.div
           initial={{ opacity: 0, scale: 0.98 }}
           animate={{ opacity: 1, scale: 1 }}
+          className="er-voucher-box"
           style={{
             background: '#ffffff',
             border: '1.5px solid #e2e8f0',
@@ -871,22 +1475,24 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
               width: '56px',
               height: '56px',
               borderRadius: '16px',
-              background: '#ecfdf5',
-              border: '1.5px solid #a7f3d0',
-              color: '#059669',
+              background: isCancelled ? '#fff1f2' : '#ecfdf5',
+              border: isCancelled ? '1.5px solid #fecdd3' : '1.5px solid #a7f3d0',
+              color: isCancelled ? '#e11d48' : '#059669',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center'
             }}>
-              <CheckCircle2 size={28} />
+              {isCancelled ? <AlertOctagon size={28} /> : <CheckCircle2 size={28} />}
             </div>
           </div>
 
           <h1 style={{ fontSize: '24px', fontWeight: 900, color: '#0f172a', margin: '0 0 8px', letterSpacing: '-0.02em' }}>
-            Avaliação Entregue com Sucesso!
+            {isCancelled ? 'Avaliação Encerrada e Respostas Computadas' : 'Avaliação Entregue com Sucesso!'}
           </h1>
-          <p style={{ fontSize: '14px', color: '#64748b', maxWidth: '520px', margin: '0 auto 28px', lineHeight: 1.5 }}>
-            Suas respostas foram processadas e armazenadas com segurança nos servidores da instituição.
+          <p style={{ fontSize: '14px', color: '#64748b', maxWidth: '540px', margin: '0 auto 28px', lineHeight: 1.5 }}>
+            {isCancelled
+              ? 'Esta avaliação foi encerrada por infração às regras de foco/janela. Todas as suas respostas foram computadas e consolidadas até onde você parou.'
+              : 'Suas respostas foram processadas e armazenadas com segurança nos servidores da instituição.'}
           </p>
 
           {/* Voucher Details Card */}
@@ -898,6 +1504,31 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
             textAlign: 'left',
             marginBottom: '32px'
           }}>
+            {isCancelled && (
+              <div style={{
+                marginBottom: '18px',
+                padding: '14px 18px',
+                borderRadius: '14px',
+                background: '#fff1f2',
+                border: '1.5px solid #fecdd3',
+                color: '#9f1239',
+                fontSize: '12.5px',
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: '10px'
+              }}>
+                <AlertOctagon size={18} color="#e11d48" style={{ flexShrink: 0, marginTop: '2px' }} />
+                <div>
+                  <strong style={{ display: 'block', color: '#881337', marginBottom: '2px' }}>
+                    Encerramento por Infração de Regras (Não Minimizar):
+                  </strong>
+                  <span>{tentativa?.motivoCancelamento || initialTentativa?.motivoCancelamento || 'Prova encerrada por infringir a regra de não minimizar ou sair da tela da avaliação.'}</span>
+                  <div style={{ marginTop: '4px', fontWeight: 600, color: '#059669' }}>
+                    ✓ Todas as {voucher?.totalRespostasRegistradas || answeredCount} respostas preenchidas até a saída foram computadas.
+                  </div>
+                </div>
+              </div>
+            )}
             <div style={{
               display: 'flex',
               alignItems: 'center',
@@ -957,7 +1588,7 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
               </div>
             </div>
 
-            <div style={{
+            <div className="er-voucher-grid" style={{
               display: 'grid',
               gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
               gap: '16px',
@@ -1068,10 +1699,12 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
     const isEndingSoon = effectiveDurationMinutes < prova.duracaoMinutos
 
     return (
-      <div style={{ maxWidth: '960px', margin: '0 auto', padding: '36px 20px 60px' }}>
+      <div className="er-briefing-wrap" style={{ maxWidth: '960px', margin: '0 auto', padding: '36px 20px 60px' }}>
+        <ExamRoomStyles />
         <motion.div
           initial={{ opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
+          className="er-briefing-card"
           style={{
             background: '#ffffff',
             border: '1.5px solid #e2e8f0',
@@ -1084,7 +1717,7 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
           }}
         >
           {/* Header Card */}
-          <div style={{
+          <div className="er-briefing-header" style={{
             display: 'flex',
             alignItems: 'flex-start',
             justifyContent: 'space-between',
@@ -1093,9 +1726,9 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
             paddingBottom: '22px',
             borderBottom: '1px solid #f1f5f9'
           }}>
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '16px', flex: 1, minWidth: '280px' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '16px', flex: 1, minWidth: '260px' }}>
               {/* Logo do Colégio Impacto */}
-              <div style={{
+              <div className="er-briefing-logo" style={{
                 width: '52px',
                 height: '52px',
                 borderRadius: '16px',
@@ -1117,7 +1750,7 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
               </div>
 
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', flexWrap: 'wrap' }}>
                   <span style={{
                     display: 'inline-flex',
                     alignItems: 'center',
@@ -1149,7 +1782,7 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
                   </span>
                 </div>
 
-              <h1 style={{
+              <h1 className="er-briefing-title" style={{
                 fontSize: '24px',
                 fontWeight: 900,
                 color: '#0f172a',
@@ -1167,7 +1800,7 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
             </div>
             </div>
 
-            <div style={{
+            <div className="er-valor-total-card" style={{
               background: '#f8fafc',
               border: '1.5px solid #e2e8f0',
               borderRadius: '16px',
@@ -1175,23 +1808,23 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
               textAlign: 'right',
               minWidth: '130px'
             }}>
-              <span style={{ fontSize: '11px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block' }}>
+              <span className="er-valor-label" style={{ fontSize: '11px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block' }}>
                 Valor Total
               </span>
-              <div style={{ fontSize: '26px', fontWeight: 900, color: '#0284c7', lineHeight: 1.1, marginTop: '2px' }}>
+              <div className="er-valor-num" style={{ fontSize: '26px', fontWeight: 900, color: '#0284c7', lineHeight: 1.1, marginTop: '2px' }}>
                 {prova.valorTotal.toFixed(1)} <span style={{ fontSize: '14px', fontWeight: 800, color: '#38bdf8' }}>pts</span>
               </div>
             </div>
           </div>
 
           {/* Quick Metrics Grid */}
-          <div style={{
+          <div className="er-metrics-grid" style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
             gap: '12px'
           }}>
             {/* Duração */}
-            <div style={{
+            <div className="er-metric-box" style={{
               background: '#ffffff',
               border: '1.5px solid #e2e8f0',
               borderRadius: '16px',
@@ -1200,7 +1833,7 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
               alignItems: 'center',
               gap: '14px'
             }}>
-              <div style={{
+              <div className="er-metric-icon" style={{
                 width: '42px',
                 height: '42px',
                 borderRadius: '12px',
@@ -1215,17 +1848,17 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
                 <Clock size={20} />
               </div>
               <div>
-                <span style={{ fontSize: '11px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'block' }}>
+                <span className="er-metric-label" style={{ fontSize: '11px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'block' }}>
                   Duração
                 </span>
-                <strong style={{ fontSize: '18px', fontWeight: 900, color: '#0f172a' }}>
+                <strong className="er-metric-val" style={{ fontSize: '18px', fontWeight: 900, color: '#0f172a' }}>
                   {prova.duracaoMinutos} min
                 </strong>
               </div>
             </div>
 
             {/* Questões */}
-            <div style={{
+            <div className="er-metric-box" style={{
               background: '#ffffff',
               border: '1.5px solid #e2e8f0',
               borderRadius: '16px',
@@ -1234,7 +1867,7 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
               alignItems: 'center',
               gap: '14px'
             }}>
-              <div style={{
+              <div className="er-metric-icon" style={{
                 width: '42px',
                 height: '42px',
                 borderRadius: '12px',
@@ -1249,17 +1882,17 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
                 <FileCheck2 size={20} />
               </div>
               <div>
-                <span style={{ fontSize: '11px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'block' }}>
+                <span className="er-metric-label" style={{ fontSize: '11px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'block' }}>
                   Questões
                 </span>
-                <strong style={{ fontSize: '18px', fontWeight: 900, color: '#0f172a' }}>
+                <strong className="er-metric-val" style={{ fontSize: '18px', fontWeight: 900, color: '#0f172a' }}>
                   {(prova.questoes || []).length} itens
                 </strong>
               </div>
             </div>
 
             {/* Encerramento */}
-            <div style={{
+            <div className="er-metric-box" style={{
               background: '#ffffff',
               border: '1.5px solid #e2e8f0',
               borderRadius: '16px',
@@ -1268,7 +1901,7 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
               alignItems: 'center',
               gap: '14px'
             }}>
-              <div style={{
+              <div className="er-metric-icon" style={{
                 width: '42px',
                 height: '42px',
                 borderRadius: '12px',
@@ -1283,17 +1916,22 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
                 <Calendar size={20} />
               </div>
               <div>
-                <span style={{ fontSize: '11px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'block' }}>
+                <span className="er-metric-label" style={{ fontSize: '11px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'block' }}>
                   Encerramento
                 </span>
-                <strong style={{ fontSize: '15px', fontWeight: 900, color: '#0f172a' }}>
-                  {new Date(deadlineStr).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })} às {new Date(deadlineStr).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                <strong className="er-metric-val" style={{ fontSize: '15px', fontWeight: 900, color: '#0f172a' }}>
+                  <span className="hidden sm:inline">
+                    {new Date(deadlineStr).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })} às {new Date(deadlineStr).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                  <span className="sm:hidden">
+                    {new Date(deadlineStr).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}, {new Date(deadlineStr).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                  </span>
                 </strong>
               </div>
             </div>
 
             {/* Conexão */}
-            <div style={{
+            <div className="er-metric-box" style={{
               background: '#ffffff',
               border: '1.5px solid #e2e8f0',
               borderRadius: '16px',
@@ -1302,7 +1940,7 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
               alignItems: 'center',
               gap: '14px'
             }}>
-              <div style={{
+              <div className="er-metric-icon" style={{
                 width: '42px',
                 height: '42px',
                 borderRadius: '12px',
@@ -1317,11 +1955,12 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
                 <Wifi size={20} />
               </div>
               <div>
-                <span style={{ fontSize: '11px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'block' }}>
+                <span className="er-metric-label" style={{ fontSize: '11px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'block' }}>
                   Conexão
                 </span>
-                <strong style={{ fontSize: '15px', fontWeight: 900, color: isOnline ? '#15803d' : '#e11d48' }}>
-                  {isOnline ? 'Online e Sincronizado' : 'Offline'}
+                <strong className="er-metric-val" style={{ fontSize: '15px', fontWeight: 900, color: isOnline ? '#15803d' : '#e11d48' }}>
+                  <span className="hidden sm:inline">{isOnline ? 'Online e Sincronizado' : 'Offline'}</span>
+                  <span className="sm:hidden">{isOnline ? 'Online' : 'Offline'}</span>
                 </strong>
               </div>
             </div>
@@ -1329,7 +1968,7 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
 
           {/* Near-Closing Warning if applicable */}
           {isEndingSoon && (
-            <div style={{
+            <div className="er-banner" style={{
               padding: '14px 18px',
               borderRadius: '14px',
               background: '#fffbeb',
@@ -1351,10 +1990,49 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
             </div>
           )}
 
+          {/* Warning banner when 'cancelar' action is enabled */}
+          {actionOnIncident === 'cancelar' && (
+            <div className="er-banner" style={{
+              padding: '16px 20px',
+              borderRadius: '16px',
+              background: 'linear-gradient(135deg, #fff1f2 0%, #ffe4e6 100%)',
+              border: '2px solid #fda4af',
+              boxShadow: '0 4px 14px rgba(225, 29, 72, 0.08)',
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: '14px',
+              color: '#9f1239',
+              fontSize: '13px',
+              lineHeight: 1.5
+            }}>
+              <div className="er-banner-icon" style={{
+                width: '38px',
+                height: '38px',
+                borderRadius: '12px',
+                background: '#ffffff',
+                border: '1.5px solid #fecdd3',
+                color: '#e11d48',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+                boxShadow: '0 2px 8px rgba(225, 29, 72, 0.12)'
+              }}>
+                <AlertOctagon size={20} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <strong style={{ display: 'block', color: '#881337', fontSize: '14px', fontWeight: 900, marginBottom: '3px' }}>
+                  Aviso Importante: Prova com Cancelamento Automático ao Minimizar
+                </strong>
+                Esta avaliação possui monitoramento estrito de integridade. É expressamente proibido <strong>minimizar a janela, alternar de aba ou trocar de aplicativo</strong> durante a realização da prova. Caso você saia ou minimize a tela, <strong>sua avaliação será imediatamente cancelada e encerrada</strong>, e suas respostas serão <strong>contabilizadas e consolidadas apenas até onde você parou</strong>. Mantenha o navegador focado em tela cheia até a entrega.
+              </div>
+            </div>
+          )}
+
           {/* Instructions & Guidelines Cards */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
             {/* Instruções Gerais */}
-            <div style={{
+            <div className="er-instructions-box" style={{
               background: '#f8fafc',
               border: '1.5px solid #e2e8f0',
               borderRadius: '18px',
@@ -1369,22 +2047,10 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
               <p style={{ fontSize: '13px', color: '#475569', lineHeight: 1.6, margin: 0 }}>
                 {prova.instrucoes || 'Leia com atenção cada questão antes de responder. Suas respostas são salvas automaticamente pelo sistema.'}
               </p>
-              {prova.materiaisPermitidos && (
-                <div style={{
-                  marginTop: '12px',
-                  paddingTop: '10px',
-                  borderTop: '1px solid #e2e8f0',
-                  fontSize: '12.5px',
-                  color: '#64748b'
-                }}>
-                  <strong style={{ color: '#334155' }}>Materiais autorizados: </strong>
-                  {prova.materiaisPermitidos}
-                </div>
-              )}
             </div>
 
             {/* Regras de Navegação e Supervisão */}
-            <div style={{
+            <div className="er-instructions-box" style={{
               background: '#f8fafc',
               border: '1.5px solid #e2e8f0',
               borderRadius: '18px',
@@ -1441,9 +2107,31 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
                     <span><strong>Suspensão Automática:</strong> Infrações não autorizadas suspenderão a prova imediatamente.</span>
                   </div>
                 )}
+                {actionOnIncident === 'cancelar' && (
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: '8px',
+                    padding: '8px 12px',
+                    borderRadius: '10px',
+                    background: '#fff1f2',
+                    border: '1px solid #fecdd3',
+                    color: '#9f1239',
+                    fontWeight: 600
+                  }}>
+                    <AlertOctagon size={15} color="#e11d48" style={{ flexShrink: 0, marginTop: '2px' }} />
+                    <span>
+                      <strong>Regra de Não Minimizar Ativa:</strong> Sair da aba ou minimizar a janela cancela e encerra a avaliação na hora, computando as respostas até o momento da infração.
+                    </span>
+                  </div>
+                )}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <Check size={14} color="#0284c7" strokeWidth={3} />
                   <span>Suas respostas possuem salvamento automático e tolerância a oscilações temporárias de rede.</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Check size={14} color="#0284c7" strokeWidth={3} />
+                  <span>Ao optar por sair da prova, a avaliação é finalizada definitivamente: as questões respondidas são computadas e as não respondidas anuladas (sem pontuação).</span>
                 </div>
               </div>
             </div>
@@ -1451,7 +2139,7 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
 
           {/* PIN Verification if required */}
           {hasPinRequirement && (
-            <div style={{
+            <div className="er-instructions-box" style={{
               background: '#f0f9ff',
               border: '1.5px solid #bae6fd',
               borderRadius: '18px',
@@ -1522,6 +2210,7 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
           {/* Academic Integrity Pledge Box */}
           <div
             onClick={() => setPledgeAccepted(!pledgeAccepted)}
+            className="er-pledge-card"
             style={{
               padding: '18px 20px',
               borderRadius: '18px',
@@ -1563,11 +2252,27 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
                 Termo de Integridade Acadêmica e Responsabilidade Escolar:
               </strong>
               Declaro que compreendi todas as regras desta avaliação. Comprometo-me a realizar este exame com integridade e dedicação, de forma estritamente individual, sem consulta a materiais não autorizados e sem comunicação com terceiros.
+              {actionOnIncident === 'cancelar' && (
+                <div style={{
+                  marginTop: '8px',
+                  paddingTop: '8px',
+                  borderTop: '1px dashed rgba(225, 29, 72, 0.3)',
+                  fontSize: '12.5px',
+                  fontWeight: 700,
+                  color: '#be123c',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}>
+                  <AlertOctagon size={14} color="#e11d48" style={{ flexShrink: 0 }} />
+                  <span>Estou ciente de que não posso minimizar a janela ou sair da tela, sob pena de encerramento imediato e cômputo apenas das respostas até onde parei.</span>
+                </div>
+              )}
             </div>
           </div>
 
           {/* Bottom Navigation & Start Button */}
-          <div style={{
+          <div className="er-briefing-actions" style={{
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
@@ -1578,6 +2283,7 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
           }}>
             <button
               onClick={() => router.push(returnUrl || '/provas-online')}
+              className="er-briefing-btn-back"
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -1608,6 +2314,7 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
             <button
               onClick={handleStartExam}
               disabled={startingLoading || !isOnline || !pledgeAccepted || (hasPinRequirement && !pinCode.trim())}
+              className="er-briefing-btn-start"
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -1671,6 +2378,7 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
 
     return (
       <div
+        className="er-question-card"
         style={{
           background: '#ffffff',
           border: '1.5px solid #e2e8f0',
@@ -1683,7 +2391,7 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
         }}
       >
         {/* Question Header */}
-        <div style={{
+        <div className="er-question-header" style={{
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
@@ -1693,7 +2401,7 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
           flexWrap: 'wrap'
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <span style={{
+            <span className="er-qnum-badge" style={{
               width: '36px',
               height: '36px',
               borderRadius: '12px',
@@ -1722,6 +2430,7 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
           <button
             type="button"
             onClick={() => handleToggleFlag(q.id)}
+            className="er-qbtn-review"
             style={{
               display: 'inline-flex',
               alignItems: 'center',
@@ -1738,12 +2447,13 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
             }}
           >
             <Bookmark size={14} color={isQFlagged ? '#f59e0b' : '#94a3b8'} fill={isQFlagged ? '#f59e0b' : 'none'} />
-            {isQFlagged ? 'Marcada para Revisar' : 'Marcar para Revisar'}
+            <span className="hidden sm:inline">{isQFlagged ? 'Marcada para Revisar' : 'Marcar para Revisar'}</span>
+            <span className="sm:hidden">{isQFlagged ? 'Revisando' : 'Revisar'}</span>
           </button>
         </div>
 
         {/* Question Statement / Enunciado */}
-        <div style={{
+        <div className="er-enunciado" style={{
           padding: '24px 0',
           borderBottom: '1px solid #f1f5f9',
           color: '#0f172a',
@@ -1769,6 +2479,7 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
                   <div
                     key={alt.id}
                     onClick={() => handleSelectSingleChoice(q.id, alt.id)}
+                    className="er-alt-row"
                     style={{
                       display: 'flex',
                       alignItems: 'center',
@@ -1794,7 +2505,7 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
                       }
                     }}
                   >
-                    <div style={{
+                    <div className="er-alt-letter" style={{
                       width: '32px',
                       height: '32px',
                       borderRadius: '10px',
@@ -1811,7 +2522,7 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
                     }}>
                       {letter}
                     </div>
-                    <div style={{
+                    <div className="er-alt-text" style={{
                       flex: 1,
                       fontSize: fontSize === 'sm' ? '13px' : fontSize === 'lg' ? '16px' : '14px',
                       color: isSelected ? '#0369a1' : '#1e293b',
@@ -1847,6 +2558,7 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
                   <div
                     key={alt.id}
                     onClick={() => handleToggleMultipleChoice(q.id, alt.id)}
+                    className="er-alt-row"
                     style={{
                       display: 'flex',
                       alignItems: 'center',
@@ -1860,7 +2572,7 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
                       transition: 'all 0.15s ease'
                     }}
                   >
-                    <div style={{
+                    <div className="er-alt-letter" style={{
                       width: '28px',
                       height: '28px',
                       borderRadius: '8px',
@@ -1874,7 +2586,7 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
                     }}>
                       {isSelected ? <Check size={16} strokeWidth={3} /> : <span style={{ fontSize: '12px', fontWeight: 800 }}>{letter}</span>}
                     </div>
-                    <div style={{
+                    <div className="er-alt-text" style={{
                       flex: 1,
                       fontSize: fontSize === 'sm' ? '13px' : fontSize === 'lg' ? '16px' : '14px',
                       color: isSelected ? '#0369a1' : '#1e293b',
@@ -1902,6 +2614,7 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
                 return (
                   <div
                     key={item.id}
+                    className="er-vf-row"
                     style={{
                       display: 'flex',
                       alignItems: 'center',
@@ -1936,7 +2649,7 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
                       </div>
                     </div>
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+                    <div className="er-vf-actions" style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
                       <button
                         type="button"
                         onClick={() => handleToggleTrueFalse(q.id, item.id, true)}
@@ -2005,6 +2718,7 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
                 value={qAnswer?.textoDissertativo || ''}
                 onChange={e => handleEssayChange(q.id, e.target.value)}
                 placeholder="Escreva sua resolução aqui de forma clara e fundamentada..."
+                className="er-essay-textarea"
                 style={{
                   width: '100%',
                   minHeight: '160px',
@@ -2084,7 +2798,7 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
 
         {/* Navigation Bottom Footer (only for single question mode) */}
         {showPaginationFooter && (
-          <div style={{
+          <div className="er-pagination-bar" style={{
             paddingTop: '20px',
             borderTop: '1px solid #f1f5f9',
             display: 'flex',
@@ -2119,7 +2833,7 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
               Anterior
             </button>
 
-            <span style={{
+            <span className="er-pagination-pill" style={{
               fontSize: '12.5px',
               color: '#64748b',
               fontWeight: 800,
@@ -2154,7 +2868,7 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
                 onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-1px)'}
                 onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
               >
-                Próxima Questão
+                <span>Próxima<span className="hidden sm:inline"> Questão</span></span>
                 <ChevronRight size={16} />
               </button>
             ) : (
@@ -2192,9 +2906,9 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
 
   return (
     <div style={{ minHeight: '100vh', background: '#f8fafc', color: '#0f172a', display: 'flex', flexDirection: 'column', paddingBottom: '60px' }}>
-      
+      <ExamRoomStyles />
       {/* 1. STICKY TOPBAR COM GRADIENTE ULTRA MODERNO */}
-      <header style={{
+      <header className="er-topbar" style={{
         position: 'sticky',
         top: 0,
         zIndex: 40,
@@ -2216,12 +2930,12 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
           opacity: 0.85
         }} />
 
-        <div style={{ maxWidth: '1440px', margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px' }}>
+        <div className="er-topbar-inner" style={{ maxWidth: '1440px', margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px' }}>
           
           {/* Left: School Logo & Exam Title */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '14px', minWidth: 0, flex: '1 1 auto' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0, flex: '1 1 auto' }}>
             {/* Logo do Colégio Impacto */}
-            <div style={{
+            <div className="er-topbar-logo" style={{
               width: '42px',
               height: '42px',
               borderRadius: '12px',
@@ -2280,7 +2994,7 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
 
             {/* Exam Title & Discipline */}
             <div style={{ minWidth: 0, flex: '1 1 auto' }}>
-              <h2 style={{
+              <h2 className="er-topbar-title" style={{
                 fontSize: '14.5px',
                 fontWeight: 800,
                 color: '#ffffff',
@@ -2295,7 +3009,7 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
                 {prova.titulo}
               </h2>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '2px' }}>
-                <span style={{
+                <span className="er-topbar-subtitle" style={{
                   fontSize: '12px',
                   color: '#94a3b8',
                   fontWeight: 600,
@@ -2326,7 +3040,7 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
           {/* Center: Autosave Status Pill */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
             {saveStatus === 'saved' && (
-              <span style={{
+              <span className="er-topbar-save-status" style={{
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: '6px',
@@ -2342,11 +3056,12 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
                 letterSpacing: '0.01em'
               }}>
                 <Check size={13} strokeWidth={3} color="#34d399" />
-                Salvo {lastSavedAt && `(${lastSavedAt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })})`}
+                <span className="hidden md:inline">Salvo {lastSavedAt && `(${lastSavedAt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })})`}</span>
+                <span className="md:hidden">Salvo</span>
               </span>
             )}
             {saveStatus === 'saving' && (
-              <span style={{
+              <span className="er-topbar-save-status" style={{
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: '6px',
@@ -2362,11 +3077,12 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
                 letterSpacing: '0.01em'
               }}>
                 <RefreshCw size={13} className="animate-spin" color="#38bdf8" />
-                Salvando respostas...
+                <span className="hidden md:inline">Salvando respostas...</span>
+                <span className="md:hidden">Salvando...</span>
               </span>
             )}
             {saveStatus === 'offline_queued' && (
-              <span style={{
+              <span className="er-topbar-save-status" style={{
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: '6px',
@@ -2382,12 +3098,14 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
                 letterSpacing: '0.01em'
               }}>
                 <WifiOff size={13} color="#fbbf24" />
-                Sem conexão — {pendingSyncCount} alterações locais
+                <span className="hidden md:inline">Sem conexão — {pendingSyncCount} alterações</span>
+                <span className="md:hidden">Offline ({pendingSyncCount})</span>
               </span>
             )}
             {saveStatus === 'error' && (
               <button
                 onClick={() => syncPendingAnswers()}
+                className="er-topbar-save-status"
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
@@ -2407,19 +3125,20 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
                 }}
               >
                 <AlertCircle size={13} color="#f87171" />
-                Falha ao sincronizar • Clique para reenviar
+                <span className="hidden md:inline">Falha ao sincronizar • Clique para reenviar</span>
+                <span className="md:hidden">Reenviar</span>
               </button>
             )}
           </div>
 
           {/* Right: Timer, Accessibility, Calculator, Fullscreen & Deliver Button */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
             {/* Countdown Timer */}
-            <div style={{
+            <div className="er-topbar-timer" style={{
               display: 'flex',
               alignItems: 'center',
-              gap: '7px',
-              padding: '6px 14px',
+              gap: '6px',
+              padding: '6px 12px',
               borderRadius: '12px',
               fontWeight: 800,
               fontSize: '14px',
@@ -2431,13 +3150,12 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
               boxShadow: isTimeCritical ? '0 0 16px rgba(239, 68, 68, 0.35)' : '0 2px 8px rgba(0, 0, 0, 0.2)',
               transition: 'all 0.2s ease'
             }}>
-              <Clock size={16} color={isTimeCritical ? '#ef4444' : '#38bdf8'} className={isTimeCritical ? 'animate-pulse' : ''} />
+              <Clock size={15} color={isTimeCritical ? '#ef4444' : '#38bdf8'} className={isTimeCritical ? 'animate-pulse' : ''} />
               <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 800 }}>{formatTimer(timeRemainingSeconds)}</span>
             </div>
 
             {/* Accessibility Font Size Zoom */}
-            <div style={{
-              display: 'inline-flex',
+            <div className="hidden md:inline-flex" style={{
               alignItems: 'center',
               background: 'rgba(255, 255, 255, 0.07)',
               border: '1px solid rgba(255, 255, 255, 0.14)',
@@ -2509,6 +3227,7 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
               type="button"
               onClick={() => setCalculatorOpen(!calculatorOpen)}
               title="Calculadora Integrada"
+              className="hidden md:inline-flex"
               style={{
                 padding: '7px 13px',
                 borderRadius: '10px',
@@ -2516,7 +3235,6 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
                 background: calculatorOpen ? 'rgba(56, 189, 248, 0.22)' : 'rgba(255, 255, 255, 0.08)',
                 color: calculatorOpen ? '#38bdf8' : '#e2e8f0',
                 cursor: 'pointer',
-                display: 'inline-flex',
                 alignItems: 'center',
                 gap: '6px',
                 fontSize: '12px',
@@ -2534,6 +3252,7 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
             <button
               onClick={enterFullscreen}
               title={isFullscreen ? "Sair da Tela Cheia" : "Tela Cheia"}
+              className="hidden md:inline-flex"
               style={{
                 padding: '7px 10px',
                 borderRadius: '10px',
@@ -2541,7 +3260,6 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
                 background: 'rgba(255, 255, 255, 0.08)',
                 color: '#e2e8f0',
                 cursor: 'pointer',
-                display: 'inline-flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 backdropFilter: 'blur(10px)',
@@ -2560,20 +3278,57 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
               {isFullscreen ? <Minimize2 size={16} color="#7dd3fc" /> : <Maximize2 size={16} color="#7dd3fc" />}
             </button>
 
-            {/* Deliver Exam Top Button */}
+            {/* Exit / Return Button in Topbar */}
             <button
-              onClick={() => setSubmitModalOpen(true)}
+              type="button"
+              onClick={() => setExitModalOpen(true)}
+              title="Sair para a Agenda Digital"
+              className="er-topbar-btn-exit"
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
-                gap: '7px',
-                padding: '8px 18px',
-                borderRadius: '12px',
+                gap: '5px',
+                padding: '7px 12px',
+                borderRadius: '10px',
+                background: 'rgba(255, 255, 255, 0.08)',
+                border: '1px solid rgba(255, 255, 255, 0.2)',
+                color: '#e2e8f0',
+                fontWeight: 700,
+                fontSize: '12px',
+                cursor: 'pointer',
+                backdropFilter: 'blur(10px)',
+                transition: 'all 0.15s ease'
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.15)'
+                e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.35)'
+                e.currentTarget.style.color = '#ffffff'
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)'
+                e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.2)'
+                e.currentTarget.style.color = '#e2e8f0'
+              }}
+            >
+              <LogOut size={13} color="#94a3b8" />
+              <span className="hidden sm:inline">Sair</span>
+            </button>
+
+            {/* Deliver Exam Top Button */}
+            <button
+              onClick={() => setSubmitModalOpen(true)}
+              className="er-topbar-btn-deliver"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '7px 14px',
+                borderRadius: '10px',
                 background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
                 border: '1px solid rgba(255, 255, 255, 0.25)',
                 color: '#ffffff',
                 fontWeight: 800,
-                fontSize: '12.5px',
+                fontSize: '12px',
                 cursor: 'pointer',
                 boxShadow: '0 4px 14px rgba(16, 185, 129, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.35)',
                 transition: 'all 0.15s ease',
@@ -2589,8 +3344,8 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
                 e.currentTarget.style.boxShadow = '0 4px 14px rgba(16, 185, 129, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.35)'
               }}
             >
-              <Send size={13} color="#ffffff" />
-              <span>Entregar Prova</span>
+              <Send size={12} color="#ffffff" />
+              <span>Entregar<span className="hidden sm:inline"> Prova</span></span>
             </button>
           </div>
         </div>
@@ -2641,7 +3396,7 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
           background: 'rgba(15, 23, 42, 0.65)',
           backdropFilter: 'blur(8px)'
         }}>
-          <div style={{
+          <div className="er-modal-box" style={{
             width: '100%',
             maxWidth: '480px',
             background: '#ffffff',
@@ -2677,33 +3432,68 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
             <p style={{ fontSize: '11.5px', color: '#94a3b8', margin: 0 }}>
               O tempo restante da sua prova permanece pausado e protegido no servidor.
             </p>
-            <button
-              onClick={() => syncPendingAnswers()}
-              style={{
-                width: '100%',
-                padding: '12px',
-                borderRadius: '12px',
-                background: '#f1f5f9',
-                border: '1px solid #cbd5e1',
-                color: '#334155',
-                fontSize: '12.5px',
-                fontWeight: 700,
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '8px'
-              }}
-            >
-              <RefreshCw size={15} color="#0284c7" />
-              Verificar se já fui liberado
-            </button>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%', marginTop: '6px' }}>
+              <button
+                type="button"
+                onClick={() => syncPendingAnswers()}
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  borderRadius: '12px',
+                  background: '#f0f9ff',
+                  border: '1.5px solid #bae6fd',
+                  color: '#0369a1',
+                  fontSize: '12.5px',
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                <RefreshCw size={15} color="#0284c7" />
+                Verificar se já fui liberado
+              </button>
+              <button
+                type="button"
+                onClick={() => setExitModalOpen(true)}
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  borderRadius: '12px',
+                  background: '#ffffff',
+                  border: '1.5px solid #cbd5e1',
+                  color: '#475569',
+                  fontSize: '12.5px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  transition: 'all 0.15s ease'
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.borderColor = '#94a3b8'
+                  e.currentTarget.style.color = '#0f172a'
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.borderColor = '#cbd5e1'
+                  e.currentTarget.style.color = '#475569'
+                }}
+              >
+                <LogOut size={15} />
+                Sair e Finalizar Prova
+              </button>
+            </div>
           </div>
         </div>
       )}
 
       {/* 3.1 FULLSCREEN ENFORCEMENT OVERLAY */}
-      {requiresFullscreen && started && !isFullscreen && !submittedVoucher && !suspensionAlert && (
+      {requiresFullscreen && started && !isFullscreen && !submittedVoucher && !suspensionAlert && !cancelledModalOpen && (
         <div style={{
           position: 'fixed',
           inset: 0,
@@ -2715,7 +3505,7 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
           background: 'rgba(15, 23, 42, 0.85)',
           backdropFilter: 'blur(10px)'
         }}>
-          <div style={{
+          <div className="er-modal-box" style={{
             width: '100%',
             maxWidth: '480px',
             background: '#ffffff',
@@ -2865,7 +3655,7 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
           flexDirection: 'column',
           gap: '16px'
         }}>
-          <div style={{
+          <div className="er-nav-card" style={{
             background: '#ffffff',
             border: '1.5px solid #e2e8f0',
             borderRadius: '24px',
@@ -2932,6 +3722,7 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
                     type="button"
                     onClick={() => goToQuestion(idx)}
                     disabled={isNavDisabled}
+                    className="er-nav-qbtn"
                     style={{
                       width: '44px',
                       height: '44px',
@@ -3061,6 +3852,7 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
+              className="er-modal-box"
               style={{
                 width: '100%',
                 maxWidth: '480px',
@@ -3200,6 +3992,180 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
                     <>
                       <CheckCircle2 size={16} />
                       Sim, Entregar Prova
+                    </>
+                  )}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* 5.1 EXIT CONFIRMATION MODAL */}
+      <AnimatePresence>
+        {exitModalOpen && (
+          <div style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 10000,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '16px',
+            background: 'rgba(15, 23, 42, 0.75)',
+            backdropFilter: 'blur(10px)',
+            WebkitBackdropFilter: 'blur(10px)'
+          }}>
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="er-modal-box"
+              style={{
+                width: '100%',
+                maxWidth: '460px',
+                background: '#ffffff',
+                borderRadius: '24px',
+                border: '1.5px solid #fecdd3',
+                boxShadow: '0 25px 60px rgba(0, 0, 0, 0.3)',
+                padding: '28px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '16px'
+              }}
+            >
+              <div style={{
+                width: '52px',
+                height: '52px',
+                borderRadius: '16px',
+                background: '#fff1f2',
+                border: '1.5px solid #fecdd3',
+                color: '#e11d48',
+                margin: '0 auto',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                boxShadow: '0 4px 14px rgba(225, 29, 72, 0.15)'
+              }}>
+                <AlertTriangle size={26} />
+              </div>
+
+              <div style={{ textAlign: 'center' }}>
+                <h2 style={{ fontSize: '18px', fontWeight: 900, color: '#0f172a', margin: '0 0 6px' }}>
+                  Encerrar e Sair da Avaliação?
+                </h2>
+                <p style={{ fontSize: '13px', color: '#64748b', margin: 0, lineHeight: 1.5 }}>
+                  Atenção: Ao sair, a prova será <strong>concluída definitivamente</strong> no sistema.
+                </p>
+              </div>
+
+              {/* Box de alerta bem evidente */}
+              <div style={{
+                background: '#fff7ed',
+                border: '1.5px solid #fed7aa',
+                borderRadius: '16px',
+                padding: '14px 16px',
+                textAlign: 'left',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '8px'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#c2410c', fontWeight: 800, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  <AlertTriangle size={15} />
+                  Aviso Importante de Encerramento
+                </div>
+                <p style={{ fontSize: '12.5px', color: '#9a3412', margin: 0, lineHeight: 1.55 }}>
+                  As perguntas que você respondeu <strong>ficarão salvas</strong> e serão computadas na sua nota. Porém, <strong>as questões não respondidas serão anuladas (sem pontuação)</strong>. Você <strong>não poderá retornar</strong> à prova após sair.
+                </p>
+              </div>
+
+              {/* Resumo das questões */}
+              <div style={{
+                background: '#f8fafc',
+                border: '1px solid #e2e8f0',
+                borderRadius: '14px',
+                padding: '12px 14px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '8px',
+                fontSize: '12.5px'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ color: '#15803d', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700 }}>
+                    <CheckCircle2 size={15} color="#16a34a" />
+                    {answeredCount} questão(ões) respondida(s)
+                  </span>
+                  <span style={{ fontSize: '11px', color: '#166534', fontWeight: 800, background: '#dcfce7', padding: '2px 8px', borderRadius: '6px' }}>
+                    Ficarão salvas
+                  </span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ color: blankCount > 0 ? '#b91c1c' : '#64748b', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700 }}>
+                    <XCircle size={15} color={blankCount > 0 ? '#dc2626' : '#94a3b8'} />
+                    {blankCount} questão(ões) em branco
+                  </span>
+                  <span style={{
+                    fontSize: '11px',
+                    color: blankCount > 0 ? '#991b1b' : '#64748b',
+                    fontWeight: 800,
+                    background: blankCount > 0 ? '#fee2e2' : '#f1f5f9',
+                    padding: '2px 8px',
+                    borderRadius: '6px'
+                  }}>
+                    {blankCount > 0 ? 'Serão anuladas (0 pts)' : 'Nenhuma em branco'}
+                  </span>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px', marginTop: '6px' }}>
+                <button
+                  type="button"
+                  onClick={() => setExitModalOpen(false)}
+                  disabled={submitting}
+                  style={{
+                    flex: 1,
+                    padding: '11px 14px',
+                    borderRadius: '12px',
+                    background: '#ffffff',
+                    border: '1.5px solid #cbd5e1',
+                    color: '#475569',
+                    fontSize: '13px',
+                    fontWeight: 700,
+                    cursor: submitting ? 'not-allowed' : 'pointer'
+                  }}
+                >
+                  Continuar na Prova
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmExitAndSubmit}
+                  disabled={submitting}
+                  style={{
+                    flex: 1,
+                    padding: '11px 14px',
+                    borderRadius: '12px',
+                    background: 'linear-gradient(135deg, #e11d48, #be123c)',
+                    border: 'none',
+                    color: '#ffffff',
+                    fontSize: '13px',
+                    fontWeight: 800,
+                    cursor: submitting ? 'not-allowed' : 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px',
+                    boxShadow: '0 4px 14px rgba(225, 29, 72, 0.3)'
+                  }}
+                >
+                  {submitting ? (
+                    <>
+                      <RefreshCw size={15} className="animate-spin" />
+                      Encerrando...
+                    </>
+                  ) : (
+                    <>
+                      <LogOut size={15} />
+                      Encerrar e Sair
                     </>
                   )}
                 </button>

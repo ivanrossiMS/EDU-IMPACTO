@@ -215,7 +215,7 @@ export async function GET(request: Request) {
           .filter(t => t.alunoId === alunoId || (dbAluno.matricula && t.alunoMatricula === dbAluno.matricula))
           .sort((a, b) => new Date(b.iniciadaEm || b.createdAt || 0).getTime() - new Date(a.iniciadaEm || a.createdAt || 0).getTime())
 
-        const activeTentativa = myTentativas.find(t => t.status === 'em_andamento')
+        const activeTentativa = myTentativas.find(t => t.status === 'em_andamento' || t.status === 'suspensa')
         const submittedTentativas = myTentativas.filter(t => t.status === 'entregue' || t.status === 'expirada')
         const canView = shouldPublishResults(prova, tentativas)
 
@@ -226,6 +226,7 @@ export async function GET(request: Request) {
             tentativasRealizadas: myTentativas.length,
             tentativasPermitidas: prova.quantidadeTentativas || 1,
             tentativaAtivaId: activeTentativa?.id || null,
+            statusTentativaAtiva: activeTentativa?.status || null,
             ultimaTentativa: myTentativas[0] || null,
             submetida: submittedTentativas.length > 0,
             resultadoLiberado: canView

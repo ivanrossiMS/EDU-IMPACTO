@@ -11,7 +11,7 @@ import {
   BookMarked, HelpCircle, ArrowUpRight, Award, Lock, Unlock,
   Layers, UserCheck, Flame, Timer, Check, Send, Edit3, X,
   GraduationCap, AlertCircle, Printer, Link2, Copy, Share2,
-  SlidersHorizontal, Trash2
+  SlidersHorizontal, Trash2, RotateCcw
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useApp } from '@/lib/context'
@@ -262,7 +262,7 @@ export default function ProvasOnlineDashboardPage() {
       case 'publicada':
         return (
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 10px', borderRadius: 99, background: '#f5f3ff', border: '1px solid #ddd6fe', color: '#5b21b6', fontSize: 11, fontWeight: 800 }}>
-            <Award size={11} /> Publicada
+            <Award size={11} /> Notas Publicadas
           </span>
         )
       default:
@@ -1210,7 +1210,25 @@ export default function ProvasOnlineDashboardPage() {
                       </span>
                     </div>
 
-                    {getStatusBadge(prova.status)}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
+                      {getStatusBadge(prova.status)}
+                      {isTeacherOrStaff && prova.status !== 'publicada' && (
+                        <span style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 3.5,
+                          padding: '2px 7px',
+                          borderRadius: 99,
+                          background: '#fffbeb',
+                          border: '1px solid #fde68a',
+                          color: '#92400e',
+                          fontSize: 10,
+                          fontWeight: 800
+                        }} title="As notas e gabarito ainda não foram divulgados aos estudantes">
+                          <Clock size={10} style={{ color: '#d97706' }} /> Falta publicar notas
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   {/* Exam Title */}
@@ -1331,6 +1349,75 @@ export default function ProvasOnlineDashboardPage() {
                           </span>
                         </div>
                       ) : null}
+
+                      {/* STATUS DA PUBLICAÇÃO DE NOTAS */}
+                      {prova.status === 'publicada' ? (
+                        <div style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '6px 10px',
+                          borderRadius: 10,
+                          background: '#f5f3ff',
+                          border: '1px solid #ddd6fe',
+                          fontSize: 10.5
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 5, color: '#5b21b6', fontWeight: 700 }}>
+                            <Award size={12} style={{ color: '#7c3aed' }} />
+                            <span>Notas e Gabarito</span>
+                          </div>
+                          <span style={{
+                            fontWeight: 800,
+                            background: '#ede9fe',
+                            color: '#6d28d9',
+                            padding: '1px 7px',
+                            borderRadius: 99,
+                            border: '1px solid #c4b5fd'
+                          }}>
+                            Já Publicadas
+                          </span>
+                        </div>
+                      ) : (
+                        <div
+                          onClick={() => router.push(`/provas-online/${prova.id}/corrigir`)}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '6px 10px',
+                            borderRadius: 10,
+                            background: '#fffbeb',
+                            border: '1px solid #fde68a',
+                            fontSize: 10.5,
+                            cursor: 'pointer',
+                            transition: 'all 0.15s ease'
+                          }}
+                          onMouseEnter={e => {
+                            e.currentTarget.style.background = '#fef3c7'
+                            e.currentTarget.style.borderColor = '#fcd34d'
+                          }}
+                          onMouseLeave={e => {
+                            e.currentTarget.style.background = '#fffbeb'
+                            e.currentTarget.style.borderColor = '#fde68a'
+                          }}
+                          title="Clique para ir à tela de correção e publicar notas"
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 5, color: '#92400e', fontWeight: 700 }}>
+                            <Clock size={12} style={{ color: '#d97706' }} />
+                            <span>Notas e Gabarito</span>
+                          </div>
+                          <span style={{
+                            fontWeight: 800,
+                            background: '#fef3c7',
+                            color: '#b45309',
+                            padding: '1px 7px',
+                            borderRadius: 99,
+                            border: '1px solid #fcd34d'
+                          }}>
+                            Falta Publicar
+                          </span>
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -1386,7 +1473,7 @@ export default function ProvasOnlineDashboardPage() {
                             color: '#ffffff'
                           }}
                         >
-                          <Timer size={14} /> Continuar Prova
+                          <RotateCcw size={14} /> Retornar à Prova
                         </button>
                       ) : canTakeExam ? (
                         <button

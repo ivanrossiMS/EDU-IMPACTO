@@ -9,7 +9,7 @@ import {
   Layers, Users, HelpCircle, CheckCircle2, AlertCircle, X,
   ChevronDown, ChevronUp, GripVertical, FileText, Image as ImageIcon,
   Calculator, AlertTriangle, RefreshCw, Search, UserCheck, Link2,
-  UploadCloud, Edit3
+  UploadCloud, Edit3, Loader2
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { HtmlContent } from '@/components/HtmlContent'
@@ -21,7 +21,8 @@ import {
   TipoQuestao,
   AlternativaQuestao,
   ItemVerdadeiroFalso,
-  CriterioAvaliacao
+  CriterioAvaliacao,
+  StatusProva
 } from '@/types/provas-online'
 import { QuestionEditorModal } from './QuestionEditorModal'
 import { ImportQuestionsModal } from './ImportQuestionsModal'
@@ -39,11 +40,15 @@ export function ExamWizard({ initialExam, isEditing = false }: ExamWizardProps) 
 
   const [step, setStep] = useState<1 | 2 | 3 | 4 | 5>(1)
   const [savingDraft, setSavingDraft] = useState(false)
+  const [savingExam, setSavingExam] = useState(false)
   const [lastDraftSaved, setLastDraftSaved] = useState<string | null>(null)
   const [previewModalOpen, setPreviewModalOpen] = useState(false)
   const [editingQuestionModalOpen, setEditingQuestionModalOpen] = useState(false)
   const [importModalOpen, setImportModalOpen] = useState(false)
   const [currentEditingQuestion, setCurrentEditingQuestion] = useState<QuestaoProva | null>(null)
+
+  const isSubmittingRef = useRef(false)
+  const autosaveAbortControllerRef = useRef<AbortController | null>(null)
 
   // Students selection state for Step 4
   const [allStudents, setAllStudents] = useState<any[]>([])
@@ -72,6 +77,19 @@ export function ExamWizard({ initialExam, isEditing = false }: ExamWizardProps) 
       })
       return {
         ...initialExam,
+        configuracaoLayout: initialExam.configuracaoLayout ? { ...initialExam.configuracaoLayout } : {
+          questaoPorPagina: true,
+          navegacaoLivre: true,
+          permitirVoltar: true,
+          embaralharQuestoes: false,
+          embaralharAlternativas: false
+        },
+        configuracaoMonitoramento: initialExam.configuracaoMonitoramento ? { ...initialExam.configuracaoMonitoramento } : {
+          solicitarTelaCheia: false,
+          registrarSaidaTela: true,
+          bloquearColar: true,
+          acaoOcorrencia: 'suspender'
+        },
         questoes: cleanQuestoes,
         dataAbertura: toLocalDateTimeInputValue(initialExam.dataAbertura),
         dataEncerramento: toLocalDateTimeInputValue(initialExam.dataEncerramento)
@@ -95,7 +113,6 @@ export function ExamWizard({ initialExam, isEditing = false }: ExamWizardProps) 
       professorId: currentUser?.id || '',
       professorNome: currentUser?.nome || 'Professor',
       instrucoes: 'Leia atentamente cada questão. Responda com calma.',
-      materiaisPermitidos: 'Caneta esferográfica azul ou preta.',
       status: 'rascunho',
       aprovacaoRequerida: false,
       statusAprovacao: 'aprovada',
@@ -107,7 +124,7 @@ export function ExamWizard({ initialExam, isEditing = false }: ExamWizardProps) 
       duracaoMinutos: 60,
       codigoLiberacao: '',
       configuracaoLayout: {
-        questaoPorPagina: false,
+        questaoPorPagina: true,
         navegacaoLivre: true,
         permitirVoltar: true,
         embaralharQuestoes: false,
@@ -116,8 +133,8 @@ export function ExamWizard({ initialExam, isEditing = false }: ExamWizardProps) 
       configuracaoMonitoramento: {
         solicitarTelaCheia: false,
         registrarSaidaTela: true,
-        bloquearColar: false,
-        acaoOcorrencia: 'alertar'
+        bloquearColar: true,
+        acaoOcorrencia: 'suspender'
       },
       configuracaoDivulgacao: {
         liberarGabarito: 'apos_encerramento',
@@ -134,21 +151,40 @@ export function ExamWizard({ initialExam, isEditing = false }: ExamWizardProps) 
   // Autosave draft debounce
   const draftTimerRef = useRef<NodeJS.Timeout | null>(null)
   useEffect(() => {
-    if (exam.status === 'publicada') return
+    // Never autosave if already submitting or if exam is not a draft (e.g. agendada, em_aplicacao)
+    if (isSubmittingRef.current) return
+    if (exam.status && exam.status !== 'rascunho') return
     if (!exam.titulo.trim()) return
 
     if (draftTimerRef.current) clearTimeout(draftTimerRef.current)
     draftTimerRef.current = setTimeout(async () => {
+      if (isSubmittingRef.current) return
+      if (exam.status && exam.status !== 'rascunho') return
+
       try {
         setSavingDraft(true)
+        if (autosaveAbortControllerRef.current) {
+          autosaveAbortControllerRef.current.abort()
+        }
+        autosaveAbortControllerRef.current = new AbortController()
+
         await fetch('/api/provas-online', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...exam, status: 'rascunho' })
+          signal: autosaveAbortControllerRef.current.signal,
+          body: JSON.stringify({
+            ...exam,
+            dataAbertura: toUtcIsoString(exam.dataAbertura),
+            dataEncerramento: toUtcIsoString(exam.dataEncerramento),
+            status: 'rascunho',
+            statusAprovacao: exam.aprovacaoRequerida ? 'pendente' : 'aprovada'
+          })
         })
         setLastDraftSaved(new Date().toLocaleTimeString('pt-BR'))
-      } catch (e) {
-        console.warn('Autosave draft error', e)
+      } catch (e: any) {
+        if (e.name !== 'AbortError') {
+          console.warn('Autosave draft error', e)
+        }
       } finally {
         setSavingDraft(false)
       }
@@ -315,6 +351,8 @@ export function ExamWizard({ initialExam, isEditing = false }: ExamWizardProps) 
 
   // Save / Publish Exam
   const handleSaveExam = async (publish: boolean) => {
+    if (savingExam) return
+
     if (!exam.titulo.trim()) {
       toast.error('Informe o título da prova na Etapa 1.')
       setStep(1)
@@ -387,6 +425,18 @@ export function ExamWizard({ initialExam, isEditing = false }: ExamWizardProps) 
       }
     }
 
+    // Cancel any pending or in-flight autosave IMMEDIATELY
+    if (draftTimerRef.current) {
+      clearTimeout(draftTimerRef.current)
+      draftTimerRef.current = null
+    }
+    if (autosaveAbortControllerRef.current) {
+      autosaveAbortControllerRef.current.abort()
+      autosaveAbortControllerRef.current = null
+    }
+    isSubmittingRef.current = true
+    setSavingExam(true)
+
     try {
       const allTurmaStudentIds = availableStudentsForTurmas.map(s => String(s.id))
       const finalAlunosEspecificos = alunosModo === 'especificos'
@@ -413,6 +463,20 @@ export function ExamWizard({ initialExam, isEditing = false }: ExamWizardProps) 
         return clean
       })
       const hasPinCode = Boolean(exam.codigoLiberacao && exam.codigoLiberacao.trim() !== '')
+
+      let targetStatus: StatusProva = 'rascunho'
+      if (publish) {
+        const now = Date.now()
+        const aTime = new Date(toUtcIsoString(exam.dataAbertura)).getTime()
+        const bTime = new Date(toUtcIsoString(exam.dataEncerramento)).getTime()
+        if (!isNaN(aTime) && !isNaN(bTime) && now >= aTime && now <= bTime) {
+          targetStatus = 'em_aplicacao'
+        } else {
+          targetStatus = 'agendada'
+        }
+      }
+      const targetStatusAprovacao = exam.aprovacaoRequerida ? 'pendente' : 'aprovada'
+
       const payload: ProvaOnline = {
         ...exam,
         dataAbertura: toUtcIsoString(exam.dataAbertura),
@@ -423,9 +487,9 @@ export function ExamWizard({ initialExam, isEditing = false }: ExamWizardProps) 
         questoes: cleanQuestoes,
         alunosModo: alunosModo,
         alunosEspecificos: finalAlunosEspecificos,
-        status: publish ? (exam.aprovacaoRequerida ? 'agendada' : 'agendada') : 'rascunho',
-        statusAprovacao: exam.aprovacaoRequerida ? 'pendente' : 'aprovada',
-        publicadoEm: publish ? new Date().toISOString() : undefined,
+        status: targetStatus,
+        statusAprovacao: targetStatusAprovacao,
+        publicadoEm: publish ? (exam.publicadoEm || new Date().toISOString()) : undefined,
         updatedAt: new Date().toISOString()
       }
 
@@ -440,10 +504,27 @@ export function ExamWizard({ initialExam, isEditing = false }: ExamWizardProps) 
         throw new Error(data.error || 'Erro ao salvar prova')
       }
 
-      toast.success(publish ? 'Prova publicada com sucesso!' : 'Rascunho salvo com sucesso!')
+      const savedData = await res.json()
+      const savedProva = savedData?.prova || savedData || payload
+
+      setExam(prev => ({
+        ...prev,
+        ...savedProva,
+        status: targetStatus,
+        statusAprovacao: targetStatusAprovacao
+      }))
+
+      toast.success(publish 
+        ? (exam.aprovacaoRequerida ? 'Prova enviada para aprovação com sucesso!' : 'Prova publicada com sucesso!') 
+        : 'Rascunho salvo com sucesso!')
+
+      router.refresh()
       router.push('/provas-online')
     } catch (e: any) {
+      isSubmittingRef.current = false
       toast.error(e.message || 'Erro ao salvar prova')
+    } finally {
+      setSavingExam(false)
     }
   }
 
@@ -549,9 +630,10 @@ export function ExamWizard({ initialExam, isEditing = false }: ExamWizardProps) 
           <button
             type="button"
             onClick={() => handleSaveExam(false)}
-            className="flex-1 md:flex-initial inline-flex items-center justify-center gap-1.5 h-10 px-4 rounded-xl bg-sky-50 border border-sky-200 text-sky-700 text-xs font-bold hover:bg-sky-100 transition-colors shadow-2xs cursor-pointer whitespace-nowrap shrink-0"
+            disabled={savingExam}
+            className="flex-1 md:flex-initial inline-flex items-center justify-center gap-1.5 h-10 px-4 rounded-xl bg-sky-50 border border-sky-200 text-sky-700 text-xs font-bold hover:bg-sky-100 transition-colors shadow-2xs cursor-pointer whitespace-nowrap shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <Save size={14} /> Salvar Rascunho
+            {savingExam ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Salvar Rascunho
           </button>
         </div>
       </div>
@@ -1518,6 +1600,7 @@ export function ExamWizard({ initialExam, isEditing = false }: ExamWizardProps) 
                       <option value="registrar">Apenas Registrar no Relatório</option>
                       <option value="alertar">Registrar e Alertar o Aluno em Tela</option>
                       <option value="suspender">Suspender Prova e Exigir Liberação do Professor</option>
+                      <option value="cancelar">Registrar e Cancelar Prova por Infringir Regras (Não Minimizar)</option>
                     </select>
                   </div>
                 </div>
@@ -2034,9 +2117,10 @@ export function ExamWizard({ initialExam, isEditing = false }: ExamWizardProps) 
             <button
               type="button"
               onClick={() => handleSaveExam(false)}
-              className="flex-1 sm:flex-initial h-11 sm:h-10 px-4 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold transition-all cursor-pointer inline-flex items-center justify-center gap-1.5 shadow-2xs whitespace-nowrap shrink-0"
+              disabled={savingExam}
+              className="flex-1 sm:flex-initial h-11 sm:h-10 px-4 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold transition-all cursor-pointer inline-flex items-center justify-center gap-1.5 shadow-2xs whitespace-nowrap shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <Save size={15} className="text-slate-500" /> Salvar Rascunho
+              {savingExam ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} className="text-slate-500" />} Salvar Rascunho
             </button>
 
             {step < 5 ? (
@@ -2051,10 +2135,20 @@ export function ExamWizard({ initialExam, isEditing = false }: ExamWizardProps) 
               <button
                 type="button"
                 onClick={() => handleSaveExam(true)}
-                className="flex-1 sm:flex-initial h-11 sm:h-10 px-6 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold shadow-sm transition-all cursor-pointer inline-flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0"
+                disabled={savingExam}
+                className="flex-1 sm:flex-initial h-11 sm:h-10 px-6 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold shadow-sm transition-all cursor-pointer inline-flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <Check size={16} strokeWidth={2.5} />
-                {exam.aprovacaoRequerida ? 'Submeter para Aprovação' : 'Publicar Prova'}
+                {savingExam ? (
+                  <>
+                    <Loader2 size={16} className="animate-spin" />
+                    <span>{exam.aprovacaoRequerida ? 'Submetendo...' : 'Publicando...'}</span>
+                  </>
+                ) : (
+                  <>
+                    <Check size={16} strokeWidth={2.5} />
+                    <span>{exam.aprovacaoRequerida ? 'Submeter para Aprovação' : 'Publicar Prova'}</span>
+                  </>
+                )}
               </button>
             )}
           </div>
@@ -2097,9 +2191,6 @@ export function ExamWizard({ initialExam, isEditing = false }: ExamWizardProps) 
                 </p>
                 <div className="pt-3 border-t border-slate-200/80 flex items-center gap-3 sm:gap-4 flex-wrap text-xs text-slate-600">
                   <span><strong>Duração:</strong> {exam.duracaoMinutos} min</span>
-                  {exam.materiaisPermitidos ? (
-                    <span><strong>Materiais:</strong> {exam.materiaisPermitidos}</span>
-                  ) : null}
                 </div>
               </div>
 

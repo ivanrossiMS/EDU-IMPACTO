@@ -66,6 +66,9 @@ export async function dbGetProvas(): Promise<ProvaOnline[]> {
         alunosEspecificos: row.alunos_especificos || row.dados?.alunosEspecificos || [],
         professorId: row.professor_id || row.dados?.professorId,
         professorNome: row.professor_nome || row.dados?.professorNome,
+        codigoLiberacao: (row.codigo_liberacao || row.dados?.codigoLiberacao || '').trim() || undefined,
+        exigeCodigoAcesso: Boolean((row.codigo_liberacao || row.dados?.codigoLiberacao || '').trim()),
+        materiaisPermitidos: undefined
       }))
     }
   } catch (err: any) {
@@ -128,6 +131,9 @@ export async function dbGetProvaById(id: string): Promise<ProvaOnline | null> {
         alunosEspecificos: data.alunos_especificos || data.dados?.alunosEspecificos || [],
         professorId: data.professor_id || data.dados?.professorId,
         professorNome: data.professor_nome || data.dados?.professorNome,
+        codigoLiberacao: (data.codigo_liberacao || data.dados?.codigoLiberacao || '').trim() || undefined,
+        exigeCodigoAcesso: Boolean((data.codigo_liberacao || data.dados?.codigoLiberacao || '').trim()),
+        materiaisPermitidos: undefined,
         questoes
       }
     }
@@ -177,6 +183,9 @@ export async function dbSaveProva(prova: Partial<ProvaOnline> & { id: string }):
     status: prova.status || 'rascunho',
     aprovacaoRequerida: prova.aprovacaoRequerida ?? false,
     statusAprovacao: prova.statusAprovacao || (prova.aprovacaoRequerida ? 'pendente' : 'aprovada'),
+    codigoLiberacao: (prova.codigoLiberacao && String(prova.codigoLiberacao).trim() !== '') ? String(prova.codigoLiberacao).trim().toUpperCase() : undefined,
+    exigeCodigoAcesso: Boolean(prova.codigoLiberacao && String(prova.codigoLiberacao).trim() !== ''),
+    materiaisPermitidos: undefined,
     valorTotal: Number(prova.valorTotal || 10),
     quantidadeTentativas: Number(prova.quantidadeTentativas || 1),
     politicaTentativas: prova.politicaTentativas || 'maior_nota',
@@ -184,7 +193,7 @@ export async function dbSaveProva(prova: Partial<ProvaOnline> & { id: string }):
     dataEncerramento: toUtcIsoString(prova.dataEncerramento) || new Date(Date.now() + 86400000 * 7).toISOString(),
     duracaoMinutos: Number(prova.duracaoMinutos || 60),
     configuracaoLayout: prova.configuracaoLayout || {
-      questaoPorPagina: false,
+      questaoPorPagina: true,
       navegacaoLivre: true,
       permitirVoltar: true,
       embaralharQuestoes: false,
@@ -193,8 +202,8 @@ export async function dbSaveProva(prova: Partial<ProvaOnline> & { id: string }):
     configuracaoMonitoramento: prova.configuracaoMonitoramento || {
       solicitarTelaCheia: false,
       registrarSaidaTela: true,
-      bloquearColar: false,
-      acaoOcorrencia: 'alertar'
+      bloquearColar: true,
+      acaoOcorrencia: 'suspender'
     },
     configuracaoDivulgacao: prova.configuracaoDivulgacao || {
       liberarGabarito: 'apos_encerramento',
@@ -220,7 +229,7 @@ export async function dbSaveProva(prova: Partial<ProvaOnline> & { id: string }):
       professor_id: completeProva.professorId,
       professor_nome: completeProva.professorNome,
       instrucoes: completeProva.instrucoes || null,
-      materiais_permitidos: completeProva.materiaisPermitidos || null,
+      materiais_permitidos: null,
       status: completeProva.status,
       aprovacao_requerida: completeProva.aprovacaoRequerida,
       status_aprovacao: completeProva.statusAprovacao,

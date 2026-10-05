@@ -441,9 +441,6 @@ export default function ImprimirProvaPage() {
             }}>
               <strong>Orientações: </strong>
               {prova.instrucoes}
-              {prova.materiaisPermitidos && (
-                <span style={{ display: 'block', marginTop: '2px' }}><strong>Materiais autorizados: </strong>{prova.materiaisPermitidos}</span>
-              )}
             </div>
           )}
         </div>

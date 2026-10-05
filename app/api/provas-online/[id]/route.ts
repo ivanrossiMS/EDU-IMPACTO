@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/server/authGuard'
 import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
-import { dbGetProvaById, dbSaveProva, dbDeleteProva, dbGetTentativasByProvaId } from '@/lib/provas-online/db'
+import { dbGetProvaById, dbSaveProva, dbDeleteProva, dbGetTentativasByProvaId, dbGetTentativaById } from '@/lib/provas-online/db'
 import { sanitizeExamForParticipant, shouldPublishResults } from '@/lib/provas-online/engine'
 
 export const dynamic = 'force-dynamic'
@@ -14,7 +14,15 @@ export async function GET(
   if (errorResponse) return errorResponse
 
   const { id } = await params
-  const prova = await dbGetProvaById(id)
+  let prova = await dbGetProvaById(id)
+  let initialTentativaFromId: any = null
+  if (!prova) {
+    const tent = await dbGetTentativaById(id)
+    if (tent) {
+      initialTentativaFromId = tent
+      prova = await dbGetProvaById(tent.provaId)
+    }
+  }
   if (!prova) {
     return NextResponse.json({ error: 'Prova não encontrada' }, { status: 404 })
   }
@@ -34,14 +42,14 @@ export async function GET(
   const { searchParams } = new URL(request.url)
   const requestedAlunoId = searchParams.get('aluno_id') || searchParams.get('slug')
 
-  const tentativas = await dbGetTentativasByProvaId(id)
+  const tentativas = await dbGetTentativasByProvaId(prova.id)
 
   if (isStudent || isResponsible) {
     const alunoId = requestedAlunoId || user.user_metadata?.aluno_id || user.id
     const matricula = user.user_metadata?.matricula || ''
-    const myTentativa = tentativas.find(t => 
+    const myTentativa = initialTentativaFromId || tentativas.find(t => 
       (t.alunoId === alunoId || t.alunoMatricula === alunoId || (matricula && t.alunoMatricula === matricula)) && 
-      (t.status === 'em_andamento' || t.status === 'entregue' || t.statusCorrecao === 'corrigida')
+      (t.status === 'em_andamento' || t.status === 'suspensa' || t.status === 'entregue' || t.statusCorrecao === 'corrigida')
     ) || null
     const canView = shouldPublishResults(prova, tentativas)
     const sanitized = sanitizeExamForParticipant(prova, canView)

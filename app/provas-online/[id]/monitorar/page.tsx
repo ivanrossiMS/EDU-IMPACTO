@@ -195,6 +195,12 @@ export default function MonitoramentoProvaPage() {
     open: false, minutes: 10, justification: ''
   })
 
+  const [endAttemptModal, setEndAttemptModal] = useState<{
+    open: boolean
+    aluno: StudentMonitorRow | null
+    justificativa: string
+  }>({ open: false, aluno: null, justificativa: '' })
+
   // Load Data
   const fetchData = async (isManual = false) => {
     if (!id) return
@@ -270,20 +276,40 @@ export default function MonitoramentoProvaPage() {
     } catch (err: any) { toast.error(err.message) }
   }
 
-  const handleForceSubmit = async (aluno: StudentMonitorRow) => {
+  const handleForceSubmit = (aluno: StudentMonitorRow) => {
     if (!aluno.tentativaId) return
-    if (!window.confirm(`Encerrar forçadamente a avaliação de ${aluno.alunoNome}?`)) return
+    setEndAttemptModal({
+      open: true,
+      aluno,
+      justificativa: aluno.situacao === 'suspensa'
+        ? 'Encerramento de onde o aluno parou após suspensão por ocorrência'
+        : 'Encerramento de onde o aluno parou solicitado pelo professor aplicador'
+    })
+  }
+
+  const handleConfirmEndAttempt = async () => {
+    if (!endAttemptModal.aluno || !endAttemptModal.aluno.tentativaId) return
+    setSubmittingAction(true)
     try {
       const res = await fetch(`/api/provas-online/${id}/monitoramento`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ acao: 'encerrar_tentativa', tentativaId: aluno.tentativaId, justificativa: 'Encerramento forçado por ordem do aplicador' })
+        body: JSON.stringify({
+          acao: 'encerrar_tentativa',
+          tentativaId: endAttemptModal.aluno.tentativaId,
+          justificativa: endAttemptModal.justificativa || 'Encerramento de onde parou executado pelo aplicador'
+        })
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Falha ao encerrar prova')
-      toast.success(`Avaliação de ${aluno.alunoNome} finalizada!`)
-      fetchData()
-    } catch (err: any) { toast.error(err.message) }
+      toast.success(`Avaliação de ${endAttemptModal.aluno.alunoNome} encerrada de onde parou com sucesso!`)
+      setEndAttemptModal({ open: false, aluno: null, justificativa: '' })
+      fetchData(true)
+    } catch (err: any) {
+      toast.error(err.message || 'Falha ao encerrar prova')
+    } finally {
+      setSubmittingAction(false)
+    }
   }
 
   const handleSendMessage = async () => {
@@ -851,10 +877,55 @@ export default function MonitoramentoProvaPage() {
                 {/* Actions footer */}
                 <div style={{ paddingTop: 12, borderTop: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                   {isSuspended ? (
-                    <button type="button" onClick={() => handleUnlockStudent(aluno)}
-                      style={{ flex: 1, height: 34, borderRadius: 10, border: 'none', background: '#059669', color: '#ffffff', fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
-                      <Unlock style={{ width: 13, height: 13 }} /> Liberar Retomada
-                    </button>
+                    <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      <button
+                        type="button"
+                        onClick={() => handleUnlockStudent(aluno)}
+                        style={{
+                          width: '100%',
+                          height: 34,
+                          borderRadius: 10,
+                          border: 'none',
+                          background: '#059669',
+                          color: '#ffffff',
+                          fontSize: 12,
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: 6,
+                          boxShadow: '0 1px 2px rgba(5, 150, 105, 0.2)'
+                        }}
+                        title="Liberar para o aluno continuar respondendo a prova"
+                      >
+                        <Unlock style={{ width: 13, height: 13 }} /> Liberar Retomada
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleForceSubmit(aluno)}
+                        style={{
+                          width: '100%',
+                          height: 32,
+                          borderRadius: 10,
+                          border: '1px solid #fecdd3',
+                          background: '#fff1f2',
+                          color: '#be123c',
+                          fontSize: 11,
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: 5,
+                          transition: 'all 0.15s'
+                        }}
+                        title="Encerrar avaliação e consolidar as respostas já salvas até o momento"
+                      >
+                        <Square style={{ width: 11, height: 11 }} /> Encerrar Prova de Onde Parou
+                      </button>
+                    </div>
                   ) : isTaking ? (
                     <>
                       <button type="button" onClick={() => setAddTimeModal({ open: true, aluno })}
@@ -862,10 +933,12 @@ export default function MonitoramentoProvaPage() {
                         <Plus style={{ width: 12, height: 12, color: '#3b82f6' }} /> +Tempo
                       </button>
                       <button type="button" onClick={() => setMessageModal({ open: true, target: 'individual', aluno })}
+                        title="Enviar mensagem particular"
                         style={{ width: 34, height: 34, borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', color: '#334155', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                         <MessageSquare style={{ width: 14, height: 14, color: '#3b82f6' }} />
                       </button>
                       <button type="button" onClick={() => handleForceSubmit(aluno)}
+                        title="Encerrar avaliação de onde o aluno parou"
                         style={{ width: 34, height: 34, borderRadius: 10, border: '1px solid #fecdd3', background: '#fff1f2', color: '#be123c', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                         <Square style={{ width: 12, height: 12 }} />
                       </button>
@@ -1067,7 +1140,48 @@ export default function MonitoramentoProvaPage() {
                 })}
               </div>
 
-              <div style={{ paddingTop: 12, borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'flex-end' }}>
+              <div style={{ paddingTop: 12, borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                {incidentLogsModal.aluno?.situacao === 'suspensa' ? (
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const target = incidentLogsModal.aluno!
+                        setIncidentLogsModal({ open: false, aluno: null, logs: [], loading: false })
+                        handleUnlockStudent(target)
+                      }}
+                      style={{ ...S.btnPrimary, background: '#059669', height: 34, fontSize: 11 }}
+                    >
+                      <Unlock style={{ width: 12, height: 12 }} /> Liberar Retomada
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const target = incidentLogsModal.aluno!
+                        setIncidentLogsModal({ open: false, aluno: null, logs: [], loading: false })
+                        handleForceSubmit(target)
+                      }}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        height: 34,
+                        padding: '0 12px',
+                        borderRadius: 10,
+                        border: '1px solid #fecdd3',
+                        background: '#fff1f2',
+                        color: '#be123c',
+                        fontSize: 11,
+                        fontWeight: 700,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <Square style={{ width: 11, height: 11 }} /> Encerrar de Onde Parou
+                    </button>
+                  </div>
+                ) : (
+                  <div />
+                )}
                 <button onClick={() => setIncidentLogsModal({ open: false, aluno: null, logs: [], loading: false })} style={S.btnSecondary}>
                   Concluir
                 </button>
@@ -1131,6 +1245,92 @@ export default function MonitoramentoProvaPage() {
                   style={{ ...S.btnPrimary, background: '#b45309', opacity: submittingAction ? 0.6 : 1 }}>
                   {submittingAction ? <RefreshCw style={{ width: 13, height: 13 }} className="animate-spin" /> : <Clock style={{ width: 13, height: 13 }} />}
                   {submittingAction ? 'Concedendo...' : 'Conceder Tempo'}
+                </button>
+              </div>
+            </ModalCard>
+          </ModalBackdrop>
+        )}
+      </AnimatePresence>
+
+      {/* ── MODAL: ENCERRAR PROVA DE ONDE PAROU ──────────────────────────────── */}
+      <AnimatePresence>
+        {endAttemptModal.open && endAttemptModal.aluno && (
+          <ModalBackdrop onClose={() => setEndAttemptModal({ open: false, aluno: null, justificativa: '' })}>
+            <ModalCard maxWidth={480}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ width: 44, height: 44, borderRadius: 14, background: '#fee2e2', border: '1px solid #fecdd3', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <Square style={{ width: 20, height: 20, color: '#e11d48' }} />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: 15, fontWeight: 800, color: '#0f172a', margin: 0 }}>Encerrar Prova de Onde Parou</h3>
+                  <p style={{ fontSize: 12, color: '#64748b', margin: '2px 0 0' }}>
+                    Aluno: <span style={{ fontWeight: 700, color: '#1e293b' }}>{endAttemptModal.aluno.alunoNome}</span>
+                  </p>
+                </div>
+              </div>
+
+              {/* Informative summary box */}
+              <div style={{ padding: '12px 14px', borderRadius: 12, background: '#fff1f2', border: '1px solid #fecdd3', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12 }}>
+                  <span style={{ color: '#9f1239', fontWeight: 600 }}>Questões respondidas até aqui:</span>
+                  <span style={{ fontWeight: 800, color: '#be123c', fontFamily: 'monospace' }}>
+                    {endAttemptModal.aluno.questoesRespondidas} de {endAttemptModal.aluno.totalQuestoes || prova?.questoes?.length || 0} ({endAttemptModal.aluno.percentualConcluido}%)
+                  </span>
+                </div>
+                <p style={{ fontSize: 12, color: '#881337', margin: 0, lineHeight: 1.5 }}>
+                  Ao confirmar, a avaliação será <strong>finalizada imediatamente</strong> de onde o aluno parou. Todas as respostas assinaladas até o momento serão consolidadas na nota e o aluno não poderá mais responder novas questões.
+                </p>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#334155', marginBottom: 6 }}>
+                  Motivo do Encerramento (Auditoria & Relatório):
+                </label>
+                <textarea
+                  rows={2}
+                  value={endAttemptModal.justificativa}
+                  onChange={e => setEndAttemptModal(p => ({ ...p, justificativa: e.target.value }))}
+                  placeholder="Ex: Interrupção disciplinar / Aluno liberado mais cedo pelo aplicador"
+                  style={{ width: '100%', borderRadius: 10, border: '1px solid #e2e8f0', padding: '10px 12px', fontSize: 12, color: '#0f172a', background: '#f8fafc', outline: 'none', resize: 'vertical', boxSizing: 'border-box' }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, paddingTop: 12, borderTop: '1px solid #f1f5f9' }}>
+                <button
+                  type="button"
+                  onClick={() => setEndAttemptModal({ open: false, aluno: null, justificativa: '' })}
+                  style={{ ...S.btnSecondary }}
+                  disabled={submittingAction}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmEndAttempt}
+                  disabled={submittingAction}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    height: 36,
+                    padding: '0 16px',
+                    borderRadius: 10,
+                    border: 'none',
+                    background: '#e11d48',
+                    color: '#ffffff',
+                    fontSize: 12,
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    opacity: submittingAction ? 0.6 : 1,
+                    transition: 'all 0.15s'
+                  }}
+                >
+                  {submittingAction ? (
+                    <RefreshCw style={{ width: 13, height: 13 }} className="animate-spin" />
+                  ) : (
+                    <Square style={{ width: 13, height: 13 }} />
+                  )}
+                  {submittingAction ? 'Encerrando...' : 'Confirmar Encerramento'}
                 </button>
               </div>
             </ModalCard>

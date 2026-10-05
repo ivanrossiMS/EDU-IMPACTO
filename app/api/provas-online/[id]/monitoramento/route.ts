@@ -10,6 +10,7 @@ import {
   dbSendMessage,
   dbGetMessages,
   dbSaveExcecao,
+  dbRecordOcorrencia,
   isInfraction
 } from '@/lib/provas-online/db'
 import { autoGradeTentativa } from '@/lib/provas-online/engine'
@@ -457,7 +458,7 @@ export async function POST(
     })
   }
 
-  // 2.3 Forçar encerramento
+  // 2.3 Forçar encerramento / Encerrar de onde parou
   if (acao === 'forcar_encerramento' || acao === 'encerrar_tentativa') {
     const nowIso = new Date().toISOString()
     tentativa.status = 'entregue'
@@ -475,15 +476,26 @@ export async function POST(
       id: crypto.randomUUID(),
       provaId,
       alunoId: tentativa.alunoId,
-      tipoExcecao: 'reabertura',
-      justificativa: justificativa || 'Encerramento administrativo forçado pelo aplicador',
+      tipoExcecao: 'encerramento_antecipado',
+      justificativa: justificativa || 'Encerramento de onde o aluno parou executado pelo aplicador',
       autorizadoPor: authorName,
+      createdAt: nowIso
+    })
+
+    await dbRecordOcorrencia({
+      id: crypto.randomUUID(),
+      tentativaId: tentativa.id,
+      alunoId: tentativa.alunoId,
+      alunoNome: tentativa.alunoNome,
+      tipo: 'encerramento_antecipado',
+      descricao: `Prova encerrada de onde o aluno parou pelo aplicador (${authorName}). Motivo: ${justificativa || 'Encerramento administrativo via supervisão'}. Respostas salvas consolidadas.`,
+      detalhes: { provaId, acaoTomada: 'encerrou_tentativa' },
       createdAt: nowIso
     })
 
     return NextResponse.json({
       ok: true,
-      message: `A tentativa de ${tentativa.alunoNome} foi encerrada administrativamente.`
+      message: `A avaliação de ${tentativa.alunoNome} foi finalizada de onde ele parou com sucesso.`
     })
   }
 

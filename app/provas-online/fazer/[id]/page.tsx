@@ -12,9 +12,13 @@ export default function FazerProvaPage() {
   const params = useParams()
   const router = useRouter()
   const searchParams = useSearchParams()
-  const returnUrl = searchParams?.get('returnUrl') || '/provas-online'
   const { currentUser } = useApp()
   const id = params?.id as string
+
+  const rawReturnUrl = searchParams?.get('returnUrl')
+  const studentSlug = (currentUser as any)?.aluno_id || currentUser?.id
+  const defaultAgendaUrl = studentSlug ? `/agenda-digital/${studentSlug}/provas-online` : '/agenda-digital'
+  const returnUrl = rawReturnUrl || defaultAgendaUrl
 
   const [prova, setProva] = useState<ProvaOnline | null>(null)
   const [tentativa, setTentativa] = useState<TentativaAluno | null>(null)

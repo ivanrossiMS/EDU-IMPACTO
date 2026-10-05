@@ -129,7 +129,7 @@ export interface ConfigMonitoramentoProva {
   solicitarTelaCheia: boolean
   registrarSaidaTela: boolean
   bloquearColar: boolean
-  acaoOcorrencia: 'registrar' | 'alertar' | 'suspender'
+  acaoOcorrencia: 'registrar' | 'alertar' | 'suspender' | 'cancelar'
 }
 
 export interface ConfigDivulgacaoProva {
@@ -303,6 +303,7 @@ export interface TentativaAluno {
 
   // Ocorrências e Suspensão
   motivoSuspensao?: string
+  motivoCancelamento?: string
 
   // Estado de conexão inferido
   statusConexao?: 'online' | 'instavel' | 'offline'
@@ -325,6 +326,7 @@ export interface OcorrenciaMonitoramento {
     | 'reconexao'
     | 'suspensao'
     | 'retomada'
+    | 'encerramento_antecipado'
   descricao: string
   duracaoSegundos?: number
   detalhes?: Record<string, any>
@@ -351,7 +353,7 @@ export interface ExcecaoAutorizada {
   provaId: string
   alunoId: string
   alunoNome?: string
-  tipoExcecao: 'tempo_adicional' | 'desbloqueio' | 'reabertura' | 'segunda_chamada'
+  tipoExcecao: 'tempo_adicional' | 'desbloqueio' | 'reabertura' | 'segunda_chamada' | 'encerramento_antecipado'
   minutosAdicionais?: number
   justificativa: string
   autorizadoPor: string
