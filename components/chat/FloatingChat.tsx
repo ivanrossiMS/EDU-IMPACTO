@@ -962,12 +962,12 @@ export function FloatingChat() {
 
         @media (max-width: 768px) {
           .wa-dock-container {
-            bottom: max(92px, calc(92px + env(safe-area-inset-bottom, 0px)));
-            right: 16px;
+            bottom: calc(76px + env(safe-area-inset-bottom, 8px));
+            right: 14px;
           }
           .wa-fab-btn {
-            width: 52px;
-            height: 52px;
+            width: 48px;
+            height: 48px;
           }
           .wa-fab-badge {
             top: -2px;

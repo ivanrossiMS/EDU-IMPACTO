@@ -655,87 +655,190 @@ export function Sidebar() {
           </AnimatePresence>
 
           {/* ═══ MÓDULOS ═══ */}
-          <div style={{ padding: '0 8px', marginBottom: 16 }}>
+          <div style={{ padding: effectiveCollapsed ? '0' : '0 2px', marginBottom: 14 }}>
             <AnimatePresence>
               {!effectiveCollapsed && (
                 <motion.div 
                   initial={{ opacity: 0, height: 0 }}
                   animate={{ opacity: 1, height: 'auto' }}
                   exit={{ opacity: 0, height: 0 }}
-                  style={{ fontSize: '10px', fontWeight: 800, color: 'rgba(255,255,255,0.4)', letterSpacing: '0.05em', marginBottom: 12, paddingLeft: 4, overflow: 'hidden' }}
+                  style={{ 
+                    fontSize: '10px', 
+                    fontWeight: 800, 
+                    color: 'rgba(255,255,255,0.4)', 
+                    letterSpacing: '0.08em', 
+                    marginBottom: 10, 
+                    paddingLeft: 4, 
+                    overflow: 'hidden',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between'
+                  }}
                 >
-                  MÓDULOS
+                  <span>MÓDULOS</span>
+                  <span style={{ fontSize: '9px', fontWeight: 700, color: 'rgba(255,255,255,0.25)', letterSpacing: '0.04em' }}>SISTEMA</span>
                 </motion.div>
               )}
             </AnimatePresence>
-            <div style={{ display: 'flex', flexDirection: effectiveCollapsed ? 'column' : 'row', gap: 8, justifyContent: 'space-between' }}>
-              
-              {/* Agenda Digital */}
-              <Link href="/agenda-digital" style={{ flex: 1, textDecoration: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }} title="Agenda Digital">
-                <motion.div 
-                  whileHover={{ scale: 1.05, filter: 'brightness(1.1)' }} 
-                  whileTap={{ scale: 0.95 }}
-                  style={{ 
-                    width: effectiveCollapsed ? 40 : 44,
-                    height: effectiveCollapsed ? 40 : 44, 
-                    borderRadius: 14, 
-                    background: 'linear-gradient(135deg, #a855f7, #7e22ce)', 
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', 
-                    boxShadow: '0 4px 12px rgba(168, 85, 247, 0.3)', 
-                    border: '1px solid rgba(255,255,255,0.1)' 
-                  }}
-                >
-                  <BookHeart size={effectiveCollapsed ? 20 : 18} color="#fff" />
-                </motion.div>
-                {!effectiveCollapsed && (
-                  <span style={{ fontSize: '10px', fontWeight: 700, color: 'rgba(255,255,255,0.6)', textAlign: 'center', lineHeight: 1.1 }}>Agenda<br/>Digital</span>
-                )}
-              </Link>
+            <div 
+              style={{ 
+                display: 'grid', 
+                gridTemplateColumns: effectiveCollapsed ? '1fr' : 'repeat(4, 1fr)', 
+                gap: effectiveCollapsed ? 10 : 6, 
+                width: '100%',
+                alignItems: 'start'
+              }}
+            >
+              {[
+                {
+                  id: 'agenda-digital',
+                  href: '/agenda-digital',
+                  title: 'Agenda Digital',
+                  line1: 'Agenda',
+                  line2: 'Digital',
+                  icon: BookHeart,
+                  gradient: 'linear-gradient(135deg, #a855f7 0%, #7e22ce 100%)',
+                  shadow: '0 4px 14px rgba(168, 85, 247, 0.35)',
+                  glow: 'rgba(168, 85, 247, 0.45)',
+                  activeBorder: 'rgba(168, 85, 247, 0.8)'
+                },
+                {
+                  id: 'gestao-pessoas',
+                  href: '/gestao-pessoas',
+                  title: 'Gestão de Pessoas',
+                  line1: 'Gestão de',
+                  line2: 'Pessoas',
+                  icon: Users,
+                  gradient: 'linear-gradient(135deg, #10b981 0%, #047857 100%)',
+                  shadow: '0 4px 14px rgba(16, 185, 129, 0.35)',
+                  glow: 'rgba(16, 185, 129, 0.45)',
+                  activeBorder: 'rgba(16, 185, 129, 0.8)'
+                },
+                {
+                  id: 'simulados',
+                  href: '/simulados',
+                  title: 'Simulados e Provas',
+                  line1: 'Simulados',
+                  line2: 'e Provas',
+                  icon: ClipboardPenLine,
+                  gradient: 'linear-gradient(135deg, #f43f5e 0%, #be123c 100%)',
+                  shadow: '0 4px 14px rgba(244, 63, 94, 0.35)',
+                  glow: 'rgba(244, 63, 94, 0.45)',
+                  activeBorder: 'rgba(244, 63, 94, 0.8)'
+                },
+                {
+                  id: 'provas-online',
+                  href: '/provas-online',
+                  title: 'Provas Online',
+                  line1: 'Provas',
+                  line2: 'Online',
+                  icon: Laptop,
+                  gradient: 'linear-gradient(135deg, #06b6d4 0%, #0284c7 100%)',
+                  shadow: '0 4px 14px rgba(6, 182, 212, 0.4)',
+                  glow: 'rgba(6, 182, 212, 0.5)',
+                  activeBorder: 'rgba(6, 182, 212, 0.8)'
+                }
+              ].map((mod) => {
+                const isActive = pathname?.startsWith(mod.href)
+                const IconComp = mod.icon
 
-              {/* Gestão de Pessoas */}
-              <Link href="/gestao-pessoas" style={{ flex: 1, textDecoration: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }} title="Gestão de Pessoas">
-                <motion.div 
-                  whileHover={{ scale: 1.05, filter: 'brightness(1.1)' }} 
-                  whileTap={{ scale: 0.95 }}
-                  style={{ 
-                    width: effectiveCollapsed ? 40 : 44,
-                    height: effectiveCollapsed ? 40 : 44, 
-                    borderRadius: 14, 
-                    background: 'linear-gradient(135deg, #10b981, #047857)', 
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', 
-                    boxShadow: '0 4px 12px rgba(16, 185, 129, 0.3)', 
-                    border: '1px solid rgba(255,255,255,0.1)' 
-                  }}
-                >
-                  <Users size={effectiveCollapsed ? 20 : 18} color="#fff" />
-                </motion.div>
-                {!effectiveCollapsed && (
-                  <span style={{ fontSize: '10px', fontWeight: 700, color: 'rgba(255,255,255,0.6)', textAlign: 'center', lineHeight: 1.1 }}>Gestão de<br/>Pessoas</span>
-                )}
-              </Link>
+                return (
+                  <Link 
+                    key={mod.id} 
+                    href={mod.href} 
+                    style={{ 
+                      textDecoration: 'none', 
+                      display: 'flex', 
+                      flexDirection: 'column', 
+                      alignItems: 'center', 
+                      gap: 6,
+                      minWidth: 0,
+                      width: '100%'
+                    }} 
+                    title={mod.title}
+                  >
+                    <motion.div 
+                      whileHover={{ scale: 1.08, y: -2, filter: 'brightness(1.15)' }} 
+                      whileTap={{ scale: 0.94 }}
+                      transition={{ type: 'spring', stiffness: 450, damping: 18 }}
+                      style={{ 
+                        position: 'relative',
+                        width: effectiveCollapsed ? 40 : 44,
+                        height: effectiveCollapsed ? 40 : 44, 
+                        borderRadius: 14, 
+                        background: mod.gradient, 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        justifyContent: 'center', 
+                        boxShadow: isActive ? `${mod.shadow}, 0 0 16px ${mod.glow}` : mod.shadow, 
+                        border: isActive ? `1.5px solid ${mod.activeBorder}` : '1px solid rgba(255,255,255,0.14)',
+                        overflow: 'hidden',
+                        cursor: 'pointer',
+                        flexShrink: 0
+                      }}
+                    >
+                      {/* Ultra Modern Glass Specular Reflection */}
+                      <div 
+                        style={{
+                          position: 'absolute',
+                          top: 0,
+                          left: 0,
+                          right: 0,
+                          height: '46%',
+                          background: 'linear-gradient(180deg, rgba(255, 255, 255, 0.28) 0%, rgba(255, 255, 255, 0) 100%)',
+                          borderRadius: '13px 13px 0 0',
+                          pointerEvents: 'none'
+                        }}
+                      />
 
-              {/* SIMULADOS */}
-              <Link href="/simulados" style={{ flex: 1, textDecoration: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }} title="PROVAS/SIMULADOS">
-                <motion.div 
-                  whileHover={{ scale: 1.05, filter: 'brightness(1.1)' }} 
-                  whileTap={{ scale: 0.95 }}
-                  style={{ 
-                    width: effectiveCollapsed ? 40 : 44,
-                    height: effectiveCollapsed ? 40 : 44, 
-                    borderRadius: 14, 
-                    background: 'linear-gradient(135deg, #f43f5e, #be123c)', 
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', 
-                    boxShadow: '0 4px 12px rgba(244, 63, 94, 0.3)', 
-                    border: '1px solid rgba(255,255,255,0.1)' 
-                  }}
-                >
-                  <ClipboardPenLine size={effectiveCollapsed ? 20 : 18} color="#fff" />
-                </motion.div>
-                {!effectiveCollapsed && (
-                  <span style={{ fontSize: '10px', fontWeight: 700, color: 'rgba(255,255,255,0.6)', textAlign: 'center', lineHeight: 1.1 }}>Simulados<br/>e Provas</span>
-                )}
-              </Link>
+                      {/* Active Inner Glow */}
+                      {isActive && (
+                        <div 
+                          style={{
+                            position: 'absolute',
+                            inset: 0,
+                            boxShadow: 'inset 0 0 8px rgba(255, 255, 255, 0.4)',
+                            pointerEvents: 'none'
+                          }}
+                        />
+                      )}
 
+                      <IconComp 
+                        size={effectiveCollapsed ? 20 : 18} 
+                        color="#fff" 
+                        style={{ 
+                          position: 'relative', 
+                          zIndex: 1, 
+                          filter: 'drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35))' 
+                        }} 
+                      />
+                    </motion.div>
+
+                    {!effectiveCollapsed && (
+                      <span 
+                        style={{ 
+                          fontSize: '9.5px', 
+                          fontWeight: 700, 
+                          color: isActive ? '#ffffff' : 'rgba(255,255,255,0.6)', 
+                          textAlign: 'center', 
+                          lineHeight: 1.15,
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          whiteSpace: 'nowrap',
+                          letterSpacing: '-0.01em',
+                          transition: 'color 0.2s ease',
+                          maxWidth: '100%',
+                          overflow: 'hidden'
+                        }}
+                      >
+                        <span style={{ textOverflow: 'ellipsis', overflow: 'hidden', maxWidth: '100%' }}>{mod.line1}</span>
+                        <span style={{ textOverflow: 'ellipsis', overflow: 'hidden', maxWidth: '100%' }}>{mod.line2}</span>
+                      </span>
+                    )}
+                  </Link>
+                )
+              })}
             </div>
           </div>
 

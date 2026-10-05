@@ -130,10 +130,175 @@ export function PushHistoryTab({ onSwitchToTesterWithPayload }: PushHistoryTabPr
   const successRate = activeCount > 0 ? Math.round((successfulCount / activeCount) * 100) : 100
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+    <div className="push-history-container" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      {/* ── ESTILOS MOBILE DE AUDITORIA ── */}
+      <style dangerouslySetInnerHTML={{__html: `
+        @media (max-width: 768px) {
+          .push-history-container {
+            padding-bottom: 120px !important;
+          }
+          .push-history-kpis {
+            grid-template-columns: repeat(2, 1fr) !important;
+            gap: 8px !important;
+          }
+          .push-history-kpi-card {
+            padding: 12px 14px !important;
+            border-radius: 14px !important;
+          }
+          .push-history-kpi-card .kpi-val {
+            font-size: 22px !important;
+            margin-top: 4px !important;
+          }
+          .push-history-kpi-card .kpi-desc {
+            display: none !important;
+          }
+          .push-history-user-scope {
+            padding: 14px 16px !important;
+            border-radius: 14px !important;
+          }
+          .push-history-user-scope-actions {
+            width: 100% !important;
+            margin-top: 6px !important;
+          }
+          .push-history-user-scope-actions button {
+            width: 100% !important;
+            justify-content: center !important;
+            padding: 10px 14px !important;
+            font-size: 13px !important;
+          }
+          .push-history-filters {
+            padding: 12px !important;
+            gap: 10px !important;
+          }
+          .push-history-filter-controls {
+            flex-direction: column !important;
+            width: 100% !important;
+            gap: 8px !important;
+            min-width: 0 !important;
+          }
+          .push-history-search {
+            max-width: 100% !important;
+            width: 100% !important;
+          }
+          .push-history-selects {
+            display: grid !important;
+            grid-template-columns: 1fr 1fr !important;
+            gap: 8px !important;
+            width: 100% !important;
+          }
+          .push-history-selects select {
+            width: 100% !important;
+            font-size: 11px !important;
+            padding: 8px 6px !important;
+          }
+          .push-history-dates-row {
+            width: 100% !important;
+            display: flex !important;
+            justify-content: space-between !important;
+            align-items: center !important;
+            gap: 6px !important;
+          }
+          .push-history-date-tabs {
+            flex: 1 !important;
+            display: flex !important;
+          }
+          .push-history-date-tabs button {
+            flex: 1 !important;
+            text-align: center !important;
+            padding: 6px 2px !important;
+            font-size: 10.5px !important;
+          }
+          .push-history-table-header {
+            display: none !important;
+          }
+          .push-history-date-desktop {
+            display: none !important;
+          }
+          .push-history-badge-desktop {
+            display: none !important;
+          }
+          .push-history-substatus {
+            display: none !important;
+          }
+          .push-history-row {
+            display: flex !important;
+            flex-direction: column !important;
+            padding: 14px !important;
+            gap: 10px !important;
+            border-radius: 14px !important;
+            margin: 8px !important;
+            border: 1px solid hsl(var(--border-subtle)) !important;
+            background: hsl(var(--bg-main) / 0.5) !important;
+          }
+          .push-history-col-cat {
+            display: flex !important;
+            align-items: center !important;
+            justify-content: space-between !important;
+            width: 100% !important;
+          }
+          .push-history-row-content {
+            padding-right: 0 !important;
+          }
+          .push-history-row-msg {
+            white-space: normal !important;
+            display: -webkit-box !important;
+            -webkit-line-clamp: 2 !important;
+            -webkit-box-orient: vertical !important;
+            overflow: hidden !important;
+            max-width: 100% !important;
+          }
+          .push-history-col-dest {
+            display: flex !important;
+            align-items: center !important;
+            justify-content: space-between !important;
+            width: 100% !important;
+            padding: 6px 10px !important;
+            background: hsl(var(--bg-surface)) !important;
+            border-radius: 8px !important;
+            border: 1px solid hsl(var(--border-subtle) / 0.6) !important;
+          }
+          .push-history-col-status {
+            display: flex !important;
+            align-items: center !important;
+          }
+          .push-history-mobile-meta {
+            display: flex !important;
+            align-items: center !important;
+            justify-content: space-between !important;
+            flex-wrap: wrap !important;
+            gap: 6px !important;
+            font-size: 11px !important;
+          }
+          .push-history-col-action {
+            width: 100% !important;
+          }
+          .push-history-row-btn {
+            width: 100% !important;
+            text-align: center !important;
+            padding: 9px 12px !important;
+            font-size: 12px !important;
+          }
+          .push-history-pagination {
+            flex-direction: column !important;
+            gap: 12px !important;
+            align-items: center !important;
+            text-align: center !important;
+          }
+          .push-history-pagination > div:last-child {
+            width: 100% !important;
+            justify-content: center !important;
+          }
+        }
+        @media (min-width: 769px) {
+          .push-history-mobile-meta {
+            display: none !important;
+          }
+        }
+      `}} />
+
       {/* ── SEÇÃO SUPERIOR: CARDS KPI / RESUMO DE ENTREGA ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14 }}>
-        <div style={{
+      <div className="push-history-kpis" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14 }}>
+        <div className="push-history-kpi-card" style={{
           background: 'hsl(var(--bg-surface))',
           border: '1px solid hsl(var(--border-subtle))',
           borderRadius: 16,
@@ -148,15 +313,15 @@ export function PushHistoryTab({ onSwitchToTesterWithPayload }: PushHistoryTabPr
               <Send size={16} color="#6366f1" />
             </div>
           </div>
-          <div style={{ fontSize: 28, fontWeight: 900, fontFamily: 'Outfit, sans-serif', marginTop: 8 }}>
+          <div className="kpi-val" style={{ fontSize: 28, fontWeight: 900, fontFamily: 'Outfit, sans-serif', marginTop: 8 }}>
             {totalCount.toLocaleString('pt-BR')}
           </div>
-          <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', marginTop: 4 }}>
+          <div className="kpi-desc" style={{ fontSize: 11, color: 'hsl(var(--text-muted))', marginTop: 4 }}>
             {selectedUser ? `Histórico específico de ${selectedUser.nome.split(' ')[0]}` : 'Notificações enviadas pela escola'}
           </div>
         </div>
 
-        <div style={{
+        <div className="push-history-kpi-card" style={{
           background: 'hsl(var(--bg-surface))',
           border: '1px solid hsl(var(--border-subtle))',
           borderRadius: 16,
@@ -171,15 +336,15 @@ export function PushHistoryTab({ onSwitchToTesterWithPayload }: PushHistoryTabPr
               <CheckCircle2 size={16} color="#10b981" />
             </div>
           </div>
-          <div style={{ fontSize: 28, fontWeight: 900, fontFamily: 'Outfit, sans-serif', color: '#10b981', marginTop: 8 }}>
+          <div className="kpi-val" style={{ fontSize: 28, fontWeight: 900, fontFamily: 'Outfit, sans-serif', color: '#10b981', marginTop: 8 }}>
             {successRate}%
           </div>
-          <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', marginTop: 4 }}>
+          <div className="kpi-desc" style={{ fontSize: 11, color: 'hsl(var(--text-muted))', marginTop: 4 }}>
             {successfulCount} entregues de {logs.length} na página atual
           </div>
         </div>
 
-        <div style={{
+        <div className="push-history-kpi-card" style={{
           background: 'hsl(var(--bg-surface))',
           border: '1px solid hsl(var(--border-subtle))',
           borderRadius: 16,
@@ -194,17 +359,17 @@ export function PushHistoryTab({ onSwitchToTesterWithPayload }: PushHistoryTabPr
               <Smartphone size={16} color="#0ea5e9" />
             </div>
           </div>
-          <div style={{ fontSize: 28, fontWeight: 900, fontFamily: 'Outfit, sans-serif', color: '#0ea5e9', marginTop: 8 }}>
+          <div className="kpi-val" style={{ fontSize: 28, fontWeight: 900, fontFamily: 'Outfit, sans-serif', color: '#0ea5e9', marginTop: 8 }}>
             {selectedUser ? userDevices.length : '100%'}
           </div>
-          <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', marginTop: 4 }}>
+          <div className="kpi-desc" style={{ fontSize: 11, color: 'hsl(var(--text-muted))', marginTop: 4 }}>
             {selectedUser
               ? `${userDevices.filter(d => d.isSubscribed).length} com push ativo nos ajustes`
               : 'Monitoramento contínuo OneSignal'}
           </div>
         </div>
 
-        <div style={{
+        <div className="push-history-kpi-card" style={{
           background: 'hsl(var(--bg-surface))',
           border: '1px solid hsl(var(--border-subtle))',
           borderRadius: 16,
@@ -219,17 +384,17 @@ export function PushHistoryTab({ onSwitchToTesterWithPayload }: PushHistoryTabPr
               <Eye size={16} color="#ec4899" />
             </div>
           </div>
-          <div style={{ fontSize: 28, fontWeight: 900, fontFamily: 'Outfit, sans-serif', color: '#ec4899', marginTop: 8 }}>
+          <div className="kpi-val" style={{ fontSize: 28, fontWeight: 900, fontFamily: 'Outfit, sans-serif', color: '#ec4899', marginTop: 8 }}>
             {readCount}
           </div>
-          <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', marginTop: 4 }}>
+          <div className="kpi-desc" style={{ fontSize: 11, color: 'hsl(var(--text-muted))', marginTop: 4 }}>
             Leituras registradas no Notification Center
           </div>
         </div>
       </div>
 
       {/* ── CARD DE SELEÇÃO DE USUÁRIO (AUDITORIA INDIVIDUAL OU GLOBAL) ── */}
-      <div style={{
+      <div className="push-history-user-scope" style={{
         background: 'hsl(var(--bg-surface))',
         border: '1.5px solid hsl(var(--border-subtle))',
         borderRadius: 18,
@@ -251,7 +416,7 @@ export function PushHistoryTab({ onSwitchToTesterWithPayload }: PushHistoryTabPr
             </p>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div className="push-history-user-scope-actions" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <button
               onClick={() => setIsUserSearchOpen(true)}
               style={{
@@ -409,7 +574,7 @@ export function PushHistoryTab({ onSwitchToTesterWithPayload }: PushHistoryTabPr
       </div>
 
       {/* ── BARRA DE FILTROS E PESQUISA ── */}
-      <div style={{
+      <div className="push-history-filters" style={{
         background: 'hsl(var(--bg-surface))',
         border: '1px solid hsl(var(--border-subtle))',
         borderRadius: 16,
@@ -420,8 +585,8 @@ export function PushHistoryTab({ onSwitchToTesterWithPayload }: PushHistoryTabPr
         justifyContent: 'space-between',
         gap: 12,
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 260 }}>
-          <div style={{ position: 'relative', width: '100%', maxWidth: 360 }}>
+        <div className="push-history-filter-controls" style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 260 }}>
+          <div className="push-history-search" style={{ position: 'relative', width: '100%', maxWidth: 360 }}>
             <Search size={15} color="hsl(var(--text-muted))" style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)' }} />
             <input
               type="text"
@@ -441,61 +606,63 @@ export function PushHistoryTab({ onSwitchToTesterWithPayload }: PushHistoryTabPr
             />
           </div>
 
-          {/* Filtro de Categoria */}
-          <select
-            value={selectedCategory}
-            onChange={e => handleFilterChange(setSelectedCategory, e.target.value)}
-            style={{
-              padding: '8px 12px',
-              borderRadius: 10,
-              border: '1px solid hsl(var(--border-subtle))',
-              background: 'hsl(var(--bg-main))',
-              color: 'hsl(var(--text-main))',
-              fontSize: 12,
-              fontWeight: 600,
-              outline: 'none',
-              cursor: 'pointer',
-            }}
-          >
-            <option value="all">Todas as Categorias</option>
-            <option value="chat">💬 Chat & Mensagens</option>
-            <option value="saida">🚗 Portaria & Saída</option>
-            <option value="frequencia">✅ Frequência Escolar</option>
-            <option value="comunicados">📢 Comunicados Oficiais</option>
-            <option value="momentos">📸 Momentos & Mídia</option>
-            <option value="calendario">📅 Eventos & Calendário</option>
-            <option value="notas">🏆 Boletim & Notas</option>
-            <option value="ocorrencias">⚠️ Ocorrências</option>
-            <option value="cobrancas">💰 Cobranças & Financeiro</option>
-            <option value="test">🔔 Diagnóstico / Testes</option>
-          </select>
+          <div className="push-history-selects">
+            {/* Filtro de Categoria */}
+            <select
+              value={selectedCategory}
+              onChange={e => handleFilterChange(setSelectedCategory, e.target.value)}
+              style={{
+                padding: '8px 12px',
+                borderRadius: 10,
+                border: '1px solid hsl(var(--border-subtle))',
+                background: 'hsl(var(--bg-main))',
+                color: 'hsl(var(--text-main))',
+                fontSize: 12,
+                fontWeight: 600,
+                outline: 'none',
+                cursor: 'pointer',
+              }}
+            >
+              <option value="all">Todas as Categorias</option>
+              <option value="chat">💬 Chat & Mensagens</option>
+              <option value="saida">🚗 Portaria & Saída</option>
+              <option value="frequencia">✅ Frequência Escolar</option>
+              <option value="comunicados">📢 Comunicados Oficiais</option>
+              <option value="momentos">📸 Momentos & Mídia</option>
+              <option value="calendario">📅 Eventos & Calendário</option>
+              <option value="notas">🏆 Boletim & Notas</option>
+              <option value="ocorrencias">⚠️ Ocorrências</option>
+              <option value="cobrancas">💰 Cobranças & Financeiro</option>
+              <option value="test">🔔 Diagnóstico / Testes</option>
+            </select>
 
-          {/* Filtro de Status */}
-          <select
-            value={selectedStatus}
-            onChange={e => handleFilterChange(setSelectedStatus, e.target.value)}
-            style={{
-              padding: '8px 12px',
-              borderRadius: 10,
-              border: '1px solid hsl(var(--border-subtle))',
-              background: 'hsl(var(--bg-main))',
-              color: 'hsl(var(--text-main))',
-              fontSize: 12,
-              fontWeight: 600,
-              outline: 'none',
-              cursor: 'pointer',
-            }}
-          >
-            <option value="all">Todos os Status</option>
-            <option value="sent">🟢 Enviados com Sucesso</option>
-            <option value="failed">🔴 Falhas / Rejeitados</option>
-            <option value="paused">⏸️ Pausados / Silenciados</option>
-          </select>
+            {/* Filtro de Status */}
+            <select
+              value={selectedStatus}
+              onChange={e => handleFilterChange(setSelectedStatus, e.target.value)}
+              style={{
+                padding: '8px 12px',
+                borderRadius: 10,
+                border: '1px solid hsl(var(--border-subtle))',
+                background: 'hsl(var(--bg-main))',
+                color: 'hsl(var(--text-main))',
+                fontSize: 12,
+                fontWeight: 600,
+                outline: 'none',
+                cursor: 'pointer',
+              }}
+            >
+              <option value="all">Todos os Status</option>
+              <option value="sent">🟢 Enviados com Sucesso</option>
+              <option value="failed">🔴 Falhas / Rejeitados</option>
+              <option value="paused">⏸️ Pausados / Silenciados</option>
+            </select>
+          </div>
         </div>
 
         {/* Filtros de Período e Botão de Atualização */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div style={{ display: 'flex', background: 'hsl(var(--bg-main))', borderRadius: 10, padding: 3, border: '1px solid hsl(var(--border-subtle))' }}>
+        <div className="push-history-dates-row" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div className="push-history-date-tabs" style={{ display: 'flex', background: 'hsl(var(--bg-main))', borderRadius: 10, padding: 3, border: '1px solid hsl(var(--border-subtle))' }}>
             {[
               { id: 'today', label: 'Hoje' },
               { id: '7d', label: '7 Dias' },
@@ -560,7 +727,7 @@ export function PushHistoryTab({ onSwitchToTesterWithPayload }: PushHistoryTabPr
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column' }}>
             {/* Header da Lista */}
-            <div style={{
+            <div className="push-history-table-header" style={{
               display: 'grid',
               gridTemplateColumns: '200px 1fr 140px 160px 120px',
               padding: '12px 20px',
@@ -608,6 +775,7 @@ export function PushHistoryTab({ onSwitchToTesterWithPayload }: PushHistoryTabPr
               return (
                 <div
                   key={log.id || index}
+                  className="push-history-row"
                   style={{
                     display: 'grid',
                     gridTemplateColumns: '200px 1fr 140px 160px 120px',
@@ -620,7 +788,7 @@ export function PushHistoryTab({ onSwitchToTesterWithPayload }: PushHistoryTabPr
                   }}
                 >
                   {/* Coluna 1: Categoria & Data */}
-                  <div>
+                  <div className="push-history-col-cat">
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                       <span style={{
                         display: 'inline-flex',
@@ -637,7 +805,7 @@ export function PushHistoryTab({ onSwitchToTesterWithPayload }: PushHistoryTabPr
                         {catDef.label}
                       </span>
                     </div>
-                    <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <div className="push-history-date-desktop" style={{ fontSize: 11, color: 'hsl(var(--text-muted))', marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
                       <Clock size={11} />
                       <span title="Horário em que o evento e a notificação foram registrados no sistema (Horário de MS)">
                         Registrado: {formattedDate}
@@ -645,6 +813,7 @@ export function PushHistoryTab({ onSwitchToTesterWithPayload }: PushHistoryTabPr
                     </div>
                     {eventRefDate && (
                       <div
+                        className="push-history-badge-desktop"
                         style={{
                           display: 'inline-flex',
                           alignItems: 'center',
@@ -664,6 +833,7 @@ export function PushHistoryTab({ onSwitchToTesterWithPayload }: PushHistoryTabPr
                     )}
                     {log.isReminder && (
                       <div
+                        className="push-history-badge-desktop"
                         style={{
                           display: 'inline-flex',
                           alignItems: 'center',
@@ -684,11 +854,11 @@ export function PushHistoryTab({ onSwitchToTesterWithPayload }: PushHistoryTabPr
                   </div>
 
                   {/* Coluna 2: Título e Mensagem */}
-                  <div style={{ paddingRight: 16 }}>
+                  <div className="push-history-row-content" style={{ paddingRight: 16 }}>
                     <div style={{ fontWeight: 800, fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
                       {log.title}
                     </div>
-                    <div style={{
+                    <div className="push-history-row-msg" style={{
                       fontSize: 12,
                       color: 'hsl(var(--text-muted))',
                       marginTop: 2,
@@ -702,7 +872,7 @@ export function PushHistoryTab({ onSwitchToTesterWithPayload }: PushHistoryTabPr
                   </div>
 
                   {/* Coluna 3: Destinatários */}
-                  <div>
+                  <div className="push-history-col-dest">
                     <div style={{ fontWeight: 800, fontSize: 13, color: 'hsl(var(--text-main))', display: 'flex', alignItems: 'center', gap: 5 }}>
                       <Users size={13} color="#6366f1" />
                       <span>{log.recipient_summary || `${log.target_count || 1} usuário(s)`}</span>
@@ -713,7 +883,7 @@ export function PushHistoryTab({ onSwitchToTesterWithPayload }: PushHistoryTabPr
                   </div>
 
                   {/* Coluna 4: Status & Confirmação de Leitura */}
-                  <div>
+                  <div className="push-history-col-status">
                     {log.status === 'paused' ? (
                       <div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -728,7 +898,7 @@ export function PushHistoryTab({ onSwitchToTesterWithPayload }: PushHistoryTabPr
                             Pausado
                           </span>
                         </div>
-                        <div style={{ fontSize: 10, color: '#b45309', marginTop: 3, fontWeight: 500 }}>
+                        <div className="push-history-substatus" style={{ fontSize: 10, color: '#b45309', marginTop: 3, fontWeight: 500 }}>
                           Silenciado (Não reenviado)
                         </div>
                       </div>
@@ -746,7 +916,7 @@ export function PushHistoryTab({ onSwitchToTesterWithPayload }: PushHistoryTabPr
                             Agendado
                           </span>
                         </div>
-                        <div style={{ fontSize: 10, color: 'hsl(var(--text-muted))', marginTop: 3 }}>
+                        <div className="push-history-substatus" style={{ fontSize: 10, color: 'hsl(var(--text-muted))', marginTop: 3 }}>
                           Fila OneSignal (Véspera)
                         </div>
                       </>
@@ -765,11 +935,11 @@ export function PushHistoryTab({ onSwitchToTesterWithPayload }: PushHistoryTabPr
                         </div>
 
                         {log.isRead ? (
-                          <div style={{ fontSize: 10, color: '#059669', marginTop: 3, display: 'flex', alignItems: 'center', gap: 4, fontWeight: 700 }}>
+                          <div className="push-history-substatus" style={{ fontSize: 10, color: '#059669', marginTop: 3, display: 'flex', alignItems: 'center', gap: 4, fontWeight: 700 }}>
                             <Eye size={11} /> Lido no app
                           </div>
                         ) : (
-                          <div style={{ fontSize: 10, color: 'hsl(var(--text-muted))', marginTop: 3 }}>
+                          <div className="push-history-substatus" style={{ fontSize: 10, color: 'hsl(var(--text-muted))', marginTop: 3 }}>
                             Aguardando leitura
                           </div>
                         )}
@@ -777,9 +947,28 @@ export function PushHistoryTab({ onSwitchToTesterWithPayload }: PushHistoryTabPr
                     )}
                   </div>
 
+                  {/* Meta badges visíveis apenas no card mobile */}
+                  <div className="push-history-mobile-meta">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'hsl(var(--text-muted))' }}>
+                      <Clock size={11} />
+                      <span>{formattedDate}</span>
+                    </div>
+                    {eventRefDate && (
+                      <span style={{ fontSize: 10, fontWeight: 700, color: '#d97706', background: 'rgba(245, 158, 11, 0.12)', padding: '1px 6px', borderRadius: 4 }}>
+                        Ref: {eventRefDate}
+                      </span>
+                    )}
+                    {log.isReminder && (
+                      <span style={{ fontSize: 10, fontWeight: 700, color: '#4f46e5', background: 'rgba(99, 102, 241, 0.12)', padding: '1px 6px', borderRadius: 4 }}>
+                        ⏰ {formatScheduledDate(log.sendAfter)}
+                      </span>
+                    )}
+                  </div>
+
                   {/* Coluna 5: Ação */}
-                  <div style={{ textAlign: 'right' }}>
+                  <div className="push-history-col-action" style={{ textAlign: 'right' }}>
                     <button
+                      className="push-history-row-btn"
                       onClick={() => setDetailLog(log)}
                       style={{
                         background: 'rgba(99, 102, 241, 0.1)',
@@ -804,7 +993,7 @@ export function PushHistoryTab({ onSwitchToTesterWithPayload }: PushHistoryTabPr
 
         {/* Paginação */}
         {totalPages > 1 && (
-          <div style={{
+          <div className="push-history-pagination" style={{
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',

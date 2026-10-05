@@ -18,6 +18,7 @@ import {
   RefreshCw,
   Send,
   X,
+  ChevronLeft,
   ChevronRight,
   Clock,
   CheckCheck,
@@ -514,8 +515,9 @@ export function AdminChatAuditView() {
         </div>
 
         {/* View Switcher Pills */}
-        <div style={{ display: 'inline-flex', padding: 4, background: '#f1f5f9', borderRadius: 12, border: '1px solid #e2e8f0' }}>
+        <div className="admin-chat-mode-switcher" style={{ display: 'inline-flex', padding: 4, background: '#f1f5f9', borderRadius: 12, border: '1px solid #e2e8f0' }}>
           <button
+            className="admin-chat-mode-btn"
             onClick={() => setActiveTab('moderation')}
             style={{
               display: 'flex',
@@ -534,9 +536,10 @@ export function AdminChatAuditView() {
             }}
           >
             <ShieldCheck size={16} color={activeTab === 'moderation' ? '#2563eb' : '#64748b'} />
-            Auditoria & Moderação Geral
+            Auditoria Geral
           </button>
           <button
+            className="admin-chat-mode-btn"
             onClick={() => setActiveTab('direct')}
             style={{
               display: 'flex',
@@ -555,7 +558,7 @@ export function AdminChatAuditView() {
             }}
           >
             <MessageCircle size={16} color={activeTab === 'direct' ? '#2563eb' : '#64748b'} />
-            Meu Atendimento Direto
+            Meu Atendimento
           </button>
         </div>
       </div>
@@ -571,68 +574,68 @@ export function AdminChatAuditView() {
       {activeTab === 'moderation' && (
         <>
           {/* 1. METRICS ROW */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 14, marginBottom: 20 }}>
+          <div className="admin-chat-kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 14, marginBottom: 20 }}>
             {/* Total Conversas */}
-            <div style={{ background: '#ffffff', borderRadius: 14, border: '1px solid #e2e8f0', padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 14, boxShadow: '0 2px 6px rgba(0,0,0,0.02)' }}>
-              <div style={{ width: 44, height: 44, borderRadius: 12, background: '#eff6ff', color: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div className="admin-chat-kpi-card" style={{ background: '#ffffff', borderRadius: 14, border: '1px solid #e2e8f0', padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 14, boxShadow: '0 2px 6px rgba(0,0,0,0.02)' }}>
+              <div className="admin-chat-kpi-icon" style={{ width: 44, height: 44, borderRadius: 12, background: '#eff6ff', color: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <Users size={22} />
               </div>
               <div>
-                <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: '#64748b', letterSpacing: '0.04em' }}>Conversas Ativas</span>
-                <div style={{ fontSize: 22, fontWeight: 900, color: '#0f172a' }}>{stats.totalConversations}</div>
+                <span className="admin-chat-kpi-label" style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: '#64748b', letterSpacing: '0.04em' }}>Conversas Ativas</span>
+                <div className="admin-chat-kpi-value" style={{ fontSize: 22, fontWeight: 900, color: '#0f172a' }}>{stats.totalConversations}</div>
               </div>
             </div>
 
             {/* Total Mensagens */}
-            <div style={{ background: '#ffffff', borderRadius: 14, border: '1px solid #e2e8f0', padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 14, boxShadow: '0 2px 6px rgba(0,0,0,0.02)' }}>
-              <div style={{ width: 44, height: 44, borderRadius: 12, background: '#f0fdf4', color: '#16a34a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div className="admin-chat-kpi-card" style={{ background: '#ffffff', borderRadius: 14, border: '1px solid #e2e8f0', padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 14, boxShadow: '0 2px 6px rgba(0,0,0,0.02)' }}>
+              <div className="admin-chat-kpi-icon" style={{ width: 44, height: 44, borderRadius: 12, background: '#f0fdf4', color: '#16a34a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <MessageSquare size={22} />
               </div>
               <div>
-                <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: '#64748b', letterSpacing: '0.04em' }}>Total de Mensagens</span>
-                <div style={{ fontSize: 22, fontWeight: 900, color: '#0f172a' }}>{stats.totalMessages}</div>
+                <span className="admin-chat-kpi-label" style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: '#64748b', letterSpacing: '0.04em' }}>Total de Mensagens</span>
+                <div className="admin-chat-kpi-value" style={{ fontSize: 22, fontWeight: 900, color: '#0f172a' }}>{stats.totalMessages}</div>
               </div>
             </div>
 
             {/* Mensagens Hoje */}
-            <div style={{ background: '#ffffff', borderRadius: 14, border: '1px solid #e2e8f0', padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 14, boxShadow: '0 2px 6px rgba(0,0,0,0.02)' }}>
-              <div style={{ width: 44, height: 44, borderRadius: 12, background: '#faf5ff', color: '#9333ea', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div className="admin-chat-kpi-card" style={{ background: '#ffffff', borderRadius: 14, border: '1px solid #e2e8f0', padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 14, boxShadow: '0 2px 6px rgba(0,0,0,0.02)' }}>
+              <div className="admin-chat-kpi-icon" style={{ width: 44, height: 44, borderRadius: 12, background: '#faf5ff', color: '#9333ea', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <Clock size={22} />
               </div>
               <div>
-                <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: '#64748b', letterSpacing: '0.04em' }}>Mensagens Hoje</span>
-                <div style={{ fontSize: 22, fontWeight: 900, color: '#0f172a' }}>{stats.messagesToday}</div>
+                <span className="admin-chat-kpi-label" style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: '#64748b', letterSpacing: '0.04em' }}>Mensagens Hoje</span>
+                <div className="admin-chat-kpi-value" style={{ fontSize: 22, fontWeight: 900, color: '#0f172a' }}>{stats.messagesToday}</div>
               </div>
             </div>
 
             {/* Mídias & Arquivos */}
-            <div style={{ background: '#ffffff', borderRadius: 14, border: '1px solid #e2e8f0', padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 14, boxShadow: '0 2px 6px rgba(0,0,0,0.02)' }}>
-              <div style={{ width: 44, height: 44, borderRadius: 12, background: '#fff7ed', color: '#ea580c', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div className="admin-chat-kpi-card" style={{ background: '#ffffff', borderRadius: 14, border: '1px solid #e2e8f0', padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 14, boxShadow: '0 2px 6px rgba(0,0,0,0.02)' }}>
+              <div className="admin-chat-kpi-icon" style={{ width: 44, height: 44, borderRadius: 12, background: '#fff7ed', color: '#ea580c', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <Paperclip size={22} />
               </div>
               <div>
-                <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: '#64748b', letterSpacing: '0.04em' }}>Mídias & Anexos</span>
-                <div style={{ fontSize: 22, fontWeight: 900, color: '#0f172a' }}>{stats.totalMedia}</div>
+                <span className="admin-chat-kpi-label" style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: '#64748b', letterSpacing: '0.04em' }}>Mídias & Anexos</span>
+                <div className="admin-chat-kpi-value" style={{ fontSize: 22, fontWeight: 900, color: '#0f172a' }}>{stats.totalMedia}</div>
               </div>
             </div>
 
             {/* Mensagens Editadas / Auditadas */}
-            <div style={{ background: '#ffffff', borderRadius: 14, border: '1px solid #e2e8f0', padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 14, boxShadow: '0 2px 6px rgba(0,0,0,0.02)' }}>
-              <div style={{ width: 44, height: 44, borderRadius: 12, background: '#fef2f2', color: '#dc2626', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div className="admin-chat-kpi-card admin-chat-kpi-card-span" style={{ background: '#ffffff', borderRadius: 14, border: '1px solid #e2e8f0', padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 14, boxShadow: '0 2px 6px rgba(0,0,0,0.02)' }}>
+              <div className="admin-chat-kpi-icon" style={{ width: 44, height: 44, borderRadius: 12, background: '#fef2f2', color: '#dc2626', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <History size={22} />
               </div>
               <div>
-                <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: '#64748b', letterSpacing: '0.04em' }}>Mensagens Editadas</span>
-                <div style={{ fontSize: 22, fontWeight: 900, color: '#0f172a' }}>{stats.totalEdited}</div>
+                <span className="admin-chat-kpi-label" style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: '#64748b', letterSpacing: '0.04em' }}>Mensagens Editadas</span>
+                <div className="admin-chat-kpi-value" style={{ fontSize: 22, fontWeight: 900, color: '#0f172a' }}>{stats.totalEdited}</div>
               </div>
             </div>
           </div>
 
           {/* 2. ADVANCED FILTERS TOOLBAR */}
-          <div style={{ background: '#ffffff', borderRadius: 14, border: '1px solid #e2e8f0', padding: '14px 16px', marginBottom: 20, boxShadow: '0 2px 6px rgba(0,0,0,0.02)' }}>
+          <div className="admin-chat-filters" style={{ background: '#ffffff', borderRadius: 14, border: '1px solid #e2e8f0', padding: '14px 16px', marginBottom: 20, boxShadow: '0 2px 6px rgba(0,0,0,0.02)' }}>
             <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 12 }}>
               {/* Text Search */}
-              <div style={{ position: 'relative', flex: '1 1 240px', minWidth: 200 }}>
+              <div className="admin-chat-search-box" style={{ position: 'relative', flex: '1 1 240px', minWidth: 200 }}>
                 <Search size={16} style={{ position: 'absolute', left: 12, top: 12, color: '#94a3b8', pointerEvents: 'none' }} />
                 <input
                   type="text"
@@ -656,7 +659,7 @@ export function AdminChatAuditView() {
               </div>
 
               {/* Turma Filter */}
-              <div style={{ position: 'relative', width: 180 }}>
+              <div className="admin-chat-turma-box" style={{ position: 'relative', width: 180 }}>
                 <GraduationCap size={16} style={{ position: 'absolute', left: 12, top: 12, color: '#94a3b8', pointerEvents: 'none' }} />
                 <select
                   value={selectedTurma}
@@ -688,7 +691,7 @@ export function AdminChatAuditView() {
               </div>
 
               {/* Date Presets */}
-              <div style={{ display: 'inline-flex', padding: 3, background: '#f1f5f9', borderRadius: 10, border: '1px solid #e2e8f0' }}>
+              <div className="admin-chat-presets-box" style={{ display: 'inline-flex', padding: 3, background: '#f1f5f9', borderRadius: 10, border: '1px solid #e2e8f0' }}>
                 <button
                   type="button"
                   onClick={() => setDatePreset('all')}
@@ -838,9 +841,9 @@ export function AdminChatAuditView() {
           </div>
 
           {/* 3. MASTER-DETAIL SPLIT PANE */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(320px, 420px) 1fr', gap: 16, alignItems: 'start' }}>
+          <div className="admin-chat-split-pane" style={{ display: 'grid', gridTemplateColumns: 'minmax(320px, 420px) 1fr', gap: 16, alignItems: 'start' }}>
             {/* ── LEFT PANE: CONVERSATIONS LIST ── */}
-            <div style={{ background: '#ffffff', borderRadius: 16, border: '1px solid #e2e8f0', boxShadow: '0 4px 16px rgba(0,0,0,0.03)', overflow: 'hidden', height: 750, display: 'flex', flexDirection: 'column' }}>
+            <div className={`admin-chat-left-pane ${selectedConv ? 'has-selection-mobile-hide' : ''}`} style={{ background: '#ffffff', borderRadius: 16, border: '1px solid #e2e8f0', boxShadow: '0 4px 16px rgba(0,0,0,0.03)', overflow: 'hidden', height: 750, display: 'flex', flexDirection: 'column' }}>
               <div style={{ padding: '14px 16px', borderBottom: '1px solid #e2e8f0', background: '#f8fafc', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontSize: 13, fontWeight: 800, color: '#334155', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                   Conversas Diretas ({conversations.length})
@@ -983,7 +986,7 @@ export function AdminChatAuditView() {
             </div>
 
             {/* ── RIGHT PANE: AUDITED TIMELINE & CONTROL ── */}
-            <div style={{ background: '#ffffff', borderRadius: 16, border: '1px solid #e2e8f0', boxShadow: '0 4px 16px rgba(0,0,0,0.03)', height: 750, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+            <div className={`admin-chat-right-pane ${!selectedConv ? 'no-selection-mobile-hide' : ''}`} style={{ background: '#ffffff', borderRadius: 16, border: '1px solid #e2e8f0', boxShadow: '0 4px 16px rgba(0,0,0,0.03)', height: 750, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
               {!selectedConv ? (
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', padding: 40, textAlign: 'center', color: '#94a3b8' }}>
                   <div style={{ width: 64, height: 64, borderRadius: 20, background: '#f8fafc', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16, color: '#3b82f6' }}>
@@ -1001,6 +1004,29 @@ export function AdminChatAuditView() {
                   {/* Top Bar of Selected Conversation */}
                   <div style={{ padding: '14px 20px', borderBottom: '1px solid #e2e8f0', background: '#f8fafc', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
                     <div>
+                      {/* Mobile Back Button */}
+                      <button
+                        type="button"
+                        onClick={() => { setSelectedConv(null); setSelectedConvId(null); }}
+                        className="admin-chat-mobile-back-btn"
+                        style={{
+                          display: 'none',
+                          alignItems: 'center',
+                          gap: 6,
+                          background: '#eff6ff',
+                          border: '1px solid #bfdbfe',
+                          color: '#1e40af',
+                          padding: '6px 12px',
+                          borderRadius: 8,
+                          fontSize: 12,
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          marginBottom: 8,
+                          width: 'fit-content'
+                        }}
+                      >
+                        <ChevronLeft size={16} /> Voltar à lista de conversas
+                      </button>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
                         <span style={{ fontSize: 15, fontWeight: 900, color: '#0f172a' }}>
                           {selectedConv.educator?.user_name || 'Educador'} ↔ {selectedConv.target?.user_name || 'Família'}
@@ -1811,6 +1837,106 @@ export function AdminChatAuditView() {
         .spin-animation {
           animation: spinAround 0.8s linear infinite !important;
         }
+
+        @media (max-width: 900px) {
+          .admin-chat-split-pane {
+            display: flex !important;
+            flex-direction: column !important;
+            gap: 12px !important;
+          }
+          .admin-chat-left-pane,
+          .admin-chat-right-pane {
+            width: 100% !important;
+            height: auto !important;
+            min-height: 520px !important;
+            max-height: calc(100vh - 160px) !important;
+          }
+          .has-selection-mobile-hide {
+            display: none !important;
+          }
+          .no-selection-mobile-hide {
+            display: none !important;
+          }
+          .admin-chat-mobile-back-btn {
+            display: inline-flex !important;
+          }
+        }
+
+        @media (max-width: 768px) {
+          .admin-chat-mode-switcher {
+            width: 100% !important;
+            display: flex !important;
+            box-sizing: border-box !important;
+          }
+          .admin-chat-mode-btn {
+            flex: 1 1 0 !important;
+            justify-content: center !important;
+            padding: 8px 6px !important;
+            font-size: 12px !important;
+            gap: 6px !important;
+            white-space: nowrap !important;
+          }
+          .admin-chat-kpi-grid {
+            grid-template-columns: repeat(2, 1fr) !important;
+            gap: 10px !important;
+            margin-bottom: 14px !important;
+          }
+          .admin-chat-kpi-card {
+            padding: 10px 12px !important;
+            border-radius: 12px !important;
+            gap: 10px !important;
+          }
+          .admin-chat-kpi-icon {
+            width: 36px !important;
+            height: 36px !important;
+            border-radius: 10px !important;
+          }
+          .admin-chat-kpi-icon svg {
+            width: 18px !important;
+            height: 18px !important;
+          }
+          .admin-chat-kpi-value {
+            font-size: 18px !important;
+            line-height: 1.1 !important;
+          }
+          .admin-chat-kpi-label {
+            font-size: 10px !important;
+          }
+          .admin-chat-kpi-card-span {
+            grid-column: span 2 !important;
+          }
+          .admin-chat-filters {
+            padding: 12px !important;
+            border-radius: 14px !important;
+            margin-bottom: 14px !important;
+          }
+          .admin-chat-filters > div {
+            gap: 10px !important;
+          }
+          .admin-chat-search-box {
+            width: 100% !important;
+            flex: none !important;
+          }
+          .admin-chat-turma-box {
+            flex: 1 1 0 !important;
+            width: auto !important;
+            min-width: 0 !important;
+          }
+          .admin-chat-presets-box {
+            width: 100% !important;
+            display: flex !important;
+            overflow-x: auto !important;
+            padding: 3px !important;
+          }
+          .admin-chat-presets-box button {
+            flex: 1 1 0 !important;
+            white-space: nowrap !important;
+            padding: 6px 4px !important;
+            font-size: 11px !important;
+            text-align: center !important;
+          }
+        }
+
         @media print {
           body * {
             visibility: hidden !important;

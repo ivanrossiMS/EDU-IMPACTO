@@ -815,69 +815,132 @@ export default function ADAdminComunicados() {
     <div className="ad-admin-page-container ad-mobile-optimized" style={{ display: 'flex', flexDirection: 'column', height: '100%', position: 'relative' }}>
       <style dangerouslySetInnerHTML={{__html: `
         @media (max-width: 768px) {
+          .ad-mobile-optimized {
+            height: auto !important;
+            min-height: 100% !important;
+          }
           .ad-comunicados-header {
             flex-direction: column !important;
             align-items: flex-start !important;
-            gap: 14px !important;
-            margin-bottom: 20px !important;
+            gap: 12px !important;
+            margin-bottom: 14px !important;
           }
           .ad-comunicados-header h2 {
-            font-size: 22px !important;
-            line-height: 1.2 !important;
+            font-size: 20px !important;
+            line-height: 1.25 !important;
             margin: 0 !important;
           }
           .ad-comunicados-header p {
             font-size: 13px !important;
-            margin-top: 4px !important;
+            margin-top: 2px !important;
+            line-height: 1.4 !important;
           }
-          .ad-comunicados-actions {
+          .ad-comunicados-actions-row {
             width: 100% !important;
-            flex-direction: column !important;
-            gap: 10px !important;
-          }
-          .ad-comunicados-top-row {
             display: flex !important;
-            flex-direction: column !important;
+            align-items: center !important;
             gap: 8px !important;
-            width: 100% !important;
           }
-          .ad-comunicados-top-row .form-input,
-          .ad-comunicados-top-row select {
-            width: 100% !important;
-          }
-          .ad-comunicados-btn-row {
-            display: flex !important;
-            flex-wrap: wrap !important;
-            gap: 8px !important;
-            width: 100% !important;
-          }
-          .ad-comunicados-btn-row button {
-            flex: 1 1 calc(50% - 8px) !important;
+          .ad-comunicados-actions-row > button:not(.ad-com-btn-refresh) {
+            flex: 1 !important;
+            height: 38px !important;
             justify-content: center !important;
             font-size: 12px !important;
-            padding: 8px 10px !important;
+            padding: 0 10px !important;
           }
-          .ad-comunicados-btn-primary {
+          .ad-comunicados-filter-bar {
+            margin-top: 12px !important;
+            padding: 12px !important;
+            border-radius: 16px !important;
+            gap: 10px !important;
+            flex-direction: column !important;
+            align-items: stretch !important;
+          }
+          .ad-filter-divider {
+            display: none !important;
+          }
+          .ad-filter-search-box {
             width: 100% !important;
-            flex: 1 1 100% !important;
-            padding: 10px !important;
+            flex: none !important;
+            order: 1 !important;
+          }
+          .ad-filter-subrow {
+            display: grid !important;
+            grid-template-columns: 1fr 1fr !important;
+            gap: 8px !important;
+            width: 100% !important;
+            order: 2 !important;
+          }
+          .ad-filter-subrow > * {
+            width: 100% !important;
+            min-width: 0 !important;
+            flex: 1 !important;
+          }
+          .ad-filter-chips-row {
+            display: flex !important;
+            align-items: center !important;
+            gap: 8px !important;
+            width: 100% !important;
+            order: 3 !important;
+          }
+          .ad-filter-chips-row > button {
+            flex: 1 !important;
+            justify-content: center !important;
+            font-size: 12px !important;
+            height: 36px !important;
+            padding: 0 10px !important;
           }
           .ad-comunicados-tabs {
             width: 100% !important;
             display: flex !important;
-            margin-bottom: 16px !important;
+            background: #f1f5f9 !important;
+            padding: 4px !important;
+            border-radius: 12px !important;
+            gap: 4px !important;
+            margin-bottom: 14px !important;
+            box-sizing: border-box !important;
           }
           .ad-comunicados-tabs .tab-trigger {
-            flex: 1 !important;
+            flex: 1 1 0 !important;
+            width: auto !important;
             justify-content: center !important;
-            font-size: 12px !important;
-            padding: 8px 12px !important;
+            font-size: 13px !important;
+            font-weight: 700 !important;
+            padding: 8px 6px !important;
+            border-radius: 8px !important;
+            display: flex !important;
+            align-items: center !important;
+            gap: 6px !important;
+            white-space: nowrap !important;
           }
           .ad-comunicado-card {
             flex-direction: column !important;
             align-items: stretch !important;
             gap: 12px !important;
             padding: 14px 16px !important;
+            border-radius: 16px !important;
+          }
+          .ad-comunicado-card-top {
+            display: flex !important;
+            align-items: flex-start !important;
+            gap: 10px !important;
+            width: 100% !important;
+          }
+          .ad-comunicado-title {
+            font-size: 15px !important;
+            font-weight: 800 !important;
+            line-height: 1.3 !important;
+            white-space: normal !important;
+            word-break: break-word !important;
+          }
+          .ad-comunicado-snippet {
+            white-space: normal !important;
+            display: -webkit-box !important;
+            -webkit-line-clamp: 2 !important;
+            -webkit-box-orient: vertical !important;
+            overflow: hidden !important;
+            line-height: 1.4 !important;
+            font-size: 13px !important;
           }
           .ad-comunicado-stats {
             border-left: none !important;
@@ -886,20 +949,29 @@ export default function ADAdminComunicados() {
             width: 100% !important;
             border-top: 1px solid #f1f5f9 !important;
             padding-top: 10px !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: space-between !important;
           }
           .ad-comunicado-actions {
             width: 100% !important;
             padding-left: 0 !important;
             border-top: 1px solid #f1f5f9 !important;
             padding-top: 10px !important;
+            display: flex !important;
             justify-content: flex-end !important;
+            gap: 8px !important;
           }
           .ad-com-btn-refresh {
-            width: 34px !important;
-            height: 34px !important;
-            min-width: 34px !important;
-            min-height: 34px !important;
+            width: 38px !important;
+            height: 38px !important;
+            min-width: 38px !important;
+            min-height: 38px !important;
             padding: 0 !important;
+          }
+          .ad-comunicados-scroll-container {
+            padding-right: 0 !important;
+            padding-bottom: 120px !important;
           }
         }
         @keyframes adSpin {
@@ -961,7 +1033,7 @@ export default function ADAdminComunicados() {
           </div>
 
           {/* Action Buttons group: Relatório Mensal, Engajamento, Refresh */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <div className="ad-comunicados-actions-row" style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <button
               onClick={() => setShowMonthlyReport(true)}
               style={{
@@ -1057,6 +1129,7 @@ export default function ADAdminComunicados() {
 
         {/* Filter bar container */}
         <div 
+          className="ad-comunicados-filter-bar"
           style={{ 
             marginTop: 16, 
             display: 'flex', 
@@ -1072,55 +1145,62 @@ export default function ADAdminComunicados() {
             boxShadow: '0 2px 8px rgba(0, 0, 0, 0.02)'
           }}
         >
-          {/* Mini Calendar Filter */}
-          <MiniCalendarFilter
-            selectedDate={selectedDate}
-            onSelectDate={setSelectedDate}
-            activeDatesWithComunicados={activeDatesWithComunicados}
-          />
+          {/* Subrow on mobile: Calendar & Author */}
+          <div className="ad-filter-subrow" style={{ display: 'flex', alignItems: 'center', gap: 10, flex: '1 1 auto' }}>
+            {/* Mini Calendar Filter */}
+            <div style={{ flexShrink: 0 }}>
+              <MiniCalendarFilter
+                selectedDate={selectedDate}
+                onSelectDate={setSelectedDate}
+                activeDatesWithComunicados={activeDatesWithComunicados}
+              />
+            </div>
 
-          <div style={{ width: 1, height: 24, background: '#e2e8f0', margin: '0 2px' }} />
+            <div className="ad-filter-divider" style={{ width: 1, height: 24, background: '#e2e8f0', margin: '0 2px' }} />
 
-          {/* Author filter */}
-          <div style={{ position: 'relative', flex: '1 1 220px', minWidth: 200 }}>
-            <Filter size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', pointerEvents: 'none' }} />
-            <select 
-              value={authorFilter}
-              onChange={e => setAuthorFilter(e.target.value)}
-              style={{
-                width: '100%',
-                height: 38,
-                paddingLeft: 34,
-                paddingRight: 28,
-                borderRadius: 12,
-                border: '1px solid #e2e8f0',
-                background: '#ffffff',
-                color: '#1e293b',
-                fontSize: 13,
-                fontWeight: 600,
-                appearance: 'none',
-                cursor: 'pointer',
-                outline: 'none',
-                transition: 'border-color 0.2s'
-              }}
-            >
-              <option value="todos">Todos os Autores</option>
-              <option value="meus">Meus Comunicados</option>
-              {availableRoles.length > 0 && (
-                <optgroup label="Filtrar por Cargo">
-                  {availableRoles.map(role => <option key={`role-${role}`} value={`cargo:${role}`}>{role}</option>)}
-                </optgroup>
-              )}
-              {availableAuthors.length > 0 && (
-                <optgroup label="Filtrar por Colaborador">
-                  {availableAuthors.map(autor => <option key={`aut-${autor}`} value={`autor:${autor}`}>{autor}</option>)}
-                </optgroup>
-              )}
-            </select>
+            {/* Author filter */}
+            <div className="ad-filter-author-box" style={{ position: 'relative', flex: '1 1 200px', minWidth: 160 }}>
+              <Filter size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', pointerEvents: 'none' }} />
+              <select 
+                value={authorFilter}
+                onChange={e => setAuthorFilter(e.target.value)}
+                style={{
+                  width: '100%',
+                  height: 38,
+                  paddingLeft: 34,
+                  paddingRight: 28,
+                  borderRadius: 12,
+                  border: '1px solid #e2e8f0',
+                  background: '#ffffff',
+                  color: '#1e293b',
+                  fontSize: 13,
+                  fontWeight: 600,
+                  appearance: 'none',
+                  cursor: 'pointer',
+                  outline: 'none',
+                  transition: 'border-color 0.2s'
+                }}
+              >
+                <option value="todos">Todos os Autores</option>
+                <option value="meus">Meus Comunicados</option>
+                {availableRoles.length > 0 && (
+                  <optgroup label="Filtrar por Cargo">
+                    {availableRoles.map(role => <option key={`role-${role}`} value={`cargo:${role}`}>{role}</option>)}
+                  </optgroup>
+                )}
+                {availableAuthors.length > 0 && (
+                  <optgroup label="Filtrar por Colaborador">
+                    {availableAuthors.map(autor => <option key={`aut-${autor}`} value={`autor:${autor}`}>{autor}</option>)}
+                  </optgroup>
+                )}
+              </select>
+            </div>
           </div>
 
+          <div className="ad-filter-divider" style={{ width: 1, height: 24, background: '#e2e8f0', margin: '0 2px' }} />
+
           {/* Search bar with clear button */}
-          <div style={{ position: 'relative', flex: '1 1 240px', minWidth: 200 }}>
+          <div className="ad-filter-search-box" style={{ position: 'relative', flex: '1 1 240px', minWidth: 200 }}>
             <Search size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', pointerEvents: 'none' }} />
             <input 
               placeholder="Buscar título, texto ou autor..." 
@@ -1165,73 +1245,74 @@ export default function ADAdminComunicados() {
             )}
           </div>
 
-          <div style={{ width: 1, height: 24, background: '#e2e8f0', margin: '0 2px' }} />
+          <div className="ad-filter-divider" style={{ width: 1, height: 24, background: '#e2e8f0', margin: '0 2px' }} />
 
-          {/* Quick Filter: Tem Comentários */}
-          <button
-            type="button"
-            onClick={() => setFilterComentarios(prev => !prev)}
-            title="Filtrar apenas comunicados que possuem comentários/conversas particulares"
-            style={{
-              height: 38,
-              padding: '0 13px',
-              borderRadius: 12,
-              border: filterComentarios ? '1px solid #4f46e5' : '1px solid #e2e8f0',
-              background: filterComentarios ? 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)' : '#ffffff',
-              color: filterComentarios ? '#ffffff' : '#475569',
-              fontSize: 13,
-              fontWeight: 700,
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 7,
-              cursor: 'pointer',
-              boxShadow: filterComentarios ? '0 4px 12px rgba(79, 70, 229, 0.3)' : '0 1px 2px rgba(0,0,0,0.02)',
-              transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-              whiteSpace: 'nowrap',
-              flexShrink: 0
-            }}
-          >
-            <MessageSquare size={14} fill={filterComentarios ? '#ffffff' : 'none'} />
-            <span>Comentários</span>
-            {filterComentarios && (
-              <span style={{ width: 16, height: 16, borderRadius: '50%', background: 'rgba(255,255,255,0.25)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 900 }}>
-                ✓
-              </span>
-            )}
-          </button>
+          {/* Quick Filters Chips */}
+          <div className="ad-filter-chips-row" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button
+              type="button"
+              onClick={() => setFilterComentarios(prev => !prev)}
+              title="Filtrar apenas comunicados que possuem comentários/conversas particulares"
+              style={{
+                height: 38,
+                padding: '0 13px',
+                borderRadius: 12,
+                border: filterComentarios ? '1px solid #4f46e5' : '1px solid #e2e8f0',
+                background: filterComentarios ? 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)' : '#ffffff',
+                color: filterComentarios ? '#ffffff' : '#475569',
+                fontSize: 13,
+                fontWeight: 700,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 7,
+                cursor: 'pointer',
+                boxShadow: filterComentarios ? '0 4px 12px rgba(79, 70, 229, 0.3)' : '0 1px 2px rgba(0,0,0,0.02)',
+                transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                whiteSpace: 'nowrap',
+                flexShrink: 0
+              }}
+            >
+              <MessageSquare size={14} fill={filterComentarios ? '#ffffff' : 'none'} />
+              <span>Comentários</span>
+              {filterComentarios && (
+                <span style={{ width: 16, height: 16, borderRadius: '50%', background: 'rgba(255,255,255,0.25)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 900 }}>
+                  ✓
+                </span>
+              )}
+            </button>
 
-          {/* Quick Filter: Tem Relatório */}
-          <button
-            type="button"
-            onClick={() => setFilterRelatorio(prev => !prev)}
-            title="Filtrar apenas comunicados que possuem relatório pedagógico anexado"
-            style={{
-              height: 38,
-              padding: '0 13px',
-              borderRadius: 12,
-              border: filterRelatorio ? '1px solid #7c3aed' : '1px solid #e2e8f0',
-              background: filterRelatorio ? 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)' : '#ffffff',
-              color: filterRelatorio ? '#ffffff' : '#475569',
-              fontSize: 13,
-              fontWeight: 700,
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 7,
-              cursor: 'pointer',
-              boxShadow: filterRelatorio ? '0 4px 12px rgba(124, 58, 237, 0.3)' : '0 1px 2px rgba(0,0,0,0.02)',
-              transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-              whiteSpace: 'nowrap',
-              flexShrink: 0
-            }}
-          >
-            <FileBarChart size={14} />
-            <span>Relatórios</span>
-            {filterRelatorio && (
-              <span style={{ width: 16, height: 16, borderRadius: '50%', background: 'rgba(255,255,255,0.25)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 900 }}>
-                ✓
-              </span>
-            )}
-          </button>
+            <button
+              type="button"
+              onClick={() => setFilterRelatorio(prev => !prev)}
+              title="Filtrar apenas comunicados que possuem relatório pedagógico anexado"
+              style={{
+                height: 38,
+                padding: '0 13px',
+                borderRadius: 12,
+                border: filterRelatorio ? '1px solid #7c3aed' : '1px solid #e2e8f0',
+                background: filterRelatorio ? 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)' : '#ffffff',
+                color: filterRelatorio ? '#ffffff' : '#475569',
+                fontSize: 13,
+                fontWeight: 700,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 7,
+                cursor: 'pointer',
+                boxShadow: filterRelatorio ? '0 4px 12px rgba(124, 58, 237, 0.3)' : '0 1px 2px rgba(0,0,0,0.02)',
+                transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                whiteSpace: 'nowrap',
+                flexShrink: 0
+              }}
+            >
+              <FileBarChart size={14} />
+              <span>Relatórios</span>
+              {filterRelatorio && (
+                <span style={{ width: 16, height: 16, borderRadius: '50%', background: 'rgba(255,255,255,0.25)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 900 }}>
+                  ✓
+                </span>
+              )}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -1352,7 +1433,7 @@ export default function ADAdminComunicados() {
         )}
       </div>
 
-      <div style={{ flex: 1, overflowY: 'auto', paddingRight: 8 }}>
+      <div className="ad-comunicados-scroll-container" style={{ flex: 1, overflowY: 'auto', paddingRight: 8 }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {filtered.length === 0 && isDataLoading && (
             <div style={{ textAlign: 'center', padding: '80px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
@@ -1507,7 +1588,7 @@ export default function ADAdminComunicados() {
                 {/* Content Column */}
                 <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                    <h3 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', letterSpacing: '-0.01em' }}>
+                    <h3 className="ad-comunicado-title" style={{ margin: 0, fontSize: 17, fontWeight: 800, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', letterSpacing: '-0.01em' }}>
                       {c.titulo}
                     </h3>
                     {c.fixado && <span style={{ background: 'rgba(245, 158, 11, 0.1)', color: '#f59e0b', padding: '2px 6px', borderRadius: 6, display: 'flex', alignItems: 'center' }}><Pin size={12} fill="#f59e0b" /></span>}
@@ -1537,7 +1618,7 @@ export default function ADAdminComunicados() {
                     )}
                   </div>
                   
-                  <p style={{ margin: 0, fontSize: 14, color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 500 }}>
+                  <p className="ad-comunicado-snippet" style={{ margin: 0, fontSize: 14, color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 500 }}>
                     {(c.conteudo || (c as any).texto || '').replace(/<[^>]*>/g, '').replace(/[\*\#\_]/g, '')}
                   </p>
                   

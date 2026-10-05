@@ -1044,6 +1044,64 @@ export default function ADAdminPushTestPage() {
 
   return (
     <div className="ad-admin-page-container" style={{ display: 'flex', flexDirection: 'column', gap: 24, paddingBottom: 40 }}>
+      <style dangerouslySetInnerHTML={{__html: `
+        @media (max-width: 768px) {
+          .ad-admin-page-container {
+            padding-bottom: 120px !important;
+          }
+          .push-teste-header h1 {
+            font-size: 19px !important;
+            line-height: 1.25 !important;
+          }
+          .push-teste-header p {
+            font-size: 13px !important;
+            line-height: 1.4 !important;
+          }
+          .push-main-tabs {
+            width: 100% !important;
+            display: flex !important;
+            gap: 4px !important;
+            padding-bottom: 0 !important;
+          }
+          .push-main-tab-btn {
+            flex: 1 1 0 !important;
+            justify-content: center !important;
+            padding: 10px 6px !important;
+            font-size: 13px !important;
+            text-align: center !important;
+          }
+          .push-badge-desktop-only {
+            display: none !important;
+          }
+          .push-device-card {
+            padding: 14px 16px !important;
+            border-radius: 16px !important;
+          }
+          .push-device-actions {
+            width: 100% !important;
+            display: grid !important;
+            grid-template-columns: 1fr 1fr !important;
+            gap: 8px !important;
+          }
+          .push-device-actions button {
+            width: 100% !important;
+            justify-content: center !important;
+            padding: 8px 6px !important;
+            font-size: 11px !important;
+          }
+          .push-device-actions button:last-child {
+            grid-column: span 2 !important;
+          }
+          .push-diagnostic-grid {
+            grid-template-columns: 1fr !important;
+            gap: 8px !important;
+          }
+          .push-simulator-grid {
+            grid-template-columns: 1fr !important;
+            gap: 16px !important;
+          }
+        }
+      `}} />
       {/* ── HEADER ── */}
       <div style={{
         display: 'flex',
@@ -1054,7 +1112,7 @@ export default function ADAdminPushTestPage() {
         paddingBottom: 8,
         borderBottom: '1px solid hsl(var(--border-subtle))'
       }}>
-        <div>
+        <div className="push-teste-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'hsl(var(--text-muted))', marginBottom: 4 }}>
             <Link href="/agenda-digital/admin" style={{ color: 'inherit', textDecoration: 'none' }}>Admin</Link>
             <ChevronRight size={14} />
@@ -1373,7 +1431,7 @@ export default function ADAdminPushTestPage() {
       )}
 
       {/* ── NAVEGAÇÃO DE ABAS: SIMULADOR vs HISTÓRICO ── */}
-      <div style={{
+      <div className="push-main-tabs" style={{
         display: 'flex',
         alignItems: 'center',
         gap: 8,
@@ -1382,6 +1440,7 @@ export default function ADAdminPushTestPage() {
         overflowX: 'auto',
       }}>
         <button
+          className="push-main-tab-btn"
           onClick={() => setActiveMainTab('disparador')}
           style={{
             display: 'flex',
@@ -1401,10 +1460,11 @@ export default function ADAdminPushTestPage() {
           }}
         >
           <Radio size={16} />
-          Disparador & Simulador de Push
+          <span>Disparador & Simulador</span>
         </button>
 
         <button
+          className="push-main-tab-btn"
           onClick={() => setActiveMainTab('historico')}
           style={{
             display: 'flex',
@@ -1424,8 +1484,8 @@ export default function ADAdminPushTestPage() {
           }}
         >
           <Clock size={16} />
-          Histórico & Auditoria de Disparos
-          <span style={{
+          <span>Histórico & Auditoria</span>
+          <span className="push-badge-desktop-only" style={{
             fontSize: 10,
             padding: '2px 8px',
             borderRadius: 12,
@@ -1451,7 +1511,7 @@ export default function ADAdminPushTestPage() {
       ) : (
         <>
           {/* ── STATUS DESTE APARELHO (DIAGNÓSTICO LOCAL PUSH) ── */}
-          <div style={{
+          <div className="push-device-card" style={{
         background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.7) 0%, rgba(30, 41, 59, 0.5) 100%)',
         border: '1px solid rgba(99, 102, 241, 0.25)',
         borderRadius: 18,
@@ -1485,7 +1545,7 @@ export default function ADAdminPushTestPage() {
             </div>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <div className="push-device-actions" style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <button
               onClick={handleResyncDevice}
               disabled={isResyncingDevice}
@@ -1535,7 +1595,7 @@ export default function ADAdminPushTestPage() {
           </div>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
+        <div className="push-diagnostic-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
           {/* Card 1: Aparelho & Sessão */}
           <div style={{ padding: '12px 16px', borderRadius: 12, background: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
@@ -1617,7 +1677,7 @@ export default function ADAdminPushTestPage() {
       </div>
 
       {/* ── GRID PRINCIPAL: CONTROLES & PREVIEW ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.4fr) minmax(0, 1fr)', gap: 24, alignItems: 'start' }}>
+      <div className="push-simulator-grid" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.4fr) minmax(0, 1fr)', gap: 24, alignItems: 'start' }}>
         
         {/* COLUNA ESQUERDA: CONTROLES */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
