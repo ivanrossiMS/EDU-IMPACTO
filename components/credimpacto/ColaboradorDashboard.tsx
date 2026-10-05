@@ -13,7 +13,8 @@ import {
   ChevronRight,
   TrendingDown,
   Sparkles,
-  Download
+  Download,
+  Calculator
 } from 'lucide-react'
 import { CredImpactoEmprestimo, CredImpactoParcela } from '@/types/credimpacto'
 import { formatBrl } from '@/lib/credimpacto/engine'
@@ -25,6 +26,7 @@ interface ColaboradorDashboardProps {
   onOpenSignModal: (loan: CredImpactoEmprestimo) => void
   onOpenPayoffModal: (loan: CredImpactoEmprestimo) => void
   onRefresh: () => void
+  onOpenNewLoan?: () => void
 }
 
 export function ColaboradorDashboard({
@@ -32,7 +34,8 @@ export function ColaboradorDashboard({
   onOpenDetails,
   onOpenSignModal,
   onOpenPayoffModal,
-  onRefresh
+  onRefresh,
+  onOpenNewLoan
 }: ColaboradorDashboardProps) {
   const [selectedLoanForContra, setSelectedLoanForContra] = useState<CredImpactoEmprestimo | null>(null)
   const [isAnsweringContra, setIsAnsweringContra] = useState(false)
@@ -238,18 +241,40 @@ export function ColaboradorDashboard({
 
       {/* LISTA DE EMPRÉSTIMOS DO COLABORADOR */}
       <div className="space-y-4">
-        <h3 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
-          <span>Minhas Operações de Empréstimo</span>
-          <span className="text-xs text-slate-500 dark:text-slate-400 font-normal">({emprestimos.length})</span>
-        </h3>
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+            <span>Minhas Operações de Empréstimo</span>
+            <span className="text-xs text-slate-500 dark:text-slate-400 font-normal">({emprestimos.length})</span>
+          </h3>
+          {onOpenNewLoan && (
+            <button
+              onClick={onOpenNewLoan}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold shadow-sm shadow-emerald-600/20 active:scale-95 transition-all"
+            >
+              <Calculator size={14} />
+              <span>Simular Empréstimo</span>
+            </button>
+          )}
+        </div>
 
         {emprestimos.length === 0 ? (
           <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-12 text-center text-slate-500 dark:text-slate-400 space-y-3 shadow-sm">
             <Wallet size={40} className="mx-auto text-slate-400 dark:text-slate-600" />
             <div className="text-base font-bold text-slate-900 dark:text-white">Você ainda não possui solicitações de empréstimo.</div>
             <p className="text-xs max-w-md mx-auto text-slate-600 dark:text-slate-400">
-              Utilize a aba &quot;Simular & Solicitar&quot; para simular os valores desejados, conferir o cronograma e enviar sua proposta à escola.
+              Faça uma simulação para conferir os prazos, valores das parcelas e enviar sua solicitação para análise da escola.
             </p>
+            {onOpenNewLoan && (
+              <div className="pt-2">
+                <button
+                  onClick={onOpenNewLoan}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold shadow-md shadow-emerald-600/20 active:scale-95 transition-all"
+                >
+                  <Calculator size={15} />
+                  <span>Simular Empréstimo</span>
+                </button>
+              </div>
+            )}
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-4">

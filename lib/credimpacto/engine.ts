@@ -68,25 +68,30 @@ export function generateInstallmentDates(
 ): Array<{ competencia: string; vencimento: string }> {
   const result: Array<{ competencia: string; vencimento: string }> = []
   
-  // Começa no próximo mês para a primeira competência
-  let year = dataInicio.getFullYear()
-  let month = dataInicio.getMonth() + 1 // 1-indexed
+  // O vencimento e competência da 1ª parcela devem ser SEMPRE no próximo mês, NUNCA no mês atual
+  const d = typeof dataInicio === 'string' && (dataInicio as string).length === 10
+    ? new Date(dataInicio + 'T12:00:00Z')
+    : new Date(dataInicio)
+
+  let year = d.getFullYear()
+  let month = d.getMonth() + 1 // mês da concessão (1 a 12)
+
+  // Avança obrigatoriamente para o mês seguinte (nunca no mês atual)
+  month += 1
+  if (month > 12) {
+    month = 1
+    year += 1
+  }
 
   for (let k = 1; k <= totalParcelas; k++) {
-    // Competência do desconto em folha (ex: 2026-10)
     const compMonthStr = String(month).padStart(2, '0')
     const competencia = `${year}-${compMonthStr}`
 
-    // Vencimento da folha (geralmente dia 5 do mês subsequente à competência)
-    let dueMonth = month + 1
-    let dueYear = year
-    if (dueMonth > 12) {
-      dueMonth = 1
-      dueYear += 1
-    }
-    const dueMonthStr = String(dueMonth).padStart(2, '0')
-    const dueDayStr = String(diaVencimento).padStart(2, '0')
-    const vencimento = `${dueYear}-${dueMonthStr}-${dueDayStr}`
+    // Garante que o dia de vencimento seja válido para o mês
+    const ultimoDiaDoMes = new Date(year, month, 0).getDate()
+    const safeDay = Math.min(Math.max(1, diaVencimento), ultimoDiaDoMes)
+    const dueDayStr = String(safeDay).padStart(2, '0')
+    const vencimento = `${year}-${compMonthStr}-${dueDayStr}`
 
     result.push({ competencia, vencimento })
 

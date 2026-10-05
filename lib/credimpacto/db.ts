@@ -586,7 +586,7 @@ export async function dbGetParcelasFolha(competencia?: string): Promise<
 
   for (const emp of emprestimos) {
     // Considera empréstimos que estejam ativos ou quitados (para histórico de competência)
-    if (['ativo', 'quitado', 'aguardando_liberacao'].includes(emp.status)) {
+    if (['ativo', 'quitado'].includes(emp.status)) {
       for (const p of emp.parcelas || []) {
         if (!competencia || p.competencia === competencia) {
           result.push({

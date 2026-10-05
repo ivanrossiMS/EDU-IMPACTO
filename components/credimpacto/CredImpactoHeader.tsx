@@ -45,8 +45,8 @@ const TAB_TITLES: Record<TabId, { title: string; subtitle: string; adminOnly?: b
     subtitle: 'Apuração e retenção de saldo devedor na rescisão conforme limites legais da CLT'
   },
   simular: {
-    title: 'Simulador & Concessão',
-    subtitle: 'Simulação matemática de amortização, parcelas, juros e envio de propostas'
+    title: 'Simulador de empréstimo',
+    subtitle: 'Configure as condições e confira sua proposta.'
   },
   relatorios: {
     title: 'Relatórios Financeiros & Extratos Contábeis',
@@ -117,13 +117,15 @@ export function CredImpactoHeader({
             <span>Atualizar</span>
           </button>
 
-          <button
-            onClick={onNewLoanClick}
-            className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold shadow-md shadow-emerald-600/20 active:scale-95 transition-all"
-          >
-            <Plus size={15} />
-            <span>{isAdminOrFinance && viewMode === 'admin' ? 'Novo Empréstimo' : 'Nova Solicitação'}</span>
-          </button>
+          {activeTab !== 'simular' && (
+            <button
+              onClick={onNewLoanClick}
+              className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold shadow-md shadow-emerald-600/20 active:scale-95 transition-all"
+            >
+              <Plus size={15} />
+              <span>{isAdminOrFinance && viewMode === 'admin' ? 'Novo Empréstimo' : 'Nova Solicitação'}</span>
+            </button>
+          )}
         </div>
       </div>
 

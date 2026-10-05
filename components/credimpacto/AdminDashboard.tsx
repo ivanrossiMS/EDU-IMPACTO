@@ -108,8 +108,8 @@ export function AdminDashboard({
   const totalSaldoAReceber = ativos.reduce((acc, e) => acc + (e.saldoDevedorAtual || 0), 0)
   const totalLiquidadoGeral = emprestimos.filter((e) => e.status === 'quitado').reduce((acc, e) => acc + (e.valorAprovado || 0), 0)
 
-  // Empréstimos elegíveis para acompanhamento de parcelas (apenas ativos ou quitados)
-  const emprestimosConcedidos = emprestimos.filter((e) => ['ativo', 'quitado'].includes(e.status))
+  // Empréstimos elegíveis para acompanhamento de parcelas (apenas ativos)
+  const emprestimosConcedidos = ativos
 
   // Métricas específicas de Liberações TED
   const pendentesLiberacao = emprestimos.filter((e) => e.status === 'aguardando_liberacao')
@@ -125,12 +125,12 @@ export function AdminDashboard({
   const hoje = new Date()
   const compAtual = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`
 
-  // Parcelas do Mês (apenas de empréstimos concedidos)
+  // Parcelas do Mês (apenas de empréstimos ativos)
   let parcelasMesPrevistas = 0
   let parcelasMesRecebidas = 0
   let parcelasEmAtraso = 0
 
-  for (const emp of emprestimosConcedidos) {
+  for (const emp of ativos) {
     for (const p of emp.parcelas || []) {
       if (p.competencia === compAtual) {
         parcelasMesPrevistas += p.valorTotal
@@ -409,78 +409,6 @@ export function AdminDashboard({
               <div className="text-[11px] font-semibold text-teal-800/80 dark:text-teal-400/80 mt-1 truncate">Principal restante</div>
             </div>
           </>
-        ) : viewModeTab === 'analise' ? (
-          <>
-            <div className="bg-gradient-to-br from-amber-50 via-orange-50/30 to-white dark:from-amber-950/40 dark:via-slate-900 dark:to-slate-900 border border-amber-200/90 dark:border-amber-800/70 rounded-2xl p-4 shadow-sm relative overflow-hidden transition-all hover:shadow-md">
-              <div className="h-1.5 w-full bg-gradient-to-r from-amber-500 to-orange-500 absolute top-0 left-0" />
-              <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 mb-2">
-                <span className="text-[10px] font-bold uppercase tracking-wider truncate text-amber-900/80 dark:text-amber-300">Novas Solicitações</span>
-                <div className="w-7 h-7 rounded-lg bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 flex items-center justify-center shrink-0">
-                  <Clock size={15} />
-                </div>
-              </div>
-              <div className="text-lg sm:text-xl font-black text-amber-700 dark:text-amber-400 font-mono truncate">
-                {pendentesAnalise.length}
-              </div>
-              <div className="text-[11px] font-semibold text-amber-800/80 dark:text-amber-400/80 mt-1 truncate">Aguardando deliberação</div>
-            </div>
-
-            <div className="bg-gradient-to-br from-orange-50 via-amber-50/30 to-white dark:from-orange-950/40 dark:via-slate-900 dark:to-slate-900 border border-orange-200/90 dark:border-orange-800/70 rounded-2xl p-4 shadow-sm relative overflow-hidden transition-all hover:shadow-md">
-              <div className="h-1.5 w-full bg-gradient-to-r from-orange-500 to-amber-500 absolute top-0 left-0" />
-              <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 mb-2">
-                <span className="text-[10px] font-bold uppercase tracking-wider truncate text-orange-900/80 dark:text-orange-300">Volume Solicitado</span>
-                <div className="w-7 h-7 rounded-lg bg-orange-100 dark:bg-orange-950 text-orange-700 dark:text-orange-300 flex items-center justify-center shrink-0">
-                  <Banknote size={15} />
-                </div>
-              </div>
-              <div className="text-lg sm:text-xl font-black text-orange-700 dark:text-orange-400 font-mono truncate">
-                {formatBrl(totalSolicitadoAnalise)}
-              </div>
-              <div className="text-[11px] font-semibold text-orange-800/80 dark:text-orange-400/80 mt-1 truncate">Demandado em propostas</div>
-            </div>
-
-            <div className="bg-gradient-to-br from-purple-50 via-violet-50/30 to-white dark:from-purple-950/40 dark:via-slate-900 dark:to-slate-900 border border-purple-200/90 dark:border-purple-800/70 rounded-2xl p-4 shadow-sm relative overflow-hidden transition-all hover:shadow-md">
-              <div className="h-1.5 w-full bg-gradient-to-r from-purple-500 to-violet-500 absolute top-0 left-0" />
-              <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 mb-2">
-                <span className="text-[10px] font-bold uppercase tracking-wider truncate text-purple-900/80 dark:text-purple-300">Em Contraproposta</span>
-                <div className="w-7 h-7 rounded-lg bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 flex items-center justify-center shrink-0">
-                  <TrendingUp size={15} />
-                </div>
-              </div>
-              <div className="text-lg sm:text-xl font-black text-purple-700 dark:text-purple-400 font-mono truncate">
-                {emContraproposta.length}
-              </div>
-              <div className="text-[11px] font-semibold text-purple-800/80 dark:text-purple-400/80 mt-1 truncate">Aguardando aceite</div>
-            </div>
-
-            <div className="bg-gradient-to-br from-blue-50 via-sky-50/30 to-white dark:from-blue-950/40 dark:via-slate-900 dark:to-slate-900 border border-blue-200/90 dark:border-blue-800/70 rounded-2xl p-4 shadow-sm relative overflow-hidden transition-all hover:shadow-md">
-              <div className="h-1.5 w-full bg-gradient-to-r from-blue-500 to-indigo-500 absolute top-0 left-0" />
-              <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 mb-2">
-                <span className="text-[10px] font-bold uppercase tracking-wider truncate text-blue-900/80 dark:text-blue-300">Ag. Assinatura</span>
-                <div className="w-7 h-7 rounded-lg bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 flex items-center justify-center shrink-0">
-                  <FileText size={15} />
-                </div>
-              </div>
-              <div className="text-lg sm:text-xl font-black text-blue-700 dark:text-blue-400 font-mono truncate">
-                {aguardandoAssinatura.length}
-              </div>
-              <div className="text-[11px] font-semibold text-blue-700 dark:text-blue-400 mt-1 truncate">Aprovados pelo financeiro</div>
-            </div>
-
-            <div className="col-span-2 lg:col-span-1 bg-gradient-to-br from-emerald-50 via-teal-50/30 to-white dark:from-emerald-950/40 dark:via-slate-900 dark:to-slate-900 border border-emerald-200/90 dark:border-emerald-800/70 rounded-2xl p-4 shadow-sm relative overflow-hidden transition-all hover:shadow-md">
-              <div className="h-1.5 w-full bg-gradient-to-r from-emerald-500 to-teal-500 absolute top-0 left-0" />
-              <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 mb-2">
-                <span className="text-[10px] font-bold uppercase tracking-wider truncate text-emerald-900/80 dark:text-emerald-300">Contratos Ativos</span>
-                <div className="w-7 h-7 rounded-lg bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 flex items-center justify-center shrink-0">
-                  <CheckCircle2 size={15} />
-                </div>
-              </div>
-              <div className="text-lg sm:text-xl font-black text-emerald-700 dark:text-emerald-400 font-mono truncate">
-                {ativos.length}
-              </div>
-              <div className="text-[11px] font-semibold text-emerald-800/80 dark:text-emerald-400/80 mt-1 truncate">{formatBrl(totalEmprestadoAtivo)}</div>
-            </div>
-          </>
         ) : (
           <>
             <div className="bg-gradient-to-br from-blue-50 via-indigo-50/30 to-white dark:from-blue-950/40 dark:via-slate-900 dark:to-slate-900 border border-blue-200/90 dark:border-blue-800/70 rounded-2xl p-4 shadow-sm relative overflow-hidden transition-all hover:shadow-md">
@@ -494,7 +422,9 @@ export function AdminDashboard({
               <div className="text-lg sm:text-xl font-black text-blue-700 dark:text-blue-400 font-mono truncate">
                 {formatBrl(totalEmprestadoAtivo)}
               </div>
-              <div className="text-[11px] font-semibold text-blue-700 dark:text-blue-400 mt-1 truncate">{ativos.length} contratos ativos</div>
+              <div className="text-[11px] font-semibold text-blue-700 dark:text-blue-400 mt-1 truncate">
+                {ativos.length} {ativos.length === 1 ? 'contrato ativo' : 'contratos ativos'}
+              </div>
             </div>
 
             <div className="bg-gradient-to-br from-emerald-50 via-teal-50/30 to-white dark:from-emerald-950/40 dark:via-slate-900 dark:to-slate-900 border border-emerald-200/90 dark:border-emerald-800/70 rounded-2xl p-4 shadow-sm relative overflow-hidden transition-all hover:shadow-md">

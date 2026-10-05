@@ -29,13 +29,13 @@ export function RelatoriosTab({
 }: RelatoriosTabProps) {
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear().toString())
 
-  // Métricas Consolidadas - apenas operações formalizadas e liberadas
-  const concedidos = useMemo(() => emprestimos.filter((e) => ['ativo', 'quitado'].includes(e.status)), [emprestimos])
+  // Métricas Consolidadas - apenas operações ativas
+  const concedidos = useMemo(() => emprestimos.filter((e) => e.status === 'ativo'), [emprestimos])
   const totalOperacoes = concedidos.length
   const totalPrincipalConcedido = concedidos.reduce((acc, e) => acc + (e.valorAprovado || 0), 0)
-  const totalSaldoDevedorGeral = emprestimos.filter((e) => e.status === 'ativo').reduce((acc, e) => acc + (e.saldoDevedorAtual || 0), 0)
+  const totalSaldoDevedorGeral = concedidos.reduce((acc, e) => acc + (e.saldoDevedorAtual || 0), 0)
   
-  // Total de juros projetados e total de juros já pagos (apenas de operações concedidas)
+  // Total de juros projetados e total de juros já pagos (apenas de operações ativas)
   let totalJurosProjetados = 0
   let totalJurosRecebidos = 0
   let totalPrincipalAmortizado = 0
@@ -50,7 +50,7 @@ export function RelatoriosTab({
     }
   }
 
-  // Agrupamento por Método de Cálculo (apenas concedidos)
+  // Agrupamento por Método de Cálculo (apenas ativos)
   const distribuicaoPorMetodo = useMemo(() => {
     const acc: Record<string, { count: number; volume: number }> = {}
     for (const emp of concedidos) {
@@ -158,13 +158,13 @@ export function RelatoriosTab({
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-4 shadow-sm">
           <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
-            Capital Concedido Total
+            Ativos Concedidos
           </div>
           <div className="text-xl font-black text-slate-900 dark:text-white font-mono">
             {formatBrl(totalPrincipalConcedido)}
           </div>
           <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
-            {totalOperacoes} operações na carteira
+            {totalOperacoes} {totalOperacoes === 1 ? 'contrato ativo' : 'contratos ativos'}
           </div>
         </div>
 

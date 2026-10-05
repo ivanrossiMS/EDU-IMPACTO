@@ -43,11 +43,11 @@ export function ParcelasTab({
   const [statusFilter, setStatusFilter] = useState('todos')
   const [compFilter, setCompFilter] = useState('todas')
 
-  // Achatar todas as parcelas APENAS de empréstimos aprovados/ativos
+  // Achatar todas as parcelas APENAS de empréstimos ativos
   const todasParcelas = useMemo(() => {
     const list: FlattenedParcela[] = []
-    const emprestimosAprovados = emprestimos.filter((emp) => ['ativo', 'quitado'].includes(emp.status))
-    for (const emp of emprestimosAprovados) {
+    const emprestimosAtivos = emprestimos.filter((emp) => emp.status === 'ativo')
+    for (const emp of emprestimosAtivos) {
       if (!emp.parcelas) continue
       for (const p of emp.parcelas) {
         list.push({
@@ -319,7 +319,7 @@ export function ParcelasTab({
                       <td className="py-2.5 px-2 text-center font-mono whitespace-nowrap">
                         <div className="font-bold text-slate-800 dark:text-slate-200">{p.competencia}</div>
                         <div className="text-[10px] text-slate-400">
-                          {new Date(p.dataVencimento).toLocaleDateString('pt-BR')}
+                          {new Date(p.dataVencimento + 'T12:00:00Z').toLocaleDateString('pt-BR')}
                         </div>
                       </td>
 
@@ -382,7 +382,7 @@ export function ParcelasTab({
                   <div>
                     <div className="font-bold text-slate-900 dark:text-white text-sm">{p.colaboradorNome}</div>
                     <div className="text-[11px] text-slate-500 dark:text-slate-400">
-                      CPF: {p.colaboradorCpf} • Vencimento: {new Date(p.dataVencimento).toLocaleDateString('pt-BR')} (Folha {p.competencia})
+                      CPF: {p.colaboradorCpf} • Vencimento: {new Date(p.dataVencimento + 'T12:00:00Z').toLocaleDateString('pt-BR')} (Folha {p.competencia})
                     </div>
                   </div>
 

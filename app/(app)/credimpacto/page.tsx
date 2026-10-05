@@ -424,6 +424,7 @@ function CredImpactoContent() {
                   onOpenSignModal={setSelectedLoanForSign}
                   onOpenPayoffModal={setSelectedLoanForPayoff}
                   onRefresh={loadData}
+                  onOpenNewLoan={handleOpenNewLoan}
                 />
               )}
             </main>

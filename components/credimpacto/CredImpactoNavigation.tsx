@@ -345,14 +345,27 @@ export function CredImpactoSidebar({
             </div>
           </div>
 
-          {/* BOTAO DE AÇÃO PRINCIPAL */}
-          <button
-            onClick={onNewLoanClick}
-            className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white text-xs font-bold shadow-lg shadow-emerald-500/25 flex items-center justify-center gap-2 active:scale-98 transition-all"
-          >
-            <Plus size={15} />
-            <span>{isAdminOrFinance && viewMode === 'admin' ? 'Conceder Empréstimo' : 'Simular Empréstimo'}</span>
-          </button>
+          {/* BOTAO DE AÇÃO PRINCIPAL ULTRA MODERNO: SIMULAR (MAIOR E DESTACADO) */}
+          <div className="relative group">
+            <div className="absolute -inset-0.5 bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-600 rounded-2xl blur-md opacity-50 group-hover:opacity-85 transition duration-300 pointer-events-none" />
+            <button
+              onClick={onNewLoanClick}
+              className="relative w-full overflow-hidden py-4 px-4 rounded-2xl bg-gradient-to-r from-emerald-500 via-emerald-600 to-teal-500 hover:from-emerald-400 hover:via-emerald-500 hover:to-teal-400 text-white shadow-[0_6px_25px_rgba(16,185,129,0.45)] hover:shadow-[0_8px_32px_rgba(16,185,129,0.65)] ring-1 ring-white/40 hover:ring-white/60 flex items-center justify-center gap-3 transition-all duration-300 transform active:scale-98 select-none"
+            >
+              {/* Efeito de brilho specular no topo */}
+              <div className="absolute top-0 left-0 right-0 h-[1.5px] bg-gradient-to-r from-transparent via-white/80 to-transparent pointer-events-none" />
+              
+              {/* Ícone com badge translúcido */}
+              <div className="w-8 h-8 rounded-xl bg-white/20 backdrop-blur-md flex items-center justify-center text-white shrink-0 group-hover:rotate-90 group-hover:scale-110 transition-all duration-300 shadow-xs border border-white/30">
+                <Plus size={20} strokeWidth={3} className="drop-shadow-sm" />
+              </div>
+              
+              <div className="flex flex-col items-start leading-none">
+                <span className="tracking-wide text-base font-black drop-shadow-sm">Simular</span>
+                <span className="text-[10px] text-emerald-100/90 font-medium mt-0.5">Novo Empréstimo</span>
+              </div>
+            </button>
+          </div>
         </div>
 
         {/* LISTA DE PÁGINAS / MENUS COM SCROLL INDEPENDENTE */}
@@ -391,6 +404,33 @@ export function CredImpactoSidebar({
                   </button>
                 )
               })}
+
+              <div className="pt-2 border-t border-white/10 space-y-1">
+                <button
+                  onClick={() => setShowSwitchModuleModal(true)}
+                  className="w-full text-left flex items-center justify-between py-2.5 px-3 rounded-xl transition-all text-slate-300 hover:bg-white/[0.06] hover:text-white group"
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-6 h-6 rounded-lg flex items-center justify-center text-slate-400 group-hover:text-emerald-300">
+                      <Grid size={15} />
+                    </div>
+                    <span className="text-xs truncate tracking-tight">Trocar Módulo</span>
+                  </div>
+                </button>
+
+                <button
+                  onClick={handleLogout}
+                  disabled={isLoggingOut}
+                  className="w-full text-left flex items-center justify-between py-2.5 px-3 rounded-xl transition-all text-rose-300 hover:bg-rose-500/10 group disabled:opacity-50"
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-6 h-6 rounded-lg flex items-center justify-center text-rose-400">
+                      <LogOut size={15} className={isLoggingOut ? 'animate-spin' : ''} />
+                    </div>
+                    <span className="text-xs truncate tracking-tight">{isLoggingOut ? 'Saindo...' : 'Sair'}</span>
+                  </div>
+                </button>
+              </div>
             </div>
           ) : (
             adminNavGroups.map((group) => (
@@ -567,98 +607,65 @@ export function CredImpactoBottomBar({
   if (viewMode === 'colaborador') {
     return (
       <>
-        <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-gradient-to-r from-[#090d16]/98 via-[#081522]/98 to-[#041d18]/98 backdrop-blur-2xl border-t border-emerald-500/25 shadow-[0_-10px_35px_rgba(0,0,0,0.7)] px-2 py-1.5 pb-[max(0.6rem,env(safe-area-inset-bottom))] overflow-hidden text-white">
+        <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-gradient-to-r from-[#090d16]/98 via-[#081522]/98 to-[#041d18]/98 backdrop-blur-2xl border-t border-emerald-500/25 shadow-[0_-10px_35px_rgba(0,0,0,0.7)] px-2 py-1.5 pb-[max(0.6rem,env(safe-area-inset-bottom))] text-white">
           {/* Top specular glow line */}
           <div className="absolute top-0 left-0 right-0 h-[1.5px] bg-gradient-to-r from-transparent via-emerald-400 to-transparent pointer-events-none" />
 
-          <div className="relative flex items-center justify-around">
+          <div className="relative grid grid-cols-4 items-end max-w-md mx-auto w-full">
+            {/* 1. Meu Espaço */}
             <button
               onClick={() => onTabChange('meus_emprestimos')}
-              className={`flex flex-col items-center justify-center py-1 px-3 rounded-xl transition-all ${
+              className={`flex flex-col items-center justify-center py-1 px-1 rounded-xl transition-all ${
                 activeTab === 'meus_emprestimos'
                   ? 'text-emerald-400 font-bold'
-                  : 'text-slate-400'
+                  : 'text-slate-400 hover:text-white'
               }`}
             >
               <div className={`p-1.5 rounded-xl ${activeTab === 'meus_emprestimos' ? 'bg-emerald-500/20 border border-emerald-500/40 text-emerald-300' : ''}`}>
-                <Wallet size={19} />
+                <Wallet size={18} />
               </div>
-              <span className="text-[10px] mt-0.5">Meu Espaço</span>
+              <span className="text-[10px] mt-0.5 truncate max-w-full">Meu Espaço</span>
             </button>
 
-            {/* Botão Central de Nova Simulação */}
+            {/* 2. BOTÃO MAIOR CENTRAL: SIMULAR (ULTRA MODERNO) */}
+            <div className="flex flex-col items-center justify-center">
+              <button
+                onClick={onNewLoanClick}
+                className="relative flex flex-col items-center justify-center -mt-5 group active:scale-95 transition-all select-none"
+              >
+                <div className="absolute -inset-1 bg-gradient-to-r from-emerald-500 to-teal-400 rounded-2xl blur-md opacity-60 group-hover:opacity-100 transition duration-300 pointer-events-none" />
+                <div className="relative w-12 h-12 rounded-2xl bg-gradient-to-tr from-emerald-500 via-emerald-600 to-teal-400 text-white flex items-center justify-center shadow-[0_6px_20px_rgba(16,185,129,0.5)] ring-4 ring-[#081522] border border-emerald-300/40 group-hover:scale-105 transition-transform">
+                  <div className="absolute top-0 inset-x-0 h-0.5 bg-white/50 rounded-t-2xl" />
+                  <Plus size={22} strokeWidth={2.8} className="drop-shadow-sm group-hover:rotate-90 transition-transform duration-300" />
+                </div>
+                <span className="text-[10px] font-extrabold text-emerald-400 mt-0.5 tracking-tight drop-shadow-xs">Simular</span>
+              </button>
+            </div>
+
+            {/* 3. Trocar Módulo */}
             <button
-              onClick={onNewLoanClick}
-              className="flex flex-col items-center justify-center -mt-5"
+              onClick={() => setShowSwitchModuleModal(true)}
+              className="flex flex-col items-center justify-center py-1 px-1 rounded-xl text-slate-300 hover:text-white transition-all active:scale-95"
             >
-              <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-emerald-600 via-emerald-500 to-teal-400 text-white flex items-center justify-center shadow-lg shadow-emerald-500/40 active:scale-95 transition-all ring-4 ring-[#081522]">
-                <Plus size={22} className="drop-shadow-sm" />
+              <div className="p-1.5 rounded-xl bg-white/10 text-emerald-400">
+                <Grid size={18} />
               </div>
-              <span className="text-[10px] font-bold text-emerald-400 mt-1">Simular</span>
+              <span className="text-[10px] mt-0.5 font-medium truncate max-w-full">Módulos</span>
             </button>
 
+            {/* 4. Sair */}
             <button
-              onClick={() => setShowMoreMenu(true)}
-              className="flex flex-col items-center justify-center py-1 px-3 rounded-xl text-slate-400"
+              onClick={handleLogout}
+              disabled={isLoggingOut}
+              className="flex flex-col items-center justify-center py-1 px-1 rounded-xl text-rose-400 hover:text-rose-300 transition-all active:scale-95 disabled:opacity-50"
             >
-              <div className="p-1.5 rounded-xl bg-white/10">
-                <MoreHorizontal size={19} />
+              <div className="p-1.5 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-400">
+                <LogOut size={18} className={isLoggingOut ? 'animate-spin' : ''} />
               </div>
-              <span className="text-[10px] mt-0.5 font-medium">Mais</span>
+              <span className="text-[10px] mt-0.5 font-medium truncate max-w-full">{isLoggingOut ? 'Saindo...' : 'Sair'}</span>
             </button>
           </div>
         </nav>
-
-        {/* DRAWER / BOTTOM SHEET DO MENU "MAIS" PARA COLABORADOR */}
-        {showMoreMenu && (
-          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/75 backdrop-blur-md animate-in fade-in">
-            <div className="relative overflow-hidden bg-gradient-to-b from-[#090d16] via-[#081522] to-[#041d18] border border-emerald-500/30 rounded-t-3xl sm:rounded-3xl max-w-md w-full p-5 shadow-2xl space-y-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] animate-in slide-in-from-bottom backdrop-blur-2xl text-white">
-              {/* Specular top glow line */}
-              <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-emerald-400 to-transparent" />
-
-              <div className="flex items-center justify-between pb-3 border-b border-white/10">
-                <div className="flex items-center gap-2">
-                  <Sparkles size={16} className="text-emerald-400" />
-                  <h3 className="text-sm font-bold text-white">Opções • CredImpacto</h3>
-                </div>
-                <button
-                  onClick={() => setShowMoreMenu(false)}
-                  className="p-1.5 rounded-lg text-slate-400 hover:text-white"
-                >
-                  <X size={18} />
-                </button>
-              </div>
-
-              <div className="space-y-2 text-xs">
-                <button
-                  onClick={() => {
-                    setShowMoreMenu(false)
-                    setShowSwitchModuleModal(true)
-                  }}
-                  className="w-full p-3 rounded-2xl bg-white/10 hover:bg-white/15 border border-white/10 text-white font-bold flex items-center justify-between"
-                >
-                  <div className="flex items-center gap-2.5">
-                    <Grid size={18} className="text-emerald-400" />
-                    <span>Trocar de Módulo (Central)</span>
-                  </div>
-                  <ChevronRight size={15} />
-                </button>
-
-                <button
-                  onClick={handleLogout}
-                  disabled={isLoggingOut}
-                  className="w-full p-3 rounded-2xl bg-rose-500/20 border border-rose-500/40 text-rose-300 font-bold flex items-center justify-between"
-                >
-                  <div className="flex items-center gap-2.5">
-                    <LogOut size={18} />
-                    <span>{isLoggingOut ? 'Saindo da Conta...' : 'Sair da Conta'}</span>
-                  </div>
-                  <ChevronRight size={15} />
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
 
         <ModuleSwitchModal
           isOpen={showSwitchModuleModal}
@@ -671,37 +678,37 @@ export function CredImpactoBottomBar({
   // Itens para o Administrador no Mobile
   return (
     <>
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-gradient-to-r from-[#090d16]/98 via-[#081522]/98 to-[#041d18]/98 backdrop-blur-2xl border-t border-emerald-500/25 shadow-[0_-10px_35px_rgba(0,0,0,0.7)] px-2 py-1.5 pb-[max(0.6rem,env(safe-area-inset-bottom))] overflow-hidden text-white">
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-gradient-to-r from-[#090d16]/98 via-[#081522]/98 to-[#041d18]/98 backdrop-blur-2xl border-t border-emerald-500/25 shadow-[0_-10px_35px_rgba(0,0,0,0.7)] px-1.5 py-1.5 pb-[max(0.6rem,env(safe-area-inset-bottom))] text-white">
         {/* Top specular glow line */}
         <div className="absolute top-0 left-0 right-0 h-[1.5px] bg-gradient-to-r from-transparent via-emerald-400 to-transparent pointer-events-none" />
 
-        <div className="relative flex items-center justify-around">
+        <div className="relative grid grid-cols-5 items-end max-w-lg mx-auto w-full">
           <button
             onClick={() => onTabChange('dashboard')}
-            className={`flex flex-col items-center justify-center py-1 px-2.5 rounded-xl transition-all ${
+            className={`flex flex-col items-center justify-center py-1 px-1 rounded-xl transition-all ${
               activeTab === 'dashboard'
                 ? 'text-emerald-400 font-bold'
                 : 'text-slate-400'
             }`}
           >
             <div className={`p-1.5 rounded-xl ${activeTab === 'dashboard' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' : ''}`}>
-              <LayoutDashboard size={18} />
+              <LayoutDashboard size={17} />
             </div>
-            <span className="text-[10px] mt-0.5">Painel</span>
+            <span className="text-[10px] mt-0.5 truncate max-w-full">Painel</span>
           </button>
 
           <button
             onClick={() => onTabChange('analise')}
-            className={`relative flex flex-col items-center justify-center py-1 px-2.5 rounded-xl transition-all ${
+            className={`relative flex flex-col items-center justify-center py-1 px-1 rounded-xl transition-all ${
               activeTab === 'analise'
                 ? 'text-emerald-400 font-bold'
                 : 'text-slate-400'
             }`}
           >
             <div className={`p-1.5 rounded-xl ${activeTab === 'analise' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' : ''}`}>
-              <ShieldCheck size={18} />
+              <ShieldCheck size={17} />
             </div>
-            <span className="text-[10px] mt-0.5">Fila</span>
+            <span className="text-[10px] mt-0.5 truncate max-w-full">Fila</span>
             {pendingRequestsCount > 0 && (
               <span className="absolute top-1 right-2 w-4 h-4 rounded-full bg-amber-500 text-black text-[9px] font-black flex items-center justify-center shadow-xs">
                 {pendingRequestsCount}
@@ -709,29 +716,33 @@ export function CredImpactoBottomBar({
             )}
           </button>
 
-          {/* Botão Central de Conceder Empréstimo */}
-          <button
-            onClick={onNewLoanClick}
-            className="flex flex-col items-center justify-center -mt-5"
-          >
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-emerald-600 via-emerald-500 to-teal-400 text-white flex items-center justify-center shadow-lg shadow-emerald-500/40 active:scale-95 transition-all ring-4 ring-[#081522]">
-              <Plus size={20} className="drop-shadow-sm" />
-            </div>
-            <span className="text-[9px] font-bold text-emerald-400 mt-1">Conceder</span>
-          </button>
+          {/* Botão Central Maior: Simular (Ultra Moderno) */}
+          <div className="flex flex-col items-center justify-center">
+            <button
+              onClick={onNewLoanClick}
+              className="relative flex flex-col items-center justify-center -mt-5 group active:scale-95 transition-all select-none"
+            >
+              <div className="absolute -inset-1 bg-gradient-to-r from-emerald-500 to-teal-400 rounded-2xl blur-md opacity-60 group-hover:opacity-100 transition duration-300 pointer-events-none" />
+              <div className="relative w-12 h-12 rounded-2xl bg-gradient-to-tr from-emerald-500 via-emerald-600 to-teal-400 text-white flex items-center justify-center shadow-[0_6px_20px_rgba(16,185,129,0.5)] ring-4 ring-[#081522] border border-emerald-300/40 group-hover:scale-105 transition-transform">
+                <div className="absolute top-0 inset-x-0 h-0.5 bg-white/50 rounded-t-2xl" />
+                <Plus size={22} strokeWidth={2.8} className="drop-shadow-sm group-hover:rotate-90 transition-transform duration-300" />
+              </div>
+              <span className="text-[10px] font-extrabold text-emerald-400 mt-0.5 tracking-tight drop-shadow-xs">Simular</span>
+            </button>
+          </div>
 
           <button
             onClick={() => onTabChange('parcelas')}
-            className={`flex flex-col items-center justify-center py-1 px-2.5 rounded-xl transition-all ${
+            className={`flex flex-col items-center justify-center py-1 px-1 rounded-xl transition-all ${
               activeTab === 'parcelas'
                 ? 'text-emerald-400 font-bold'
                 : 'text-slate-400'
             }`}
           >
             <div className={`p-1.5 rounded-xl ${activeTab === 'parcelas' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' : ''}`}>
-              <Receipt size={18} />
+              <Receipt size={17} />
             </div>
-            <span className="text-[10px] mt-0.5">Parcelas</span>
+            <span className="text-[10px] mt-0.5 truncate max-w-full">Parcelas</span>
           </button>
 
           <button
