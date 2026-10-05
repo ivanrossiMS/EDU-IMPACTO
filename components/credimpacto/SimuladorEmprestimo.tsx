@@ -20,7 +20,8 @@ import {
   Clock,
   Sparkles,
   ArrowRight,
-  Building
+  Building,
+  AlertCircle
 } from 'lucide-react'
 import {
   MetodoCalculo,
@@ -118,10 +119,23 @@ export function SimuladorEmprestimo({
   // Se admin conceder para um colaborador específico
   const [targetColaboradorId, setTargetColaboradorId] = useState<string>('')
 
-  // Campo de CPF (obrigatório, exibido por completo e editável)
-  const [cpfInput, setCpfInput] = useState<string>(
-    currentUserCpf ? formatCpfMask(currentUserCpf) : '121.231.312-31'
-  )
+  // Função utilitária para extrair CPF válido individual
+  const getValidCpf = (raw?: string | null): string => {
+    if (!raw) return ''
+    const clean = raw.replace(/\D/g, '')
+    if (!clean || clean === '00000000000' || clean.length !== 11) {
+      return ''
+    }
+    return formatCpfMask(clean)
+  }
+
+  // Campo de CPF (individual de cada colaborador se houver cadastrado, ou vazio se não houver)
+  const [cpfInput, setCpfInput] = useState<string>(() => {
+    if (viewMode === 'admin') {
+      return ''
+    }
+    return getValidCpf(currentUserCpf)
+  })
   
   // Detalhes da solicitação
   const [justificativa, setJustificativa] = useState('')
@@ -143,14 +157,15 @@ export function SimuladorEmprestimo({
     }
   }
 
-  // Sincroniza CPF inicial do usuário logado se chegar após carregamento
+  // Sincroniza CPF individual do usuário logado se for colaborador
   useEffect(() => {
-    if (currentUserCpf && (!cpfInput || cpfInput === '121.231.312-31')) {
-      setCpfInput(formatCpfMask(currentUserCpf))
+    if (viewMode === 'colaborador') {
+      const valid = getValidCpf(currentUserCpf)
+      setCpfInput(valid)
     }
-  }, [currentUserCpf])
+  }, [currentUserCpf, viewMode])
 
-  // Dados Bancários
+  // Dados Bancários (a chave PIX inicia sempre vazia)
   const [dadosBancarios, setDadosBancarios] = useState<DadosBancariosColaborador>({
     banco: '',
     agencia: '',
@@ -176,14 +191,17 @@ export function SimuladorEmprestimo({
     return colaboradoresList.find((c) => c.id === targetColaboradorId) || null
   }, [isAdminOrFinance, viewMode, targetColaboradorId, colaboradoresList])
 
-  // Quando admin seleciona colaborador, sincroniza o CPF dele no campo
+  // Quando admin seleciona colaborador, sincroniza o CPF individual dele no campo (ou vazio se não houver)
   useEffect(() => {
-    if (selectedColaborador) {
-      if (selectedColaborador.cpf) {
-        setCpfInput(formatCpfMask(selectedColaborador.cpf))
+    if (viewMode === 'admin') {
+      if (selectedColaborador) {
+        const valid = getValidCpf(selectedColaborador.cpf)
+        setCpfInput(valid)
+      } else {
+        setCpfInput('')
       }
     }
-  }, [selectedColaborador])
+  }, [selectedColaborador, viewMode])
 
   const effectiveSalary = selectedColaborador?.salario || userSalary
 
@@ -228,21 +246,20 @@ export function SimuladorEmprestimo({
     }
 
     const cleanCpfDigits = (cpfInput || '').replace(/\D/g, '')
-    if (!cleanCpfDigits || cleanCpfDigits.length !== 11) {
-      toast.error('O CPF é obrigatório e deve conter 11 dígitos para prosseguir com a solicitação.')
-      return
+    // Apenas colaborador solicitando é obrigado a ter CPF prévio com 11 dígitos; o admin pode enviar sem CPF para o colaborador completar na assinatura
+    if (!isAdmin) {
+      if (!cleanCpfDigits || cleanCpfDigits.length !== 11 || cleanCpfDigits === '00000000000') {
+        toast.error('O CPF é obrigatório e deve conter 11 dígitos para prosseguir com a solicitação.')
+        return
+      }
     }
 
-    // Se ainda não preencheu chave PIX, sugere o próprio CPF
-    if (!dadosBancarios.chavePix) {
-      setDadosBancarios((prev) => ({ ...prev, chavePix: formatCpfMask(cleanCpfDigits) }))
-    }
-
+    // O campo da chave PIX permanece vazio para o usuário preencher livremente se desejar
     setShowConfirmationModal(true)
   }
 
   const handleSubmitRequest = async () => {
-    if (!dadosBancarios.chavePix || !dadosBancarios.chavePix.trim()) {
+    if (!isAdmin && (!dadosBancarios.chavePix || !dadosBancarios.chavePix.trim())) {
       toast.error('Informe a Chave PIX para crédito do valor.')
       return
     }
@@ -250,7 +267,10 @@ export function SimuladorEmprestimo({
     setIsSubmitting(true)
     try {
       const isConcessaoPelaEscola = isAdminOrFinance && viewMode === 'admin' && Boolean(targetColaboradorId)
-      const formattedCpf = formatCpfMask(cpfInput)
+      const cleanCpfDigits = (cpfInput || '').replace(/\D/g, '')
+      const formattedCpf = (cleanCpfDigits.length === 11 && cleanCpfDigits !== '00000000000')
+        ? formatCpfMask(cleanCpfDigits)
+        : ''
 
       const payload: any = {
         valorSolicitado: valor,
@@ -260,7 +280,7 @@ export function SimuladorEmprestimo({
         justificativaSolicitacao: justificativa,
         finalidade,
         dadosBancarios: {
-          chavePix: dadosBancarios.chavePix.trim(),
+          chavePix: dadosBancarios.chavePix?.trim() || (isConcessaoPelaEscola ? 'A definir pelo colaborador' : ''),
           tipoConta: 'corrente'
         },
         criadoPorFinanceiro: isConcessaoPelaEscola,
@@ -307,9 +327,9 @@ export function SimuladorEmprestimo({
   }
 
   // Dados do Colaborador para exibição
-  const displayCollaboratorName = selectedColaborador?.nome || currentUserName || 'Maria Auxiliadora de Araújo Honório Vilela'
-  const displayCollaboratorCargo = selectedColaborador?.cargo || currentUserCargo || 'Auxiliar administrativo'
-  const displayCollaboratorUnidade = selectedColaborador?.unidade || currentUserUnidade || 'Colégio Impacto'
+  const displayCollaboratorName = (viewMode === 'admin' ? selectedColaborador?.nome : (currentUserName || selectedColaborador?.nome)) || 'Colaborador'
+  const displayCollaboratorCargo = (viewMode === 'admin' ? selectedColaborador?.cargo : (currentUserCargo || selectedColaborador?.cargo)) || 'Colaborador'
+  const displayCollaboratorUnidade = (viewMode === 'admin' ? selectedColaborador?.unidade : (currentUserUnidade || selectedColaborador?.unidade)) || 'Colégio Impacto'
 
   const minValor = isAdmin ? 10 : (config.valorMinimoEmprestimo || 200)
   const maxValor = isAdmin
@@ -374,10 +394,17 @@ export function SimuladorEmprestimo({
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
-            <Link2 size={15} className="rotate-45" />
-            <span>Vinculado ao cadastro</span>
-          </div>
+          {cpfInput && cpfInput.replace(/\D/g, '').length === 11 && cpfInput.replace(/\D/g, '') !== '00000000000' ? (
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+              <Link2 size={15} className="rotate-45" />
+              <span>Vinculado ao cadastro</span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-2.5 py-1 rounded-lg border border-amber-200/60 dark:border-amber-800/40">
+              <AlertCircle size={14} />
+              <span>Pendente pelo colaborador</span>
+            </div>
+          )}
 
           {/* Seletor rápido para Admin mudar de beneficiário */}
           {isAdminOrFinance && viewMode === 'admin' && (
@@ -944,8 +971,10 @@ export function SimuladorEmprestimo({
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-slate-500 dark:text-slate-400 font-sans">CPF do Contrato:</span>
-                <span className="font-bold text-emerald-600 dark:text-emerald-400 font-mono">
-                  {cpfInput || currentUserCpf || 'Não informado'}
+                <span className={`font-bold font-mono ${cpfInput && cpfInput.replace(/\D/g, '').length === 11 && cpfInput.replace(/\D/g, '') !== '00000000000' ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}`}>
+                  {cpfInput && cpfInput.replace(/\D/g, '').length === 11 && cpfInput.replace(/\D/g, '') !== '00000000000'
+                    ? cpfInput
+                    : 'Pendente de preenchimento pelo colaborador'}
                 </span>
               </div>
             </div>
@@ -1007,26 +1036,28 @@ export function SimuladorEmprestimo({
                 />
               </div>
 
-              {/* CHAVE PIX PARA LIBERAÇÃO DO VALOR (OBRIGATÓRIO) */}
+              {/* CHAVE PIX PARA LIBERAÇÃO DO VALOR */}
               <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-1.5">
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center justify-between">
                   <span className="flex items-center gap-1.5">
                     <Building size={14} className="text-emerald-600 dark:text-emerald-400" />
                     <span>Chave PIX para Recebimento</span>
                   </span>
-                  <span className="text-[10px] text-rose-500 font-bold lowercase">
-                    * obrigatório
+                  <span className={`text-[10px] font-bold lowercase ${isAdmin ? 'text-slate-400' : 'text-rose-500'}`}>
+                    {isAdmin ? '(opcional pelo admin)' : '* obrigatório'}
                   </span>
                 </label>
                 <input
                   type="text"
-                  placeholder="Informe sua Chave PIX (CPF, Celular, E-mail ou Aleatória)"
+                  placeholder={isAdmin ? "Opcional: Chave PIX (ou o colaborador informará ao assinar)" : "Informe sua Chave PIX (CPF, Celular, E-mail ou Aleatória)"}
                   value={dadosBancarios.chavePix}
                   onChange={(e) => setDadosBancarios({ ...dadosBancarios, chavePix: e.target.value })}
                   className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 font-mono shadow-sm"
                 />
                 <p className="text-[10px] text-slate-500 dark:text-slate-400">
-                  O valor de {formatBrl(valor)} será transferido via PIX para esta chave após aprovação e assinatura digital.
+                  {isAdmin
+                    ? 'Se não informada agora pelo administrador, o colaborador indicará seus dados de recebimento ao formalizar a proposta.'
+                    : `O valor de ${formatBrl(valor)} será transferido via PIX para esta chave após aprovação e assinatura digital.`}
                 </p>
               </div>
             </div>

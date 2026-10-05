@@ -4,7 +4,7 @@ import { createContext, useContext, useState, useCallback, useEffect } from 'rea
 import { Preferences } from '@capacitor/preferences'
 import { Capacitor } from '@capacitor/core'
 import { SecureStoragePlugin } from 'capacitor-secure-storage-plugin'
-import { restoreSessionSecurely, getLogoutBarrier, isUserLoggedOut } from '@/lib/auth/secureSession'
+import { restoreSessionSecurely, getLogoutBarrier, isUserLoggedOut, getProjectRef } from '@/lib/auth/secureSession'
 import { supabase } from '@/lib/supabase'
 
 export type Theme = 'dark' | 'light'
@@ -298,6 +298,32 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               saveSetting('edu-current-perfil', savedUser.perfil)
             }
           } catch {}
+
+          // Se ainda não encontrou via SDK local, mas temos cookies de autenticação no navegador:
+          if (!savedUser && typeof document !== 'undefined') {
+            try {
+              const projectRef = getProjectRef()
+              const hasAuthCookie = document.cookie.split('; ').some(
+                c => c.startsWith(`sb-${projectRef}-auth-token`) && c.split('=')[1]?.length > 0
+              )
+              if (hasAuthCookie) {
+                const meRes = await fetch('/api/auth/me', {
+                  cache: 'no-store',
+                  credentials: 'include',
+                  signal: AbortSignal.timeout(2000)
+                })
+                if (meRes.ok) {
+                  const meData = await meRes.json()
+                  const resolvedUser = meData?.user as CurrentUser
+                  if (resolvedUser?.id) {
+                    savedUser = resolvedUser
+                    saveSetting('edu-current-user', resolvedUser)
+                    saveSetting('edu-current-perfil', resolvedUser.perfil || '')
+                  }
+                }
+              }
+            } catch {}
+          }
         }
 
         // Se o storage assíncrono falhou mas tínhamos usuário síncrono no localStorage,

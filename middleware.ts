@@ -91,6 +91,69 @@ const NO_CACHE_HEADERS = {
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
+  // ── Interceptação de /login para usuários com sessão ativa (Zero Flash) ──────
+  if (pathname === '/login') {
+    const hasLogoutBarrier = request.cookies.has('edu_logout_pending_barrier')
+    const stepParam = request.nextUrl.searchParams.get('step')
+
+    // Se não há logout pendente e nenhum step especial solicitado (como choose_system ou primeiro acesso):
+    if (!hasLogoutBarrier && !stepParam) {
+      const projectRef = getProjectRef()
+      const allCookies = request.cookies.getAll()
+      const hasAuthCookie = allCookies.some(
+        c => (c.name === `sb-${projectRef}-auth-token` || c.name.startsWith(`sb-${projectRef}-auth-token.`)) && c.value.length > 0
+      )
+
+      if (hasAuthCookie) {
+        try {
+          const supabaseAuthCheck = createServerClient(
+            process.env.NEXT_PUBLIC_SUPABASE_URL!,
+            process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+            {
+              cookies: {
+                getAll() {
+                  return request.cookies.getAll()
+                },
+                setAll() {},
+              },
+            }
+          )
+
+          const userPromise = supabaseAuthCheck.auth.getUser()
+          const timeoutPromise = new Promise<{ data: { user: any }, error?: any }>(res =>
+            setTimeout(() => res({ data: { user: null }, error: new Error('TIMEOUT') }), 3000)
+          )
+          const { data, error } = await Promise.race([userPromise, timeoutPromise])
+
+          if (!error && data?.user) {
+            const redirectParam = request.nextUrl.searchParams.get('next') || request.nextUrl.searchParams.get('redirect')
+            if (redirectParam && redirectParam.startsWith('/') && !redirectParam.startsWith('//')) {
+              return NextResponse.redirect(new URL(redirectParam, request.url))
+            }
+
+            const perfil = data.user.user_metadata?.perfil || ''
+            const cargo = data.user.user_metadata?.cargo || ''
+            const isFamilyOrStudent = (
+              perfil === 'Família' ||
+              perfil === 'Responsável' ||
+              perfil === 'Aluno' ||
+              cargo === 'Responsável' ||
+              cargo === 'Aluno'
+            )
+
+            if (isFamilyOrStudent) {
+              return NextResponse.redirect(new URL('/agenda-digital', request.url))
+            } else {
+              return NextResponse.redirect(new URL('/', request.url))
+            }
+          }
+        } catch {
+          // Em caso de erro na checagem no Edge, segue normalmente para renderização
+        }
+      }
+    }
+  }
+
   // Sempre deixa passar rotas públicas e assets
   if (isPublicPath(pathname)) {
     return NextResponse.next()

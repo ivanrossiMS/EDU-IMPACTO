@@ -37,8 +37,6 @@ export function AssinaturaEletronicaModal({
     assinadoEm: string
   } | null>(null)
 
-  if (!loan) return null
-
   const formatCpfMask = (val: string) => {
     const digits = (val || '').replace(/\D/g, '').slice(0, 11)
     if (digits.length <= 3) return digits
@@ -46,6 +44,25 @@ export function AssinaturaEletronicaModal({
     if (digits.length <= 9) return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6)}`
     return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9, 11)}`
   }
+
+  // Sincroniza CPF inicial e reseta estados ao abrir um contrato
+  React.useEffect(() => {
+    if (loan) {
+      const rawCpf = loan.colaboradorCpf || ''
+      const clean = rawCpf.replace(/\D/g, '')
+      if (clean === '00000000000' || clean.length !== 11) {
+        setCpf('')
+      } else {
+        setCpf(formatCpfMask(rawCpf))
+      }
+      setSenha('')
+      setAceitoContrato(false)
+      setAceitoDesconto(false)
+      setSignatureReceipt(null)
+    }
+  }, [loan])
+
+  if (!loan) return null
 
   const handleSign = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -55,7 +72,7 @@ export function AssinaturaEletronicaModal({
     }
 
     const cleanCpfDigits = (cpf || '').replace(/\D/g, '')
-    if (cleanCpfDigits.length !== 11) {
+    if (cleanCpfDigits.length !== 11 || cleanCpfDigits === '00000000000') {
       toast.error('Por favor, informe seu CPF completo (11 dígitos). Ele constará no contrato oficial de mútuo.')
       return
     }
@@ -199,6 +216,16 @@ export function AssinaturaEletronicaModal({
               </label>
             </div>
 
+            {/* AVISO QUANDO CPF AINDA NÃO CONSTA OU ESTÁ PENDENTE */}
+            {(!loan.colaboradorCpf || loan.colaboradorCpf.replace(/\D/g, '').length !== 11 || loan.colaboradorCpf.replace(/\D/g, '') === '00000000000') && (
+              <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700/60 rounded-xl p-3.5 text-xs flex items-start gap-2.5 text-amber-900 dark:text-amber-200 animate-in fade-in">
+                <AlertCircle size={18} className="shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
+                <div className="text-[11px] leading-relaxed">
+                  <strong>Atenção:</strong> Seu CPF ainda não consta cadastrado nesta proposta de empréstimo. <strong>Preencha obrigatoriamente o seu CPF completo com 11 dígitos abaixo</strong> para validar a assinatura jurídica e formalizar o contrato de mútuo.
+                </div>
+              </div>
+            )}
+
             {/* CPF OBRIGATÓRIO PARA ASSINATURA */}
             <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-1.5">
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center justify-between">
@@ -207,7 +234,7 @@ export function AssinaturaEletronicaModal({
                   <span>CPF do Titular</span>
                   <span className="text-rose-500">*</span>
                 </span>
-                <span className="text-[10px] text-slate-400 font-normal">
+                <span className="text-[10px] text-amber-600 dark:text-amber-400 font-semibold">
                   Obrigatório para emissão jurídica do contrato
                 </span>
               </label>
@@ -254,7 +281,7 @@ export function AssinaturaEletronicaModal({
               </button>
               <button
                 type="submit"
-                disabled={isSubmitting || !aceitoContrato || !aceitoDesconto || !senha || !cpf || cpf.replace(/\D/g, '').length !== 11}
+                disabled={isSubmitting || !aceitoContrato || !aceitoDesconto || !senha || !cpf || cpf.replace(/\D/g, '').length !== 11 || cpf.replace(/\D/g, '') === '00000000000'}
                 className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-sm shadow-blue-600/20 flex items-center gap-2 disabled:opacity-40 transition-all active:scale-98"
               >
                 {isSubmitting ? (

@@ -73,7 +73,17 @@ export default function LoginPage() {
   const [showBlockModal, setShowBlockModal] = useState(false)
 
   // ── step manager
-  const [step, setStep] = useState<Step>('login')
+  const [step, setStep] = useState<Step>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const s = new URLSearchParams(window.location.search).get('step') as Step
+        if (s && ['login', 'first_access_verify', 'first_access_create', 'setup_master', 'choose_system', 'choose_agenda_role'].includes(s)) {
+          return s
+        }
+      } catch {}
+    }
+    return 'login'
+  })
   const [isCheckingSavedUser, setIsCheckingSavedUser] = useState(true)
   const [pendingAuth, setPendingAuth] = useState<any>(null)
   
@@ -246,6 +256,12 @@ export default function LoginPage() {
         }, 6000)
 
         try {
+          // Se o usuário veio para um fluxo específico de primeiro acesso ou configuração master:
+          if (stepParam && ['first_access_verify', 'first_access_create', 'setup_master'].includes(stepParam)) {
+            finishSessionCheck(undefined, stepParam)
+            return
+          }
+
           // 0. Se houver barreira de logout ativa ou usuário explicitamente deslogado, NÃO restaura sessão!
           const barrier = await getLogoutBarrier()
           const isLoggedOut = isUserLoggedOut() || Boolean(barrier)
@@ -1753,12 +1769,64 @@ export default function LoginPage() {
 
         {/* Enterprise SaaS Background Overlay */}
         <BackgroundEffects />
-        {step === 'login' && LoginContent}
-        {step === 'first_access_verify' && FirstAccessVerify}
-        {step === 'first_access_create' && FirstAccessCreate}
-        {step === 'setup_master' && SetupMasterContent}
-        {step === 'choose_system' && ChooseSystemContent}
-        {step === 'choose_agenda_role' && ChooseAgendaRoleContent}
+        {isCheckingSavedUser ? (
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              minHeight: 320,
+              zIndex: 2,
+              animation: 'fadeIn 0.3s ease-out',
+            }}
+          >
+            <div
+              style={{
+                width: 64,
+                height: 64,
+                borderRadius: 20,
+                background: 'rgba(255, 255, 255, 0.05)',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginBottom: 20,
+                boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3)',
+              }}
+            >
+              <div
+                style={{
+                  width: 26,
+                  height: 26,
+                  border: '3px solid rgba(255, 255, 255, 0.15)',
+                  borderTopColor: '#3b82f6',
+                  borderRadius: '50%',
+                  animation: 'spin 0.8s linear infinite',
+                }}
+              />
+            </div>
+            <div
+              style={{
+                fontSize: 13,
+                fontWeight: 600,
+                color: 'rgba(255, 255, 255, 0.6)',
+                letterSpacing: '0.02em',
+              }}
+            >
+              Iniciando sessão segura...
+            </div>
+          </div>
+        ) : (
+          <>
+            {step === 'login' && LoginContent}
+            {step === 'first_access_verify' && FirstAccessVerify}
+            {step === 'first_access_create' && FirstAccessCreate}
+            {step === 'setup_master' && SetupMasterContent}
+            {step === 'choose_system' && ChooseSystemContent}
+            {step === 'choose_agenda_role' && ChooseAgendaRoleContent}
+          </>
+        )}
         
         {/* Modal de bloqueio */}
         {showBlockModal && (

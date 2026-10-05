@@ -135,48 +135,53 @@ export async function POST(request: Request) {
       } catch (e) {}
     }
 
-    // Valida CPF obrigatório com 11 dígitos
+    // Valida CPF obrigatório com 11 dígitos (apenas para colaborador solicitando por conta própria; admin pode enviar sem CPF para o colaborador completar na assinatura)
     const cleanDigitsCpf = (colabCpf || '').replace(/\D/g, '').slice(0, 11)
-    if (!cleanDigitsCpf || cleanDigitsCpf.length !== 11) {
+    if (!isMasterOrAdminConcession && (!cleanDigitsCpf || cleanDigitsCpf.length !== 11 || cleanDigitsCpf === '00000000000')) {
       return NextResponse.json({ error: 'O CPF do colaborador é obrigatório e deve conter 11 dígitos.' }, { status: 400 })
     }
 
-    // Valida Chave PIX obrigatória
-    if (!dadosBancarios?.chavePix || !String(dadosBancarios.chavePix).trim()) {
+    // Valida Chave PIX obrigatória (para colaborador solicitando; admin pode conceder e deixar a definir)
+    if (!isMasterOrAdminConcession && (!dadosBancarios?.chavePix || !String(dadosBancarios.chavePix).trim())) {
       return NextResponse.json({ error: 'A Chave PIX é obrigatória para o crédito do empréstimo.' }, { status: 400 })
     }
 
-    // Formata o CPF (000.000.000-00) e sincroniza no cadastro do colaborador (funcionarios e system_users)
-    let formattedCpf = `${cleanDigitsCpf.slice(0, 3)}.${cleanDigitsCpf.slice(3, 6)}.${cleanDigitsCpf.slice(6, 9)}-${cleanDigitsCpf.slice(9, 11)}`
+    // Formata o CPF (000.000.000-00) se fornecido com 11 dígitos válidos
+    let formattedCpf = ''
+    if (cleanDigitsCpf.length === 11 && cleanDigitsCpf !== '00000000000') {
+      formattedCpf = `${cleanDigitsCpf.slice(0, 3)}.${cleanDigitsCpf.slice(3, 6)}.${cleanDigitsCpf.slice(6, 9)}-${cleanDigitsCpf.slice(9, 11)}`
+    }
     colabCpf = formattedCpf
 
-    try {
-      const funcIdToUpdate = criadoPorFinanceiro && targetColaboradorId ? targetColaboradorId : resolved.funcionarioId
-      if (funcIdToUpdate) {
-        await sb.from('funcionarios').update({
-          cpf: formattedCpf,
-          updated_at: new Date().toISOString()
-        }).eq('id', funcIdToUpdate)
-      } else if (colabEmail) {
-        await sb.from('funcionarios').update({
-          cpf: formattedCpf,
-          updated_at: new Date().toISOString()
-        }).ilike('email', colabEmail)
-      }
+    if (formattedCpf) {
+      try {
+        const funcIdToUpdate = criadoPorFinanceiro && targetColaboradorId ? targetColaboradorId : resolved.funcionarioId
+        if (funcIdToUpdate) {
+          await sb.from('funcionarios').update({
+            cpf: formattedCpf,
+            updated_at: new Date().toISOString()
+          }).eq('id', funcIdToUpdate)
+        } else if (colabEmail) {
+          await sb.from('funcionarios').update({
+            cpf: formattedCpf,
+            updated_at: new Date().toISOString()
+          }).ilike('email', colabEmail)
+        }
 
-      if (resolved.systemUserId || resolved.id) {
-        await sb.from('system_users').update({
-          cpf: formattedCpf,
-          updated_at: new Date().toISOString()
-        }).or(`id.eq.${resolved.systemUserId || resolved.id},auth_id.eq.${resolved.id}`)
-      } else if (colabEmail) {
-        await sb.from('system_users').update({
-          cpf: formattedCpf,
-          updated_at: new Date().toISOString()
-        }).ilike('email', colabEmail)
+        if (resolved.systemUserId || resolved.id) {
+          await sb.from('system_users').update({
+            cpf: formattedCpf,
+            updated_at: new Date().toISOString()
+          }).or(`id.eq.${resolved.systemUserId || resolved.id},auth_id.eq.${resolved.id}`)
+        } else if (colabEmail) {
+          await sb.from('system_users').update({
+            cpf: formattedCpf,
+            updated_at: new Date().toISOString()
+          }).ilike('email', colabEmail)
+        }
+      } catch (errSync) {
+        console.warn('[Sync CPF error]', errSync)
       }
-    } catch (errSync) {
-      console.warn('[Sync CPF error]', errSync)
     }
 
     // Define taxa e método
@@ -249,7 +254,7 @@ export async function POST(request: Request) {
       status: initialStatus,
       justificativaSolicitacao,
       finalidade,
-      dadosBancarios: dadosBancarios || undefined,
+      dadosBancarios: dadosBancarios?.chavePix ? dadosBancarios : (isMasterOrAdminConcession ? { chavePix: 'A definir pelo colaborador', tipoConta: 'corrente' } : undefined),
       criadoPorTipo: criadoPorFinanceiro && resolved.isAdminOrFinance ? 'financeiro' : 'colaborador',
       criadoPorId: resolved.id,
       criadoPorNome: resolved.nome,

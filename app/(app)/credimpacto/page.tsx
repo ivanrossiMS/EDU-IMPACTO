@@ -384,8 +384,7 @@ function CredImpactoContent() {
                   viewMode={viewMode}
                   currentUserId={currentMe?.id || currentUser?.id}
                   currentUserName={currentMe?.nome || currentUser?.nome || currentUser?.email}
-                  currentUserCargo={currentMe?.cargo || currentUser?.cargo}
-                  currentUserCpf={currentMe?.cpf || (currentUser as any)?.cpf}
+                  currentUserCpf={currentMe?.cpf || (currentUser as any)?.cpf || (currentUser as any)?.user_metadata?.cpf || ''}
                   currentUserUnidade={currentMe?.unidade}
                   colaboradoresList={colaboradoresList}
                   onRequestSubmitted={() => {

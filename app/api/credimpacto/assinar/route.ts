@@ -71,7 +71,7 @@ export async function POST(request: Request) {
 
     // Processa CPF enviado no momento do aceite ou já existente
     const submittedCpfDigits = (cpf || loan.colaboradorCpf || resolved.cpf || '').replace(/\D/g, '')
-    if (submittedCpfDigits.length === 11) {
+    if (submittedCpfDigits.length === 11 && submittedCpfDigits !== '00000000000') {
       const formattedCpf = `${submittedCpfDigits.slice(0, 3)}.${submittedCpfDigits.slice(3, 6)}.${submittedCpfDigits.slice(6, 9)}-${submittedCpfDigits.slice(9, 11)}`
       loan.colaboradorCpf = formattedCpf
 
