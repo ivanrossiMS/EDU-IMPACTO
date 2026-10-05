@@ -13,7 +13,15 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json()
-    const { valorSolicitado, quantidadeParcelas, metodoCalculo, taxaMensal, salarioBase } = body
+    const {
+      valorSolicitado,
+      quantidadeParcelas,
+      metodoCalculo,
+      taxaMensal,
+      salarioBase,
+      primeiraParcelaCompetencia,
+      primeiraParcelaVencimento
+    } = body
 
     if (!valorSolicitado || valorSolicitado <= 0) {
       return NextResponse.json({ error: 'Informe um valor válido para simulação.' }, { status: 400 })
@@ -39,6 +47,10 @@ export async function POST(request: Request) {
 
     const salarioParaCalculo = salarioBase ? Number(salarioBase) : resolvedUser.salarioBase
 
+    // Apenas administrador pode definir primeira parcela personalizada
+    const customComp = resolvedUser.isAdminOrFinance ? primeiraParcelaCompetencia : undefined
+    const customVenc = resolvedUser.isAdminOrFinance ? primeiraParcelaVencimento : undefined
+
     const simulacao = simulateLoan(
       Number(valorSolicitado),
       Number(quantidadeParcelas),
@@ -46,7 +58,9 @@ export async function POST(request: Request) {
       metodo,
       salarioParaCalculo,
       new Date(),
-      config.diaPadraoDescontoFolha
+      config.diaPadraoDescontoFolha,
+      customComp,
+      customVenc
     )
 
     return NextResponse.json(simulacao)

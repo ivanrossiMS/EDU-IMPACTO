@@ -21,7 +21,8 @@ import {
   Sparkles,
   ArrowRight,
   Building,
-  AlertCircle
+  AlertCircle,
+  RotateCcw
 } from 'lucide-react'
 import {
   MetodoCalculo,
@@ -31,7 +32,8 @@ import {
 import {
   simulateLoan,
   formatBrl,
-  METODOS_LABELS
+  METODOS_LABELS,
+  generateInstallmentDates
 } from '@/lib/credimpacto/engine'
 import { toast } from 'sonner'
 import * as Slider from '@radix-ui/react-slider'
@@ -115,6 +117,14 @@ export function SimuladorEmprestimo({
   const [parcelasInput, setParcelasInput] = useState('')
   const [showMethodModal, setShowMethodModal] = useState(false)
   const [showRateModal, setShowRateModal] = useState(false)
+
+  // Escolha da 1ª Parcela (Exclusivo Administrador)
+  const canChooseFirstInstallment = Boolean(isAdminOrFinance)
+  const [primeiraCompetencia, setPrimeiraCompetencia] = useState<string>('')
+  const [primeiroVencimento, setPrimeiroVencimento] = useState<string>('')
+  const [showFirstInstallmentModal, setShowFirstInstallmentModal] = useState(false)
+  const [modalTempCompetencia, setModalTempCompetencia] = useState<string>('')
+  const [modalTempVencimento, setModalTempVencimento] = useState<string>('')
 
   // Se admin conceder para um colaborador específico
   const [targetColaboradorId, setTargetColaboradorId] = useState<string>('')
@@ -205,6 +215,163 @@ export function SimuladorEmprestimo({
 
   const effectiveSalary = selectedColaborador?.salario || userSalary
 
+  // Padrão do sistema: 1ª parcela SEMPRE no próximo mês (mês seguinte ao atual)
+  const defaultFirstInstallment = useMemo(() => {
+    const d = new Date()
+    let y = d.getFullYear()
+    let m = d.getMonth() + 1
+    m += 1
+    if (m > 12) {
+      m = 1
+      y += 1
+    }
+    const comp = `${y}-${String(m).padStart(2, '0')}`
+    const targetDay = config.diaPadraoDescontoFolha || 5
+    const ultimoDia = new Date(y, m, 0).getDate()
+    const safeDay = Math.min(Math.max(1, targetDay), ultimoDia)
+    const venc = `${y}-${String(m).padStart(2, '0')}-${String(safeDay).padStart(2, '0')}`
+    return { competencia: comp, vencimento: venc, day: safeDay }
+  }, [config.diaPadraoDescontoFolha])
+
+  const currentMonthCompetencia = useMemo(() => {
+    const d = new Date()
+    const y = d.getFullYear()
+    const m = d.getMonth() + 1
+    return `${y}-${String(m).padStart(2, '0')}`
+  }, [])
+
+  const plus2MonthsCompetencia = useMemo(() => {
+    const d = new Date()
+    let y = d.getFullYear()
+    let m = d.getMonth() + 3
+    if (m > 12) {
+      m -= 12
+      y += 1
+    }
+    return `${y}-${String(m).padStart(2, '0')}`
+  }, [])
+
+  const plus3MonthsCompetencia = useMemo(() => {
+    const d = new Date()
+    let y = d.getFullYear()
+    let m = d.getMonth() + 4
+    if (m > 12) {
+      m -= 12
+      y += 1
+    }
+    return `${y}-${String(m).padStart(2, '0')}`
+  }, [])
+
+  const availableCompetencias = useMemo(() => {
+    const list: Array<{
+      competencia: string
+      label: string
+      isCurrentMonth: boolean
+      isDefaultNextMonth: boolean
+    }> = []
+
+    const d = new Date()
+    const currentY = d.getFullYear()
+    const currentM = d.getMonth() + 1
+
+    const monthNames = [
+      'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+      'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+    ]
+
+    for (let offset = 0; offset <= 24; offset++) {
+      let m = currentM + offset
+      let y = currentY
+      while (m > 12) {
+        m -= 12
+        y += 1
+      }
+      const compStr = `${y}-${String(m).padStart(2, '0')}`
+      const isCurrent = offset === 0
+      const isDefault = offset === 1
+      const name = monthNames[m - 1]
+
+      let tag = ''
+      if (isDefault) tag = ' (Padrão — Próximo Mês)'
+      else if (isCurrent) tag = ' (Mês Atual — Sem Carência)'
+      else if (offset === 2) tag = ' (Carência 60 dias)'
+      else if (offset === 3) tag = ' (Carência 90 dias)'
+      else tag = ` (+${offset - 1} meses)`
+
+      list.push({
+        competencia: compStr,
+        label: `${name}/${y} — ${compStr}${tag}`,
+        isCurrentMonth: isCurrent,
+        isDefaultNextMonth: isDefault
+      })
+    }
+
+    return list
+  }, [])
+
+  const handleOpenFirstInstallmentModal = () => {
+    setModalTempCompetencia(primeiraCompetencia || defaultFirstInstallment.competencia)
+    setModalTempVencimento(primeiroVencimento || defaultFirstInstallment.vencimento)
+    setShowFirstInstallmentModal(true)
+  }
+
+  const handleSelectCompetenciaInModal = (comp: string) => {
+    setModalTempCompetencia(comp)
+    const [y, m] = comp.split('-').map(Number)
+    const currentDay = modalTempVencimento ? parseInt(modalTempVencimento.split('-')[2], 10) : (config.diaPadraoDescontoFolha || 5)
+    const ultimoDia = new Date(y, m, 0).getDate()
+    const safeDay = Math.min(Math.max(1, currentDay), ultimoDia)
+    setModalTempVencimento(`${y}-${String(m).padStart(2, '0')}-${String(safeDay).padStart(2, '0')}`)
+  }
+
+  const handleSelectPresetInModal = (offset: number) => {
+    const d = new Date()
+    let y = d.getFullYear()
+    let m = d.getMonth() + 1 + offset
+    while (m > 12) {
+      m -= 12
+      y += 1
+    }
+    const compStr = `${y}-${String(m).padStart(2, '0')}`
+    setModalTempCompetencia(compStr)
+    const currentDay = modalTempVencimento ? parseInt(modalTempVencimento.split('-')[2], 10) : (config.diaPadraoDescontoFolha || 5)
+    const ultimoDia = new Date(y, m, 0).getDate()
+    const safeDay = Math.min(Math.max(1, currentDay), ultimoDia)
+    setModalTempVencimento(`${y}-${String(m).padStart(2, '0')}-${String(safeDay).padStart(2, '0')}`)
+  }
+
+  const handleDateChangeInModal = (dateStr: string) => {
+    if (!dateStr) return
+    setModalTempVencimento(dateStr)
+    setModalTempCompetencia(dateStr.slice(0, 7))
+  }
+
+  const handleApplyFirstInstallment = () => {
+    setPrimeiraCompetencia(modalTempCompetencia)
+    setPrimeiroVencimento(modalTempVencimento)
+    setShowFirstInstallmentModal(false)
+    toast.success(`1ª parcela definida para ${formatCompetenciaShort(modalTempCompetencia)}!`)
+  }
+
+  const handleResetFirstInstallment = () => {
+    setPrimeiraCompetencia('')
+    setPrimeiroVencimento('')
+    setShowFirstInstallmentModal(false)
+    toast.info('1ª parcela restaurada para o padrão (próximo mês).')
+  }
+
+  const previewInstallments = useMemo(() => {
+    const targetComp = modalTempCompetencia || defaultFirstInstallment.competencia
+    const targetVenc = modalTempVencimento || defaultFirstInstallment.vencimento
+    return generateInstallmentDates(
+      parcelas,
+      new Date(),
+      config.diaPadraoDescontoFolha,
+      targetComp,
+      targetVenc
+    )
+  }, [modalTempCompetencia, modalTempVencimento, parcelas, defaultFirstInstallment, config.diaPadraoDescontoFolha])
+
   // Executa o cálculo da simulação em tempo real
   const simulacao = useMemo(() => {
     return simulateLoan(
@@ -214,9 +381,21 @@ export function SimuladorEmprestimo({
       metodo,
       effectiveSalary,
       new Date(),
-      config.diaPadraoDescontoFolha
+      config.diaPadraoDescontoFolha,
+      canChooseFirstInstallment && primeiraCompetencia ? primeiraCompetencia : undefined,
+      canChooseFirstInstallment && primeiroVencimento ? primeiroVencimento : undefined
     )
-  }, [valor, parcelas, taxa, metodo, effectiveSalary, config.diaPadraoDescontoFolha])
+  }, [
+    valor,
+    parcelas,
+    taxa,
+    metodo,
+    effectiveSalary,
+    config.diaPadraoDescontoFolha,
+    canChooseFirstInstallment,
+    primeiraCompetencia,
+    primeiroVencimento
+  ])
 
   const isAdmin = Boolean(isAdminOrFinance && viewMode === 'admin')
 
@@ -284,7 +463,9 @@ export function SimuladorEmprestimo({
           tipoConta: 'corrente'
         },
         criadoPorFinanceiro: isConcessaoPelaEscola,
-        colaboradorCpf: formattedCpf
+        colaboradorCpf: formattedCpf,
+        primeiraParcelaCompetencia: canChooseFirstInstallment && primeiraCompetencia ? primeiraCompetencia : undefined,
+        primeiraParcelaVencimento: canChooseFirstInstallment && primeiroVencimento ? primeiroVencimento : undefined
       }
 
       if (isConcessaoPelaEscola && selectedColaborador) {
@@ -601,8 +782,8 @@ export function SimuladorEmprestimo({
             </div>
           </div>
 
-          {/* PILLS INFERIORES: SISTEMA DE AMORTIZAÇÃO & TAXA DE JUROS */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+          {/* PILLS INFERIORES: SISTEMA DE AMORTIZAÇÃO, TAXA DE JUROS & 1ª PARCELA */}
+          <div className={`grid grid-cols-1 ${canChooseFirstInstallment ? 'sm:grid-cols-3' : 'sm:grid-cols-2'} gap-3 pt-3 border-t border-slate-100 dark:border-slate-800`}>
             {/* Sistema de Amortização */}
             <div
               onClick={() => {
@@ -654,6 +835,38 @@ export function SimuladorEmprestimo({
               </div>
               <ChevronDown size={14} className="text-slate-400 shrink-0" />
             </div>
+
+            {/* 1ª Parcela (Exclusivo Administrador) */}
+            {canChooseFirstInstallment && (
+              <div
+                onClick={handleOpenFirstInstallmentModal}
+                className="p-3 rounded-2xl bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200/80 dark:border-emerald-800/50 flex items-center justify-between gap-2.5 cursor-pointer hover:bg-emerald-100/60 dark:hover:bg-emerald-900/30 transition-all shadow-2xs group"
+                title="Escolher a 1ª parcela (Exclusivo Administrador)"
+              >
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-8 h-8 rounded-xl bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shadow-xs border border-emerald-200/60 dark:border-emerald-700/60 shrink-0 group-hover:scale-105 transition-transform">
+                    <Calendar size={15} />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1">
+                      <span className="text-[10px] text-slate-400 uppercase font-semibold block leading-none truncate">
+                        1ª Parcela
+                      </span>
+                      <span className="text-[9px] font-bold px-1 py-0.2 rounded bg-emerald-100 dark:bg-emerald-900/70 text-emerald-700 dark:text-emerald-300 uppercase">
+                        Admin
+                      </span>
+                    </div>
+                    <span className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate block mt-0.5 font-mono">
+                      {formatCompetenciaShort(simulacao.parcelas[0]?.competencia || defaultFirstInstallment.competencia)}
+                      <span className="text-[10px] text-slate-400 font-sans font-normal ml-1">
+                        ({simulacao.parcelas[0]?.dataVencimento ? new Date(simulacao.parcelas[0].dataVencimento + 'T12:00:00Z').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) : ''})
+                      </span>
+                    </span>
+                  </div>
+                </div>
+                <ChevronDown size={14} className="text-slate-400 shrink-0 group-hover:text-emerald-600 transition-colors" />
+              </div>
+            )}
           </div>
         </div>
 
@@ -712,6 +925,25 @@ export function SimuladorEmprestimo({
                 </span>
               </div>
 
+              {/* Primeira Parcela */}
+              <div className="flex items-center justify-between text-xs">
+                <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400 font-medium">
+                  <Calendar size={16} className="text-slate-400" />
+                  <span>1ª Parcela</span>
+                  {canChooseFirstInstallment && primeiraCompetencia && (
+                    <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300">
+                      Personalizada
+                    </span>
+                  )}
+                </div>
+                <span className="font-bold text-slate-900 dark:text-white font-mono text-xs">
+                  {formatCompetenciaShort(simulacao.parcelas[0]?.competencia || defaultFirstInstallment.competencia)}
+                  <span className="text-[10px] text-slate-400 font-sans font-normal ml-1">
+                    ({simulacao.parcelas[0]?.dataVencimento ? new Date(simulacao.parcelas[0].dataVencimento + 'T12:00:00Z').toLocaleDateString('pt-BR') : ''})
+                  </span>
+                </span>
+              </div>
+
               {/* Divisor */}
               <div className="border-t border-slate-100 dark:border-slate-800 my-1" />
 
@@ -764,9 +996,24 @@ export function SimuladorEmprestimo({
               </div>
             </div>
 
-            <span className="px-3 py-1 rounded-full bg-emerald-100/80 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 text-xs font-bold border border-emerald-200/80 dark:border-emerald-800/60 shrink-0 shadow-xs">
-              {parcelas} parcelas
-            </span>
+            <div className="flex items-center gap-2 shrink-0">
+              {canChooseFirstInstallment && (
+                <button
+                  type="button"
+                  onClick={handleOpenFirstInstallmentModal}
+                  className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/50 dark:hover:bg-emerald-900/50 text-emerald-800 dark:text-emerald-300 text-xs font-semibold border border-emerald-200/80 dark:border-emerald-800/60 transition-all cursor-pointer shadow-2xs"
+                  title="Alterar competência da 1ª parcela"
+                >
+                  <Calendar size={12} className="text-emerald-600 dark:text-emerald-400" />
+                  <span>1ª Parcela: <strong>{formatCompetenciaShort(simulacao.parcelas[0]?.competencia || defaultFirstInstallment.competencia)}</strong></span>
+                  <Pencil size={11} className="text-emerald-600 dark:text-emerald-400 opacity-70 ml-0.5" />
+                </button>
+              )}
+
+              <span className="px-3 py-1 rounded-full bg-emerald-100/80 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 text-xs font-bold border border-emerald-200/80 dark:border-emerald-800/60 shrink-0 shadow-xs">
+                {parcelas} parcelas
+              </span>
+            </div>
           </div>
         </div>
 
@@ -944,6 +1191,207 @@ export function SimuladorEmprestimo({
         </div>
       )}
 
+      {/* MODAL PARA ESCOLHER PRIMEIRA PARCELA (EXCLUSIVO ADMINISTRADOR) */}
+      {showFirstInstallmentModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-md w-full p-5 sm:p-6 space-y-4 shadow-2xl animate-in zoom-in-95">
+            {/* Header */}
+            <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 flex items-center justify-center border border-emerald-200/60 dark:border-emerald-700/60">
+                  <Calendar size={16} />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                    Escolher Primeira Parcela
+                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 uppercase">
+                      Admin
+                    </span>
+                  </h3>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Defina quando iniciará o desconto em folha deste contrato.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowFirstInstallmentModal(false)}
+                className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 p-1"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Atalhos Rápidos */}
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">
+                Atalhos Rápidos
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                {/* Próximo Mês (Padrão) */}
+                <button
+                  type="button"
+                  onClick={() => handleSelectPresetInModal(1)}
+                  className={`p-2.5 rounded-xl border text-left text-xs transition-all ${
+                    modalTempCompetencia === defaultFirstInstallment.competencia
+                      ? 'border-emerald-500 bg-emerald-50/60 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200 font-bold shadow-2xs'
+                      : 'border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 text-slate-700 dark:text-slate-300'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-[11px]">Próximo mês</span>
+                    <span className="text-[9px] px-1 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-slate-500">Padrão</span>
+                  </div>
+                  <div className="text-[10px] text-slate-400 mt-0.5">
+                    {formatCompetenciaShort(defaultFirstInstallment.competencia)}
+                  </div>
+                </button>
+
+                {/* Mês Atual (Sem Carência) */}
+                <button
+                  type="button"
+                  onClick={() => handleSelectPresetInModal(0)}
+                  className={`p-2.5 rounded-xl border text-left text-xs transition-all ${
+                    modalTempCompetencia === currentMonthCompetencia
+                      ? 'border-emerald-500 bg-emerald-50/60 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200 font-bold shadow-2xs'
+                      : 'border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 text-slate-700 dark:text-slate-300'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-[11px]">Mês atual</span>
+                    <span className="text-[9px] px-1 py-0.2 rounded bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300">Imediato</span>
+                  </div>
+                  <div className="text-[10px] text-slate-400 mt-0.5">
+                    {formatCompetenciaShort(currentMonthCompetencia)}
+                  </div>
+                </button>
+
+                {/* Carência de 60 dias (+2 meses) */}
+                <button
+                  type="button"
+                  onClick={() => handleSelectPresetInModal(2)}
+                  className={`p-2.5 rounded-xl border text-left text-xs transition-all ${
+                    modalTempCompetencia === plus2MonthsCompetencia
+                      ? 'border-emerald-500 bg-emerald-50/60 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200 font-bold shadow-2xs'
+                      : 'border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 text-slate-700 dark:text-slate-300'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-[11px]">Carência 60 dias</span>
+                    <span className="text-[9px] text-slate-400">+2 meses</span>
+                  </div>
+                  <div className="text-[10px] text-slate-400 mt-0.5">
+                    {formatCompetenciaShort(plus2MonthsCompetencia)}
+                  </div>
+                </button>
+
+                {/* Carência de 90 dias (+3 meses) */}
+                <button
+                  type="button"
+                  onClick={() => handleSelectPresetInModal(3)}
+                  className={`p-2.5 rounded-xl border text-left text-xs transition-all ${
+                    modalTempCompetencia === plus3MonthsCompetencia
+                      ? 'border-emerald-500 bg-emerald-50/60 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200 font-bold shadow-2xs'
+                      : 'border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 text-slate-700 dark:text-slate-300'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-[11px]">Carência 90 dias</span>
+                    <span className="text-[9px] text-slate-400">+3 meses</span>
+                  </div>
+                  <div className="text-[10px] text-slate-400 mt-0.5">
+                    {formatCompetenciaShort(plus3MonthsCompetencia)}
+                  </div>
+                </button>
+              </div>
+            </div>
+
+            {/* Seleção Detalhada */}
+            <div className="space-y-3 pt-1">
+              <div>
+                <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 block mb-1">
+                  Competência da 1ª Parcela (Mês da Folha)
+                </label>
+                <select
+                  value={modalTempCompetencia}
+                  onChange={(e) => handleSelectCompetenciaInModal(e.target.value)}
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-medium text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                >
+                  {availableCompetencias.map((comp) => (
+                    <option key={comp.competencia} value={comp.competencia}>
+                      {comp.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 block mb-1">
+                  Data de Vencimento da 1ª Parcela
+                </label>
+                <input
+                  type="date"
+                  value={modalTempVencimento}
+                  onChange={(e) => handleDateChangeInModal(e.target.value)}
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-medium font-mono text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                />
+                <span className="text-[10px] text-slate-400 block mt-1">
+                  O dia selecionado será mantido para os vencimentos das parcelas seguintes.
+                </span>
+              </div>
+            </div>
+
+            {/* Card de Impacto no Cronograma */}
+            <div className="bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200/70 dark:border-emerald-800/40 rounded-xl p-3.5 space-y-1.5 text-xs">
+              <div className="font-bold text-emerald-900 dark:text-emerald-300 text-[11px] uppercase tracking-wider flex items-center gap-1.5">
+                <CheckCircle2 size={13} />
+                <span>Impacto no Cronograma ({parcelas} parcelas)</span>
+              </div>
+              <div className="flex justify-between items-center text-slate-700 dark:text-slate-300 pt-0.5">
+                <span>Início (1ª parcela):</span>
+                <strong className="font-mono text-slate-900 dark:text-white">
+                  {formatCompetenciaShort(previewInstallments[0]?.competencia)} ({previewInstallments[0]?.vencimento ? new Date(previewInstallments[0].vencimento + 'T12:00:00Z').toLocaleDateString('pt-BR') : ''})
+                </strong>
+              </div>
+              <div className="flex justify-between items-center text-slate-700 dark:text-slate-300">
+                <span>Término ({parcelas}ª parcela):</span>
+                <strong className="font-mono text-slate-900 dark:text-white">
+                  {formatCompetenciaShort(previewInstallments[previewInstallments.length - 1]?.competencia)} ({previewInstallments[previewInstallments.length - 1]?.vencimento ? new Date(previewInstallments[previewInstallments.length - 1].vencimento + 'T12:00:00Z').toLocaleDateString('pt-BR') : ''})
+                </strong>
+              </div>
+            </div>
+
+            {/* Ações */}
+            <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={handleResetFirstInstallment}
+                className="px-3 py-2 rounded-xl text-xs font-semibold text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 flex items-center gap-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+              >
+                <RotateCcw size={13} />
+                <span>Restaurar Padrão</span>
+              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowFirstInstallmentModal(false)}
+                  className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleApplyFirstInstallment}
+                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white shadow-sm shadow-emerald-600/25 transition-all"
+                >
+                  Confirmar 1ª Parcela
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* MODAL DE CONFIRMAÇÃO E DADOS BANCÁRIOS */}
       {showConfirmationModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in">
@@ -988,6 +1436,12 @@ export function SimuladorEmprestimo({
               <div className="flex justify-between">
                 <span className="text-slate-500 dark:text-slate-400 font-sans">Parcelamento:</span>
                 <span className="text-slate-900 dark:text-white font-medium">{parcelas}x parcelas em folha</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500 dark:text-slate-400 font-sans">1ª Parcela:</span>
+                <span className="font-bold text-slate-900 dark:text-white">
+                  {formatCompetenciaShort(simulacao.parcelas[0]?.competencia || defaultFirstInstallment.competencia)} ({simulacao.parcelas[0]?.dataVencimento ? new Date(simulacao.parcelas[0].dataVencimento + 'T12:00:00Z').toLocaleDateString('pt-BR') : ''})
+                </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-500 dark:text-slate-400 font-sans">

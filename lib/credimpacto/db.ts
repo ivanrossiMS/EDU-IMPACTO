@@ -453,6 +453,11 @@ export async function dbSaveEmprestimo(
       criado_por_id: updatedLoan.criadoPorId || null,
       criado_por_nome: updatedLoan.criadoPorNome || null,
       memoria_calculo: updatedLoan.memoriaCalculo || null,
+      dados: {
+        ...((updatedLoan as any).dados || {}),
+        primeiraParcelaCompetencia: updatedLoan.primeiraParcelaCompetencia || updatedLoan.parcelas?.[0]?.competencia,
+        primeiraParcelaVencimento: updatedLoan.primeiraParcelaVencimento || updatedLoan.parcelas?.[0]?.dataVencimento
+      },
       updated_at: nowIso
     }
 
@@ -888,6 +893,8 @@ function mapDbRowToEmprestimo(e: any, parcelas: CredImpactoParcela[]): CredImpac
     quantidadeParcelas: Number(e.quantidade_parcelas || e.quantidadeParcelas),
     taxaMensal: Number(e.taxa_mensal || e.taxaMensal),
     metodoCalculo: e.metodo_calculo || e.metodoCalculo,
+    primeiraParcelaCompetencia: e.dados?.primeiraParcelaCompetencia || e.primeira_parcela_competencia || e.primeiraParcelaCompetencia || parcelas[0]?.competencia,
+    primeiraParcelaVencimento: e.dados?.primeiraParcelaVencimento || e.primeira_parcela_vencimento || e.primeiraParcelaVencimento || parcelas[0]?.dataVencimento,
     totalJuros: Number(e.total_juros || e.totalJuros || 0),
     totalAPagar: Number(e.total_a_pagar || e.totalAPagar),
     saldoDevedorAtual: Number(e.saldo_devedor_atual || e.saldoDevedorAtual || 0),

@@ -117,6 +117,8 @@ export interface ContrapropostaFinanceiro {
   motivo: string
   propostoPorId: string
   propostoPorNome: string
+  primeiraParcelaCompetencia?: string
+  primeiraParcelaVencimento?: string
   propostoEm: string
   status: 'pendente' | 'aceita' | 'recusada'
 }
@@ -139,6 +141,8 @@ export interface CredImpactoEmprestimo {
   quantidadeParcelas: number
   taxaMensal: number
   metodoCalculo: MetodoCalculo
+  primeiraParcelaCompetencia?: string     // Ex: '2026-11'
+  primeiraParcelaVencimento?: string      // Ex: '2026-11-05'
   totalJuros: number
   totalAPagar: number
   saldoDevedorAtual: number               // Principal restante ainda não amortizado
@@ -195,6 +199,8 @@ export interface CredImpactoSimulacao {
   totalAPagar: number
   valorPrimeiraParcela: number
   valorUltimaParcela: number
+  primeiraParcelaCompetencia?: string
+  primeiraParcelaVencimento?: string
   parcelas: Array<{
     numero: number
     competencia: string

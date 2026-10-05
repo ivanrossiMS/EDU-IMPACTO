@@ -60,27 +60,48 @@ export const METODOS_LABELS: Record<MetodoCalculo, { nome: string; descricao: st
 
 /**
  * Gera as competências e datas de vencimento sequenciais a partir de uma data inicial.
+ * Permite ao administrador definir opcionalmente a competência e vencimento da 1ª parcela.
  */
 export function generateInstallmentDates(
   totalParcelas: number,
   dataInicio: Date = new Date(),
-  diaVencimento: number = 5
+  diaVencimento: number = 5,
+  primeiraParcelaCompetencia?: string,
+  primeiraParcelaVencimento?: string
 ): Array<{ competencia: string; vencimento: string }> {
   const result: Array<{ competencia: string; vencimento: string }> = []
   
-  // O vencimento e competência da 1ª parcela devem ser SEMPRE no próximo mês, NUNCA no mês atual
-  const d = typeof dataInicio === 'string' && (dataInicio as string).length === 10
-    ? new Date(dataInicio + 'T12:00:00Z')
-    : new Date(dataInicio)
+  let year: number
+  let month: number
+  let targetDay = diaVencimento
 
-  let year = d.getFullYear()
-  let month = d.getMonth() + 1 // mês da concessão (1 a 12)
+  if (primeiraParcelaCompetencia && /^\d{4}-\d{2}$/.test(primeiraParcelaCompetencia)) {
+    const parts = primeiraParcelaCompetencia.split('-')
+    year = parseInt(parts[0], 10)
+    month = parseInt(parts[1], 10)
+    if (primeiraParcelaVencimento && /^\d{4}-\d{2}-\d{2}$/.test(primeiraParcelaVencimento)) {
+      targetDay = parseInt(primeiraParcelaVencimento.split('-')[2], 10) || diaVencimento
+    }
+  } else if (primeiraParcelaVencimento && /^\d{4}-\d{2}-\d{2}$/.test(primeiraParcelaVencimento)) {
+    const parts = primeiraParcelaVencimento.split('-')
+    year = parseInt(parts[0], 10)
+    month = parseInt(parts[1], 10)
+    targetDay = parseInt(parts[2], 10) || diaVencimento
+  } else {
+    // Padrão: O vencimento e competência da 1ª parcela devem ser SEMPRE no próximo mês, NUNCA no mês atual
+    const d = typeof dataInicio === 'string' && (dataInicio as string).length === 10
+      ? new Date(dataInicio + 'T12:00:00Z')
+      : new Date(dataInicio)
 
-  // Avança obrigatoriamente para o mês seguinte (nunca no mês atual)
-  month += 1
-  if (month > 12) {
-    month = 1
-    year += 1
+    year = d.getFullYear()
+    month = d.getMonth() + 1 // mês da concessão (1 a 12)
+
+    // Avança obrigatoriamente para o mês seguinte (nunca no mês atual)
+    month += 1
+    if (month > 12) {
+      month = 1
+      year += 1
+    }
   }
 
   for (let k = 1; k <= totalParcelas; k++) {
@@ -89,9 +110,13 @@ export function generateInstallmentDates(
 
     // Garante que o dia de vencimento seja válido para o mês
     const ultimoDiaDoMes = new Date(year, month, 0).getDate()
-    const safeDay = Math.min(Math.max(1, diaVencimento), ultimoDiaDoMes)
+    const safeDay = Math.min(Math.max(1, targetDay), ultimoDiaDoMes)
     const dueDayStr = String(safeDay).padStart(2, '0')
-    const vencimento = `${year}-${compMonthStr}-${dueDayStr}`
+    let vencimento = `${year}-${compMonthStr}-${dueDayStr}`
+
+    if (k === 1 && primeiraParcelaVencimento && /^\d{4}-\d{2}-\d{2}$/.test(primeiraParcelaVencimento)) {
+      vencimento = primeiraParcelaVencimento
+    }
 
     result.push({ competencia, vencimento })
 
@@ -116,12 +141,20 @@ export function simulateLoan(
   metodo: MetodoCalculo = 'JUROS_SIMPLES_SALDO',
   salarioBaseColaborador?: number,
   dataInicio: Date = new Date(),
-  diaVencimento: number = 5
+  diaVencimento: number = 5,
+  primeiraParcelaCompetencia?: string,
+  primeiraParcelaVencimento?: string
 ): CredImpactoSimulacao {
   const principal = roundMoney(Math.max(0, valorSolicitado))
   const n = Math.max(1, Math.floor(quantidadeParcelas))
   const i = Math.max(0, taxaMensal) / 100 // decimal
-  const dates = generateInstallmentDates(n, dataInicio, diaVencimento)
+  const dates = generateInstallmentDates(
+    n,
+    dataInicio,
+    diaVencimento,
+    primeiraParcelaCompetencia,
+    primeiraParcelaVencimento
+  )
 
   const parcelas: CredImpactoSimulacao['parcelas'] = []
   let totalJuros = 0
@@ -131,7 +164,7 @@ export function simulateLoan(
     {
       etapa: 'Capital Inicial (Principal)',
       descricao: `Valor concedido pela escola: ${formatBrl(principal)}`,
-      detalhe: `Número de parcelas: ${n} | Taxa mensal: ${taxaMensal.toFixed(2)}% a.m.`
+      detalhe: `Número de parcelas: ${n} | Taxa mensal: ${taxaMensal.toFixed(2)}% a.m.${dates[0] ? ` | 1ª Parcela: ${dates[0].competencia} (${dates[0].vencimento})` : ''}`
     }
   ]
 
@@ -389,6 +422,8 @@ export function simulateLoan(
     totalAPagar,
     valorPrimeiraParcela,
     valorUltimaParcela,
+    primeiraParcelaCompetencia: dates[0]?.competencia,
+    primeiraParcelaVencimento: dates[0]?.vencimento,
     parcelas,
     memoriaCalculo,
     limiteMargemConsignavel

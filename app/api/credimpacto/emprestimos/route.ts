@@ -69,7 +69,9 @@ export async function POST(request: Request) {
       justificativaSolicitacao,
       finalidade,
       dadosBancarios,
-      criadoPorFinanceiro
+      criadoPorFinanceiro,
+      primeiraParcelaCompetencia,
+      primeiraParcelaVencimento
     } = body
 
     const valor = Number(valorSolicitado)
@@ -195,7 +197,10 @@ export async function POST(request: Request) {
       metodo = config.metodoCalculoPadrao
     }
 
-    // Calcula simulação e parcelas
+    // Calcula simulação e parcelas (respeitando escolha da 1ª parcela se for administrador)
+    const customComp = isMasterOrAdminConcession ? primeiraParcelaCompetencia : undefined
+    const customVenc = isMasterOrAdminConcession ? primeiraParcelaVencimento : undefined
+
     const simulacao = simulateLoan(
       valor,
       parcelasCount,
@@ -203,7 +208,9 @@ export async function POST(request: Request) {
       metodo,
       colabSalario,
       new Date(),
-      config.diaPadraoDescontoFolha
+      config.diaPadraoDescontoFolha,
+      customComp,
+      customVenc
     )
 
     const empId = crypto.randomUUID()
@@ -247,6 +254,8 @@ export async function POST(request: Request) {
       quantidadeParcelas: parcelasCount,
       taxaMensal: taxa,
       metodoCalculo: metodo,
+      primeiraParcelaCompetencia: simulacao.primeiraParcelaCompetencia,
+      primeiraParcelaVencimento: simulacao.primeiraParcelaVencimento,
       totalJuros: simulacao.totalJuros,
       totalAPagar: simulacao.totalAPagar,
       saldoDevedorAtual: valor,

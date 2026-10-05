@@ -98,6 +98,8 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
           quantidadeParcelas: Number(contraproposta.quantidadeParcelas || loan.quantidadeParcelas),
           taxaMensal: Number(contraproposta.taxaMensal || loan.taxaMensal),
           metodoCalculo: contraproposta.metodoCalculo || loan.metodoCalculo,
+          primeiraParcelaCompetencia: contraproposta.primeiraParcelaCompetencia || loan.primeiraParcelaCompetencia,
+          primeiraParcelaVencimento: contraproposta.primeiraParcelaVencimento || loan.primeiraParcelaVencimento,
           motivo: contraproposta.motivo || 'Ajuste de valor/prazo para adequação à margem salarial.',
           propostoPorId: resolved.id,
           propostoPorNome: resolved.nome,
@@ -141,13 +143,17 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
           prop.metodoCalculo,
           loan.colaboradorSalarioBase,
           new Date(),
-          config.diaPadraoDescontoFolha
+          config.diaPadraoDescontoFolha,
+          prop.primeiraParcelaCompetencia,
+          prop.primeiraParcelaVencimento
         )
 
         loan.valorAprovado = prop.valorProposto
         loan.quantidadeParcelas = prop.quantidadeParcelas
         loan.taxaMensal = prop.taxaMensal
         loan.metodoCalculo = prop.metodoCalculo
+        loan.primeiraParcelaCompetencia = novaSimulacao.primeiraParcelaCompetencia
+        loan.primeiraParcelaVencimento = novaSimulacao.primeiraParcelaVencimento
         loan.totalJuros = novaSimulacao.totalJuros
         loan.totalAPagar = novaSimulacao.totalAPagar
         loan.saldoDevedorAtual = prop.valorProposto
