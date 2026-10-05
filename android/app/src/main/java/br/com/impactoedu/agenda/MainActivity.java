@@ -19,6 +19,9 @@ public class MainActivity extends BridgeActivity {
 
         try {
             super.onCreate(savedInstanceState);
+            if (this.bridge != null && this.bridge.getWebView() != null) {
+                this.bridge.getWebView().setBackgroundColor(0xFF0A0F24);
+            }
         } catch (Throwable t) {
             Log.e(TAG, "FATAL EXCEPTION no super.onCreate: " + t.getMessage(), t);
             CrashHandler.showCrash(this, t);

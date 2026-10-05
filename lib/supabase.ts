@@ -2,7 +2,7 @@ import { createClient } from '@supabase/supabase-js'
 import { Preferences } from '@capacitor/preferences'
 import { Capacitor } from '@capacitor/core'
 import { createChunks, combineChunks, stringToBase64URL, stringFromBase64URL, isChunkLike } from '@supabase/ssr'
-import { saveSessionSecurely, clearSessionSecurely, setSecureStorageWithRetry, getSecureStorageWithRetry } from '@/lib/auth/secureSession'
+import { saveSessionSecurely, clearSessionSecurely, setSecureStorageWithRetry, getSecureStorageWithRetry, withTimeout } from '@/lib/auth/secureSession'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://lrpwerkkqrjkcauofhph.supabase.co'
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxycHdlcmtrcXJqa2NhdW9maHBoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU0MDAzMjYsImV4cCI6MjA5MDk3NjMyNn0.1-_0vMiLn0Y9piS90150Ur7qx8ic1Kz64RuhiaVGLhg'
@@ -175,10 +175,10 @@ const customStorage = {
 
     if (Capacitor.isNativePlatform()) {
       try {
-        await SecureStoragePlugin.remove({ key })
+        await withTimeout(SecureStoragePlugin.remove({ key }), 1200, null)
       } catch (e) {}
       try {
-        await Preferences.remove({ key })
+        await withTimeout(Preferences.remove({ key }), 1200, null)
       } catch (e) {}
     }
 

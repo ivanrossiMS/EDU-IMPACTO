@@ -23,25 +23,29 @@ export const DEFAULT_MODULES: Record<string, boolean> = {
   almoxarifado: true,
 }
 
+import { startupDiagnostics } from '@/lib/diagnostics/startupDiagnostics'
+
 // Resilient async setting loader supporting Keychain, Capacitor Preferences, and localStorage
 export async function loadSettingAsync<T>(key: string, fallback: T): Promise<T> {
   if (typeof window === 'undefined') return fallback
   try {
     if (Capacitor.isNativePlatform()) {
-      // 1. Tenta Keychain / Keystore nativo para dados de sessão e usuário
+      // 1. Tenta Keychain / Keystore nativo para dados de sessão e usuário com timeout de 1200ms
       if (key === 'edu-current-user' || key === 'edu-current-perfil') {
         try {
-          const sec = await SecureStoragePlugin.get({ key })
+          const secPromise = SecureStoragePlugin.get({ key })
+          const secTimeout = new Promise<{ value?: string } | null>(res => setTimeout(() => res(null), 1200))
+          const sec = await Promise.race([secPromise, secTimeout])
           if (sec?.value) {
             try { return JSON.parse(sec.value) as T } catch { return sec.value as unknown as T }
           }
         } catch {}
       }
 
-      // 2. Capacitor Preferences com timeout robusto de 3500ms para cold boot e reboot
+      // 2. Capacitor Preferences com timeout robusto de 1500ms para cold boot e reboot
       try {
         const getPromise = Preferences.get({ key })
-        const timeoutPromise = new Promise<{ value: string | null }>(res => setTimeout(() => res({ value: null }), 3500))
+        const timeoutPromise = new Promise<{ value: string | null }>(res => setTimeout(() => res({ value: null }), 1500))
         const { value } = await Promise.race([getPromise, timeoutPromise])
         if (value !== null && value !== undefined) {
           try { return JSON.parse(value) as T } catch { return value as unknown as T }
@@ -215,10 +219,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     // Fallback de segurança para garantir hidratação mesmo em falha grave de storage
     const fallbackTimer = setTimeout(() => {
-      if (isMounted) setHydrated(true)
-    }, 5000)
+      if (isMounted) {
+        startupDiagnostics.recordMilestone('context_hydration_fallback_timeout')
+        setHydrated(true)
+      }
+    }, 2500)
 
     async function hydrate() {
+      startupDiagnostics.recordMilestone('context_hydration_start')
       try {
         const barrier = await getLogoutBarrier()
         const isLoggedOut = isUserLoggedOut() || Boolean(barrier)
@@ -243,6 +251,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           setActiveModulesState({ ...DEFAULT_MODULES, ...savedModules })
           setActiveUnitState(savedUnit)
           document.documentElement.setAttribute('data-theme', savedTheme)
+          startupDiagnostics.recordMilestone('context_hydration_logged_out')
           return
         }
 
@@ -291,6 +300,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           } catch {}
         }
 
+        // Se o storage assíncrono falhou mas tínhamos usuário síncrono no localStorage,
+        // preserva o usuário já inicializado para evitar logout indevido por lentidão de Keychain
+        if (!savedUser && typeof window !== 'undefined') {
+          try {
+            const syncRaw = window.localStorage.getItem('edu-current-user')
+            if (syncRaw) {
+              const syncParsed = JSON.parse(syncRaw)
+              if (syncParsed?.id) {
+                savedUser = syncParsed
+                const syncPerfil = window.localStorage.getItem('edu-current-perfil')
+                if (syncPerfil) savedPerfil = JSON.parse(syncPerfil)
+              }
+            }
+          } catch {}
+        }
+
         setThemeState(savedTheme)
         setSidebarThemeState(savedSidebarTheme)
         setActiveModulesState({ ...DEFAULT_MODULES, ...savedModules })
@@ -325,7 +350,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           setCurrentUserPerfilState('')
         }
         document.documentElement.setAttribute('data-theme', savedTheme)
+        startupDiagnostics.recordMilestone('context_hydration_end', { hasUser: Boolean(savedUser) })
       } catch (err) {
+        startupDiagnostics.recordError('context_hydration', err)
         console.error('[Context Hydration Error]', err)
       } finally {
         if (isMounted) {

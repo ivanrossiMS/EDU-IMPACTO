@@ -1,12 +1,10 @@
 import type { Metadata } from 'next'
-import Script from 'next/script'
 import './globals.css'
 import 'katex/dist/katex.min.css'
 import { AppProvider } from '@/lib/context'
 import { ReactQueryProvider } from '@/components/ReactQueryProvider'
 import { GlobalAccessGuard } from '@/components/layout/GlobalAccessGuard'
 import { Suspense } from 'react'
-
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://impacto-edu.net'),
@@ -27,27 +25,30 @@ export const viewport = {
 
 import { GlobalNavigationLoader } from '@/components/layout/GlobalNavigationLoader'
 import { GlobalLogoutOverlay } from '@/components/layout/GlobalLogoutOverlay'
-
 import { KeyboardProvider } from '@/components/providers/KeyboardProvider'
 import { CapacitorResumeGuard } from '@/components/providers/CapacitorResumeGuard'
 import { GlobalNotificationProvider } from '@/components/providers/GlobalNotificationProvider'
 import { GlobalButtonEffects } from '@/components/providers/GlobalButtonEffects'
+import { GlobalCrashShield } from '@/components/providers/GlobalCrashShield'
+import { OneSignalWebScript } from '@/components/providers/OneSignalWebScript'
 import { Toaster } from 'sonner'
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="pt-BR" suppressHydrationWarning data-scroll-behavior="smooth" style={{ backgroundColor: '#0A0F24', color: '#ffffff' }}>
       <head>
-        {/* Preconnect para carregamento não-bloqueante das fontes */}
+        {/* Preconnect para carregamento das fontes */}
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        {/* Carregamento não-bloqueante para evitar tela branca em conexões lentas ou offline */}
         <link
           href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&family=Inter:ital,opsz,wght@0,14..32,300;0,14..32,400;0,14..32,500;0,14..32,600;0,14..32,700;0,14..32,800;0,14..32,900;1,14..32,400&family=Outfit:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
           rel="stylesheet"
         />
-
       </head>
-      <body style={{ backgroundColor: '#0A0F24', color: '#ffffff', minHeight: '100vh', margin: 0 }}>
+      <body style={{ backgroundColor: '#0A0F24', color: '#ffffff', minHeight: '100dvh', margin: 0 }}>
+        {/* Escudo global contra ChunkLoadError e unhandled rejections */}
+        <GlobalCrashShield />
         <GlobalButtonEffects />
         <Suspense fallback={null}>
           <GlobalNavigationLoader />
@@ -64,14 +65,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             </KeyboardProvider>
           </AppProvider>
         </ReactQueryProvider>
-        <Script
-          src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js"
-          strategy="afterInteractive"
-        />
+        {/* OneSignal Web SDK isolado exclusivamente para Web desktop */}
+        <OneSignalWebScript />
         <Toaster position="top-right" richColors theme="dark" closeButton />
         <div id="global-overlay-root"></div>
       </body>
     </html>
   )
 }
-

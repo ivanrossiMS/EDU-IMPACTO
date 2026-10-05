@@ -109,7 +109,25 @@ export function isPermanentTokenRevocation(error: any): boolean {
 }
 
 /**
- * Grava chave-valor no SecureStorage com retry e backoff exponencial.
+ * Executa uma promise com timeout de segurança garantindo que nunca trave
+ * caso o hardware do dispositivo (Keychain/Keystore) ou o bridge nativo bloqueie.
+ */
+export async function withTimeout<T>(promise: Promise<T>, ms: number, fallbackValue: T): Promise<T> {
+  let timer: any;
+  const timeoutPromise = new Promise<T>((resolve) => {
+    timer = setTimeout(() => resolve(fallbackValue), ms);
+  });
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+const SECURE_STORAGE_OP_TIMEOUT_MS = 1200;
+
+/**
+ * Grava chave-valor no SecureStorage com retry e backoff exponencial e timeout estrito.
  */
 export async function setSecureStorageWithRetry(
   key: string,
@@ -119,8 +137,9 @@ export async function setSecureStorageWithRetry(
 ): Promise<boolean> {
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
-      await SecureStoragePlugin.set({ key, value });
-      return true;
+      const setCall = SecureStoragePlugin.set({ key, value });
+      const res = await withTimeout(setCall, SECURE_STORAGE_OP_TIMEOUT_MS, null);
+      if (res !== null) return true;
     } catch (err) {
       if (attempt < maxAttempts) {
         await new Promise((resolve) => setTimeout(resolve, initialDelayMs * attempt));
@@ -132,7 +151,8 @@ export async function setSecureStorageWithRetry(
 
   // Fallback para Preferences quando SecureStorage falha permanentemente
   try {
-    await Preferences.set({ key, value });
+    const prefCall = Preferences.set({ key, value });
+    await withTimeout(prefCall, SECURE_STORAGE_OP_TIMEOUT_MS, null);
     return true;
   } catch (prefErr) {
     console.warn(`[Auth] Fallback para Preferences também falhou para chave ${key}:`, prefErr);
@@ -141,7 +161,7 @@ export async function setSecureStorageWithRetry(
 }
 
 /**
- * Lê chave-valor do SecureStorage com retry para bloqueios transitórios.
+ * Lê chave-valor do SecureStorage com retry para bloqueios transitórios e timeout estrito.
  */
 export async function getSecureStorageWithRetry(
   key: string,
@@ -150,9 +170,10 @@ export async function getSecureStorageWithRetry(
 ): Promise<string | null> {
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
-      const res = await SecureStoragePlugin.get({ key });
+      const getCall = SecureStoragePlugin.get({ key });
+      const res = await withTimeout(getCall, SECURE_STORAGE_OP_TIMEOUT_MS, null);
       if (res?.value) return res.value;
-      return null;
+      if (res !== null) return null; // Respondeu com sucesso mas sem valor
     } catch (err: any) {
       const msg = (err?.message || '').toLowerCase();
       // Chave não existente não deve sofrer novas tentativas
@@ -771,8 +792,12 @@ export async function restoreSessionSecurely(supabase: SupabaseClient): Promise<
     try {
       // 1. Verifica se o cliente já possui sessão ativa não expirada na memória
       try {
-        const { data: sessionData } = await supabase.auth.getSession();
-        const currentSession = sessionData?.session;
+        const sessionRes = await withTimeout(
+          supabase.auth.getSession(),
+          2500,
+          { data: { session: null }, error: null }
+        );
+        const currentSession = sessionRes?.data?.session;
         if (currentSession && isValidSessionObject(currentSession)) {
           const now = Math.floor(Date.now() / 1000);
           const expiresAt = currentSession.expires_at || 0;
@@ -812,11 +837,16 @@ export async function restoreSessionSecurely(supabase: SupabaseClient): Promise<
         return { success: false, isOffline: false, session: null, error: refreshErr };
       }
 
-      // 4. Injeta sessão válida no cliente Supabase
-      const { data, error } = await supabase.auth.setSession({
+      // 4. Injeta sessão válida no cliente Supabase com timeout de segurança
+      const setSessionPromise = supabase.auth.setSession({
         access_token: storedSession.access_token,
         refresh_token: storedSession.refresh_token,
       });
+      const { data, error } = await withTimeout(
+        setSessionPromise,
+        2500,
+        { data: { session: storedSession as any, user: storedSession.user as any }, error: null }
+      );
 
       if (isExplicitlyLoggedOut) {
         return { success: false, isOffline: false, session: null, error: new Error('User is logged out') };

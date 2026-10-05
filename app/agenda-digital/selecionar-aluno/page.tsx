@@ -1168,18 +1168,16 @@ function SelecionarAlunoContent() {
   // Redirecionamento de alunos normais
   useEffect(() => {
     if (currentUser && currentUser.perfil === 'Aluno') {
-      if (typeof window !== 'undefined') {
-        const u = currentUser as any;
-        if (u && u.perfilReal !== 'Família' && u.perfilReal !== 'Responsável' && !u.hasDualRole && u.perfil === 'Aluno') {
-          setTimeout(() => { window.location.href = `/agenda-digital/aluno/${redirectTarget}` }, 50)
-          return
-        }
+      const u = currentUser as any;
+      if (u && u.perfilReal !== 'Família' && u.perfilReal !== 'Responsável' && !u.hasDualRole && u.perfil === 'Aluno') {
+        router.replace(`/agenda-digital/aluno/${redirectTarget}`)
+        return
       }
       if (currentUser.id) {
-        setTimeout(() => { window.location.href = `/agenda-digital/aluno/${redirectTarget}` }, 50)
+        router.replace(`/agenda-digital/aluno/${redirectTarget}`)
       }
     }
-  }, [isStillLoading, currentUser, redirectTarget])
+  }, [isStillLoading, currentUser, redirectTarget, router])
 
   // Redirecionamento automático caso haja uma notificação pendente para um dependente específico
   useEffect(() => {
@@ -1226,7 +1224,7 @@ function SelecionarAlunoContent() {
                 const { Preferences } = await import('@capacitor/preferences')
                 await Preferences.remove({ key: PENDING_PUSH_ROUTE_KEY })
               } catch {}
-              window.location.replace(dest)
+              router.replace(dest)
               return
             }
 
@@ -1246,7 +1244,7 @@ function SelecionarAlunoContent() {
                 const { Preferences } = await import('@capacitor/preferences')
                 await Preferences.remove({ key: PENDING_PUSH_ROUTE_KEY })
               } catch {}
-              window.location.replace(dest)
+              router.replace(dest)
               return
             }
 
@@ -1265,7 +1263,7 @@ function SelecionarAlunoContent() {
                 const { Preferences } = await import('@capacitor/preferences')
                 await Preferences.remove({ key: PENDING_PUSH_ROUTE_KEY })
               } catch {}
-              window.location.replace(fixedDest)
+              router.replace(fixedDest)
               return
             }
             // Se não encontrou o aluno correspondente nesta conta
@@ -1315,7 +1313,7 @@ function SelecionarAlunoContent() {
                 if (targetStudent) {
                   const matchDest = `/agenda-digital/${targetStudent.id}/${redirectTarget}${getForwardParams()}`
                   console.log(`[SelecionarAluno] Aluno resolvido via conversa (${targetStudent.nome}). Redirecionando direto para ${matchDest}...`)
-                  window.location.replace(matchDest)
+                  router.replace(matchDest)
                   return
                 }
               }
@@ -1330,7 +1328,7 @@ function SelecionarAlunoContent() {
           if (matchStudent) {
             const matchDest = `/agenda-digital/${matchStudent.id}/${redirectTarget}${getForwardParams()}`
             console.log(`[SelecionarAluno] Aluno correspondente à turma (${matchStudent.nome}). Redirecionando direto para ${matchDest}...`)
-            window.location.replace(matchDest)
+            router.replace(matchDest)
             return
           }
         }
@@ -1340,7 +1338,7 @@ function SelecionarAlunoContent() {
           const singleStudent = meusAlunos[0]
           const singleDest = `/agenda-digital/${singleStudent.id}/${redirectTarget}${getForwardParams()}`
           console.log(`[SelecionarAluno] Família com 1 aluno único (${singleStudent.nome}). Redirecionando direto para ${singleDest}...`)
-          window.location.replace(singleDest)
+          router.replace(singleDest)
           return
         }
       }

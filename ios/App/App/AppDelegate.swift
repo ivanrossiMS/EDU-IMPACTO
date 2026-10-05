@@ -7,7 +7,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     var window: UIWindow?
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-        // Override point for customization after application launch.
+        // Garantir fundo escuro (#0A0F24) na janela para eliminar qualquer flash branco na inicialização
+        let darkBackground = UIColor(red: 10/255.0, green: 15/255.0, blue: 36/255.0, alpha: 1.0)
+        window?.backgroundColor = darkBackground
         return true
     }
 
