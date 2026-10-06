@@ -554,7 +554,8 @@ function SelecionarPerfilAdminContent() {
       {/* Main content Area */}
       <main className="portal-sections-grid">
         {/* SECTION 1: ADMIN MASTER */}
-        {['Administrador', 'Diretor Geral', 'Administrador Master'].includes(currentUser?.perfil || '') && (
+        {(['Administrador', 'Diretor Geral', 'Administrador Master', 'Direção'].includes(currentUser?.perfil || '') ||
+          ['Administrador', 'Diretor Geral', 'Administrador Master', 'Direção'].includes(currentUser?.cargo || '')) && (
           <section className="animate-reveal delay-1">
             <div className="portal-section-header">
               <h2 className="portal-section-title">

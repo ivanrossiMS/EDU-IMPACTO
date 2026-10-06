@@ -35,7 +35,8 @@ import {
   MonitorSmartphone,
   Radio,
   FileCheck2,
-  UserCircle
+  UserCircle,
+  ArrowLeftRight
 } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
@@ -141,6 +142,21 @@ export function ADSidebar() {
   const isFamily = p.includes('família') || p.includes('familia') || c.includes('aluno') || c.includes('responsável') || c.includes('responsavel')
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false)
   const [isTrocarModuloOpen, setIsTrocarModuloOpen] = useState(false)
+
+  const isAdminUser = [
+    'Direção',
+    'Administrador',
+    'Diretor Geral',
+    'Administrador Master'
+  ].includes(currentUser?.perfil || '') || [
+    'Direção',
+    'Administrador',
+    'Diretor Geral',
+    'Administrador Master'
+  ].includes(currentUser?.cargo || '')
+
+  const isAdminSection = pathname?.startsWith('/agenda-digital/admin')
+  const shouldShowSwitchProfile = Boolean(isAdminUser || isAdminSection)
 
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -724,46 +740,60 @@ export function ADSidebar() {
                     )}
                   </div>
 
-                  {/* Bottom Actions Row: Meu Perfil, Trocar Módulo, Sair - DENTRO DO CARD */}
+                  {/* Bottom Actions Row: Trocar Perfil / Meu Perfil, Trocar Módulo, Sair - DENTRO DO CARD */}
                   {!isCollapsed ? (
                     <div 
                       style={{ 
                         display: 'grid', 
-                        gridTemplateColumns: 'repeat(3, 1fr)', 
-                        gap: 4, 
+                        gridTemplateColumns: shouldShowSwitchProfile 
+                          ? 'minmax(0, 1.25fr) minmax(0, 1fr) minmax(0, 0.85fr)' 
+                          : 'repeat(3, 1fr)', 
+                        gap: 3, 
                         background: 'rgba(0, 0, 0, 0.22)',
                         padding: '3px',
                         borderRadius: 12,
                         border: '1px solid rgba(255, 255, 255, 0.04)'
                       }}
                     >
-                      {/* 1. Meu Perfil */}
+                      {/* 1. Trocar Perfil / Meu Perfil */}
                       <motion.button
                         whileHover={{ scale: 1.02, backgroundColor: 'rgba(168, 85, 247, 0.16)', color: '#ffffff' }}
                         whileTap={{ scale: 0.97 }}
                         onClick={() => {
-                          router.push('/meu-perfil');
+                          if (shouldShowSwitchProfile) {
+                            router.push('/agenda-digital/selecionar-perfil-admin');
+                          } else {
+                            router.push('/meu-perfil');
+                          }
                         }}
-                        title="Meu Perfil"
+                        title={shouldShowSwitchProfile ? "Trocar perfil" : "Meu Perfil"}
                         style={{
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
-                          gap: 5,
-                          padding: '6px 4px',
+                          gap: 4,
+                          padding: '6px 3px',
                           borderRadius: 9,
                           background: 'transparent',
                           border: 'none',
                           color: 'rgba(255, 255, 255, 0.8)',
                           cursor: 'pointer',
-                          fontSize: 11,
+                          fontSize: shouldShowSwitchProfile ? 10.5 : 11,
                           fontWeight: 600,
                           letterSpacing: '0.01em',
-                          transition: 'all 0.15s ease'
+                          transition: 'all 0.15s ease',
+                          whiteSpace: 'nowrap',
+                          minWidth: 0
                         }}
                       >
-                        <UserCircle size={14} color="#a855f7" style={{ filter: 'drop-shadow(0 0 5px rgba(168, 85, 247, 0.4))', flexShrink: 0 }} />
-                        <span>Perfil</span>
+                        {shouldShowSwitchProfile ? (
+                          <ArrowLeftRight size={13} color="#a855f7" style={{ filter: 'drop-shadow(0 0 5px rgba(168, 85, 247, 0.4))', flexShrink: 0 }} />
+                        ) : (
+                          <UserCircle size={14} color="#a855f7" style={{ filter: 'drop-shadow(0 0 5px rgba(168, 85, 247, 0.4))', flexShrink: 0 }} />
+                        )}
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {shouldShowSwitchProfile ? 'Trocar perfil' : 'Perfil'}
+                        </span>
                       </motion.button>
 
                       {/* 2. Trocar Módulo */}
@@ -776,21 +806,23 @@ export function ADSidebar() {
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
-                          gap: 5,
-                          padding: '6px 4px',
+                          gap: 4,
+                          padding: '6px 3px',
                           borderRadius: 9,
                           background: 'transparent',
                           border: 'none',
                           color: 'rgba(255, 255, 255, 0.8)',
                           cursor: 'pointer',
-                          fontSize: 11,
+                          fontSize: 10.5,
                           fontWeight: 600,
                           letterSpacing: '0.01em',
-                          transition: 'all 0.15s ease'
+                          transition: 'all 0.15s ease',
+                          whiteSpace: 'nowrap',
+                          minWidth: 0
                         }}
                       >
-                        <LayoutDashboard size={14} color="#06b6d4" style={{ filter: 'drop-shadow(0 0 5px rgba(6, 182, 212, 0.4))', flexShrink: 0 }} />
-                        <span>Módulos</span>
+                        <LayoutDashboard size={13} color="#06b6d4" style={{ filter: 'drop-shadow(0 0 5px rgba(6, 182, 212, 0.4))', flexShrink: 0 }} />
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>Módulos</span>
                       </motion.button>
 
                       {/* 3. Sair */}
@@ -810,21 +842,23 @@ export function ADSidebar() {
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
-                          gap: 5,
-                          padding: '6px 4px',
+                          gap: 4,
+                          padding: '6px 3px',
                           borderRadius: 9,
                           background: 'transparent',
                           border: 'none',
                           color: 'rgba(255, 255, 255, 0.8)',
                           cursor: 'pointer',
-                          fontSize: 11,
+                          fontSize: 10.5,
                           fontWeight: 600,
                           letterSpacing: '0.01em',
-                          transition: 'all 0.15s ease'
+                          transition: 'all 0.15s ease',
+                          whiteSpace: 'nowrap',
+                          minWidth: 0
                         }}
                       >
-                        <LogOut size={14} color="#f43f5e" style={{ filter: 'drop-shadow(0 0 5px rgba(244, 63, 94, 0.4))', flexShrink: 0 }} />
-                        <span>Sair</span>
+                        <LogOut size={13} color="#f43f5e" style={{ filter: 'drop-shadow(0 0 5px rgba(244, 63, 94, 0.4))', flexShrink: 0 }} />
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>Sair</span>
                       </motion.button>
                     </div>
                   ) : (
@@ -843,8 +877,14 @@ export function ADSidebar() {
                       <motion.button
                         whileHover={{ scale: 1.1, backgroundColor: 'rgba(168, 85, 247, 0.18)' }}
                         whileTap={{ scale: 0.95 }}
-                        onClick={() => router.push('/meu-perfil')}
-                        title="Meu Perfil"
+                        onClick={() => {
+                          if (shouldShowSwitchProfile) {
+                            router.push('/agenda-digital/selecionar-perfil-admin');
+                          } else {
+                            router.push('/meu-perfil');
+                          }
+                        }}
+                        title={shouldShowSwitchProfile ? "Trocar perfil" : "Meu Perfil"}
                         style={{
                           width: 30,
                           height: 30,
@@ -858,7 +898,11 @@ export function ADSidebar() {
                           color: '#a855f7'
                         }}
                       >
-                        <UserCircle size={15} />
+                        {shouldShowSwitchProfile ? (
+                          <ArrowLeftRight size={14} />
+                        ) : (
+                          <UserCircle size={15} />
+                        )}
                       </motion.button>
                       <motion.button
                         whileHover={{ scale: 1.1, backgroundColor: 'rgba(6, 182, 212, 0.18)' }}

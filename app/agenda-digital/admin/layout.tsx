@@ -4,7 +4,7 @@ import { performLogout } from "@/lib/auth/logout";
 import { useApp } from '@/lib/context'
 import { useState, useEffect } from 'react'
 import { getInitials } from '@/lib/utils'
-import { ChevronDown, LogOut } from 'lucide-react'
+import { ChevronDown, LogOut, ArrowLeftRight } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { LoadingGlass } from '@/components/LoadingGlass'
 import { hideSplashScreen } from '@/lib/capacitor/splash'
@@ -177,6 +177,22 @@ export default function AgendaDigitalAdminLayout({
                   <div style={{ fontWeight: 700, fontSize: 13 }}>{nomeUsuario}</div>
                   <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>{currentUser?.email || 'admin@escola.com'}</div>
                 </div>
+                <button
+                  onClick={() => {
+                    setShowUserMenu(false)
+                    router.push('/agenda-digital/selecionar-perfil-admin')
+                  }}
+                  style={{
+                    width: '100%', padding: '8px 12px', borderRadius: 8, border: 'none',
+                    background: 'transparent', cursor: 'pointer', display: 'flex',
+                    alignItems: 'center', gap: 8, color: '#a855f7', fontSize: 13, fontWeight: 600,
+                    transition: 'background 0.15s', textAlign: 'left', marginBottom: 2
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'rgba(168,85,247,0.08)'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                >
+                  <ArrowLeftRight size={14} /> Trocar perfil
+                </button>
                 <button
                   onClick={handleLogout}
                   style={{

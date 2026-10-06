@@ -11,7 +11,7 @@ import { UserAvatar } from '@/components/UserAvatar'
 import React, { useState, useEffect } from 'react'
 import { 
   Bell, MessageSquare, Image as ImageIcon, Calendar, 
-  UserCog, Users, X, LogOut, Briefcase, ShieldCheck, CheckCircle2, FileText, MonitorSmartphone, AlertTriangle
+  UserCog, Users, X, LogOut, Briefcase, ShieldCheck, CheckCircle2, FileText, MonitorSmartphone, AlertTriangle, ArrowLeftRight
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { hideSplashScreen } from '@/lib/capacitor/splash'
@@ -477,11 +477,18 @@ export default function AgendaDigitalColaboradorLayout({
           <div className="ad-right-section" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', minWidth: '180px' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%' }}>
               <button 
-                onClick={() => router.push('/agenda-digital/selecionar-aluno')}
+                onClick={() => {
+                  const isAdmin = ['Direção', 'Administrador', 'Diretor Geral', 'Administrador Master'].includes(currentUser?.perfil || '') || ['Direção', 'Administrador', 'Diretor Geral', 'Administrador Master'].includes(currentUser?.cargo || '')
+                  if (isAdmin) {
+                    router.push('/agenda-digital/selecionar-perfil-admin')
+                  } else {
+                    router.push('/agenda-digital/selecionar-aluno')
+                  }
+                }}
                 className="ad-btn-side" 
                 style={{ width: '100%', height: 36, fontSize: 12, borderRadius: 12 }}
               >
-                <Users size={14} /> Voltar p/ Seleção
+                <ArrowLeftRight size={14} /> Trocar Perfil
               </button>
               <button 
                 onClick={async () => { 
