@@ -46,6 +46,7 @@ import { UserAvatar } from '@/components/UserAvatar'
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 import { useQuery } from '@tanstack/react-query'
 import { TrocarModuloModal } from '@/components/layout/TrocarModuloModal'
+import { isFamilyOrStudent } from '@/lib/auth/moduleRouting'
 
 const menuItems = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, href: '/agenda-digital/admin' },
@@ -678,6 +679,23 @@ export function ADSidebar() {
               const displayId = isMirroring ? (espelharAluno ? profileData?.aluno?.id : (espelharColabId ? espelharColabId : (mirroredResp?.id || 'r'))) : currentUser?.id;
               const displayCargo = isMirroring ? (espelharAluno ? 'ALUNO' : (espelharColabId ? (espelharColabCargo || 'COLABORADOR') : 'RESPONSÁVEL')) : (currentUser?.cargo || currentUser?.perfil || 'Colaborador');
 
+              const normalizedCargo = (displayCargo || '')
+                .trim()
+                .toLowerCase()
+                .normalize('NFD')
+                .replace(/[\u0300-\u036f]/g, '');
+
+              const isResponsibleOrStudent = Boolean(
+                isFamily ||
+                isAlunoLogado ||
+                isFamilyOrStudent(currentUser) ||
+                espelharAluno ||
+                Boolean(espelharRespId) ||
+                normalizedCargo === 'responsavel' ||
+                normalizedCargo === 'aluno' ||
+                normalizedCargo === 'familia'
+              );
+
               return (
                 <div 
                   style={{
@@ -685,10 +703,10 @@ export function ADSidebar() {
                     backdropFilter: 'blur(16px)',
                     border: '1px solid rgba(255, 255, 255, 0.12)',
                     borderRadius: 20,
-                    padding: isCollapsed ? '10px 6px' : '12px 12px 10px',
+                    padding: isCollapsed ? '10px 6px' : (isResponsibleOrStudent ? '12px' : '12px 12px 10px'),
                     display: 'flex',
                     flexDirection: 'column',
-                    gap: 10,
+                    gap: isResponsibleOrStudent ? 0 : 10,
                     boxShadow: '0 10px 30px rgba(0,0,0,0.3)',
                     transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
                   }}
@@ -741,217 +759,219 @@ export function ADSidebar() {
                   </div>
 
                   {/* Bottom Actions Row: Trocar Perfil / Meu Perfil, Trocar Módulo, Sair - DENTRO DO CARD */}
-                  {!isCollapsed ? (
-                    <div 
-                      style={{ 
-                        display: 'grid', 
-                        gridTemplateColumns: shouldShowSwitchProfile 
-                          ? 'minmax(0, 1.25fr) minmax(0, 1fr) minmax(0, 0.85fr)' 
-                          : 'repeat(3, 1fr)', 
-                        gap: 3, 
-                        background: 'rgba(0, 0, 0, 0.22)',
-                        padding: '3px',
-                        borderRadius: 12,
-                        border: '1px solid rgba(255, 255, 255, 0.04)'
-                      }}
-                    >
-                      {/* 1. Trocar Perfil / Meu Perfil */}
-                      <motion.button
-                        whileHover={{ scale: 1.02, backgroundColor: 'rgba(168, 85, 247, 0.16)', color: '#ffffff' }}
-                        whileTap={{ scale: 0.97 }}
-                        onClick={() => {
-                          if (shouldShowSwitchProfile) {
-                            router.push('/agenda-digital/selecionar-perfil-admin');
-                          } else {
-                            router.push('/meu-perfil');
-                          }
-                        }}
-                        title={shouldShowSwitchProfile ? "Trocar perfil" : "Meu Perfil"}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          gap: 4,
-                          padding: '6px 3px',
-                          borderRadius: 9,
-                          background: 'transparent',
-                          border: 'none',
-                          color: 'rgba(255, 255, 255, 0.8)',
-                          cursor: 'pointer',
-                          fontSize: shouldShowSwitchProfile ? 10.5 : 11,
-                          fontWeight: 600,
-                          letterSpacing: '0.01em',
-                          transition: 'all 0.15s ease',
-                          whiteSpace: 'nowrap',
-                          minWidth: 0
+                  {!isResponsibleOrStudent && (
+                    !isCollapsed ? (
+                      <div 
+                        style={{ 
+                          display: 'grid', 
+                          gridTemplateColumns: shouldShowSwitchProfile 
+                            ? 'minmax(0, 1.25fr) minmax(0, 1fr) minmax(0, 0.85fr)' 
+                            : 'repeat(3, 1fr)', 
+                          gap: 3, 
+                          background: 'rgba(0, 0, 0, 0.22)',
+                          padding: '3px',
+                          borderRadius: 12,
+                          border: '1px solid rgba(255, 255, 255, 0.04)'
                         }}
                       >
-                        {shouldShowSwitchProfile ? (
-                          <ArrowLeftRight size={13} color="#a855f7" style={{ filter: 'drop-shadow(0 0 5px rgba(168, 85, 247, 0.4))', flexShrink: 0 }} />
-                        ) : (
-                          <UserCircle size={14} color="#a855f7" style={{ filter: 'drop-shadow(0 0 5px rgba(168, 85, 247, 0.4))', flexShrink: 0 }} />
-                        )}
-                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {shouldShowSwitchProfile ? 'Trocar perfil' : 'Perfil'}
-                        </span>
-                      </motion.button>
+                        {/* 1. Trocar Perfil / Meu Perfil */}
+                        <motion.button
+                          whileHover={{ scale: 1.02, backgroundColor: 'rgba(168, 85, 247, 0.16)', color: '#ffffff' }}
+                          whileTap={{ scale: 0.97 }}
+                          onClick={() => {
+                            if (shouldShowSwitchProfile) {
+                              router.push('/agenda-digital/selecionar-perfil-admin');
+                            } else {
+                              router.push('/meu-perfil');
+                            }
+                          }}
+                          title={shouldShowSwitchProfile ? "Trocar perfil" : "Meu Perfil"}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: 4,
+                            padding: '6px 3px',
+                            borderRadius: 9,
+                            background: 'transparent',
+                            border: 'none',
+                            color: 'rgba(255, 255, 255, 0.8)',
+                            cursor: 'pointer',
+                            fontSize: shouldShowSwitchProfile ? 10.5 : 11,
+                            fontWeight: 600,
+                            letterSpacing: '0.01em',
+                            transition: 'all 0.15s ease',
+                            whiteSpace: 'nowrap',
+                            minWidth: 0
+                          }}
+                        >
+                          {shouldShowSwitchProfile ? (
+                            <ArrowLeftRight size={13} color="#a855f7" style={{ filter: 'drop-shadow(0 0 5px rgba(168, 85, 247, 0.4))', flexShrink: 0 }} />
+                          ) : (
+                            <UserCircle size={14} color="#a855f7" style={{ filter: 'drop-shadow(0 0 5px rgba(168, 85, 247, 0.4))', flexShrink: 0 }} />
+                          )}
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {shouldShowSwitchProfile ? 'Trocar perfil' : 'Perfil'}
+                          </span>
+                        </motion.button>
 
-                      {/* 2. Trocar Módulo */}
-                      <motion.button
-                        whileHover={{ scale: 1.02, backgroundColor: 'rgba(6, 182, 212, 0.16)', color: '#ffffff' }}
-                        whileTap={{ scale: 0.97 }}
-                        onClick={() => setIsTrocarModuloOpen(true)}
-                        title="Trocar Módulo"
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          gap: 4,
-                          padding: '6px 3px',
-                          borderRadius: 9,
-                          background: 'transparent',
-                          border: 'none',
-                          color: 'rgba(255, 255, 255, 0.8)',
-                          cursor: 'pointer',
-                          fontSize: 10.5,
-                          fontWeight: 600,
-                          letterSpacing: '0.01em',
-                          transition: 'all 0.15s ease',
-                          whiteSpace: 'nowrap',
-                          minWidth: 0
-                        }}
-                      >
-                        <LayoutDashboard size={13} color="#06b6d4" style={{ filter: 'drop-shadow(0 0 5px rgba(6, 182, 212, 0.4))', flexShrink: 0 }} />
-                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>Módulos</span>
-                      </motion.button>
+                        {/* 2. Trocar Módulo */}
+                        <motion.button
+                          whileHover={{ scale: 1.02, backgroundColor: 'rgba(6, 182, 212, 0.16)', color: '#ffffff' }}
+                          whileTap={{ scale: 0.97 }}
+                          onClick={() => setIsTrocarModuloOpen(true)}
+                          title="Trocar Módulo"
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: 4,
+                            padding: '6px 3px',
+                            borderRadius: 9,
+                            background: 'transparent',
+                            border: 'none',
+                            color: 'rgba(255, 255, 255, 0.8)',
+                            cursor: 'pointer',
+                            fontSize: 10.5,
+                            fontWeight: 600,
+                            letterSpacing: '0.01em',
+                            transition: 'all 0.15s ease',
+                            whiteSpace: 'nowrap',
+                            minWidth: 0
+                          }}
+                        >
+                          <LayoutDashboard size={13} color="#06b6d4" style={{ filter: 'drop-shadow(0 0 5px rgba(6, 182, 212, 0.4))', flexShrink: 0 }} />
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>Módulos</span>
+                        </motion.button>
 
-                      {/* 3. Sair */}
-                      <motion.button
-                        whileHover={{ scale: 1.02, backgroundColor: 'rgba(244, 63, 94, 0.16)', color: '#ffffff' }}
-                        whileTap={{ scale: 0.97 }}
-                        onClick={async () => {
-                          setLoadingPath('logout')
-                          try {
-                            await performLogout();
-                          } catch (err) {
-                            window.location.replace('/login');
-                          }
-                        }}
-                        title="Sair do sistema"
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          gap: 4,
-                          padding: '6px 3px',
-                          borderRadius: 9,
-                          background: 'transparent',
-                          border: 'none',
-                          color: 'rgba(255, 255, 255, 0.8)',
-                          cursor: 'pointer',
-                          fontSize: 10.5,
-                          fontWeight: 600,
-                          letterSpacing: '0.01em',
-                          transition: 'all 0.15s ease',
-                          whiteSpace: 'nowrap',
-                          minWidth: 0
-                        }}
-                      >
-                        <LogOut size={13} color="#f43f5e" style={{ filter: 'drop-shadow(0 0 5px rgba(244, 63, 94, 0.4))', flexShrink: 0 }} />
-                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>Sair</span>
-                      </motion.button>
-                    </div>
-                  ) : (
-                    <div 
-                      style={{ 
-                        display: 'flex', 
-                        flexDirection: 'column', 
-                        alignItems: 'center', 
-                        gap: 5, 
-                        background: 'rgba(0, 0, 0, 0.22)',
-                        padding: '3px',
-                        borderRadius: 10,
-                        width: '100%' 
-                      }}
-                    >
-                      <motion.button
-                        whileHover={{ scale: 1.1, backgroundColor: 'rgba(168, 85, 247, 0.18)' }}
-                        whileTap={{ scale: 0.95 }}
-                        onClick={() => {
-                          if (shouldShowSwitchProfile) {
-                            router.push('/agenda-digital/selecionar-perfil-admin');
-                          } else {
-                            router.push('/meu-perfil');
-                          }
-                        }}
-                        title={shouldShowSwitchProfile ? "Trocar perfil" : "Meu Perfil"}
-                        style={{
-                          width: 30,
-                          height: 30,
-                          borderRadius: 8,
-                          background: 'transparent',
-                          border: 'none',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          cursor: 'pointer',
-                          color: '#a855f7'
+                        {/* 3. Sair */}
+                        <motion.button
+                          whileHover={{ scale: 1.02, backgroundColor: 'rgba(244, 63, 94, 0.16)', color: '#ffffff' }}
+                          whileTap={{ scale: 0.97 }}
+                          onClick={async () => {
+                            setLoadingPath('logout')
+                            try {
+                              await performLogout();
+                            } catch (err) {
+                              window.location.replace('/login');
+                            }
+                          }}
+                          title="Sair do sistema"
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: 4,
+                            padding: '6px 3px',
+                            borderRadius: 9,
+                            background: 'transparent',
+                            border: 'none',
+                            color: 'rgba(255, 255, 255, 0.8)',
+                            cursor: 'pointer',
+                            fontSize: 10.5,
+                            fontWeight: 600,
+                            letterSpacing: '0.01em',
+                            transition: 'all 0.15s ease',
+                            whiteSpace: 'nowrap',
+                            minWidth: 0
+                          }}
+                        >
+                          <LogOut size={13} color="#f43f5e" style={{ filter: 'drop-shadow(0 0 5px rgba(244, 63, 94, 0.4))', flexShrink: 0 }} />
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>Sair</span>
+                        </motion.button>
+                      </div>
+                    ) : (
+                      <div 
+                        style={{ 
+                          display: 'flex', 
+                          flexDirection: 'column', 
+                          alignItems: 'center', 
+                          gap: 5, 
+                          background: 'rgba(0, 0, 0, 0.22)',
+                          padding: '3px',
+                          borderRadius: 10,
+                          width: '100%' 
                         }}
                       >
-                        {shouldShowSwitchProfile ? (
-                          <ArrowLeftRight size={14} />
-                        ) : (
-                          <UserCircle size={15} />
-                        )}
-                      </motion.button>
-                      <motion.button
-                        whileHover={{ scale: 1.1, backgroundColor: 'rgba(6, 182, 212, 0.18)' }}
-                        whileTap={{ scale: 0.95 }}
-                        onClick={() => setIsTrocarModuloOpen(true)}
-                        title="Trocar Módulo"
-                        style={{
-                          width: 30,
-                          height: 30,
-                          borderRadius: 8,
-                          background: 'transparent',
-                          border: 'none',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          cursor: 'pointer',
-                          color: '#06b6d4'
-                        }}
-                      >
-                        <LayoutDashboard size={15} />
-                      </motion.button>
-                      <motion.button
-                        whileHover={{ scale: 1.1, backgroundColor: 'rgba(244, 63, 94, 0.18)' }}
-                        whileTap={{ scale: 0.95 }}
-                        onClick={async () => {
-                          setLoadingPath('logout')
-                          try {
-                            await performLogout();
-                          } catch (err) {
-                            window.location.replace('/login');
-                          }
-                        }}
-                        title="Sair"
-                        style={{
-                          width: 30,
-                          height: 30,
-                          borderRadius: 8,
-                          background: 'transparent',
-                          border: 'none',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          cursor: 'pointer',
-                          color: '#f43f5e'
-                        }}
-                      >
-                        <LogOut size={15} />
-                      </motion.button>
-                    </div>
+                        <motion.button
+                          whileHover={{ scale: 1.1, backgroundColor: 'rgba(168, 85, 247, 0.18)' }}
+                          whileTap={{ scale: 0.95 }}
+                          onClick={() => {
+                            if (shouldShowSwitchProfile) {
+                              router.push('/agenda-digital/selecionar-perfil-admin');
+                            } else {
+                              router.push('/meu-perfil');
+                            }
+                          }}
+                          title={shouldShowSwitchProfile ? "Trocar perfil" : "Meu Perfil"}
+                          style={{
+                            width: 30,
+                            height: 30,
+                            borderRadius: 8,
+                            background: 'transparent',
+                            border: 'none',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            cursor: 'pointer',
+                            color: '#a855f7'
+                          }}
+                        >
+                          {shouldShowSwitchProfile ? (
+                            <ArrowLeftRight size={14} />
+                          ) : (
+                            <UserCircle size={15} />
+                          )}
+                        </motion.button>
+                        <motion.button
+                          whileHover={{ scale: 1.1, backgroundColor: 'rgba(6, 182, 212, 0.18)' }}
+                          whileTap={{ scale: 0.95 }}
+                          onClick={() => setIsTrocarModuloOpen(true)}
+                          title="Trocar Módulo"
+                          style={{
+                            width: 30,
+                            height: 30,
+                            borderRadius: 8,
+                            background: 'transparent',
+                            border: 'none',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            cursor: 'pointer',
+                            color: '#06b6d4'
+                          }}
+                        >
+                          <LayoutDashboard size={15} />
+                        </motion.button>
+                        <motion.button
+                          whileHover={{ scale: 1.1, backgroundColor: 'rgba(244, 63, 94, 0.18)' }}
+                          whileTap={{ scale: 0.95 }}
+                          onClick={async () => {
+                            setLoadingPath('logout')
+                            try {
+                              await performLogout();
+                            } catch (err) {
+                              window.location.replace('/login');
+                            }
+                          }}
+                          title="Sair"
+                          style={{
+                            width: 30,
+                            height: 30,
+                            borderRadius: 8,
+                            background: 'transparent',
+                            border: 'none',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            cursor: 'pointer',
+                            color: '#f43f5e'
+                          }}
+                        >
+                          <LogOut size={15} />
+                        </motion.button>
+                      </div>
+                    )
                   )}
                 </div>
               );

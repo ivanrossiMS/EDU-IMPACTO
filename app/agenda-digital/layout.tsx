@@ -80,6 +80,16 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
   const targetPathRef = React.useRef<string | null>(null)
   const currentPathRef = React.useRef(pathname)
   const [initialReady, setInitialReady] = React.useState(false)
+  const [isScrolled, setIsScrolled] = React.useState(false)
+
+  const handleScroll = React.useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    const top = e.currentTarget.scrollTop
+    if (top > 24 && !isScrolled) {
+      setIsScrolled(true)
+    } else if (top <= 24 && isScrolled) {
+      setIsScrolled(false)
+    }
+  }, [isScrolled])
 
   const isSelectStudent = pathname?.includes('/agenda-digital/selecionar-aluno') || pathname?.includes('/agenda-digital/selecionar-perfil-admin')
   const isIndexPage = pathname === '/agenda-digital'
@@ -306,7 +316,7 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
   return (
     <>
 
-      <div className="agenda-digital-wrapper ad-mesh-bg" style={{ display: 'flex', height: '100vh', width: '100vw', overflow: 'hidden' }}>
+      <div className="agenda-digital-wrapper ad-mesh-bg" style={{ display: 'flex', height: '100dvh', width: '100vw', overflow: 'hidden', position: 'relative' }}>
         <style dangerouslySetInnerHTML={{__html: `
           :root {
             --ad-bg-mesh: radial-gradient(ellipse at top right, rgba(216, 180, 254, 0.45) 0%, transparent 70%), radial-gradient(ellipse at bottom left, rgba(186, 230, 253, 0.45) 0%, transparent 70%);
@@ -325,6 +335,10 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
           
           .no-scrollbar::-webkit-scrollbar { display: none; }
           .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+          .ad-mobile-status-scrim {
+            display: none;
+          }
 
           .ad-main-scroll {
             flex: 1;
@@ -348,7 +362,7 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
             position: relative;
             display: block;
             flex-shrink: 0;
-            background: linear-gradient(135deg, rgba(99, 102, 241, 0.05) 0%, rgba(168, 85, 247, 0.05) 100%);
+            background: #080a1a;
             overflow: hidden;
             aspect-ratio: 1600 / 400;
             min-height: 110px;
@@ -370,7 +384,7 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
           }
 
           .ad-banner-skeleton {
-            background: linear-gradient(90deg, rgba(226, 232, 240, 0.4) 0%, rgba(241, 245, 249, 0.8) 50%, rgba(226, 232, 240, 0.4) 100%);
+            background: linear-gradient(90deg, #090e24 0%, #151e3f 50%, #090e24 100%) !important;
             background-size: 200% 100%;
             animation: adBannerShimmer 1.5s infinite ease-in-out;
           }
@@ -385,20 +399,41 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
             padding-top: 0px !important;
           }
 
-
           @media (max-width: 1024px) {
             /* .ad-sidebar-container handled by component logic */
           }
           
           @media (max-width: 768px) {
+            .ad-mobile-status-scrim {
+              display: block;
+              position: fixed;
+              top: 0;
+              left: 0;
+              right: 0;
+              height: max(calc(env(safe-area-inset-top, 0px) + 2px), 24px);
+              z-index: 9999;
+              pointer-events: none;
+              transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+            }
+            .ad-mobile-status-scrim.ad-scrim-gradient {
+              background: linear-gradient(180deg, rgba(8, 12, 28, 0.45) 0%, rgba(8, 12, 28, 0.1) 70%, transparent 100%);
+            }
+            .ad-mobile-status-scrim.ad-scrim-solid {
+              background: rgba(10, 15, 36, 0.88);
+              backdrop-filter: blur(20px);
+              -webkit-backdrop-filter: blur(20px);
+              border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+              box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+            }
+
             .ad-banner-global {
               position: relative !important;
               width: 100% !important;
               height: auto !important;
               aspect-ratio: 1600 / 400 !important;
-              min-height: 105px !important;
-              max-height: 260px !important;
-              background: transparent;
+              min-height: calc(115px + env(safe-area-inset-top, 0px)) !important;
+              max-height: 280px !important;
+              background: #080a1a !important;
               margin: 0 !important;
               padding: 0 !important;
               display: block !important;
@@ -409,9 +444,10 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
               width: 100% !important;
               height: 100% !important;
               aspect-ratio: 1600 / 400 !important;
-              min-height: 105px !important;
-              max-height: 260px !important;
+              min-height: calc(115px + env(safe-area-inset-top, 0px)) !important;
+              max-height: 280px !important;
               object-fit: cover !important;
+              object-position: center top !important;
               margin: 0 !important;
             }
 
@@ -427,13 +463,16 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
           }
         `}} />
         
+        {/* Scrim superior de proteção para barra de status em telas móveis */}
+        <div className={`ad-mobile-status-scrim ${isScrolled || (!bannerUrl && isLoaded) ? 'ad-scrim-solid' : 'ad-scrim-gradient'}`} />
+
         {!isRouterPage && (
           <div className="ad-sidebar-container">
             <ADSidebar />
           </div>
         )}
 
-        <div className="ad-main-scroll no-scrollbar">
+        <div className="ad-main-scroll no-scrollbar" onScroll={handleScroll}>
           {bannerUrl ? (
             <div className="ad-banner-global">
               <img 

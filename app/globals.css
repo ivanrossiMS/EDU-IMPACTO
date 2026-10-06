@@ -357,6 +357,7 @@
     width: 100%;
     max-width: 100vw;
     overflow-x: hidden;
+    background-color: #0A0F24; /* Fundo base escuro previne qualquer flash branco na área de status bar / entalhe */
   }
 
   body {
@@ -364,6 +365,9 @@
     background-color: hsl(var(--bg-base));
     color: hsl(var(--text-primary));
     min-height: 100vh;
+    min-height: 100dvh;
+    margin: 0;
+    padding: 0;
     line-height: 1.65;
     font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
     font-variant-numeric: tabular-nums;
@@ -372,7 +376,7 @@
     max-width: 100vw;
     overflow-x: hidden;
     position: relative;
-    padding-top: env(safe-area-inset-top); /* StatusBar padding for mobile */
+    /* padding-top removido daqui: o cabeçalho/banner deve ir até o topo da tela sob a status bar (edge-to-edge), evitando faixa branca acima do cabeçalho */
   }
 }
 
