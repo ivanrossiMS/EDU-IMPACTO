@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 import { useIsMobile } from '@/lib/hooks/useIsMobile'
 import { useApp } from '@/lib/context'
+import { TrocarModuloModal } from '@/components/layout/TrocarModuloModal'
 
 interface NavItem {
   label: string
@@ -36,6 +37,7 @@ export function SidebarSimulados() {
   const isMobile = useIsMobile()
   const [collapsed, setCollapsed] = useState(false)
   const [isLoggingOut, setIsLoggingOut] = useState(false)
+  const [isTrocarModuloOpen, setIsTrocarModuloOpen] = useState(false)
   const { currentUserPerfil, setCurrentUserPerfil, currentUser, setCurrentUser } = useApp()
 
   const handleLogout = async () => {
@@ -184,7 +186,7 @@ export function SidebarSimulados() {
 
         <motion.button
           whileTap={{ scale: 0.9 }}
-          onClick={() => window.location.href = '/login?step=choose_system'}
+          onClick={() => setIsTrocarModuloOpen(true)}
           style={{
             display: 'flex',
             flexDirection: 'column',
@@ -440,7 +442,7 @@ export function SidebarSimulados() {
               <motion.div key="expanded" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 <div style={{ display: 'flex', gap: 8, width: '100%' }}>
                 <button
-                  onClick={() => window.location.href = '/login?step=choose_system'}
+                  onClick={() => setIsTrocarModuloOpen(true)}
                   style={{
                     flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, padding: '8px 4px', borderRadius: 12, 
                     border: '1px solid rgba(6, 182, 212, 0.3)', cursor: 'pointer',
@@ -490,7 +492,7 @@ export function SidebarSimulados() {
               <motion.div key="collapsed" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'center', width: '100%', padding: '0 8px' }}>
                 <button
                   title="Trocar de Módulo"
-                  onClick={() => window.location.href = '/login?step=choose_system'}
+                  onClick={() => setIsTrocarModuloOpen(true)}
                   style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(6, 182, 212, 0.1)', border: '1px solid rgba(6, 182, 212, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#06b6d4', cursor: 'pointer', transition: 'all 0.3s', flexShrink: 0 }}
                   onMouseEnter={e => { e.currentTarget.style.background = 'rgba(6, 182, 212, 0.2)' }}
                   onMouseLeave={e => { e.currentTarget.style.background = 'rgba(6, 182, 212, 0.1)' }}
@@ -535,6 +537,11 @@ export function SidebarSimulados() {
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
       `}} />
     </motion.div>
+
+    <TrocarModuloModal 
+      isOpen={isTrocarModuloOpen} 
+      onClose={() => setIsTrocarModuloOpen(false)} 
+    />
     </>
   )
 }

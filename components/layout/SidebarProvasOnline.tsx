@@ -12,6 +12,7 @@ import {
 } from 'lucide-react'
 import { useIsMobile } from '@/lib/hooks/useIsMobile'
 import { useApp } from '@/lib/context'
+import { TrocarModuloModal } from '@/components/layout/TrocarModuloModal'
 
 interface NavItem {
   label: string
@@ -29,6 +30,7 @@ export function SidebarProvasOnline() {
   const isMobile = useIsMobile()
   const [collapsed, setCollapsed] = useState(false)
   const [isLoggingOut, setIsLoggingOut] = useState(false)
+  const [isTrocarModuloOpen, setIsTrocarModuloOpen] = useState(false)
   const { currentUserPerfil, currentUser } = useApp()
 
   const isStudent = currentUser?.cargo === 'Aluno' || currentUser?.perfil === 'Aluno' || Boolean(currentUser?.aluno_id && currentUser?.cargo !== 'Responsável')
@@ -195,7 +197,7 @@ export function SidebarProvasOnline() {
             )
           })}
           <button
-            onClick={() => router.push('/login?step=choose_system')}
+            onClick={() => setIsTrocarModuloOpen(true)}
             style={{
               display: 'flex',
               flexDirection: 'column',
@@ -393,39 +395,70 @@ export function SidebarProvasOnline() {
           zIndex: 1
         }}>
           {/* Quick Module Switcher */}
-          {!collapsed && (
-            <div>
-              <div style={{ fontSize: 10, fontWeight: 800, color: 'rgba(255, 255, 255, 0.4)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8, paddingLeft: 4 }}>
-                Alternar Módulo
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
-                {[
-                  { href: '/dashboard', title: 'Gestão Escolar (ERP)', icon: '🏢' },
-                  { href: '/agenda-digital', title: 'Agenda Digital', icon: '📱' },
-                  { href: '/gestao-pessoas', title: 'Gestão de Pessoas', icon: '👥' },
-                  { href: '/simulados', title: 'Provas e Simulados', icon: '📝' },
-                ].map((mod) => (
-                  <Link key={mod.href} href={mod.href} style={{ textDecoration: 'none' }} title={mod.title}>
-                    <div style={{
-                      height: 38,
-                      borderRadius: 10,
-                      background: 'rgba(255, 255, 255, 0.04)',
-                      border: '1px solid rgba(255, 255, 255, 0.08)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: 16,
-                      cursor: 'pointer',
-                      transition: 'all 0.2s'
-                    }}
-                    onMouseEnter={e => { e.currentTarget.style.background = 'rgba(14, 165, 233, 0.15)'; e.currentTarget.style.borderColor = 'rgba(56, 189, 248, 0.4)' }}
-                    onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255, 255, 255, 0.04)'; e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.08)' }}
-                    >
-                      {mod.icon}
-                    </div>
-                  </Link>
-                ))}
-              </div>
+          {!collapsed ? (
+            <div style={{ marginBottom: 12 }}>
+              <button
+                type="button"
+                onClick={() => setIsTrocarModuloOpen(true)}
+                style={{
+                  width: '100%',
+                  padding: '9px 12px',
+                  borderRadius: 12,
+                  background: 'rgba(56, 189, 248, 0.08)',
+                  border: '1px solid rgba(56, 189, 248, 0.25)',
+                  color: '#38bdf8',
+                  fontSize: 12,
+                  fontWeight: 700,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 8,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s'
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.background = 'rgba(56, 189, 248, 0.16)'
+                  e.currentTarget.style.borderColor = 'rgba(56, 189, 248, 0.45)'
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.background = 'rgba(56, 189, 248, 0.08)'
+                  e.currentTarget.style.borderColor = 'rgba(56, 189, 248, 0.25)'
+                }}
+              >
+                <Layers size={16} />
+                <span>Trocar Módulo</span>
+              </button>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12 }}>
+              <button
+                type="button"
+                title="Trocar Módulo"
+                onClick={() => setIsTrocarModuloOpen(true)}
+                style={{
+                  width: 38,
+                  height: 38,
+                  borderRadius: 10,
+                  background: 'rgba(56, 189, 248, 0.08)',
+                  border: '1px solid rgba(56, 189, 248, 0.25)',
+                  color: '#38bdf8',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s'
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.background = 'rgba(56, 189, 248, 0.16)'
+                  e.currentTarget.style.borderColor = 'rgba(56, 189, 248, 0.45)'
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.background = 'rgba(56, 189, 248, 0.08)'
+                  e.currentTarget.style.borderColor = 'rgba(56, 189, 248, 0.25)'
+                }}
+              >
+                <Layers size={18} />
+              </button>
             </div>
           )}
 
@@ -494,6 +527,11 @@ export function SidebarProvasOnline() {
           </div>
         </div>
       </aside>
+
+      <TrocarModuloModal 
+        isOpen={isTrocarModuloOpen} 
+        onClose={() => setIsTrocarModuloOpen(false)} 
+      />
     </>
   )
 }

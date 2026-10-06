@@ -395,13 +395,13 @@ export function ConciliacaoFolhaTab({ onRefresh }: ConciliacaoFolhaTabProps) {
             <thead className="bg-slate-50/80 dark:bg-slate-800/50 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider border-b border-slate-200/80 dark:border-slate-800">
               <tr>
                 <th className="py-2.5 px-3 min-w-[150px]">Colaborador</th>
-                <th className="py-2.5 px-3 whitespace-nowrap">Operação</th>
-                <th className="py-2.5 px-2 text-center whitespace-nowrap w-[50px]">Parcela</th>
-                <th className="py-2.5 px-2 text-right whitespace-nowrap">Amortização</th>
-                <th className="py-2.5 px-2 text-right whitespace-nowrap">Juros</th>
-                <th className="py-2.5 px-2 text-right whitespace-nowrap">Valor Desconto</th>
-                <th className="py-2.5 px-2 text-center whitespace-nowrap">Status</th>
-                <th className="py-2.5 px-3 text-right whitespace-nowrap">Ações</th>
+                <th className="py-2.5 px-3 text-center whitespace-nowrap w-[130px]">Operação</th>
+                <th className="py-2.5 px-2 text-center whitespace-nowrap w-[60px]">Parcela</th>
+                <th className="py-2.5 px-2 text-center whitespace-nowrap w-[110px]">Amortização</th>
+                <th className="py-2.5 px-2 text-center whitespace-nowrap w-[110px]">Juros</th>
+                <th className="py-2.5 px-2 text-center whitespace-nowrap w-[120px]">Valor Desconto</th>
+                <th className="py-2.5 px-2 text-center whitespace-nowrap w-[110px]">Status</th>
+                <th className="py-2.5 px-3 text-center whitespace-nowrap w-[100px]">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80 font-mono">
@@ -426,7 +426,7 @@ export function ConciliacaoFolhaTab({ onRefresh }: ConciliacaoFolhaTabProps) {
                         </div>
                       </td>
 
-                      <td className="py-2.5 px-3 font-bold text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                      <td className="py-2.5 px-3 text-center font-bold text-slate-700 dark:text-slate-300 whitespace-nowrap">
                         {p.codigoOperacao}
                       </td>
 
@@ -434,40 +434,42 @@ export function ConciliacaoFolhaTab({ onRefresh }: ConciliacaoFolhaTabProps) {
                         {p.numero}
                       </td>
 
-                      <td className="py-2.5 px-2 text-right text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                      <td className="py-2.5 px-2 text-center text-slate-700 dark:text-slate-300 whitespace-nowrap">
                         {formatBrl(p.valorAmortizacao)}
                       </td>
 
-                      <td className="py-2.5 px-2 text-right text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                      <td className="py-2.5 px-2 text-center text-slate-500 dark:text-slate-400 whitespace-nowrap">
                         {formatBrl(p.valorJuros)}
                       </td>
 
-                      <td className="py-2.5 px-2 text-right font-bold text-slate-900 dark:text-white whitespace-nowrap">
+                      <td className="py-2.5 px-2 text-center font-bold text-slate-900 dark:text-white whitespace-nowrap">
                         {formatBrl(p.valorTotal)}
                       </td>
 
                       <td className="py-2.5 px-2 text-center whitespace-nowrap">
-                        <span
-                          className={`text-[9px] font-bold uppercase px-2 py-0.5 rounded-full font-sans border whitespace-nowrap ${
-                            isPaid
-                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200/80 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800/40'
-                              : p.status === 'atrasada'
-                              ? 'bg-rose-50 text-rose-700 border-rose-200/80 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800/40'
-                              : 'bg-amber-50 text-amber-700 border-amber-200/80 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800/40'
-                          }`}
-                        >
-                          {p.status === 'descontada'
-                            ? 'Descontado'
-                            : p.status === 'paga_avulso'
-                            ? 'Pago Avulso'
-                            : p.status === 'prevista'
-                            ? 'Prevista'
-                            : p.status}
-                        </span>
+                        <div className="flex items-center justify-center">
+                          <span
+                            className={`text-[9px] font-bold uppercase px-2 py-0.5 rounded-full font-sans border whitespace-nowrap ${
+                              isPaid
+                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200/80 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800/40'
+                                : p.status === 'atrasada'
+                                ? 'bg-rose-50 text-rose-700 border-rose-200/80 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800/40'
+                                : 'bg-amber-50 text-amber-700 border-amber-200/80 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800/40'
+                            }`}
+                          >
+                            {p.status === 'descontada'
+                              ? 'Descontado'
+                              : p.status === 'paga_avulso'
+                              ? 'Pago Avulso'
+                              : p.status === 'prevista'
+                              ? 'Prevista'
+                              : p.status}
+                          </span>
+                        </div>
                       </td>
 
-                      <td className="py-2.5 px-3 text-right font-sans whitespace-nowrap">
-                        <div className="flex items-center justify-end gap-1.5">
+                      <td className="py-2.5 px-3 text-center font-sans whitespace-nowrap">
+                        <div className="flex items-center justify-center gap-1.5">
                           {!isPaid ? (
                             <button
                               onClick={() => handleOpenIndividualModal(p)}

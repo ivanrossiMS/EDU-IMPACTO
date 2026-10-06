@@ -37,6 +37,7 @@ import { formatBrl } from '@/lib/credimpacto/engine'
 import { performLogout } from '@/lib/auth/logout'
 import { useApp } from '@/lib/context'
 import { UserAvatar } from '@/components/UserAvatar'
+import { TrocarModuloModal } from '@/components/layout/TrocarModuloModal'
 
 export type TabId =
   | 'dashboard'
@@ -86,144 +87,7 @@ interface NavGroup {
  * MODAL ULTRA-MODERNO: CENTRAL DE MÓDULOS (TROCAR DE MÓDULO)
  */
 export function ModuleSwitchModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
-    }
-    if (isOpen) {
-      window.addEventListener('keydown', handleKeyDown)
-    }
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [isOpen, onClose])
-
-  if (!isOpen) return null
-
-  const modules = [
-    {
-      id: 'dashboard',
-      href: '/dashboard',
-      title: 'ERP Principal',
-      subtitle: 'Painel Central, Gestão Escolar & Financeiro',
-      icon: LayoutDashboard,
-      gradient: 'from-blue-600 to-indigo-600',
-      badge: 'Principal'
-    },
-    {
-      id: 'agenda-digital',
-      href: '/agenda-digital',
-      title: 'Agenda Digital',
-      subtitle: 'Comunicação, Família & Recados',
-      icon: BookHeart,
-      gradient: 'from-purple-600 to-violet-600',
-      badge: 'Comunicação'
-    },
-    {
-      id: 'gestao-pessoas',
-      href: '/gestao-pessoas',
-      title: 'Gestão de Pessoas',
-      subtitle: 'Colaboradores, Ponto & Folha RH',
-      icon: Users,
-      gradient: 'from-emerald-600 to-teal-600',
-      badge: 'RH'
-    },
-    {
-      id: 'simulados',
-      href: '/simulados',
-      title: 'Simulados e Provas',
-      subtitle: 'Elaboração, Banco de Questões & Gabaritos',
-      icon: ClipboardPenLine,
-      gradient: 'from-rose-600 to-pink-600',
-      badge: 'Pedagógico'
-    },
-    {
-      id: 'provas-online',
-      href: '/provas-online',
-      title: 'Provas Online',
-      subtitle: 'Aplicação de Avaliações Digitais',
-      icon: Laptop,
-      gradient: 'from-cyan-600 to-sky-600',
-      badge: 'Digital'
-    }
-  ]
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-md p-4 animate-in fade-in"
-      onClick={onClose}
-    >
-      <div
-        className="relative overflow-hidden bg-gradient-to-b from-[#090d16] via-[#081522] to-[#041d18] border border-emerald-500/30 rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-5 animate-in zoom-in-95 backdrop-blur-2xl text-white"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Specular top glow line */}
-        <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-emerald-400 to-transparent pointer-events-none" />
-
-        <div className="flex items-center justify-between pb-3 border-b border-white/10">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-emerald-600 via-emerald-500 to-teal-400 text-white flex items-center justify-center shadow-md shadow-emerald-500/30">
-              <Grid size={20} />
-            </div>
-            <div>
-              <h3 className="text-base font-extrabold text-white">Central de Módulos</h3>
-              <p className="text-xs text-slate-400">Selecione para onde deseja navegar no Impacto EDU</p>
-            </div>
-          </div>
-          <button
-            onClick={onClose}
-            className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
-          >
-            <X size={18} />
-          </button>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-[60vh] overflow-y-auto pr-1">
-          {modules.map((m) => {
-            const Icon = m.icon
-            return (
-              <a
-                key={m.id}
-                href={m.href}
-                className="group p-3.5 rounded-2xl border border-white/10 bg-white/[0.04] hover:bg-white/[0.08] hover:border-emerald-500/50 hover:shadow-lg transition-all flex flex-col justify-between text-left"
-              >
-                <div className="flex items-start justify-between mb-2">
-                  <div className={`w-9 h-9 rounded-xl bg-gradient-to-tr ${m.gradient} text-white flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform`}>
-                    <Icon size={18} />
-                  </div>
-                  <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-md bg-white/10 text-slate-300 border border-white/10">
-                    {m.badge}
-                  </span>
-                </div>
-                <div>
-                  <div className="text-xs font-bold text-white group-hover:text-emerald-400 transition-colors">
-                    {m.title}
-                  </div>
-                  <div className="text-[11px] text-slate-400 font-medium line-clamp-1 mt-0.5">
-                    {m.subtitle}
-                  </div>
-                </div>
-              </a>
-            )
-          })}
-        </div>
-
-        <div className="pt-2 border-t border-white/10 flex items-center justify-between gap-3">
-          <a
-            href="/login?step=choose_system"
-            className="text-xs font-bold text-slate-300 hover:text-emerald-400 flex items-center gap-1.5 transition-colors"
-          >
-            <span>Tela Completa de Seleção</span>
-            <ExternalLink size={13} />
-          </a>
-          <button
-            onClick={onClose}
-            className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-white text-xs font-bold transition-colors"
-          >
-            Fechar
-          </button>
-        </div>
-      </div>
-    </div>
-  )
+  return <TrocarModuloModal isOpen={isOpen} onClose={onClose} />
 }
 
 /**

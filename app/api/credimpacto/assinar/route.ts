@@ -14,7 +14,7 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json()
-    const { emprestimoId, senha, termoAceito, cpf } = body
+    const { emprestimoId, senha, termoAceito, cpf, chavePix, tipoChavePix } = body
 
     if (!emprestimoId) {
       return NextResponse.json({ error: 'Identificador do empréstimo é obrigatório.' }, { status: 400 })
@@ -93,6 +93,21 @@ export async function POST(request: Request) {
       }, { status: 400 })
     }
 
+    // Processa e valida Chave PIX enviada no momento do aceite ou já cadastrada
+    const submittedPix = (chavePix || loan.dadosBancarios?.chavePix || '').trim()
+    const isPlaceholder = !submittedPix || submittedPix.toLowerCase().includes('definir')
+    if (isPlaceholder) {
+      return NextResponse.json({
+        error: 'É obrigatório informar uma Chave PIX válida para recebimento dos recursos do empréstimo.'
+      }, { status: 400 })
+    }
+
+    loan.dadosBancarios = {
+      ...(loan.dadosBancarios || { tipoConta: 'corrente' }),
+      chavePix: submittedPix,
+      tipoChavePix: tipoChavePix || loan.dadosBancarios?.tipoChavePix || 'cpf'
+    }
+
     // Corrige dados do titular no contrato caso tenham vindo genéricos do criador
     if (resolved.email && (!loan.colaboradorEmail || loan.colaboradorEmail.toLowerCase() !== resolved.email.toLowerCase())) {
       loan.colaboradorEmail = resolved.email
@@ -135,7 +150,7 @@ export async function POST(request: Request) {
     const codigoVerificacao = `VAL-CRED-${randPart.slice(0, 4)}-${randPart.slice(4)}`
 
     // 4. Hash SHA-256 do contrato + metadados
-    const payloadToHash = `${loan.id}|${loan.codigoOperacao}|${loan.colaboradorCpf}|${loan.valorAprovado}|${loan.totalAPagar}|${nowIso}|${ip}|${userAgent}`
+    const payloadToHash = `${loan.id}|${loan.codigoOperacao}|${loan.colaboradorCpf}|${loan.dadosBancarios.chavePix}|${loan.valorAprovado}|${loan.totalAPagar}|${nowIso}|${ip}|${userAgent}`
     const hashSha256 = crypto.createHash('sha256').update(payloadToHash).digest('hex')
 
     // 5. Atualiza o empréstimo
@@ -166,7 +181,7 @@ export async function POST(request: Request) {
       loan,
       { id: resolved.id, nome: resolved.nome, perfil: resolved.perfil },
       'ASSINATURA',
-      `Assinatura eletrônica confirmada pelo colaborador via IP ${ip} (Hash SHA-256: ${hashSha256.slice(0, 16)}...)`
+      `Assinatura eletrônica confirmada pelo colaborador via IP ${ip} (PIX: ${loan.dadosBancarios.chavePix}, Hash SHA-256: ${hashSha256.slice(0, 16)}...)`
     )
 
     return NextResponse.json({
@@ -174,7 +189,9 @@ export async function POST(request: Request) {
       emprestimo: updated,
       codigoVerificacao,
       hashSha256,
-      assinadoEm: nowIso
+      assinadoEm: nowIso,
+      chavePixRegistrada: loan.dadosBancarios.chavePix,
+      tipoChavePixRegistrada: loan.dadosBancarios.tipoChavePix
     })
   } catch (err: any) {
     return NextResponse.json({ error: err.message || 'Erro ao processar assinatura eletrônica' }, { status: 400 })

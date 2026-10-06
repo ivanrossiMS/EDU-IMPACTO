@@ -263,6 +263,36 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
       return NextResponse.json(updated)
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // 5. AÇÃO: ATUALIZAR DADOS BANCÁRIOS / CHAVE PIX
+    // ─────────────────────────────────────────────────────────────────────────
+    if (acao === 'atualizar_dados_bancarios') {
+      const isOwner = loan.colaboradorId === resolved.id || loan.colaboradorEmail === resolved.email
+      if (!isOwner && !resolved.isAdminOrFinance) {
+        return NextResponse.json({ error: 'Acesso não autorizado para atualizar dados bancários desta operação.' }, { status: 403 })
+      }
+
+      const { dadosBancarios } = body
+      const cleanPix = (dadosBancarios?.chavePix || '').trim()
+      if (!cleanPix || cleanPix.toLowerCase().includes('definir')) {
+        return NextResponse.json({ error: 'Informe uma Chave PIX válida.' }, { status: 400 })
+      }
+
+      loan.dadosBancarios = {
+        ...(loan.dadosBancarios || { tipoConta: 'corrente' }),
+        ...dadosBancarios,
+        chavePix: cleanPix
+      }
+
+      const updated = await dbSaveEmprestimo(
+        loan,
+        { id: resolved.id, nome: resolved.nome, perfil: resolved.perfil },
+        'EDICAO',
+        `Chave PIX atualizada para: ${cleanPix} por ${resolved.nome}`
+      )
+      return NextResponse.json(updated)
+    }
+
     return NextResponse.json({ error: 'Ação não reconhecida.' }, { status: 400 })
   } catch (err: any) {
     return NextResponse.json({ error: err.message || 'Erro ao processar alteração do empréstimo' }, { status: 400 })

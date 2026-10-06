@@ -41,6 +41,13 @@ export function EmprestimoDetalhesModal({
 
   if (!loan) return null
 
+  const justificativaTexto =
+    loan.justificativaSolicitacao ||
+    (loan as any).justificativa ||
+    (loan as any).observacao ||
+    (loan as any).observacoes
+  const finalidadeTexto = loan.finalidade || (loan as any).motivo
+
   const handlePrintContract = () => {
     const printWindow = window.open('', '_blank')
     if (printWindow) {
@@ -213,6 +220,12 @@ export function EmprestimoDetalhesModal({
                     <span className="text-slate-500 dark:text-slate-400 font-sans">Data de Solicitação:</span>
                     <span className="text-slate-700 dark:text-slate-300">{new Date(loan.createdAt).toLocaleString('pt-BR')}</span>
                   </div>
+                  {finalidadeTexto && (
+                    <div className="flex justify-between">
+                      <span className="text-slate-500 dark:text-slate-400 font-sans">Finalidade:</span>
+                      <span className="text-slate-800 dark:text-slate-200 font-semibold">{finalidadeTexto}</span>
+                    </div>
+                  )}
                 </div>
 
                 {/* DADOS BANCÁRIOS E LIBERAÇÃO */}
@@ -253,6 +266,30 @@ export function EmprestimoDetalhesModal({
                 </div>
               </div>
 
+              {/* JUSTIFICATIVA OU OBSERVAÇÕES */}
+              <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800 rounded-xl p-4 space-y-2">
+                <div className="font-bold text-slate-900 dark:text-slate-200 uppercase tracking-wider text-[11px] mb-1 flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <FileText size={14} className="text-emerald-600 dark:text-emerald-400" />
+                    <span>Justificativa ou Observações:</span>
+                  </div>
+                  {finalidadeTexto && (
+                    <span className="text-[10.5px] font-semibold px-2.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800/80">
+                      Finalidade: {finalidadeTexto}
+                    </span>
+                  )}
+                </div>
+                {justificativaTexto ? (
+                  <div className="text-xs text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-900/90 border border-slate-200/70 dark:border-slate-700/60 rounded-xl p-3.5 whitespace-pre-wrap leading-relaxed shadow-2xs font-normal">
+                    {justificativaTexto}
+                  </div>
+                ) : (
+                  <div className="text-xs text-slate-400 dark:text-slate-500 italic bg-white/40 dark:bg-slate-900/30 border border-dashed border-slate-200/80 dark:border-slate-800 rounded-xl p-3.5">
+                    Nenhuma justificativa ou observação informada na proposta.
+                  </div>
+                )}
+              </div>
+
               {/* AVISOS CONTEXTUAIS */}
               {loan.status === 'aguardando_assinatura' && onOpenSignModal && (
                 <div className="p-4 rounded-xl bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-500/30 flex items-center justify-between gap-3 text-xs">
@@ -266,7 +303,7 @@ export function EmprestimoDetalhesModal({
                     onClick={() => onOpenSignModal(loan)}
                     className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shrink-0 shadow-sm shadow-blue-600/20 transition-colors"
                   >
-                    Assinar Agora
+                    Aceitar e Assinar
                   </button>
                 </div>
               )}

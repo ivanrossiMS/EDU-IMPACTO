@@ -100,10 +100,10 @@ export interface CredImpactoMemoriaCalculo {
 }
 
 export interface DadosBancariosColaborador {
-  banco: string
-  agencia: string
-  conta: string
-  tipoConta: 'corrente' | 'poupanca' | 'salario'
+  banco?: string
+  agencia?: string
+  conta?: string
+  tipoConta?: 'corrente' | 'poupanca' | 'salario'
   chavePix?: string
   tipoChavePix?: 'cpf' | 'email' | 'telefone' | 'aleatoria'
   favorecido?: string
@@ -270,6 +270,7 @@ export interface CredImpactoAuditLog {
   entidadeId: string
   acao:
     | 'CRIACAO'
+    | 'EDICAO'
     | 'APROVACAO'
     | 'RECUSA'
     | 'CONTRAPROPOSTA'

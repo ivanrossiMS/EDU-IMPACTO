@@ -1,12 +1,25 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect, useCallback } from 'react'
+import { usePathname } from 'next/navigation'
 import * as Popover from '@radix-ui/react-popover'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Bell, Calendar as CalendarIcon, ClipboardCheck, ShieldAlert, Megaphone, CheckCircle2, Clock, X, UserCheck } from 'lucide-react'
+import {
+  Bell,
+  Calendar as CalendarIcon,
+  ClipboardCheck,
+  ShieldAlert,
+  Megaphone,
+  CheckCircle2,
+  Clock,
+  UserCheck
+} from 'lucide-react'
 import { useData } from '@/lib/dataContext'
+import { useApp } from '@/lib/context'
 import { useSupabaseArray } from '@/lib/useSupabaseCollection'
-import { format, isAfter, subDays } from 'date-fns'
+import { useBroadcastRealtime } from '@/lib/hooks/useBroadcastRealtime'
+import { supabase } from '@/lib/supabase'
+import { format, isAfter, subDays, isSameDay } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 
 export function NotificationPopover() {
@@ -15,12 +28,176 @@ export function NotificationPopover() {
   const [activeTab, setActiveTab] = useState<'all' | 'tarefas' | 'agenda' | 'ocorrencias' | 'comunicado' | 'autorizacao'>('all')
 
   const { tarefas = [], eventosAgenda = [], ocorrencias = [] } = useData()
-  const { currentUser } = require('@/lib/context').useApp()
-  // Ensure we fetch recent ones by ordering desc
-  const [comunicados] = useSupabaseArray<any>('comunicados?order=created_at.desc&limit=10')
-  const [saidaCalls] = useSupabaseArray<any>('saida/calls')
+  const { currentUser } = useApp()
+  const pathname = usePathname()
+  const { on: onRealtime } = useBroadcastRealtime()
 
-  // Derive notifications
+  // Comunicados recentes
+  const [comunicados] = useSupabaseArray<any>('comunicados?order=created_at.desc&limit=10')
+
+  // ── Sincronização em tempo real das Autorizações Especiais do Dia ────────────
+  const [saidaCalls, setSaidaCalls] = useState<any[]>([])
+
+  const fetchSpecialAuths = useCallback(async () => {
+    try {
+      const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Campo_Grande' }).format(new Date())
+      const res = await fetch(`/api/saida/calls?date=${todayStr}&_t=${Date.now()}`, {
+        headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' },
+        cache: 'no-store'
+      })
+      if (!res.ok) return
+      const data = await res.json()
+      const arr: any[] = Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : []
+      setSaidaCalls(arr)
+    } catch (err) {
+      console.warn('[NotificationPopover] Falha ao sincronizar autorizações da portaria:', err)
+    }
+  }, [])
+
+  // 1. Carga inicial e a cada mudança de rota
+  useEffect(() => {
+    fetchSpecialAuths()
+  }, [fetchSpecialAuths, pathname])
+
+  // 2. Revalidação imediata sempre que o usuário abre o popover
+  useEffect(() => {
+    if (open) {
+      fetchSpecialAuths()
+    }
+  }, [open, fetchSpecialAuths])
+
+  // 3. Polling em segundo plano a cada 30 segundos
+  useEffect(() => {
+    const timer = setInterval(() => {
+      fetchSpecialAuths()
+    }, 30000)
+    return () => clearInterval(timer)
+  }, [fetchSpecialAuths])
+
+  // 4. Escuta de eventos em tempo real locais/BroadcastChannel (chamadas e autorizações instantâneas)
+  useEffect(() => {
+    const unsub = onRealtime('*', payload => {
+      const d = payload.data as any
+      if ((payload.event === 'CALL_STUDENT' && d?.status === 'special_auth') || payload.event === 'SPECIAL_AUTH_NOTIFY') {
+        const incomingId = d?.id || d?.callId
+        if (incomingId) {
+          setSaidaCalls(prev => {
+            const idx = prev.findIndex(c => c.id === incomingId)
+            const targetTime = d.targetTime || d.target_time || d.dados?.targetTime || d.horarioPrevisto || undefined
+            const newEntry = {
+              ...d,
+              id: incomingId,
+              status: 'special_auth',
+              targetTime
+            }
+            if (idx >= 0) {
+              const updated = [...prev]
+              updated[idx] = { ...updated[idx], ...newEntry }
+              return updated
+            }
+            return [newEntry, ...prev]
+          })
+        }
+      } else if (payload.event === 'CONFIRM_PICKUP') {
+        const targetId = d?.callId
+        const sId = d?.studentId ? String(d.studentId).trim() : ''
+        setSaidaCalls(prev => {
+          return prev.map(c => {
+            const matchId = targetId && c.id === targetId
+            const matchStudent = sId && c.studentId && String(c.studentId).trim() === sId
+            if (matchId || matchStudent) {
+              return { ...c, confirmedOut: true, confirmedAt: d?.confirmedAt || new Date().toISOString() }
+            }
+            return c
+          })
+        })
+      } else if (payload.event === 'DELETE_CALL' || payload.event === 'CANCEL_CALL') {
+        if (d?.callId) {
+          setSaidaCalls(prev => prev.filter(c => c.id !== d.callId))
+        }
+      }
+    })
+    return () => { unsub() }
+  }, [onRealtime])
+
+  // 5. Escuta de eventos Realtime via Supabase (entre dispositivos diferentes conectados)
+  useEffect(() => {
+    let channel: any = null
+    try {
+      const channelName = `saida_popover_${Math.random().toString(36).substring(2, 8)}`
+      channel = supabase.channel(channelName)
+
+      channel
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'saida_calls' },
+          (payload: any) => {
+            const { eventType, new: newRow, old: oldRow } = payload
+            if (eventType === 'INSERT' || eventType === 'UPDATE') {
+              let rawDados = newRow?.dados || {}
+              if (typeof rawDados === 'string') {
+                try { rawDados = JSON.parse(rawDados) } catch (e) {}
+              }
+              if (rawDados.status === 'special_auth') {
+                const call = { id: newRow.id, ...rawDados }
+                setSaidaCalls(prev => {
+                  const idx = prev.findIndex(c => c.id === call.id)
+                  if (idx >= 0) {
+                    const next = [...prev]
+                    next[idx] = { ...next[idx], ...call }
+                    return next
+                  }
+                  return [call, ...prev]
+                })
+              } else if (rawDados.status === 'confirmed') {
+                const sId = rawDados.studentId ? String(rawDados.studentId).trim() : ''
+                if (sId) {
+                  setSaidaCalls(prev => prev.map(c => {
+                    if (c.studentId && String(c.studentId).trim() === sId) {
+                      return { ...c, confirmedOut: true, confirmedAt: rawDados.confirmedAt || rawDados.calledAt || new Date().toISOString() }
+                    }
+                    return c
+                  }))
+                }
+              }
+            } else if (eventType === 'DELETE' && oldRow?.id) {
+              setSaidaCalls(prev => prev.filter(c => c.id !== oldRow.id))
+            }
+          }
+        )
+        .on(
+          'broadcast',
+          { event: 'SPECIAL_AUTH_NOTIFY' },
+          (payload: any) => {
+            const d = payload?.payload?.data || payload?.data
+            const incomingId = d?.id || d?.callId
+            if (incomingId) {
+              setSaidaCalls(prev => {
+                const idx = prev.findIndex(c => c.id === incomingId)
+                const newEntry = { ...d, id: incomingId, status: 'special_auth' }
+                if (idx >= 0) {
+                  const next = [...prev]
+                  next[idx] = { ...next[idx], ...newEntry }
+                  return next
+                }
+                return [newEntry, ...prev]
+              })
+            }
+          }
+        )
+        .subscribe()
+    } catch (err) {
+      console.warn('[NotificationPopover] Erro ao subscrever canal Realtime:', err)
+    }
+
+    return () => {
+      if (channel) {
+        supabase.removeChannel(channel)
+      }
+    }
+  }, [])
+
+  // ── Derive notifications ──────────────────────────────────────────────────
   const notifications = useMemo(() => {
     const list: any[] = []
     const now = new Date()
@@ -43,7 +220,6 @@ export function NotificationPopover() {
     // 2. Novos Eventos do Calendário (criados ou que vão acontecer em breve)
     eventosAgenda.forEach(e => {
       const eDate = new Date(e.data)
-      // Show events happening from today until 7 days in future
       if (isAfter(eDate, subDays(now, 1)) && !isAfter(eDate, new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000))) {
         list.push({
           id: `evento-${e.id}`,
@@ -60,8 +236,8 @@ export function NotificationPopover() {
 
     // 3. Ocorrências recentes (últimos 5 dias)
     ocorrencias.forEach((o: any) => {
-      const dateStr = o.created_at || o.data || o.data_registro;
-      const oDate = dateStr ? new Date(dateStr) : new Date();
+      const dateStr = o.created_at || o.data || o.data_registro
+      const oDate = dateStr ? new Date(dateStr) : new Date()
       if (isAfter(oDate, fiveDaysAgo)) {
         list.push({
           id: `ocorr-${o.id}`,
@@ -80,12 +256,12 @@ export function NotificationPopover() {
     comunicados.forEach(c => {
       const cDate = c.created_at ? new Date(c.created_at) : new Date()
       if (isAfter(cDate, fiveDaysAgo)) {
-        const isAdmin = currentUser?.perfil === 'Admin' || currentUser?.perfil === 'Diretor';
-        const link = isAdmin 
-          ? '/agenda-digital/admin/comunicados' 
-          : currentUser?.id 
-            ? `/agenda-digital/colaborador/comunicados` 
-            : '/agenda-digital/comunicados';
+        const isAdmin = currentUser?.perfil === 'Admin' || currentUser?.perfil === 'Diretor'
+        const link = isAdmin
+          ? '/agenda-digital/admin/comunicados'
+          : currentUser?.id
+            ? `/agenda-digital/colaborador/comunicados`
+            : '/agenda-digital/comunicados'
 
         list.push({
           id: `comun-${c.id}`,
@@ -100,18 +276,68 @@ export function NotificationPopover() {
       }
     })
 
-    // 5. Autorizações Especiais da Portaria
-    ;(saidaCalls || []).filter((c: any) => c.status === 'special_auth').forEach((c: any) => {
+    // 5. Autorizações Especiais do Dia (Portaria)
+    const confirmedMap = new Map<string, any>()
+    ;(saidaCalls || []).forEach((ac: any) => {
+      if (ac.status === 'confirmed') {
+        if (ac.studentId) confirmedMap.set(String(ac.studentId).trim(), ac)
+        if (ac.studentName) confirmedMap.set(ac.studentName.trim().toLowerCase(), ac)
+      }
+    })
+
+    const specialAuthEntries = (saidaCalls || []).filter((c: any) => {
+      if (c.status === 'special_auth') return true
+      if (c.guardianId === 'special' || c.guardianId === 'special-auth') return true
+      return false
+    })
+
+    specialAuthEntries.forEach((c: any) => {
+      const sId = c.studentId ? String(c.studentId).trim() : ''
+      const sName = c.studentName ? c.studentName.trim().toLowerCase() : ''
+      const confirmedCall = (sId ? confirmedMap.get(sId) : null) || (sName ? confirmedMap.get(sName) : null)
+      const isConfirmed = !!c.confirmedOut || !!confirmedCall
+      const confirmedAtRaw = c.confirmedAt || confirmedCall?.confirmedAt || confirmedCall?.calledAt
+
+      let confirmedTimeStr = ''
+      if (confirmedAtRaw) {
+        try {
+          const dConf = new Date(confirmedAtRaw)
+          confirmedTimeStr = !isNaN(dConf.getTime())
+            ? new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Campo_Grande', hour: '2-digit', minute: '2-digit' }).format(dConf)
+            : String(confirmedAtRaw).slice(11, 16)
+        } catch {
+          confirmedTimeStr = String(confirmedAtRaw).slice(11, 16)
+        }
+      }
+
+      // Horário previsto da autorização
+      let targetTimeStr = ''
+      const rawTargetTime = c.targetTime || c.target_time || c.dados?.targetTime || c.horarioPrevisto || null
+      if (rawTargetTime && rawTargetTime !== 'Indefinido') {
+        targetTimeStr = ` às ${rawTargetTime}`
+      }
+
+      let subtitle = ''
+      if (isConfirmed && confirmedTimeStr) {
+        subtitle = `Saída confirmada às ${confirmedTimeStr} · Liberado para ${c.guardianName || 'Responsável'}`
+      } else {
+        subtitle = `Liberado para ${c.guardianName || 'Responsável'}${targetTimeStr}${c.studentClass ? ` · ${c.studentClass}` : ''}`
+      }
+
       const cDate = c.calledAt ? new Date(c.calledAt) : new Date()
-      const targetTimeStr = c.targetTime && c.targetTime !== 'Indefinido' ? ` (${c.targetTime})` : ''
+
       list.push({
         id: `spec-auth-${c.id}`,
         type: 'autorizacao',
         title: `Autorização Especial: ${c.studentName || 'Aluno'}`,
-        subtitle: `${c.studentClass ? `${c.studentClass} · ` : ''}Liberado para ${c.guardianName || 'Responsável'}${targetTimeStr}`,
+        subtitle,
         date: cDate,
-        icon: <UserCheck size={16} color="#d97706" />,
-        bg: 'rgba(245, 158, 11, 0.12)',
+        photo: c.studentPhoto || null,
+        isConfirmed,
+        targetTime: rawTargetTime,
+        operatorName: c.operatorId || null,
+        icon: <UserCheck size={16} color={isConfirmed ? "#10b981" : "#d97706"} />,
+        bg: isConfirmed ? 'rgba(16, 185, 129, 0.12)' : 'rgba(245, 158, 11, 0.14)',
         link: '/saida-alunos/chamadas'
       })
     })
@@ -126,6 +352,8 @@ export function NotificationPopover() {
     if (activeTab === 'all') return true
     return n.type === activeTab
   })
+
+  const now = new Date()
 
   return (
     <Popover.Root open={open} onOpenChange={setOpen}>
@@ -195,7 +423,7 @@ export function NotificationPopover() {
                 </div>
 
                 {/* Tabs */}
-                <div style={{ display: 'flex', gap: 4, padding: '16px 20px 8px', justifyContent: 'center' }}>
+                <div style={{ display: 'flex', gap: 4, padding: '16px 20px 8px', justifyContent: 'center', overflowX: 'auto' }}>
                   {[
                     { id: 'all', label: 'Todas' },
                     { id: 'autorizacao', label: 'Autorizações' },
@@ -203,26 +431,47 @@ export function NotificationPopover() {
                     { id: 'agenda', label: 'Agenda' },
                     { id: 'tarefa', label: 'Tarefas' },
                     { id: 'ocorrencia', label: 'Ocorrências' }
-                  ].map(tab => (
-                    <button
-                      key={tab.id}
-                      onClick={() => setActiveTab(tab.id as any)}
-                      style={{
-                        padding: '6px 10px',
-                        borderRadius: 20,
-                        fontSize: 11,
-                        fontWeight: 700,
-                        border: 'none',
-                        cursor: 'pointer',
-                        whiteSpace: 'nowrap',
-                        transition: 'all 0.2s',
-                        background: activeTab === tab.id ? 'rgba(255,255,255,0.15)' : 'transparent',
-                        color: activeTab === tab.id ? '#fff' : 'rgba(255,255,255,0.5)',
-                      }}
-                    >
-                      {tab.label}
-                    </button>
-                  ))}
+                  ].map(tab => {
+                    const count = tab.id === 'all'
+                      ? notifications.length
+                      : notifications.filter(n => n.type === tab.id).length
+
+                    return (
+                      <button
+                        key={tab.id}
+                        onClick={() => setActiveTab(tab.id as any)}
+                        style={{
+                          padding: '6px 10px',
+                          borderRadius: 20,
+                          fontSize: 11,
+                          fontWeight: 700,
+                          border: 'none',
+                          cursor: 'pointer',
+                          whiteSpace: 'nowrap',
+                          transition: 'all 0.2s',
+                          background: activeTab === tab.id ? 'rgba(255,255,255,0.15)' : 'transparent',
+                          color: activeTab === tab.id ? '#fff' : 'rgba(255,255,255,0.5)',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 5
+                        }}
+                      >
+                        <span>{tab.label}</span>
+                        {count > 0 && (
+                          <span style={{
+                            fontSize: 10,
+                            padding: '1px 5px',
+                            borderRadius: 10,
+                            background: activeTab === tab.id ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.08)',
+                            color: '#fff',
+                            fontWeight: 800
+                          }}>
+                            {count}
+                          </span>
+                        )}
+                      </button>
+                    )
+                  })}
                 </div>
 
                 {/* List */}
@@ -238,7 +487,7 @@ export function NotificationPopover() {
                       </div>
                     </div>
                   ) : (
-                    filteredNotifications.slice(0, 6).map((item, i) => {
+                    filteredNotifications.slice(0, activeTab === 'all' ? 15 : 30).map((item, i) => {
                       const isRead = markedRead.includes(item.id)
                       return (
                         <motion.a
@@ -251,7 +500,7 @@ export function NotificationPopover() {
                           }}
                           initial={{ opacity: 0, x: -10 }}
                           animate={{ opacity: 1, x: 0 }}
-                          transition={{ delay: i * 0.05 }}
+                          transition={{ delay: i * 0.04 }}
                           style={{
                             display: 'flex',
                             alignItems: 'center',
@@ -267,10 +516,15 @@ export function NotificationPopover() {
                           onMouseOut={e => e.currentTarget.style.background = isRead ? 'transparent' : 'rgba(255,255,255,0.02)'}
                         >
                           {!isRead && (
-                            <div style={{ position: 'absolute', left: 4, top: '50%', marginTop: -3, width: 6, height: 6, borderRadius: 3, background: '#3b82f6' }} />
+                            <div style={{ position: 'absolute', left: 4, top: '50%', marginTop: -3, width: 6, height: 6, borderRadius: 3, background: item.type === 'autorizacao' ? '#f59e0b' : '#3b82f6' }} />
                           )}
-                          <div style={{ width: 40, height: 40, borderRadius: 12, background: item.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                            {item.icon}
+                          <div style={{ width: 40, height: 40, borderRadius: 12, background: item.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden' }}>
+                            {item.photo ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img src={item.photo} alt={item.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            ) : (
+                              item.icon
+                            )}
                           </div>
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ color: isRead ? 'rgba(255,255,255,0.6)' : 'white', fontSize: 13, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -280,7 +534,7 @@ export function NotificationPopover() {
                               <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 }}>{item.subtitle}</span>
                               <span style={{ display: 'flex', alignItems: 'center', gap: 3, flexShrink: 0 }}>
                                 <Clock size={10} />
-                                {format(item.date, "dd MMM", { locale: ptBR })}
+                                {isSameDay(item.date, now) ? format(item.date, 'HH:mm') : format(item.date, 'dd MMM', { locale: ptBR })}
                               </span>
                             </div>
                           </div>

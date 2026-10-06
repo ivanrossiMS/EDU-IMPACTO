@@ -325,7 +325,7 @@ export function ColaboradorDashboard({
                           className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold shadow-sm shadow-blue-600/30 transition-all active:scale-98"
                         >
                           <FileCheck2 size={15} />
-                          <span>Assinar Contrato</span>
+                          <span>Aceitar e Assinar</span>
                         </button>
                       )}
 

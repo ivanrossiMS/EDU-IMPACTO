@@ -21,7 +21,9 @@ import {
   Trash2,
   Copy,
   DollarSign,
-  CreditCard
+  CreditCard,
+  Pencil,
+  Building
 } from 'lucide-react'
 import { CredImpactoEmprestimo, StatusEmprestimo } from '@/types/credimpacto'
 import { formatBrl, METODOS_LABELS } from '@/lib/credimpacto/engine'
@@ -77,6 +79,66 @@ export function AdminDashboard({
   // Modal de Exclusão de Empréstimo
   const [loanToDelete, setLoanToDelete] = useState<CredImpactoEmprestimo | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
+
+  // Modal de Edição de Chave PIX (Liberações TED)
+  const [editingPixLoan, setEditingPixLoan] = useState<CredImpactoEmprestimo | null>(null)
+  const [editingPixKey, setEditingPixKey] = useState('')
+  const [editingPixType, setEditingPixType] = useState<'cpf' | 'email' | 'telefone' | 'aleatoria'>('cpf')
+  const [isSavingPix, setIsSavingPix] = useState(false)
+
+  const handleOpenEditPix = (loan: CredImpactoEmprestimo) => {
+    setEditingPixLoan(loan)
+    const existing = loan.dadosBancarios?.chavePix || ''
+    const isPlaceholder = existing.toLowerCase().includes('definir')
+    setEditingPixKey(isPlaceholder ? '' : existing)
+    setEditingPixType((loan.dadosBancarios?.tipoChavePix as any) || 'cpf')
+  }
+
+  const handleSavePix = async () => {
+    if (!editingPixLoan) return
+    const clean = editingPixKey.trim()
+    if (!clean || clean.toLowerCase().includes('definir')) {
+      toast.error('Informe uma Chave PIX válida.')
+      return
+    }
+    setIsSavingPix(true)
+    try {
+      const res = await fetch(`/api/credimpacto/emprestimos/${editingPixLoan.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          acao: 'atualizar_dados_bancarios',
+          dadosBancarios: {
+            ...(editingPixLoan.dadosBancarios || { tipoConta: 'corrente' }),
+            chavePix: clean,
+            tipoChavePix: editingPixType
+          }
+        })
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Erro ao atualizar PIX')
+      toast.success(`Chave PIX da operação ${editingPixLoan.codigoOperacao} atualizada com sucesso!`)
+
+      // Se estiver com o modal de liberação aberto para este empréstimo, atualiza nele também
+      if (disbursingLoan && disbursingLoan.id === editingPixLoan.id) {
+        setDisbursingLoan({
+          ...disbursingLoan,
+          dadosBancarios: {
+            ...(disbursingLoan.dadosBancarios || { tipoConta: 'corrente' }),
+            chavePix: clean,
+            tipoChavePix: editingPixType
+          }
+        })
+      }
+
+      setEditingPixLoan(null)
+      onRefresh()
+    } catch (err: any) {
+      toast.error(err.message || 'Falha ao salvar Chave PIX')
+    } finally {
+      setIsSavingPix(false)
+    }
+  }
 
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text)
@@ -259,6 +321,13 @@ export function AdminDashboard({
   // Confirmação de Liberação
   const handleConfirmDisbursement = async () => {
     if (!disbursingLoan) return
+
+    const cleanPix = disbursingLoan.dadosBancarios?.chavePix?.trim()
+    if (!cleanPix || cleanPix.toLowerCase().includes('definir')) {
+      toast.error('É obrigatório definir uma Chave PIX válida antes de confirmar a liberação dos recursos.')
+      return
+    }
+
     setIsSubmittingDisbursement(true)
     try {
       const res = await fetch(`/api/credimpacto/emprestimos/${disbursingLoan.id}`, {
@@ -545,23 +614,23 @@ export function AdminDashboard({
             <thead className="bg-slate-50/80 dark:bg-slate-800/50 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider border-b border-slate-200/80 dark:border-slate-800">
               {viewModeTab === 'liberacoes' ? (
                 <tr>
-                  <th className="py-2.5 px-3 whitespace-nowrap">Operação</th>
-                  <th className="py-2.5 px-3 min-w-[150px]">Colaborador</th>
-                  <th className="py-2.5 px-3 min-w-[200px]">Dados Bancários / Chave PIX</th>
-                  <th className="py-2.5 px-3 text-right whitespace-nowrap">Valor a Liberar</th>
-                  <th className="py-2.5 px-2 text-center whitespace-nowrap w-[60px]">Prazo</th>
-                  <th className="py-2.5 px-2 text-center whitespace-nowrap">Status</th>
-                  <th className="py-2.5 px-3 text-right whitespace-nowrap">Ações</th>
+                  <th className="py-2.5 px-3 text-center whitespace-nowrap w-[130px]">Operação</th>
+                  <th className="py-2.5 px-3 text-left min-w-[170px]">Colaborador</th>
+                  <th className="py-2.5 px-3 text-left min-w-[200px]">Dados Bancários / Chave PIX</th>
+                  <th className="py-2.5 px-3 text-center whitespace-nowrap w-[150px]">Valor a Liberar</th>
+                  <th className="py-2.5 px-2 text-center whitespace-nowrap w-[70px]">Prazo</th>
+                  <th className="py-2.5 px-2 text-center whitespace-nowrap w-[120px]">Status</th>
+                  <th className="py-2.5 px-3 text-center whitespace-nowrap w-[140px]">Ações</th>
                 </tr>
               ) : (
                 <tr>
-                  <th className="py-2.5 px-3 whitespace-nowrap">Operação</th>
-                  <th className="py-2.5 px-3 min-w-[150px]">Colaborador</th>
-                  <th className="py-2.5 px-3 text-right whitespace-nowrap">Valor Concedido</th>
-                  <th className="py-2.5 px-2 text-center whitespace-nowrap w-[60px]">Parcelas</th>
-                  <th className="py-2.5 px-3 text-right whitespace-nowrap">Saldo Devedor</th>
-                  <th className="py-2.5 px-2 text-center whitespace-nowrap">Status</th>
-                  <th className="py-2.5 px-3 text-right whitespace-nowrap">Ações</th>
+                  <th className="py-2.5 px-3 text-center whitespace-nowrap w-[130px]">Operação</th>
+                  <th className="py-2.5 px-4 text-left min-w-[200px]">Colaborador</th>
+                  <th className="py-2.5 px-3 text-center whitespace-nowrap w-[160px]">Valor Concedido</th>
+                  <th className="py-2.5 px-2 text-center whitespace-nowrap w-[80px]">Parcelas</th>
+                  <th className="py-2.5 px-3 text-center whitespace-nowrap w-[160px]">Saldo Devedor</th>
+                  <th className="py-2.5 px-2 text-center whitespace-nowrap w-[120px]">Status</th>
+                  <th className="py-2.5 px-3 text-center whitespace-nowrap w-[130px]">Ações</th>
                 </tr>
               )}
             </thead>
@@ -581,14 +650,14 @@ export function AdminDashboard({
                   if (viewModeTab === 'liberacoes') {
                     return (
                       <tr key={loan.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors">
-                        <td className="py-2.5 px-3 font-mono font-bold text-slate-900 dark:text-white whitespace-nowrap">
+                        <td className="py-2.5 px-3 text-center font-mono font-bold text-slate-900 dark:text-white whitespace-nowrap">
                           <div className="text-xs">{loan.codigoOperacao}</div>
                           <div className="text-[10px] text-slate-400 font-sans font-normal">
                             {new Date(loan.createdAt).toLocaleDateString('pt-BR')}
                           </div>
                         </td>
 
-                        <td className="py-2.5 px-3 min-w-[150px] max-w-[200px]">
+                        <td className="py-2.5 px-3 text-left min-w-[170px] max-w-[220px]">
                           <div className="font-bold text-slate-900 dark:text-white truncate" title={loan.colaboradorNome}>
                             {loan.colaboradorNome}
                           </div>
@@ -597,35 +666,48 @@ export function AdminDashboard({
                           </div>
                         </td>
 
-                        <td className="py-2.5 px-3 min-w-[200px]">
-                          {loan.dadosBancarios?.chavePix ? (
+                        <td className="py-2.5 px-3 text-left min-w-[200px]">
+                          {loan.dadosBancarios?.chavePix && !loan.dadosBancarios.chavePix.toLowerCase().includes('definir') ? (
                             <div className="flex items-center gap-1.5">
-                              <span className="text-[9px] uppercase font-bold px-1.5 py-0.5 rounded bg-cyan-100 dark:bg-cyan-950 text-cyan-800 dark:text-cyan-300 font-mono">PIX</span>
-                              <span className="font-mono text-xs font-semibold text-slate-900 dark:text-white truncate max-w-[140px]" title={loan.dadosBancarios.chavePix}>
+                              <span className="text-[9px] uppercase font-bold px-1.5 py-0.5 rounded bg-cyan-100 dark:bg-cyan-950 text-cyan-800 dark:text-cyan-300 font-mono">
+                                {loan.dadosBancarios.tipoChavePix ? loan.dadosBancarios.tipoChavePix.toUpperCase() : 'PIX'}
+                              </span>
+                              <span className="font-mono text-xs font-semibold text-slate-900 dark:text-white truncate max-w-[130px]" title={loan.dadosBancarios.chavePix}>
                                 {loan.dadosBancarios.chavePix}
                               </span>
                               <button
                                 type="button"
                                 onClick={() => copyToClipboard(loan.dadosBancarios!.chavePix!, 'Chave PIX')}
-                                className="text-slate-400 hover:text-cyan-600 transition-colors"
+                                className="text-slate-400 hover:text-cyan-600 transition-colors p-0.5"
                                 title="Copiar Chave PIX"
                               >
                                 <Copy size={12} />
                               </button>
+                              <button
+                                type="button"
+                                onClick={() => handleOpenEditPix(loan)}
+                                className="text-slate-400 hover:text-emerald-600 transition-colors p-0.5"
+                                title="Editar Chave PIX"
+                              >
+                                <Pencil size={12} />
+                              </button>
                             </div>
                           ) : (
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-[9px] uppercase font-bold px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-mono">CPF</span>
-                              <span className="font-mono text-xs text-slate-700 dark:text-slate-300">
-                                {loan.colaboradorCpf}
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="text-[9px] uppercase font-bold px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 font-mono">
+                                PENDENTE
+                              </span>
+                              <span className="font-mono text-xs text-amber-700 dark:text-amber-400 truncate max-w-[110px]" title="A definir pelo colaborador">
+                                {loan.dadosBancarios?.chavePix || 'A definir'}
                               </span>
                               <button
                                 type="button"
-                                onClick={() => copyToClipboard(loan.colaboradorCpf, 'CPF')}
-                                className="text-slate-400 hover:text-cyan-600 transition-colors"
-                                title="Copiar CPF"
+                                onClick={() => handleOpenEditPix(loan)}
+                                className="text-[10px] font-bold text-cyan-600 dark:text-cyan-400 hover:underline flex items-center gap-0.5"
+                                title="Definir Chave PIX agora"
                               >
-                                <Copy size={12} />
+                                <Pencil size={11} />
+                                <span>Definir</span>
                               </button>
                             </div>
                           )}
@@ -636,7 +718,7 @@ export function AdminDashboard({
                           )}
                         </td>
 
-                        <td className="py-2.5 px-3 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
+                        <td className="py-2.5 px-3 text-center font-mono font-bold text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
                           <div className="text-xs">{formatBrl(loan.valorAprovado)}</div>
                           <div className="text-[10px] text-slate-400 font-sans font-normal">
                             TED / Transferência
@@ -648,13 +730,15 @@ export function AdminDashboard({
                         </td>
 
                         <td className="py-2.5 px-2 text-center whitespace-nowrap">
-                          <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full border whitespace-nowrap ${badge.bg}`}>
-                            {badge.label}
-                          </span>
+                          <div className="flex items-center justify-center">
+                            <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full border whitespace-nowrap ${badge.bg}`}>
+                              {badge.label}
+                            </span>
+                          </div>
                         </td>
 
-                        <td className="py-2.5 px-3 text-right whitespace-nowrap">
-                          <div className="flex items-center justify-end gap-1.5">
+                        <td className="py-2.5 px-3 text-center whitespace-nowrap">
+                          <div className="flex items-center justify-center gap-1.5">
                             {isPendingDisbursement ? (
                               <button
                                 onClick={() => {
@@ -696,14 +780,14 @@ export function AdminDashboard({
 
                   return (
                     <tr key={loan.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors">
-                      <td className="py-2.5 px-3 font-mono font-bold text-slate-900 dark:text-white whitespace-nowrap">
+                      <td className="py-2.5 px-3 text-center font-mono font-bold text-slate-900 dark:text-white whitespace-nowrap">
                         <div className="text-xs">{loan.codigoOperacao}</div>
                         <div className="text-[10px] text-slate-400 font-sans font-normal">
                           {new Date(loan.createdAt).toLocaleDateString('pt-BR')}
                         </div>
                       </td>
 
-                      <td className="py-2.5 px-3 min-w-[150px] max-w-[220px]">
+                      <td className="py-2.5 px-4 text-left min-w-[200px] max-w-[260px]">
                         <div className="font-bold text-slate-900 dark:text-white truncate" title={loan.colaboradorNome}>
                           {loan.colaboradorNome}
                         </div>
@@ -712,7 +796,7 @@ export function AdminDashboard({
                         </div>
                       </td>
 
-                      <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900 dark:text-white whitespace-nowrap">
+                      <td className="py-2.5 px-3 text-center font-mono font-bold text-slate-900 dark:text-white whitespace-nowrap">
                         <div>{formatBrl(loan.valorAprovado || loan.valorSolicitado)}</div>
                         <div className="text-[10px] text-slate-400 font-sans font-normal">
                           {loan.taxaMensal}% a.m.
@@ -723,18 +807,20 @@ export function AdminDashboard({
                         {loan.quantidadeParcelas}x
                       </td>
 
-                      <td className="py-2.5 px-3 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
+                      <td className="py-2.5 px-3 text-center font-mono font-bold text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
                         {formatBrl(loan.saldoDevedorAtual)}
                       </td>
 
                       <td className="py-2.5 px-2 text-center whitespace-nowrap">
-                        <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full border whitespace-nowrap ${badge.bg}`}>
-                          {badge.label}
-                        </span>
+                        <div className="flex items-center justify-center">
+                          <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full border whitespace-nowrap ${badge.bg}`}>
+                            {badge.label}
+                          </span>
+                        </div>
                       </td>
 
-                      <td className="py-2.5 px-3 text-right whitespace-nowrap">
-                        <div className="flex items-center justify-end gap-1.5">
+                      <td className="py-2.5 px-3 text-center whitespace-nowrap">
+                        <div className="flex items-center justify-center gap-1.5">
                           {/* Ação 1: Analisar */}
                           {isPendingAnalysis && (
                             <button
@@ -1140,11 +1226,11 @@ export function AdminDashboard({
                 <span className="text-slate-600 dark:text-slate-400 font-sans">Valor a Liberar:</span>
                 <span className="font-black text-emerald-600 dark:text-emerald-400 text-sm">{formatBrl(disbursingLoan.valorAprovado)}</span>
               </div>
-              {disbursingLoan.dadosBancarios?.chavePix ? (
+              {disbursingLoan.dadosBancarios?.chavePix && !disbursingLoan.dadosBancarios.chavePix.toLowerCase().includes('definir') ? (
                 <div className="flex justify-between items-center bg-white dark:bg-slate-900 p-2 rounded-lg border border-cyan-200/60 dark:border-cyan-800/40">
                   <span className="text-slate-600 dark:text-slate-400 font-sans text-[11px]">Chave PIX:</span>
                   <div className="flex items-center gap-1.5">
-                    <span className="text-cyan-700 dark:text-cyan-300 font-bold">{disbursingLoan.dadosBancarios.chavePix}</span>
+                    <span className="text-cyan-700 dark:text-cyan-300 font-bold font-mono">{disbursingLoan.dadosBancarios.chavePix}</span>
                     <button
                       type="button"
                       onClick={() => copyToClipboard(disbursingLoan.dadosBancarios!.chavePix!, 'Chave PIX')}
@@ -1153,22 +1239,34 @@ export function AdminDashboard({
                     >
                       <Copy size={13} />
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => handleOpenEditPix(disbursingLoan)}
+                      className="text-slate-400 hover:text-emerald-600 p-1"
+                      title="Editar Chave PIX"
+                    >
+                      <Pencil size={13} />
+                    </button>
                   </div>
                 </div>
               ) : (
-                <div className="flex justify-between items-center bg-white dark:bg-slate-900 p-2 rounded-lg border border-cyan-200/60 dark:border-cyan-800/40">
-                  <span className="text-slate-600 dark:text-slate-400 font-sans text-[11px]">PIX (CPF):</span>
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-cyan-700 dark:text-cyan-300 font-bold">{disbursingLoan.colaboradorCpf}</span>
-                    <button
-                      type="button"
-                      onClick={() => copyToClipboard(disbursingLoan.colaboradorCpf, 'CPF')}
-                      className="text-slate-400 hover:text-cyan-600 p-1"
-                      title="Copiar CPF"
-                    >
-                      <Copy size={13} />
-                    </button>
+                <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700/60 p-2.5 rounded-lg flex items-center justify-between gap-2">
+                  <div>
+                    <span className="text-amber-800 dark:text-amber-300 font-bold text-xs block">
+                      ⚠️ Chave PIX Não Cadastrada
+                    </span>
+                    <span className="text-amber-700 dark:text-amber-400 text-[11px]">
+                      {disbursingLoan.dadosBancarios?.chavePix || 'A definir pelo colaborador'}
+                    </span>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => handleOpenEditPix(disbursingLoan)}
+                    className="px-2.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs shadow-xs flex items-center gap-1 shrink-0 transition-colors"
+                  >
+                    <Pencil size={12} />
+                    <span>Definir PIX</span>
+                  </button>
                 </div>
               )}
               {disbursingLoan.dadosBancarios?.banco && (
@@ -1216,23 +1314,36 @@ export function AdminDashboard({
               )}
             </div>
 
-            <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setDisbursingLoan(null)}
-                className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 transition-colors"
-              >
-                Voltar
-              </button>
-              <button
-                type="button"
-                disabled={isSubmittingDisbursement}
-                onClick={handleConfirmDisbursement}
-                className="px-5 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-xs font-bold text-white shadow-sm shadow-cyan-600/30 disabled:opacity-50 transition-colors"
-              >
-                {isSubmittingDisbursement ? 'Confirmando...' : 'Confirmar Liberação e Ativar'}
-              </button>
-            </div>
+            {(() => {
+              const isPixMissing = !disbursingLoan.dadosBancarios?.chavePix || disbursingLoan.dadosBancarios.chavePix.toLowerCase().includes('definir')
+
+              return (
+                <div className="pt-3 border-t border-slate-100 dark:border-slate-800 space-y-2">
+                  {isPixMissing && (
+                    <p className="text-[11px] text-amber-600 dark:text-amber-400 font-semibold text-right">
+                      * Cadastre a Chave PIX acima para habilitar a confirmação de liberação.
+                    </p>
+                  )}
+                  <div className="flex justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setDisbursingLoan(null)}
+                      className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 transition-colors"
+                    >
+                      Voltar
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isSubmittingDisbursement || isPixMissing}
+                      onClick={handleConfirmDisbursement}
+                      className="px-5 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-xs font-bold text-white shadow-sm shadow-cyan-600/30 disabled:opacity-40 transition-colors"
+                    >
+                      {isSubmittingDisbursement ? 'Confirmando...' : 'Confirmar Liberação e Ativar'}
+                    </button>
+                  </div>
+                </div>
+              )
+            })()}
           </div>
         </div>
       )}
@@ -1281,6 +1392,119 @@ export function AdminDashboard({
                     <span>Confirmar Exclusão</span>
                   </>
                 )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE EDIÇÃO DE CHAVE PIX */}
+      {editingPixLoan && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-2xl max-w-md w-full p-5 shadow-2xl space-y-4">
+            <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-3">
+              <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <Building size={16} className="text-cyan-600 dark:text-cyan-400" />
+                <span>Atualizar Chave PIX</span>
+              </h3>
+              <button
+                onClick={() => setEditingPixLoan(null)}
+                className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors text-sm"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="bg-slate-50 dark:bg-slate-800/60 rounded-xl p-3 text-xs space-y-1">
+              <div className="flex justify-between">
+                <span className="text-slate-500 dark:text-slate-400">Operação:</span>
+                <span className="font-bold text-slate-900 dark:text-white font-mono">{editingPixLoan.codigoOperacao}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500 dark:text-slate-400">Colaborador:</span>
+                <span className="font-bold text-slate-900 dark:text-white">{editingPixLoan.colaboradorNome}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500 dark:text-slate-400">Valor Líquido:</span>
+                <span className="font-bold text-emerald-600 dark:text-emerald-400 font-mono">{formatBrl(editingPixLoan.valorAprovado)}</span>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">
+                  Tipo de Chave PIX
+                </label>
+                <div className="grid grid-cols-4 gap-1.5 p-1 bg-slate-100 dark:bg-slate-800/80 rounded-xl text-xs font-medium">
+                  {(
+                    [
+                      { id: 'cpf', label: 'CPF' },
+                      { id: 'telefone', label: 'Celular' },
+                      { id: 'email', label: 'E-mail' },
+                      { id: 'aleatoria', label: 'Aleatória' }
+                    ] as const
+                  ).map((t) => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => {
+                        setEditingPixType(t.id)
+                        if (t.id === 'cpf' && (!editingPixKey || editingPixKey.includes('@') || editingPixKey.includes('('))) {
+                          setEditingPixKey(editingPixLoan.colaboradorCpf || '')
+                        }
+                      }}
+                      className={`py-1.5 rounded-lg text-[11px] font-semibold transition-all ${
+                        editingPixType === t.id
+                          ? 'bg-white dark:bg-slate-900 text-cyan-600 dark:text-cyan-400 shadow-xs'
+                          : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                      }`}
+                    >
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1 flex items-center justify-between">
+                  <span>Chave PIX de Destino</span>
+                  {editingPixType === 'cpf' && editingPixLoan.colaboradorCpf && (
+                    <button
+                      type="button"
+                      onClick={() => setEditingPixKey(editingPixLoan.colaboradorCpf || '')}
+                      className="text-[10px] text-cyan-600 dark:text-cyan-400 font-semibold hover:underline lowercase"
+                    >
+                      Usar CPF do Colaborador
+                    </button>
+                  )}
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editingPixKey}
+                  onChange={(e) => setEditingPixKey(e.target.value)}
+                  placeholder="Informe a Chave PIX para transferência..."
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-mono font-bold text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500"
+                />
+              </div>
+            </div>
+
+            <div className="pt-2 flex justify-end gap-2 border-t border-slate-100 dark:border-slate-800">
+              <button
+                type="button"
+                disabled={isSavingPix}
+                onClick={() => setEditingPixLoan(null)}
+                className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={isSavingPix || !editingPixKey.trim() || editingPixKey.toLowerCase().includes('definir')}
+                onClick={handleSavePix}
+                className="px-4 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs shadow-sm shadow-cyan-600/30 disabled:opacity-50 transition-all flex items-center gap-1.5"
+              >
+                {isSavingPix ? 'Salvando...' : 'Salvar Chave PIX'}
               </button>
             </div>
           </div>

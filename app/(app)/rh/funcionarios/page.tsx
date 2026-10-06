@@ -51,20 +51,33 @@ export default function FuncionariosPage() {
   const [funcionariosRaw, setFuncionarios, { loading: isLoading }] = useSupabaseArray<any>('rh/funcionarios');
   const funcionarios = funcionariosRaw || [];
 
-  // Unidades do sistema
-  const unidades = useMemo(() =>
-    (mantenedores || []).flatMap(m => (m.unidades || []).map((u: any) => u.nomeFantasia || u.razaoSocial)), [mantenedores])
+  // Unidades do sistema (mantenedores + funcionários cadastrados)
+  const unidades = useMemo(() => {
+    const fromMantenedores = (mantenedores || []).flatMap(m => (m.unidades || []).map((u: any) => u.nomeFantasia || u.razaoSocial)).filter(Boolean)
+    const fromFuncs = (funcionarios || []).map((f: any) => f.unidade).filter(Boolean)
+    return Array.from(new Set([...fromMantenedores, ...fromFuncs])).sort((a, b) => a.localeCompare(b, 'pt-BR')) as string[]
+  }, [mantenedores, funcionarios])
+
+  // Cargos que realmente possuem funcionários (ou lista padrão de CARGOS)
+  const cargosAtivos = useMemo(() => {
+    const fromFuncs = (funcionarios || []).map((f: any) => f.cargo?.trim()).filter(Boolean)
+    const list = fromFuncs.length > 0 ? fromFuncs : CARGOS
+    return Array.from(new Set(list)).sort((a, b) => a.localeCompare(b, 'pt-BR')) as string[]
+  }, [funcionarios])
 
   // Departamentos que realmente possuem funcionários
   const departamentosAtivos = useMemo(() => {
-    const deps = (funcionarios || []).map((f: any) => f.departamento).filter(Boolean)
-    return Array.from(new Set(deps)).sort() as string[]
+    const deps = (funcionarios || []).map((f: any) => f.departamento?.trim()).filter(Boolean)
+    return Array.from(new Set(deps)).sort((a, b) => a.localeCompare(b, 'pt-BR')) as string[]
   }, [funcionarios])
 
+  const hasSemUnidade = useMemo(() => (funcionarios || []).some((f: any) => !f.unidade?.trim()), [funcionarios])
 
   const [search, setSearch] = useState('')
   const [filtroSt, setFiltroSt] = useState('Todos')
+  const [filtroCargo, setFiltroCargo] = useState('Todos')
   const [filtroDep, setFiltroDep] = useState('Todos')
+  const [filtroUnidade, setFiltroUnidade] = useState('Todos')
   const [modal, setModal] = useState<'add' | 'edit' | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [confirmId, setConfirmId] = useState<string | null>(null)
@@ -108,15 +121,49 @@ export default function FuncionariosPage() {
   const set = (k: string, v: unknown) => setForm(prev => ({ ...prev, [k]: v }))
 
   const filtered = useMemo(() => funcionarios.filter(f => {
-    const q = search.toLowerCase()
-  const searchActive = search.trim().length >= 3
-    const matchSearch = !searchActive || (f.nome.toLowerCase().includes(q) || f.cargo.toLowerCase().includes(q) || (f as any).cpf?.includes(q))
+    const q = search.toLowerCase().trim()
+    const searchActive = q.length > 0
+    const matchSearch = !searchActive || (
+      (f.nome || '').toLowerCase().includes(q) ||
+      (f.cargo || '').toLowerCase().includes(q) ||
+      (f.departamento || '').toLowerCase().includes(q) ||
+      (f.unidade || '').toLowerCase().includes(q) ||
+      ((f as any).cpf || '').includes(q) ||
+      ((f as any).codigo || '').toLowerCase().includes(q)
+    )
     const matchSt = filtroSt === 'Todos' || f.status === filtroSt
-    const matchDep = filtroDep === 'Todos' || f.departamento === filtroDep
-    return matchSearch && matchSt && matchDep
-  }), [funcionarios, search, filtroSt, filtroDep])
+    const matchCargo = filtroCargo === 'Todos' || (f.cargo || '').trim() === filtroCargo.trim()
+    const matchDep = filtroDep === 'Todos' || (f.departamento || '').trim() === filtroDep.trim()
+    const matchUnidade =
+      filtroUnidade === 'Todos' ? true :
+      filtroUnidade === '__SEM_UNIDADE__' ? !f.unidade?.trim() :
+      (f.unidade || '').trim() === filtroUnidade.trim()
+
+    return matchSearch && matchSt && matchCargo && matchDep && matchUnidade
+  }), [funcionarios, search, filtroSt, filtroCargo, filtroDep, filtroUnidade])
 
   const totalFolha = funcionarios.reduce((s, f) => s + f.salario, 0)
+
+  const handleExportCSV = () => {
+    if (!filtered || filtered.length === 0) return
+    const rows = filtered.map(f => ({
+      'Código': (f as any).codigo || '',
+      'Nome': f.nome || '',
+      'Email': f.email || '',
+      'Cargo': f.cargo || '',
+      'Departamento': f.departamento || '',
+      'Salário': f.salario || 0,
+      'Admissão': f.admissao || '',
+      'Unidade': f.unidade || '',
+      'Perfil Sistema': (f as any).perfilSistema || '',
+      'Status': f.status || '',
+      'CPF': (f as any).cpf || '',
+    }))
+    const ws = XLSX.utils.json_to_sheet(rows)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Funcionários')
+    XLSX.writeFile(wb, `funcionarios_${new Date().toISOString().slice(0, 10)}.xlsx`)
+  }
 
   const openAdd = () => {
     setForm({ ...BLANK_FORM, codigo: gerarCodFunc(funcionarios.length) })
@@ -342,7 +389,7 @@ export default function FuncionariosPage() {
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
           <button className="btn btn-secondary btn-sm" onClick={() => setImportModal(true)}><Upload size={13} />Importar Tabela</button>
-          <button className="btn btn-secondary btn-sm"><Download size={13} />Exportar CSV</button>
+          <button className="btn btn-secondary btn-sm" onClick={handleExportCSV}><Download size={13} />Exportar CSV</button>
           <button className="btn btn-primary btn-sm" onClick={openAdd}><UserPlus size={13} />Novo Funcionário</button>
         </div>
       </div>
@@ -374,15 +421,42 @@ export default function FuncionariosPage() {
             <Search size={13} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
             <input className="form-input" style={{ paddingLeft: 32, color: '#0f172a' }} placeholder="Buscar nome, cargo, CPF..." value={search} onChange={e => setSearch(e.target.value)} />
           </div>
-          <select className="form-input" style={{ width: 150, color: '#0f172a' }} value={filtroSt} onChange={e => setFiltroSt(e.target.value)}>
+          <select className="form-input" style={{ width: 145, color: '#0f172a' }} value={filtroSt} onChange={e => setFiltroSt(e.target.value)}>
             <option value="Todos">Todos os status</option>
-            {STATUS_OPTS.map(s => <option key={s}>{s}</option>)}
+            {STATUS_OPTS.map(s => <option key={s} value={s}>{s}</option>)}
           </select>
-          <select className="form-input" style={{ width: 170, color: '#0f172a' }} value={filtroDep} onChange={e => setFiltroDep(e.target.value)}>
-            <option value="Todos">Todos departamentos</option>
-            {departamentosAtivos.map(d => <option key={d}>{d}</option>)}
+          <select className="form-input" style={{ width: 160, color: '#0f172a' }} value={filtroCargo} onChange={e => setFiltroCargo(e.target.value)}>
+            <option value="Todos">Todos os cargos</option>
+            {cargosAtivos.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
-          <span style={{ fontSize: 12, color: '#0f172a', fontWeight: 600 }}>{filtered.length} resultado(s)</span>
+          <select className="form-input" style={{ width: 160, color: '#0f172a' }} value={filtroDep} onChange={e => setFiltroDep(e.target.value)}>
+            <option value="Todos">Todos deptos</option>
+            {departamentosAtivos.map(d => <option key={d} value={d}>{d}</option>)}
+          </select>
+          <select className="form-input" style={{ width: 170, color: '#0f172a' }} value={filtroUnidade} onChange={e => setFiltroUnidade(e.target.value)}>
+            <option value="Todos">Todas as unidades</option>
+            {unidades.map(u => <option key={u} value={u}>{u}</option>)}
+            {hasSemUnidade && <option value="__SEM_UNIDADE__">Sem unidade</option>}
+          </select>
+          {(filtroSt !== 'Todos' || filtroCargo !== 'Todos' || filtroDep !== 'Todos' || filtroUnidade !== 'Todos' || search.trim() !== '') && (
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              style={{ color: '#ef4444', display: 'flex', alignItems: 'center', gap: 4, padding: '4px 8px', fontSize: 12, height: 38 }}
+              onClick={() => {
+                setSearch('')
+                setFiltroSt('Todos')
+                setFiltroCargo('Todos')
+                setFiltroDep('Todos')
+                setFiltroUnidade('Todos')
+              }}
+              title="Limpar todos os filtros"
+            >
+              <X size={13} />
+              Limpar
+            </button>
+          )}
+          <span style={{ fontSize: 12, color: '#0f172a', fontWeight: 600, whiteSpace: 'nowrap' }}>{filtered.length} resultado(s)</span>
         </div>
       </div>
 

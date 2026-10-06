@@ -210,7 +210,7 @@ export async function GET(request: Request) {
     // Deduplicação final por chave de minuto para evitar duplicidade de chamada entre tabelas
     const uniqueMap = new Map<string, any>()
     for (const c of rawResult) {
-      const k = getCallTimeKey(c.studentId, c.confirmedAt || c.calledAt) || c.id
+      const k = c.status === 'special_auth' ? `special_auth_${c.id}` : (getCallTimeKey(c.studentId, c.confirmedAt || c.calledAt) || c.id)
       if (!uniqueMap.has(k)) {
         uniqueMap.set(k, c)
       } else {
@@ -754,7 +754,36 @@ async function dispatchSpecialAuthNotification({
   try {
     const supabaseService = getAdminClient()
 
-    // 1. Fetch current saida_config to check if notifications are enabled and get target user IDs
+    // 1. Emitir broadcast Realtime via Supabase para todas as instâncias conectadas no web app
+    try {
+      const channel = supabaseService.channel('saida_calls_shared_room')
+      await channel.send({
+        type: 'broadcast',
+        event: 'SPECIAL_AUTH_NOTIFY',
+        payload: {
+          data: {
+            id: callId,
+            callId,
+            studentId: studentId || '',
+            studentName: studentName || 'Aluno',
+            studentClass: studentClass || '',
+            guardianName: authorizedPerson || 'Pessoa Autorizada',
+            authorizedPerson: authorizedPerson || 'Pessoa Autorizada',
+            targetTime: targetTime || '',
+            studentPhoto: studentPhoto || null,
+            operatorId: operatorName || 'Portaria',
+            status: 'special_auth',
+            calledAt: new Date().toISOString(),
+            isTest: false
+          }
+        }
+      })
+      await supabaseService.removeChannel(channel)
+    } catch (realtimeErr) {
+      console.warn('[API Saida] Falha no broadcast Realtime de Autorização Especial:', realtimeErr)
+    }
+
+    // 2. Fetch current saida_config to check if notifications are enabled and get target user IDs
     const { data: configRow } = await supabaseService
       .from('saida_config')
       .select('dados')
@@ -768,11 +797,11 @@ async function dispatchSpecialAuthNotification({
       : []
 
     if (!isEnabled || targetUserIds.length === 0) {
-      console.log('[API Saida] Notificação de Autorização Especial: desativada ou nenhum colaborador configurado.')
+      console.log('[API Saida] Notificação Push de Autorização Especial: desativada ou nenhum colaborador configurado.')
       return
     }
 
-    // 2. Fetch collaborator users safely (avoiding PostgreSQL 22P02 UUID cast errors)
+    // 3. Fetch collaborator users safely (avoiding PostgreSQL 22P02 UUID cast errors)
     const effectiveUsers = await resolveCollaboratorUsers(supabaseService, targetUserIds)
 
     if (effectiveUsers.length === 0) {
@@ -792,7 +821,7 @@ async function dispatchSpecialAuthNotification({
       if (u.email) pushTargets.add(String(u.email).toLowerCase().trim())
     })
 
-    // 3. Dispatch OneSignal Mobile Push Notification if enabled
+    // 4. Dispatch OneSignal Mobile Push Notification if enabled
     const pushEnabled = configDados.specialAuthNotifyPush !== false
     if (pushEnabled) {
       const { sendAgendaPushNotification } = await import('@/lib/server/agendaNotifications')
@@ -846,30 +875,6 @@ async function dispatchSpecialAuthNotification({
         }
       })
       console.log(`[API Saida] Push de Autorização Especial enviado para ${effectiveUsers.length} colaboradores (${directSubIds.length} aparelhos diretos):`, effectiveUsers.map(u => u.nome))
-    }
-
-    // 4. Emitir broadcast Realtime via Supabase para todas as instâncias conectadas
-    try {
-      const channel = supabaseService.channel('saida_calls_shared_room')
-      await channel.send({
-        type: 'broadcast',
-        event: 'SPECIAL_AUTH_NOTIFY',
-        payload: {
-          data: {
-            id: callId,
-            studentName: studentName || 'Aluno',
-            studentClass: studentClass || '',
-            authorizedPerson: authorizedPerson || 'Pessoa Autorizada',
-            targetTime: targetTime || '',
-            studentPhoto: studentPhoto || null,
-            targetUserIds: Array.from(pushTargets),
-            isTest: false
-          }
-        }
-      })
-      await supabaseService.removeChannel(channel)
-    } catch (realtimeErr) {
-      console.warn('[API Saida] Falha no broadcast Realtime de Autorização Especial:', realtimeErr)
     }
   } catch (err: any) {
     console.error('[API Saida] Erro ao disparar notificação de Autorização Especial:', err.message)

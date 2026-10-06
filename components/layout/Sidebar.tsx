@@ -20,6 +20,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion'
 import { UserAvatar } from '@/components/UserAvatar'
 import { NotificationPopover } from '@/components/layout/NotificationPopover'
+import { TrocarModuloModal } from '@/components/layout/TrocarModuloModal'
 import { useIsMobile } from '@/lib/hooks/useIsMobile'
 
 interface NavItem {
@@ -368,6 +369,7 @@ export function Sidebar() {
   const anoVigente = cfgCalendarioLetivo?.find((c: any) => c.isVigente)?.ano || '2026'
   const [openGroup, setOpenGroup] = useState<string | null>('ACADÊMICO')
   const [showTopMenu, setShowTopMenu] = useState(false)
+  const [isTrocarModuloOpen, setIsTrocarModuloOpen] = useState(false)
   const pathname = usePathname()
 
   const menuRef = useRef<HTMLDivElement>(null)
@@ -625,7 +627,7 @@ export function Sidebar() {
                   onClick={(e) => {
                     e.stopPropagation();
                     setShowTopMenu(false);
-                    window.location.href = '/login?step=choose_system';
+                    setIsTrocarModuloOpen(true);
                   }}
                   style={{
                     width: '100%',
@@ -687,234 +689,7 @@ export function Sidebar() {
             )}
           </AnimatePresence>
 
-          {/* ═══ MÓDULOS ═══ */}
-          <div style={{ padding: effectiveCollapsed ? '0' : '0 2px', marginBottom: 14 }}>
-            <AnimatePresence>
-              {!effectiveCollapsed && (
-                <motion.div 
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: 'auto' }}
-                  exit={{ opacity: 0, height: 0 }}
-                  style={{ 
-                    fontSize: '10px', 
-                    fontWeight: 800, 
-                    color: 'rgba(255,255,255,0.4)', 
-                    letterSpacing: '0.08em', 
-                    marginBottom: 10, 
-                    paddingLeft: 4, 
-                    overflow: 'hidden',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between'
-                  }}
-                >
-                  <span>MÓDULOS</span>
-                  <span style={{ fontSize: '9px', fontWeight: 700, color: 'rgba(255,255,255,0.25)', letterSpacing: '0.04em' }}>SISTEMA</span>
-                </motion.div>
-              )}
-            </AnimatePresence>
-            {(() => {
-              const normalize = (s: string) => (s || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim()
-              const activePerfilName = currentUserPerfil || currentUser?.perfil || currentUser?.cargo || ''
-              const userPerfilObj = (perfis || []).find((p: any) => 
-                p.nome === activePerfilName || 
-                normalize(p.nome) === normalize(activePerfilName) ||
-                (currentUser?.perfil && (p.nome === currentUser.perfil || normalize(p.nome) === normalize(currentUser.perfil))) ||
-                (currentUser?.cargo && (p.nome === currentUser.cargo || normalize(p.nome) === normalize(currentUser.cargo)))
-              )
-              const isAgendaBlocked = !!userPerfilObj?.bloqueadoAgendaDigital
-              const isGestaoPessoasBlocked = !!userPerfilObj?.bloqueadoGestaoPessoas
-              const isSimuladosBlocked = !!userPerfilObj?.bloqueadoSimulados
-              const isProvasOnlineBlocked = !!userPerfilObj?.bloqueadoProvasOnline
-              const isCredImpactoBlocked = !!userPerfilObj?.bloqueadoCredImpacto
-
-              const availableBottomModules = [
-                {
-                  id: 'agenda-digital',
-                  href: '/agenda-digital',
-                  title: 'Agenda Digital',
-                  line1: 'Agenda',
-                  line2: 'Digital',
-                  icon: BookHeart,
-                  gradient: 'linear-gradient(135deg, #a855f7 0%, #7e22ce 100%)',
-                  shadow: '0 4px 14px rgba(168, 85, 247, 0.35)',
-                  glow: 'rgba(168, 85, 247, 0.45)',
-                  activeBorder: 'rgba(168, 85, 247, 0.8)',
-                  blocked: isAgendaBlocked
-                },
-                {
-                  id: 'gestao-pessoas',
-                  href: '/gestao-pessoas',
-                  title: 'Gestão de Pessoas',
-                  line1: 'Gestão de',
-                  line2: 'Pessoas',
-                  icon: Users,
-                  gradient: 'linear-gradient(135deg, #10b981 0%, #047857 100%)',
-                  shadow: '0 4px 14px rgba(16, 185, 129, 0.35)',
-                  glow: 'rgba(16, 185, 129, 0.45)',
-                  activeBorder: 'rgba(16, 185, 129, 0.8)',
-                  blocked: isGestaoPessoasBlocked
-                },
-                {
-                  id: 'simulados',
-                  href: '/simulados',
-                  title: 'Simulados e Provas',
-                  line1: 'Simulados',
-                  line2: 'e Provas',
-                  icon: ClipboardPenLine,
-                  gradient: 'linear-gradient(135deg, #f43f5e 0%, #be123c 100%)',
-                  shadow: '0 4px 14px rgba(244, 63, 94, 0.35)',
-                  glow: 'rgba(244, 63, 94, 0.45)',
-                  activeBorder: 'rgba(244, 63, 94, 0.8)',
-                  blocked: isSimuladosBlocked
-                },
-                {
-                  id: 'provas-online',
-                  href: '/provas-online',
-                  title: 'Provas Online',
-                  line1: 'Provas',
-                  line2: 'Online',
-                  icon: Laptop,
-                  gradient: 'linear-gradient(135deg, #06b6d4 0%, #0284c7 100%)',
-                  shadow: '0 4px 14px rgba(6, 182, 212, 0.4)',
-                  glow: 'rgba(6, 182, 212, 0.5)',
-                  activeBorder: 'rgba(6, 182, 212, 0.8)',
-                  blocked: isProvasOnlineBlocked
-                },
-                {
-                  id: 'credimpacto',
-                  href: '/credimpacto',
-                  title: 'CredImpacto - Empréstimos e Consignado',
-                  line1: 'Cred',
-                  line2: 'Impacto',
-                  icon: Landmark,
-                  gradient: 'linear-gradient(135deg, #059669 0%, #047857 100%)',
-                  shadow: '0 4px 14px rgba(5, 150, 105, 0.35)',
-                  glow: 'rgba(5, 150, 105, 0.45)',
-                  activeBorder: 'rgba(16, 185, 129, 0.8)',
-                  blocked: isCredImpactoBlocked
-                }
-              ].filter(m => !m.blocked)
-
-              if (availableBottomModules.length === 0) return null
-
-              return (
-                <div 
-                  style={{ 
-                    display: 'grid', 
-                    gridTemplateColumns: effectiveCollapsed ? '1fr' : `repeat(${availableBottomModules.length}, 1fr)`, 
-                    gap: effectiveCollapsed ? 10 : 4, 
-                    width: '100%',
-                    alignItems: 'start'
-                  }}
-                >
-                  {availableBottomModules.map((mod) => {
-                const isActive = pathname?.startsWith(mod.href)
-                const IconComp = mod.icon
-
-                return (
-                  <Link 
-                    key={mod.id} 
-                    href={mod.href} 
-                    style={{ 
-                      textDecoration: 'none', 
-                      display: 'flex', 
-                      flexDirection: 'column', 
-                      alignItems: 'center', 
-                      gap: 6,
-                      minWidth: 0,
-                      width: '100%'
-                    }} 
-                    title={mod.title}
-                  >
-                    <motion.div 
-                      whileHover={{ scale: 1.08, y: -2, filter: 'brightness(1.15)' }} 
-                      whileTap={{ scale: 0.94 }}
-                      transition={{ type: 'spring', stiffness: 450, damping: 18 }}
-                      style={{ 
-                        position: 'relative',
-                        width: effectiveCollapsed ? 40 : 44,
-                        height: effectiveCollapsed ? 40 : 44, 
-                        borderRadius: 14, 
-                        background: mod.gradient, 
-                        display: 'flex', 
-                        alignItems: 'center', 
-                        justifyContent: 'center', 
-                        boxShadow: isActive ? `${mod.shadow}, 0 0 16px ${mod.glow}` : mod.shadow, 
-                        border: isActive ? `1.5px solid ${mod.activeBorder}` : '1px solid rgba(255,255,255,0.14)',
-                        overflow: 'hidden',
-                        cursor: 'pointer',
-                        flexShrink: 0
-                      }}
-                    >
-                      {/* Ultra Modern Glass Specular Reflection */}
-                      <div 
-                        style={{
-                          position: 'absolute',
-                          top: 0,
-                          left: 0,
-                          right: 0,
-                          height: '46%',
-                          background: 'linear-gradient(180deg, rgba(255, 255, 255, 0.28) 0%, rgba(255, 255, 255, 0) 100%)',
-                          borderRadius: '13px 13px 0 0',
-                          pointerEvents: 'none'
-                        }}
-                      />
-
-                      {/* Active Inner Glow */}
-                      {isActive && (
-                        <div 
-                          style={{
-                            position: 'absolute',
-                            inset: 0,
-                            boxShadow: 'inset 0 0 8px rgba(255, 255, 255, 0.4)',
-                            pointerEvents: 'none'
-                          }}
-                        />
-                      )}
-
-                      <IconComp 
-                        size={effectiveCollapsed ? 20 : 18} 
-                        color="#fff" 
-                        style={{ 
-                          position: 'relative', 
-                          zIndex: 1, 
-                          filter: 'drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35))' 
-                        }} 
-                      />
-                    </motion.div>
-
-                    {!effectiveCollapsed && (
-                      <span 
-                        style={{ 
-                          fontSize: '9.5px', 
-                          fontWeight: 700, 
-                          color: isActive ? '#ffffff' : 'rgba(255,255,255,0.6)', 
-                          textAlign: 'center', 
-                          lineHeight: 1.15,
-                          display: 'flex',
-                          flexDirection: 'column',
-                          alignItems: 'center',
-                          whiteSpace: 'nowrap',
-                          letterSpacing: '-0.01em',
-                          transition: 'color 0.2s ease',
-                          maxWidth: '100%',
-                          overflow: 'hidden'
-                        }}
-                      >
-                        <span style={{ textOverflow: 'ellipsis', overflow: 'hidden', maxWidth: '100%' }}>{mod.line1}</span>
-                        <span style={{ textOverflow: 'ellipsis', overflow: 'hidden', maxWidth: '100%' }}>{mod.line2}</span>
-                      </span>
-                    )}
-                  </Link>
-                )
-              })}
-            </div>
-          )
-        })()}
-      </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             <motion.div 
               ref={profileCardRef}
               onClick={(e) => {
@@ -966,6 +741,11 @@ export function Sidebar() {
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
       `}} />
     </motion.aside>
+
+    <TrocarModuloModal 
+      isOpen={isTrocarModuloOpen} 
+      onClose={() => setIsTrocarModuloOpen(false)} 
+    />
     </>
   )
 }

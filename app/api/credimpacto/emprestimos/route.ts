@@ -144,8 +144,9 @@ export async function POST(request: Request) {
     }
 
     // Valida Chave PIX obrigatória (para colaborador solicitando; admin pode conceder e deixar a definir)
-    if (!isMasterOrAdminConcession && (!dadosBancarios?.chavePix || !String(dadosBancarios.chavePix).trim())) {
-      return NextResponse.json({ error: 'A Chave PIX é obrigatória para o crédito do empréstimo.' }, { status: 400 })
+    const cleanPixEnvio = String(dadosBancarios?.chavePix || '').trim()
+    if (!isMasterOrAdminConcession && (!cleanPixEnvio || cleanPixEnvio.toLowerCase().includes('definir'))) {
+      return NextResponse.json({ error: 'A Chave PIX é obrigatória para o crédito do empréstimo e deve ser preenchida pelo colaborador.' }, { status: 400 })
     }
 
     // Formata o CPF (000.000.000-00) se fornecido com 11 dígitos válidos

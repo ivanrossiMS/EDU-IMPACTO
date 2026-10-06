@@ -278,15 +278,15 @@ export function ParcelasTab({
           <table className="w-full text-xs text-left">
             <thead className="bg-slate-50/80 dark:bg-slate-800/50 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider border-b border-slate-200/80 dark:border-slate-800">
               <tr>
-                <th className="py-2.5 px-3 whitespace-nowrap">Operação</th>
-                <th className="py-2.5 px-2 text-center whitespace-nowrap w-[50px]">Parcela</th>
+                <th className="py-2.5 px-3 text-center whitespace-nowrap w-[130px]">Operação</th>
+                <th className="py-2.5 px-2 text-center whitespace-nowrap w-[60px]">Parcela</th>
                 <th className="py-2.5 px-3 min-w-[150px]">Colaborador</th>
-                <th className="py-2.5 px-2 text-center whitespace-nowrap">Folha / Venc.</th>
-                <th className="py-2.5 px-2 text-right whitespace-nowrap">Amortização</th>
-                <th className="py-2.5 px-2 text-right whitespace-nowrap">Juros</th>
-                <th className="py-2.5 px-2 text-right whitespace-nowrap">Valor Parcela</th>
-                <th className="py-2.5 px-2 text-center whitespace-nowrap">Status</th>
-                <th className="py-2.5 px-2 text-center whitespace-nowrap w-[45px]">Ação</th>
+                <th className="py-2.5 px-2 text-center whitespace-nowrap w-[110px]">Folha / Venc.</th>
+                <th className="py-2.5 px-2 text-center whitespace-nowrap w-[110px]">Amortização</th>
+                <th className="py-2.5 px-2 text-center whitespace-nowrap w-[110px]">Juros</th>
+                <th className="py-2.5 px-2 text-center whitespace-nowrap w-[120px]">Valor Parcela</th>
+                <th className="py-2.5 px-2 text-center whitespace-nowrap w-[110px]">Status</th>
+                <th className="py-2.5 px-2 text-center whitespace-nowrap w-[50px]">Ação</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-mono text-[11px]">
@@ -301,7 +301,7 @@ export function ParcelasTab({
                   const badge = getStatusBadge(p.status)
                   return (
                     <tr key={`${p.loanId}-${p.numero}`} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors">
-                      <td className="py-2.5 px-3 font-mono font-bold text-slate-900 dark:text-white whitespace-nowrap">
+                      <td className="py-2.5 px-3 text-center font-mono font-bold text-slate-900 dark:text-white whitespace-nowrap">
                         {p.codigoOperacao}
                       </td>
 
@@ -323,32 +323,36 @@ export function ParcelasTab({
                         </div>
                       </td>
 
-                      <td className="py-2.5 px-2 text-right font-mono text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                      <td className="py-2.5 px-2 text-center font-mono text-slate-700 dark:text-slate-300 whitespace-nowrap">
                         {formatBrl(p.valorAmortizacao)}
                       </td>
 
-                      <td className="py-2.5 px-2 text-right font-mono text-cyan-700 dark:text-cyan-400 whitespace-nowrap">
+                      <td className="py-2.5 px-2 text-center font-mono text-cyan-700 dark:text-cyan-400 whitespace-nowrap">
                         {formatBrl(p.valorJuros)}
                       </td>
 
-                      <td className="py-2.5 px-2 text-right font-mono font-bold text-slate-900 dark:text-white whitespace-nowrap">
+                      <td className="py-2.5 px-2 text-center font-mono font-bold text-slate-900 dark:text-white whitespace-nowrap">
                         {formatBrl(p.valorTotal)}
                       </td>
 
                       <td className="py-2.5 px-2 text-center whitespace-nowrap">
-                        <span className={`text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full border whitespace-nowrap ${badge.bg}`}>
-                          {badge.label}
-                        </span>
+                        <div className="flex items-center justify-center">
+                          <span className={`text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full border whitespace-nowrap ${badge.bg}`}>
+                            {badge.label}
+                          </span>
+                        </div>
                       </td>
 
                       <td className="py-2.5 px-2 text-center whitespace-nowrap">
-                        <button
-                          onClick={() => onOpenDetails(p.loan)}
-                          className="p-1 rounded-lg text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors inline-flex items-center justify-center"
-                          title="Ver detalhes do empréstimo"
-                        >
-                          <ArrowUpRight size={15} />
-                        </button>
+                        <div className="flex items-center justify-center">
+                          <button
+                            onClick={() => onOpenDetails(p.loan)}
+                            className="p-1 rounded-lg text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors inline-flex items-center justify-center"
+                            title="Ver detalhes do empréstimo"
+                          >
+                            <ArrowUpRight size={15} />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   )

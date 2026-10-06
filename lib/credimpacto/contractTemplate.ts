@@ -94,8 +94,13 @@ export function generateContractHtml(
   <div style="margin-bottom: 18px;">
     <div style="font-weight: bold; font-size: 13px; color: #0f172a; margin-bottom: 6px;">CLÁUSULA PRIMEIRA – DO OBJETO E VALOR CONCEDIDO</div>
     <p style="font-size: 13px; text-align: justify; margin: 0 0 6px 0;">
-      A <strong>CREDORA</strong> concede ao(à) <strong>DEVEDOR(A)</strong>, nesta data, a título de empréstimo financeiro, a quantia líquida de <strong>${formatBrl(loan.valorAprovado)}</strong>, a ser creditada na conta bancária de titularidade do(a) colaborador(a) indicada na proposta.
+      A <strong>CREDORA</strong> concede ao(à) <strong>DEVEDOR(A)</strong>, nesta data, a título de empréstimo financeiro, a quantia líquida de <strong>${formatBrl(loan.valorAprovado)}</strong>${loan.finalidade ? ` (Finalidade declarada: <strong>${loan.finalidade}</strong>)` : ''}, a ser creditada na conta bancária de titularidade do(a) colaborador(a) indicada na proposta${loan.dadosBancarios?.chavePix && !loan.dadosBancarios.chavePix.toLowerCase().includes('definir') ? ` (Chave PIX cadastrada: <strong>${loan.dadosBancarios.chavePix}</strong>${loan.dadosBancarios.tipoChavePix ? ` • ${loan.dadosBancarios.tipoChavePix.toUpperCase()}` : ''})` : ''}.
     </p>
+    ${loan.justificativaSolicitacao ? `
+    <p style="font-size: 12px; color: #475569; margin: 4px 0; font-style: italic;">
+      • Justificativa ou Observações: &ldquo;${loan.justificativaSolicitacao}&rdquo;
+    </p>
+    ` : ''}
   </div>
 
   <!-- CLÁUSULA SEGUNDA - TAXA E MÉTODO DE CÁLCULO -->
@@ -188,7 +193,7 @@ export function generateContractHtml(
       <div style="font-size: 12px; color: #0f172a; display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
         <div><strong>Assinante:</strong> ${loan.colaboradorNome}</div>
         <div><strong>CPF:</strong> ${loan.colaboradorCpf}</div>
-        <div><strong>Data e Hora (UTC):</strong> ${new Date(loan.assinadoEm).toUTCString()}</div>
+        <div><strong>Chave PIX Informada:</strong> ${loan.dadosBancarios?.chavePix || 'Pendente'} ${loan.dadosBancarios?.tipoChavePix ? `(${loan.dadosBancarios.tipoChavePix.toUpperCase()})` : ''}</div>
         <div><strong>Data e Hora (Local):</strong> ${new Date(loan.assinadoEm).toLocaleString('pt-BR')}</div>
         <div><strong>Endereço IP:</strong> ${loan.assinanteIp || 'Registrado no servidor'}</div>
         <div><strong>Código de Validação:</strong> <code style="font-weight: bold; color: #0369a1;">${loan.codigoVerificacaoAssinatura || 'N/A'}</code></div>

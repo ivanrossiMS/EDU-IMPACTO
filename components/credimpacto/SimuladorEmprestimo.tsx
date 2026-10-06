@@ -437,20 +437,47 @@ export function SimuladorEmprestimo({
     setShowConfirmationModal(true)
   }
 
+  const handleUseCpfAsPixInSimulator = () => {
+    setDadosBancarios((prev) => ({
+      ...prev,
+      tipoChavePix: 'cpf',
+      chavePix: cpfInput
+    }))
+    toast.info('Chave PIX preenchida com o CPF informado!')
+  }
+
   const handleSubmitRequest = async () => {
-    if (!isAdmin && (!dadosBancarios.chavePix || !dadosBancarios.chavePix.trim())) {
-      toast.error('Informe a Chave PIX para crédito do valor.')
-      return
+    const isConcessaoPelaEscola = isAdminOrFinance && viewMode === 'admin' && Boolean(targetColaboradorId)
+    const cleanCpfDigits = (cpfInput || '').replace(/\D/g, '')
+
+    if (!isAdmin) {
+      if (!cleanCpfDigits || cleanCpfDigits.length !== 11 || cleanCpfDigits === '00000000000') {
+        toast.error('O CPF é obrigatório e deve conter 11 dígitos para enviar a solicitação.')
+        return
+      }
+
+      const cleanPix = (dadosBancarios.chavePix || '').trim()
+      if (!cleanPix || cleanPix.toLowerCase().includes('definir')) {
+        toast.error('Informe uma Chave PIX válida para crédito do valor.')
+        return
+      }
+
+      if (dadosBancarios.tipoChavePix === 'cpf') {
+        const pixDigits = cleanPix.replace(/\D/g, '')
+        if (pixDigits.length !== 11 || pixDigits === '00000000000') {
+          toast.error('A Chave PIX do tipo CPF deve conter 11 dígitos válidos.')
+          return
+        }
+      }
     }
 
     setIsSubmitting(true)
     try {
-      const isConcessaoPelaEscola = isAdminOrFinance && viewMode === 'admin' && Boolean(targetColaboradorId)
-      const cleanCpfDigits = (cpfInput || '').replace(/\D/g, '')
       const formattedCpf = (cleanCpfDigits.length === 11 && cleanCpfDigits !== '00000000000')
         ? formatCpfMask(cleanCpfDigits)
         : ''
 
+      const cleanPix = (dadosBancarios.chavePix || '').trim()
       const payload: any = {
         valorSolicitado: valor,
         quantidadeParcelas: parcelas,
@@ -459,8 +486,9 @@ export function SimuladorEmprestimo({
         justificativaSolicitacao: justificativa,
         finalidade,
         dadosBancarios: {
-          chavePix: dadosBancarios.chavePix?.trim() || (isConcessaoPelaEscola ? 'A definir pelo colaborador' : ''),
-          tipoConta: 'corrente'
+          chavePix: cleanPix || (isConcessaoPelaEscola ? 'A definir pelo colaborador' : ''),
+          tipoConta: 'corrente',
+          tipoChavePix: dadosBancarios.tipoChavePix || 'cpf'
         },
         criadoPorFinanceiro: isConcessaoPelaEscola,
         colaboradorCpf: formattedCpf,
@@ -1491,55 +1519,133 @@ export function SimuladorEmprestimo({
               </div>
 
               {/* CHAVE PIX PARA LIBERAÇÃO DO VALOR */}
-              <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-1.5">
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center justify-between">
-                  <span className="flex items-center gap-1.5">
+              <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
                     <Building size={14} className="text-emerald-600 dark:text-emerald-400" />
                     <span>Chave PIX para Recebimento</span>
-                  </span>
-                  <span className={`text-[10px] font-bold lowercase ${isAdmin ? 'text-slate-400' : 'text-rose-500'}`}>
-                    {isAdmin ? '(opcional pelo admin)' : '* obrigatório'}
-                  </span>
-                </label>
-                <input
-                  type="text"
-                  placeholder={isAdmin ? "Opcional: Chave PIX (ou o colaborador informará ao assinar)" : "Informe sua Chave PIX (CPF, Celular, E-mail ou Aleatória)"}
-                  value={dadosBancarios.chavePix}
-                  onChange={(e) => setDadosBancarios({ ...dadosBancarios, chavePix: e.target.value })}
-                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 font-mono shadow-sm"
-                />
-                <p className="text-[10px] text-slate-500 dark:text-slate-400">
-                  {isAdmin
-                    ? 'Se não informada agora pelo administrador, o colaborador indicará seus dados de recebimento ao formalizar a proposta.'
-                    : `O valor de ${formatBrl(valor)} será transferido via PIX para esta chave após aprovação e assinatura digital.`}
-                </p>
+                    <span className={isAdmin ? 'text-slate-400 font-normal lowercase' : 'text-rose-500'}>
+                      {isAdmin ? '(opcional pelo admin)' : '* obrigatório'}
+                    </span>
+                  </label>
+                  {!isAdmin && (
+                    <span className="text-[10px] text-amber-600 dark:text-amber-400 font-semibold">
+                      Obrigatório para crédito em conta
+                    </span>
+                  )}
+                </div>
+
+                {/* Seletor do Tipo de Chave */}
+                <div className="grid grid-cols-4 gap-1.5 p-1 bg-slate-100 dark:bg-slate-800/80 rounded-xl text-xs font-medium">
+                  {(
+                    [
+                      { id: 'cpf', label: 'CPF' },
+                      { id: 'telefone', label: 'Celular' },
+                      { id: 'email', label: 'E-mail' },
+                      { id: 'aleatoria', label: 'Aleatória' }
+                    ] as const
+                  ).map((t) => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => setDadosBancarios({
+                        ...dadosBancarios,
+                        tipoChavePix: t.id,
+                        chavePix: t.id === 'cpf' && (!dadosBancarios.chavePix || dadosBancarios.chavePix.includes('@') || dadosBancarios.chavePix.includes('(')) ? (cpfInput || '') : (t.id !== 'cpf' && dadosBancarios.chavePix?.includes('.') ? '' : dadosBancarios.chavePix)
+                      })}
+                      className={`py-1.5 rounded-lg text-[11px] font-semibold transition-all ${
+                        (dadosBancarios.tipoChavePix || 'cpf') === t.id
+                          ? 'bg-white dark:bg-slate-900 text-emerald-600 dark:text-emerald-400 shadow-xs'
+                          : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                      }`}
+                    >
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="space-y-1">
+                  <div className="relative">
+                    <input
+                      type="text"
+                      placeholder={
+                        isAdmin
+                          ? "Opcional: Chave PIX (ou o colaborador informará ao assinar)"
+                          : (dadosBancarios.tipoChavePix || 'cpf') === 'cpf'
+                          ? "000.000.000-00"
+                          : dadosBancarios.tipoChavePix === 'telefone'
+                          ? "(00) 00000-0000"
+                          : dadosBancarios.tipoChavePix === 'email'
+                          ? "seu.email@exemplo.com"
+                          : "Chave aleatória UUID"
+                      }
+                      value={dadosBancarios.chavePix}
+                      onChange={(e) => {
+                        const val = e.target.value
+                        let formatted = val
+                        if ((dadosBancarios.tipoChavePix || 'cpf') === 'cpf') {
+                          formatted = formatCpfMask(val)
+                        }
+                        setDadosBancarios({ ...dadosBancarios, chavePix: formatted })
+                      }}
+                      className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 font-mono shadow-sm"
+                    />
+                    {(dadosBancarios.tipoChavePix || 'cpf') === 'cpf' && cpfInput && dadosBancarios.chavePix !== cpfInput && (
+                      <button
+                        type="button"
+                        onClick={handleUseCpfAsPixInSimulator}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:hover:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 font-bold px-2 py-1 rounded-lg border border-emerald-200 dark:border-emerald-800 transition-colors"
+                      >
+                        Usar meu CPF
+                      </button>
+                    )}
+                  </div>
+                  <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                    {isAdmin
+                      ? 'Se não informada agora pelo administrador, o colaborador indicará seus dados de recebimento ao formalizar a proposta.'
+                      : `O valor de ${formatBrl(valor)} será transferido via PIX para esta chave após aprovação e assinatura digital.`}
+                  </p>
+                </div>
               </div>
             </div>
 
-            <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setShowConfirmationModal(false)}
-                className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 transition-colors"
-              >
-                Voltar
-              </button>
-              <button
-                type="button"
-                disabled={isSubmitting}
-                onClick={handleSubmitRequest}
-                className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white shadow-sm shadow-emerald-600/20 flex items-center gap-2 disabled:opacity-50 transition-colors"
-              >
-                {isSubmitting ? (
-                  <span>Enviando proposta...</span>
-                ) : (
-                  <>
-                    <Send size={14} />
-                    <span>Confirmar e Enviar Proposta</span>
-                  </>
-                )}
-              </button>
-            </div>
+            {(() => {
+              const isCpfFilled = Boolean(cpfInput && cpfInput.replace(/\D/g, '').length === 11 && cpfInput.replace(/\D/g, '') !== '00000000000')
+              const isPixFilled = Boolean(
+                dadosBancarios.chavePix &&
+                dadosBancarios.chavePix.trim().length > 0 &&
+                !dadosBancarios.chavePix.toLowerCase().includes('definir') &&
+                ((dadosBancarios.tipoChavePix || 'cpf') !== 'cpf' || (dadosBancarios.chavePix.replace(/\D/g, '').length === 11 && dadosBancarios.chavePix.replace(/\D/g, '') !== '00000000000'))
+              )
+              const canSubmit = isAdmin || (isCpfFilled && isPixFilled)
+
+              return (
+                <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmationModal(false)}
+                    className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 transition-colors"
+                  >
+                    Voltar
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isSubmitting || !canSubmit}
+                    onClick={handleSubmitRequest}
+                    className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white shadow-sm shadow-emerald-600/20 flex items-center gap-2 disabled:opacity-40 transition-colors"
+                  >
+                    {isSubmitting ? (
+                      <span>Enviando proposta...</span>
+                    ) : (
+                      <>
+                        <Send size={14} />
+                        <span>Confirmar e Enviar Proposta</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              )
+            })()}
           </div>
         </div>
       )}
