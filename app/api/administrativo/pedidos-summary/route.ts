@@ -27,7 +27,7 @@ export async function GET(request: Request) {
 
     // Buscamos em paralelo os dados estritamente necessários
     const [resTitulos, resPedidos, resManuais, resAlunos, resTurmas] = await Promise.all([
-      supabase.from('titulos').select('id, aluno, eventoDescricao, descricao, valor, dataLancamento, created_at, vencimento'),
+      supabase.from('titulos').select('id, aluno, evento_descricao, descricao, valor, created_at, vencimento, dados'),
       supabase.from('adm_pedidos_livros').select('id, dados'),
       supabase.from('adm_pedidos_livros_manuais').select('id, dados'),
       supabase.from('alunos').select('id, nome, turma'),
@@ -67,7 +67,7 @@ export async function GET(request: Request) {
     // Filtra parcelas dos Títulos que são livros
     const parcelasDeTitulos: any[] = []
     for (const t of titulos) {
-      const desc = resolverDesc({ eventoDescricao: t.eventoDescricao, descricao: t.descricao })
+      const desc = resolverDesc({ eventoDescricao: t.evento_descricao, descricao: t.descricao })
       if (!isEventoLivro(desc)) continue
 
       const matchingAluno = alunosMapByNome.get(t.aluno)
@@ -85,7 +85,7 @@ export async function GET(request: Request) {
         turma: turmaNome,
         eventoDescricao: desc,
         valor: t.valor || 0,
-        dataLancamento: t.dataLancamento,
+        dataLancamento: t.dados?.dataLancamento || t.dados?.data_lancamento || t.created_at,
         created_at: t.created_at,
         vencimento: t.vencimento
       })

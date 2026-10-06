@@ -229,7 +229,7 @@ export async function GET(request: Request) {
     }
 
     const cleanRemetente = String(effectiveRemetente).replace(/^f_?/, '');
-    query = query.or(`remetente_id.eq."${cleanRemetente}",remetente_id.eq."f_${cleanRemetente}",destinatario_id.eq."${cleanRemetente}",destinatario_id.eq."f_${cleanRemetente}"`);
+    query = query.or(`remetente_id.eq."${cleanRemetente}",remetente_id.eq."f_${cleanRemetente}"`);
   }
 
   const { data, error } = await query;

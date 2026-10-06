@@ -689,7 +689,7 @@ async function dispatchSaidaConfirmadaPush({
     const freqId = `FREQ-${rawStudentId}-${today}`
     const anoLetivo = new Date().getFullYear().toString()
 
-    const { data: existingFreq } = await supabaseService.from('frequencias').select('presente, tempos, dados').eq('id', freqId).maybeSingle()
+    const { data: existingFreq } = await supabaseService.from('frequencias').select('presente, dados').eq('id', freqId).maybeSingle()
 
     await supabaseService.from('frequencias').upsert({
       id: freqId,
@@ -697,7 +697,6 @@ async function dispatchSaidaConfirmadaPush({
       turma_id: turmaAluno,
       data: today,
       presente: existingFreq?.presente ?? true,
-      tempos: existingFreq?.tempos || null,
       dados: {
         ...(existingFreq?.dados || {}),
         saidaHorario: confirmedAt || new Date().toISOString(),

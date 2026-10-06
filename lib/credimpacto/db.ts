@@ -16,11 +16,15 @@ import {
 import { roundMoney } from './engine'
 import { DEFAULT_TERMO_AUTORIZACAO } from './contractTemplate'
 
+let isCredImpactoDedicatedAvailable: boolean | null = null
+
 function isTableMissingError(err: any): boolean {
   if (!err) return false
   const msg = (err.message || '').toLowerCase()
   const code = err.code || ''
+  const status = err.status || err.statusCode || 0
   return (
+    status === 404 ||
     code === 'PGRST205' ||
     code === '42P01' ||
     msg.includes('could not find the table') ||
@@ -57,35 +61,46 @@ const DEFAULT_CONFIG: CredImpactoConfig = {
 export async function dbGetConfiguracao(): Promise<CredImpactoConfig> {
   const sb = getAdminClient()
 
-  // 1. Tenta tabela dedicada
-  try {
-    const { data, error } = await sb
-      .from('credimpacto_configuracao')
-      .select('*')
-      .eq('id', 'default')
-      .maybeSingle()
+  // 1. Tenta tabela dedicada apenas se disponivel
+  if (isCredImpactoDedicatedAvailable !== false) {
+    try {
+      const { data, error } = await sb
+        .from('credimpacto_configuracao')
+        .select('*')
+        .eq('id', 'default')
+        .maybeSingle()
 
-    if (!error && data) {
-      return {
-        id: data.id,
-        taxaMensalPadrao: Number(data.taxa_mensal_padrao ?? DEFAULT_CONFIG.taxaMensalPadrao),
-        metodoCalculoPadrao: data.metodo_calculo_padrao || DEFAULT_CONFIG.metodoCalculoPadrao,
-        metodosPermitidos: data.metodos_permitidos || DEFAULT_CONFIG.metodosPermitidos,
-        margemMaximaConsignavel: Number(data.margem_maxima_consignavel ?? DEFAULT_CONFIG.margemMaximaConsignavel),
-        prazoMinimoParcelas: Number(data.prazo_minimo_parcelas ?? DEFAULT_CONFIG.prazoMinimoParcelas),
-        prazoMaximoParcelas: Number(data.prazo_maximo_parcelas ?? DEFAULT_CONFIG.prazoMaximoParcelas),
-        valorMinimoEmprestimo: Number(data.valor_minimo_emprestimo ?? DEFAULT_CONFIG.valorMinimoEmprestimo),
-        valorMaximoEmprestimo: Number(data.valor_maximo_emprestimo ?? DEFAULT_CONFIG.valorMaximoEmprestimo),
-        diaPadraoDescontoFolha: Number(data.dia_padrao_desconto_folha ?? DEFAULT_CONFIG.diaPadraoDescontoFolha),
-        exigeAprovacaoDupla: Boolean(data.exige_aprovacao_dupla),
-        limiteCompensacaoRescisaoCltPercentual: Number(data.limite_compensacao_rescisao_clt_percentual ?? 100),
-        textoContratoPadrao: data.texto_contrato_padrao,
-        termoAutorizacaoDesconto: data.termo_autorizacao_desconto || DEFAULT_CONFIG.termoAutorizacaoDesconto,
-        updatedAt: data.updated_at
+      if (!error && data) {
+        isCredImpactoDedicatedAvailable = true
+        return {
+          id: data.id,
+          taxaMensalPadrao: Number(data.taxa_mensal_padrao ?? DEFAULT_CONFIG.taxaMensalPadrao),
+          metodoCalculoPadrao: data.metodo_calculo_padrao || DEFAULT_CONFIG.metodoCalculoPadrao,
+          metodosPermitidos: data.metodos_permitidos || DEFAULT_CONFIG.metodosPermitidos,
+          margemMaximaConsignavel: Number(data.margem_maxima_consignavel ?? DEFAULT_CONFIG.margemMaximaConsignavel),
+          prazoMinimoParcelas: Number(data.prazo_minimo_parcelas ?? DEFAULT_CONFIG.prazoMinimoParcelas),
+          prazoMaximoParcelas: Number(data.prazo_maximo_parcelas ?? DEFAULT_CONFIG.prazoMaximoParcelas),
+          valorMinimoEmprestimo: Number(data.valor_minimo_emprestimo ?? DEFAULT_CONFIG.valorMinimoEmprestimo),
+          valorMaximoEmprestimo: Number(data.valor_maximo_emprestimo ?? DEFAULT_CONFIG.valorMaximoEmprestimo),
+          diaPadraoDescontoFolha: Number(data.dia_padrao_desconto_folha ?? DEFAULT_CONFIG.diaPadraoDescontoFolha),
+          exigeAprovacaoDupla: Boolean(data.exige_aprovacao_dupla),
+          limiteCompensacaoRescisaoCltPercentual: Number(data.limite_compensacao_rescisao_clt_percentual ?? 100),
+          textoContratoPadrao: data.texto_contrato_padrao,
+          termoAutorizacaoDesconto: data.termo_autorizacao_desconto || DEFAULT_CONFIG.termoAutorizacaoDesconto,
+          updatedAt: data.updated_at
+        }
+      }
+
+      if (error && isTableMissingError(error)) {
+        isCredImpactoDedicatedAvailable = false
+      }
+    } catch (err: any) {
+      if (isTableMissingError(err)) {
+        isCredImpactoDedicatedAvailable = false
+      } else {
+        console.error('[dbGetConfiguracao dedicated]', err)
       }
     }
-  } catch (err: any) {
-    if (!isTableMissingError(err)) console.error('[dbGetConfiguracao dedicated]', err)
   }
 
   // 2. Fallback na tabela geral 'configuracoes' (chave: 'credimpacto_config')
@@ -194,69 +209,80 @@ export async function dbGetEmprestimos(filtros?: {
   const cleanEmail = (filtros?.colaboradorEmail || '').trim().toLowerCase()
   const cleanNome = (filtros?.colaboradorNome || '').trim().toLowerCase()
 
-  // 1. Tenta tabela dedicada
-  try {
-    let query = sb
-      .from('credimpacto_emprestimos')
-      .select('*')
-      .order('created_at', { ascending: false })
+  // 1. Tenta tabela dedicada apenas se disponivel
+  if (isCredImpactoDedicatedAvailable !== false) {
+    try {
+      let query = sb
+        .from('credimpacto_emprestimos')
+        .select('*')
+        .order('created_at', { ascending: false })
 
-    if (idList.length === 1) {
-      query = query.eq('colaborador_id', idList[0])
-    } else if (idList.length > 1) {
-      query = query.in('colaborador_id', idList)
-    }
-    if (filtros?.status && filtros.status !== 'todos') {
-      query = query.eq('status', filtros.status)
-    }
-
-    const { data: emprestimos, error } = await query
-
-    if (!error && Array.isArray(emprestimos)) {
-      // Busca as parcelas para cada empréstimo
-      const empIds = emprestimos.map((e) => e.id)
-      let parcelasMap: Record<string, CredImpactoParcela[]> = {}
-
-      if (empIds.length > 0) {
-        const { data: parcs } = await sb
-          .from('credimpacto_parcelas')
-          .select('*')
-          .in('emprestimo_id', empIds)
-          .order('numero', { ascending: true })
-
-        if (Array.isArray(parcs)) {
-          parcs.forEach((p) => {
-            const parsedParcela: CredImpactoParcela = {
-              id: p.id,
-              emprestimoId: p.emprestimo_id,
-              numero: p.numero,
-              competencia: p.competencia,
-              dataVencimento: p.data_vencimento,
-              valorAmortizacao: Number(p.valor_amortizacao),
-              valorJuros: Number(p.valor_juros),
-              valorTotal: Number(p.valor_total),
-              saldoDevedorApos: Number(p.saldo_devedor_apos),
-              status: p.status,
-              dataPagamento: p.data_pagamento,
-              valorPago: p.valor_pago ? Number(p.valor_pago) : undefined,
-              metodoPagamento: p.metodo_pagamento,
-              loteFolhaId: p.lote_folha_id,
-              comprovanteUrl: p.comprovante_url,
-              observacao: p.observacao,
-              responsavelBaixaId: p.responsavel_baixa_id,
-              responsavelBaixaNome: p.responsavel_baixa_nome,
-              baixadoEm: p.baixado_em
-            }
-            if (!parcelasMap[p.emprestimo_id]) parcelasMap[p.emprestimo_id] = []
-            parcelasMap[p.emprestimo_id].push(parsedParcela)
-          })
-        }
+      if (idList.length === 1) {
+        query = query.eq('colaborador_id', idList[0])
+      } else if (idList.length > 1) {
+        query = query.in('colaborador_id', idList)
+      }
+      if (filtros?.status && filtros.status !== 'todos') {
+        query = query.eq('status', filtros.status)
       }
 
-      return emprestimos.map((e) => mapDbRowToEmprestimo(e, parcelasMap[e.id] || []))
+      const { data: emprestimos, error } = await query
+
+      if (!error && Array.isArray(emprestimos)) {
+        isCredImpactoDedicatedAvailable = true
+        // Busca as parcelas para cada empréstimo
+        const empIds = emprestimos.map((e) => e.id)
+        let parcelasMap: Record<string, CredImpactoParcela[]> = {}
+
+        if (empIds.length > 0) {
+          const { data: parcs } = await sb
+            .from('credimpacto_parcelas')
+            .select('*')
+            .in('emprestimo_id', empIds)
+            .order('numero', { ascending: true })
+
+          if (Array.isArray(parcs)) {
+            parcs.forEach((p) => {
+              const parsedParcela: CredImpactoParcela = {
+                id: p.id,
+                emprestimoId: p.emprestimo_id,
+                numero: p.numero,
+                competencia: p.competencia,
+                dataVencimento: p.data_vencimento,
+                valorAmortizacao: Number(p.valor_amortizacao),
+                valorJuros: Number(p.valor_juros),
+                valorTotal: Number(p.valor_total),
+                saldoDevedorApos: Number(p.saldo_devedor_apos),
+                status: p.status,
+                dataPagamento: p.data_pagamento,
+                valorPago: p.valor_pago ? Number(p.valor_pago) : undefined,
+                metodoPagamento: p.metodo_pagamento,
+                loteFolhaId: p.lote_folha_id,
+                comprovanteUrl: p.comprovante_url,
+                observacao: p.observacao,
+                responsavelBaixaId: p.responsavel_baixa_id,
+                responsavelBaixaNome: p.responsavel_baixa_nome,
+                baixadoEm: p.baixado_em
+              }
+              if (!parcelasMap[p.emprestimo_id]) parcelasMap[p.emprestimo_id] = []
+              parcelasMap[p.emprestimo_id].push(parsedParcela)
+            })
+          }
+        }
+
+        return emprestimos.map((e) => mapDbRowToEmprestimo(e, parcelasMap[e.id] || []))
+      }
+
+      if (error && isTableMissingError(error)) {
+        isCredImpactoDedicatedAvailable = false
+      }
+    } catch (err: any) {
+      if (isTableMissingError(err)) {
+        isCredImpactoDedicatedAvailable = false
+      } else {
+        console.error('[dbGetEmprestimos dedicated error]', err)
+      }
     }
-  } catch (err: any) {
-    if (!isTableMissingError(err)) console.error('[dbGetEmprestimos dedicated error]', err)
   }
 
   // 2. Fallback resiliente usando relatorios_records com prefixo 'credimpacto:emp:'
@@ -301,47 +327,58 @@ export async function dbGetEmprestimos(filtros?: {
 export async function dbGetEmprestimoById(id: string): Promise<CredImpactoEmprestimo | null> {
   const sb = getAdminClient()
 
-  // 1. Tenta tabela dedicada
-  try {
-    const { data: e, error } = await sb
-      .from('credimpacto_emprestimos')
-      .select('*')
-      .eq('id', id)
-      .maybeSingle()
-
-    if (!error && e) {
-      const { data: parcs } = await sb
-        .from('credimpacto_parcelas')
+  // 1. Tenta tabela dedicada apenas se disponivel
+  if (isCredImpactoDedicatedAvailable !== false) {
+    try {
+      const { data: e, error } = await sb
+        .from('credimpacto_emprestimos')
         .select('*')
-        .eq('emprestimo_id', id)
-        .order('numero', { ascending: true })
+        .eq('id', id)
+        .maybeSingle()
 
-      const parcelas: CredImpactoParcela[] = (parcs || []).map((p: any) => ({
-        id: p.id,
-        emprestimoId: p.emprestimo_id,
-        numero: p.numero,
-        competencia: p.competencia,
-        dataVencimento: p.data_vencimento,
-        valorAmortizacao: Number(p.valor_amortizacao),
-        valorJuros: Number(p.valor_juros),
-        valorTotal: Number(p.valor_total),
-        saldoDevedorApos: Number(p.saldo_devedor_apos),
-        status: p.status,
-        dataPagamento: p.data_pagamento,
-        valorPago: p.valor_pago ? Number(p.valor_pago) : undefined,
-        metodoPagamento: p.metodo_pagamento,
-        loteFolhaId: p.lote_folha_id,
-        comprovanteUrl: p.comprovante_url,
-        observacao: p.observacao,
-        responsavelBaixaId: p.responsavel_baixa_id,
-        responsavelBaixaNome: p.responsavel_baixa_nome,
-        baixadoEm: p.baixado_em
-      }))
+      if (!error && e) {
+        isCredImpactoDedicatedAvailable = true
+        const { data: parcs } = await sb
+          .from('credimpacto_parcelas')
+          .select('*')
+          .eq('emprestimo_id', id)
+          .order('numero', { ascending: true })
 
-      return mapDbRowToEmprestimo(e, parcelas)
+        const parcelas: CredImpactoParcela[] = (parcs || []).map((p: any) => ({
+          id: p.id,
+          emprestimoId: p.emprestimo_id,
+          numero: p.numero,
+          competencia: p.competencia,
+          dataVencimento: p.data_vencimento,
+          valorAmortizacao: Number(p.valor_amortizacao),
+          valorJuros: Number(p.valor_juros),
+          valorTotal: Number(p.valor_total),
+          saldoDevedorApos: Number(p.saldo_devedor_apos),
+          status: p.status,
+          dataPagamento: p.data_pagamento,
+          valorPago: p.valor_pago ? Number(p.valor_pago) : undefined,
+          metodoPagamento: p.metodo_pagamento,
+          loteFolhaId: p.lote_folha_id,
+          comprovanteUrl: p.comprovante_url,
+          observacao: p.observacao,
+          responsavelBaixaId: p.responsavel_baixa_id,
+          responsavelBaixaNome: p.responsavel_baixa_nome,
+          baixadoEm: p.baixado_em
+        }))
+
+        return mapDbRowToEmprestimo(e, parcelas)
+      }
+
+      if (error && isTableMissingError(error)) {
+        isCredImpactoDedicatedAvailable = false
+      }
+    } catch (err: any) {
+      if (isTableMissingError(err)) {
+        isCredImpactoDedicatedAvailable = false
+      } else {
+        console.error('[dbGetEmprestimoById dedicated]', err)
+      }
     }
-  } catch (err: any) {
-    if (!isTableMissingError(err)) console.error('[dbGetEmprestimoById dedicated]', err)
   }
 
   // 2. Fallback
