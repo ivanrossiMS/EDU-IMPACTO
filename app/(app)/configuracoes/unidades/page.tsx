@@ -21,9 +21,9 @@ const emptyMantenedor = (): Omit<Mantenedor, 'id' | 'unidades'> => ({
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 24, backdropFilter: 'blur(4px)' }}>
-      <div style={{ background: 'hsl(var(--bg-surface))', borderRadius: 18, width: '100%', maxWidth: 620, maxHeight: '92vh', overflow: 'auto', border: '1px solid hsl(var(--border-default))', boxShadow: '0 24px 80px rgba(0,0,0,0.4)' }}>
-        <div style={{ padding: '20px 24px', borderBottom: '1px solid hsl(var(--border-subtle))', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, background: 'hsl(var(--bg-surface))', zIndex: 1, borderRadius: '18px 18px 0 0' }}>
-          <div style={{ fontWeight: 800, fontSize: 16 }}>{title}</div>
+      <div style={{ background: '#ffffff', color: '#0f172a', borderRadius: 18, width: '100%', maxWidth: 620, maxHeight: '92vh', overflow: 'auto', border: '1px solid #e2e8f0', boxShadow: '0 24px 80px rgba(0,0,0,0.4)' }}>
+        <div style={{ padding: '20px 24px', borderBottom: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, background: '#ffffff', zIndex: 1, borderRadius: '18px 18px 0 0' }}>
+          <div style={{ fontWeight: 800, fontSize: 16, color: '#0f172a' }}>{title}</div>
           <button onClick={onClose} className="btn btn-ghost btn-icon"><X size={16} /></button>
         </div>
         <div style={{ padding: '24px' }}>{children}</div>
@@ -35,7 +35,7 @@ function Modal({ title, onClose, children }: { title: string; onClose: () => voi
 function Field({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) {
   return (
     <div>
-      <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-muted))', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+      <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
         {label}{required && <span style={{ color: '#f87171' }}> *</span>}
       </label>
       {children}
@@ -54,15 +54,15 @@ function MantenedorForm({ data, onChange, logoRef, onLogoUpload }: {
   return (
     <div style={{ display: 'grid', gap: 16 }}>
       {/* Logo upload strip */}
-      <div style={{ display: 'flex', gap: 16, alignItems: 'center', padding: '16px',background: 'hsl(var(--bg-elevated))', borderRadius: 12, border: '1px solid hsl(var(--border-subtle))' }}>
+      <div style={{ display: 'flex', gap: 16, alignItems: 'center', padding: '16px', background: '#f8fafc', borderRadius: 12, border: '1px solid #e2e8f0' }}>
         <div
           onClick={() => logoRef.current?.click()}
-          style={{ width: 72, height: 72, borderRadius: 12, background: data.logo ? 'transparent' : 'hsl(var(--bg-overlay))', border: `2px dashed ${data.logo ? '#10b981' : 'hsl(var(--border-default))'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', overflow: 'hidden', flexShrink: 0 }}>
-          {data.logo ? <img src={data.logo} alt="logo" style={{ width: '100%', height: '100%', objectFit: 'contain', padding: 4 }} /> : <Upload size={20} color="hsl(var(--text-muted))" />}
+          style={{ width: 72, height: 72, borderRadius: 12, background: data.logo ? 'transparent' : '#f1f5f9', border: `2px dashed ${data.logo ? '#10b981' : '#cbd5e1'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', overflow: 'hidden', flexShrink: 0 }}>
+          {data.logo ? <img src={data.logo} alt="logo" style={{ width: '100%', height: '100%', objectFit: 'contain', padding: 4 }} /> : <Upload size={20} color="#64748b" />}
         </div>
         <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>Logo da Rede / Mantenedora</div>
-          <div style={{ fontSize: 12, color: 'hsl(var(--text-muted))', marginBottom: 8 }}>Aparecerá nos documentos e no sistema. Recomendado: PNG 300×100px</div>
+          <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4, color: '#0f172a' }}>Logo da Rede / Mantenedora</div>
+          <div style={{ fontSize: 12, color: '#64748b', marginBottom: 8 }}>Aparecerá nos documentos e no sistema. Recomendado: PNG 300×100px</div>
           <div style={{ display: 'flex', gap: 8 }}>
             <button type="button" className="btn btn-secondary btn-sm" onClick={() => logoRef.current?.click()}><Upload size={11} />Carregar logo</button>
             {data.logo && <button type="button" className="btn btn-ghost btn-sm" style={{ color: '#f87171' }} onClick={() => onChange({ ...data, logo: null })}>✕ Remover</button>}
@@ -84,8 +84,8 @@ function MantenedorForm({ data, onChange, logoRef, onLogoUpload }: {
         <Field label="Site"><input className="form-input" value={data.website} onChange={f('website')} placeholder="www.rede.com.br" /></Field>
       </div>
 
-      <div style={{ height: 1, background: 'hsl(var(--border-subtle))' }} />
-      <div style={{ fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-muted))', textTransform: 'uppercase', letterSpacing: '0.05em' }}>📍 Endereço</div>
+      <div style={{ height: 1, background: '#e2e8f0' }} />
+      <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>📍 Endereço</div>
 
       <CepAddressFields
         cep={data.cep}
@@ -105,8 +105,8 @@ function MantenedorForm({ data, onChange, logoRef, onLogoUpload }: {
         }}
       />
 
-      <div style={{ height: 1, background: 'hsl(var(--border-subtle))' }} />
-      <div style={{ fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-muted))', textTransform: 'uppercase', letterSpacing: '0.05em' }}>👤 Responsável</div>
+      <div style={{ height: 1, background: '#e2e8f0' }} />
+      <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>👤 Responsável</div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
         <Field label="Nome do responsável" required><input className="form-input" value={data.responsavel} onChange={f('responsavel')} placeholder="Dr. / Dra. ..." /></Field>
         <Field label="Cargo"><input className="form-input" value={data.cargo} onChange={f('cargo')} placeholder="Presidente / Diretor..." /></Field>
@@ -251,8 +251,8 @@ export default function MultiUnidadesPage() {
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
         <div>
-          <h1 style={{ fontFamily: 'Outfit, sans-serif', fontWeight: 800, fontSize: 26 }}>🏫 Multi-Unidades</h1>
-          <p style={{ color: 'hsl(var(--text-muted))', fontSize: 14, marginTop: 4 }}>Gestão de Mantenedores e Unidades Educacionais</p>
+          <h1 style={{ fontFamily: 'Outfit, sans-serif', fontWeight: 800, fontSize: 26, color: '#0f172a' }}>🏫 Multi-Unidades</h1>
+          <p style={{ color: '#64748b', fontSize: 14, marginTop: 4 }}>Gestão de Mantenedores e Unidades Educacionais</p>
         </div>
         <button className="btn btn-primary" onClick={openAddMantenedor}><Plus size={15} /> Novo Mantenedor</button>
       </div>
@@ -265,11 +265,11 @@ export default function MultiUnidadesPage() {
           { icon: '🎓', label: 'Total de Alunos', value: totalAlunos.toLocaleString('pt-BR'), color: '#10b981' },
           { icon: '📋', label: 'CNPJs Cadastrados', value: (mantenedores || []).length + totalUnidades, color: '#f59e0b' },
         ].map(k => (
-          <div key={k.label} className="card" style={{ padding: '16px 20px', display: 'flex', gap: 14, alignItems: 'center' }}>
+          <div key={k.label} className="card" style={{ padding: '16px 20px', display: 'flex', gap: 14, alignItems: 'center', background: '#ffffff', border: '1px solid #e2e8f0' }}>
             <div style={{ width: 44, height: 44, borderRadius: 12, background: `${k.color}22`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 }}>{k.icon}</div>
             <div>
-              <div style={{ fontSize: 20, fontWeight: 800 }}>{k.value}</div>
-              <div style={{ fontSize: 12, color: 'hsl(var(--text-muted))' }}>{k.label}</div>
+              <div style={{ fontSize: 20, fontWeight: 800, color: '#0f172a' }}>{k.value}</div>
+              <div style={{ fontSize: 12, color: '#64748b' }}>{k.label}</div>
             </div>
           </div>
         ))}
@@ -278,18 +278,18 @@ export default function MultiUnidadesPage() {
       {/* Mantenedores list */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
         {(mantenedores ?? []).map(m => (
-          <div key={m.id} className="card" style={{ overflow: 'hidden', border: '1px solid hsl(var(--border-subtle))' }}>
+          <div key={m.id} className="card" style={{ overflow: 'hidden', border: '1px solid #e2e8f0', background: '#ffffff' }}>
             {/* Mantenedor Header */}
-            <div style={{ padding: '18px 20px', display: 'flex', alignItems: 'center', gap: 14, cursor: 'pointer', borderBottom: expanded.has(m.id) ? '1px solid hsl(var(--border-subtle))' : 'none' }}
+            <div style={{ padding: '18px 20px', display: 'flex', alignItems: 'center', gap: 14, cursor: 'pointer', borderBottom: expanded.has(m.id) ? '1px solid #e2e8f0' : 'none' }}
               onClick={() => toggleExpanded(m.id)}>
-              <div style={{ width: 50, height: 50, borderRadius: 12, background: m.logo ? 'transparent' : 'var(--gradient-purple)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden', border: '1px solid hsl(var(--border-subtle))' }}>
+              <div style={{ width: 50, height: 50, borderRadius: 12, background: m.logo ? 'transparent' : 'var(--gradient-purple)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden', border: '1px solid #e2e8f0' }}>
                 {m.logo ? <img src={m.logo} alt={m.nome} style={{ width: '100%', height: '100%', objectFit: 'contain', padding: 4 }} /> : <Building2 size={22} color="#fff" />}
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                  <span style={{ fontWeight: 800, fontSize: 16 }}>{m.nome}</span>
+                  <span style={{ fontWeight: 800, fontSize: 16, color: '#0f172a' }}>{m.nome}</span>
                 </div>
-                <div style={{ fontSize: 12, color: 'hsl(var(--text-muted))', marginTop: 2 }}>
+                <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
                   {m.responsavel} · {m.cargo || '—'} · {m.unidades.length} unidade(s)
                   {m.cidade && ` · ${m.cidade}/${m.estado}`}
                 </div>
@@ -298,14 +298,14 @@ export default function MultiUnidadesPage() {
                 <button className="btn btn-ghost btn-sm btn-icon" title="Editar" onClick={() => openEditMantenedor(m)}><Edit2 size={14} /></button>
                 <button className="btn btn-ghost btn-sm btn-icon" title="Excluir" onClick={() => setConfirmId({ type: 'mantenedor', mId: m.id })} style={{ color: '#f87171' }}><Trash2 size={14} /></button>
               </div>
-              {expanded.has(m.id) ? <ChevronDown size={18} color="hsl(var(--text-muted))" /> : <ChevronRight size={18} color="hsl(var(--text-muted))" />}
+              {expanded.has(m.id) ? <ChevronDown size={18} color="#64748b" /> : <ChevronRight size={18} color="#64748b" />}
             </div>
 
             {/* Expanded */}
             {expanded.has(m.id) && (
               <div>
                 {/* Contact strip */}
-                <div style={{ padding: '10px 20px', background: 'hsl(var(--bg-elevated))', display: 'flex', gap: 20, flexWrap: 'wrap', fontSize: 12, color: 'hsl(var(--text-secondary))' }}>
+                <div style={{ padding: '10px 20px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', display: 'flex', gap: 20, flexWrap: 'wrap', fontSize: 12, color: '#475569' }}>
                   {m.endereco && <span><MapPin size={11} style={{ marginRight: 3 }} />{m.endereco}, {m.cidade}/{m.estado}</span>}
                   {m.telefone && <span><Phone size={11} style={{ marginRight: 3 }} />{m.telefone}</span>}
                   {m.email && <span><Mail size={11} style={{ marginRight: 3 }} />{m.email}</span>}
@@ -315,9 +315,9 @@ export default function MultiUnidadesPage() {
                 {/* Unidades */}
                 <div style={{ padding: '16px 20px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-                    <div style={{ fontWeight: 700, fontSize: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <Building2 size={14} /> Unidades
-                      <span style={{ background: 'hsl(var(--bg-elevated))', borderRadius: 99, padding: '1px 8px', fontSize: 11, fontWeight: 600 }}>{m.unidades.length}</span>
+                    <div style={{ fontWeight: 700, fontSize: 14, color: '#0f172a', display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <Building2 size={14} color="#0f172a" /> Unidades
+                      <span style={{ background: '#f1f5f9', color: '#334155', borderRadius: 99, padding: '1px 8px', fontSize: 11, fontWeight: 600 }}>{m.unidades.length}</span>
                     </div>
                     <button className="btn btn-primary btn-sm" onClick={() => openAddUnidade(m.id)}>
                       <Plus size={13} /> Adicionar Unidade
@@ -325,28 +325,28 @@ export default function MultiUnidadesPage() {
                   </div>
 
                   {m.unidades.length === 0 ? (
-                    <div style={{ padding: '28px', textAlign: 'center', color: 'hsl(var(--text-muted))', fontSize: 13, background: 'hsl(var(--bg-elevated))', borderRadius: 12 }}>
+                    <div style={{ padding: '28px', textAlign: 'center', color: '#64748b', fontSize: 13, background: '#f8fafc', borderRadius: 12, border: '1px solid #e2e8f0' }}>
                       Nenhuma unidade cadastrada.{' '}
-                      <button onClick={() => openAddUnidade(m.id)} style={{ color: '#60a5fa', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>Adicionar agora →</button>
+                      <button onClick={() => openAddUnidade(m.id)} style={{ color: '#2563eb', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>Adicionar agora →</button>
                     </div>
                   ) : (
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 12 }}>
                       {m.unidades.map(u => (
-                        <div key={u.id} style={{ background: 'hsl(var(--bg-elevated))', borderRadius: 14, padding: '18px', border: '1px solid rgba(16,185,129,0.15)', transition: 'box-shadow 0.2s' }}>
+                        <div key={u.id} style={{ background: '#f8fafc', borderRadius: 14, padding: '18px', border: '1px solid #e2e8f0', transition: 'box-shadow 0.2s' }}>
                           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 12 }}>
                             <div>
-                              <div style={{ fontWeight: 700, fontSize: 14 }}>{u.nomeFantasia || u.razaoSocial}</div>
+                              <div style={{ fontWeight: 700, fontSize: 14, color: '#0f172a' }}>{u.nomeFantasia || u.razaoSocial}</div>
                           {u.razaoSocial && u.nomeFantasia && (
-                            <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', marginTop: 1 }}>{u.razaoSocial}</div>
+                            <div style={{ fontSize: 11, color: '#64748b', marginTop: 1 }}>{u.razaoSocial}</div>
                           )}
                           {u.codigo && (
                             <div style={{ marginTop: 4 }}>
-                              <span style={{ fontSize: 10, fontWeight: 800, padding: '2px 8px', background: 'rgba(99,102,241,0.12)', color: '#818cf8', borderRadius: 20, letterSpacing: '0.08em', fontFamily: 'monospace' }}>
+                              <span style={{ fontSize: 10, fontWeight: 800, padding: '2px 8px', background: 'rgba(99,102,241,0.12)', color: '#6366f1', borderRadius: 20, letterSpacing: '0.08em', fontFamily: 'monospace' }}>
                                 🔖 {u.codigo}
                               </span>
                             </div>
                           )}
-                          <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', marginTop: 2 }}>
+                          <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>
                                 {u.codigoMec ? `MEC: ${u.codigoMec}` : ''}
                               </div>
                             </div>
@@ -356,19 +356,19 @@ export default function MultiUnidadesPage() {
                             </div>
                           </div>
                           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 10 }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'hsl(var(--text-secondary))' }}><Users size={11} /> Alunos: <strong>{u.alunosAtivos}</strong></div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'hsl(var(--text-secondary))' }}><BookOpen size={11} /> Capacidade: <strong>{u.capacidade}</strong></div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: '#475569' }}><Users size={11} /> Alunos: <strong style={{ color: '#0f172a' }}>{u.alunosAtivos}</strong></div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: '#475569' }}><BookOpen size={11} /> Capacidade: <strong style={{ color: '#0f172a' }}>{u.capacidade}</strong></div>
                           </div>
-                          <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', borderTop: '1px solid hsl(var(--border-subtle))', paddingTop: 8 }}>
+                          <div style={{ fontSize: 11, color: '#64748b', borderTop: '1px solid #e2e8f0', paddingTop: 8 }}>
                             <MapPin size={10} style={{ marginRight: 3 }} />{[u.endereco, u.numero, u.cidade].filter(Boolean).join(', ')}
                           </div>
                           {u.diretor?.nome && (
-                            <div style={{ fontSize: 11, color: '#60a5fa', marginTop: 4 }}>
+                            <div style={{ fontSize: 11, color: '#2563eb', marginTop: 4 }}>
                               👔 Dir.: {u.diretor.nome}{u.secretario?.nome ? `  ·  ✍️ Sec.: ${u.secretario.nome}` : ''}
                             </div>
                           )}
                           {u.cabecalhoDocumentos && (
-                            <div style={{ marginTop: 6, padding: '4px 8px', background: 'rgba(99,102,241,0.08)', borderRadius: 6, fontSize: 10, color: '#818cf8', display: 'flex', alignItems: 'center', gap: 4 }}>
+                            <div style={{ marginTop: 6, padding: '4px 8px', background: 'rgba(99,102,241,0.08)', borderRadius: 6, fontSize: 10, color: '#6366f1', display: 'flex', alignItems: 'center', gap: 4 }}>
                               <CheckCircle size={9} /> Cabeçalho configurado
                             </div>
                           )}
@@ -383,9 +383,9 @@ export default function MultiUnidadesPage() {
         ))}
 
         {(mantenedores ?? []).length === 0 && (
-          <div style={{ textAlign: 'center', padding: '56px', color: 'hsl(var(--text-muted))', fontSize: 14 }}>
+          <div style={{ textAlign: 'center', padding: '56px', color: '#64748b', fontSize: 14 }}>
             <Building2 size={48} style={{ margin: '0 auto 14px', opacity: 0.3 }} />
-            <p style={{ fontWeight: 700, fontSize: 16, marginBottom: 6 }}>Nenhum mantenedor cadastrado</p>
+            <p style={{ fontWeight: 700, fontSize: 16, marginBottom: 6, color: '#0f172a' }}>Nenhum mantenedor cadastrado</p>
             <p style={{ marginBottom: 20 }}>Cadastre a rede ou mantenedora principal para começar</p>
             <button className="btn btn-primary" onClick={openAddMantenedor}><Plus size={14} /> Adicionar primeiro mantenedor</button>
           </div>

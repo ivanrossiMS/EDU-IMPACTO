@@ -27,7 +27,10 @@ export function NotificationPopover() {
   const [markedRead, setMarkedRead] = useState<string[]>([])
   const [activeTab, setActiveTab] = useState<'all' | 'tarefas' | 'agenda' | 'ocorrencias' | 'comunicado' | 'autorizacao'>('all')
 
-  const { tarefas = [], eventosAgenda = [], ocorrencias = [] } = useData()
+  const dataContext = useData()
+  const tarefas = dataContext?.tarefas || []
+  const eventosAgenda = dataContext?.eventosAgenda || []
+  const ocorrencias = dataContext?.ocorrencias || []
   const { currentUser } = useApp()
   const pathname = usePathname()
   const { on: onRealtime } = useBroadcastRealtime()
@@ -379,14 +382,15 @@ export function NotificationPopover() {
           <Popover.Portal forceMount>
             <Popover.Content asChild side="top" align="start" sideOffset={12} alignOffset={-10}>
               <motion.div
+                className="notification-popover-content"
                 initial={{ opacity: 0, y: 100, scale: 0.95 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 100, scale: 0.95 }}
                 transition={{ type: 'spring', damping: 25, stiffness: 300 }}
                 style={{
-                  width: 380,
+                  width: 'min(410px, calc(100vw - 20px))',
                   maxHeight: '80vh',
-                  background: 'rgba(2, 6, 23, 0.85)',
+                  background: 'rgba(2, 6, 23, 0.88)',
                   backdropFilter: 'blur(20px)',
                   WebkitBackdropFilter: 'blur(20px)',
                   border: '1px solid rgba(255, 255, 255, 0.1)',
@@ -396,6 +400,7 @@ export function NotificationPopover() {
                   flexDirection: 'column',
                   overflow: 'hidden',
                   zIndex: 9999,
+                  color: '#ffffff',
                   transformOrigin: 'bottom center'
                 }}
               >
@@ -406,7 +411,7 @@ export function NotificationPopover() {
                       <Bell size={18} color="white" />
                     </div>
                     <div>
-                      <h3 style={{ fontSize: 16, fontWeight: 800, color: '#fff', margin: 0 }}>Notificações</h3>
+                      <div style={{ fontSize: 16, fontWeight: 800, color: '#ffffff', margin: 0, letterSpacing: '-0.3px' }}>Notificações</div>
                       <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', margin: 0 }}>{unreadCount} pendente{unreadCount !== 1 ? 's' : ''}</p>
                     </div>
                   </div>
@@ -422,8 +427,15 @@ export function NotificationPopover() {
                   )}
                 </div>
 
-                {/* Tabs */}
-                <div style={{ display: 'flex', gap: 4, padding: '16px 20px 8px', justifyContent: 'center', overflowX: 'auto' }}>
+                {/* Tabs — Botões em grid 3x2 lado a lado e embaixo, sem scroll lateral */}
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(3, 1fr)',
+                  gap: 6,
+                  padding: '12px 18px 12px',
+                  borderBottom: '1px solid rgba(255, 255, 255, 0.06)',
+                  background: 'rgba(255, 255, 255, 0.015)'
+                }}>
                   {[
                     { id: 'all', label: 'Todas' },
                     { id: 'autorizacao', label: 'Autorizações' },
@@ -435,36 +447,63 @@ export function NotificationPopover() {
                     const count = tab.id === 'all'
                       ? notifications.length
                       : notifications.filter(n => n.type === tab.id).length
+                    const isActive = activeTab === tab.id
 
                     return (
                       <button
                         key={tab.id}
                         onClick={() => setActiveTab(tab.id as any)}
                         style={{
-                          padding: '6px 10px',
-                          borderRadius: 20,
+                          padding: '7px 4px',
+                          borderRadius: 10,
                           fontSize: 11,
-                          fontWeight: 700,
-                          border: 'none',
+                          fontWeight: isActive ? 700 : 500,
+                          border: isActive
+                            ? '1px solid rgba(96, 165, 250, 0.45)'
+                            : '1px solid rgba(255, 255, 255, 0.07)',
                           cursor: 'pointer',
-                          whiteSpace: 'nowrap',
-                          transition: 'all 0.2s',
-                          background: activeTab === tab.id ? 'rgba(255,255,255,0.15)' : 'transparent',
-                          color: activeTab === tab.id ? '#fff' : 'rgba(255,255,255,0.5)',
-                          display: 'inline-flex',
+                          transition: 'all 0.18s cubic-bezier(0.4, 0, 0.2, 1)',
+                          background: isActive
+                            ? 'linear-gradient(135deg, rgba(59, 130, 246, 0.25) 0%, rgba(139, 92, 246, 0.18) 100%)'
+                            : 'rgba(255, 255, 255, 0.035)',
+                          color: isActive ? '#93c5fd' : 'rgba(255, 255, 255, 0.7)',
+                          display: 'flex',
                           alignItems: 'center',
-                          gap: 5
+                          justifyContent: 'center',
+                          gap: 5,
+                          boxShadow: isActive ? '0 2px 10px rgba(59, 130, 246, 0.25)' : 'none',
+                          whiteSpace: 'nowrap',
+                          minWidth: 0
+                        }}
+                        onMouseOver={e => {
+                          if (!isActive) {
+                            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)'
+                            e.currentTarget.style.color = '#ffffff'
+                          }
+                        }}
+                        onMouseOut={e => {
+                          if (!isActive) {
+                            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.035)'
+                            e.currentTarget.style.color = 'rgba(255, 255, 255, 0.7)'
+                          }
                         }}
                       >
-                        <span>{tab.label}</span>
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{tab.label}</span>
                         {count > 0 && (
                           <span style={{
                             fontSize: 10,
-                            padding: '1px 5px',
-                            borderRadius: 10,
-                            background: activeTab === tab.id ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.08)',
+                            minWidth: 16,
+                            height: 16,
+                            padding: '0 4px',
+                            borderRadius: 8,
+                            background: isActive ? '#3b82f6' : 'rgba(255, 255, 255, 0.12)',
                             color: '#fff',
-                            fontWeight: 800
+                            fontWeight: 800,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            lineHeight: 1,
+                            flexShrink: 0
                           }}>
                             {count}
                           </span>

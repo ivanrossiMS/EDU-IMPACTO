@@ -15,7 +15,7 @@ import {
   Home, LineChart, BookMarked, Database, Globe, Webhook, FolderOpen,
   BookOpenCheck, CalendarDays, FlaskConical, HardHat, ClipboardPenLine, Clock3, Banknote, Wallet, AlertTriangle, DoorOpen, Scan, Monitor, ListChecks, BookHeart, ShieldCheck, LogOut, Handshake,
   UserCircle, Laptop, ShieldAlert, History, Landmark, Coins, CreditCard as CardIcon, FileSpreadsheet, Building, Tablet, FileStack,
-  Sun, Moon, FileCheck2, Calculator
+  FileCheck2, Calculator
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { UserAvatar } from '@/components/UserAvatar'
@@ -361,50 +361,15 @@ function NavGroupComp({ group, collapsed, onToggle, open }: { group: NavGroup; c
 
 export function Sidebar() {
   const router = useRouter()
-  const { sidebarCollapsed: collapsed, toggleSidebar, currentUserPerfil, currentUser, hydrated, theme, setTheme, setCurrentUser } = useApp()
+  const { sidebarCollapsed: collapsed, toggleSidebar, currentUser, currentUserPerfil, hydrated } = useApp()
   const isMobile = useIsMobile()
   const effectiveCollapsed = isMobile ? false : collapsed
   
   const { cfgCalendarioLetivo = [], perfis } = useData()
   const anoVigente = cfgCalendarioLetivo?.find((c: any) => c.isVigente)?.ano || '2026'
   const [openGroup, setOpenGroup] = useState<string | null>('ACADÊMICO')
-  const [showTopMenu, setShowTopMenu] = useState(false)
   const [isTrocarModuloOpen, setIsTrocarModuloOpen] = useState(false)
   const pathname = usePathname()
-
-  const menuRef = useRef<HTMLDivElement>(null)
-  const profileCardRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        setShowTopMenu(false)
-      }
-    }
-    if (showTopMenu) {
-      window.addEventListener('keydown', handleKeyDown)
-    }
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [showTopMenu])
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (
-        menuRef.current && 
-        !menuRef.current.contains(event.target as Node) &&
-        profileCardRef.current &&
-        !profileCardRef.current.contains(event.target as Node)
-      ) {
-        setShowTopMenu(false)
-      }
-    }
-    if (showTopMenu) {
-      document.addEventListener('mousedown', handleClickOutside)
-    }
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside)
-    }
-  }, [showTopMenu])
 
   if (!hydrated) return null
 
@@ -562,178 +527,244 @@ export function Sidebar() {
         </div>
 
         {/* Profile Footer */}
-        <div style={{ padding: '8px 12px 16px', borderTop: '1px solid rgba(255, 255, 255, 0.05)', position: 'relative' }}>
-          <AnimatePresence>
-            {showTopMenu && (
-              <motion.div
-                ref={menuRef}
-                initial={{ y: 15, opacity: 0, scale: 0.95 }}
-                animate={{ y: 0, opacity: 1, scale: 1 }}
-                exit={{ y: 15, opacity: 0, scale: 0.95 }}
-                transition={{ type: 'spring', damping: 20, stiffness: 300 }}
-                style={{
-                  position: 'absolute',
-                  bottom: 'calc(100% + 10px)',
-                  left: 10,
-                  right: 10,
-                  background: 'linear-gradient(180deg, rgba(15, 17, 41, 0.95) 0%, rgba(6, 8, 20, 0.98) 100%)',
-                  backdropFilter: 'blur(20px)',
-                  border: '1px solid rgba(255, 255, 255, 0.08)',
-                  borderRadius: 16,
-                  padding: '6px',
-                  boxShadow: '0 -10px 25px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.1)',
-                  zIndex: 100,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 4
+        <div style={{ padding: effectiveCollapsed ? '8px 8px 16px' : '8px 12px 16px', borderTop: '1px solid rgba(255, 255, 255, 0.05)', position: 'relative' }}>
+          <motion.div 
+            whileHover={{ borderColor: 'rgba(255, 255, 255, 0.18)', backgroundColor: 'rgba(255, 255, 255, 0.05)' }}
+            style={{ 
+              padding: effectiveCollapsed ? '10px 6px' : '12px 12px 10px', 
+              borderRadius: 20, 
+              background: 'rgba(255, 255, 255, 0.04)', 
+              backdropFilter: 'blur(16px)',
+              border: '1px solid rgba(255, 255, 255, 0.12)', 
+              boxShadow: '0 4px 20px rgba(0, 0, 0, 0.25)',
+              display: 'flex', 
+              flexDirection: 'column', 
+              gap: 10,
+              transition: 'all 0.2s ease'
+            }}
+          >
+            {/* Top row: Avatar + User Info + Notifications */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', justifyContent: effectiveCollapsed ? 'center' : 'flex-start' }}>
+              <div style={{ position: 'relative', flexShrink: 0 }}>
+                <UserAvatar 
+                  key={currentUser?.foto || 'default'}
+                  userId={currentUser?.id} 
+                  name={currentUser?.nome || 'Usuário'} 
+                  fotoUrl={currentUser?.foto}
+                  size={effectiveCollapsed ? 36 : 40} 
+                  style={{ borderRadius: 12, border: '1px solid rgba(255,255,255,0.12)' }} 
+                />
+                <div style={{ position: 'absolute', bottom: -1, right: -1, width: 10, height: 10, borderRadius: '50%', background: '#10b981', border: '2px solid #060814', boxShadow: '0 0 8px #10b981' }} />
+              </div>
+              
+              {!effectiveCollapsed && (
+                <>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 800, color: 'white', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', letterSpacing: '-0.01em' }}>
+                      {currentUser?.nome || 'Usuário'}
+                    </div>
+                    <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.45)', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {currentUser?.cargo || 'Colaborador'}
+                    </div>
+                  </div>
+                  
+                  {/* Notification Popover */}
+                  <div style={{ flexShrink: 0 }}>
+                    <NotificationPopover />
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Bottom Actions Row: Meu Perfil, Trocar Módulo, Sair - DENTRO DO CARD */}
+            {!effectiveCollapsed ? (
+              <div 
+                style={{ 
+                  display: 'grid', 
+                  gridTemplateColumns: 'repeat(3, 1fr)', 
+                  gap: 4, 
+                  background: 'rgba(0, 0, 0, 0.22)',
+                  padding: '3px',
+                  borderRadius: 12,
+                  border: '1px solid rgba(255, 255, 255, 0.04)'
                 }}
               >
-                {/* Option 1: Meu Perfil */}
+                {/* 1. Meu Perfil */}
                 <motion.button
-                  whileHover={{ scale: 1.02, backgroundColor: 'rgba(255, 255, 255, 0.04)' }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setShowTopMenu(false);
+                  whileHover={{ scale: 1.02, backgroundColor: 'rgba(168, 85, 247, 0.16)', color: '#ffffff' }}
+                  whileTap={{ scale: 0.97 }}
+                  onClick={() => {
                     router.push('/meu-perfil');
                     if (isMobile) toggleSidebar();
                   }}
+                  title="Meu Perfil"
                   style={{
-                    width: '100%',
-                    padding: effectiveCollapsed ? '10px' : '10px 14px',
-                    borderRadius: 12,
-                    background: 'rgba(255, 255, 255, 0)',
-                    border: 'none',
-                    cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
-                    justifyContent: effectiveCollapsed ? 'center' : 'flex-start',
-                    gap: 12,
+                    justifyContent: 'center',
+                    gap: 5,
+                    padding: '6px 4px',
+                    borderRadius: 9,
+                    background: 'transparent',
+                    border: 'none',
                     color: 'rgba(255, 255, 255, 0.8)',
-                    transition: 'all 0.2s',
-                    textAlign: 'left'
+                    cursor: 'pointer',
+                    fontSize: 11,
+                    fontWeight: 600,
+                    letterSpacing: '0.01em',
+                    transition: 'all 0.15s ease'
                   }}
                 >
-                  <UserCircle size={18} color="#7928ca" style={{ filter: 'drop-shadow(0 0 5px rgba(121, 40, 202, 0.5))', flexShrink: 0 }} />
-                  {!effectiveCollapsed && (
-                    <span style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.02em' }}>Meu Perfil</span>
-                  )}
+                  <UserCircle size={14} color="#a855f7" style={{ filter: 'drop-shadow(0 0 5px rgba(168, 85, 247, 0.4))', flexShrink: 0 }} />
+                  <span>Perfil</span>
                 </motion.button>
 
-                {/* Option: Trocar Módulo */}
+                {/* 2. Trocar Módulo */}
                 <motion.button
-                  whileHover={{ scale: 1.02, backgroundColor: 'rgba(0, 210, 255, 0.04)' }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setShowTopMenu(false);
-                    setIsTrocarModuloOpen(true);
-                  }}
+                  whileHover={{ scale: 1.02, backgroundColor: 'rgba(6, 182, 212, 0.16)', color: '#ffffff' }}
+                  whileTap={{ scale: 0.97 }}
+                  onClick={() => setIsTrocarModuloOpen(true)}
+                  title="Trocar Módulo"
                   style={{
-                    width: '100%',
-                    padding: effectiveCollapsed ? '10px' : '10px 14px',
-                    borderRadius: 12,
-                    background: 'rgba(255, 255, 255, 0)',
-                    border: 'none',
-                    cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
-                    justifyContent: effectiveCollapsed ? 'center' : 'flex-start',
-                    gap: 12,
-                    color: '#00D2FF',
-                    transition: 'all 0.2s',
-                    textAlign: 'left'
+                    justifyContent: 'center',
+                    gap: 5,
+                    padding: '6px 4px',
+                    borderRadius: 9,
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'rgba(255, 255, 255, 0.8)',
+                    cursor: 'pointer',
+                    fontSize: 11,
+                    fontWeight: 600,
+                    letterSpacing: '0.01em',
+                    transition: 'all 0.15s ease'
                   }}
                 >
-                  <LayoutDashboard size={18} color="#00D2FF" style={{ filter: 'drop-shadow(0 0 5px rgba(0, 210, 255, 0.5))', flexShrink: 0 }} />
-                  {!effectiveCollapsed && (
-                    <span style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.02em' }}>Trocar Módulo</span>
-                  )}
+                  <LayoutDashboard size={14} color="#06b6d4" style={{ filter: 'drop-shadow(0 0 5px rgba(6, 182, 212, 0.4))', flexShrink: 0 }} />
+                  <span>Módulos</span>
                 </motion.button>
 
-                {/* Option 2: Sair */}
+                {/* 3. Sair */}
                 <motion.button
-                  whileHover={{ scale: 1.02, backgroundColor: 'rgba(239, 68, 68, 0.04)' }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={async (e) => {
-                    e.stopPropagation();
-                    setShowTopMenu(false);
+                  whileHover={{ scale: 1.02, backgroundColor: 'rgba(244, 63, 94, 0.16)', color: '#ffffff' }}
+                  whileTap={{ scale: 0.97 }}
+                  onClick={async () => {
                     try {
                       await performLogout();
                     } catch (err) {
                       window.location.replace('/login');
                     }
                   }}
+                  title="Sair do sistema"
                   style={{
-                    width: '100%',
-                    padding: effectiveCollapsed ? '10px' : '10px 14px',
-                    borderRadius: 12,
-                    background: 'rgba(255, 255, 255, 0)',
-                    border: 'none',
-                    cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
-                    justifyContent: effectiveCollapsed ? 'center' : 'flex-start',
-                    gap: 12,
-                    color: '#ef4444',
-                    transition: 'all 0.2s',
-                    textAlign: 'left'
+                    justifyContent: 'center',
+                    gap: 5,
+                    padding: '6px 4px',
+                    borderRadius: 9,
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'rgba(255, 255, 255, 0.8)',
+                    cursor: 'pointer',
+                    fontSize: 11,
+                    fontWeight: 600,
+                    letterSpacing: '0.01em',
+                    transition: 'all 0.15s ease'
                   }}
                 >
-                  <LogOut size={18} color="#ef4444" style={{ filter: 'drop-shadow(0 0 5px rgba(239, 68, 68, 0.5))', flexShrink: 0 }} />
-                  {!effectiveCollapsed && (
-                    <span style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.02em' }}>Sair</span>
-                  )}
+                  <LogOut size={14} color="#f43f5e" style={{ filter: 'drop-shadow(0 0 5px rgba(244, 63, 94, 0.4))', flexShrink: 0 }} />
+                  <span>Sair</span>
                 </motion.button>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <motion.div 
-              ref={profileCardRef}
-              onClick={(e) => {
-                e.stopPropagation();
-                setShowTopMenu(prev => !prev);
-              }}
-              whileHover={{ background: 'rgba(255, 255, 255, 0.08)', borderColor: 'rgba(255, 255, 255, 0.2)' }}
-              style={{ padding: '10px', borderRadius: 20, background: 'rgba(255, 255, 255, 0.04)', display: 'flex', alignItems: 'center', gap: 10, border: '1px solid rgba(255, 255, 255, 0.12)', cursor: 'pointer', transition: 'all 0.2s' }}
-            >
-              <div style={{ position: 'relative' }}>
-                <UserAvatar 
-                  key={currentUser?.foto || 'default'}
-                  userId={currentUser?.id} 
-                  name={currentUser?.nome || 'Usuário'} 
-                  fotoUrl={currentUser?.foto}
-                  size={40} 
-                  style={{ borderRadius: 12, border: '1px solid rgba(255,255,255,0.1)' }} 
-                />
-                <div style={{ position: 'absolute', bottom: -1, right: -1, width: 12, height: 12, borderRadius: 6, background: '#10b981', border: '2px solid #060814', boxShadow: '0 0 8px #10b981' }} />
               </div>
-              {!effectiveCollapsed && (
-                <>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 12, fontWeight: 800, color: 'white', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{currentUser?.nome || 'Usuário'}</div>
-                    <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', fontWeight: 700 }}>{currentUser?.cargo || 'Colaborador'}</div>
-                  </div>
-                  
-                  {/* Inline Actions */}
-                  <div style={{ display: 'flex', gap: 6, marginLeft: 'auto' }} onClick={e => e.stopPropagation()}>
-                      <motion.button 
-                        whileHover={{ background: 'rgba(255,255,255,0.15)', scale: 1.1 }}
-                        whileTap={{ scale: 0.9 }}
-                        onClick={(e) => { e.stopPropagation(); setTheme(theme === 'dark' ? 'light' : 'dark') }}
-                        style={{ width: 32, height: 32, borderRadius: 10, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
-                      >
-                        {theme === 'dark' ? <Sun size={17} color="#fbbf24" style={{ filter: 'drop-shadow(0 0 5px rgba(251, 191, 36, 0.4))' }} /> : <Moon size={17} color="#60a5fa" style={{ filter: 'drop-shadow(0 0 5px rgba(96, 165, 250, 0.4))' }} />}
-                      </motion.button>
-                      
-                      <NotificationPopover />
-                  </div>
-                </>
-              )}
-            </motion.div>
-          </div>
+            ) : (
+              <div 
+                style={{ 
+                  display: 'flex', 
+                  flexDirection: 'column', 
+                  alignItems: 'center', 
+                  gap: 5, 
+                  background: 'rgba(0, 0, 0, 0.22)',
+                  padding: '3px',
+                  borderRadius: 10,
+                  width: '100%' 
+                }}
+              >
+                <NotificationPopover />
+                <motion.button
+                  whileHover={{ scale: 1.1, backgroundColor: 'rgba(168, 85, 247, 0.18)' }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => {
+                    router.push('/meu-perfil');
+                    if (isMobile) toggleSidebar();
+                  }}
+                  title="Meu Perfil"
+                  style={{
+                    width: 30,
+                    height: 30,
+                    borderRadius: 8,
+                    background: 'transparent',
+                    border: 'none',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
+                    color: '#a855f7'
+                  }}
+                >
+                  <UserCircle size={16} />
+                </motion.button>
+                <motion.button
+                  whileHover={{ scale: 1.1, backgroundColor: 'rgba(6, 182, 212, 0.18)' }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => setIsTrocarModuloOpen(true)}
+                  title="Trocar Módulo"
+                  style={{
+                    width: 30,
+                    height: 30,
+                    borderRadius: 8,
+                    background: 'transparent',
+                    border: 'none',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
+                    color: '#06b6d4'
+                  }}
+                >
+                  <LayoutDashboard size={16} />
+                </motion.button>
+                <motion.button
+                  whileHover={{ scale: 1.1, backgroundColor: 'rgba(244, 63, 94, 0.18)' }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={async () => {
+                    try {
+                      await performLogout();
+                    } catch (err) {
+                      window.location.replace('/login');
+                    }
+                  }}
+                  title="Sair"
+                  style={{
+                    width: 30,
+                    height: 30,
+                    borderRadius: 8,
+                    background: 'transparent',
+                    border: 'none',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
+                    color: '#f43f5e'
+                  }}
+                >
+                  <LogOut size={16} />
+                </motion.button>
+              </div>
+            )}
+          </motion.div>
         </div>
       </div>
       <style dangerouslySetInnerHTML={{__html: `

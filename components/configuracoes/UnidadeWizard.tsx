@@ -41,7 +41,7 @@ interface Props {
 function Field({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) {
   return (
     <div>
-      <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-muted))', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+      <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
         {label} {required && <span style={{ color: '#f87171' }}>*</span>}
       </label>
       {children}
@@ -64,24 +64,24 @@ function SignatureUpload({ value, onChange, label }: { value: string | null; onC
   }
   return (
     <div>
-      <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-muted))', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</label>
+      <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</label>
       <div
         onClick={() => ref.current?.click()}
-        style={{ border: `2px dashed ${value ? '#10b981' : 'hsl(var(--border-default))'}`, borderRadius: 10, padding: '14px', textAlign: 'center', cursor: 'pointer', background: value ? 'rgba(16,185,129,0.05)' : 'hsl(var(--bg-elevated))', transition: 'all 0.2s', minHeight: 80, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}
+        style={{ border: `2px dashed ${value ? '#10b981' : '#cbd5e1'}`, borderRadius: 10, padding: '14px', textAlign: 'center', cursor: 'pointer', background: value ? 'rgba(16,185,129,0.05)' : '#f8fafc', transition: 'all 0.2s', minHeight: 80, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}
       >
         {value ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <img src={value} alt="imagem carregada" style={{ maxHeight: 60, maxWidth: 160, objectFit: 'contain', borderRadius: 4, background: '#fff', padding: 4 }} />
             <div>
               <div style={{ fontSize: 12, fontWeight: 600, color: '#10b981' }}>✓ Imagem carregada</div>
-              <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', marginTop: 2 }}>Clique para substituir</div>
+              <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>Clique para substituir</div>
             </div>
           </div>
         ) : (
           <div>
-            <Upload size={20} color="hsl(var(--text-muted))" style={{ margin: '0 auto 4px' }} />
-            <div style={{ fontSize: 12, color: 'hsl(var(--text-muted))' }}>Clique para carregar imagem</div>
-            <div style={{ fontSize: 10, color: 'hsl(var(--text-muted))', marginTop: 2 }}>PNG, JPG ou SVG</div>
+            <Upload size={20} color="#64748b" style={{ margin: '0 auto 4px' }} />
+            <div style={{ fontSize: 12, color: '#64748b' }}>Clique para carregar imagem</div>
+            <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 2 }}>PNG, JPG ou SVG</div>
           </div>
         )}
       </div>
@@ -105,8 +105,8 @@ function ResponsavelCard({ title, emoji, data, onChange }: {
   const f = (key: keyof Responsavel) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     onChange({ ...data, [key]: e.target.value })
   return (
-    <div style={{ background: 'hsl(var(--bg-elevated))', borderRadius: 14, padding: '20px', border: '1px solid hsl(var(--border-subtle))' }}>
-      <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+    <div style={{ background: '#f8fafc', borderRadius: 14, padding: '20px', border: '1px solid #e2e8f0' }}>
+      <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8, color: '#0f172a' }}>
         <span style={{ fontSize: 20 }}>{emoji}</span> {title}
       </div>
       <div style={{ display: 'grid', gap: 14 }}>
@@ -170,18 +170,18 @@ export default function UnidadeWizard({ initial, codigoExistente, onSave, onClos
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 24, backdropFilter: 'blur(6px)' }}>
-      <div style={{ background: 'hsl(var(--bg-surface))', borderRadius: 20, width: '100%', maxWidth: 680, maxHeight: '92vh', overflow: 'hidden', border: '1px solid hsl(var(--border-default))', display: 'flex', flexDirection: 'column', boxShadow: '0 24px 80px rgba(0,0,0,0.4)' }}>
+      <div style={{ background: '#ffffff', color: '#0f172a', borderRadius: 20, width: '100%', maxWidth: 680, maxHeight: '92vh', overflow: 'hidden', border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', boxShadow: '0 24px 80px rgba(0,0,0,0.4)' }}>
         {/* Header */}
-        <div style={{ padding: '20px 24px', borderBottom: '1px solid hsl(var(--border-subtle))', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ padding: '20px 24px', borderBottom: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#ffffff' }}>
           <div>
-            <div style={{ fontWeight: 800, fontSize: 17 }}>{mode === 'add' ? '🏫 Nova Unidade' : '✏️ Editar Unidade'}</div>
+            <div style={{ fontWeight: 800, fontSize: 17, color: '#0f172a' }}>{mode === 'add' ? '🏫 Nova Unidade' : '✏️ Editar Unidade'}</div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
-              <span style={{ fontSize: 12, color: 'hsl(var(--text-muted))' }}>{data.nomeFantasia || 'Complete os dados passo a passo'}</span>
+              <span style={{ fontSize: 12, color: '#64748b' }}>{data.nomeFantasia || 'Complete os dados passo a passo'}</span>
               {codigoExistente && (
-                <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', background: 'rgba(99,102,241,0.12)', color: '#818cf8', borderRadius: 20, letterSpacing: '0.08em' }}>{codigoExistente}</span>
+                <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', background: 'rgba(99,102,241,0.12)', color: '#6366f1', borderRadius: 20, letterSpacing: '0.08em' }}>{codigoExistente}</span>
               )}
               {!codigoExistente && mode === 'add' && (
-                <span style={{ fontSize: 11, color: 'hsl(var(--text-muted))', fontStyle: 'italic' }}>código gerado ao salvar</span>
+                <span style={{ fontSize: 11, color: '#64748b', fontStyle: 'italic' }}>código gerado ao salvar</span>
               )}
             </div>
           </div>
@@ -189,7 +189,7 @@ export default function UnidadeWizard({ initial, codigoExistente, onSave, onClos
         </div>
 
         {/* Step tabs */}
-        <div style={{ padding: '0 24px', borderBottom: '1px solid hsl(var(--border-subtle))', background: 'hsl(var(--bg-elevated))' }}>
+        <div style={{ padding: '0 24px', borderBottom: '1px solid #e2e8f0', background: '#f8fafc' }}>
           <div style={{ display: 'flex', gap: 0 }}>
             {STEPS.map((s, i) => {
               const Icon = s.icon
@@ -198,16 +198,16 @@ export default function UnidadeWizard({ initial, codigoExistente, onSave, onClos
               return (
                 <div key={i} onClick={() => { if(i < step) { setStep(i); setErrors([]) } }}
                   style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 20px', cursor: i < step ? 'pointer' : 'default', borderBottom: active ? '2px solid #3b82f6' : '2px solid transparent', flex: 1, opacity: i > step ? 0.4 : 1, transition: 'all 0.2s' }}>
-                  <div style={{ width: 28, height: 28, borderRadius: '50%', background: done ? '#10b981' : active ? '#3b82f6' : 'hsl(var(--bg-overlay))', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'all 0.2s' }}>
-                    {done ? <CheckCircle size={14} color="#fff" /> : <Icon size={13} color={active ? '#fff' : 'hsl(var(--text-muted))'} />}
+                  <div style={{ width: 28, height: 28, borderRadius: '50%', background: done ? '#10b981' : active ? '#3b82f6' : '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'all 0.2s' }}>
+                    {done ? <CheckCircle size={14} color="#fff" /> : <Icon size={13} color={active ? '#fff' : '#64748b'} />}
                   </div>
                   <div style={{ display: 'none', flex: 1 }} className="step-label">
-                    <div style={{ fontSize: 11, fontWeight: 700, color: active ? '#60a5fa' : done ? '#34d399' : 'hsl(var(--text-muted))' }}>Passo {i+1}</div>
-                    <div style={{ fontSize: 12, fontWeight: 600 }}>{s.label}</div>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: active ? '#2563eb' : done ? '#10b981' : '#64748b' }}>Passo {i+1}</div>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: '#0f172a' }}>{s.label}</div>
                   </div>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 10, fontWeight: 700, color: active ? '#60a5fa' : done ? '#34d399' : 'hsl(var(--text-muted))', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Passo {i+1}</div>
-                    <div style={{ fontSize: 12, fontWeight: 700 }}>{s.label}</div>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: active ? '#2563eb' : done ? '#10b981' : '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Passo {i+1}</div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: '#0f172a' }}>{s.label}</div>
                   </div>
                 </div>
               )
@@ -341,12 +341,12 @@ export default function UnidadeWizard({ initial, codigoExistente, onSave, onClos
         </div>
 
         {/* Footer */}
-        <div style={{ padding: '16px 24px', borderTop: '1px solid hsl(var(--border-subtle))', display: 'flex', gap: 10, justifyContent: 'space-between', background: 'hsl(var(--bg-elevated))' }}>
+        <div style={{ padding: '16px 24px', borderTop: '1px solid #e2e8f0', display: 'flex', gap: 10, justifyContent: 'space-between', background: '#f8fafc' }}>
           <button className="btn btn-ghost" onClick={step === 0 ? onClose : back}>
             {step === 0 ? 'Cancelar' : <><ChevronLeft size={14} />Voltar</>}
           </button>
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-            <span style={{ fontSize: 12, color: 'hsl(var(--text-muted))' }}>Passo {step + 1} de {STEPS.length}</span>
+            <span style={{ fontSize: 12, color: '#64748b' }}>Passo {step + 1} de {STEPS.length}</span>
             {step < STEPS.length - 1 ? (
               <button className="btn btn-primary" onClick={next}>
                 Próximo <ChevronRight size={14} />

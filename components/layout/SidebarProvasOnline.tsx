@@ -8,11 +8,12 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   LayoutDashboard, PlusCircle, Library, FileCheck2, LogOut,
   User, Loader2, Sparkles, ChevronLeft, ChevronRight, Award,
-  Clock, Shield, BookOpen, Layers, Users, Activity, CheckSquare
+  Clock, Shield, BookOpen, Layers, Users, Activity, CheckSquare, UserCircle
 } from 'lucide-react'
 import { useIsMobile } from '@/lib/hooks/useIsMobile'
 import { useApp } from '@/lib/context'
 import { TrocarModuloModal } from '@/components/layout/TrocarModuloModal'
+import { UserAvatar } from '@/components/UserAvatar'
 
 interface NavItem {
   label: string
@@ -384,7 +385,7 @@ export function SidebarProvasOnline() {
           </div>
         </div>
 
-        {/* Bottom Section: Module Switcher & User Profile */}
+        {/* Bottom Section: User Profile & Actions */}
         <div style={{
           padding: '16px 12px',
           borderTop: '1px solid rgba(255, 255, 255, 0.07)',
@@ -394,135 +395,225 @@ export function SidebarProvasOnline() {
           position: 'relative',
           zIndex: 1
         }}>
-          {/* Quick Module Switcher */}
-          {!collapsed ? (
-            <div style={{ marginBottom: 12 }}>
-              <button
-                type="button"
-                onClick={() => setIsTrocarModuloOpen(true)}
-                style={{
-                  width: '100%',
-                  padding: '9px 12px',
-                  borderRadius: 12,
-                  background: 'rgba(56, 189, 248, 0.08)',
-                  border: '1px solid rgba(56, 189, 248, 0.25)',
-                  color: '#38bdf8',
-                  fontSize: 12,
-                  fontWeight: 700,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 8,
-                  cursor: 'pointer',
-                  transition: 'all 0.2s'
-                }}
-                onMouseEnter={e => {
-                  e.currentTarget.style.background = 'rgba(56, 189, 248, 0.16)'
-                  e.currentTarget.style.borderColor = 'rgba(56, 189, 248, 0.45)'
-                }}
-                onMouseLeave={e => {
-                  e.currentTarget.style.background = 'rgba(56, 189, 248, 0.08)'
-                  e.currentTarget.style.borderColor = 'rgba(56, 189, 248, 0.25)'
-                }}
-              >
-                <Layers size={16} />
-                <span>Trocar Módulo</span>
-              </button>
-            </div>
-          ) : (
-            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12 }}>
-              <button
-                type="button"
-                title="Trocar Módulo"
-                onClick={() => setIsTrocarModuloOpen(true)}
-                style={{
-                  width: 38,
-                  height: 38,
-                  borderRadius: 10,
-                  background: 'rgba(56, 189, 248, 0.08)',
-                  border: '1px solid rgba(56, 189, 248, 0.25)',
-                  color: '#38bdf8',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s'
-                }}
-                onMouseEnter={e => {
-                  e.currentTarget.style.background = 'rgba(56, 189, 248, 0.16)'
-                  e.currentTarget.style.borderColor = 'rgba(56, 189, 248, 0.45)'
-                }}
-                onMouseLeave={e => {
-                  e.currentTarget.style.background = 'rgba(56, 189, 248, 0.08)'
-                  e.currentTarget.style.borderColor = 'rgba(56, 189, 248, 0.25)'
-                }}
-              >
-                <Layers size={18} />
-              </button>
-            </div>
-          )}
-
           {/* User Card */}
-          <div style={{
-            padding: collapsed ? '8px' : '10px 12px',
-            borderRadius: 14,
-            background: 'rgba(255, 255, 255, 0.04)',
-            border: '1px solid rgba(255, 255, 255, 0.08)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: collapsed ? 'center' : 'space-between',
-            gap: 10
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, overflow: 'hidden' }}>
-              <div style={{
-                width: 36,
-                height: 36,
-                borderRadius: 10,
-                background: 'linear-gradient(135deg, #38bdf8, #0284c7)',
+          <div 
+            style={{
+              background: 'rgba(255, 255, 255, 0.04)',
+              backdropFilter: 'blur(16px)',
+              border: '1px solid rgba(255, 255, 255, 0.12)',
+              borderRadius: 20,
+              padding: collapsed ? '10px 6px' : '12px 12px 10px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 10,
+              boxShadow: '0 10px 30px rgba(0,0,0,0.3)',
+              transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
+            }}
+          >
+            {/* Top row: Avatar + Name/Role + Notification */}
+            <div 
+              style={{
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'center',
-                color: '#ffffff',
-                fontWeight: 800,
-                fontSize: 14,
-                flexShrink: 0,
-                boxShadow: '0 4px 12px rgba(2, 132, 199, 0.35)'
-              }}>
-                {currentUser?.nome?.[0] || 'U'}
+                gap: 10,
+                width: '100%',
+                justifyContent: collapsed ? 'center' : 'flex-start'
+              }}
+            >
+              <div style={{ position: 'relative', flexShrink: 0 }}>
+                <UserAvatar 
+                  key={currentUser?.foto || 'default'}
+                  userId={currentUser?.id} 
+                  name={currentUser?.nome || 'Usuário'} 
+                  fotoUrl={currentUser?.foto}
+                  size={collapsed ? 36 : 40} 
+                  style={{ borderRadius: 12, border: '1px solid rgba(255,255,255,0.12)' }} 
+                />
+                <div style={{ position: 'absolute', bottom: -1, right: -1, width: 10, height: 10, borderRadius: '50%', background: '#10b981', border: '2px solid #060814', boxShadow: '0 0 8px #10b981' }} />
               </div>
+              
               {!collapsed && (
-                <div style={{ overflow: 'hidden' }}>
-                  <div style={{ fontSize: 13, fontWeight: 800, color: '#ffffff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 800, color: 'white', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', letterSpacing: '-0.01em' }}>
                     {currentUser?.nome || 'Usuário'}
                   </div>
-                  <div style={{ fontSize: 11, color: '#38bdf8', fontWeight: 700 }}>
+                  <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.45)', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     {currentUserPerfil || currentUser?.cargo || 'Colaborador'}
                   </div>
                 </div>
               )}
             </div>
 
-            {!collapsed && (
-              <button
-                onClick={handleLogout}
-                style={{
-                  border: 'none',
-                  background: 'transparent',
-                  color: 'rgba(255, 255, 255, 0.45)',
-                  cursor: 'pointer',
-                  padding: 6,
-                  borderRadius: 8,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  transition: 'all 0.2s'
+            {/* Bottom Actions Row: Meu Perfil, Trocar Módulo, Sair - DENTRO DO CARD */}
+            {!collapsed ? (
+              <div 
+                style={{ 
+                  display: 'grid', 
+                  gridTemplateColumns: 'repeat(3, 1fr)', 
+                  gap: 4, 
+                  background: 'rgba(0, 0, 0, 0.22)',
+                  padding: '3px',
+                  borderRadius: 12,
+                  border: '1px solid rgba(255, 255, 255, 0.04)'
                 }}
-                onMouseEnter={e => { e.currentTarget.style.color = '#ef4444'; e.currentTarget.style.background = 'rgba(239, 68, 68, 0.15)' }}
-                onMouseLeave={e => { e.currentTarget.style.color = 'rgba(255, 255, 255, 0.45)'; e.currentTarget.style.background = 'transparent' }}
-                title="Sair do sistema"
               >
-                <LogOut size={16} />
-              </button>
+                {/* 1. Meu Perfil */}
+                <motion.button
+                  whileHover={{ scale: 1.02, backgroundColor: 'rgba(168, 85, 247, 0.16)', color: '#ffffff' }}
+                  whileTap={{ scale: 0.97 }}
+                  onClick={() => {
+                    router.push('/meu-perfil');
+                  }}
+                  title="Meu Perfil"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 5,
+                    padding: '6px 4px',
+                    borderRadius: 9,
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'rgba(255, 255, 255, 0.8)',
+                    cursor: 'pointer',
+                    fontSize: 11,
+                    fontWeight: 600,
+                    letterSpacing: '0.01em',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  <UserCircle size={14} color="#a855f7" style={{ filter: 'drop-shadow(0 0 5px rgba(168, 85, 247, 0.4))', flexShrink: 0 }} />
+                  <span>Perfil</span>
+                </motion.button>
+
+                {/* 2. Trocar Módulo */}
+                <motion.button
+                  whileHover={{ scale: 1.02, backgroundColor: 'rgba(6, 182, 212, 0.16)', color: '#ffffff' }}
+                  whileTap={{ scale: 0.97 }}
+                  onClick={() => setIsTrocarModuloOpen(true)}
+                  title="Trocar Módulo"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 5,
+                    padding: '6px 4px',
+                    borderRadius: 9,
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'rgba(255, 255, 255, 0.8)',
+                    cursor: 'pointer',
+                    fontSize: 11,
+                    fontWeight: 600,
+                    letterSpacing: '0.01em',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  <LayoutDashboard size={14} color="#06b6d4" style={{ filter: 'drop-shadow(0 0 5px rgba(6, 182, 212, 0.4))', flexShrink: 0 }} />
+                  <span>Módulos</span>
+                </motion.button>
+
+                {/* 3. Sair */}
+                <motion.button
+                  whileHover={{ scale: 1.02, backgroundColor: 'rgba(244, 63, 94, 0.16)', color: '#ffffff' }}
+                  whileTap={{ scale: 0.97 }}
+                  onClick={handleLogout}
+                  title="Sair do sistema"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 5,
+                    padding: '6px 4px',
+                    borderRadius: 9,
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'rgba(255, 255, 255, 0.8)',
+                    cursor: 'pointer',
+                    fontSize: 11,
+                    fontWeight: 600,
+                    letterSpacing: '0.01em',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  <LogOut size={14} color="#f43f5e" style={{ filter: 'drop-shadow(0 0 5px rgba(244, 63, 94, 0.4))', flexShrink: 0 }} />
+                  <span>Sair</span>
+                </motion.button>
+              </div>
+            ) : (
+              <div 
+                style={{ 
+                  display: 'flex', 
+                  flexDirection: 'column', 
+                  alignItems: 'center', 
+                  gap: 5, 
+                  background: 'rgba(0, 0, 0, 0.22)',
+                  padding: '3px',
+                  borderRadius: 10,
+                  width: '100%' 
+                }}
+              >
+                <motion.button
+                  whileHover={{ scale: 1.1, backgroundColor: 'rgba(168, 85, 247, 0.18)' }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => router.push('/meu-perfil')}
+                  title="Meu Perfil"
+                  style={{
+                    width: 30,
+                    height: 30,
+                    borderRadius: 8,
+                    background: 'transparent',
+                    border: 'none',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
+                    color: '#a855f7'
+                  }}
+                >
+                  <UserCircle size={15} />
+                </motion.button>
+                <motion.button
+                  whileHover={{ scale: 1.1, backgroundColor: 'rgba(6, 182, 212, 0.18)' }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => setIsTrocarModuloOpen(true)}
+                  title="Trocar Módulo"
+                  style={{
+                    width: 30,
+                    height: 30,
+                    borderRadius: 8,
+                    background: 'transparent',
+                    border: 'none',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
+                    color: '#06b6d4'
+                  }}
+                >
+                  <LayoutDashboard size={15} />
+                </motion.button>
+                <motion.button
+                  whileHover={{ scale: 1.1, backgroundColor: 'rgba(244, 63, 94, 0.18)' }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={handleLogout}
+                  title="Sair"
+                  style={{
+                    width: 30,
+                    height: 30,
+                    borderRadius: 8,
+                    background: 'transparent',
+                    border: 'none',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
+                    color: '#f43f5e'
+                  }}
+                >
+                  <LogOut size={15} />
+                </motion.button>
+              </div>
             )}
           </div>
         </div>

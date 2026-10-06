@@ -95,8 +95,8 @@ export default function ConfiguracoesPage() {
     <div>
       <div className="page-header">
         <div>
-          <h1 className="page-title">Configurações do Sistema</h1>
-          <p className="page-subtitle">Gerenciamento, segurança e personalização da plataforma</p>
+          <h1 className="page-title" style={{ color: '#0f172a' }}>Configurações do Sistema</h1>
+          <p className="page-subtitle" style={{ color: '#64748b' }}>Gerenciamento, segurança e personalização da plataforma</p>
         </div>
         <button className="btn btn-primary btn-sm" onClick={handleSave}>
           {saved ? <><CheckCircle size={13} style={{ color: '#34d399' }} />Salvo!</> : <><Save size={13} />Salvar Alterações</>}
@@ -105,16 +105,16 @@ export default function ConfiguracoesPage() {
 
       <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: 20, alignItems: 'start' }}>
         {/* Sidebar navigation */}
-        <div className="card" style={{ padding: '10px' }}>
+        <div className="card" style={{ padding: '10px', background: '#ffffff', border: '1px solid #e2e8f0' }}>
           {CONFIG_SECTIONS.map(s => (
             <button key={s.id} onClick={() => setSection(s.id)}
               style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px', borderRadius: 8, width: '100%', textAlign: 'left', background: section === s.id ? 'rgba(59,130,246,0.1)' : 'transparent', border: `1px solid ${section === s.id ? 'rgba(59,130,246,0.3)' : 'transparent'}`, cursor: 'pointer', marginBottom: 2 }}>
               <span style={{ fontSize: 20 }}>{s.icon}</span>
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: section === s.id ? '#60a5fa' : 'hsl(var(--text-primary))' }}>{s.label}</div>
-                <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', marginTop: 1 }}>{s.desc}</div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: section === s.id ? '#2563eb' : '#0f172a' }}>{s.label}</div>
+                <div style={{ fontSize: 11, color: '#64748b', marginTop: 1 }}>{s.desc}</div>
               </div>
-              {section === s.id && <ChevronRight size={14} color="#60a5fa" />}
+              {section === s.id && <ChevronRight size={14} color="#2563eb" />}
             </button>
           ))}
         </div>
@@ -126,38 +126,38 @@ export default function ConfiguracoesPage() {
           {section === 'aparencia' && (
             <>
               {/* Colors + Theme */}
-              <div className="card" style={{ padding: '24px' }}>
-                <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 16 }}>🖌 Paleta de Cores & Tema</div>
+              <div className="card" style={{ padding: '24px', background: '#ffffff', border: '1px solid #e2e8f0' }}>
+                <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 16, color: '#0f172a' }}>🖌 Paleta de Cores & Tema</div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
                   {[
                     { label: 'Cor primária', value: primaryColor, setter: setPrimaryColor },
                     { label: 'Cor de destaque', value: accentColor, setter: setAccentColor },
                   ].map(c => (
                     <div key={c.label}>
-                      <label className="form-label">{c.label}</label>
+                      <label className="form-label" style={{ color: '#0f172a' }}>{c.label}</label>
                       <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
                         <input type="color" value={c.value} onChange={e => c.setter(e.target.value)} style={{ width: 40, height: 40, borderRadius: 8, border: 'none', cursor: 'pointer', padding: 2, background: 'transparent' }} />
-                        <input className="form-input" value={c.value} onChange={e => c.setter(e.target.value)} style={{ fontFamily: 'monospace', fontSize: 13 }} />
+                        <input className="form-input" value={c.value} onChange={e => c.setter(e.target.value)} style={{ fontFamily: 'monospace', fontSize: 13, color: '#0f172a', background: '#ffffff', borderColor: '#cbd5e1' }} />
                       </div>
                     </div>
                   ))}
                   <div>
-                    <label className="form-label">Tema padrão</label>
-                    <select className="form-input" value={theme} onChange={e => setTheme(e.target.value as 'dark' | 'light')}>
+                    <label className="form-label" style={{ color: '#0f172a' }}>Tema padrão</label>
+                    <select className="form-input" value={theme} onChange={e => setTheme(e.target.value as 'dark' | 'light')} style={{ color: '#0f172a', background: '#ffffff', borderColor: '#cbd5e1' }}>
                       <option value="dark">🌙 Dark</option>
                       <option value="light">☀️ Light</option>
                     </select>
                   </div>
                   <div>
-                    <label className="form-label">Cor da Sidebar</label>
-                    <select className="form-input" value={sidebarTheme} onChange={e => setSidebarTheme(e.target.value as 'dark' | 'light')}>
+                    <label className="form-label" style={{ color: '#0f172a' }}>Cor da Sidebar</label>
+                    <select className="form-input" value={sidebarTheme} onChange={e => setSidebarTheme(e.target.value as 'dark' | 'light')} style={{ color: '#0f172a', background: '#ffffff', borderColor: '#cbd5e1' }}>
                       <option value="dark">🌑 Dark sidebar</option>
                       <option value="light">🟡 Light sidebar</option>
                     </select>
                   </div>
                 </div>
-                <div style={{ marginTop: 16, padding: '16px', background: 'hsl(var(--bg-elevated))', borderRadius: 12 }}>
-                  <div style={{ fontSize: 12, color: 'hsl(var(--text-muted))', marginBottom: 10 }}>Pré-visualização:</div>
+                <div style={{ marginTop: 16, padding: '16px', background: '#f8fafc', borderRadius: 12, border: '1px solid #e2e8f0' }}>
+                  <div style={{ fontSize: 12, color: '#64748b', marginBottom: 10 }}>Pré-visualização:</div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
                     <div style={{ width: 36, height: 36, borderRadius: 8, background: primaryColor, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 800, fontSize: 14, fontFamily: 'Outfit, sans-serif' }}>{schoolName[0]}</div>
                     <span style={{ fontWeight: 800, fontSize: 16, fontFamily: 'Outfit, sans-serif', color: primaryColor }}>{schoolName}</span>
@@ -167,12 +167,12 @@ export default function ConfiguracoesPage() {
               </div>
 
               {/* Domain */}
-              <div className="card" style={{ padding: '24px' }}>
-                <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 16 }}>🌐 Domínio Personalizado</div>
+              <div className="card" style={{ padding: '24px', background: '#ffffff', border: '1px solid #e2e8f0' }}>
+                <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 16, color: '#0f172a' }}>🌐 Domínio Personalizado</div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 12, alignItems: 'end' }}>
                   <div>
-                    <label className="form-label">Subdomínio ou domínio próprio</label>
-                    <input className="form-input" value={domain} onChange={e => setDomain(e.target.value)} style={{ fontFamily: 'monospace' }} placeholder="app.suaescola.com.br" />
+                    <label className="form-label" style={{ color: '#0f172a' }}>Subdomínio ou domínio próprio</label>
+                    <input className="form-input" value={domain} onChange={e => setDomain(e.target.value)} style={{ fontFamily: 'monospace', color: '#0f172a', background: '#ffffff', borderColor: '#cbd5e1' }} placeholder="app.suaescola.com.br" />
                   </div>
                   <button className="btn btn-primary btn-sm"><CheckCircle size={13} />Verificar DNS</button>
                 </div>
@@ -184,8 +184,8 @@ export default function ConfiguracoesPage() {
           {/* ── NOTIFICAÇÕES ── */}
           {section === 'notificacoes' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              <div className="card" style={{ padding: '24px' }}>
-                <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 16 }}>🔔 Canais de Notificação</div>
+              <div className="card" style={{ padding: '24px', background: '#ffffff', border: '1px solid #e2e8f0' }}>
+                <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 16, color: '#0f172a' }}>🔔 Canais de Notificação</div>
                 {[
                   { key: 'email', canal: '📧 E-mail', desc: 'Comunicados automáticos por e-mail' },
                   { key: 'push', canal: '📱 Push Web', desc: 'Notificações no navegador' },
@@ -193,10 +193,10 @@ export default function ConfiguracoesPage() {
                   { key: 'sms', canal: '💬 SMS', desc: 'SMS para urgências e cobranças' },
                   { key: 'telegram', canal: '🤖 Bot Telegram', desc: 'Relatórios diários por bot' },
                 ].map(n => (
-                  <div key={n.key} style={{ display: 'flex', gap: 14, padding: '14px', background: 'hsl(var(--bg-elevated))', borderRadius: 10, alignItems: 'center', marginBottom: 8 }}>
+                  <div key={n.key} style={{ display: 'flex', gap: 14, padding: '14px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, alignItems: 'center', marginBottom: 8 }}>
                     <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 14, fontWeight: 600 }}>{n.canal}</div>
-                      <div style={{ fontSize: 12, color: 'hsl(var(--text-muted))', marginTop: 2 }}>{n.desc}</div>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: '#0f172a' }}>{n.canal}</div>
+                      <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>{n.desc}</div>
                     </div>
                     <span className={`badge ${notifToggles[n.key] ? 'badge-success' : 'badge-neutral'}`}>{notifToggles[n.key] ? '✓ Ativo' : 'Inativo'}</span>
                     <Toggle active={notifToggles[n.key]} onToggle={() => toggle(notifToggles, setNotifToggles, n.key)} />
@@ -211,8 +211,8 @@ export default function ConfiguracoesPage() {
           {/* ── SEGURANÇA ── */}
           {section === 'seguranca' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <div className="card" style={{ padding: '24px' }}>
-                <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 16 }}>🔒 Políticas de Segurança</div>
+              <div className="card" style={{ padding: '24px', background: '#ffffff', border: '1px solid #e2e8f0' }}>
+                <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 16, color: '#0f172a' }}>🔒 Políticas de Segurança</div>
                 {[
                   { key: 'twofa', label: 'Autenticação em 2 fatores (2FA)', desc: 'Exigir para todos os administradores' },
                   { key: 'sessoes', label: 'Sessões simultâneas limitadas', desc: 'Limitar a 1 sessão ativa por usuário' },
@@ -220,19 +220,19 @@ export default function ConfiguracoesPage() {
                   { key: 'inatividade', label: 'Bloqueio por inatividade', desc: 'Deslogar após 30 minutos sem atividade' },
                   { key: 'lgpd', label: 'Conformidade LGPD', desc: 'Dados pessoais sob termo de consentimento' },
                 ].map(opt => (
-                  <div key={opt.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px', background: 'hsl(var(--bg-elevated))', borderRadius: 10, marginBottom: 8 }}>
+                  <div key={opt.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, marginBottom: 8 }}>
                     <div>
-                      <div style={{ fontSize: 13, fontWeight: 600 }}>{opt.label}</div>
-                      <div style={{ fontSize: 12, color: 'hsl(var(--text-muted))', marginTop: 2 }}>{opt.desc}</div>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: '#0f172a' }}>{opt.label}</div>
+                      <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>{opt.desc}</div>
                     </div>
                     <Toggle active={securityToggles[opt.key]} onToggle={() => toggle(securityToggles, setSecurityToggles, opt.key)} />
                   </div>
                 ))}
               </div>
-              <div className="card" style={{ padding: '24px' }}>
-                <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 14 }}>🔑 Chave de API do sistema</div>
+              <div className="card" style={{ padding: '24px', background: '#ffffff', border: '1px solid #e2e8f0' }}>
+                <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 14, color: '#0f172a' }}>🔑 Chave de API do sistema</div>
                 <div style={{ display: 'flex', gap: 10, marginBottom: 10 }}>
-                  <input className="form-input" style={{ flex: 1, fontFamily: 'monospace', fontSize: 12 }} type={showKey ? 'text' : 'password'} value="sk_live_impacto_edu_2026_placeholder" readOnly />
+                  <input className="form-input" style={{ flex: 1, fontFamily: 'monospace', fontSize: 12, color: '#0f172a', background: '#ffffff', borderColor: '#cbd5e1' }} type={showKey ? 'text' : 'password'} value="sk_live_impacto_edu_2026_placeholder" readOnly />
                   <button className="btn btn-ghost btn-icon" onClick={() => setShowKey(!showKey)}>{showKey ? <EyeOff size={16} /> : <Eye size={16} />}</button>
                   <button className="btn btn-secondary btn-sm"><RefreshCw size={13} />Regenerar</button>
                 </div>

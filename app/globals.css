@@ -244,6 +244,30 @@
   color-scheme: dark !important;
 }
 
+[data-theme='light'] body,
+[data-theme='light'] .app-wrapper,
+[data-theme='light'] .main-content,
+[data-theme='light'] .page-content {
+  color: #0f172a !important;
+}
+
+[data-theme='light'] h1:not(.notification-popover-content *):not(.sidebar-dark *):not(.credimpacto-sidebar *):not(.login-wrapper *):not(.auth-card *),
+[data-theme='light'] h2:not(.notification-popover-content *):not(.sidebar-dark *):not(.credimpacto-sidebar *):not(.login-wrapper *):not(.auth-card *),
+[data-theme='light'] h3:not(.notification-popover-content *):not(.sidebar-dark *):not(.credimpacto-sidebar *):not(.login-wrapper *):not(.auth-card *),
+[data-theme='light'] h4:not(.notification-popover-content *):not(.sidebar-dark *):not(.credimpacto-sidebar *):not(.login-wrapper *):not(.auth-card *),
+[data-theme='light'] h5:not(.notification-popover-content *):not(.sidebar-dark *):not(.credimpacto-sidebar *):not(.login-wrapper *):not(.auth-card *),
+[data-theme='light'] h6:not(.notification-popover-content *):not(.sidebar-dark *):not(.credimpacto-sidebar *):not(.login-wrapper *):not(.auth-card *) {
+  color: #0f172a;
+}
+
+[data-theme='light'] .card:not(.login-card *):not(.login-wrapper *):not(.auth-card *),
+[data-theme='light'] .card-elevated:not(.login-card *):not(.login-wrapper *):not(.auth-card *),
+[data-theme='light'] .kpi-card {
+  color: #0f172a;
+  background: #ffffff;
+  border-color: #e2e8f0;
+}
+
 [data-theme='light'] .form-label:not(.login-wrapper *):not(.login-card *):not(.auth-card *) {
   color: #0f172a !important;
 }

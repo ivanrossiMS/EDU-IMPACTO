@@ -31,8 +31,11 @@ import {
   Banknote,
   Receipt,
   BarChart3,
-  Clock
+  Clock,
+  UserCircle
 } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { motion } from 'framer-motion'
 import { formatBrl } from '@/lib/credimpacto/engine'
 import { performLogout } from '@/lib/auth/logout'
 import { useApp } from '@/lib/context'
@@ -111,6 +114,7 @@ export function CredImpactoSidebar({
   currentMe
 }: CredImpactoNavigationProps) {
   const { currentUser, theme, setTheme, setLoadingPath } = useApp()
+  const router = useRouter()
   const [showSwitchModuleModal, setShowSwitchModuleModal] = useState(false)
   const [isLoggingOut, setIsLoggingOut] = useState(false)
 
@@ -185,7 +189,7 @@ export function CredImpactoSidebar({
 
   return (
     <>
-      <aside className="hidden md:flex flex-col w-72 shrink-0 h-screen sticky top-0 relative overflow-hidden bg-gradient-to-b from-[#090d16] via-[#081522] to-[#041d18] text-white border-r border-emerald-500/20 z-30 select-none shadow-[4px_0_35px_rgba(0,0,0,0.6)]">
+      <aside className="hidden md:flex flex-col w-72 shrink-0 h-screen sticky top-0 relative overflow-hidden bg-gradient-to-b from-[#090d16] via-[#081522] to-[#041d18] text-white border-r border-emerald-500/20 z-30 select-none shadow-[4px_0_35px_rgba(0,0,0,0.6)] credimpacto-sidebar">
         {/* AMBIENT GLOWS & SPECULAR ACCENTS */}
         <div className="absolute top-0 left-0 right-0 h-48 bg-gradient-to-b from-emerald-500/10 via-teal-500/5 to-transparent pointer-events-none" />
         <div className="absolute -top-16 -left-16 w-48 h-48 rounded-full bg-emerald-500/10 blur-3xl pointer-events-none" />
@@ -200,7 +204,7 @@ export function CredImpactoSidebar({
             </div>
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-1.5">
-                <h2 className="text-sm font-extrabold text-white tracking-tight">CredImpacto</h2>
+                <h2 className="text-sm font-extrabold tracking-tight text-white !text-white" style={{ color: '#ffffff' }}>CredImpacto</h2>
                 <span className="text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-xs">
                   PRO
                 </span>
@@ -364,63 +368,149 @@ export function CredImpactoSidebar({
           </div>
 
           {/* USER PROFILE CARD */}
-          <div className="p-2.5 rounded-2xl bg-white/[0.06] border border-white/10 shadow-inner backdrop-blur-md">
-            <div className="flex items-center gap-2.5">
-              <div className="relative shrink-0">
-                <UserAvatar
-                  userId={currentUser?.id || currentMe?.id}
-                  name={userName}
+          <div 
+            style={{
+              background: 'rgba(255, 255, 255, 0.04)',
+              backdropFilter: 'blur(16px)',
+              border: '1px solid rgba(255, 255, 255, 0.12)',
+              borderRadius: 20,
+              padding: '12px 12px 10px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 10,
+              boxShadow: '0 10px 30px rgba(0,0,0,0.3)',
+              transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
+            }}
+          >
+            {/* Top row: Avatar + Name/Role + Notification */}
+            <div 
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                width: '100%',
+                justifyContent: 'flex-start'
+              }}
+            >
+              <div style={{ position: 'relative', flexShrink: 0 }}>
+                <UserAvatar 
+                  key={currentUser?.foto || 'default'}
+                  userId={currentUser?.id || currentMe?.id} 
+                  name={userName} 
                   fotoUrl={currentUser?.foto}
-                  size={36}
-                  className="rounded-xl border border-white/20 shadow-sm"
+                  size={40} 
+                  style={{ borderRadius: 12, border: '1px solid rgba(255,255,255,0.12)' }} 
                 />
-                <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-400 border-2 border-[#090d16] shadow-xs" />
+                <div style={{ position: 'absolute', bottom: -1, right: -1, width: 10, height: 10, borderRadius: '50%', background: '#10b981', border: '2px solid #060814', boxShadow: '0 0 8px #10b981' }} />
               </div>
-              <div className="min-w-0 flex-1">
-                <div className="text-xs font-bold text-white truncate">
+              
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 800, color: 'white', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', letterSpacing: '-0.01em' }}>
                   {userName}
                 </div>
-                <div className="text-[10px] text-slate-300 font-medium truncate">
+                <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.45)', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {userCargo}
                 </div>
-                {userUnidade && (
-                  <div className="text-[9.5px] text-emerald-400 font-semibold truncate flex items-center gap-1 mt-0.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
-                    <span>{userUnidade}</span>
-                  </div>
-                )}
               </div>
-              {/* THEME TOGGLE */}
-              <button
-                onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-                className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white transition-all shrink-0"
-                title={theme === 'dark' ? 'Mudar para tema claro' : 'Mudar para tema escuro'}
-              >
-                {theme === 'dark' ? <Sun size={13} className="text-amber-400" /> : <Moon size={13} className="text-indigo-400" />}
-              </button>
             </div>
-          </div>
 
-          {/* ACTION BUTTONS: TROCAR MÓDULO & SAIR */}
-          <div className="grid grid-cols-2 gap-1.5 pt-0.5">
-            <button
-              onClick={() => setShowSwitchModuleModal(true)}
-              className="py-2 px-2 rounded-xl bg-white/10 hover:bg-white/15 border border-white/10 text-white text-[11px] font-bold flex items-center justify-center gap-1.5 transition-all active:scale-98"
-              title="Trocar de Módulo"
+            {/* Bottom Actions Row: Meu Perfil, Trocar Módulo, Sair - DENTRO DO CARD */}
+            <div 
+              style={{ 
+                display: 'grid', 
+                gridTemplateColumns: 'repeat(3, 1fr)', 
+                gap: 4, 
+                background: 'rgba(0, 0, 0, 0.22)',
+                padding: '3px',
+                borderRadius: 12,
+                border: '1px solid rgba(255, 255, 255, 0.04)'
+              }}
             >
-              <Grid size={13} className="text-emerald-400" />
-              <span className="truncate">Trocar Módulo</span>
-            </button>
+              {/* 1. Meu Perfil */}
+              <motion.button
+                whileHover={{ scale: 1.02, backgroundColor: 'rgba(168, 85, 247, 0.16)', color: '#ffffff' }}
+                whileTap={{ scale: 0.97 }}
+                onClick={() => {
+                  router.push('/meu-perfil');
+                }}
+                title="Meu Perfil"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 5,
+                  padding: '6px 4px',
+                  borderRadius: 9,
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'rgba(255, 255, 255, 0.8)',
+                  cursor: 'pointer',
+                  fontSize: 11,
+                  fontWeight: 600,
+                  letterSpacing: '0.01em',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                <UserCircle size={14} color="#a855f7" style={{ filter: 'drop-shadow(0 0 5px rgba(168, 85, 247, 0.4))', flexShrink: 0 }} />
+                <span>Perfil</span>
+              </motion.button>
 
-            <button
-              onClick={handleLogout}
-              disabled={isLoggingOut}
-              className="py-2 px-2 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 text-rose-300 text-[11px] font-bold flex items-center justify-center gap-1.5 transition-all active:scale-98 disabled:opacity-50"
-              title="Sair do sistema"
-            >
-              <LogOut size={13} className={isLoggingOut ? 'animate-spin' : ''} />
-              <span>{isLoggingOut ? 'Saindo...' : 'Sair'}</span>
-            </button>
+              {/* 2. Trocar Módulo */}
+              <motion.button
+                whileHover={{ scale: 1.02, backgroundColor: 'rgba(6, 182, 212, 0.16)', color: '#ffffff' }}
+                whileTap={{ scale: 0.97 }}
+                onClick={() => setShowSwitchModuleModal(true)}
+                title="Trocar Módulo"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 5,
+                  padding: '6px 4px',
+                  borderRadius: 9,
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'rgba(255, 255, 255, 0.8)',
+                  cursor: 'pointer',
+                  fontSize: 11,
+                  fontWeight: 600,
+                  letterSpacing: '0.01em',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                <LayoutDashboard size={14} color="#06b6d4" style={{ filter: 'drop-shadow(0 0 5px rgba(6, 182, 212, 0.4))', flexShrink: 0 }} />
+                <span>Módulos</span>
+              </motion.button>
+
+              {/* 3. Sair */}
+              <motion.button
+                whileHover={{ scale: 1.02, backgroundColor: 'rgba(244, 63, 94, 0.16)', color: '#ffffff' }}
+                whileTap={{ scale: 0.97 }}
+                onClick={handleLogout}
+                disabled={isLoggingOut}
+                title="Sair do sistema"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 5,
+                  padding: '6px 4px',
+                  borderRadius: 9,
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'rgba(255, 255, 255, 0.8)',
+                  cursor: 'pointer',
+                  fontSize: 11,
+                  fontWeight: 600,
+                  letterSpacing: '0.01em',
+                  transition: 'all 0.15s ease',
+                  opacity: isLoggingOut ? 0.5 : 1
+                }}
+              >
+                <LogOut size={14} color="#f43f5e" style={{ filter: 'drop-shadow(0 0 5px rgba(244, 63, 94, 0.4))', flexShrink: 0 }} />
+                <span>{isLoggingOut ? 'Saindo...' : 'Sair'}</span>
+              </motion.button>
+            </div>
           </div>
         </div>
       </aside>
@@ -635,7 +725,7 @@ export function CredImpactoBottomBar({
             <div className="flex items-center justify-between pb-3 border-b border-white/10">
               <div className="flex items-center gap-2">
                 <Sparkles size={16} className="text-emerald-400" />
-                <h3 className="text-sm font-bold text-white">Mais Módulos & Páginas • CredImpacto</h3>
+                <h3 className="text-sm font-bold text-white !text-white" style={{ color: '#ffffff' }}>Mais Módulos & Páginas • CredImpacto</h3>
               </div>
               <button
                 onClick={() => setShowMoreMenu(false)}

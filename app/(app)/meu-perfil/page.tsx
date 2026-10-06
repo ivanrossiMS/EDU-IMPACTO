@@ -52,18 +52,18 @@ function PasswordStrength({ pw }: { pw: string }) {
     <div style={{ marginTop: 8 }}>
       <div style={{ display: 'flex', gap: 4, marginBottom: 6 }}>
         {[1,2,3,4,5].map(i => (
-          <div key={i} style={{ flex: 1, height: 4, borderRadius: 2, background: i <= score ? color : 'hsl(var(--bg-overlay))' }} />
+          <div key={i} style={{ flex: 1, height: 4, borderRadius: 2, background: i <= score ? color : '#e2e8f0' }} />
         ))}
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
         <span style={{ fontSize: 11, color }}>Força: {label}</span>
-        <span style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>{score}/5 critérios</span>
+        <span style={{ fontSize: 11, color: '#64748b' }}>{score}/5 critérios</span>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
         {checks.map(c => (
           <div key={c.label} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11 }}>
             {c.ok ? <Check size={10} color="#10b981" /> : <X size={10} color="#6b7280" />}
-            <span style={{ color: c.ok ? '#10b981' : 'hsl(var(--text-muted))' }}>{c.label}</span>
+            <span style={{ color: c.ok ? '#10b981' : '#64748b' }}>{c.label}</span>
           </div>
         ))}
       </div>
@@ -237,17 +237,45 @@ export default function MeuPerfilPage(props?: any) {
 
   if (!effectiveUser) {
     return (
-      <div style={{ textAlign: 'center', padding: '80px 20px', color: 'hsl(var(--text-muted))' }}>
+      <div style={{ textAlign: 'center', padding: '80px 20px', color: '#64748b' }}>
         <div style={{ fontSize: 40, marginBottom: 12 }}>👤</div>
-        <div style={{ fontWeight: 700, fontSize: 16 }}>Nenhum usuário logado</div>
-        <div style={{ fontSize: 13, marginTop: 6 }}>Faça login para acessar seu perfil.</div>
+        <div style={{ fontWeight: 700, fontSize: 16, color: '#0f172a' }}>Nenhum usuário logado</div>
+        <div style={{ fontSize: 13, marginTop: 6, color: '#64748b' }}>Faça login para acessar seu perfil.</div>
       </div>
     )
   }
 
   return (
-    <div style={{ maxWidth: 980, margin: '0 auto' }}>
+    <div className="meu-perfil-container" style={{ maxWidth: 980, margin: '0 auto', color: '#0f172a' }}>
       <style dangerouslySetInnerHTML={{__html: `
+        .meu-perfil-container {
+          color: #0f172a;
+        }
+        .meu-perfil-container .card {
+          background: #ffffff !important;
+          border: 1px solid #e2e8f0 !important;
+          color: #0f172a !important;
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05) !important;
+        }
+        .meu-perfil-container .page-title {
+          color: #0f172a !important;
+        }
+        .meu-perfil-container .page-subtitle {
+          color: #64748b !important;
+        }
+        .meu-perfil-container .form-label {
+          color: #0f172a !important;
+        }
+        .meu-perfil-container input,
+        .meu-perfil-container textarea {
+          color: #0f172a !important;
+          background: #ffffff !important;
+          border-color: #cbd5e1 !important;
+        }
+        .meu-perfil-container input::placeholder,
+        .meu-perfil-container textarea::placeholder {
+          color: #94a3b8 !important;
+        }
         .profile-grid {
           display: grid;
           grid-template-columns: 300px 1fr;
@@ -393,15 +421,15 @@ export default function MeuPerfilPage(props?: any) {
                 )}
               </div>
 
-            <div style={{ fontWeight: 800, fontSize: 17 }}>{displayNome}</div>
-            <div style={{ fontSize: 13, color: 'hsl(var(--text-muted))', marginTop: 2 }}>{displayCargo}</div>
+            <div style={{ fontWeight: 800, fontSize: 17, color: '#0f172a' }}>{displayNome}</div>
+            <div style={{ fontSize: 13, color: '#64748b', marginTop: 2 }}>{displayCargo}</div>
             <div style={{ marginTop: 10 }}>
               <span style={{ fontSize: 11, padding: '4px 12px', borderRadius: 20, background: 'rgba(99,102,241,0.12)', color: '#6366f1', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                 <Shield size={10} />{displayPerfil}
               </span>
             </div>
             {extra.bio && (
-              <div style={{ marginTop: 14, fontSize: 12, color: 'hsl(var(--text-secondary))', fontStyle: 'italic', lineHeight: 1.5, padding: '10px 14px', background: 'hsl(var(--bg-elevated))', borderRadius: 8 }}>
+              <div style={{ marginTop: 14, fontSize: 12, color: '#334155', fontStyle: 'italic', lineHeight: 1.5, padding: '10px 14px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8 }}>
                 &quot;{extra.bio}&quot;
               </div>
             )}
@@ -410,7 +438,7 @@ export default function MeuPerfilPage(props?: any) {
           {/* Info rápida */}
           {!isColaboradorProfile && (
             <div className="card" style={{ padding: '16px 20px' }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-muted))', marginBottom: 12, letterSpacing: '0.06em' }}>INFORMAÇÕES DA CONTA</div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', marginBottom: 12, letterSpacing: '0.06em' }}>INFORMAÇÕES DA CONTA</div>
               {[
                 { icon: <Mail size={13} />,      label: 'E-mail',        value: displayEmail },
                 { icon: <BadgeCheck size={13} />, label: 'Perfil',        value: displayPerfil },
@@ -418,11 +446,11 @@ export default function MeuPerfilPage(props?: any) {
                 { icon: <Phone size={13} />,     label: 'Telefone',      value: extra.telefone || '—' },
                 { icon: <Clock size={13} />,     label: 'Último acesso', value: 'Agora' },
               ].map(item => (
-                <div key={item.label} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, paddingBottom: 10, marginBottom: 10, borderBottom: '1px solid hsl(var(--border-subtle))' }}>
-                  <div style={{ color: 'hsl(var(--text-muted))', marginTop: 1, flexShrink: 0 }}>{item.icon}</div>
+                <div key={item.label} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, paddingBottom: 10, marginBottom: 10, borderBottom: '1px solid #f1f5f9' }}>
+                  <div style={{ color: '#64748b', marginTop: 1, flexShrink: 0 }}>{item.icon}</div>
                   <div>
-                    <div style={{ fontSize: 10, color: 'hsl(var(--text-muted))' }}>{item.label}</div>
-                    <div style={{ fontSize: 12, fontWeight: 600, wordBreak: 'break-all' }}>{item.value}</div>
+                    <div style={{ fontSize: 10, color: '#64748b', fontWeight: 600 }}>{item.label}</div>
+                    <div style={{ fontSize: 12, fontWeight: 600, wordBreak: 'break-all', color: '#0f172a' }}>{item.value}</div>
                   </div>
                 </div>
               ))}
@@ -438,8 +466,8 @@ export default function MeuPerfilPage(props?: any) {
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
               <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(96,165,250,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><User size={16} color="#60a5fa" /></div>
               <div>
-                <div style={{ fontWeight: 700, fontSize: 15 }}>Identificação da Conta</div>
-                <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>Dados gerenciados pelo administrador do sistema</div>
+                <div style={{ fontWeight: 700, fontSize: 15, color: '#0f172a' }}>Identificação da Conta</div>
+                <div style={{ fontSize: 11, color: '#64748b' }}>Dados gerenciados pelo administrador do sistema</div>
               </div>
             </div>
             <div className="info-fields-grid">
@@ -449,13 +477,13 @@ export default function MeuPerfilPage(props?: any) {
                 { label: 'Cargo / Função', value: displayCargo },
                 { label: 'Perfil de acesso', value: displayPerfil },
               ].map(f => (
-                <div key={f.label} style={{ padding: '12px 14px', background: 'hsl(var(--bg-elevated))', borderRadius: 10, border: '1px solid hsl(var(--border-subtle))' }}>
-                  <div style={{ fontSize: 10, color: 'hsl(var(--text-muted))', marginBottom: 4, fontWeight: 600, letterSpacing: '0.05em' }}>{f.label}</div>
-                  <div style={{ fontSize: 13, fontWeight: 700 }}>{f.value}</div>
+                <div key={f.label} style={{ padding: '12px 14px', background: '#f8fafc', borderRadius: 10, border: '1px solid #e2e8f0' }}>
+                  <div style={{ fontSize: 10, color: '#64748b', marginBottom: 4, fontWeight: 600, letterSpacing: '0.05em' }}>{f.label}</div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: '#0f172a' }}>{f.value}</div>
                 </div>
               ))}
             </div>
-            <div style={{ marginTop: 12, padding: '8px 12px', borderRadius: 8, background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.15)', fontSize: 11, color: '#fbbf24', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div style={{ marginTop: 12, padding: '8px 12px', borderRadius: 8, background: '#fffbeb', border: '1px solid #fde68a', fontSize: 11, color: '#b45309', display: 'flex', alignItems: 'center', gap: 6, fontWeight: 500 }}>
               🔒 Para alterar nome, e-mail ou cargo, contate o administrador do sistema.
             </div>
           </div>
@@ -466,8 +494,8 @@ export default function MeuPerfilPage(props?: any) {
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(52,211,153,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><FileText size={16} color="#34d399" /></div>
                 <div>
-                  <div style={{ fontWeight: 700, fontSize: 15 }}>Informações Complementares</div>
-                  <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>Telefone, unidade e bio — você pode editar</div>
+                  <div style={{ fontWeight: 700, fontSize: 15, color: '#0f172a' }}>Informações Complementares</div>
+                  <div style={{ fontSize: 11, color: '#64748b' }}>Telefone, unidade e bio — você pode editar</div>
                 </div>
               </div>
               {!editMode ? (
@@ -484,17 +512,17 @@ export default function MeuPerfilPage(props?: any) {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                 <div className="edit-fields-grid">
                   <div>
-                    <label className="form-label">Telefone</label>
-                    <input className="form-input" value={form.telefone} onChange={e => setForm(p => ({ ...p, telefone: e.target.value }))} placeholder="(11) 98888-0000" />
+                    <label className="form-label" style={{ color: '#0f172a' }}>Telefone</label>
+                    <input className="form-input" value={form.telefone} onChange={e => setForm(p => ({ ...p, telefone: e.target.value }))} placeholder="(11) 98888-0000" style={{ color: '#0f172a', background: '#ffffff', borderColor: '#cbd5e1' }} />
                   </div>
                   <div>
-                    <label className="form-label">Unidade de trabalho</label>
-                    <input className="form-input" value={form.unidade} onChange={e => setForm(p => ({ ...p, unidade: e.target.value }))} placeholder="Ex: Unidade Centro" />
+                    <label className="form-label" style={{ color: '#0f172a' }}>Unidade de trabalho</label>
+                    <input className="form-input" value={form.unidade} onChange={e => setForm(p => ({ ...p, unidade: e.target.value }))} placeholder="Ex: Unidade Centro" style={{ color: '#0f172a', background: '#ffffff', borderColor: '#cbd5e1' }} />
                   </div>
                 </div>
                 <div>
-                  <label className="form-label">Bio / Descrição</label>
-                  <textarea className="form-input" rows={3} value={form.bio} onChange={e => setForm(p => ({ ...p, bio: e.target.value }))} placeholder="Uma breve descrição sobre você..." style={{ resize: 'vertical' }} />
+                  <label className="form-label" style={{ color: '#0f172a' }}>Bio / Descrição</label>
+                  <textarea className="form-input" rows={3} value={form.bio} onChange={e => setForm(p => ({ ...p, bio: e.target.value }))} placeholder="Uma breve descrição sobre você..." style={{ color: '#0f172a', background: '#ffffff', borderColor: '#cbd5e1', resize: 'vertical' }} />
                 </div>
               </div>
             ) : (
@@ -504,9 +532,9 @@ export default function MeuPerfilPage(props?: any) {
                   { label: 'Unidade de trabalho', value: extra.unidade || '—' },
                   { label: 'Bio', value: extra.bio || '—' },
                 ].map(f => (
-                  <div key={f.label} style={{ padding: '12px 14px', background: 'hsl(var(--bg-elevated))', borderRadius: 10, border: '1px solid hsl(var(--border-subtle))' }}>
-                    <div style={{ fontSize: 10, color: 'hsl(var(--text-muted))', marginBottom: 4, fontWeight: 600 }}>{f.label}</div>
-                    <div style={{ fontSize: 13, fontWeight: 600 }}>{f.value}</div>
+                  <div key={f.label} style={{ padding: '12px 14px', background: '#f8fafc', borderRadius: 10, border: '1px solid #e2e8f0' }}>
+                    <div style={{ fontSize: 10, color: '#64748b', marginBottom: 4, fontWeight: 600 }}>{f.label}</div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: '#0f172a' }}>{f.value}</div>
                   </div>
                 ))}
               </div>
@@ -519,8 +547,8 @@ export default function MeuPerfilPage(props?: any) {
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
                 <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(239,68,68,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Key size={16} color="#ef4444" /></div>
                 <div>
-                  <div style={{ fontWeight: 700, fontSize: 15 }}>Segurança — Trocar Senha</div>
-                  <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>Mantenha sua conta protegida com uma senha forte</div>
+                  <div style={{ fontWeight: 700, fontSize: 15, color: '#0f172a' }}>Segurança — Trocar Senha</div>
+                  <div style={{ fontSize: 11, color: '#64748b' }}>Mantenha sua conta protegida com uma senha forte</div>
                 </div>
               </div>
 
@@ -538,13 +566,13 @@ export default function MeuPerfilPage(props?: any) {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               {/* Senha atual */}
               <div>
-                <label className="form-label">Senha atual</label>
+                <label className="form-label" style={{ color: '#0f172a' }}>Senha atual</label>
                 <div style={{ position: 'relative' }}>
-                  <Lock size={13} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'hsl(var(--text-muted))', pointerEvents: 'none' }} />
+                  <Lock size={13} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#64748b', pointerEvents: 'none' }} />
                   <input className="form-input" type={showPw.atual ? 'text' : 'password'} value={pwForm.atual}
                     onChange={e => setPwForm(p => ({ ...p, atual: e.target.value }))} placeholder="Digite a senha atual"
-                    style={{ paddingLeft: 36, paddingRight: 40 }} />
-                  <button type="button" style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'hsl(var(--text-muted))' }} onClick={() => setShowPw(p => ({ ...p, atual: !p.atual }))}>
+                    style={{ paddingLeft: 36, paddingRight: 40, color: '#0f172a', background: '#ffffff', borderColor: '#cbd5e1' }} />
+                  <button type="button" style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }} onClick={() => setShowPw(p => ({ ...p, atual: !p.atual }))}>
                     {showPw.atual ? <EyeOff size={14} /> : <Eye size={14} />}
                   </button>
                 </div>
@@ -552,13 +580,13 @@ export default function MeuPerfilPage(props?: any) {
 
               {/* Nova senha */}
               <div>
-                <label className="form-label">Nova senha</label>
+                <label className="form-label" style={{ color: '#0f172a' }}>Nova senha</label>
                 <div style={{ position: 'relative' }}>
-                  <Lock size={13} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'hsl(var(--text-muted))', pointerEvents: 'none' }} />
+                  <Lock size={13} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#64748b', pointerEvents: 'none' }} />
                   <input className="form-input" type={showPw.nova ? 'text' : 'password'} value={pwForm.nova}
                     onChange={e => setPwForm(p => ({ ...p, nova: e.target.value }))} placeholder="Mínimo 8 caracteres"
-                    style={{ paddingLeft: 36, paddingRight: 40 }} />
-                  <button type="button" style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'hsl(var(--text-muted))' }} onClick={() => setShowPw(p => ({ ...p, nova: !p.nova }))}>
+                    style={{ paddingLeft: 36, paddingRight: 40, color: '#0f172a', background: '#ffffff', borderColor: '#cbd5e1' }} />
+                  <button type="button" style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }} onClick={() => setShowPw(p => ({ ...p, nova: !p.nova }))}>
                     {showPw.nova ? <EyeOff size={14} /> : <Eye size={14} />}
                   </button>
                 </div>
@@ -567,13 +595,13 @@ export default function MeuPerfilPage(props?: any) {
 
               {/* Confirmar */}
               <div>
-                <label className="form-label">Confirmar nova senha</label>
+                <label className="form-label" style={{ color: '#0f172a' }}>Confirmar nova senha</label>
                 <div style={{ position: 'relative' }}>
-                  <Lock size={13} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'hsl(var(--text-muted))', pointerEvents: 'none' }} />
+                  <Lock size={13} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#64748b', pointerEvents: 'none' }} />
                   <input className="form-input" type={showPw.confirmar ? 'text' : 'password'} value={pwForm.confirmar}
                     onChange={e => setPwForm(p => ({ ...p, confirmar: e.target.value }))} placeholder="Repita a nova senha"
-                    style={{ paddingLeft: 36, paddingRight: 40, borderColor: pwForm.confirmar && pwForm.confirmar !== pwForm.nova ? '#ef4444' : undefined }} />
-                  <button type="button" style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'hsl(var(--text-muted))' }} onClick={() => setShowPw(p => ({ ...p, confirmar: !p.confirmar }))}>
+                    style={{ paddingLeft: 36, paddingRight: 40, color: '#0f172a', background: '#ffffff', borderColor: pwForm.confirmar && pwForm.confirmar !== pwForm.nova ? '#ef4444' : '#cbd5e1' }} />
+                  <button type="button" style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }} onClick={() => setShowPw(p => ({ ...p, confirmar: !p.confirmar }))}>
                     {showPw.confirmar ? <EyeOff size={14} /> : <Eye size={14} />}
                   </button>
                 </div>
@@ -598,7 +626,7 @@ export default function MeuPerfilPage(props?: any) {
           <div className="card" style={{ padding: '20px 24px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
               <Shield size={16} color="#6366f1" />
-              <div style={{ fontWeight: 700, fontSize: 14 }}>Sessão Atual</div>
+              <div style={{ fontWeight: 700, fontSize: 14, color: '#0f172a' }}>Sessão Atual</div>
             </div>
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
               {[
@@ -607,9 +635,9 @@ export default function MeuPerfilPage(props?: any) {
                 { label: 'Plataforma', value: 'Web Browser' },
                 { label: 'Acesso',    value: 'Ativo agora' },
               ].map(item => (
-                <div key={item.label} style={{ flex: '1 0 160px', padding: '10px 14px', background: 'hsl(var(--bg-elevated))', borderRadius: 8 }}>
-                  <div style={{ fontSize: 10, color: 'hsl(var(--text-muted))' }}>{item.label}</div>
-                  <div style={{ fontSize: 12, fontWeight: 600, wordBreak: 'break-all' }}>{item.value}</div>
+                <div key={item.label} style={{ flex: '1 0 160px', padding: '10px 14px', background: '#f8fafc', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                  <div style={{ fontSize: 10, color: '#64748b' }}>{item.label}</div>
+                  <div style={{ fontSize: 12, fontWeight: 600, wordBreak: 'break-all', color: '#0f172a' }}>{item.value}</div>
                 </div>
               ))}
             </div>

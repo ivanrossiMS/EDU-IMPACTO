@@ -2,6 +2,7 @@
 import { performLogout } from "@/lib/auth/logout";
 
 import React from 'react'
+import { motion } from 'framer-motion'
 import { usePathname, useRouter } from 'next/navigation'
 import { useApp } from '@/lib/context'
 import {
@@ -9,9 +10,11 @@ import {
   ClipboardCheck, GraduationCap,
   MessageSquareWarning, Settings,
   LogOut, Home, Stethoscope, Heart, PieChart, Grid, HelpCircle, Scale, User, Megaphone, KeyRound,
-  LayoutGrid, X
+  LayoutGrid, X, UserCircle, LayoutDashboard
 } from 'lucide-react'
 import { useIsMobile } from '@/lib/hooks/useIsMobile'
+import { UserAvatar } from '@/components/UserAvatar'
+import { TrocarModuloModal } from '@/components/layout/TrocarModuloModal'
 
 const MENUS = [
   { href: '/gestao-pessoas', icon: Home, label: 'Visão Geral' },
@@ -49,6 +52,7 @@ export function PeopleSidebar() {
   const { currentUser } = useApp()
   const isMobile = useIsMobile()
   const [isDrawerOpen, setIsDrawerOpen] = React.useState(false)
+  const [isTrocarModuloOpen, setIsTrocarModuloOpen] = React.useState(false)
   const activeDockRef = React.useRef<HTMLButtonElement | null>(null)
 
   React.useEffect(() => {
@@ -412,7 +416,7 @@ export function PeopleSidebar() {
               <div style={{ display: 'flex', gap: 8, paddingTop: 12, borderTop: '1px solid rgba(255, 255, 255, 0.08)' }}>
                 <button
                   onClick={() => {
-                    router.push('/')
+                    setIsTrocarModuloOpen(true)
                     setIsDrawerOpen(false)
                   }}
                   style={{
@@ -468,29 +472,46 @@ export function PeopleSidebar() {
   }
 
   return (
+    <>
     <div style={{ 
       width: 280, 
+      height: '100vh',
+      maxHeight: '100vh',
       background: '#020617', // Slate 950
       borderRight: '1px solid #1e293b', // Slate 800
       display: 'flex', 
       flexDirection: 'column',
-      padding: '32px 20px',
+      padding: '24px 16px 16px',
+      boxSizing: 'border-box',
       boxShadow: '4px 0 24px rgba(0, 0, 0, 0.4)',
-      zIndex: 10
+      zIndex: 10,
+      overflow: 'hidden'
     }}>
       {/* Brand */}
-      <div style={{ marginBottom: 40, display: 'flex', alignItems: 'center', gap: 16, padding: '0 8px' }}>
-        <div style={{ width: 44, height: 44, borderRadius: 14, background: 'linear-gradient(135deg, #38bdf8, #3b82f6)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 16px rgba(56, 189, 248, 0.3)' }}>
-          <Users size={24} color="#fff" strokeWidth={2.5} />
+      <div style={{ marginBottom: 20, display: 'flex', alignItems: 'center', gap: 14, padding: '0 8px', flexShrink: 0 }}>
+        <div style={{ width: 42, height: 42, borderRadius: 14, background: 'linear-gradient(135deg, #38bdf8, #3b82f6)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 16px rgba(56, 189, 248, 0.3)', flexShrink: 0 }}>
+          <Users size={22} color="#fff" strokeWidth={2.5} />
         </div>
         <div>
-          <div style={{ fontSize: 18, fontWeight: 900, color: '#f8fafc', letterSpacing: '-0.03em', fontFamily: "'Outfit', sans-serif" }}>Gestão Pessoas</div>
-          <div style={{ fontSize: 12, color: '#94a3b8', fontWeight: 500, letterSpacing: '0.05em' }}>IMPACTO EDU</div>
+          <div style={{ fontSize: 17, fontWeight: 900, color: '#f8fafc', letterSpacing: '-0.03em', fontFamily: "'Outfit', sans-serif" }}>Gestão Pessoas</div>
+          <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 500, letterSpacing: '0.05em' }}>IMPACTO EDU</div>
         </div>
       </div>
 
       {/* Navigation */}
-      <nav style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <nav 
+        style={{ 
+          flex: 1, 
+          minHeight: 0, 
+          display: 'flex', 
+          flexDirection: 'column', 
+          gap: 6, 
+          overflowY: 'auto',
+          overflowX: 'hidden',
+          paddingRight: 4
+        }}
+        className="custom-people-scrollbar"
+      >
         {filteredMenus.map(m => {
           const isActive = pathname === m.href || (m.href !== '/gestao-pessoas' && pathname?.startsWith(m.href))
           return (
@@ -498,13 +519,14 @@ export function PeopleSidebar() {
               key={m.href}
               onClick={() => router.push(m.href)}
               style={{
-                display: 'flex', alignItems: 'center', gap: 14, padding: '14px 16px', borderRadius: 16, border: 'none', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderRadius: 14, border: 'none', cursor: 'pointer',
                 background: isActive ? 'rgba(56, 189, 248, 0.1)' : 'transparent',
                 color: isActive ? '#38bdf8' : '#94a3b8',
                 fontWeight: isActive ? 700 : 500,
                 transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
                 position: 'relative',
-                overflow: 'hidden'
+                overflow: 'hidden',
+                flexShrink: 0
               }}
               onMouseEnter={e => { 
                 if(!isActive) {
@@ -522,97 +544,181 @@ export function PeopleSidebar() {
               {isActive && (
                 <div style={{ position: 'absolute', left: 0, top: '50%', transform: 'translateY(-50%)', width: 4, height: 20, borderRadius: '0 4px 4px 0', background: '#38bdf8', boxShadow: '0 0 10px rgba(56, 189, 248, 0.5)' }} />
               )}
-              <m.icon size={20} strokeWidth={isActive ? 2.5 : 2} style={{ color: isActive ? '#38bdf8' : '#64748b' }} />
-              <span style={{ fontSize: 14 }}>{m.label}</span>
+              <m.icon size={18} strokeWidth={isActive ? 2.5 : 2} style={{ color: isActive ? '#38bdf8' : '#64748b', flexShrink: 0 }} />
+              <span style={{ fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.label}</span>
             </button>
           )
         })}
       </nav>
 
-      {/* Footer / User */}
-      <div style={{ marginTop: 'auto', paddingTop: 24, borderTop: '1px solid rgba(255, 255, 255, 0.05)' }}>
-        {/* USER INFO */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 24, padding: '0 4px' }}>
-          {currentUser?.foto ? (
-            <img 
-              src={currentUser.foto} 
-              alt={currentUser.nome || 'Avatar'}
-              style={{
-                width: 44, height: 44, borderRadius: 14, objectFit: 'cover',
-                boxShadow: '0 0 20px rgba(59, 130, 246, 0.3)',
-                border: '1px solid rgba(59, 130, 246, 0.2)'
-              }}
-            />
-          ) : (
-            <div style={{
-              width: 44, height: 44, borderRadius: 14,
-              background: 'linear-gradient(135deg, #38bdf8, #2563eb)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              boxShadow: '0 0 20px rgba(59, 130, 246, 0.4)'
-            }}>
-              <User size={20} color="#ffffff" strokeWidth={2.5} />
-            </div>
-          )}
-          
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <span style={{ fontSize: 13, fontWeight: 700, color: '#f8fafc', letterSpacing: '-0.01em', marginBottom: 2 }}>
-              {currentUser?.nome || 'Usuário'}
-            </span>
-            <span style={{ fontSize: 9, fontWeight: 700, color: '#64748b', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-              {currentUser?.cargo || currentUser?.perfil || 'COLABORADOR'}
-            </span>
-          </div>
-        </div>
-
-        {/* BUTTONS */}
-        <div style={{ display: 'flex', gap: 8, width: '100%' }}>
-          <button
-            onClick={() => router.push('/')}
-            style={{
-              flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, padding: '8px 4px', borderRadius: 12, 
-            border: '1px solid rgba(6, 182, 212, 0.3)', cursor: 'pointer',
-            color: '#06b6d4', fontWeight: 700, transition: 'all 0.2s', letterSpacing: '0.02em',
-            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)'
-          }}
-          onMouseEnter={e => { 
-            e.currentTarget.style.background = 'linear-gradient(180deg, rgba(15, 23, 42, 0.9), rgba(30, 58, 138, 0.5))'; 
-            e.currentTarget.style.borderColor = 'rgba(6, 182, 212, 0.6)'; 
-            e.currentTarget.style.boxShadow = '0 0 15px rgba(6, 182, 212, 0.15)';
-          }}
-          onMouseLeave={e => { 
-            e.currentTarget.style.background = 'linear-gradient(180deg, rgba(15, 23, 42, 0.9), rgba(30, 58, 138, 0.3))'; 
-            e.currentTarget.style.borderColor = 'rgba(6, 182, 212, 0.3)'; 
-            e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.1)';
-          }}
-        >
-          <Grid size={16} strokeWidth={2.5} />
-          <span style={{ fontSize: 9, whiteSpace: 'nowrap' }}>MÓDULOS</span>
-        </button>
-
-        <button
-          onClick={handleLogout}
+      {/* Footer / User - POSIÇÃO FIXA NO RODAPÉ DA SIDEBAR */}
+      <div style={{ marginTop: 'auto', paddingTop: 14, borderTop: '1px solid rgba(255, 255, 255, 0.05)', flexShrink: 0 }}>
+        {/* User Info Card */}
+        <div 
           style={{
-            flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, padding: '8px 4px', borderRadius: 12, 
-            border: '1px solid rgba(239, 68, 68, 0.3)', cursor: 'pointer',
-            color: '#ef4444', fontWeight: 700, transition: 'all 0.2s', letterSpacing: '0.02em',
-            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)'
-          }}
-          onMouseEnter={e => { 
-            e.currentTarget.style.background = 'linear-gradient(180deg, rgba(15, 23, 42, 0.9), rgba(127, 29, 29, 0.5))'; 
-            e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.5)'; 
-            e.currentTarget.style.boxShadow = '0 0 15px rgba(239, 68, 68, 0.15)';
-          }}
-          onMouseLeave={e => { 
-            e.currentTarget.style.background = 'linear-gradient(180deg, rgba(15, 23, 42, 0.9), rgba(127, 29, 29, 0.3))'; 
-            e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.3)'; 
-            e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.1)';
+            background: 'rgba(255, 255, 255, 0.04)',
+            backdropFilter: 'blur(16px)',
+            border: '1px solid rgba(255, 255, 255, 0.12)',
+            borderRadius: 20,
+            padding: '12px 12px 10px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 10,
+            boxShadow: '0 10px 30px rgba(0,0,0,0.3)',
+            transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
           }}
         >
-          <LogOut size={16} strokeWidth={2.5} />
-          <span style={{ fontSize: 9, whiteSpace: 'nowrap' }}>SAIR</span>
-        </button>
+          {/* Top row: Avatar + Name/Role (Sem botão de notificação) */}
+          <div 
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              width: '100%',
+              justifyContent: 'flex-start'
+            }}
+          >
+            <div style={{ position: 'relative', flexShrink: 0 }}>
+              <UserAvatar 
+                key={currentUser?.foto || 'default'}
+                userId={currentUser?.id} 
+                name={currentUser?.nome || 'Usuário'} 
+                fotoUrl={currentUser?.foto}
+                size={40} 
+                style={{ borderRadius: 12, border: '1px solid rgba(255,255,255,0.12)' }} 
+              />
+              <div style={{ position: 'absolute', bottom: -1, right: -1, width: 10, height: 10, borderRadius: '50%', background: '#10b981', border: '2px solid #060814', boxShadow: '0 0 8px #10b981' }} />
+            </div>
+            
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13, fontWeight: 800, color: 'white', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', letterSpacing: '-0.01em' }}>
+                {currentUser?.nome || 'Usuário'}
+              </div>
+              <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.45)', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {currentUser?.cargo || currentUser?.perfil || 'Colaborador'}
+              </div>
+            </div>
+          </div>
+
+          {/* Bottom Actions Row: Meu Perfil, Trocar Módulo, Sair - DENTRO DO CARD */}
+          <div 
+            style={{ 
+              display: 'grid', 
+              gridTemplateColumns: 'repeat(3, 1fr)', 
+              gap: 4, 
+              background: 'rgba(0, 0, 0, 0.22)',
+              padding: '3px',
+              borderRadius: 12,
+              border: '1px solid rgba(255, 255, 255, 0.04)'
+            }}
+          >
+            {/* 1. Meu Perfil */}
+            <motion.button
+              whileHover={{ scale: 1.02, backgroundColor: 'rgba(168, 85, 247, 0.16)', color: '#ffffff' }}
+              whileTap={{ scale: 0.97 }}
+              onClick={() => {
+                router.push('/meu-perfil');
+              }}
+              title="Meu Perfil"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 5,
+                padding: '6px 4px',
+                borderRadius: 9,
+                background: 'transparent',
+                border: 'none',
+                color: 'rgba(255, 255, 255, 0.8)',
+                cursor: 'pointer',
+                fontSize: 11,
+                fontWeight: 600,
+                letterSpacing: '0.01em',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              <UserCircle size={14} color="#a855f7" style={{ filter: 'drop-shadow(0 0 5px rgba(168, 85, 247, 0.4))', flexShrink: 0 }} />
+              <span>Perfil</span>
+            </motion.button>
+
+            {/* 2. Trocar Módulo */}
+            <motion.button
+              whileHover={{ scale: 1.02, backgroundColor: 'rgba(6, 182, 212, 0.16)', color: '#ffffff' }}
+              whileTap={{ scale: 0.97 }}
+              onClick={() => setIsTrocarModuloOpen(true)}
+              title="Trocar Módulo"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 5,
+                padding: '6px 4px',
+                borderRadius: 9,
+                background: 'transparent',
+                border: 'none',
+                color: 'rgba(255, 255, 255, 0.8)',
+                cursor: 'pointer',
+                fontSize: 11,
+                fontWeight: 600,
+                letterSpacing: '0.01em',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              <LayoutDashboard size={14} color="#06b6d4" style={{ filter: 'drop-shadow(0 0 5px rgba(6, 182, 212, 0.4))', flexShrink: 0 }} />
+              <span>Módulos</span>
+            </motion.button>
+
+            {/* 3. Sair */}
+            <motion.button
+              whileHover={{ scale: 1.02, backgroundColor: 'rgba(244, 63, 94, 0.16)', color: '#ffffff' }}
+              whileTap={{ scale: 0.97 }}
+              onClick={handleLogout}
+              title="Sair do sistema"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 5,
+                padding: '6px 4px',
+                borderRadius: 9,
+                background: 'transparent',
+                border: 'none',
+                color: 'rgba(255, 255, 255, 0.8)',
+                cursor: 'pointer',
+                fontSize: 11,
+                fontWeight: 600,
+                letterSpacing: '0.01em',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              <LogOut size={14} color="#f43f5e" style={{ filter: 'drop-shadow(0 0 5px rgba(244, 63, 94, 0.4))', flexShrink: 0 }} />
+              <span>Sair</span>
+            </motion.button>
+          </div>
         </div>
       </div>
     </div>
+
+    <style dangerouslySetInnerHTML={{__html: `
+      .custom-people-scrollbar::-webkit-scrollbar {
+        width: 5px;
+      }
+      .custom-people-scrollbar::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      .custom-people-scrollbar::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.12);
+        border-radius: 999px;
+      }
+      .custom-people-scrollbar::-webkit-scrollbar-thumb:hover {
+        background: rgba(56, 189, 248, 0.4);
+      }
+    `}} />
+
+    <TrocarModuloModal 
+      isOpen={isTrocarModuloOpen} 
+      onClose={() => setIsTrocarModuloOpen(false)} 
+    />
+    </>
   )
 }

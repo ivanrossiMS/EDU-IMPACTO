@@ -34,7 +34,8 @@ import {
   Loader2,
   MonitorSmartphone,
   Radio,
-  FileCheck2
+  FileCheck2,
+  UserCircle
 } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
@@ -43,6 +44,7 @@ import { useApp, saveSetting } from '@/lib/context'
 import { UserAvatar } from '@/components/UserAvatar'
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 import { useQuery } from '@tanstack/react-query'
+import { TrocarModuloModal } from '@/components/layout/TrocarModuloModal'
 
 const menuItems = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, href: '/agenda-digital/admin' },
@@ -138,6 +140,7 @@ export function ADSidebar() {
   const c = (currentUser?.cargo || '').toLowerCase();
   const isFamily = p.includes('família') || p.includes('familia') || c.includes('aluno') || c.includes('responsável') || c.includes('responsavel')
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false)
+  const [isTrocarModuloOpen, setIsTrocarModuloOpen] = useState(false)
 
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -643,196 +646,272 @@ export function ADSidebar() {
               )}
             </div>
           {/* User Profile / Ações Rápidas Footer */}
-          <div style={{ padding: '24px 16px', borderTop: '1px solid rgba(255, 255, 255, 0.05)' }}>
-            {!isCollapsed ? (
-              <div style={{
-                background: 'rgba(255, 255, 255, 0.03)',
-                border: '1px solid rgba(255, 255, 255, 0.08)',
-                borderRadius: 16,
-                padding: '16px',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 12,
-                boxShadow: '0 8px 32px rgba(0,0,0,0.2)'
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 4 }}>
-                  <div style={{ position: 'relative', width: 54, height: 54, borderRadius: '50%', background: 'linear-gradient(135deg, #a855f7, #ec4899)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 800, fontSize: 21 }}>
-                    {(() => {
-                      const espelharRespId = searchParams?.get('espelhar_responsavel');
-                      const espelharAluno = searchParams?.get('espelhar_aluno') === 'true';
-                      const espelharColabId = searchParams?.get('espelhar_colaborador');
-                      const isMirroring = !!(espelharRespId || espelharAluno || espelharColabId);
-                      
-                      const mirroredResp = espelharRespId && profileData?.aluno?.responsaveis ? profileData.aluno.responsaveis.find((r: any) => String(r.id) === String(espelharRespId)) : null;
-                      const displayNome = isMirroring ? (espelharAluno ? (profileData?.aluno?.nome || 'Aluno') : (espelharColabId ? (searchParams?.get('espelhar_nome') || 'Colaborador') : (mirroredResp?.nome || 'Responsável'))) : (currentUser?.nome || 'Usuário');
-                      const displayFoto = isMirroring ? (espelharAluno ? profileData?.aluno?.foto : (espelharColabId ? searchParams?.get('espelhar_foto') : (mirroredResp?.foto || null))) : currentUser?.foto;
-                      const displayId = isMirroring ? (espelharAluno ? profileData?.aluno?.id : (espelharColabId ? espelharColabId : (mirroredResp?.id || 'r'))) : currentUser?.id;
-                      
-                      return (
-                        <UserAvatar 
-                          userId={displayId} 
-                          name={displayNome} 
-                          fotoUrl={displayFoto}
-                          size={54}
-                          style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%', opacity: isUploadingPhoto ? 0.5 : 1 }}
-                        />
-                      );
-                    })()}
-                    {isUploadingPhoto && (
-                      <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <Loader2 className="animate-spin" size={14} color="#fff" />
+          <div style={{ padding: '16px 12px', borderTop: '1px solid rgba(255, 255, 255, 0.05)' }}>
+            {(() => {
+              const espelharRespId = searchParams?.get('espelhar_responsavel');
+              const espelharAluno = searchParams?.get('espelhar_aluno') === 'true';
+              const espelharColabId = searchParams?.get('espelhar_colaborador');
+              const espelharColabNome = searchParams?.get('espelhar_nome');
+              const espelharColabCargo = searchParams?.get('espelhar_cargo');
+              const espelharColabFoto = searchParams?.get('espelhar_foto');
+              const isMirroring = !!(espelharRespId || espelharAluno || espelharColabId);
+              
+              const mirroredResp = espelharRespId && profileData?.aluno?.responsaveis ? profileData.aluno.responsaveis.find((r: any) => String(r.id) === String(espelharRespId)) : null;
+              const displayNome = isMirroring ? (espelharAluno ? (profileData?.aluno?.nome || 'Aluno') : (espelharColabId ? (espelharColabNome || 'Colaborador') : (mirroredResp?.nome || 'Responsável'))) : (currentUser?.nome || 'Usuário');
+              const displayFoto = isMirroring ? (espelharAluno ? profileData?.aluno?.foto : (espelharColabId ? espelharColabFoto : (mirroredResp?.foto || null))) : currentUser?.foto;
+              const displayId = isMirroring ? (espelharAluno ? profileData?.aluno?.id : (espelharColabId ? espelharColabId : (mirroredResp?.id || 'r'))) : currentUser?.id;
+              const displayCargo = isMirroring ? (espelharAluno ? 'ALUNO' : (espelharColabId ? (espelharColabCargo || 'COLABORADOR') : 'RESPONSÁVEL')) : (currentUser?.cargo || currentUser?.perfil || 'Colaborador');
+
+              return (
+                <div 
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.04)',
+                    backdropFilter: 'blur(16px)',
+                    border: '1px solid rgba(255, 255, 255, 0.12)',
+                    borderRadius: 20,
+                    padding: isCollapsed ? '10px 6px' : '12px 12px 10px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 10,
+                    boxShadow: '0 10px 30px rgba(0,0,0,0.3)',
+                    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
+                  }}
+                >
+                  {/* Top row: Avatar + Name/Role + Notification */}
+                  <div 
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      width: '100%',
+                      justifyContent: isCollapsed ? 'center' : 'flex-start'
+                    }}
+                  >
+                    <div style={{ position: 'relative', flexShrink: 0 }}>
+                      <UserAvatar 
+                        key={displayFoto || 'default'}
+                        userId={displayId} 
+                        name={displayNome} 
+                        fotoUrl={displayFoto}
+                        size={isCollapsed ? 36 : 40} 
+                        style={{ borderRadius: 12, border: '1px solid rgba(255,255,255,0.12)', opacity: isUploadingPhoto ? 0.5 : 1 }} 
+                      />
+                      {isUploadingPhoto && (
+                        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <Loader2 className="animate-spin" size={14} color="#fff" />
+                        </div>
+                      )}
+                      <label 
+                        style={{ position: 'absolute', inset: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(15,23,42,0.85)', opacity: 0, transition: 'opacity 0.2s', borderRadius: 12 }} 
+                        onMouseEnter={e => e.currentTarget.style.opacity = '1'} 
+                        onMouseLeave={e => e.currentTarget.style.opacity = '0'}
+                      >
+                        <Camera size={14} color="#fff" />
+                        <input type="file" accept="image/*" style={{ display: 'none' }} disabled={isUploadingPhoto} onChange={handlePhotoUpload} />
+                      </label>
+                      <div style={{ position: 'absolute', bottom: -1, right: -1, width: 10, height: 10, borderRadius: '50%', background: '#10b981', border: '2px solid #060814', boxShadow: '0 0 8px #10b981' }} />
+                    </div>
+                    
+                    {!isCollapsed && (
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 13, fontWeight: 800, color: 'white', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', letterSpacing: '-0.01em' }}>
+                          {abbreviateName(displayNome)}
+                        </div>
+                        <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.45)', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {displayCargo}
+                        </div>
                       </div>
                     )}
-                    <label style={{ position: 'absolute', inset: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(15,23,42,0.85)', opacity: 0, transition: 'opacity 0.2s', borderRadius: '50%' }} onMouseEnter={e => e.currentTarget.style.opacity = '1'} onMouseLeave={e => e.currentTarget.style.opacity = '0'}>
-                      <Camera size={14} color="#fff" />
-                      <input type="file" accept="image/*" style={{ display: 'none' }} disabled={isUploadingPhoto} onChange={handlePhotoUpload} />
-                    </label>
                   </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', flex: 1 }}>
-                    <span style={{ fontWeight: 800, color: 'white', fontSize: 15, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', letterSpacing: '-0.01em' }}>
-                      {(() => {
-                        const espelharRespId = searchParams?.get('espelhar_responsavel');
-                        const espelharAluno = searchParams?.get('espelhar_aluno') === 'true';
-                        const espelharColabId = searchParams?.get('espelhar_colaborador');
-                        const espelharColabNome = searchParams?.get('espelhar_nome');
-                        const isMirroring = !!(espelharRespId || espelharAluno || espelharColabId);
-                        const mirroredResp = espelharRespId && profileData?.aluno?.responsaveis ? profileData.aluno.responsaveis.find((r: any) => String(r.id) === String(espelharRespId)) : null;
-                        return isMirroring ? (espelharAluno ? abbreviateName(profileData?.aluno?.nome || 'Aluno') : abbreviateName(espelharColabId ? (espelharColabNome || 'Colaborador') : (mirroredResp?.nome || 'Responsável'))) : abbreviateName(currentUser?.nome || 'Usuário');
-                      })()}
-                    </span>
-                    <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {(() => {
-                        const espelharRespId = searchParams?.get('espelhar_responsavel');
-                        const espelharAluno = searchParams?.get('espelhar_aluno') === 'true';
-                        const espelharColabId = searchParams?.get('espelhar_colaborador');
-                        const espelharColabCargo = searchParams?.get('espelhar_cargo')
-  const espelharColabFoto = searchParams?.get('espelhar_foto')
-  const espelharColabPerfil = searchParams?.get('espelhar_perfil');
-                        const isMirroring = !!(espelharRespId || espelharAluno || espelharColabId);
-                        return isMirroring ? (espelharAluno ? 'ALUNO' : (espelharColabId ? (espelharColabCargo || 'COLABORADOR') : 'RESPONSÁVEL')) : (currentUser?.cargo || currentUser?.perfil || 'Perfil');
-                      })()}
-                    </span>
-                  </div>
-                </div>
 
-                <div style={{ display: 'flex', gap: 8 }}>
-                  {currentUser?.cargo !== 'Aluno' && (
-                    <button 
-                      onClick={() => router.push(isFamily ? '/agenda-digital/selecionar-aluno' : '/agenda-digital/selecionar-perfil-admin')}
-                      style={{
-                        flex: 1, height: 32, borderRadius: 8, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.1)',
-                        color: 'white', fontSize: 11, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, cursor: 'pointer', transition: 'all 0.2s'
+                  {/* Bottom Actions Row: Meu Perfil, Trocar Módulo, Sair - DENTRO DO CARD */}
+                  {!isCollapsed ? (
+                    <div 
+                      style={{ 
+                        display: 'grid', 
+                        gridTemplateColumns: 'repeat(3, 1fr)', 
+                        gap: 4, 
+                        background: 'rgba(0, 0, 0, 0.22)',
+                        padding: '3px',
+                        borderRadius: 12,
+                        border: '1px solid rgba(255, 255, 255, 0.04)'
                       }}
-                      onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.15)' }}
-                      onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.08)' }}
                     >
-                      <Users size={14} /> Trocar
-                    </button>
-                  )}
-                  <button 
-                    onClick={async () => { 
-                      setLoadingPath('logout')
-                      await performLogout(); 
-                    }}
-                    style={isAlunoLogado ? {
-                      flex: 1, height: 34, borderRadius: 10,
-                      background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.2) 0%, rgba(220, 38, 38, 0.28) 100%)',
-                      border: '1.2px solid rgba(239, 68, 68, 0.45)',
-                      color: '#fca5a5', fontSize: 12, fontWeight: 700,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
-                      cursor: 'pointer', transition: 'all 0.2s',
-                      boxShadow: '0 2px 8px rgba(239, 68, 68, 0.15)'
-                    } : {
-                      flex: 1, height: 32, borderRadius: 8, background: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.3)',
-                      color: '#fca5a5', fontSize: 11, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, cursor: 'pointer', transition: 'all 0.2s'
-                    }}
-                    onMouseEnter={e => { e.currentTarget.style.background = isAlunoLogado ? 'linear-gradient(135deg, rgba(239, 68, 68, 0.35) 0%, rgba(220, 38, 38, 0.45) 100%)' : 'rgba(239, 68, 68, 0.25)' }}
-                    onMouseLeave={e => { e.currentTarget.style.background = isAlunoLogado ? 'linear-gradient(135deg, rgba(239, 68, 68, 0.2) 0%, rgba(220, 38, 38, 0.28) 100%)' : 'rgba(239, 68, 68, 0.15)' }}
-                  >
-                    <LogOut size={14} /> Sair
-                  </button>
-                </div>
+                      {/* 1. Meu Perfil */}
+                      <motion.button
+                        whileHover={{ scale: 1.02, backgroundColor: 'rgba(168, 85, 247, 0.16)', color: '#ffffff' }}
+                        whileTap={{ scale: 0.97 }}
+                        onClick={() => {
+                          router.push('/meu-perfil');
+                        }}
+                        title="Meu Perfil"
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: 5,
+                          padding: '6px 4px',
+                          borderRadius: 9,
+                          background: 'transparent',
+                          border: 'none',
+                          color: 'rgba(255, 255, 255, 0.8)',
+                          cursor: 'pointer',
+                          fontSize: 11,
+                          fontWeight: 600,
+                          letterSpacing: '0.01em',
+                          transition: 'all 0.15s ease'
+                        }}
+                      >
+                        <UserCircle size={14} color="#a855f7" style={{ filter: 'drop-shadow(0 0 5px rgba(168, 85, 247, 0.4))', flexShrink: 0 }} />
+                        <span>Perfil</span>
+                      </motion.button>
 
-                {!isFamily && (
-                  <button
-                    onClick={() => window.location.href = '/login?step=choose_system'}
-                    style={{
-                      width: '100%', height: 34, borderRadius: 8, marginTop: 8,
-                      background: 'linear-gradient(135deg, rgba(0, 210, 255, 0.15), rgba(121, 40, 202, 0.15))',
-                      border: '1px solid rgba(0, 210, 255, 0.3)',
-                      color: '#00D2FF', fontSize: 11, fontWeight: 700, 
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, 
-                      cursor: 'pointer', transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                      boxShadow: '0 4px 15px rgba(0, 210, 255, 0.1)',
-                      position: 'relative', overflow: 'hidden', textTransform: 'uppercase', letterSpacing: '0.05em'
-                    }}
-                    onMouseEnter={e => {
-                      e.currentTarget.style.background = 'linear-gradient(135deg, rgba(0, 210, 255, 0.25), rgba(121, 40, 202, 0.25))';
-                      e.currentTarget.style.boxShadow = '0 6px 20px rgba(0, 210, 255, 0.2)';
-                      e.currentTarget.style.transform = 'translateY(-1px)';
-                    }}
-                    onMouseLeave={e => {
-                      e.currentTarget.style.background = 'linear-gradient(135deg, rgba(0, 210, 255, 0.15), rgba(121, 40, 202, 0.15))';
-                      e.currentTarget.style.boxShadow = '0 4px 15px rgba(0, 210, 255, 0.1)';
-                      e.currentTarget.style.transform = 'translateY(0)';
-                    }}
-                  >
-                    <LayoutDashboard size={14} style={{ zIndex: 1 }} />
-                    <span style={{ zIndex: 1 }}>Mudar de Módulo</span>
-                  </button>
-                )}
-              </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 16, alignItems: 'center' }}>
-                <div style={{ position: 'relative', width: 60, height: 60, borderRadius: '50%', background: 'linear-gradient(135deg, #a855f7, #ec4899)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 800, fontSize: 24 }}>
-                  <UserAvatar 
-                    userId={currentUser?.id} 
-                    name={currentUser?.nome || 'Usuário'} 
-                    fotoUrl={currentUser?.foto}
-                    size={60}
-                    style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%', opacity: isUploadingPhoto ? 0.5 : 1 }}
-                  />
-                  {isUploadingPhoto && (
-                    <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      
+                      {/* 2. Trocar Módulo */}
+                      <motion.button
+                        whileHover={{ scale: 1.02, backgroundColor: 'rgba(6, 182, 212, 0.16)', color: '#ffffff' }}
+                        whileTap={{ scale: 0.97 }}
+                        onClick={() => setIsTrocarModuloOpen(true)}
+                        title="Trocar Módulo"
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: 5,
+                          padding: '6px 4px',
+                          borderRadius: 9,
+                          background: 'transparent',
+                          border: 'none',
+                          color: 'rgba(255, 255, 255, 0.8)',
+                          cursor: 'pointer',
+                          fontSize: 11,
+                          fontWeight: 600,
+                          letterSpacing: '0.01em',
+                          transition: 'all 0.15s ease'
+                        }}
+                      >
+                        <LayoutDashboard size={14} color="#06b6d4" style={{ filter: 'drop-shadow(0 0 5px rgba(6, 182, 212, 0.4))', flexShrink: 0 }} />
+                        <span>Módulos</span>
+                      </motion.button>
+
+                      {/* 3. Sair */}
+                      <motion.button
+                        whileHover={{ scale: 1.02, backgroundColor: 'rgba(244, 63, 94, 0.16)', color: '#ffffff' }}
+                        whileTap={{ scale: 0.97 }}
+                        onClick={async () => {
+                          setLoadingPath('logout')
+                          try {
+                            await performLogout();
+                          } catch (err) {
+                            window.location.replace('/login');
+                          }
+                        }}
+                        title="Sair do sistema"
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: 5,
+                          padding: '6px 4px',
+                          borderRadius: 9,
+                          background: 'transparent',
+                          border: 'none',
+                          color: 'rgba(255, 255, 255, 0.8)',
+                          cursor: 'pointer',
+                          fontSize: 11,
+                          fontWeight: 600,
+                          letterSpacing: '0.01em',
+                          transition: 'all 0.15s ease'
+                        }}
+                      >
+                        <LogOut size={14} color="#f43f5e" style={{ filter: 'drop-shadow(0 0 5px rgba(244, 63, 94, 0.4))', flexShrink: 0 }} />
+                        <span>Sair</span>
+                      </motion.button>
+                    </div>
+                  ) : (
+                    <div 
+                      style={{ 
+                        display: 'flex', 
+                        flexDirection: 'column', 
+                        alignItems: 'center', 
+                        gap: 5, 
+                        background: 'rgba(0, 0, 0, 0.22)',
+                        padding: '3px',
+                        borderRadius: 10,
+                        width: '100%' 
+                      }}
+                    >
+                      <motion.button
+                        whileHover={{ scale: 1.1, backgroundColor: 'rgba(168, 85, 247, 0.18)' }}
+                        whileTap={{ scale: 0.95 }}
+                        onClick={() => router.push('/meu-perfil')}
+                        title="Meu Perfil"
+                        style={{
+                          width: 30,
+                          height: 30,
+                          borderRadius: 8,
+                          background: 'transparent',
+                          border: 'none',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          cursor: 'pointer',
+                          color: '#a855f7'
+                        }}
+                      >
+                        <UserCircle size={15} />
+                      </motion.button>
+                      <motion.button
+                        whileHover={{ scale: 1.1, backgroundColor: 'rgba(6, 182, 212, 0.18)' }}
+                        whileTap={{ scale: 0.95 }}
+                        onClick={() => setIsTrocarModuloOpen(true)}
+                        title="Trocar Módulo"
+                        style={{
+                          width: 30,
+                          height: 30,
+                          borderRadius: 8,
+                          background: 'transparent',
+                          border: 'none',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          cursor: 'pointer',
+                          color: '#06b6d4'
+                        }}
+                      >
+                        <LayoutDashboard size={15} />
+                      </motion.button>
+                      <motion.button
+                        whileHover={{ scale: 1.1, backgroundColor: 'rgba(244, 63, 94, 0.18)' }}
+                        whileTap={{ scale: 0.95 }}
+                        onClick={async () => {
+                          setLoadingPath('logout')
+                          try {
+                            await performLogout();
+                          } catch (err) {
+                            window.location.replace('/login');
+                          }
+                        }}
+                        title="Sair"
+                        style={{
+                          width: 30,
+                          height: 30,
+                          borderRadius: 8,
+                          background: 'transparent',
+                          border: 'none',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          cursor: 'pointer',
+                          color: '#f43f5e'
+                        }}
+                      >
+                        <LogOut size={15} />
+                      </motion.button>
                     </div>
                   )}
-                  <label style={{ position: 'absolute', inset: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(15,23,42,0.85)', opacity: 0, transition: 'opacity 0.2s', borderRadius: '50%' }} onMouseEnter={e => e.currentTarget.style.opacity = '1'} onMouseLeave={e => e.currentTarget.style.opacity = '0'}>
-                    <Camera size={16} color="#fff" />
-                    <input type="file" accept="image/*" style={{ display: 'none' }} disabled={isUploadingPhoto} onChange={handlePhotoUpload} />
-                  </label>
                 </div>
-                {currentUser?.cargo !== 'Aluno' && (
-                  <button 
-                    onClick={() => router.push(isFamily ? '/agenda-digital/selecionar-aluno' : '/agenda-digital/selecionar-perfil-admin')}
-                    style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(255, 255, 255, 0.08)', border: '1px solid rgba(255, 255, 255, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', cursor: 'pointer' }}
-                  >
-                    <Users size={18} />
-                  </button>
-                )}
-                <button 
-                  onClick={async () => { 
-                    setLoadingPath('logout')
-                    await performLogout(); 
-                  }}
-                  style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ef4444', cursor: 'pointer' }}
-                >
-                  <LogOut size={18} />
-                </button>
-
-                {!isFamily && (
-                  <button
-                    title="Mudar de Módulo"
-                    onClick={() => window.location.href = '/login?step=choose_system'}
-                    style={{ width: 40, height: 40, borderRadius: 12, background: 'linear-gradient(135deg, rgba(0, 210, 255, 0.15), rgba(121, 40, 202, 0.15))', border: '1px solid rgba(0, 210, 255, 0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#00D2FF', cursor: 'pointer', transition: 'all 0.3s' }}
-                    onMouseEnter={e => { e.currentTarget.style.background = 'linear-gradient(135deg, rgba(0, 210, 255, 0.25), rgba(121, 40, 202, 0.25))' }}
-                    onMouseLeave={e => { e.currentTarget.style.background = 'linear-gradient(135deg, rgba(0, 210, 255, 0.15), rgba(121, 40, 202, 0.15))' }}
-                  >
-                    <LayoutDashboard size={18} />
-                  </button>
-                )}
-              </div>
-            )}
+              );
+            })()}
           </div>
           </div>
         </div>
@@ -848,6 +927,10 @@ export function ADSidebar() {
           .ad-nav-desktop-wrapper { display: none; }
         }
       `}} />
+      <TrocarModuloModal 
+        isOpen={isTrocarModuloOpen} 
+        onClose={() => setIsTrocarModuloOpen(false)} 
+      />
       </>
     )
 }
