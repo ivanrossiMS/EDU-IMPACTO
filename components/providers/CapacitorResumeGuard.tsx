@@ -140,18 +140,20 @@ export function CapacitorResumeGuard() {
     let removeAppListener: (() => void) | null = null
 
     if (Capacitor.isNativePlatform()) {
-      // Configura StatusBar imediatamente na inicialização nativa
+      // Configuração inicial da barra de status no ambiente nativo (iOS / Android)
       import('@capacitor/status-bar').then(({ StatusBar, Style }) => {
         StatusBar.setOverlaysWebView({ overlay: true }).catch(() => {})
         StatusBar.setStyle({ style: Style.Dark }).catch(() => {})
+        StatusBar.setBackgroundColor({ color: '#0A0F24' }).catch(() => {})
       }).catch(() => {})
 
       import('@capacitor/app').then(({ App }) => {
         App.addListener('resume', async () => {
-          // Re-aplica StatusBar ao voltar ao primeiro plano
+          // Re-aplica a configuração da StatusBar ao retomar o app
           import('@capacitor/status-bar').then(({ StatusBar, Style }) => {
             StatusBar.setOverlaysWebView({ overlay: true }).catch(() => {})
             StatusBar.setStyle({ style: Style.Dark }).catch(() => {})
+            StatusBar.setBackgroundColor({ color: '#0A0F24' }).catch(() => {})
           }).catch(() => {})
 
           const hasBarrier = await getLogoutBarrier()

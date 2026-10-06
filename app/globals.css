@@ -362,7 +362,7 @@
 
   body {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-    background-color: hsl(var(--bg-base));
+    background-color: #0A0F24;
     color: hsl(var(--text-primary));
     min-height: 100vh;
     min-height: 100dvh;
@@ -376,7 +376,7 @@
     max-width: 100vw;
     overflow-x: hidden;
     position: relative;
-    /* padding-top removido daqui: o cabeçalho/banner deve ir até o topo da tela sob a status bar (edge-to-edge), evitando faixa branca acima do cabeçalho */
+    /* padding-top: env(safe-area-inset-top) removido: o layout deve ir até o topo da tela sob a status bar (edge-to-edge), evitando faixa branca acima do cabeçalho */
   }
 }
 

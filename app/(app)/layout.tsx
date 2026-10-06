@@ -393,8 +393,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               <div style={{
                 display: 'flex',
                 alignItems: 'center',
-                height: 60,
+                height: 'calc(60px + env(safe-area-inset-top, 0px))',
                 padding: '0 16px',
+                paddingTop: 'env(safe-area-inset-top, 0px)',
                 background: 'hsl(var(--bg-surface))',
                 borderBottom: '1px solid hsl(var(--border-subtle))',
                 position: 'sticky',

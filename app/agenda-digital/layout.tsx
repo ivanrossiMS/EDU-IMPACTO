@@ -80,16 +80,6 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
   const targetPathRef = React.useRef<string | null>(null)
   const currentPathRef = React.useRef(pathname)
   const [initialReady, setInitialReady] = React.useState(false)
-  const [isScrolled, setIsScrolled] = React.useState(false)
-
-  const handleScroll = React.useCallback((e: React.UIEvent<HTMLDivElement>) => {
-    const top = e.currentTarget.scrollTop
-    if (top > 24 && !isScrolled) {
-      setIsScrolled(true)
-    } else if (top <= 24 && isScrolled) {
-      setIsScrolled(false)
-    }
-  }, [isScrolled])
 
   const isSelectStudent = pathname?.includes('/agenda-digital/selecionar-aluno') || pathname?.includes('/agenda-digital/selecionar-perfil-admin')
   const isIndexPage = pathname === '/agenda-digital'
@@ -316,7 +306,7 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
   return (
     <>
 
-      <div className="agenda-digital-wrapper ad-mesh-bg" style={{ display: 'flex', height: '100dvh', width: '100vw', overflow: 'hidden', position: 'relative' }}>
+      <div className="agenda-digital-wrapper ad-mesh-bg" style={{ display: 'flex', height: '100dvh', width: '100vw', overflow: 'hidden' }}>
         <style dangerouslySetInnerHTML={{__html: `
           :root {
             --ad-bg-mesh: radial-gradient(ellipse at top right, rgba(216, 180, 254, 0.45) 0%, transparent 70%), radial-gradient(ellipse at bottom left, rgba(186, 230, 253, 0.45) 0%, transparent 70%);
@@ -336,7 +326,7 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
           .no-scrollbar::-webkit-scrollbar { display: none; }
           .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
-          .ad-mobile-status-scrim {
+          .ad-mobile-status-bar {
             display: none;
           }
 
@@ -362,7 +352,7 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
             position: relative;
             display: block;
             flex-shrink: 0;
-            background: #080a1a;
+            background: #0A0F24;
             overflow: hidden;
             aspect-ratio: 1600 / 400;
             min-height: 110px;
@@ -399,31 +389,24 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
             padding-top: 0px !important;
           }
 
+
           @media (max-width: 1024px) {
             /* .ad-sidebar-container handled by component logic */
           }
           
           @media (max-width: 768px) {
-            .ad-mobile-status-scrim {
+            .ad-mobile-status-bar {
               display: block;
-              position: fixed;
+              position: sticky;
               top: 0;
               left: 0;
               right: 0;
-              height: max(calc(env(safe-area-inset-top, 0px) + 2px), 24px);
-              z-index: 9999;
-              pointer-events: none;
-              transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-            }
-            .ad-mobile-status-scrim.ad-scrim-gradient {
-              background: linear-gradient(180deg, rgba(8, 12, 28, 0.45) 0%, rgba(8, 12, 28, 0.1) 70%, transparent 100%);
-            }
-            .ad-mobile-status-scrim.ad-scrim-solid {
-              background: rgba(10, 15, 36, 0.88);
-              backdrop-filter: blur(20px);
-              -webkit-backdrop-filter: blur(20px);
-              border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-              box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+              width: 100%;
+              height: env(safe-area-inset-top, 0px);
+              min-height: env(safe-area-inset-top, 0px);
+              background: #0A0F24 !important;
+              z-index: 100;
+              flex-shrink: 0;
             }
 
             .ad-banner-global {
@@ -431,9 +414,9 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
               width: 100% !important;
               height: auto !important;
               aspect-ratio: 1600 / 400 !important;
-              min-height: calc(115px + env(safe-area-inset-top, 0px)) !important;
-              max-height: 280px !important;
-              background: #080a1a !important;
+              min-height: 105px !important;
+              max-height: 260px !important;
+              background: #0A0F24 !important;
               margin: 0 !important;
               padding: 0 !important;
               display: block !important;
@@ -444,16 +427,15 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
               width: 100% !important;
               height: 100% !important;
               aspect-ratio: 1600 / 400 !important;
-              min-height: calc(115px + env(safe-area-inset-top, 0px)) !important;
-              max-height: 280px !important;
+              min-height: 105px !important;
+              max-height: 260px !important;
               object-fit: cover !important;
-              object-position: center top !important;
               margin: 0 !important;
             }
 
             .ad-content-inner {
               padding: 16px !important;
-              padding-top: calc(16px + env(safe-area-inset-top, 0px)) !important;
+              padding-top: 16px !important;
               padding-bottom: 100px !important;
             }
             .ad-content-inner.ad-has-banner {
@@ -463,16 +445,14 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
           }
         `}} />
         
-        {/* Scrim superior de proteção para barra de status em telas móveis */}
-        <div className={`ad-mobile-status-scrim ${isScrolled || (!bannerUrl && isLoaded) ? 'ad-scrim-solid' : 'ad-scrim-gradient'}`} />
-
         {!isRouterPage && (
           <div className="ad-sidebar-container">
             <ADSidebar />
           </div>
         )}
 
-        <div className="ad-main-scroll no-scrollbar" onScroll={handleScroll}>
+        <div className="ad-main-scroll no-scrollbar">
+          <div className="ad-mobile-status-bar" />
           {bannerUrl ? (
             <div className="ad-banner-global">
               <img 
