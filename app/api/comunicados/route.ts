@@ -395,20 +395,27 @@ export async function GET(request: Request) {
       }
     }
 
-    const colaboradorConditions = [
-      `destino.eq.todos`
-    ];
+    const colaboradorConditionsSet = new Set<string>();
+    colaboradorConditionsSet.add(`destino.eq.todos`);
 
+    const cleanCandidateIds = new Set<string>();
     candidateUserIds.forEach(cId => {
-      const clean = String(cId).replace(/^f_?/, '');
-      colaboradorConditions.push(`dados->"funcionariosIds".cs.["${cId}"]`);
-      colaboradorConditions.push(`dados->"funcionariosIds".cs.["${clean}"]`);
-      colaboradorConditions.push(`dados->"funcionariosIds".cs.["f_${clean}"]`);
-      colaboradorConditions.push(`dados->"colaboradoresIds".cs.["${cId}"]`);
-      colaboradorConditions.push(`dados->"colaboradoresIds".cs.["${clean}"]`);
-      colaboradorConditions.push(`dados->"colaboradoresIds".cs.["f_${clean}"]`);
-      colaboradorConditions.push(`dados->>autorId.eq.${cId}`);
-      colaboradorConditions.push(`dados->>autorId.eq.${clean}`);
+      if (!cId) return;
+      const str = String(cId).trim();
+      if (!str) return;
+      cleanCandidateIds.add(str);
+      const clean = str.replace(/^f_?/, '').trim();
+      if (clean) {
+        cleanCandidateIds.add(clean);
+        cleanCandidateIds.add(`f_${clean}`);
+      }
+    });
+
+    cleanCandidateIds.forEach(id => {
+      colaboradorConditionsSet.add(`dados->"funcionariosIds".cs.["${id}"]`);
+      colaboradorConditionsSet.add(`dados->"colaboradoresIds".cs.["${id}"]`);
+      const unescaped = id.replace(/["\\]/g, '');
+      colaboradorConditionsSet.add(`dados->>autorId.eq.${unescaped}`);
     });
 
     // Buscar grupos da agenda e turmas com cache de memória (TTL 60s) para evitar consultas pesadas repetidas
@@ -446,7 +453,9 @@ export async function GET(request: Request) {
     }
 
     matchedGroupNames.forEach(gNome => {
-      colaboradorConditions.push(`dados->grupos.cs.["${gNome}"]`);
+      if (gNome) {
+        colaboradorConditionsSet.add(`dados->grupos.cs.["${gNome.replace(/"/g, '')}"]`);
+      }
     });
 
     if (matchedTurmaSyncIds.size > 0 || matchedGroupNames.size > 0) {
@@ -455,13 +464,15 @@ export async function GET(request: Request) {
           const tId = String(t.id);
           const tNomeLower = String(t.nome || '').trim().toLowerCase();
           if (matchedTurmaSyncIds.has(tId) || Array.from(matchedGroupNames).some(gn => gn.trim().toLowerCase() === tNomeLower)) {
-            colaboradorConditions.push(`dados->turmas.cs.["${t.nome}"]`);
+            if (t.nome) {
+              colaboradorConditionsSet.add(`dados->turmas.cs.["${t.nome.replace(/"/g, '')}"]`);
+            }
           }
         });
       }
     }
 
-    query = query.or(colaboradorConditions.join(','));
+    query = query.or(Array.from(colaboradorConditionsSet).join(','));
   }
   
   if (idParam) {
@@ -1085,9 +1096,7 @@ export async function GET(request: Request) {
 
   return NextResponse.json(filtered, {
     headers: {
-      'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
-      'Pragma': 'no-cache',
-      'Expires': '0',
+      'Cache-Control': 'private, max-age=5, stale-while-revalidate=15',
     },
   })
 }

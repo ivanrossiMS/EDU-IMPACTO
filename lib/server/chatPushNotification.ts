@@ -480,7 +480,7 @@ export async function dispatchChatPushNotification({
 
             await supabase
               .from('agenda_push_logs')
-              .insert({
+              .upsert({
                 user_id: isUuid ? String(senderId) : null,
                 type: 'chat',
                 item_id: familyItemId,
@@ -492,6 +492,9 @@ export async function dispatchChatPushNotification({
                 error_message: logErrorMsg,
                 onesignal_response: JSON.stringify(responsePayloadObj),
                 created_at: new Date().toISOString()
+              }, {
+                onConflict: 'item_id,type',
+                ignoreDuplicates: true
               })
           } catch (logErr: any) {
             console.warn(`[ChatPush] Erro ao gravar log de auditoria família:`, logErr?.message)
@@ -560,7 +563,7 @@ export async function dispatchChatPushNotification({
 
             await supabase
               .from('agenda_push_logs')
-              .insert({
+              .upsert({
                 user_id: isUuid ? String(senderId) : null,
                 type: 'chat',
                 item_id: colabItemId,
@@ -572,6 +575,9 @@ export async function dispatchChatPushNotification({
                 error_message: logErrorMsg,
                 onesignal_response: JSON.stringify(responsePayloadObj),
                 created_at: new Date().toISOString()
+              }, {
+                onConflict: 'item_id,type',
+                ignoreDuplicates: true
               })
           } catch (logErr: any) {
             console.warn(`[ChatPush] Erro ao gravar log de auditoria colaborador:`, logErr?.message)

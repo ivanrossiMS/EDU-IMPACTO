@@ -435,23 +435,27 @@ function ColaboradorComunicadosContent() {
     if (isRefreshing) return
     setIsRefreshing(true)
     try {
-      await Promise.allSettled([
-        queryClient.invalidateQueries({ queryKey: ['agenda', 'comunicados'], refetchType: 'all' }),
-        queryClient.refetchQueries({ queryKey: ['agenda', 'comunicados'] }),
-        refetchComunicados()
-      ])
+      await refetchComunicados()
     } finally {
       setTimeout(() => setIsRefreshing(false), 500)
     }
-  }, [queryClient, isRefreshing, refetchComunicados])
+  }, [isRefreshing, refetchComunicados])
 
-  // Ao entrar na tela ou voltar de outras abas, sincroniza de imediato
+  // Ao entrar na tela ou voltar de outras abas, sincroniza apenas as queries ativas
   useEffect(() => {
-    queryClient.invalidateQueries({ queryKey: ['agenda', 'comunicados'], refetchType: 'all' })
+    queryClient.invalidateQueries({ queryKey: ['agenda', 'comunicados'], refetchType: 'active' })
   }, [queryClient])
 
-  // Escuta de eventos em tempo real com injeção otimista em 0ms
+  // Escuta de eventos em tempo real com injeção otimista em 0ms e sincronização com debounce
   useEffect(() => {
+    let syncTimer: ReturnType<typeof setTimeout> | null = null
+    const triggerDebouncedSync = () => {
+      if (syncTimer) clearTimeout(syncTimer)
+      syncTimer = setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ['agenda', 'comunicados'], refetchType: 'active' })
+      }, 1000)
+    }
+
     const handleInsert = (e: any) => {
       const payload = e.detail
       const rawItem = payload?.item || payload?.new || payload
@@ -480,7 +484,7 @@ function ColaboradorComunicadosContent() {
           return [normalized, ...list]
         })
       }
-      queryClient.invalidateQueries({ queryKey: ['agenda', 'comunicados'], refetchType: 'all' })
+      triggerDebouncedSync()
     }
 
     const handleUpdate = (e: any) => {
@@ -492,7 +496,7 @@ function ColaboradorComunicadosContent() {
           return list.map((c: any) => String(c.id) === String(rawItem.id) ? { ...c, ...rawItem } : c)
         })
       }
-      queryClient.invalidateQueries({ queryKey: ['agenda', 'comunicados'], refetchType: 'all' })
+      triggerDebouncedSync()
     }
 
     const handleDelete = (e: any) => {
@@ -506,7 +510,7 @@ function ColaboradorComunicadosContent() {
           return list.filter((c: any) => !idSet.has(String(c.id)))
         })
       }
-      queryClient.invalidateQueries({ queryKey: ['agenda', 'comunicados'], refetchType: 'all' })
+      triggerDebouncedSync()
     }
 
     window.addEventListener('ad:comunicados-insert', handleInsert)
@@ -515,7 +519,7 @@ function ColaboradorComunicadosContent() {
 
     const handleVisibilityOrOnline = () => {
       if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
-        queryClient.invalidateQueries({ queryKey: ['agenda', 'comunicados'] })
+        triggerDebouncedSync()
       }
     }
     document.addEventListener('visibilitychange', handleVisibilityOrOnline)
@@ -524,11 +528,12 @@ function ColaboradorComunicadosContent() {
     // Contingência leve a cada 60s apenas se a aba estiver visível e em primeiro plano
     const pollTimer = setInterval(() => {
       if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
-        queryClient.invalidateQueries({ queryKey: ['agenda', 'comunicados'] })
+        triggerDebouncedSync()
       }
     }, 60000)
 
     return () => {
+      if (syncTimer) clearTimeout(syncTimer)
       window.removeEventListener('ad:comunicados-insert', handleInsert)
       window.removeEventListener('ad:comunicados-update', handleUpdate)
       window.removeEventListener('ad:comunicados-delete', handleDelete)

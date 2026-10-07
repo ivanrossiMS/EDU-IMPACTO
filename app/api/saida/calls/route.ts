@@ -6,6 +6,47 @@ import { resolveCollaboratorUsers } from '@/lib/server/collaboratorLookup'
 
 export const dynamic = 'force-dynamic'
 
+// Cache em memória no servidor (TTL 120s) para evitar sobrecarga repetitiva na tabela alunos
+const serverAlunosCache = new Map<string, { data: any, expires: number }>()
+
+async function fetchAlunosBatch(supabaseClient: any, ids: string[]): Promise<Record<string, any>> {
+  const result: Record<string, any> = {}
+  const now = Date.now()
+  const missingIds: string[] = []
+
+  const cleanIds = Array.from(new Set(ids.map(id => String(id).trim()).filter(Boolean)))
+  for (const id of cleanIds) {
+    const cached = serverAlunosCache.get(id)
+    if (cached && cached.expires > now) {
+      result[id] = cached.data
+    } else {
+      missingIds.push(id)
+    }
+  }
+
+  if (missingIds.length === 0) return result
+
+  // Chunking em blocos de até 60 IDs para evitar URLs gigantescas que geram HTTP 500 no PostgREST
+  const CHUNK_SIZE = 60
+  for (let i = 0; i < missingIds.length; i += CHUNK_SIZE) {
+    const chunk = missingIds.slice(i, i + CHUNK_SIZE)
+    const { data } = await supabaseClient
+      .from('alunos')
+      .select('id, nome, turma, foto, foto_url')
+      .in('id', chunk)
+
+    if (data && Array.isArray(data)) {
+      data.forEach((a: any) => {
+        const strId = String(a.id)
+        result[strId] = a
+        serverAlunosCache.set(strId, { data: a, expires: now + 120000 })
+      })
+    }
+  }
+
+  return result
+}
+
 export async function GET(request: Request) {
   const { user, errorResponse } = await requireAuth()
   if (errorResponse) return errorResponse
@@ -104,15 +145,7 @@ export async function GET(request: Request) {
       const studentIdsToFetch = Array.from(new Set(freqRecords.map((f: any) => String(f.aluno_id || '').trim()).filter(Boolean)))
       let alunosMap: Record<string, any> = {}
       if (studentIdsToFetch.length > 0) {
-        const { data: dbAlunos } = await supabase
-          .from('alunos')
-          .select('id, nome, turma, foto, foto_url')
-          .in('id', studentIdsToFetch)
-        if (dbAlunos) {
-          dbAlunos.forEach((a: any) => {
-            alunosMap[String(a.id)] = a
-          })
-        }
+        alunosMap = await fetchAlunosBatch(supabase, studentIdsToFetch)
       }
 
       for (const fRecord of freqRecords) {
@@ -166,15 +199,7 @@ export async function GET(request: Request) {
 
       let missingAlunosMap: Record<string, any> = {}
       if (missingEventStudentIds.length > 0) {
-        const { data: dbAlunos } = await supabase
-          .from('alunos')
-          .select('id, nome, turma, foto, foto_url')
-          .in('id', missingEventStudentIds)
-        if (dbAlunos) {
-          dbAlunos.forEach((a: any) => {
-            missingAlunosMap[String(a.id)] = a
-          })
-        }
+        missingAlunosMap = await fetchAlunosBatch(supabase, missingEventStudentIds)
       }
 
       for (const ev of exitEvents) {
@@ -225,17 +250,11 @@ export async function GET(request: Request) {
     if (callsMissingPhoto.length > 0) {
       const studentIdsToFetch = Array.from(new Set(callsMissingPhoto.map((c: any) => String(c.studentId).trim()).filter(Boolean)))
       if (studentIdsToFetch.length > 0) {
-        const { data: dbAlunosPhotos } = await supabase
-          .from('alunos')
-          .select('id, foto, foto_url')
-          .in('id', studentIdsToFetch)
-        if (dbAlunosPhotos && dbAlunosPhotos.length > 0) {
-          const photoMap = new Map(dbAlunosPhotos.map(p => [String(p.id), p.foto || p.foto_url]))
-          for (const c of callsMissingPhoto) {
-            const p = photoMap.get(String(c.studentId).trim())
-            if (p) {
-              c.studentPhoto = p
-            }
+        const photoMap = await fetchAlunosBatch(supabase, studentIdsToFetch)
+        for (const c of callsMissingPhoto) {
+          const p = photoMap[String(c.studentId).trim()]
+          if (p?.foto || p?.foto_url) {
+            c.studentPhoto = p.foto || p.foto_url
           }
         }
       }
@@ -290,16 +309,15 @@ export async function POST(request: Request) {
         .filter((r: any) => !r.dados?.studentPhoto && r.dados?.studentId)
         .map((r: any) => String(r.dados.studentId).trim())
       if (missingPhotoIds.length > 0) {
-        const { data: sPhotos } = await supabaseService.from('alunos').select('id, foto, foto_url').in('id', missingPhotoIds)
-        if (sPhotos) {
-          const map = new Map(sPhotos.map(s => [String(s.id), s.foto || s.foto_url]))
-          rows.forEach((r: any) => {
-            if (!r.dados?.studentPhoto && r.dados?.studentId) {
-              const p = map.get(String(r.dados.studentId).trim())
-              if (p) r.dados.studentPhoto = p
+        const photoMap = await fetchAlunosBatch(supabaseService, missingPhotoIds)
+        rows.forEach((r: any) => {
+          if (!r.dados?.studentPhoto && r.dados?.studentId) {
+            const p = photoMap[String(r.dados.studentId).trim()]
+            if (p?.foto || p?.foto_url) {
+              r.dados.studentPhoto = p.foto || p.foto_url
             }
-          })
-        }
+          }
+        })
       }
       
       const { data: existingRows } = await supabaseService.from('saida_calls').select('id, dados').in('id', ids)

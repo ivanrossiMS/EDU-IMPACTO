@@ -229,15 +229,27 @@ async function runOverdueFinancialAlertsRoutine(options: { forceSimulate?: boole
   }
 
   // ─── 5. Deduplicação Atômica: Checar agenda_push_logs ─────────────────────────
-  const dedupItemIds = candidates.map(c => `fin_overdue_3d_${c.id}`)
+  // A chave gravada no banco pode ser fin_overdue_3d_{id} ou fin_overdue_3d_{id}_aluno_{alunoId}
+  const candidateKeysMap = new Map<string, string[]>()
+  const allDedupSearchKeys: string[] = []
+  candidates.forEach(c => {
+    const rawKey = `fin_overdue_3d_${c.id}`
+    const alunoKey = `fin_overdue_3d_${c.id}_aluno_${c.alunoId}`
+    candidateKeysMap.set(String(c.id), [rawKey, alunoKey])
+    allDedupSearchKeys.push(rawKey, alunoKey)
+  })
+
   const { data: existingLogs } = await supabase
     .from('agenda_push_logs')
     .select('item_id')
     .eq('type', 'cobrancas')
-    .in('item_id', dedupItemIds)
+    .in('item_id', allDedupSearchKeys)
 
   const alreadySentSet = new Set<string>((existingLogs || []).map((l: any) => String(l.item_id)))
-  const pendingCandidates = candidates.filter(c => !alreadySentSet.has(`fin_overdue_3d_${c.id}`))
+  const pendingCandidates = candidates.filter(c => {
+    const keys = candidateKeysMap.get(String(c.id)) || []
+    return !keys.some(k => alreadySentSet.has(k))
+  })
 
   console.log(`${logPrefix} Já notificados anteriormente: ${alreadySentSet.size} | Pendentes de envio: ${pendingCandidates.length}`)
 

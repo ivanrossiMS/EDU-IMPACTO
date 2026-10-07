@@ -242,7 +242,10 @@ export function AgendaDigitalProvider({ children, isFamily = false }: { children
 
   const queryClient = useQueryClient()
   const pathname = usePathname() || ''
-  const isComunicadosRoute = pathname.includes('comunicados') || pathname === '/agenda-digital/admin'
+  // As páginas filhas dedicadas (/colaborador/comunicados, /admin/comunicados, /[slug]/comunicados) já gerenciam seu próprio useQueryComunicados.
+  // O Provider só precisa carregar comunicados no Dashboard geral ou na visão de detalhes de pessoa.
+  const isDedicatedComunicadosPage = pathname.includes('/comunicados')
+  const isComunicadosRoute = !isDedicatedComunicadosPage && (pathname === '/agenda-digital/admin' || pathname.includes('/pessoas/'))
   const isMomentosRoute = pathname.includes('momentos') || pathname === '/agenda-digital/admin'
   const isAdminPath = pathname.startsWith('/agenda-digital/admin')
 

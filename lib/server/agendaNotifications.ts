@@ -13,6 +13,7 @@
 
 import { sendPushNotification } from './pushService'
 import { getPushPauseStatus, isNotificationExemptFromPause } from './pushPauseService'
+import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 
 export type AgendaPushType =
   | 'comunicados'
@@ -96,19 +97,10 @@ function _markInProcess(key: string): void {
 }
 
 /**
- * Cria um cliente Supabase Service Role para operações de servidor.
- * Usa cache no escopo do módulo para evitar múltiplas instâncias por request.
+ * Retorna o cliente Supabase Admin reutilizando a instância Singleton com pooling de conexões.
  */
 function _createSupabaseService() {
-  const { createClient } = require('@supabase/supabase-js')
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      auth: { persistSession: false, autoRefreshToken: false },
-      global: { fetch: (url: any, options: any) => fetch(url, { ...options, cache: 'no-store' }) }
-    }
-  )
+  return getAdminClient()
 }
 
 /**
@@ -218,7 +210,7 @@ export async function sendAgendaPushNotification({
           try {
             await supabaseService
               .from('agenda_push_logs')
-              .insert({
+              .upsert({
                 user_id: senderUserId || null,
                 type,
                 item_id: dedupKey,
@@ -238,6 +230,9 @@ export async function sendAgendaPushNotification({
                   _send_after: sendAfter || null,
                 }),
                 created_at: new Date().toISOString(),
+              }, {
+                onConflict: 'item_id,type',
+                ignoreDuplicates: true,
               })
           } catch (logErr: any) {
             console.warn(`${logPrefix} Falha ao gravar log de pausa:`, logErr?.message)
@@ -295,17 +290,13 @@ export async function sendAgendaPushNotification({
     }
     _markInProcess(inProcessKey)
 
-    // ── Barreira 2: INSERT atômico no banco (proteção entre processos) ───────
-    // Usa INSERT com onConflict: 'ignore' para garantir atomicidade.
-    // A constraint UNIQUE (item_id, type) garante que apenas 1 worker consiga
-    // inserir — os outros recebem erro 23505 (UNIQUE violation) e abortam.
-    //
-    // REQUISITO DE BANCO (rodar uma única vez no Supabase SQL Editor):
-    //   ALTER TABLE agenda_push_logs
-    //     ADD CONSTRAINT agenda_push_logs_item_id_type_unique UNIQUE (item_id, type);
-    const { error: reserveError } = await supabaseService
+    // ── Barreira 2: UPSERT atômico no banco (proteção entre processos sem exceptions) ───────
+    // Usa UPSERT com onConflict: 'item_id,type' e ignoreDuplicates: true.
+    // O PostgREST envia 'Prefer: resolution=ignore-duplicates' (INSERT ... ON CONFLICT DO NOTHING).
+    // Isso evita Exceptions 23505 no PostgreSQL e status HTTP 409 no PostgREST.
+    const { data: insertedRows, error: reserveError } = await supabaseService
       .from('agenda_push_logs')
-      .insert({
+      .upsert({
         user_id: senderUserId || null,
         type,
         item_id: dedupKey,
@@ -320,9 +311,20 @@ export async function sendAgendaPushNotification({
           _send_after: sendAfter || null,
         }),
         created_at: new Date().toISOString(),
+      }, {
+        onConflict: 'item_id,type',
+        ignoreDuplicates: true,
       })
+      .select('id')
 
-    // Erro 23505 = UNIQUE violation → já existe uma entrada → skip duplicata
+    // Se já existia um registro anterior com essa constraint (ON CONFLICT DO NOTHING),
+    // o PostgREST retorna lista vazia de inserção sem lançar erro.
+    if (!reserveError && (!insertedRows || insertedRows.length === 0)) {
+      console.log(`${logPrefix} Push duplicado interceptado pelo banco (chave=${dedupKey}). Ignorando silenciosamente.`)
+      return { success: true, skipped: true, reason: 'already_sent' }
+    }
+
+    // Erro 23505 residual = UNIQUE violation → já existe uma entrada → skip duplicata
     if (reserveError) {
       if (reserveError.code === '23505') {
         console.log(`${logPrefix} Push duplicado interceptado pelo banco (chave=${dedupKey}). Ignorando.`)
