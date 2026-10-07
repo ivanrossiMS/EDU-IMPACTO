@@ -4,6 +4,7 @@ import { dbGetEmprestimoById, dbSaveEmprestimo, dbGetConfiguracao } from '@/lib/
 import { resolveCredImpactoUser } from '@/lib/credimpacto/authHelper'
 import { simulateLoan } from '@/lib/credimpacto/engine'
 import { generateContractHtml } from '@/lib/credimpacto/contractTemplate'
+import crypto from 'crypto'
 
 export const dynamic = 'force-dynamic'
 
@@ -58,19 +59,75 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
       const { decisao, motivoRecusa, contraproposta } = body
 
       if (decisao === 'aprovar') {
+        const { dispensarAssinatura = true, ativarDireto = false, chavePix, tipoChavePix } = body
         const config = await dbGetConfiguracao()
-        loan.status = 'aguardando_assinatura'
+
+        if (chavePix && !chavePix.toLowerCase().includes('definir')) {
+          loan.dadosBancarios = {
+            ...(loan.dadosBancarios || { tipoConta: 'corrente' }),
+            chavePix: chavePix.trim(),
+            tipoChavePix: tipoChavePix || loan.dadosBancarios?.tipoChavePix || 'cpf'
+          }
+        }
+
         if (!loan.termoAutorizacaoDesconto) {
           loan.termoAutorizacaoDesconto = config.termoAutorizacaoDesconto
         }
+
+        if (dispensarAssinatura) {
+          const ip =
+            request.headers.get('x-forwarded-for')?.split(',')[0].trim() ||
+            request.headers.get('x-real-ip') ||
+            '127.0.0.1'
+          const userAgent = request.headers.get('user-agent') || 'Impacto EDU Admin'
+          const nowIso = new Date().toISOString()
+          const randPart = crypto.randomBytes(4).toString('hex').toUpperCase()
+          const codigoVerificacao = `VAL-ADM-${randPart.slice(0, 4)}-${randPart.slice(4)}`
+          const payloadToHash = `${loan.id}|${loan.codigoOperacao}|${loan.colaboradorCpf}|${loan.dadosBancarios?.chavePix || 'ADMIN'}|${loan.valorAprovado}|${loan.totalAPagar}|${nowIso}|${ip}|ADMIN-DIRECT`
+          const hashSha256 = crypto.createHash('sha256').update(payloadToHash).digest('hex')
+
+          loan.assinadoEm = nowIso
+          loan.assinanteIp = ip
+          loan.assinanteUserAgent = userAgent
+          loan.assinanteDocumento = loan.colaboradorCpf || resolved.cpf || 'Autorização Administrativa'
+          loan.assinanteNome = resolved.nome
+          loan.aprovadoDiretoPorNome = resolved.nome
+          loan.aprovadoDiretoPorId = resolved.id
+          loan.codigoVerificacaoAssinatura = codigoVerificacao
+          loan.contratoHashSha256 = hashSha256
+
+          if (ativarDireto) {
+            loan.status = 'ativo'
+            loan.dataLiberacao = nowIso
+            loan.liberadoPorId = resolved.id
+            loan.liberadoPorNome = resolved.nome
+          } else {
+            loan.status = 'aguardando_liberacao'
+          }
+        } else {
+          loan.status = 'aguardando_assinatura'
+        }
+
+        const { getDadosUnidadeEscolar } = await import('@/lib/credimpacto/unitHelper')
+        const dadosUnidade = await getDadosUnidadeEscolar(loan.colaboradorUnidade || resolved.unidade)
+
         loan.contratoConteudoHtml = generateContractHtml(loan, {
+          razaoSocialEscola: dadosUnidade.razaoSocial,
+          nomeFantasiaEscola: dadosUnidade.nomeFantasia,
+          cnpjEscola: dadosUnidade.cnpj,
+          enderecoEscola: dadosUnidade.endereco,
+          cidadeUfEscola: dadosUnidade.cidadeUf,
+          unidadeEscola: dadosUnidade.unidadeNome,
           termoAutorizacaoDesconto: loan.termoAutorizacaoDesconto
         })
+
         const updated = await dbSaveEmprestimo(
           loan,
           { id: resolved.id, nome: resolved.nome, perfil: resolved.perfil },
           'APROVACAO',
-          'Solicitação de empréstimo aprovada pelo financeiro'
+          dispensarAssinatura
+            ? `Solicitação de empréstimo aprovada diretamente por ${resolved.nome} (autorização do colaborador dispensada)${ativarDireto ? ' e ativada imediatamente' : ' e encaminhada para Liberação TED'}`
+            : 'Solicitação de empréstimo aprovada pelo financeiro (aguardando assinatura do colaborador)'
         )
         return NextResponse.json(updated)
       }
@@ -115,6 +172,89 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
         )
         return NextResponse.json(updated)
       }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // 1.1 AÇÃO: APROVAR DIRETO (Dispensar Autorização do Colaborador) — Apenas Administrador/Financeiro
+    // ─────────────────────────────────────────────────────────────────────────
+    if (acao === 'aprovar_direto') {
+      if (!resolved.isAdminOrFinance) {
+        return NextResponse.json({ error: 'Apenas usuários autorizados do financeiro/direção podem aprovar empréstimos diretamente.' }, { status: 403 })
+      }
+
+      if (['ativo', 'quitado', 'recusado', 'cancelado'].includes(loan.status)) {
+        return NextResponse.json({ error: `Operações com status '${loan.status}' não podem ser aprovadas diretamente.` }, { status: 400 })
+      }
+
+      const { ativarDireto = false, chavePix, tipoChavePix, comprovanteLiberacaoUrl } = body
+
+      if (chavePix && !chavePix.toLowerCase().includes('definir')) {
+        loan.dadosBancarios = {
+          ...(loan.dadosBancarios || { tipoConta: 'corrente' }),
+          chavePix: chavePix.trim(),
+          tipoChavePix: tipoChavePix || loan.dadosBancarios?.tipoChavePix || 'cpf'
+        }
+      }
+
+      const config = await dbGetConfiguracao()
+      if (!loan.termoAutorizacaoDesconto) {
+        loan.termoAutorizacaoDesconto = config.termoAutorizacaoDesconto
+      }
+
+      const ip =
+        request.headers.get('x-forwarded-for')?.split(',')[0].trim() ||
+        request.headers.get('x-real-ip') ||
+        '127.0.0.1'
+      const userAgent = request.headers.get('user-agent') || 'Impacto EDU Admin'
+      const nowIso = new Date().toISOString()
+      const randPart = crypto.randomBytes(4).toString('hex').toUpperCase()
+      const codigoVerificacao = `VAL-ADM-${randPart.slice(0, 4)}-${randPart.slice(4)}`
+      const payloadToHash = `${loan.id}|${loan.codigoOperacao}|${loan.colaboradorCpf}|${loan.dadosBancarios?.chavePix || 'ADMIN'}|${loan.valorAprovado}|${loan.totalAPagar}|${nowIso}|${ip}|ADMIN-DIRECT`
+      const hashSha256 = crypto.createHash('sha256').update(payloadToHash).digest('hex')
+
+      loan.assinadoEm = nowIso
+      loan.assinanteIp = ip
+      loan.assinanteUserAgent = userAgent
+      loan.assinanteDocumento = loan.colaboradorCpf || resolved.cpf || 'Autorização Administrativa'
+      loan.assinanteNome = resolved.nome
+      loan.aprovadoDiretoPorNome = resolved.nome
+      loan.aprovadoDiretoPorId = resolved.id
+      loan.codigoVerificacaoAssinatura = codigoVerificacao
+      loan.contratoHashSha256 = hashSha256
+
+      if (ativarDireto) {
+        loan.status = 'ativo'
+        loan.dataLiberacao = nowIso
+        loan.liberadoPorId = resolved.id
+        loan.liberadoPorNome = resolved.nome
+        if (comprovanteLiberacaoUrl) {
+          loan.comprovanteLiberacaoUrl = comprovanteLiberacaoUrl
+        }
+      } else {
+        loan.status = 'aguardando_liberacao'
+      }
+
+      const { getDadosUnidadeEscolar } = await import('@/lib/credimpacto/unitHelper')
+      const dadosUnidade = await getDadosUnidadeEscolar(loan.colaboradorUnidade || resolved.unidade)
+
+      loan.contratoConteudoHtml = generateContractHtml(loan, {
+        razaoSocialEscola: dadosUnidade.razaoSocial,
+        nomeFantasiaEscola: dadosUnidade.nomeFantasia,
+        cnpjEscola: dadosUnidade.cnpj,
+        enderecoEscola: dadosUnidade.endereco,
+        cidadeUfEscola: dadosUnidade.cidadeUf,
+        unidadeEscola: dadosUnidade.unidadeNome,
+        termoAutorizacaoDesconto: loan.termoAutorizacaoDesconto
+      })
+
+      const updated = await dbSaveEmprestimo(
+        loan,
+        { id: resolved.id, nome: resolved.nome, perfil: resolved.perfil },
+        'APROVACAO',
+        `Empréstimo ${loan.codigoOperacao} aprovado diretamente por ${resolved.nome} (autorização do colaborador dispensada)${ativarDireto ? ' e ativado de imediato' : ' e enviado para Liberação TED'}`
+      )
+
+      return NextResponse.json(updated)
     }
 
     // ─────────────────────────────────────────────────────────────────────────

@@ -25,6 +25,7 @@ interface EmprestimoDetalhesModalProps {
   onClose: () => void
   onOpenSignModal?: (loan: CredImpactoEmprestimo) => void
   onOpenPayoffModal?: (loan: CredImpactoEmprestimo) => void
+  onDirectApprove?: (loan: CredImpactoEmprestimo) => void
   onDelete?: (loan: CredImpactoEmprestimo) => void
   isAdminOrFinance: boolean
 }
@@ -34,6 +35,7 @@ export function EmprestimoDetalhesModal({
   onClose,
   onOpenSignModal,
   onOpenPayoffModal,
+  onDirectApprove,
   onDelete,
   isAdminOrFinance
 }: EmprestimoDetalhesModalProps) {
@@ -99,6 +101,16 @@ export function EmprestimoDetalhesModal({
           </div>
 
           <div className="flex items-center gap-2 flex-wrap justify-end">
+            {isAdminOrFinance && onDirectApprove && (loan.status === 'aguardando_assinatura' || loan.status === 'solicitado') && (
+              <button
+                onClick={() => onDirectApprove(loan)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-sm transition-all"
+                title="Aprovar Diretamente (Dispensar Autorização do Colaborador)"
+              >
+                <CheckCircle2 size={14} />
+                <span>Aprovar Direto</span>
+              </button>
+            )}
             {isAdminOrFinance && onDelete && (
               <button
                 onClick={() => onDelete(loan)}
@@ -291,19 +303,58 @@ export function EmprestimoDetalhesModal({
               </div>
 
               {/* AVISOS CONTEXTUAIS */}
-              {loan.status === 'aguardando_assinatura' && onOpenSignModal && (
-                <div className="p-4 rounded-xl bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-500/30 flex items-center justify-between gap-3 text-xs">
+              {loan.status === 'aguardando_assinatura' && (
+                <div className="p-4 rounded-xl bg-emerald-50/80 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
                   <div>
-                    <div className="font-bold text-blue-900 dark:text-blue-300">Contrato Aprovado e Pronto para Assinatura</div>
+                    <div className="font-bold text-emerald-900 dark:text-emerald-300 flex items-center gap-1.5">
+                      <CheckCircle2 size={16} className="text-emerald-600 dark:text-emerald-400" />
+                      <span>{isAdminOrFinance ? 'Aprovação Direta Disponível (Administrador)' : 'Contrato Aprovado e Pronto para Assinatura'}</span>
+                    </div>
                     <div className="text-slate-600 dark:text-slate-400 text-[11px] mt-0.5">
-                      Para dar continuidade à liberação dos fundos, o colaborador precisa efetuar a assinatura eletrônica com aceite da autorização de desconto em folha.
+                      {isAdminOrFinance
+                        ? 'Como Administrador, você pode aprovar este empréstimo diretamente, dispensando a necessidade de autorização ou assinatura do colaborador.'
+                        : 'Para dar continuidade à liberação dos fundos, efetue a assinatura eletrônica com aceite da autorização de desconto em folha.'}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {isAdminOrFinance && onDirectApprove && (
+                      <button
+                        onClick={() => onDirectApprove(loan)}
+                        className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shrink-0 shadow-sm shadow-emerald-600/20 transition-colors flex items-center gap-1.5"
+                      >
+                        <CheckCircle2 size={14} />
+                        <span>Aprovar Direto</span>
+                      </button>
+                    )}
+                    {onOpenSignModal && (
+                      <button
+                        onClick={() => onOpenSignModal(loan)}
+                        className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shrink-0 shadow-sm shadow-blue-600/20 transition-colors"
+                      >
+                        {isAdminOrFinance ? 'Abrir Assinatura do Colaborador' : 'Aceitar e Assinar'}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {loan.status === 'solicitado' && isAdminOrFinance && onDirectApprove && (
+                <div className="p-4 rounded-xl bg-amber-50/80 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                  <div>
+                    <div className="font-bold text-amber-900 dark:text-amber-300 flex items-center gap-1.5">
+                      <Clock size={16} className="text-amber-600 dark:text-amber-400" />
+                      <span>Solicitação Pendente de Análise / Aprovação</span>
+                    </div>
+                    <div className="text-slate-600 dark:text-slate-400 text-[11px] mt-0.5">
+                      Você pode aprovar este empréstimo diretamente sem exigir a assinatura prévia do colaborador.
                     </div>
                   </div>
                   <button
-                    onClick={() => onOpenSignModal(loan)}
-                    className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shrink-0 shadow-sm shadow-blue-600/20 transition-colors"
+                    onClick={() => onDirectApprove(loan)}
+                    className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shrink-0 shadow-sm shadow-emerald-600/20 transition-colors flex items-center gap-1.5"
                   >
-                    Aceitar e Assinar
+                    <CheckCircle2 size={14} />
+                    <span>Aprovar Direto</span>
                   </button>
                 </div>
               )}

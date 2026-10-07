@@ -12,6 +12,7 @@ import tls from 'tls'
 import net from 'net'
 import { getAdminClient } from './supabaseAdminSingleton'
 import { IMPACTO_LOGO_DATA_URI } from '@/components/ui/impactoLogoBase64'
+import { isNonDeliverableTestEmail } from '@/lib/utils/emailValidation'
 
 const IMPACTO_LOGO_BUFFER = Buffer.from(
   IMPACTO_LOGO_DATA_URI.replace(/^data:image\/\w+;base64,/, ''),
@@ -37,6 +38,50 @@ export interface SmtpDiagnosticStep {
   dadosTecnicos?: any
   erro?: string
   sugestao?: string
+}
+
+export interface CapturedEmail {
+  id: string
+  to: any
+  from?: string
+  subject?: string
+  text?: string
+  html?: string
+  attachments?: any[]
+  timestamp: string
+  simulated: boolean
+  reason: 'test_environment_mock' | 'suppressed_non_deliverable_domain'
+}
+
+const capturedEmails: CapturedEmail[] = []
+
+/**
+ * Retorna os e-mails capturados em memória (modo de teste ou interceptação)
+ */
+export function getCapturedEmails(): CapturedEmail[] {
+  return [...capturedEmails]
+}
+
+/**
+ * Limpa o histórico de e-mails capturados em memória
+ */
+export function clearCapturedEmails(): void {
+  capturedEmails.length = 0
+}
+
+/**
+ * Detecta se o sistema deve operar em modo de mock/captura sem acionar SMTP real
+ */
+export function isEmailMockMode(): boolean {
+  if (process.env.SMTP_MOCK === 'true') return true
+  if (process.env.ALLOW_REAL_EMAIL_IN_TEST === 'true') return false
+  if (process.env.NODE_ENV === 'test') return true
+  if (process.env.VITEST || process.env.JEST_WORKER_ID) return true
+  if (typeof process.env.NODE_TEST_CONTEXT !== 'undefined') return true
+  if (typeof process !== 'undefined' && Array.isArray(process.argv) && process.argv.some(arg => arg.includes('test'))) {
+    return true
+  }
+  return false
 }
 
 const CONFIG_SMTP_KEY = 'cfgEmailSmtp'
@@ -154,6 +199,87 @@ export async function sendMailWithResilience(
   maxRetries = 4,
   options?: { useFreshConnection?: boolean }
 ): Promise<SentMessageInfo> {
+  // 1. Extração e normalização de todos os destinatários informados (to, cc, bcc)
+  const extractRecipients = (target: any): string[] => {
+    if (!target) return []
+    if (typeof target === 'string') return target.split(',').map(s => s.trim().toLowerCase()).filter(Boolean)
+    if (Array.isArray(target)) return target.flatMap(extractRecipients)
+    if (typeof target === 'object' && target.address) return [String(target.address).trim().toLowerCase()]
+    return []
+  }
+
+  const allRecipients = [
+    ...extractRecipients(mailOptions.to),
+    ...extractRecipients(mailOptions.cc),
+    ...extractRecipients(mailOptions.bcc),
+  ]
+
+  // 2. Modo de teste/mock em memória: evita qualquer socket real com a Locaweb
+  if (isEmailMockMode()) {
+    const allowRealInTest = process.env.ALLOW_REAL_EMAIL_IN_TEST === 'true'
+    const allowedTestRecipients = (process.env.SMTP_ALLOWED_TEST_RECIPIENTS || '')
+      .split(',')
+      .map(s => s.trim().toLowerCase())
+      .filter(Boolean)
+
+    const allAllowedForRealTest =
+      allowRealInTest &&
+      allRecipients.length > 0 &&
+      allRecipients.every(r => allowedTestRecipients.includes(r))
+
+    if (!allAllowedForRealTest) {
+      const mockId = `mock-test-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`
+      capturedEmails.push({
+        id: mockId,
+        to: mailOptions.to as any,
+        from: String(mailOptions.from || cfg.fromEmail),
+        subject: String(mailOptions.subject || ''),
+        text: String(mailOptions.text || ''),
+        html: String(mailOptions.html || ''),
+        attachments: mailOptions.attachments as any,
+        timestamp: new Date().toISOString(),
+        simulated: true,
+        reason: 'test_environment_mock',
+      })
+      console.info(`[EmailService] [TEST MOCK] E-mail retido em memória para ${allRecipients.join(', ')} (assunto: "${mailOptions.subject}"). Nenhuma conexão real aberta.`)
+      return {
+        messageId: `<${mockId}@mock.test.local>`,
+        response: '250 2.0.0 OK (Mocked in test)',
+        envelope: { from: cfg.fromEmail, to: allRecipients },
+        accepted: allRecipients,
+        rejected: [],
+        pending: [],
+      } as any
+    }
+  }
+
+  // 3. Proteção estrita contra domínios reservados de teste e exemplo (RFC 2606 / 6761)
+  const testRecipients = allRecipients.filter(r => isNonDeliverableTestEmail(r))
+  if (testRecipients.length > 0) {
+    const suppressedId = `suppressed-nullmx-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`
+    capturedEmails.push({
+      id: suppressedId,
+      to: mailOptions.to as any,
+      from: String(mailOptions.from || cfg.fromEmail),
+      subject: String(mailOptions.subject || ''),
+      text: String(mailOptions.text || ''),
+      html: String(mailOptions.html || ''),
+      attachments: mailOptions.attachments as any,
+      timestamp: new Date().toISOString(),
+      simulated: true,
+      reason: 'suppressed_non_deliverable_domain',
+    })
+    console.warn(`[EmailService] [SUPRIMIDO] Envio bloqueado para domínio fictício/exemplo (Null MX): ${testRecipients.join(', ')}. Proteção anti-bounce da Locaweb acionada.`)
+    return {
+      messageId: `<${suppressedId}@suppressed.nullmx.local>`,
+      response: '250 2.0.0 OK (Suppressed non-deliverable domain)',
+      envelope: { from: cfg.fromEmail, to: allRecipients },
+      accepted: allRecipients,
+      rejected: [],
+      pending: [],
+    } as any
+  }
+
   let lastError: any = null
   const useFresh = options?.useFreshConnection ?? false
 
@@ -222,6 +348,16 @@ export async function enviarCodigoOtpEmail(params: {
   alunoNome: string
   protocolo: string
 }): Promise<{ success: boolean; simulated?: boolean; messageId?: string; error?: string }> {
+  // Se o destinatário pertencer a domínio reservado/fictício, simula com sucesso e não abre socket SMTP nem consulta DB
+  if (isNonDeliverableTestEmail(params.destinatario)) {
+    console.warn(`[EmailService] [SUPRIMIDO OTP] Destinatário fictício interceptado: ${params.destinatario}. Conexão com Locaweb prevenida.`)
+    return {
+      success: true,
+      simulated: true,
+      messageId: `suppressed-otp-${Date.now()}`,
+    }
+  }
+
   const cfg = await getSmtpConfig()
 
   const htmlContent = `
@@ -389,6 +525,16 @@ export async function enviarCopiaContratoAssinadoEmail(params: {
   pdfBuffer: Buffer
   nomeArquivo?: string
 }): Promise<{ success: boolean; simulated?: boolean; messageId?: string; error?: string }> {
+  // Se o destinatário pertencer a domínio reservado/fictício, simula com sucesso e não abre socket SMTP nem consulta DB
+  if (isNonDeliverableTestEmail(params.destinatario)) {
+    console.warn(`[EmailService] [SUPRIMIDO CÓPIA] Destinatário fictício interceptado: ${params.destinatario}. Conexão com Locaweb prevenida.`)
+    return {
+      success: true,
+      simulated: true,
+      messageId: `suppressed-copy-${Date.now()}`,
+    }
+  }
+
   const cfg = await getSmtpConfig()
 
   const htmlContent = `
@@ -887,6 +1033,20 @@ export async function enviarEmailTeste(
     status: 'success',
     dadosTecnicos: { destinatario: destLimpo },
   })
+
+  // Bloqueio preventivo contra domínios reservados de teste ou exemplo (RFC 2606 / 6761)
+  if (isNonDeliverableTestEmail(destLimpo)) {
+    emit(0, {
+      status: 'error',
+      erro: `Destinatário reservado para testes/exemplos (RFC 2606): "${destLimpo}".`,
+      sugestao: 'Este domínio possui Null MX e não aceita e-mails. Utilize um endereço real autorizado (ex: direcao@colegioimpacto.net) para homologar a entrega na Locaweb.',
+    })
+    return {
+      success: false,
+      error: `O domínio de "${destLimpo}" é reservado para exemplos e testes (RFC 2606) e possui Null MX, gerando rejeição imediata de entrega na Locaweb. Utilize um destinatário real para homologação.`,
+      steps,
+    }
+  }
 
   // 2. Conexão e Autenticação
   emit(1, { status: 'running' })

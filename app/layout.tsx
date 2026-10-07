@@ -35,7 +35,7 @@ import { Toaster } from 'sonner'
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="pt-BR" suppressHydrationWarning data-scroll-behavior="smooth">
+    <html lang="pt-BR" suppressHydrationWarning data-scroll-behavior="smooth" style={{ backgroundColor: '#0A0F24' }}>
       <head>
         {/* Preconnect para carregamento das fontes */}
         <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -46,7 +46,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           rel="stylesheet"
         />
       </head>
-      <body style={{ minHeight: '100dvh', margin: 0 }}>
+      <body style={{ minHeight: '100dvh', margin: 0, backgroundColor: '#0A0F24' }}>
         {/* Escudo global contra ChunkLoadError e unhandled rejections */}
         <GlobalCrashShield />
         <GlobalButtonEffects />

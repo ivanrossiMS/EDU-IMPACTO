@@ -7,9 +7,15 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     var window: UIWindow?
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-        // Garantir fundo escuro (#0A0F24) na janela para eliminar qualquer flash branco na inicialização
+        // Garantir fundo escuro (#0A0F24) na janela e na WKWebView para eliminar qualquer flash branco na inicialização
         let darkBackground = UIColor(red: 10/255.0, green: 15/255.0, blue: 36/255.0, alpha: 1.0)
         window?.backgroundColor = darkBackground
+        if let bridgeVC = window?.rootViewController as? CAPBridgeViewController {
+            bridgeVC.view.backgroundColor = darkBackground
+            bridgeVC.webView?.backgroundColor = darkBackground
+            bridgeVC.webView?.isOpaque = false
+            bridgeVC.webView?.scrollView.backgroundColor = darkBackground
+        }
         return true
     }
 

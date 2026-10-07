@@ -191,13 +191,22 @@ export function generateContractHtml(
       loan.assinadoEm
         ? `
       <div style="font-size: 12px; color: #0f172a; display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
-        <div><strong>Assinante:</strong> ${loan.colaboradorNome}</div>
-        <div><strong>CPF:</strong> ${loan.colaboradorCpf}</div>
-        <div><strong>Chave PIX Informada:</strong> ${loan.dadosBancarios?.chavePix || 'Pendente'} ${loan.dadosBancarios?.tipoChavePix ? `(${loan.dadosBancarios.tipoChavePix.toUpperCase()})` : ''}</div>
-        <div><strong>Data e Hora (Local):</strong> ${new Date(loan.assinadoEm).toLocaleString('pt-BR')}</div>
+        <div><strong>Beneficiário(a):</strong> ${loan.colaboradorNome}</div>
+        <div><strong>CPF:</strong> ${loan.colaboradorCpf || 'Pendente'}</div>
+        <div><strong>Chave PIX:</strong> ${loan.dadosBancarios?.chavePix || 'Pendente'} ${loan.dadosBancarios?.tipoChavePix ? `(${loan.dadosBancarios.tipoChavePix.toUpperCase()})` : ''}</div>
+        <div><strong>Data e Hora:</strong> ${new Date(loan.assinadoEm).toLocaleString('pt-BR')}</div>
         <div><strong>Endereço IP:</strong> ${loan.assinanteIp || 'Registrado no servidor'}</div>
         <div><strong>Código de Validação:</strong> <code style="font-weight: bold; color: #0369a1;">${loan.codigoVerificacaoAssinatura || 'N/A'}</code></div>
       </div>
+      ${
+        loan.codigoVerificacaoAssinatura?.startsWith('VAL-ADM') || loan.aprovadoDiretoPorNome
+          ? `
+        <div style="margin-top: 10px; padding: 8px 12px; background: #e0f2fe; border-left: 3px solid #0284c7; border-radius: 4px; font-size: 11.5px; color: #0369a1;">
+          <strong>✓ HOMOLOGAÇÃO ADMINISTRATIVA DIRETA:</strong> Operação autorizada e formalizada diretamente pela Direção / Gestão Escolar (${loan.aprovadoDiretoPorNome || loan.assinanteNome || 'Administrador Master'}), dispensada a assinatura digital prévia do colaborador com base na prerrogativa de concessão institucional e averbação em folha.
+        </div>
+      `
+          : ''
+      }
       <div style="margin-top: 10px; font-size: 11px; color: #475569; word-break: break-all;">
         <strong>Hash Criptográfico SHA-256:</strong><br/>
         <code style="background: #e0f2fe; padding: 2px 6px; border-radius: 4px; color: #0284c7; font-family: monospace;">${loan.contratoHashSha256 || 'Em validação'}</code>

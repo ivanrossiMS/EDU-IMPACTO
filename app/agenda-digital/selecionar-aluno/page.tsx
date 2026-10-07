@@ -88,12 +88,23 @@ const SELECTOR_STYLES = `
         }
 
         .animate-reveal {
-          animation: revealUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-          opacity: 0;
+          animation: revealUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
         }
         .delay-1 { animation-delay: 0.1s; }
         .delay-2 { animation-delay: 0.2s; }
         .delay-3 { animation-delay: 0.3s; }
+
+        @media (prefers-reduced-motion: reduce) {
+          .animate-reveal {
+            animation: none !important;
+            opacity: 1 !important;
+            transform: none !important;
+          }
+          .welcome-avatar-wrapper,
+          .welcome-sparkle {
+            animation: none !important;
+          }
+        }
 
         /* Premium Welcome Header Card */
         .premium-welcome-card {
@@ -1023,6 +1034,10 @@ function SelecionarAlunoContent() {
 
   useEffect(() => {
     setMounted(true)
+    const safetyTimer = setTimeout(() => {
+      setHasFetched(true)
+    }, 3500)
+    return () => clearTimeout(safetyTimer)
   }, [])
 
   // 1. Sincronizar dados mais recentes do perfil e foto/avatar via /api/auth/me

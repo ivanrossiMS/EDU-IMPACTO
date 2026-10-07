@@ -193,13 +193,24 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
     }
   }, [routeNavigating, isFetchingQueries])
 
-  // 5. Failsafe de segurança: nunca trava a tela por mais de 6.5s
+  // 5. Failsafe de segurança: nunca trava a tela por mais de 4s
+  const [masterFailsafeTimeout, setMasterFailsafeTimeout] = React.useState(false)
+  React.useEffect(() => {
+    const timer = setTimeout(() => {
+      setMasterFailsafeTimeout(true)
+      setInitialReady(true)
+      setRouteNavigating(false)
+      targetPathRef.current = null
+    }, 4000)
+    return () => clearTimeout(timer)
+  }, [])
+
   React.useEffect(() => {
     if (routeNavigating) {
       const emergencyDismiss = setTimeout(() => {
         setRouteNavigating(false)
         targetPathRef.current = null
-      }, 6500)
+      }, 4000)
       return () => clearTimeout(emergencyDismiss)
     }
   }, [routeNavigating])
@@ -258,10 +269,10 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
   }, [hydrated, currentUser, isFamily, pathname, perfisLoading, perfis, loadingPath])
 
   React.useEffect(() => {
-    if (accessState === 'allowed') {
+    if (accessState === 'allowed' || masterFailsafeTimeout) {
       hideSplashScreen(300)
     }
-  }, [accessState])
+  }, [accessState, masterFailsafeTimeout])
 
   // Acesso negado — somente após verificação completa com dados reais
   if (accessState === 'denied' && loadingPath !== 'logout') {
@@ -286,6 +297,7 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
   }
 
   const isMasterLoading =
+    !masterFailsafeTimeout &&
     loadingPath !== 'logout' && (
       !mounted ||
       !hydrated ||

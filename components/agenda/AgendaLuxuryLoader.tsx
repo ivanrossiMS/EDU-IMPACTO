@@ -27,7 +27,7 @@ export function AgendaLuxuryLoader({
   style,
 }: AgendaLuxuryLoaderProps) {
   const [shouldRender, setShouldRender] = useState(isLoading)
-  const [visible, setVisible] = useState(false)
+  const [visible, setVisible] = useState(true)
   const [isExiting, setIsExiting] = useState(false)
 
   const mountTimestampRef = useRef<number>(Date.now())
@@ -68,18 +68,22 @@ export function AgendaLuxuryLoader({
     }, 360) // Matches CSS transition duration
   }, [preventExit])
 
+  // Failsafe mestre: nunca bloqueia o usuário por mais de 4.5s sob nenhuma hipótese
+  useEffect(() => {
+    if (!isLoading) return
+    const failsafe = setTimeout(() => {
+      triggerExit()
+    }, 4500)
+    return () => clearTimeout(failsafe)
+  }, [isLoading, triggerExit])
+
   useEffect(() => {
     if (isLoading) {
       clearTimers()
       mountTimestampRef.current = Date.now()
       setShouldRender(true)
       setIsExiting(false)
-      
-      // RequestAnimationFrame to guarantee CSS opacity transition triggers
-      const raf = requestAnimationFrame(() => {
-        setVisible(true)
-      })
-      return () => cancelAnimationFrame(raf)
+      setVisible(true)
     } else {
       if (!shouldRender) return
 

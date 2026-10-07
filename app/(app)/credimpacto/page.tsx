@@ -460,6 +460,32 @@ function CredImpactoContent() {
           setSelectedLoanForDetails(null)
           setSelectedLoanForPayoff(l)
         }}
+        onDirectApprove={async (l) => {
+          if (
+            !confirm(
+              `Deseja aprovar diretamente o empréstimo ${l.codigoOperacao} de ${l.colaboradorNome} dispensando a autorização do colaborador?\n\nA operação será homologada administrativamente e encaminhada para a fila de Liberações TED.`
+            )
+          ) {
+            return
+          }
+          try {
+            const res = await fetch(`/api/credimpacto/emprestimos/${l.id}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                acao: 'aprovar_direto',
+                ativarDireto: false
+              })
+            })
+            const data = await res.json()
+            if (!res.ok) throw new Error(data.error || 'Erro ao aprovar empréstimo')
+            toast.success(`Empréstimo ${data.codigoOperacao} aprovado diretamente! Encaminhado para a fila de Liberações TED.`)
+            setSelectedLoanForDetails(null)
+            loadData()
+          } catch (e: any) {
+            toast.error(e.message || 'Falha ao aprovar operação diretamente.')
+          }
+        }}
         onDelete={async (l) => {
           if (!confirm(`Deseja realmente excluir permanentemente a operação ${l.codigoOperacao} de ${l.colaboradorNome}? Esta ação é irreversível.`)) return
           try {

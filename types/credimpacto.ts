@@ -171,6 +171,9 @@ export interface CredImpactoEmprestimo {
   assinanteIp?: string
   assinanteUserAgent?: string
   assinanteDocumento?: string
+  assinanteNome?: string
+  aprovadoDiretoPorNome?: string
+  aprovadoDiretoPorId?: string
   
   // Quitação e Cancelamento
   quitadoEm?: string

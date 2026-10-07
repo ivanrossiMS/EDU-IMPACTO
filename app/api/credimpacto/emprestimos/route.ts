@@ -5,6 +5,7 @@ import { resolveCredImpactoUser } from '@/lib/credimpacto/authHelper'
 import { simulateLoan } from '@/lib/credimpacto/engine'
 import { generateContractHtml } from '@/lib/credimpacto/contractTemplate'
 import { CredImpactoEmprestimo, MetodoCalculo } from '@/types/credimpacto'
+import crypto from 'crypto'
 
 export const dynamic = 'force-dynamic'
 
@@ -232,9 +233,12 @@ export async function POST(request: Request) {
       status: 'prevista' as const
     }))
 
-    const initialStatus = criadoPorFinanceiro && resolved.isAdminOrFinance
-      ? 'aguardando_assinatura' // Admin concedeu diretamente; aguarda aceite e assinatura do colaborador
-      : 'solicitado'            // Colaborador solicitou; aguarda análise financeira
+    const dispensarAssinaturaColaborador = Boolean(criadoPorFinanceiro && resolved.isAdminOrFinance && !body.exigirAssinaturaColaborador)
+    const initialStatus = dispensarAssinaturaColaborador
+      ? (body.ativarDireto ? 'ativo' : 'aguardando_liberacao')
+      : criadoPorFinanceiro && resolved.isAdminOrFinance
+      ? 'aguardando_assinatura'
+      : 'solicitado'
 
     // Obtém dados oficiais da unidade escolar onde o colaborador está cadastrado
     const dadosUnidade = await getDadosUnidadeEscolar(colabUnidade)
@@ -275,6 +279,38 @@ export async function POST(request: Request) {
       updatedAt: new Date().toISOString()
     }
 
+    if (dispensarAssinaturaColaborador) {
+      const ip =
+        request.headers.get('x-forwarded-for')?.split(',')[0].trim() ||
+        request.headers.get('x-real-ip') ||
+        '127.0.0.1'
+      const userAgent = request.headers.get('user-agent') || 'Impacto EDU Admin'
+      const nowIso = new Date().toISOString()
+      const randPart = crypto.randomBytes(4).toString('hex').toUpperCase()
+      const codigoVerificacao = `VAL-ADM-${randPart.slice(0, 4)}-${randPart.slice(4)}`
+      const payloadToHash = `${empId}|${codigoOperacao}|${colabCpf}|${dadosBancarios?.chavePix || 'ADMIN'}|${valor}|${simulacao.totalAPagar}|${nowIso}|${ip}|ADMIN-CONCESSAO`
+      const hashSha256 = crypto.createHash('sha256').update(payloadToHash).digest('hex')
+
+      novoEmprestimo.assinadoEm = nowIso
+      novoEmprestimo.assinanteIp = ip
+      novoEmprestimo.assinanteUserAgent = userAgent
+      novoEmprestimo.assinanteDocumento = colabCpf || resolved.cpf || 'Autorização Administrativa'
+      novoEmprestimo.assinanteNome = resolved.nome
+      novoEmprestimo.aprovadoDiretoPorNome = resolved.nome
+      novoEmprestimo.aprovadoDiretoPorId = resolved.id
+      novoEmprestimo.codigoVerificacaoAssinatura = codigoVerificacao
+      novoEmprestimo.contratoHashSha256 = hashSha256
+
+      if (body.ativarDireto) {
+        novoEmprestimo.dataLiberacao = nowIso
+        novoEmprestimo.liberadoPorId = resolved.id
+        novoEmprestimo.liberadoPorNome = resolved.nome
+        if (body.comprovanteLiberacaoUrl) {
+          novoEmprestimo.comprovanteLiberacaoUrl = body.comprovanteLiberacaoUrl
+        }
+      }
+    }
+
     // Gera texto contratual com a unidade escolar do colaborador e termo configurado
     novoEmprestimo.contratoConteudoHtml = generateContractHtml(novoEmprestimo, {
       razaoSocialEscola: dadosUnidade.razaoSocial,
@@ -290,7 +326,11 @@ export async function POST(request: Request) {
       novoEmprestimo,
       { id: resolved.id, nome: resolved.nome, perfil: resolved.perfil },
       'CRIACAO',
-      criadoPorFinanceiro ? 'Empréstimo iniciado pelo financeiro' : 'Solicitação enviada pelo colaborador'
+      dispensarAssinaturaColaborador
+        ? `Empréstimo concedido e aprovado diretamente por ${resolved.nome} (autorização dispensada)`
+        : criadoPorFinanceiro
+        ? 'Empréstimo iniciado pelo financeiro'
+        : 'Solicitação enviada pelo colaborador'
     )
 
     return NextResponse.json(salvo, { status: 201 })

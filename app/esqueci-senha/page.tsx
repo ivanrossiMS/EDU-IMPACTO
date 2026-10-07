@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase';
 import { Mail, ArrowLeft, Send, CheckCircle2, AlertCircle, Shield, Lock, HelpCircle, BookOpen } from 'lucide-react';
 import { BackgroundEffects } from '@/components/ui/LoginBackground';
 import { getWhatsAppShareUrl } from '@/lib/whatsapp';
+import { isNonDeliverableTestEmail } from '@/lib/utils/emailValidation';
 
 export default function EsqueciSenha() {
   const [email, setEmail] = useState('');
@@ -28,7 +29,17 @@ export default function EsqueciSenha() {
     setLoading(true);
     setMensagem(null);
 
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    const emailLimpo = (email || '').trim().toLowerCase();
+    if (isNonDeliverableTestEmail(emailLimpo)) {
+      setMensagem({
+        tipo: 'erro',
+        texto: 'O domínio deste e-mail é reservado para testes/exemplos (RFC 2606) e não recebe mensagens. Por favor, informe um endereço de e-mail válido.',
+      });
+      setLoading(false);
+      return;
+    }
+
+    const { error } = await supabase.auth.resetPasswordForEmail(emailLimpo, {
       redirectTo: `${window.location.origin}/atualizar-senha`,
     });
 

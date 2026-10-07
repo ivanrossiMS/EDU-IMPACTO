@@ -12,7 +12,8 @@
     "test:notifications": "node --test test/notification-module-guard.test.mjs",
     "test:startup": "node --experimental-strip-types --test test/startup-resilience.test.mjs",
     "test:matricula": "npx tsx test/matricula-digital-flow.test.mjs",
-    "test": "npm run test:auth && npm run test:notifications && npm run test:startup"
+    "test:email": "npx tsx test/email-service-resilience.test.mjs",
+    "test": "npm run test:auth && npm run test:notifications && npm run test:startup && npm run test:email"
   },
   "dependencies": {
     "@capacitor-community/privacy-screen": "^8.0.0",

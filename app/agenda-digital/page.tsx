@@ -79,15 +79,25 @@ function AgendaDigitalIndexContent() {
               localStorage.removeItem(PENDING_PUSH_ROUTE_KEY);
             } catch (_) {}
           }
-          window.location.replace(cleanDest);
+          router.replace(cleanDest);
           return true;
         }
       }
       return false;
     };
 
+    // Failsafe de resolução: se em 2.8s nenhuma rota foi resolvida, direciona para selecionar-aluno sem travar a tela
+    const failsafeTimer = setTimeout(() => {
+      console.warn('[AgendaDigitalIndex] Failsafe acionado por lentidão de rede: navegando para selecionar-aluno...');
+      const paramStr = searchParams.toString() ? `?${searchParams.toString()}` : ''
+      router.replace(`/agenda-digital/selecionar-aluno${paramStr}`);
+    }, 2800);
+
     checkPendingPush().then((handled) => {
-      if (handled) return;
+      if (handled) {
+        clearTimeout(failsafeTimer);
+        return;
+      }
 
       const perfil = currentUserPerfil || currentUser.perfil || ''
       const cargo = currentUser.cargo || ''
@@ -98,11 +108,13 @@ function AgendaDigitalIndexContent() {
       
       // Se o destino for colaborador explicitamente
       if (perfilDestino === 'colaborador') {
-        window.location.replace(`/agenda-digital/colaborador/${redirect}${paramStr}`);
+        clearTimeout(failsafeTimer);
+        router.replace(`/agenda-digital/colaborador/${redirect}${paramStr}`);
         return;
       }
       
       if (isAdmin) {
+        clearTimeout(failsafeTimer);
         if (perfil === 'Diretor Geral' || cargo === 'Administrador Master' || perfil === 'Administrador') {
           router.replace('/agenda-digital/selecionar-perfil-admin')
         } else {
@@ -117,7 +129,8 @@ function AgendaDigitalIndexContent() {
 
       // Se é colaborador puro (sem filhos/responsável vinculados), vai direto para colaborador sem esperar
       if (isStaff && !hasDualRole) {
-        window.location.replace(`/agenda-digital/colaborador/${redirect}${paramStr}`);
+        clearTimeout(failsafeTimer);
+        router.replace(`/agenda-digital/colaborador/${redirect}${paramStr}`);
         return;
       }
 
@@ -127,7 +140,8 @@ function AgendaDigitalIndexContent() {
           if (cargo === 'Aluno') {
              const directAlunoId = currentUser.aluno_id || (currentUser as any).user_metadata?.aluno_id;
              if (directAlunoId) {
-               window.location.replace(`/agenda-digital/${directAlunoId}/${redirect}${paramStr}`);
+               clearTimeout(failsafeTimer);
+               router.replace(`/agenda-digital/${directAlunoId}/${redirect}${paramStr}`);
                return;
              }
           }
@@ -140,10 +154,12 @@ function AgendaDigitalIndexContent() {
               const parsed = JSON.parse(cached);
               const list = Array.isArray(parsed) ? parsed : (Array.isArray(parsed?.data) ? parsed.data : null);
               if (list && list.length === 1 && list[0]?.id) {
-                window.location.replace(`/agenda-digital/${list[0].id}/${redirect}${paramStr}`);
+                clearTimeout(failsafeTimer);
+                router.replace(`/agenda-digital/${list[0].id}/${redirect}${paramStr}`);
                 return;
               }
               if (list && list.length > 1) {
+                clearTimeout(failsafeTimer);
                 router.replace(`/agenda-digital/selecionar-aluno${paramStr}`);
                 return;
               }
@@ -152,15 +168,16 @@ function AgendaDigitalIndexContent() {
 
           // Chamada otimizada e deduplicada ao backend
           const data = await getMeusAlunosDedup();
+          clearTimeout(failsafeTimer);
           if (Array.isArray(data) && data.length === 1 && data[0].id) {
             try {
               localStorage.setItem(userCacheKey, JSON.stringify(data));
             } catch (_) {}
-            window.location.replace(`/agenda-digital/${data[0].id}/${redirect}${paramStr}`);
+            router.replace(`/agenda-digital/${data[0].id}/${redirect}${paramStr}`);
             return;
           }
           if (Array.isArray(data) && data.length === 0 && isStaff) {
-            window.location.replace(`/agenda-digital/colaborador/${redirect}${paramStr}`);
+            router.replace(`/agenda-digital/colaborador/${redirect}${paramStr}`);
             return;
           }
           if (Array.isArray(data) && data.length > 1) {
@@ -170,9 +187,10 @@ function AgendaDigitalIndexContent() {
           }
           router.replace(`/agenda-digital/selecionar-aluno${paramStr}`);
         } catch (e) {
+          clearTimeout(failsafeTimer);
           console.error('Erro ao buscar alunos:', e);
           if (isStaff) {
-            window.location.replace(`/agenda-digital/colaborador/${redirect}${paramStr}`);
+            router.replace(`/agenda-digital/colaborador/${redirect}${paramStr}`);
           } else {
             router.replace(`/agenda-digital/selecionar-aluno${paramStr}`);
           }
@@ -181,7 +199,13 @@ function AgendaDigitalIndexContent() {
 
       fetchSecureStudents();
     });
+
+    return () => clearTimeout(failsafeTimer);
   }, [currentUserPerfil, currentUser, router, searchParams, hydrated])
 
-  return <LoadingGlass />
+  return (
+    <div style={{ minHeight: '100dvh', width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <LoadingGlass statusText="Iniciando Agenda Digital..." />
+    </div>
+  )
 }

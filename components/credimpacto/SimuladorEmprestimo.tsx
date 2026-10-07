@@ -516,7 +516,7 @@ export function SimuladorEmprestimo({
 
       toast.success(
         isConcessaoPelaEscola
-          ? `Empréstimo ${data.codigoOperacao} concedido! Aguardando aceite e assinatura do colaborador.`
+          ? `Empréstimo ${data.codigoOperacao} concedido e aprovado diretamente! Encaminhado para a fila de Liberações TED.`
           : `Solicitação ${data.codigoOperacao} enviada com sucesso para análise do financeiro!`
       )
 
@@ -1602,7 +1602,9 @@ export function SimuladorEmprestimo({
                   </div>
                   <p className="text-[10px] text-slate-500 dark:text-slate-400">
                     {isAdmin
-                      ? 'Se não informada agora pelo administrador, o colaborador indicará seus dados de recebimento ao formalizar a proposta.'
+                      ? (Boolean(targetColaboradorId)
+                          ? 'Aprovação direta: o empréstimo será homologado administrativamente com dispensa de assinatura do colaborador e enviado para Liberações TED.'
+                          : 'Se não informada agora pelo administrador, o colaborador indicará seus dados de recebimento.')
                       : `O valor de ${formatBrl(valor)} será transferido via PIX para esta chave após aprovação e assinatura digital.`}
                   </p>
                 </div>
@@ -1618,6 +1620,7 @@ export function SimuladorEmprestimo({
                 ((dadosBancarios.tipoChavePix || 'cpf') !== 'cpf' || (dadosBancarios.chavePix.replace(/\D/g, '').length === 11 && dadosBancarios.chavePix.replace(/\D/g, '') !== '00000000000'))
               )
               const canSubmit = isAdmin || (isCpfFilled && isPixFilled)
+              const isDirectConcession = isAdminOrFinance && viewMode === 'admin' && Boolean(targetColaboradorId)
 
               return (
                 <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-2">
@@ -1635,11 +1638,11 @@ export function SimuladorEmprestimo({
                     className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white shadow-sm shadow-emerald-600/20 flex items-center gap-2 disabled:opacity-40 transition-colors"
                   >
                     {isSubmitting ? (
-                      <span>Enviando proposta...</span>
+                      <span>{isDirectConcession ? 'Concedendo e aprovando...' : 'Enviando proposta...'}</span>
                     ) : (
                       <>
-                        <Send size={14} />
-                        <span>Confirmar e Enviar Proposta</span>
+                        {isDirectConcession ? <CheckCircle2 size={14} /> : <Send size={14} />}
+                        <span>{isDirectConcession ? 'Conceder e Aprovar Diretamente' : 'Confirmar e Enviar Proposta'}</span>
                       </>
                     )}
                   </button>
@@ -1684,26 +1687,30 @@ export function SimuladorEmprestimo({
 
             {/* Título */}
             <h3 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight">
-              Proposta Enviada com Sucesso!
+              {successData?.isConcessaoPelaEscola ? 'Empréstimo Concedido & Aprovado!' : 'Proposta Enviada com Sucesso!'}
             </h3>
 
             {/* Descrição Principal */}
             <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 mt-2 leading-relaxed">
-              Sua solicitação de empréstimo foi registrada no sistema com sucesso.
+              {successData?.isConcessaoPelaEscola
+                ? 'A operação foi aprovada pela administração e direcionada diretamente para a fila de Liberações TED, com dispensa de assinatura do colaborador.'
+                : 'Sua solicitação de empréstimo foi registrada no sistema com sucesso.'}
             </p>
 
-            {/* Card Destacado: Status da Análise */}
+            {/* Card Destacado: Status da Análise / Liberação */}
             <div className="my-5 p-4 rounded-2xl bg-slate-50/90 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60 text-left space-y-3">
               <div className="flex items-start gap-3">
-                <div className="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0 mt-0.5">
-                  <Clock size={16} />
+                <div className={`w-8 h-8 rounded-xl ${successData?.isConcessaoPelaEscola ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'} flex items-center justify-center shrink-0 mt-0.5`}>
+                  {successData?.isConcessaoPelaEscola ? <CheckCircle2 size={16} /> : <Clock size={16} />}
                 </div>
                 <div>
                   <div className="text-xs font-bold text-slate-900 dark:text-white">
-                    Análise pelo Setor Responsável
+                    {successData?.isConcessaoPelaEscola ? 'Homologação Administrativa Concluída' : 'Análise pelo Setor Responsável'}
                   </div>
                   <div className="text-[11px] text-slate-600 dark:text-slate-300 mt-1 leading-relaxed">
-                    A sua proposta será analisada pela comissão de crédito e pelo setor responsável. Em breve você receberá o retorno com os próximos passos.
+                    {successData?.isConcessaoPelaEscola
+                      ? 'O contrato com chancela administrativa já foi gerado e o valor está pronto para transferência em Liberações TED / Tesouraria.'
+                      : 'A sua proposta será analisada pela comissão de crédito e pelo setor responsável. Em breve você receberá o retorno com os próximos passos.'}
                   </div>
                 </div>
               </div>
@@ -1724,7 +1731,11 @@ export function SimuladorEmprestimo({
             {/* Dica de Próximo Passo */}
             <div className="flex items-center justify-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400 mb-6">
               <Sparkles size={13} className="text-emerald-500 shrink-0" />
-              <span>Assim que aprovada, você receberá a via digital para assinatura.</span>
+              <span>
+                {successData?.isConcessaoPelaEscola
+                  ? 'A transferência bancária pode ser efetuada no menu Liberações TED.'
+                  : 'Assim que aprovada, você receberá a via digital para assinatura.'}
+              </span>
             </div>
 
             {/* Botão de Ação Principal */}
@@ -1732,7 +1743,7 @@ export function SimuladorEmprestimo({
               onClick={handleCloseSuccessModal}
               className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-sm shadow-lg shadow-emerald-600/25 transition-all transform active:scale-98 flex items-center justify-center gap-2"
             >
-              <span>Entendido, Acompanhar Proposta</span>
+              <span>{successData?.isConcessaoPelaEscola ? 'Concluir e Ir para Gestão' : 'Entendido, Acompanhar Proposta'}</span>
               <ArrowRight size={16} />
             </button>
           </div>

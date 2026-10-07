@@ -64,11 +64,20 @@ export function AdminDashboard({
   // Modais de Ação Administrativa
   const [analyzingLoan, setAnalyzingLoan] = useState<CredImpactoEmprestimo | null>(null)
   const [analysisDecision, setAnalysisDecision] = useState<'aprovar' | 'recusar' | 'contraproposta'>('aprovar')
+  const [analysisDispensarAssinatura, setAnalysisDispensarAssinatura] = useState(true)
+  const [analysisAtivarDireto, setAnalysisAtivarDireto] = useState(false)
   const [motivoRecusa, setMotivoRecusa] = useState('')
   const [contraValor, setContraValor] = useState<number>(0)
   const [contraParcelas, setContraParcelas] = useState<number>(0)
   const [contraMotivo, setContraMotivo] = useState('')
   const [isSubmittingAnalysis, setIsSubmittingAnalysis] = useState(false)
+
+  // Modal de Aprovação Direta (Dispensar Autorização do Colaborador)
+  const [approvingDirectLoan, setApprovingDirectLoan] = useState<CredImpactoEmprestimo | null>(null)
+  const [directApproveDestination, setDirectApproveDestination] = useState<'aguardando_liberacao' | 'ativo'>('aguardando_liberacao')
+  const [directApprovePixKey, setDirectApprovePixKey] = useState('')
+  const [directApprovePixType, setDirectApprovePixType] = useState<'cpf' | 'email' | 'telefone' | 'aleatoria'>('cpf')
+  const [isSubmittingDirectApproval, setIsSubmittingDirectApproval] = useState(false)
 
   // Modal de Liberação de Recursos
   const [disbursingLoan, setDisbursingLoan] = useState<CredImpactoEmprestimo | null>(null)
@@ -223,13 +232,57 @@ export function AdminDashboard({
   }, [emprestimos, searchTerm, statusFilter])
 
   // Abertura do Modal de Análise
+  // Abertura do Modal de Análise
   const handleOpenAnalysisModal = (loan: CredImpactoEmprestimo) => {
     setAnalyzingLoan(loan)
     setAnalysisDecision('aprovar')
+    setAnalysisDispensarAssinatura(true)
+    setAnalysisAtivarDireto(false)
     setMotivoRecusa('')
     setContraValor(loan.valorSolicitado)
     setContraParcelas(loan.quantidadeParcelas)
     setContraMotivo('Ajuste para compatibilidade com o teto de desconto em folha.')
+  }
+
+  // Abertura do Modal de Aprovação Direta
+  const handleOpenDirectApprovalModal = (loan: CredImpactoEmprestimo) => {
+    setApprovingDirectLoan(loan)
+    setDirectApproveDestination('aguardando_liberacao')
+    const existing = loan.dadosBancarios?.chavePix || ''
+    const isPlaceholder = existing.toLowerCase().includes('definir')
+    setDirectApprovePixKey(isPlaceholder ? '' : existing)
+    setDirectApprovePixType((loan.dadosBancarios?.tipoChavePix as any) || 'cpf')
+  }
+
+  const handleConfirmDirectApproval = async () => {
+    if (!approvingDirectLoan) return
+    setIsSubmittingDirectApproval(true)
+    try {
+      const res = await fetch(`/api/credimpacto/emprestimos/${approvingDirectLoan.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          acao: 'aprovar_direto',
+          ativarDireto: directApproveDestination === 'ativo',
+          chavePix: directApprovePixKey.trim() || undefined,
+          tipoChavePix: directApprovePixType
+        })
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Erro ao aprovar empréstimo')
+
+      toast.success(
+        directApproveDestination === 'ativo'
+          ? `Empréstimo ${data.codigoOperacao} aprovado diretamente e ativado com sucesso!`
+          : `Empréstimo ${data.codigoOperacao} aprovado diretamente! Encaminhado para a fila de Liberações TED.`
+      )
+      setApprovingDirectLoan(null)
+      onRefresh()
+    } catch (err: any) {
+      toast.error(err.message || 'Falha ao aprovar operação')
+    } finally {
+      setIsSubmittingDirectApproval(false)
+    }
   }
 
   const handleConfirmAnalysis = async () => {
@@ -238,7 +291,9 @@ export function AdminDashboard({
     try {
       const payload: any = {
         acao: 'analisar',
-        decisao: analysisDecision
+        decisao: analysisDecision,
+        dispensarAssinatura: analysisDispensarAssinatura,
+        ativarDireto: analysisAtivarDireto
       }
 
       if (analysisDecision === 'recusar') {
@@ -276,7 +331,11 @@ export function AdminDashboard({
 
       toast.success(
         analysisDecision === 'aprovar'
-          ? `Empréstimo ${data.codigoOperacao} aprovado! Contrato disponibilizado para assinatura do colaborador.`
+          ? analysisDispensarAssinatura
+            ? analysisAtivarDireto
+              ? `Empréstimo ${data.codigoOperacao} aprovado diretamente e ativado com sucesso!`
+              : `Empréstimo ${data.codigoOperacao} aprovado diretamente! Encaminhado para a fila de Liberações TED.`
+            : `Empréstimo ${data.codigoOperacao} aprovado! Contrato disponibilizado para assinatura do colaborador.`
           : analysisDecision === 'recusar'
           ? `Solicitação ${data.codigoOperacao} recusada.`
           : `Contraproposta enviada ao colaborador ${analyzingLoan.colaboradorNome}.`
@@ -630,7 +689,7 @@ export function AdminDashboard({
                   <th className="py-2.5 px-2 text-center whitespace-nowrap w-[80px]">Parcelas</th>
                   <th className="py-2.5 px-3 text-center whitespace-nowrap w-[160px]">Saldo Devedor</th>
                   <th className="py-2.5 px-2 text-center whitespace-nowrap w-[120px]">Status</th>
-                  <th className="py-2.5 px-3 text-center whitespace-nowrap w-[130px]">Ações</th>
+                  <th className="py-2.5 px-3 text-center whitespace-nowrap min-w-[170px]">Ações</th>
                 </tr>
               )}
             </thead>
@@ -821,14 +880,36 @@ export function AdminDashboard({
 
                       <td className="py-2.5 px-3 text-center whitespace-nowrap">
                         <div className="flex items-center justify-center gap-1.5">
-                          {/* Ação 1: Analisar */}
+                          {/* Ação 1: Analisar ou Aprovar Direto quando Solicitado */}
                           {isPendingAnalysis && (
+                            <>
+                              <button
+                                onClick={() => handleOpenDirectApprovalModal(loan)}
+                                className="px-2 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] shadow-sm flex items-center gap-1 transition-all"
+                                title="Aprovar Diretamente (Dispensar Autorização do Colaborador)"
+                              >
+                                <Check size={12} />
+                                <span>Aprovar</span>
+                              </button>
+                              <button
+                                onClick={() => handleOpenAnalysisModal(loan)}
+                                className="px-2 py-1 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-bold text-[11px] shadow-sm flex items-center gap-1 transition-all"
+                                title="Analisar Proposta"
+                              >
+                                <span>Analisar</span>
+                              </button>
+                            </>
+                          )}
+
+                          {/* Ação: Aprovar Direto quando Aguardando Assinatura */}
+                          {loan.status === 'aguardando_assinatura' && (
                             <button
-                              onClick={() => handleOpenAnalysisModal(loan)}
-                              className="px-2 py-1 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-bold text-[11px] shadow-sm flex items-center gap-1 transition-all"
-                              title="Analisar Proposta"
+                              onClick={() => handleOpenDirectApprovalModal(loan)}
+                              className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] shadow-sm flex items-center gap-1.5 transition-all"
+                              title="Aprovar Diretamente (Dispensar Autorização do Colaborador)"
                             >
-                              <span>Analisar</span>
+                              <CheckCircle2 size={13} />
+                              <span>Aprovar Direto</span>
                             </button>
                           )}
 
@@ -997,11 +1078,30 @@ export function AdminDashboard({
                   {/* AÇÕES MOBILE */}
                   <div className="flex flex-col gap-2 pt-1">
                     {isPendingAnalysis && (
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          onClick={() => handleOpenDirectApprovalModal(loan)}
+                          className="py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm active:scale-98 transition-all"
+                        >
+                          <CheckCircle2 size={14} />
+                          <span>Aprovar Direto</span>
+                        </button>
+                        <button
+                          onClick={() => handleOpenAnalysisModal(loan)}
+                          className="py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm active:scale-98 transition-all"
+                        >
+                          <span>Analisar Proposta</span>
+                        </button>
+                      </div>
+                    )}
+
+                    {loan.status === 'aguardando_assinatura' && (
                       <button
-                        onClick={() => handleOpenAnalysisModal(loan)}
-                        className="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm active:scale-98 transition-all"
+                        onClick={() => handleOpenDirectApprovalModal(loan)}
+                        className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm active:scale-98 transition-all"
                       >
-                        <span>Analisar Proposta de Crédito</span>
+                        <CheckCircle2 size={15} />
+                        <span>Aprovar Direto (Dispensar Autorização)</span>
                       </button>
                     )}
 
@@ -1123,6 +1223,77 @@ export function AdminDashboard({
                   <span>Recusar</span>
                 </button>
               </div>
+
+              {/* DETALHES DE APROVAÇÃO DIRETA */}
+              {analysisDecision === 'aprovar' && (
+                <div className="p-3.5 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/50 rounded-xl space-y-2.5 text-xs animate-in fade-in">
+                  <div className="flex items-center gap-2 text-emerald-800 dark:text-emerald-300 font-bold text-xs">
+                    <CheckCircle2 size={16} className="text-emerald-600 dark:text-emerald-400 shrink-0" />
+                    <span>Aprovação Direta sem Autorização do Colaborador</span>
+                  </div>
+                  <p className="text-[11px] text-emerald-900/80 dark:text-emerald-300/80">
+                    O empréstimo será formalizado diretamente pela administração sem exigir que o colaborador assine previamente no portal.
+                  </p>
+
+                  <div className="pt-2 border-t border-emerald-200/60 dark:border-emerald-800/40 space-y-2">
+                    <label className="block text-[11px] font-bold text-emerald-950 dark:text-emerald-200 uppercase tracking-wider">
+                      Destino Pós-Aprovação:
+                    </label>
+                    <div className="space-y-1.5">
+                      <label className="flex items-start gap-2 cursor-pointer p-2 rounded-lg hover:bg-emerald-100/50 dark:hover:bg-emerald-900/20 transition-colors">
+                        <input
+                          type="radio"
+                          name="analysisDest"
+                          checked={analysisDispensarAssinatura && !analysisAtivarDireto}
+                          onChange={() => {
+                            setAnalysisDispensarAssinatura(true)
+                            setAnalysisAtivarDireto(false)
+                          }}
+                          className="mt-0.5 text-emerald-600 focus:ring-emerald-500"
+                        />
+                        <div>
+                          <div className="font-bold text-slate-900 dark:text-white text-xs">Encaminhar para Liberações TED (Recomendado)</div>
+                          <div className="text-[10px] text-slate-500 dark:text-slate-400">Aprova a operação e a envia para a tesouraria realizar o TED/PIX e anexar comprovante.</div>
+                        </div>
+                      </label>
+
+                      <label className="flex items-start gap-2 cursor-pointer p-2 rounded-lg hover:bg-emerald-100/50 dark:hover:bg-emerald-900/20 transition-colors">
+                        <input
+                          type="radio"
+                          name="analysisDest"
+                          checked={analysisDispensarAssinatura && analysisAtivarDireto}
+                          onChange={() => {
+                            setAnalysisDispensarAssinatura(true)
+                            setAnalysisAtivarDireto(true)
+                          }}
+                          className="mt-0.5 text-emerald-600 focus:ring-emerald-500"
+                        />
+                        <div>
+                          <div className="font-bold text-slate-900 dark:text-white text-xs">Ativar Imediatamente</div>
+                          <div className="text-[10px] text-slate-500 dark:text-slate-400">Utilize se os recursos já foram entregues ao colaborador. O empréstimo ficará ativo agora.</div>
+                        </div>
+                      </label>
+
+                      <label className="flex items-start gap-2 cursor-pointer p-2 rounded-lg hover:bg-emerald-100/50 dark:hover:bg-emerald-900/20 transition-colors">
+                        <input
+                          type="radio"
+                          name="analysisDest"
+                          checked={!analysisDispensarAssinatura}
+                          onChange={() => {
+                            setAnalysisDispensarAssinatura(false)
+                            setAnalysisAtivarDireto(false)
+                          }}
+                          className="mt-0.5 text-emerald-600 focus:ring-emerald-500"
+                        />
+                        <div>
+                          <div className="font-bold text-slate-900 dark:text-white text-xs">Ainda assim exigir assinatura digital do colaborador</div>
+                          <div className="text-[10px] text-slate-500 dark:text-slate-400">O contrato ficará aguardando o colaborador aceitar os termos no portal.</div>
+                        </div>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* CAMPOS ESPECÍFICOS DE RECUSA */}
               {analysisDecision === 'recusar' && (
@@ -1505,6 +1676,146 @@ export function AdminDashboard({
                 className="px-4 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs shadow-sm shadow-cyan-600/30 disabled:opacity-50 transition-all flex items-center gap-1.5"
               >
                 {isSavingPix ? 'Salvando...' : 'Salvar Chave PIX'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE APROVAÇÃO DIRETA (DISPENSAR AUTORIZAÇÃO DO COLABORADOR) */}
+      {approvingDirectLoan && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-3">
+              <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <CheckCircle2 size={18} className="text-emerald-600 dark:text-emerald-400" />
+                <span>Aprovação Direta de Empréstimo</span>
+              </h3>
+              <button onClick={() => setApprovingDirectLoan(null)} className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors">✕</button>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/50 text-xs text-emerald-900 dark:text-emerald-300">
+              <div className="font-bold text-xs mb-1">Prerrogativa Administrativa:</div>
+              Você está aprovando esta operação diretamente como Administrador/Direção. A autorização de desconto em folha e contrato de mútuo serão formalizados com carimbo administrativo, <strong>dispensando a necessidade de autorização ou assinatura prévia do colaborador</strong>.
+            </div>
+
+            {/* DADOS DA OPERAÇÃO */}
+            <div className="bg-slate-50 dark:bg-slate-800/60 rounded-xl p-3.5 border border-slate-200/80 dark:border-slate-700/60 text-xs space-y-2">
+              <div className="flex justify-between">
+                <span className="text-slate-500 dark:text-slate-400">Operação:</span>
+                <span className="font-mono font-bold text-slate-900 dark:text-white">{approvingDirectLoan.codigoOperacao}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500 dark:text-slate-400">Colaborador:</span>
+                <span className="font-bold text-slate-900 dark:text-white">{approvingDirectLoan.colaboradorNome}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500 dark:text-slate-400">CPF:</span>
+                <span className="font-mono text-slate-700 dark:text-slate-300">{approvingDirectLoan.colaboradorCpf || 'Não informado'}</span>
+              </div>
+              <div className="flex justify-between pt-1 border-t border-slate-200/60 dark:border-slate-700/60">
+                <span className="text-slate-500 dark:text-slate-400">Valor / Parcelas:</span>
+                <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                  {formatBrl(approvingDirectLoan.valorAprovado || approvingDirectLoan.valorSolicitado)} em {approvingDirectLoan.quantidadeParcelas}x
+                </span>
+              </div>
+            </div>
+
+            {/* ESCOLHA DE DESTINO */}
+            <div className="space-y-2">
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+                Como deseja prosseguir com a aprovação?
+              </label>
+
+              <div className="space-y-2">
+                <label className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
+                  directApproveDestination === 'aguardando_liberacao'
+                    ? 'bg-cyan-50/70 dark:bg-cyan-950/30 border-cyan-300 dark:border-cyan-700/70'
+                    : 'bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800'
+                }`}>
+                  <input
+                    type="radio"
+                    name="directDest"
+                    checked={directApproveDestination === 'aguardando_liberacao'}
+                    onChange={() => setDirectApproveDestination('aguardando_liberacao')}
+                    className="mt-0.5 text-cyan-600 focus:ring-cyan-500"
+                  />
+                  <div>
+                    <div className="font-bold text-slate-900 dark:text-white text-xs">
+                      1. Aprovar e Enviar para Liberações TED (Recomendado)
+                    </div>
+                    <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                      Formaliza o contrato imediatamente e move o empréstimo para a aba <strong>Liberações TED</strong>, onde a tesouraria pode efetuar o PIX/transferência e anexar o comprovante.
+                    </div>
+                  </div>
+                </label>
+
+                <label className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
+                  directApproveDestination === 'ativo'
+                    ? 'bg-emerald-50/70 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-700/70'
+                    : 'bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800'
+                }`}>
+                  <input
+                    type="radio"
+                    name="directDest"
+                    checked={directApproveDestination === 'ativo'}
+                    onChange={() => setDirectApproveDestination('ativo')}
+                    className="mt-0.5 text-emerald-600 focus:ring-emerald-500"
+                  />
+                  <div>
+                    <div className="font-bold text-slate-900 dark:text-white text-xs">
+                      2. Aprovar e Ativar Imediatamente
+                    </div>
+                    <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                      Utilize se o valor já foi creditado/entregue ao colaborador. A operação ficará ativa de imediato no saldo a receber e no controle de folha.
+                    </div>
+                  </div>
+                </label>
+              </div>
+            </div>
+
+            {/* DADOS BANCÁRIOS / PIX (OPCIONAL) */}
+            <div className="space-y-2 bg-slate-50 dark:bg-slate-800/40 p-3.5 rounded-xl border border-slate-200/80 dark:border-slate-700/60 text-xs">
+              <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                Chave PIX do Colaborador (opcional, pode ser preenchida ou editada depois)
+              </label>
+              <div className="grid grid-cols-3 gap-2">
+                <select
+                  value={directApprovePixType}
+                  onChange={(e) => setDirectApprovePixType(e.target.value as any)}
+                  className="bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-2.5 py-2 text-xs text-slate-800 dark:text-slate-200"
+                >
+                  <option value="cpf">CPF</option>
+                  <option value="email">E-mail</option>
+                  <option value="telefone">Telefone</option>
+                  <option value="aleatoria">Aleatória</option>
+                </select>
+                <input
+                  type="text"
+                  placeholder="Chave PIX..."
+                  value={directApprovePixKey}
+                  onChange={(e) => setDirectApprovePixKey(e.target.value)}
+                  className="col-span-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-mono text-slate-900 dark:text-white placeholder:text-slate-400"
+                />
+              </div>
+            </div>
+
+            <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setApprovingDirectLoan(null)}
+                className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={isSubmittingDirectApproval}
+                onClick={handleConfirmDirectApproval}
+                className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white shadow-sm shadow-emerald-600/30 disabled:opacity-50 transition-colors flex items-center gap-1.5"
+              >
+                <CheckCircle2 size={14} />
+                <span>{isSubmittingDirectApproval ? 'Aprovando...' : 'Confirmar Aprovação Direta'}</span>
               </button>
             </div>
           </div>

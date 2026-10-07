@@ -493,7 +493,10 @@ export async function dbSaveEmprestimo(
       dados: {
         ...((updatedLoan as any).dados || {}),
         primeiraParcelaCompetencia: updatedLoan.primeiraParcelaCompetencia || updatedLoan.parcelas?.[0]?.competencia,
-        primeiraParcelaVencimento: updatedLoan.primeiraParcelaVencimento || updatedLoan.parcelas?.[0]?.dataVencimento
+        primeiraParcelaVencimento: updatedLoan.primeiraParcelaVencimento || updatedLoan.parcelas?.[0]?.dataVencimento,
+        assinanteNome: updatedLoan.assinanteNome,
+        aprovadoDiretoPorNome: updatedLoan.aprovadoDiretoPorNome,
+        aprovadoDiretoPorId: updatedLoan.aprovadoDiretoPorId
       },
       updated_at: nowIso
     }
@@ -954,6 +957,9 @@ function mapDbRowToEmprestimo(e: any, parcelas: CredImpactoParcela[]): CredImpac
     assinanteIp: e.assinante_ip || e.assinanteIp,
     assinanteUserAgent: e.assinante_user_agent || e.assinanteUserAgent,
     assinanteDocumento: e.assinante_documento || e.assinanteDocumento,
+    assinanteNome: e.dados?.assinanteNome || e.assinante_nome || e.assinanteNome,
+    aprovadoDiretoPorNome: e.dados?.aprovadoDiretoPorNome || e.aprovado_direto_por_nome || e.aprovadoDiretoPorNome,
+    aprovadoDiretoPorId: e.dados?.aprovadoDiretoPorId || e.aprovado_direto_por_id || e.aprovadoDiretoPorId,
     quitadoEm: e.quitado_em || e.quitadoEm,
     canceladoEm: e.cancelado_em || e.canceladoEm,
     canceladoPorId: e.cancelado_por_id || e.canceladoPorId,
