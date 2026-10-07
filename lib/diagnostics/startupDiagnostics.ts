@@ -35,7 +35,7 @@ export interface StartupDiagnosticRecord {
 
 const STORAGE_KEY = 'edu_startup_diagnostics_history'
 const MAX_HISTORY_RECORDS = 8
-const APP_VERSION = '1.0.12'
+const APP_VERSION = '1.0.11'
 const SENSITIVE_KEY_REGEX = /password|token|secret|aluno|nome|matricula|cpf|email|rg|telefone|auth|bearer/i
 
 function sanitizeMeta(meta?: any): Record<string, any> | undefined {
