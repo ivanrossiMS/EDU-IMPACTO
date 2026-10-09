@@ -291,7 +291,7 @@ export function ColaboradorDashboard({
               return (
                 <div
                   key={loan.id}
-                  className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl shadow-sm hover:border-slate-300 dark:hover:border-slate-700 transition-all overflow-hidden relative"
+                  className="bg-white/90 dark:bg-slate-900/85 backdrop-blur-xl border border-white/80 dark:border-slate-700/60 rounded-2xl shadow-[0_10px_25px_-5px_rgba(15,23,42,0.08),0_8px_10px_-6px_rgba(15,23,42,0.04),inset_0_1px_1px_rgba(255,255,255,0.95)] dark:shadow-[0_12px_28px_-6px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.08)] ring-1 ring-slate-900/5 dark:ring-white/5 overflow-hidden transition-all duration-300 hover:shadow-xl relative"
                 >
                   {/* LISTRA SUPERIOR COLORIDA COM GRADIENTE DO STATUS */}
                   <div className={`h-1.5 w-full ${cardStyle.topStripe} absolute top-0 left-0 right-0`} />

@@ -239,9 +239,9 @@ export function ConciliacaoFolhaTab({ onRefresh }: ConciliacaoFolhaTabProps) {
     const q = searchTerm.toLowerCase().trim()
     const matchSearch =
       !q ||
-      p.colaboradorNome.toLowerCase().includes(q) ||
-      p.colaboradorCpf.includes(q) ||
-      p.codigoOperacao.toLowerCase().includes(q)
+      (p.colaboradorNome || '').toLowerCase().includes(q) ||
+      (p.colaboradorCpf || '').includes(q) ||
+      (p.codigoOperacao || '').toLowerCase().includes(q)
     const matchStatus = statusFilter === 'todos' ? true : p.status === statusFilter
     return matchSearch && matchStatus
   })

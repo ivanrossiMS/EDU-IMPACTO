@@ -36,6 +36,11 @@ const TAB_TITLES: Record<TabId, { title: string; subtitle: string; adminOnly?: b
     title: 'Controle de Parcelas & Cronograma',
     subtitle: 'Acompanhamento de todas as parcelas por competência, vencimento e quitação'
   },
+  ficha_colaborador: {
+    title: 'Ficha Financeira por Colaborador',
+    subtitle: 'Extrato consolidado, margem consignável legal (Lei 10.820/03), contratos, parcelas e exportações',
+    adminOnly: true
+  },
   folha: {
     title: 'Conciliação em Folha',
     subtitle: 'Relação mensal de parcelas para desconto em folha e comprovação de baixa'

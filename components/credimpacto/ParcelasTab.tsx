@@ -53,10 +53,10 @@ export function ParcelasTab({
         list.push({
           ...p,
           loanId: emp.id,
-          codigoOperacao: emp.codigoOperacao,
-          colaboradorNome: emp.colaboradorNome,
-          colaboradorCpf: emp.colaboradorCpf,
-          colaboradorMatricula: emp.colaboradorMatricula,
+          codigoOperacao: emp.codigoOperacao || '',
+          colaboradorNome: emp.colaboradorNome || 'Colaborador',
+          colaboradorCpf: emp.colaboradorCpf || '',
+          colaboradorMatricula: emp.colaboradorMatricula || '',
           loanStatus: emp.status,
           loan: emp
         })
@@ -81,9 +81,9 @@ export function ParcelasTab({
       const q = searchTerm.toLowerCase().trim()
       const matchSearch =
         !q ||
-        p.colaboradorNome.toLowerCase().includes(q) ||
-        p.colaboradorCpf.includes(q) ||
-        p.codigoOperacao.toLowerCase().includes(q)
+        (p.colaboradorNome || '').toLowerCase().includes(q) ||
+        (p.colaboradorCpf || '').includes(q) ||
+        (p.codigoOperacao || '').toLowerCase().includes(q)
 
       const matchStatus = statusFilter === 'todos' ? true : p.status === statusFilter
       const matchComp = compFilter === 'todas' ? true : p.competencia === compFilter

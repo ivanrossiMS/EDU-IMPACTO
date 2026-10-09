@@ -11,6 +11,7 @@ import { AdminDashboard } from '@/components/credimpacto/AdminDashboard'
 import { SimuladorEmprestimo } from '@/components/credimpacto/SimuladorEmprestimo'
 import { ConciliacaoFolhaTab } from '@/components/credimpacto/ConciliacaoFolhaTab'
 import { ParcelasTab } from '@/components/credimpacto/ParcelasTab'
+import { FichaColaboradorTab } from '@/components/credimpacto/FichaColaboradorTab'
 import { RelatoriosTab } from '@/components/credimpacto/RelatoriosTab'
 import { RescisaoDesligamentoTab } from '@/components/credimpacto/RescisaoDesligamentoTab'
 import { ConfiguracoesTab } from '@/components/credimpacto/ConfiguracoesTab'
@@ -71,6 +72,7 @@ function CredImpactoContent() {
         'analise',
         'liberacoes',
         'parcelas',
+        'ficha_colaborador',
         'folha',
         'rescisao',
         'simular',
@@ -125,6 +127,22 @@ function CredImpactoContent() {
   const [selectedLoanForDetails, setSelectedLoanForDetails] = useState<CredImpactoEmprestimo | null>(null)
   const [selectedLoanForSign, setSelectedLoanForSign] = useState<CredImpactoEmprestimo | null>(null)
   const [selectedLoanForPayoff, setSelectedLoanForPayoff] = useState<CredImpactoEmprestimo | null>(null)
+
+  // Ficha Financeira por Colaborador selecionado
+  const colaboradorParam = searchParams.get('colaborador') || undefined
+  const [selectedColaboradorForFicha, setSelectedColaboradorForFicha] = useState<string | undefined>(colaboradorParam)
+
+  useEffect(() => {
+    if (colaboradorParam) {
+      setSelectedColaboradorForFicha(colaboradorParam)
+    }
+  }, [colaboradorParam])
+
+  const handleOpenFichaColaborador = (colaboradorId: string) => {
+    setSelectedColaboradorForFicha(colaboradorId)
+    setActiveTab('ficha_colaborador')
+    router.replace(`/credimpacto?tab=ficha_colaborador&colaborador=${encodeURIComponent(colaboradorId)}`, { scroll: false })
+  }
 
   // Perfil enriquecido do usuário logado (com CPF e Unidade)
   const [currentMe, setCurrentMe] = useState<{
@@ -329,6 +347,7 @@ function CredImpactoContent() {
                   emprestimos={emprestimos}
                   onOpenDetails={setSelectedLoanForDetails}
                   onRefresh={loadData}
+                  onOpenFichaColaborador={handleOpenFichaColaborador}
                 />
               )}
 
@@ -339,6 +358,7 @@ function CredImpactoContent() {
                   emprestimos={emprestimos}
                   onOpenDetails={setSelectedLoanForDetails}
                   onRefresh={loadData}
+                  onOpenFichaColaborador={handleOpenFichaColaborador}
                 />
               )}
 
@@ -349,6 +369,7 @@ function CredImpactoContent() {
                   emprestimos={emprestimos}
                   onOpenDetails={setSelectedLoanForDetails}
                   onRefresh={loadData}
+                  onOpenFichaColaborador={handleOpenFichaColaborador}
                 />
               )}
 
@@ -359,6 +380,7 @@ function CredImpactoContent() {
                   emprestimos={emprestimos}
                   onOpenDetails={setSelectedLoanForDetails}
                   onRefresh={loadData}
+                  onOpenFichaColaborador={handleOpenFichaColaborador}
                 />
               )}
 
@@ -368,6 +390,18 @@ function CredImpactoContent() {
                   emprestimos={emprestimos}
                   onOpenDetails={setSelectedLoanForDetails}
                   onRefresh={loadData}
+                />
+              )}
+
+              {/* FICHA FINANCEIRA POR COLABORADOR (ADMIN) */}
+              {activeTab === 'ficha_colaborador' && viewMode === 'admin' && (
+                <FichaColaboradorTab
+                  emprestimos={emprestimos}
+                  colaboradoresList={colaboradoresList}
+                  config={config}
+                  onOpenDetails={setSelectedLoanForDetails}
+                  onRefresh={loadData}
+                  initialSelectedColaboradorId={selectedColaboradorForFicha}
                 />
               )}
 

@@ -49,6 +49,7 @@ export type TabId =
   | 'analise'
   | 'liberacoes'
   | 'parcelas'
+  | 'ficha_colaborador'
   | 'folha'
   | 'rescisao'
   | 'simular'
@@ -163,6 +164,7 @@ export function CredImpactoSidebar({
       group: 'Controle Financeiro & Folha',
       items: [
         { id: 'parcelas' as TabId, label: 'Controle de Parcelas', desc: '', icon: Receipt },
+        { id: 'ficha_colaborador' as TabId, label: 'Ficha por Colaborador', desc: '', icon: UserCheck },
         { id: 'folha' as TabId, label: 'Conciliação em Folha', desc: '', icon: FileSpreadsheet },
         { id: 'rescisao' as TabId, label: 'Rescisão CLT', desc: '', icon: UserX }
       ]
@@ -702,7 +704,7 @@ export function CredImpactoBottomBar({
           <button
             onClick={() => setShowMoreMenu(true)}
             className={`flex flex-col items-center justify-center py-1 px-2.5 rounded-xl transition-all ${
-              ['liberacoes', 'folha', 'rescisao', 'simular', 'relatorios', 'configuracoes', 'auditoria'].includes(activeTab)
+              ['liberacoes', 'ficha_colaborador', 'folha', 'rescisao', 'simular', 'relatorios', 'configuracoes', 'auditoria'].includes(activeTab)
                 ? 'text-emerald-400 font-bold'
                 : 'text-slate-400'
             }`}
@@ -736,6 +738,25 @@ export function CredImpactoBottomBar({
             </div>
 
             <div className="grid grid-cols-1 gap-2 text-xs max-h-[60vh] overflow-y-auto pr-1">
+              {/* Ficha por Colaborador */}
+              <button
+                onClick={() => {
+                  onTabChange('ficha_colaborador')
+                  setShowMoreMenu(false)
+                }}
+                className={`p-3 rounded-2xl flex items-center justify-between border transition-all ${
+                  activeTab === 'ficha_colaborador'
+                    ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300 font-bold'
+                    : 'bg-white/[0.04] border-white/10 text-slate-200 hover:bg-white/[0.08]'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <UserCheck size={18} className="text-emerald-400" />
+                  <span className="font-semibold text-xs">Ficha por Colaborador (Extrato)</span>
+                </div>
+                <ChevronRight size={15} className="text-slate-400" />
+              </button>
+
               {/* Liberações TED */}
               <button
                 onClick={() => {

@@ -17,6 +17,7 @@ export type TabId =
   | 'meus_emprestimos'
   | 'simular'
   | 'emprestimos'
+  | 'ficha_colaborador'
   | 'folha'
   | 'rescisao'
   | 'configuracoes'
@@ -49,6 +50,7 @@ export function CredImpactoTabs({
             icon: FileText,
             badge: pendingRequestsCount > 0 ? String(pendingRequestsCount) : undefined
           },
+          { id: 'ficha_colaborador' as TabId, label: 'Ficha por Colaborador', icon: UserX },
           { id: 'folha' as TabId, label: 'Conciliação em Folha', icon: FileSpreadsheet },
           { id: 'rescisao' as TabId, label: 'Rescisão CLT', icon: UserX },
           { id: 'simular' as TabId, label: 'Simulador', icon: Calculator },

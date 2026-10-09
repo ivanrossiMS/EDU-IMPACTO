@@ -17,6 +17,7 @@ import {
   Upload,
   Calendar,
   UserX,
+  UserCheck,
   FileText,
   Trash2,
   Copy,
@@ -34,13 +35,15 @@ interface AdminDashboardProps {
   onOpenDetails: (loan: CredImpactoEmprestimo) => void
   onRefresh: () => void
   viewModeTab?: 'dashboard' | 'emprestimos' | 'analise' | 'liberacoes'
+  onOpenFichaColaborador?: (colaboradorId: string) => void
 }
 
 export function AdminDashboard({
   emprestimos,
   onOpenDetails,
   onRefresh,
-  viewModeTab = 'dashboard'
+  viewModeTab = 'dashboard',
+  onOpenFichaColaborador
 }: AdminDashboardProps) {
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState(
@@ -221,10 +224,10 @@ export function AdminDashboard({
       const q = searchTerm.toLowerCase().trim()
       const matchSearch =
         !q ||
-        loan.colaboradorNome.toLowerCase().includes(q) ||
-        loan.colaboradorCpf.includes(q) ||
-        loan.codigoOperacao.toLowerCase().includes(q) ||
-        (loan.colaboradorMatricula && loan.colaboradorMatricula.toLowerCase().includes(q))
+        (loan.colaboradorNome || '').toLowerCase().includes(q) ||
+        (loan.colaboradorCpf || '').includes(q) ||
+        (loan.codigoOperacao || '').toLowerCase().includes(q) ||
+        (loan.colaboradorMatricula ? loan.colaboradorMatricula.toLowerCase().includes(q) : false)
 
       const matchStatus = statusFilter === 'todos' ? true : loan.status === statusFilter
       return matchSearch && matchStatus
@@ -434,6 +437,61 @@ export function AdminDashboard({
         return { label: 'Cancelado', bg: 'bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-800/50 dark:text-slate-400 dark:border-slate-700/50' }
       default:
         return { label: status, bg: 'bg-slate-100 text-slate-700 border-slate-200 dark:bg-white/10 dark:text-white dark:border-white/20' }
+    }
+  }
+
+  const getStatusCardStyles = (status: string) => {
+    switch (status) {
+      case 'solicitado':
+      case 'em_analise':
+        return {
+          headerBg: 'bg-gradient-to-r from-amber-500/20 via-orange-500/10 to-amber-500/5 dark:from-amber-950/60 dark:via-orange-950/30 dark:to-slate-900/60',
+          topStripe: 'bg-gradient-to-r from-amber-500 to-orange-500',
+          iconBg: 'bg-amber-100/90 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300 border-amber-200/80 dark:border-amber-800/60'
+        }
+      case 'contraproposta':
+        return {
+          headerBg: 'bg-gradient-to-r from-purple-500/20 via-violet-500/10 to-purple-500/5 dark:from-purple-950/60 dark:via-violet-950/30 dark:to-slate-900/60',
+          topStripe: 'bg-gradient-to-r from-purple-500 to-violet-500',
+          iconBg: 'bg-purple-100/90 text-purple-800 dark:bg-purple-950/80 dark:text-purple-300 border-purple-200/80 dark:border-purple-800/60'
+        }
+      case 'aguardando_assinatura':
+        return {
+          headerBg: 'bg-gradient-to-r from-blue-500/20 via-sky-500/10 to-blue-500/5 dark:from-blue-950/60 dark:via-sky-950/30 dark:to-slate-900/60',
+          topStripe: 'bg-gradient-to-r from-blue-500 to-sky-500',
+          iconBg: 'bg-blue-100/90 text-blue-800 dark:bg-blue-950/80 dark:text-blue-300 border-blue-200/80 dark:border-blue-800/60'
+        }
+      case 'aguardando_liberacao':
+        return {
+          headerBg: 'bg-gradient-to-r from-cyan-500/20 via-teal-500/10 to-cyan-500/5 dark:from-cyan-950/60 dark:via-teal-950/30 dark:to-slate-900/60',
+          topStripe: 'bg-gradient-to-r from-cyan-500 to-teal-500',
+          iconBg: 'bg-cyan-100/90 text-cyan-800 dark:bg-cyan-950/80 dark:text-cyan-300 border-cyan-200/80 dark:border-cyan-800/60'
+        }
+      case 'ativo':
+        return {
+          headerBg: 'bg-gradient-to-r from-emerald-500/20 via-teal-500/10 to-emerald-500/5 dark:from-emerald-950/60 dark:via-teal-950/30 dark:to-slate-900/60',
+          topStripe: 'bg-gradient-to-r from-emerald-500 to-teal-500',
+          iconBg: 'bg-emerald-100/90 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 border-emerald-200/80 dark:border-emerald-800/60'
+        }
+      case 'quitado':
+        return {
+          headerBg: 'bg-gradient-to-r from-slate-200/60 via-slate-100/40 to-slate-50/20 dark:from-slate-800/70 dark:via-slate-800/40 dark:to-slate-900/60',
+          topStripe: 'bg-gradient-to-r from-slate-400 to-slate-500',
+          iconBg: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border-slate-200 dark:border-slate-700'
+        }
+      case 'recusado':
+      case 'cancelado':
+        return {
+          headerBg: 'bg-gradient-to-r from-rose-500/20 via-red-500/10 to-rose-500/5 dark:from-rose-950/60 dark:via-red-950/30 dark:to-slate-900/60',
+          topStripe: 'bg-gradient-to-r from-rose-500 to-red-500',
+          iconBg: 'bg-rose-100/90 text-rose-800 dark:bg-rose-950/80 dark:text-rose-300 border-rose-200/80 dark:border-rose-800/60'
+        }
+      default:
+        return {
+          headerBg: 'bg-gradient-to-r from-slate-100/80 via-slate-50/40 to-transparent dark:from-slate-800/40 dark:via-slate-800/20 dark:to-slate-900/60',
+          topStripe: 'bg-gradient-to-r from-slate-300 to-slate-400',
+          iconBg: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border-slate-200 dark:border-slate-700'
+        }
     }
   }
 
@@ -666,9 +724,9 @@ export function AdminDashboard({
         </div>
       </div>
 
-      {/* TABELA DE OPERAÇÕES (DESKTOP: hidden md:block para não duplicar no mobile) */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm">
-        <div className="hidden md:block overflow-x-auto">
+      {/* TABELA DE OPERAÇÕES (DESKTOP: visível apenas a partir de md) */}
+      <div className="hidden md:block bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl border border-slate-200/80 dark:border-slate-700/60 rounded-2xl overflow-hidden shadow-[0_10px_25px_-5px_rgba(15,23,42,0.06),0_8px_10px_-6px_rgba(15,23,42,0.03),inset_0_1px_1px_rgba(255,255,255,0.9)] dark:shadow-[0_12px_28px_-6px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.06)] ring-1 ring-slate-900/5 dark:ring-white/5">
+        <div className="overflow-x-auto">
           <table className="w-full text-xs text-left">
             <thead className="bg-slate-50/80 dark:bg-slate-800/50 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider border-b border-slate-200/80 dark:border-slate-800">
               {viewModeTab === 'liberacoes' ? (
@@ -717,8 +775,31 @@ export function AdminDashboard({
                         </td>
 
                         <td className="py-2.5 px-3 text-left min-w-[170px] max-w-[220px]">
-                          <div className="font-bold text-slate-900 dark:text-white truncate" title={loan.colaboradorNome}>
-                            {loan.colaboradorNome}
+                          <div className="flex items-center gap-1.5 group">
+                            {onOpenFichaColaborador ? (
+                              <button
+                                type="button"
+                                onClick={() => onOpenFichaColaborador(loan.colaboradorId || loan.colaboradorCpf || loan.colaboradorNome)}
+                                className="font-bold text-slate-900 dark:text-white truncate text-left hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors cursor-pointer"
+                                title={`Ver Ficha Financeira de ${loan.colaboradorNome}`}
+                              >
+                                {loan.colaboradorNome}
+                              </button>
+                            ) : (
+                              <div className="font-bold text-slate-900 dark:text-white truncate" title={loan.colaboradorNome}>
+                                {loan.colaboradorNome}
+                              </div>
+                            )}
+                            {onOpenFichaColaborador && (
+                              <button
+                                type="button"
+                                onClick={() => onOpenFichaColaborador(loan.colaboradorId || loan.colaboradorCpf || loan.colaboradorNome)}
+                                className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/50 rounded"
+                                title={`Ver Ficha Financeira de ${loan.colaboradorNome}`}
+                              >
+                                <UserCheck size={13} />
+                              </button>
+                            )}
                           </div>
                           <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate">
                             {loan.colaboradorCargo || 'Colaborador'} • CPF: {loan.colaboradorCpf}
@@ -816,6 +897,16 @@ export function AdminDashboard({
                               </span>
                             )}
 
+                            {onOpenFichaColaborador && (
+                              <button
+                                onClick={() => onOpenFichaColaborador(loan.colaboradorId || loan.colaboradorCpf || loan.colaboradorNome)}
+                                className="p-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/40 transition-all"
+                                title="Ver Ficha do Colaborador"
+                              >
+                                <UserCheck size={14} />
+                              </button>
+                            )}
+
                             <button
                               onClick={() => onOpenDetails(loan)}
                               className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition-all"
@@ -847,8 +938,31 @@ export function AdminDashboard({
                       </td>
 
                       <td className="py-2.5 px-4 text-left min-w-[200px] max-w-[260px]">
-                        <div className="font-bold text-slate-900 dark:text-white truncate" title={loan.colaboradorNome}>
-                          {loan.colaboradorNome}
+                        <div className="flex items-center gap-1.5 group">
+                          {onOpenFichaColaborador ? (
+                            <button
+                              type="button"
+                              onClick={() => onOpenFichaColaborador(loan.colaboradorId || loan.colaboradorCpf || loan.colaboradorNome)}
+                              className="font-bold text-slate-900 dark:text-white truncate text-left hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors cursor-pointer"
+                              title={`Ver Ficha Financeira de ${loan.colaboradorNome}`}
+                            >
+                              {loan.colaboradorNome}
+                            </button>
+                          ) : (
+                            <div className="font-bold text-slate-900 dark:text-white truncate" title={loan.colaboradorNome}>
+                              {loan.colaboradorNome}
+                            </div>
+                          )}
+                          {onOpenFichaColaborador && (
+                            <button
+                              type="button"
+                              onClick={() => onOpenFichaColaborador(loan.colaboradorId || loan.colaboradorCpf || loan.colaboradorNome)}
+                              className="text-slate-400 hover:text-emerald-600 p-0.5 rounded transition-colors"
+                              title={`Ver Ficha Financeira de ${loan.colaboradorNome}`}
+                            >
+                              <UserCheck size={13} />
+                            </button>
+                          )}
                         </div>
                         <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate">
                           {loan.colaboradorCargo || 'Colaborador'} • CPF: {loan.colaboradorCpf}
@@ -928,6 +1042,17 @@ export function AdminDashboard({
                             </button>
                           )}
 
+                          {/* Ação: Ver Ficha do Colaborador */}
+                          {onOpenFichaColaborador && (
+                            <button
+                              onClick={() => onOpenFichaColaborador(loan.colaboradorId || loan.colaboradorCpf || loan.colaboradorNome)}
+                              className="p-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/40 transition-all"
+                              title="Ver Ficha Financeira do Colaborador"
+                            >
+                              <UserCheck size={14} />
+                            </button>
+                          )}
+
                           {/* Ação 3: Ver Detalhes */}
                           <button
                             onClick={() => onOpenDetails(loan)}
@@ -954,41 +1079,78 @@ export function AdminDashboard({
             </tbody>
           </table>
         </div>
+      </div>
 
-        {/* LISTAGEM EM CARDS PARA DISPOSITIVOS MÓVEIS (ÚNICA VISÃO NO MOBILE) */}
-        <div className="block md:hidden divide-y divide-slate-100 dark:divide-slate-800">
-          {filteredEmprestimos.length === 0 ? (
-            <div className="py-12 text-center text-slate-400 dark:text-slate-500 text-xs">
-              Nenhuma operação encontrada com os filtros selecionados.
-            </div>
-          ) : (
-            filteredEmprestimos.map((loan) => {
-              const badge = getStatusBadge(loan.status)
-              const isPendingAnalysis = loan.status === 'solicitado' || loan.status === 'em_analise'
-              const isPendingDisbursement = loan.status === 'aguardando_liberacao'
+      {/* LISTAGEM EM CARDS PARA DISPOSITIVOS MÓVEIS (CARDS INDEPENDENTES GLASSMORPH COM SOMBRAS 3D E CABEÇALHOS EM GRADIENTE) */}
+      <div className="block md:hidden space-y-4">
+        {filteredEmprestimos.length === 0 ? (
+          <div className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border border-slate-200/80 dark:border-slate-800 rounded-2xl py-12 text-center text-slate-400 dark:text-slate-500 text-xs shadow-md">
+            Nenhuma operação encontrada com os filtros selecionados.
+          </div>
+        ) : (
+          filteredEmprestimos.map((loan) => {
+            const badge = getStatusBadge(loan.status)
+            const cardStyle = getStatusCardStyles(loan.status)
+            const isPendingAnalysis = loan.status === 'solicitado' || loan.status === 'em_analise'
+            const isPendingDisbursement = loan.status === 'aguardando_liberacao'
 
-              return (
-                <div key={loan.id} className="p-4 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <span className="font-mono font-bold text-slate-900 dark:text-white text-xs">{loan.codigoOperacao}</span>
-                      <span className="text-[10px] text-slate-400 font-sans ml-2">{new Date(loan.createdAt).toLocaleDateString('pt-BR')}</span>
+            return (
+              <div
+                key={loan.id}
+                className="bg-white/90 dark:bg-slate-900/85 backdrop-blur-xl border border-white/80 dark:border-slate-700/60 rounded-2xl shadow-[0_10px_25px_-5px_rgba(15,23,42,0.08),0_8px_10px_-6px_rgba(15,23,42,0.04),inset_0_1px_1px_rgba(255,255,255,0.95)] dark:shadow-[0_12px_28px_-6px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.08)] ring-1 ring-slate-900/5 dark:ring-white/5 overflow-hidden transition-all duration-300 hover:shadow-xl relative"
+              >
+                {/* LISTRA SUPERIOR COLORIDA COM GRADIENTE DO STATUS */}
+                <div className={`h-1.5 w-full ${cardStyle.topStripe}`} />
+
+                {/* CABEÇALHO DO CARD COM GRADIENTE */}
+                <div className={`p-4 ${cardStyle.headerBg} border-b border-slate-200/60 dark:border-slate-800/80`}>
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <div className="flex items-center gap-2.5">
+                      <div className={`w-8 h-8 rounded-xl ${cardStyle.iconBg} border flex items-center justify-center font-mono font-black text-[11px] shrink-0 shadow-xs`}>
+                        {loan.codigoOperacao.split('-')[2] || 'CR'}
+                      </div>
+                      <div>
+                        <div className="font-mono font-bold text-slate-900 dark:text-white text-xs tracking-tight">
+                          {loan.codigoOperacao}
+                        </div>
+                        <div className="text-[10px] text-slate-500 dark:text-slate-400 font-sans">
+                          {new Date(loan.createdAt).toLocaleDateString('pt-BR')}
+                        </div>
+                      </div>
                     </div>
-                    <span className={`text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full border ${badge.bg}`}>
+                    <span className={`text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full border shadow-xs whitespace-nowrap ${badge.bg}`}>
                       {badge.label}
                     </span>
                   </div>
 
-                  <div>
-                    <div className="font-bold text-slate-900 dark:text-white text-sm">{loan.colaboradorNome}</div>
-                    <div className="text-[11px] text-slate-500 dark:text-slate-400">
-                      {loan.colaboradorCargo || 'Colaborador'} • CPF: {loan.colaboradorCpf || 'Não informado'}
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="font-bold text-slate-900 dark:text-white text-sm tracking-tight truncate">
+                        {loan.colaboradorNome}
+                      </div>
+                      <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium truncate">
+                        {loan.colaboradorCargo || 'Colaborador'} • CPF: {loan.colaboradorCpf || 'Não informado'}
+                      </div>
                     </div>
+                    {onOpenFichaColaborador && (
+                      <button
+                        type="button"
+                        onClick={() => onOpenFichaColaborador(loan.colaboradorId || loan.colaboradorCpf || loan.colaboradorNome)}
+                        className="px-2 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-[11px] font-bold text-emerald-700 dark:text-emerald-300 flex items-center gap-1 shrink-0 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition-colors shadow-xs"
+                        title="Ver Ficha Financeira"
+                      >
+                        <UserCheck size={12} />
+                        <span>Ficha</span>
+                      </button>
+                    )}
                   </div>
+                </div>
 
+                {/* CORPO DO CARD COM EFEITO GLASS E CONTEÚDO */}
+                <div className="p-4 space-y-3">
                   {/* SE FOR LIBERAÇÃO TED: Card específico com PIX e dados bancários */}
                   {(viewModeTab === 'liberacoes' || isPendingDisbursement) && (
-                    <div className="bg-cyan-50/60 dark:bg-cyan-950/20 p-3 rounded-xl border border-cyan-200/60 dark:border-cyan-800/40 text-xs space-y-2">
+                    <div className="bg-cyan-50/70 dark:bg-cyan-950/30 backdrop-blur-sm p-3 rounded-xl border border-cyan-200/70 dark:border-cyan-800/50 text-xs space-y-2 shadow-xs">
                       <div className="flex justify-between items-center">
                         <span className="text-[10px] uppercase font-bold text-cyan-800 dark:text-cyan-300">Valor a Transferir</span>
                         <span className="font-mono font-black text-emerald-600 dark:text-emerald-400 text-sm">
@@ -997,7 +1159,7 @@ export function AdminDashboard({
                       </div>
 
                       {loan.dadosBancarios?.chavePix ? (
-                        <div className="flex items-center justify-between bg-white dark:bg-slate-900 p-2 rounded-lg border border-cyan-200/60 dark:border-cyan-800/40">
+                        <div className="flex items-center justify-between bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm p-2 rounded-lg border border-cyan-200/70 dark:border-cyan-800/50">
                           <div className="truncate mr-2">
                             <span className="text-[9px] uppercase font-bold text-cyan-600 dark:text-cyan-400 mr-1.5 font-mono">PIX:</span>
                             <span className="font-mono text-xs text-slate-900 dark:text-white">{loan.dadosBancarios.chavePix}</span>
@@ -1012,7 +1174,7 @@ export function AdminDashboard({
                           </button>
                         </div>
                       ) : (
-                        <div className="flex items-center justify-between bg-white dark:bg-slate-900 p-2 rounded-lg border border-cyan-200/60 dark:border-cyan-800/40">
+                        <div className="flex items-center justify-between bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm p-2 rounded-lg border border-cyan-200/70 dark:border-cyan-800/50">
                           <div className="truncate mr-2">
                             <span className="text-[9px] uppercase font-bold text-slate-500 mr-1.5 font-mono">PIX (CPF):</span>
                             <span className="font-mono text-xs text-slate-900 dark:text-white">{loan.colaboradorCpf}</span>
@@ -1039,18 +1201,18 @@ export function AdminDashboard({
                   {/* SE FOR ANÁLISE PENDENTE: Card de proposta solicitada */}
                   {isPendingAnalysis && viewModeTab !== 'liberacoes' && (
                     <div className="space-y-2">
-                      <div className="grid grid-cols-2 gap-2 bg-amber-50/60 dark:bg-amber-950/20 p-2.5 rounded-xl border border-amber-200/60 dark:border-amber-900/30 text-center font-mono">
+                      <div className="grid grid-cols-2 gap-2 bg-amber-50/70 dark:bg-amber-950/30 backdrop-blur-sm p-2.5 rounded-xl border border-amber-200/70 dark:border-amber-900/40 text-center font-mono shadow-xs">
                         <div>
-                          <div className="text-[9px] uppercase font-sans text-amber-700 dark:text-amber-400 font-semibold">Valor Solicitado</div>
+                          <div className="text-[9px] uppercase font-sans text-amber-700 dark:text-amber-400 font-bold">Valor Solicitado</div>
                           <div className="font-bold text-slate-900 dark:text-white text-xs mt-0.5">{formatBrl(loan.valorSolicitado)}</div>
                         </div>
                         <div>
-                          <div className="text-[9px] uppercase font-sans text-amber-700 dark:text-amber-400 font-semibold">Prazo Desejado</div>
+                          <div className="text-[9px] uppercase font-sans text-amber-700 dark:text-amber-400 font-bold">Prazo Desejado</div>
                           <div className="font-bold text-slate-700 dark:text-slate-300 text-xs mt-0.5">{loan.quantidadeParcelas}x parcelas</div>
                         </div>
                       </div>
                       {loan.justificativaSolicitacao && (
-                        <div className="text-[11px] text-slate-600 dark:text-slate-400 italic bg-slate-50 dark:bg-slate-800/40 p-2 rounded-lg">
+                        <div className="text-[11px] text-slate-600 dark:text-slate-400 italic bg-slate-50/80 dark:bg-slate-800/40 backdrop-blur-sm p-2.5 rounded-lg border border-slate-200/40 dark:border-slate-800/40">
                           &ldquo;{loan.justificativaSolicitacao}&rdquo;
                         </div>
                       )}
@@ -1059,17 +1221,17 @@ export function AdminDashboard({
 
                   {/* SE FOR CONTRATO ATIVO/QUITADO: Grid tradicional com 3 colunas */}
                   {!isPendingAnalysis && !isPendingDisbursement && viewModeTab !== 'liberacoes' && (
-                    <div className="grid grid-cols-3 gap-2 bg-slate-50 dark:bg-slate-800/50 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800 text-center font-mono">
+                    <div className="grid grid-cols-3 gap-2 bg-slate-50/80 dark:bg-slate-800/50 backdrop-blur-sm p-2.5 rounded-xl border border-slate-200/60 dark:border-slate-800/80 text-center font-mono shadow-xs">
                       <div>
-                        <div className="text-[9px] uppercase font-sans text-slate-400 font-semibold">Concedido</div>
+                        <div className="text-[9px] uppercase font-sans text-slate-500 dark:text-slate-400 font-semibold">Concedido</div>
                         <div className="font-bold text-slate-900 dark:text-white text-xs mt-0.5">{formatBrl(loan.valorAprovado)}</div>
                       </div>
                       <div>
-                        <div className="text-[9px] uppercase font-sans text-slate-400 font-semibold">Parcelas</div>
+                        <div className="text-[9px] uppercase font-sans text-slate-500 dark:text-slate-400 font-semibold">Parcelas</div>
                         <div className="font-bold text-slate-700 dark:text-slate-300 text-xs mt-0.5">{loan.quantidadeParcelas}x</div>
                       </div>
                       <div>
-                        <div className="text-[9px] uppercase font-sans text-slate-400 font-semibold">Saldo Devedor</div>
+                        <div className="text-[9px] uppercase font-sans text-slate-500 dark:text-slate-400 font-semibold">Saldo Devedor</div>
                         <div className="font-bold text-emerald-600 dark:text-emerald-400 text-xs mt-0.5">{formatBrl(loan.saldoDevedorAtual)}</div>
                       </div>
                     </div>
@@ -1081,14 +1243,14 @@ export function AdminDashboard({
                       <div className="grid grid-cols-2 gap-2">
                         <button
                           onClick={() => handleOpenDirectApprovalModal(loan)}
-                          className="py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm active:scale-98 transition-all"
+                          className="py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-md shadow-emerald-600/20 active:scale-98 transition-all"
                         >
                           <CheckCircle2 size={14} />
                           <span>Aprovar Direto</span>
                         </button>
                         <button
                           onClick={() => handleOpenAnalysisModal(loan)}
-                          className="py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm active:scale-98 transition-all"
+                          className="py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-md shadow-amber-500/20 active:scale-98 transition-all"
                         >
                           <span>Analisar Proposta</span>
                         </button>
@@ -1098,7 +1260,7 @@ export function AdminDashboard({
                     {loan.status === 'aguardando_assinatura' && (
                       <button
                         onClick={() => handleOpenDirectApprovalModal(loan)}
-                        className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm active:scale-98 transition-all"
+                        className="w-full py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-md shadow-emerald-600/20 active:scale-98 transition-all"
                       >
                         <CheckCircle2 size={15} />
                         <span>Aprovar Direto (Dispensar Autorização)</span>
@@ -1111,7 +1273,7 @@ export function AdminDashboard({
                           setDisbursingLoan(loan)
                           setComprovanteUrl(loan.comprovanteLiberacaoUrl || '')
                         }}
-                        className="w-full py-2.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm active:scale-98 transition-all"
+                        className="w-full py-2.5 rounded-xl bg-gradient-to-r from-cyan-600 to-teal-600 hover:from-cyan-500 hover:to-teal-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-md shadow-cyan-600/20 active:scale-98 transition-all"
                       >
                         <Banknote size={15} />
                         <span>Liberar TED & Anexar Comprovante</span>
@@ -1121,14 +1283,24 @@ export function AdminDashboard({
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => onOpenDetails(loan)}
-                        className="flex-1 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs flex items-center justify-center gap-1.5 transition-all"
+                        className="flex-1 py-2 rounded-xl bg-slate-100/90 hover:bg-slate-200/90 dark:bg-slate-800/90 dark:hover:bg-slate-700/90 border border-slate-200/80 dark:border-slate-700/80 text-slate-700 dark:text-slate-200 font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-xs"
                       >
                         <Eye size={14} />
                         <span>Ver Detalhes</span>
                       </button>
+                      {onOpenFichaColaborador && (
+                        <button
+                          onClick={() => onOpenFichaColaborador(loan.colaboradorId || loan.colaboradorCpf || loan.colaboradorNome)}
+                          className="px-3 py-2 rounded-xl bg-emerald-50/80 hover:bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200/70 dark:border-emerald-800/50 font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-xs"
+                          title="Ficha do Colaborador"
+                        >
+                          <UserCheck size={14} />
+                          <span>Ficha</span>
+                        </button>
+                      )}
                       <button
                         onClick={() => setLoanToDelete(loan)}
-                        className="p-2 rounded-xl bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border border-rose-200/60 dark:border-rose-800/40 transition-all"
+                        className="p-2 rounded-xl bg-rose-50/80 hover:bg-rose-100 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border border-rose-200/70 dark:border-rose-800/50 transition-all shadow-xs"
                         title="Excluir"
                       >
                         <Trash2 size={15} />
@@ -1136,10 +1308,10 @@ export function AdminDashboard({
                     </div>
                   </div>
                 </div>
-              )
-            })
-          )}
-        </div>
+              </div>
+            )
+          })
+        )}
       </div>
 
       {/* MODAL DE ANÁLISE DE PROPOSTA */}
