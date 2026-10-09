@@ -1,5 +1,6 @@
 import UIKit
 import Capacitor
+import Security
 
 @UIApplicationMain
 class AppDelegate: UIResponder, UIApplicationDelegate {
@@ -7,7 +8,10 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     var window: UIWindow?
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-        // Garantir fundo escuro (#0A0F24) na janela e na WKWebView para eliminar qualquer flash branco na inicialização
+        // 1. Limpeza de resíduos de segurança em caso de nova instalação ou reinstalação pós-exclusão
+        clearKeychainOnFreshInstall()
+
+        // 2. Garantir fundo escuro (#0A0F24) na janela e na WKWebView para eliminar qualquer flash branco na inicialização
         let darkBackground = UIColor(red: 10/255.0, green: 15/255.0, blue: 36/255.0, alpha: 1.0)
         window?.backgroundColor = darkBackground
         if let bridgeVC = window?.rootViewController as? CAPBridgeViewController {
@@ -17,6 +21,45 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
             bridgeVC.webView?.scrollView.backgroundColor = darkBackground
         }
         return true
+    }
+
+    /**
+     * Limpa o Keychain residual caso seja uma primeira instalação ou reinstalação após o app ter sido deletado.
+     * Preserva intacto o Keychain se for uma atualização de versão ou se o app já tiver rodado neste dispositivo.
+     */
+    private func clearKeychainOnFreshInstall() {
+        let defaults = UserDefaults.standard
+        let hasRunBeforeKey = "hasRunBefore"
+        let hasRunBefore = defaults.bool(forKey: hasRunBeforeKey)
+
+        if !hasRunBefore {
+            // Verifica se é uma atualização de versão anterior que já continha dados salvos no UserDefaults
+            let existingKeys = defaults.dictionaryRepresentation().keys
+            let hasExistingAppData = existingKeys.contains { key in
+                key.hasPrefix("CapacitorStorage.") || key.hasPrefix("edu_") || key.hasPrefix("edu-")
+            }
+
+            // Se NÃO existem dados prévios no UserDefaults, trata-se de uma instalação limpa (ou reinstalação pós-delete)
+            if !hasExistingAppData {
+                NSLog("[ImpactoEdu] Fresh install ou reinstalação detectada. Limpando Keychain residual...")
+                let secClasses: [CFString] = [
+                    kSecClassGenericPassword,
+                    kSecClassInternetPassword,
+                    kSecClassCertificate,
+                    kSecClassKey,
+                    kSecClassIdentity
+                ]
+                for secClass in secClasses {
+                    let query: [String: Any] = [kSecClass as String: secClass]
+                    SecItemDelete(query as CFDictionary)
+                }
+            } else {
+                NSLog("[ImpactoEdu] Atualização de versão existente detectada. Preservando credenciais no Keychain.")
+            }
+
+            defaults.set(true, forKey: hasRunBeforeKey)
+            defaults.synchronize()
+        }
     }
 
     func applicationWillResignActive(_ application: UIApplication) {

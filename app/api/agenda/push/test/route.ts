@@ -1399,10 +1399,11 @@ export async function GET(request: Request) {
       const cleanAlunoId = alunoId.trim()
 
       // Buscar aluno
+      const isCleanUuid = isUUID(cleanAlunoId)
       const { data: aluno, error: alunoErr } = await supabase
         .from('alunos')
         .select('id, nome, matricula, turma, status, foto, dados, responsavel, responsavel_financeiro, responsavel_pedagogico')
-        .or(`id.eq.${cleanAlunoId},matricula.eq.${cleanAlunoId}`)
+        .or(isCleanUuid ? `id.eq.${cleanAlunoId},matricula.eq.${cleanAlunoId}` : `matricula.eq.${cleanAlunoId}`)
         .maybeSingle()
 
       if (alunoErr || !aluno) {
@@ -1739,10 +1740,12 @@ export async function POST(request: Request) {
 
     // 1. Resolução do Aluno se fornecido
     if (alunoId) {
+      const cleanAlunoId = String(alunoId).trim()
+      const isAlUuid = isUUID(cleanAlunoId)
       const { data: st } = await supabase
         .from('alunos')
         .select('id, nome, matricula, turma, status, responsavel, responsavel_financeiro, responsavel_pedagogico, dados')
-        .or(`id.eq.${String(alunoId).trim()},matricula.eq.${String(alunoId).trim()}`)
+        .or(isAlUuid ? `id.eq.${cleanAlunoId},matricula.eq.${cleanAlunoId}` : `matricula.eq.${cleanAlunoId}`)
         .maybeSingle()
 
       if (st) {

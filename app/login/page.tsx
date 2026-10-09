@@ -801,7 +801,7 @@ export default function LoginPage() {
 
       setFaUser(data.user)
       setStep('first_access_create')
-      setFaRegEmail(data.user.email || '') 
+      setFaRegEmail(data.user.email || (q.includes('@') ? q : '')) 
     } catch (err: any) {
       setFaError(err.message)
     } finally {
@@ -835,11 +835,10 @@ export default function LoginPage() {
         setCreateLoading(false); setCreateSuccess(true)
        await new Promise(r => setTimeout(r, 2000))
        setStep('login')
-       // Preenche com o Código do Aluno (matrícula) ou e-mail cadastrado
-       const isAluno = faUser?.cargo === 'Aluno' || faUser?.userType === 'aluno'
-       const studentCode = faUser?.matricula || faUser?.realId || faUser?.id?.replace(/^aluno-/, '')
-       const loginHint = isAluno && studentCode ? studentCode : (faRegEmail ? faRegEmail : (faUser?.matricula || ''))
-       setEmail(loginHint)
+       // Preenche com o e-mail cadastrado no primeiro acesso (ou fallback para matrícula/código)
+       const loginEmail = (faRegEmail || faUser?.email || '').trim()
+       const fallbackCode = faUser?.matricula || faUser?.realId || faUser?.id?.replace(/^aluno-/, '')
+       setEmail(loginEmail || fallbackCode || '')
        setFaQuery(''); setFaUser(null); setNewPass(''); setConfirmPass(''); setCreateSuccess(false); setFaAlreadyConfiguredUser(null)
     } catch (err: any) {
        console.error("Setup erro:", err)
@@ -1088,7 +1087,13 @@ export default function LoginPage() {
     <div className="login-form-wrapper" style={{ width:'100%', maxWidth:420, position:'relative', zIndex:1, animation:'fadeSlideIn 0.35s ease-out both' }}>
       <motion.button 
         type="button" 
-        onClick={goLogin} 
+        onClick={() => {
+          const userEmail = (faAlreadyConfiguredUser?.email || (faQuery.includes('@') ? faQuery.trim() : '')).trim()
+          if (userEmail) {
+            setEmail(userEmail)
+          }
+          goLogin()
+        }} 
         whileHover={{ scale: 1.05, backgroundColor: 'rgba(255,255,255,0.15)', borderColor: 'rgba(255,255,255,0.3)' }}
         whileTap={{ scale: 0.95 }}
         style={{ 
@@ -1140,10 +1145,9 @@ export default function LoginPage() {
                 <button 
                   type="button" 
                   onClick={() => {
-                    const studentCode = faAlreadyConfiguredUser.matricula || faAlreadyConfiguredUser.realId || faAlreadyConfiguredUser.id?.replace(/^aluno-/, '')
-                    const loginValue = (faAlreadyConfiguredUser.cargo === 'Aluno' || faAlreadyConfiguredUser.userType === 'aluno') && studentCode
-                      ? studentCode
-                      : (faAlreadyConfiguredUser.email || faQuery.trim())
+                    const userEmail = (faAlreadyConfiguredUser.email || (faQuery.includes('@') ? faQuery.trim() : '')).trim()
+                    const fallbackCode = faAlreadyConfiguredUser.matricula || faAlreadyConfiguredUser.realId || faAlreadyConfiguredUser.id?.replace(/^aluno-/, '')
+                    const loginValue = userEmail || fallbackCode || faQuery.trim()
                     setEmail(loginValue)
                     goLogin()
                   }}

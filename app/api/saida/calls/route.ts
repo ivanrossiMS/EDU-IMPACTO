@@ -127,6 +127,24 @@ export async function GET(request: Request) {
     const exitEvents: any[] = (eventosRes && 'data' in eventosRes && Array.isArray((eventosRes as any).data)) ? (eventosRes as any).data : []
     let rawResult: any[] = (data || []).map((row: any) => ({ id: row.id, ...(row.dados || {}) }))
 
+    // Filtrar para garantir que apenas chamadas cuja data efetiva (calledAt / confirmedAt) corresponde ao período solicitado sejam retornadas
+    if (effectiveFrom || effectiveTo) {
+      rawResult = rawResult.filter((c: any) => {
+        const dt = c.calledAt || c.confirmedAt
+        if (!dt) return true
+        let callDate = dt.slice(0, 10)
+        try {
+          const d = new Date(dt.includes('T') && !dt.endsWith('Z') && !dt.includes('-') && !dt.includes('+') ? `${dt}-04:00` : dt)
+          if (!isNaN(d.getTime())) {
+            callDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Campo_Grande' }).format(d)
+          }
+        } catch {}
+        if (effectiveFrom && callDate < effectiveFrom) return false
+        if (effectiveTo && callDate > effectiveTo) return false
+        return true
+      })
+    }
+
     const getCallTimeKey = (sId: string, dtStr?: string) => {
       if (!sId || !dtStr) return ''
       try {
@@ -432,7 +450,18 @@ export async function POST(request: Request) {
       const confirmedEntry = studentCallsToday.find(r => {
         let d = r.dados
         if (typeof d === 'string') { try { d = JSON.parse(d) } catch(e){} }
-        return d?.status === 'confirmed'
+        if (d?.status !== 'confirmed') return false
+        const dt = d?.confirmedAt || d?.calledAt
+        let callDate = dt ? dt.slice(0, 10) : null
+        try {
+          if (dt) {
+            const dObj = new Date(dt.includes('T') && !dt.endsWith('Z') && !dt.includes('-') && !dt.includes('+') ? `${dt}-04:00` : dt)
+            if (!isNaN(dObj.getTime())) {
+              callDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Campo_Grande' }).format(dObj)
+            }
+          }
+        } catch {}
+        return !callDate || callDate === todayStr
       })
 
       if (confirmedEntry) {

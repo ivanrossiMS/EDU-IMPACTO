@@ -86,11 +86,15 @@ export async function syncStudentToDevices(studentId: string, actionType: 'creat
       return
     }
 
-    // ─── CASO: CRIAÇÃO OU ATUALIZAÇÃO ───────────────────────────────────────────
+    const studentStr = String(studentId || '').trim()
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(studentStr)
+    const orConds = [`matricula.eq.${studentStr}`]
+    if (isUuid) orConds.push(`id.eq.${studentStr}`)
+
     const { data: student } = await supabase
       .from('alunos')
-      .select('id, nome, codigo, matricula, foto, status')
-      .or(`id.eq.${studentId},codigo.eq.${studentId},matricula.eq.${studentId}`)
+      .select('id, nome, matricula, foto, status, dados')
+      .or(orConds.join(','))
       .maybeSingle()
 
     if (!student) {
@@ -110,7 +114,7 @@ export async function syncStudentToDevices(studentId: string, actionType: 'creat
       return
     }
 
-    const codigo = student.codigo || student.matricula || student.id
+    const codigo = student.matricula || student.dados?.codigo || student.id
     if (!codigo) {
       console.log(`[Portaria Sync] Aluno ${student.nome} está sem número de matrícula. Sincronização cancelada.`)
       return

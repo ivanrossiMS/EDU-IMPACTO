@@ -348,6 +348,8 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
             overflow-x: hidden;
             position: relative;
             background: transparent;
+            min-width: 0;
+            width: 100%;
           }
 
           .ad-content-inner {
@@ -357,6 +359,8 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
             width: 100%;
             position: relative;
             z-index: 10;
+            box-sizing: border-box;
+            min-width: 0;
           }
 
           .ad-banner-global {
@@ -449,6 +453,9 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
               padding: 16px !important;
               padding-top: 16px !important;
               padding-bottom: 100px !important;
+              box-sizing: border-box !important;
+              max-width: 100% !important;
+              min-width: 0 !important;
             }
             .ad-content-inner.ad-has-banner {
               margin-top: 0px !important;

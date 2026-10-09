@@ -111,12 +111,18 @@ export async function POST(request: Request) {
       if (!existingAuth && isValidEmail(storedAlunoEmail)) {
         existingAuth = await findAuthByEmail(storedAlunoEmail)
       }
+      if (!existingAuth && isValidEmail(q)) {
+        existingAuth = await findAuthByEmail(q)
+      }
+      
+      const authEmail = existingAuth?.email && isValidEmail(existingAuth.email) ? existingAuth.email : ''
+      const finalAlunoEmail = storedAlunoEmail || authEmail || (isValidEmail(q) ? q : '')
       
       const userPayload = {
         id: `aluno-${aluno.id}`,
         realId: aluno.id,
         nome: aluno.nome,
-        email: storedAlunoEmail || '',
+        email: finalAlunoEmail,
         cargo: 'Aluno',
         perfil: 'Família',
         matricula: aluno.matricula || aluno.dados?.codigo || aluno.id || '',
@@ -181,18 +187,22 @@ export async function POST(request: Request) {
         }, { status: 403 })
       }
 
+      const storedRespEmail = (responsavel.email || '').trim().toLowerCase()
+      const finalRespEmail = storedRespEmail || (isValidEmail(q) ? q : '')
+
       const userPayload = {
         id: `responsavel-${responsavel.id}`,
         realId: responsavel.id,
         nome: responsavel.nome,
-        email: responsavel.email || '',
+        email: finalRespEmail,
         cargo: 'Responsável',
         perfil: 'Família',
         userType: 'responsavel'
       }
 
-      if (responsavel.email) {
-        const existingAuthResp = await findAuthByEmail((responsavel.email || '').trim())
+      const emailToCheck = finalRespEmail || responsavel.email
+      if (emailToCheck) {
+        const existingAuthResp = await findAuthByEmail(emailToCheck.trim())
         if (existingAuthResp) {
           return NextResponse.json({ 
             error: "Sua senha já foi configurada. Use o Login normal ou 'Esqueci minha senha' para receber um link por e-mail.",

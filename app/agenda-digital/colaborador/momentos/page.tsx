@@ -14,6 +14,7 @@ import { useApp } from '@/lib/context'
 import { EmptyStateCard } from '../../components/EmptyStateCard'
 import { getInitials, formatDateTime } from '@/lib/utils'
 import { uploadFileToSupabase } from '@/lib/upload/uploadClient'
+import { apiFetch } from '@/lib/api/apiClient'
 import { compressImage, compressVideo, formatFileSize, extractVideoThumbnail } from '@/lib/mediaCompressor'
 import { DestinatariosModal } from '@/components/agenda/DestinatariosModal'
 
@@ -704,12 +705,12 @@ export default function ADMomentosPage() {
     const rawFiles = Array.from(e.target.files)
     e.target.value = ''
 
-    const MAX_LIMIT = 100 * 1024 * 1024 // 100MB (limite do servidor/bucket)
+    const MAX_LIMIT = 50 * 1024 * 1024 // 50MB (limite do servidor/bucket)
     const validFiles: File[] = []
 
     for (const f of rawFiles) {
       if (f.size > MAX_LIMIT) {
-        adAlert(`O arquivo "${f.name}" (${formatFileSize(f.size)}) excede o limite máximo de 100MB suportado pelo servidor. Escolha um arquivo menor ou reduza a resolução.`, 'Arquivo muito grande')
+        adAlert(`O arquivo "${f.name}" (${formatFileSize(f.size)}) excede o limite máximo de 50MB suportado pelo servidor. Escolha um arquivo menor ou reduza a resolução.`, 'Arquivo muito grande')
         continue
       }
       validFiles.push(f)
@@ -721,14 +722,15 @@ export default function ADMomentosPage() {
     try {
       const processedFiles: File[] = []
       for (const file of validFiles) {
-        setMediaOriginalSizes(prev => ({ ...prev, [file.name]: file.size }))
-
         const isImage = file.type.startsWith('image/') || /\.(jpe?g|png|webp|gif|bmp|heic|heif)$/i.test(file.name)
         const isVideo = file.type.startsWith('video/') || file.type.includes('video') || /\.(mp4|mov|webm|m4v|3gp|mkv|avi)$/i.test(file.name)
+
+        setMediaOriginalSizes(prev => ({ ...prev, [file.name]: file.size }))
 
         if (isImage) {
           // Pré-comprime a foto na seleção de forma rápida e converte para WebP
           const compressed = await compressImage(file, { maxWidth: 1920, maxHeight: 1920, quality: 0.75 })
+          setMediaOriginalSizes(prev => ({ ...prev, [compressed.name]: file.size }))
           processedFiles.push(compressed)
           setMediaThumbnails(prev => ({ ...prev, [compressed.name]: URL.createObjectURL(compressed) }))
         } else if (isVideo) {
@@ -758,11 +760,11 @@ export default function ADMomentosPage() {
     if (!newPost.mediaFiles.length) return adAlert('Selecione ao menos uma foto ou vídeo para publicar.', 'Atenção')
     if (!newPost.targetClasses.length) return adAlert('Por favor, selecione ao menos um destinatário (Turma, Grupo ou Aluno) para publicar o momento.', 'Destinatários obrigatórios')
     
-    // Validar tamanhos (100MB)
-    const MAX_VIDEO_SIZE = 100 * 1024 * 1024 // 100MB
+    // Validar tamanhos (50MB)
+    const MAX_VIDEO_SIZE = 50 * 1024 * 1024 // 50MB
     for (const f of newPost.mediaFiles) {
       if ((f.type.includes('video') || /\.(mp4|mov|webm|m4v|3gp|mkv|avi)$/i.test(f.name)) && f.size > MAX_VIDEO_SIZE) {
-        return adAlert(`O vídeo "${f.name}" (${formatFileSize(f.size)}) é muito grande. O limite máximo é 100MB.`, 'Arquivo muito grande')
+        return adAlert(`O vídeo "${f.name}" (${formatFileSize(f.size)}) ultrapassa o limite máximo de 50MB suportado pelo servidor. Escolha um vídeo com menor duração ou reduza a resolução na câmera.`, 'Arquivo muito grande')
       }
     }
 
@@ -771,8 +773,13 @@ export default function ADMomentosPage() {
     
     try {
       const uploadedMediaReport: { name: string; type: string; originalSize: number; finalSize: number }[] = []
+      const mediaArray: ADMedia[] = []
+      const totalFiles = newPost.mediaFiles.length
 
-      const mediaArray: ADMedia[] = await Promise.all(newPost.mediaFiles.map(async (file, idx) => {
+      // Processamento e envio sequencial: evita congestionamento de sockets TCP,
+      // economiza memória RAM do aparelho e permite retry cirúrgico em caso de instabilidade móvel
+      for (let i = 0; i < totalFiles; i++) {
+        const file = newPost.mediaFiles[i]
         const bucket = 'comunicados-midia'
         let fileToUpload: File = file
         const originalSize = mediaOriginalSizes[file.name] || file.size
@@ -780,33 +787,51 @@ export default function ADMomentosPage() {
         const isImage = file.type.startsWith('image/') || /\.(jpe?g|png|webp|gif|bmp|heic|heif)$/i.test(file.name)
         const isVideo = file.type.startsWith('video/') || file.type.includes('video') || /\.(mp4|mov|webm|m4v|3gp|mkv|avi)$/i.test(file.name)
 
+        setUploadProgress(prev => ({ ...prev, [file.name]: 25 }))
+
         if (isImage) {
-          setUploadProgress(prev => ({ ...prev, [file.name]: 20 }))
-          fileToUpload = await compressImage(file, { quality: 0.75, format: 'image/webp' })
+          // Se já for WebP e menor que 2.5MB, já foi devidamente otimizado na seleção
+          if (file.type !== 'image/webp' || file.size > 2.5 * 1024 * 1024) {
+            fileToUpload = await compressImage(file, { quality: 0.75, format: 'image/webp' })
+          }
           setUploadProgress(prev => ({ ...prev, [file.name]: 50 }))
         } else if (isVideo) {
-          setUploadProgress(prev => ({ ...prev, [file.name]: 10 }))
-          fileToUpload = await compressVideo(file, (percent) => {
-            const scaled = Math.round(10 + (percent * 0.40))
-            setUploadProgress(prev => ({ ...prev, [file.name]: scaled }))
-          }) as File
+          // Vídeos <= 50MB são mantidos nativos para máxima fidelidade e fluidez
+          if (file.size > 50 * 1024 * 1024) {
+            fileToUpload = await compressVideo(file, (percent) => {
+              const scaled = Math.round(20 + (percent * 0.30))
+              setUploadProgress(prev => ({ ...prev, [file.name]: scaled }))
+            }) as File
+          }
+          setUploadProgress(prev => ({ ...prev, [file.name]: 50 }))
         }
 
         if (fileToUpload.size > 50 * 1024 * 1024) {
-          throw new Error(`O arquivo "${file.name}" (${formatFileSize(fileToUpload.size)}) ultrapassa o limite de 50MB suportado pelo servidor. Escolha um vídeo com menor duração ou reduza a resolução na câmera.`)
+          throw new Error(`O arquivo "${file.name}" (${formatFileSize(fileToUpload.size)}) ultrapassa o limite de 50MB suportado pelo servidor. Escolha um vídeo menor ou reduza a resolução na câmera.`)
         }
 
         setUploadProgress(prev => ({ ...prev, [file.name]: 60 }))
 
-        // Upload centralizado (Cache-Control: 30 dias para momentos)
-        const uploadRes = await uploadFileToSupabase({
+        // Upload centralizado com auto-retry resiliente
+        let uploadRes = await uploadFileToSupabase({
           bucket,
           file: fileToUpload,
           usageType: 'common'
         })
 
+        if (!uploadRes.ok) {
+          console.warn(`[Momentos Upload] Tentativa 1 falhou para "${file.name}", aguardando para retentar...`, uploadRes.error)
+          setUploadProgress(prev => ({ ...prev, [file.name]: 70 }))
+          await new Promise(r => setTimeout(r, 1200))
+          uploadRes = await uploadFileToSupabase({
+            bucket,
+            file: fileToUpload,
+            usageType: 'common'
+          })
+        }
+
         if (!uploadRes.ok || !uploadRes.url) {
-          throw new Error(uploadRes.error || 'Upload falhou')
+          throw new Error(uploadRes.error || `Falha no envio de "${file.name}".`)
         }
         
         uploadedMediaReport.push({
@@ -816,11 +841,11 @@ export default function ADMomentosPage() {
           finalSize: fileToUpload.size
         })
 
-        // Sucesso
+        // Sucesso deste arquivo
         setUploadProgress(prev => ({ ...prev, [file.name]: 100 }))
 
-        return { type: isVideo ? 'video' : 'image', url: uploadRes.url }
-      }))
+        mediaArray.push({ type: isVideo ? 'video' : 'image', url: uploadRes.url })
+      }
 
       const isSelected = newPost.targetClasses.length > 0;
       const selectedTurmas = isSelected ? newPost.targetClasses.filter(t => t.type === 'turma' || t.type === 'grupo') : [];
@@ -886,7 +911,7 @@ export default function ADMomentosPage() {
       adAlert(`Momento publicado com sucesso!\n\nTamanho final das mídias:\n${finalSizeDetails}`, '🎉 Sucesso')
 
       try {
-        const res = await fetch('/api/agenda/momentos', {
+        const res = await apiFetch('/api/agenda/momentos', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(post)
@@ -908,7 +933,11 @@ export default function ADMomentosPage() {
       }
     } catch (e: any) {
       console.error('[Momentos Upload] Error:', e)
-      adAlert(`Erro ao enviar mídias: ${e.message || 'Erro desconhecido'}`, 'Erro')
+      const rawMsg = e.message || 'Erro desconhecido'
+      const friendlyMsg = rawMsg.includes('Failed to fetch') || rawMsg.includes('Network')
+        ? 'Falha de conexão com a internet durante o envio das mídias. Verifique seu sinal e tente novamente.'
+        : rawMsg
+      adAlert(`Erro ao enviar mídias: ${friendlyMsg}`, 'Erro')
     } finally {
       setIsSubmitting(false)
       setUploadProgress({})
@@ -2122,15 +2151,39 @@ export default function ADMomentosPage() {
                     Otimizando e enviando {newPost.mediaFiles.length} mídia{newPost.mediaFiles.length !== 1 ? 's' : ''}. Aguarde alguns instantes.
                   </div>
                   
-                  {/* Lista de arquivos com status */}
-                  <div style={{ width: '100%', maxWidth: 320, display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
-                    {newPost.mediaFiles.map((f, i) => (
-                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#f8fafc', padding: '9px 14px', borderRadius: 12, border: '1px solid #e2e8f0' }}>
-                        {f.type.includes('video') ? <Video size={16} color="#6366f1" /> : <ImageIcon size={16} color="#ec4899" />}
-                        <div style={{ flex: 1, textAlign: 'left', fontSize: 12, fontWeight: 600, color: '#334155', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</div>
-                        {uploadProgress[f.name] === 100 ? <Check size={16} color="#10b981" /> : <Loader2 size={14} className="animate-spin" color="#94a3b8" />}
-                      </div>
-                    ))}
+                  {/* Lista de arquivos com status em tempo real */}
+                  <div style={{ width: '100%', maxWidth: 320, display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12, maxHeight: 220, overflowY: 'auto' }}>
+                    {newPost.mediaFiles.map((f, i) => {
+                      const prog = uploadProgress[f.name] || 0
+                      const isComplete = prog === 100
+                      const isInProgress = prog > 0 && prog < 100
+
+                      return (
+                        <div key={i} style={{ 
+                          display: 'flex', 
+                          alignItems: 'center', 
+                          gap: 10, 
+                          background: isComplete ? '#f0fdf4' : (isInProgress ? '#f5f3ff' : '#f8fafc'), 
+                          padding: '9px 14px', 
+                          borderRadius: 12, 
+                          border: isComplete ? '1px solid #bbf7d0' : (isInProgress ? '1px solid #ddd6fe' : '1px solid #e2e8f0'),
+                          transition: 'all 0.2s ease'
+                        }}>
+                          {f.type.includes('video') ? <Video size={16} color="#6366f1" /> : <ImageIcon size={16} color="#ec4899" />}
+                          <div style={{ flex: 1, textAlign: 'left', fontSize: 12, fontWeight: 600, color: '#334155', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</div>
+                          {isComplete ? (
+                            <Check size={16} color="#10b981" />
+                          ) : isInProgress ? (
+                            <span style={{ fontSize: 11, fontWeight: 700, color: '#7c3aed', display: 'flex', alignItems: 'center', gap: 4 }}>
+                              <Loader2 size={12} className="animate-spin" color="#7c3aed" />
+                              {prog}%
+                            </span>
+                          ) : (
+                            <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 500 }}>Aguardando</span>
+                          )}
+                        </div>
+                      )
+                    })}
                   </div>
                 </div>
               )}

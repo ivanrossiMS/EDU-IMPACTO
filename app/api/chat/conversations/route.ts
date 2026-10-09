@@ -448,23 +448,27 @@ async function syncTurmaParticipants(supabase: any, convId: string, grupoId?: st
       })
     })
 
-    // 2. Alunos da turma -> role: 'readonly'
+    // 2. Alunos da turma -> role: 'observer' (leitura permitida pela constraint do banco)
     alunoIds.forEach(aId => {
       participantsToUpsert.push({
         conversation_id: convId,
         user_id: aId,
         user_name: 'Aluno',
         user_perfil: 'Aluno',
-        user_role: 'readonly'
+        user_role: 'observer'
       })
     })
 
-    // 3. Responsáveis dos alunos -> role: 'readonly'
+    // 3. Responsáveis dos alunos -> role: 'observer'
     if (alunoIds.length > 0) {
+      // Filtrar apenas identificadores válidos para evitar erro 22P02 caso aluno_id na tabela seja UUID
+      const validAlunoUuids = alunoIds.filter(id => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(id).trim()))
+      const searchAlunoIds = validAlunoUuids.length > 0 ? validAlunoUuids : alunoIds
+
       const { data: links } = await supabase
         .from('aluno_responsavel')
         .select('responsavel_id')
-        .in('aluno_id', alunoIds)
+        .in('aluno_id', searchAlunoIds)
 
       if (links) {
         const uniqueRespIds = Array.from(new Set(links.map((l: any) => String(l.responsavel_id))))
@@ -474,7 +478,7 @@ async function syncTurmaParticipants(supabase: any, convId: string, grupoId?: st
             user_id: rId,
             user_name: 'Família',
             user_perfil: 'Responsável',
-            user_role: 'readonly'
+            user_role: 'observer'
           })
         })
       }

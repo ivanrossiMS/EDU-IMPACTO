@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<data-extraction-rules>
+    <cloud-backup>
+        <!-- Exclui credenciais criptografadas e preferências de autenticação do Google Drive Backup -->
+        <exclude domain="sharedpref" path="cap_sec.xml" />
+        <exclude domain="sharedpref" path="CapacitorStorage.xml" />
+    </cloud-backup>
+    <device-transfer>
+        <!-- Exclui na transferência direta entre dispositivos para forçar nova autenticação -->
+        <exclude domain="sharedpref" path="cap_sec.xml" />
+        <exclude domain="sharedpref" path="CapacitorStorage.xml" />
+    </device-transfer>
+</data-extraction-rules>

@@ -37,24 +37,28 @@ export async function POST(request: NextRequest) {
       if (loginInput.startsWith('aluno.')) {
         userType = 'aluno'
         const matricula = loginInput.replace('aluno.', '').replace('@impactoedu.local', '')
+        const isMatriculaUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(matricula)
+        const orConditions = [`matricula.eq.${matricula}`, `dados->>codigo.eq.${matricula}`]
+        if (isMatriculaUuid) orConditions.push(`id.eq.${matricula}`)
         const { data: aData } = await supabaseAdmin
           .from('alunos')
           .select('id, nome, email, matricula, dados, status, foto')
-          .or(`matricula.eq.${matricula},id.eq.${matricula},dados->>codigo.eq.${matricula}`)
+          .or(orConditions.join(','))
           .limit(1)
         alunoRecord = aData?.[0] || null
       }
     } else if (!hasValidEmailSyntax) {
       // ── Entrada é Matrícula, CPF, Código, Telefone ou E-mail sem domínio padrão (ex: aluno@aluno) ──
       const loginDigits = loginInput.replace(/\D/g, '')
+      const isLoginUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(loginInput)
 
       let alunoConditions = [
         `matricula.eq.${loginInput}`,
-        `id.eq.${loginInput}`,
         `dados->>codigo.eq.${loginInput}`,
         `email.ilike.${loginInput}`,
         `dados->>email.ilike.${loginInput}`
       ]
+      if (isLoginUuid) alunoConditions.push(`id.eq.${loginInput}`)
       if (loginDigits.length >= 11) alunoConditions.push(`dados->>cpf.eq.${loginDigits}`)
       if (loginDigits.length >= 8) alunoConditions.push(`telefone.ilike.%${loginDigits}%`)
 

@@ -26,7 +26,9 @@ export interface UploadResult {
 }
 
 /**
- * Fallback transparente: envia o arquivo via rota de API servidora com autenticação e Service Role
+ * Fallback transparente: envia o arquivo via rota de API servidora com autenticação e Service Role.
+ * NOTA: As Serverless Functions da Vercel possuem limite estrito de 4.5MB no corpo da requisição.
+ * Para arquivos maiores que 4.5MB, o upload DEVE ser feito diretamente ao Storage.
  */
 async function fallbackServerUpload(
   bucket: string,
@@ -34,6 +36,13 @@ async function fallbackServerUpload(
   file: File,
   usageType: 'common' | 'fixed' = 'common'
 ): Promise<UploadResult> {
+  if (file.size > 4.5 * 1024 * 1024) {
+    return {
+      ok: false,
+      error: `O arquivo "${file.name}" (${(file.size / (1024 * 1024)).toFixed(1)}MB) excede o limite de contingência do servidor (4.5MB). Realize o envio direto.`
+    }
+  }
+
   try {
     const formData = new FormData()
     formData.append('file', file)
@@ -61,18 +70,21 @@ async function fallbackServerUpload(
       }
     }
   } catch (err: any) {
+    const isNetworkErr = (typeof navigator !== 'undefined' && !navigator.onLine) || err?.message?.includes('fetch') || err?.message?.includes('Network')
     return {
       ok: false,
-      error: err.message || 'Erro ao conectar ao servidor para envio do arquivo.'
+      error: isNetworkErr
+        ? 'Erro de conexão com o servidor. Verifique seu sinal de internet.'
+        : (err.message || 'Erro ao conectar ao servidor para envio do arquivo.')
     }
   }
 }
 
 /**
  * Função centralizada para upload de arquivos ao Supabase Storage.
- * Garante uso eficiente do Egress definindo o Cache-Control adequadamente
- * e evita timeouts ao usar URLs assinadas diretamente para o bucket,
- * com fallback automático para a rota de API caso o envio direto falhe.
+ * Garante uso eficiente do Egress definindo o Cache-Control adequadamente,
+ * realiza retries automáticos com backoff exponencial e uploads diretos via URL assinada
+ * sem esgotar conexões móveis nem estourar os limites da Vercel.
  */
 export async function uploadFileToSupabase({
   bucket,
@@ -92,22 +104,51 @@ export async function uploadFileToSupabase({
 
     const mimeType = resolveMimeType(file.name, file.type)
 
-    // 1. Obter URL assinada via API Route (com Bearer token via apiFetch)
-    const signRes = await apiFetch('/api/upload-midia/sign', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ bucket, fileName: file.name, folder })
-    })
+    // 1. Obter URL assinada via API Route com retries automáticos
+    let signedRes: any = null
+    let signErrorMsg = ''
 
-    if (!signRes.ok) {
-      const errData = await signRes.json().catch(() => ({}))
-      console.warn('[uploadFileToSupabase] Falha ao obter URL assinada, tentando fallback:', errData.error)
-      return await fallbackServerUpload(bucket, folder, file, usageType)
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const signRes = await apiFetch('/api/upload-midia/sign', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ bucket, fileName: file.name, folder })
+        })
+
+        if (signRes.ok) {
+          signedRes = await signRes.json()
+          break
+        } else {
+          const errData = await signRes.json().catch(() => ({}))
+          signErrorMsg = errData.error || `Erro de assinatura (Status: ${signRes.status})`
+          console.warn(`[uploadFileToSupabase] Tentativa ${attempt} de assinatura falhou:`, signErrorMsg)
+        }
+      } catch (signErr: any) {
+        signErrorMsg = signErr?.message || 'Falha de conexão'
+        console.warn(`[uploadFileToSupabase] Exceção tentativa ${attempt} de assinatura:`, signErr)
+      }
+
+      if (attempt < 3) {
+        await new Promise(r => setTimeout(r, attempt * 600))
+      }
     }
 
-    const signedRes = await signRes.json()
+    if (!signedRes || !signedRes.signedUrl) {
+      if (file.size <= 4.5 * 1024 * 1024) {
+        console.warn('[uploadFileToSupabase] Falha ao obter URL assinada, tentando fallback para /api/upload-midia:', signErrorMsg)
+        return await fallbackServerUpload(bucket, folder, file, usageType)
+      }
+      const isNet = (typeof navigator !== 'undefined' && !navigator.onLine) || signErrorMsg.includes('fetch')
+      return {
+        ok: false,
+        error: isNet 
+          ? `Falha de conexão ao autorizar envio de "${file.name}". Verifique sua internet e tente novamente.` 
+          : (signErrorMsg || 'Não foi possível autorizar o envio do arquivo.')
+      }
+    }
 
     // 2. Definir Cache-Control com base no uso (em segundos para Supabase)
     const cacheControlSeconds = usageType === 'fixed'
@@ -118,9 +159,47 @@ export async function uploadFileToSupabase({
     let directUploadOk = false
     let directError = ''
 
-    // 3.1 Tentativa prioritária: SDK Supabase oficial (monta FormData correto e evita cabeçalhos customizados que causam CORS)
-    try {
-      if (signedRes.token && signedRes.path) {
+    // 3.1 Tentativa prioritária: Direct PUT nativo com FormData (rápido, sem conflitos de cabeçalhos de autenticação)
+    if (signedRes.signedUrl) {
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          const formBody = new FormData()
+          formBody.append('cacheControl', cacheControlSeconds)
+          formBody.append('', file)
+
+          const uploadRes = await fetch(signedRes.signedUrl, {
+            method: 'PUT',
+            body: formBody
+          })
+
+          if (uploadRes.ok) {
+            directUploadOk = true
+            break
+          } else {
+            const errText = await uploadRes.text().catch(() => '')
+            console.warn(`[uploadFileToSupabase] Direct PUT tentativa ${attempt} falhou:`, uploadRes.status, errText)
+            if (uploadRes.status === 413 || errText.includes('EntityTooLarge') || errText.includes('exceeded the maximum')) {
+              return { ok: false, error: `O arquivo "${file.name}" (${(file.size / (1024 * 1024)).toFixed(1)}MB) excede o limite máximo de 50MB suportado pelo servidor.` }
+            }
+            if (uploadRes.status === 415 || errText.includes('InvalidMimeType')) {
+              return { ok: false, error: `Formato de mídia não suportado (${mimeType}).` }
+            }
+            directError = `Erro no envio (Status: ${uploadRes.status})`
+          }
+        } catch (putErr: any) {
+          console.warn(`[uploadFileToSupabase] Exceção tentativa ${attempt} no Direct PUT:`, putErr)
+          directError = putErr.message || 'Erro de conexão'
+        }
+
+        if (attempt < 3) {
+          await new Promise(r => setTimeout(r, attempt * 800))
+        }
+      }
+    }
+
+    // 3.2 Tentativa secundária: SDK Supabase oficial caso o Direct PUT nativo não tenha confirmado
+    if (!directUploadOk && signedRes.token && signedRes.path) {
+      try {
         const { data: uploadData, error: uploadErr } = await supabase.storage
           .from(bucket)
           .uploadToSignedUrl(signedRes.path, signedRes.token, file, {
@@ -135,37 +214,8 @@ export async function uploadFileToSupabase({
           console.warn('[uploadFileToSupabase] SDK uploadToSignedUrl falhou:', uploadErr.message)
           directError = uploadErr.message
         }
-      }
-    } catch (sdkErr: any) {
-      console.warn('[uploadFileToSupabase] Exceção no SDK uploadToSignedUrl:', sdkErr)
-    }
-
-    // 3.2 Tentativa secundária: Se o SDK falhou mas há URL assinada direta, tentar via FormData PUT nativo
-    if (!directUploadOk && signedRes.signedUrl) {
-      try {
-        const formBody = new FormData()
-        formBody.append('cacheControl', cacheControlSeconds)
-        formBody.append('', file)
-
-        const uploadRes = await fetch(signedRes.signedUrl, {
-          method: 'PUT',
-          body: formBody
-        })
-
-        if (uploadRes.ok) {
-          directUploadOk = true
-        } else {
-          const errText = await uploadRes.text().catch(() => '')
-          console.warn('[uploadFileToSupabase] Direct FormData PUT falhou:', uploadRes.status, errText)
-          if (uploadRes.status === 413 || errText.includes('EntityTooLarge') || errText.includes('exceeded the maximum')) {
-            return { ok: false, error: `O arquivo "${file.name}" (${(file.size / (1024 * 1024)).toFixed(1)}MB) excede o limite máximo de 50MB suportado pelo servidor.` }
-          }
-          if (uploadRes.status === 415 || errText.includes('InvalidMimeType')) {
-            directError = `Formato de mídia não suportado (${mimeType}).`
-          }
-        }
-      } catch (putErr: any) {
-        console.warn('[uploadFileToSupabase] Exceção no Direct FormData PUT:', putErr)
+      } catch (sdkErr: any) {
+        console.warn('[uploadFileToSupabase] Exceção no SDK uploadToSignedUrl:', sdkErr)
       }
     }
 
@@ -177,19 +227,31 @@ export async function uploadFileToSupabase({
       }
     }
 
-    // 4. Fallback automático transparente via rota servidora (com apiFetch e Service Role)
-    console.info('[uploadFileToSupabase] Tentando fallback para /api/upload-midia...')
-    const fallbackResult = await fallbackServerUpload(bucket, folder, file, usageType)
-    if (fallbackResult.ok) {
-      return fallbackResult
+    // 4. Fallback automático para rota servidora (APENAS para arquivos <= 4.5MB devido ao limite da Vercel)
+    if (file.size <= 4.5 * 1024 * 1024) {
+      console.info('[uploadFileToSupabase] Tentando fallback para /api/upload-midia...')
+      const fallbackResult = await fallbackServerUpload(bucket, folder, file, usageType)
+      if (fallbackResult.ok) {
+        return fallbackResult
+      }
+      directError = fallbackResult.error || directError
     }
 
+    const isNetwork = (typeof navigator !== 'undefined' && !navigator.onLine) || directError.includes('fetch')
     return {
       ok: false,
-      error: directError || fallbackResult.error || 'Falha no envio do arquivo ao servidor.'
+      error: isNetwork
+        ? `Falha de conexão ao enviar "${file.name}". Verifique sua internet e tente novamente.`
+        : (directError || 'Falha no envio do arquivo ao servidor.')
     }
   } catch (err: any) {
     console.error('[uploadFileToSupabase] Unexpected error:', err)
-    return { ok: false, error: err.message || 'Erro inesperado durante o upload.' }
+    const isNetwork = (typeof navigator !== 'undefined' && !navigator.onLine) || err?.message?.includes('fetch')
+    return { 
+      ok: false, 
+      error: isNetwork 
+        ? `Falha de conexão com a internet ao enviar "${file.name}". Tente novamente.` 
+        : (err.message || 'Erro inesperado durante o upload.') 
+    }
   }
 }

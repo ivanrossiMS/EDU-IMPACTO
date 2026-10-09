@@ -267,12 +267,22 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
     if (!isoString) return false
     try {
       const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Campo_Grande' }).format(new Date())
-      const callDateStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Campo_Grande' }).format(new Date(isoString))
-      return callDateStr >= todayStr
+      const safeIso = isoString.includes('T') && !isoString.endsWith('Z') && !isoString.includes('-') && !isoString.includes('+') ? `${isoString}-04:00` : isoString
+      const d = new Date(safeIso)
+      if (isNaN(d.getTime())) {
+        return isoString.slice(0, 10) === todayStr
+      }
+      const callDateStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Campo_Grande' }).format(d)
+      return callDateStr === todayStr
     } catch {
       return true
     }
   }, [])
+
+  const isFromTodayRef = useRef(isFromToday)
+  useEffect(() => {
+    isFromTodayRef.current = isFromToday
+  }, [isFromToday])
 
   const channelRef = useRef<any>(null)
   const processedBroadcasts = useRef<Set<string>>(new Set())
@@ -371,7 +381,7 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
                   return [call, ...arr]
                 }
                 // Protect confirmed students from being set back to waiting/called via DB triggers/inserts unless isRevert is set
-                const isAlreadyConfirmed = callStudentId ? arr.some(c => c.studentId != null && String(c.studentId) === callStudentId && c.status === 'confirmed') : false
+                const isAlreadyConfirmed = callStudentId ? arr.some(c => c.studentId != null && String(c.studentId) === callStudentId && c.status === 'confirmed' && isFromTodayRef.current(c.confirmedAt || c.calledAt)) : false
                 if (isAlreadyConfirmed && (call.status === 'waiting' || call.status === 'called') && !(call as any).isRevert) {
                   return arr.map(c => (c.studentId != null && String(c.studentId) === callStudentId && c.status !== 'special_auth') ? { ...c, status: 'confirmed' } : c)
                 }
@@ -403,7 +413,7 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
                   }
                   return [call, ...arr]
                 }
-                const isAlreadyConfirmed = callStudentId ? arr.some(c => c.studentId != null && String(c.studentId) === callStudentId && c.status === 'confirmed') : false
+                const isAlreadyConfirmed = callStudentId ? arr.some(c => c.studentId != null && String(c.studentId) === callStudentId && c.status === 'confirmed' && isFromTodayRef.current(c.confirmedAt || c.calledAt)) : false
                 if (isAlreadyConfirmed && (call.status === 'waiting' || call.status === 'called') && !(call as any).isRevert) {
                   return arr.map(c => (c.studentId != null && String(c.studentId) === callStudentId && c.status !== 'special_auth') ? { ...c, status: 'confirmed' } : c)
                 }
@@ -443,7 +453,7 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
                   }
                   return [data, ...arr]
                 }
-                const isAlreadyConfirmed = dataStudentId ? arr.some(c => c.studentId != null && String(c.studentId) === dataStudentId && c.status === 'confirmed') : false
+                const isAlreadyConfirmed = dataStudentId ? arr.some(c => c.studentId != null && String(c.studentId) === dataStudentId && c.status === 'confirmed' && isFromTodayRef.current(c.confirmedAt || c.calledAt)) : false
                 if (isAlreadyConfirmed && data.status !== 'confirmed' && !data.isRevert) {
                   return arr.map(c => (c.studentId != null && String(c.studentId) === dataStudentId && c.status !== 'special_auth') ? { ...c, status: 'confirmed' } : c)
                 }
@@ -585,10 +595,11 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
   ): PickupCall | null => {
     const sIdStr = studentId ? String(studentId) : ''
     
-    // Check for existing active call (waiting or called)
+    // Check for existing active call (waiting or called) today
     const existingActive = activeCalls.find(c =>
       c.studentId != null && String(c.studentId) === sIdStr &&
-      (c.status === 'waiting' || c.status === 'called')
+      (c.status === 'waiting' || c.status === 'called') &&
+      isFromToday(c.calledAt)
     )
     if (existingActive) {
       return existingActive
@@ -596,7 +607,8 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
 
     // Check for existing confirmed call today
     const existingConfirmed = activeCalls.find(c =>
-      c.studentId != null && String(c.studentId) === sIdStr && c.status === 'confirmed'
+      c.studentId != null && String(c.studentId) === sIdStr && c.status === 'confirmed' &&
+      isFromToday(c.confirmedAt || c.calledAt)
     )
 
     // Se o aluno já foi confirmado hoje, mas for uma autorização especial ou força nova chamada,
@@ -632,7 +644,7 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
     }
 
     return call
-  }, [activeCalls, setActiveCallsLocal, emit, addLog, sendBroadcast, persistSingleCall])
+  }, [activeCalls, setActiveCallsLocal, emit, addLog, sendBroadcast, persistSingleCall, isFromToday])
 
   // ─── blockAttempt ──────────────────────────────────────────────────
   // Logs a BLOCKED access attempt (proibido or wrong day) without creating an
@@ -959,9 +971,10 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
     const currentNow = now()
     const sIdStr = studentId ? String(studentId) : ''
 
-    // 1. Se o aluno já tem chamada aguardando/chamado, atualiza e confirma a chamada existente
+    // 1. Se o aluno já tem chamada aguardando/chamado hoje, atualiza e confirma a chamada existente
     const existingWaiting = activeCalls.find(c =>
-      c.studentId != null && String(c.studentId) === sIdStr && (c.status === 'waiting' || c.status === 'called')
+      c.studentId != null && String(c.studentId) === sIdStr && (c.status === 'waiting' || c.status === 'called') &&
+      isFromToday(c.calledAt)
     )
 
     if (existingWaiting) {
@@ -987,7 +1000,8 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
 
     // 2. Se o aluno já teve uma saída confirmada hoje, retorna a chamada confirmada
     const existingConfirmed = activeCalls.find(c =>
-      c.studentId != null && String(c.studentId) === sIdStr && c.status === 'confirmed'
+      c.studentId != null && String(c.studentId) === sIdStr && c.status === 'confirmed' &&
+      isFromToday(c.confirmedAt || c.calledAt)
     )
     if (existingConfirmed) {
       return existingConfirmed
@@ -1028,7 +1042,7 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
     }
     addLog('CONFIRM', `Saída confirmada (Saiu Sozinho): ${studentName}`)
     return newCall
-  }, [activeCalls, setActiveCallsLocal, emit, sendBroadcast, persistSingleCall, addLog])
+  }, [activeCalls, setActiveCallsLocal, emit, sendBroadcast, persistSingleCall, addLog, isFromToday])
 
   // ─── Config ───────────────────────────────────────────────────────────────
   const updateConfig = useCallback((patch: Partial<SaidaConfig>) => {

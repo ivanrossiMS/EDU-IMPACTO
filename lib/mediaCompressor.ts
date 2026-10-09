@@ -160,8 +160,8 @@ export async function compressImage(
   let maxHeight = options.maxHeight;
   const format = options.format || 'image/webp';
 
-  // Se a imagem já for WebP e for menor que 150KB, não precisa comprimir mais
-  if (!isHeic && fileSize < 150 * 1024 && sourceFile.type === 'image/webp') {
+  // Se a imagem já for WebP e for razoavelmente compactada (< 2.5MB), não precisa recomprimir
+  if (!isHeic && fileSize < 2.5 * 1024 * 1024 && sourceFile.type === 'image/webp') {
     return sourceFile;
   }
 
@@ -635,9 +635,11 @@ export async function compressVideo(
   onProgress?: (percent: number) => void,
   options: VideoCompressOptions = {}
 ): Promise<File | Blob> {
-  // Se o vídeo já for menor que 20MB e estiver em formato MP4/WebM padrão web, não precisa recomprimir
-  const isWebFormat = /\.(mp4|webm)$/i.test(file.name) || file.type === 'video/mp4' || file.type === 'video/webm';
-  if (file.size < 20 * 1024 * 1024 && isWebFormat) {
+  // Se o vídeo já for menor ou igual a 50MB (limite do bucket comunicados-midia no Supabase)
+  // e estiver em formato de vídeo web/mobile padrão, mantém o arquivo original para garantir
+  // máxima fidelidade, compatibilidade nativa e evitar travamentos no dispositivo do colaborador.
+  const isVideoFormat = /\.(mp4|webm|mov|m4v|3gp|mkv|avi)$/i.test(file.name) || file.type.startsWith('video/') || file.type.includes('video');
+  if (file.size <= 50 * 1024 * 1024 && isVideoFormat) {
     if (onProgress) onProgress(100);
     return file;
   }
@@ -658,6 +660,7 @@ export async function compressVideo(
     let vfcId: number | null = null;
     let progressTimer: NodeJS.Timeout | null = null;
     let safetyTimeout: NodeJS.Timeout | null = null;
+    let watchdogTimer: NodeJS.Timeout | null = null;
     let resolved = false;
 
     const safeResolve = (result: File | Blob) => {
@@ -670,6 +673,10 @@ export async function compressVideo(
 
     const cleanup = () => {
       isRecording = false;
+      if (watchdogTimer) {
+        clearTimeout(watchdogTimer);
+        watchdogTimer = null;
+      }
       if (progressTimer) {
         clearInterval(progressTimer);
         progressTimer = null;
@@ -735,7 +742,18 @@ export async function compressVideo(
       const objectUrl = URL.createObjectURL(file);
       videoElement.src = objectUrl;
 
+      // Watchdog de segurança imediato: se o navegador mobile demorar ou não disparar onloadedmetadata em 12s,
+      // cancela a recompressão e utiliza o arquivo original com segurança total.
+      watchdogTimer = setTimeout(() => {
+        console.warn('[Video Compressor] Timeout no carregamento de metadados do vídeo (12s). Usando original.');
+        safeResolve(file);
+      }, 12000);
+
       videoElement.onloadedmetadata = () => {
+        if (watchdogTimer) {
+          clearTimeout(watchdogTimer);
+          watchdogTimer = null;
+        }
         let duration = videoElement.duration;
         if (isNaN(duration) || !isFinite(duration) || duration <= 0) {
           duration = 10;
@@ -937,6 +955,8 @@ export async function compressVideo(
 
         // Inicia reprodução
         renderLoop();
+        videoElement.muted = true;
+        videoElement.setAttribute('muted', '');
         const playPromise = videoElement.play();
         if (playPromise !== undefined) {
           playPromise.catch((err) => {
@@ -957,8 +977,8 @@ export async function compressVideo(
           }
         }, 150);
 
-        // Timeout de segurança
-        const maxWaitMs = Math.min(60000, Math.max(6000, Math.round((duration + 4) * 1000)));
+        // Timeout de segurança máximo de 30s
+        const maxWaitMs = Math.min(30000, Math.max(5000, Math.round((duration + 2) * 1000)));
         safetyTimeout = setTimeout(() => {
           console.warn('[Video Compressor] Timeout de segurança atingido.');
           onPlaybackEnd();

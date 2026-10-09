@@ -153,13 +153,16 @@ export async function POST(req: Request) {
       const cleanUserIdZero = rawUserIdStr.replace(/^0+/, '')
 
       // ── 1. FAST PATH (INDEXED POSTGRES): busca direta em 'alunos' por ID ou Matrícula (< 20ms) ──
-      const candidateFilters = [
-        `id.eq.${rawUserIdStr}`,
-        `matricula.eq.${rawUserIdStr}`
-      ]
+      const isRawUserUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawUserIdStr)
+      const candidateFilters = [`matricula.eq.${rawUserIdStr}`]
+      if (isRawUserUuid) {
+        candidateFilters.push(`id.eq.${rawUserIdStr}`)
+      }
       if (cleanUserIdZero && cleanUserIdZero !== rawUserIdStr) {
         candidateFilters.push(`matricula.eq.${cleanUserIdZero}`)
-        candidateFilters.push(`id.eq.${cleanUserIdZero}`)
+        if (isRawUserUuid) {
+          candidateFilters.push(`id.eq.${cleanUserIdZero}`)
+        }
       }
 
       let match: any = null
@@ -193,10 +196,15 @@ export async function POST(req: Request) {
 
       // ── 3. FAST PATH TERCIÁRIO: Se não for aluno, pode ser responsável com crachá ──
       if (!match) {
+        const respFilters = [`codigo.eq.${rawUserIdStr}`, `rfid.eq.${rawUserIdStr}`]
+        if (isRawUserUuid) {
+          respFilters.push(`id.eq.${rawUserIdStr}`)
+        }
+
         const { data: respFound } = await supabase
           .from('responsaveis')
           .select('id, nome, codigo, rfid')
-          .or(`id.eq.${rawUserIdStr},codigo.eq.${rawUserIdStr},rfid.eq.${rawUserIdStr}`)
+          .or(respFilters.join(','))
           .limit(1)
           .maybeSingle()
 
@@ -691,17 +699,19 @@ export async function POST(req: Request) {
             horaSaida: localTimeStr,
           }
 
+          const eventTimestampIso = new Date(`${localDate}T${localTimeStr}:00-04:00`).toISOString()
+
           await supabase.from('saida_calls').upsert({
             id: callId,
             dados: callDados,
-            created_at: new Date().toISOString()
+            created_at: eventTimestampIso
           }, { onConflict: 'id' })
 
           // Atualiza também o ID geral do dia para retrocompatibilidade
           await supabase.from('saida_calls').upsert({
             id: `saida-catraca-${alunoId}-${localDate}`,
             dados: callDados,
-            created_at: new Date().toISOString()
+            created_at: eventTimestampIso
           }, { onConflict: 'id' })
 
           // 3. Disparo do Push Notification para os Responsáveis na Agenda Digital
@@ -951,15 +961,19 @@ export async function POST(req: Request) {
         const row = pendingRows[0]
 
         // Buscar dados do aluno
-        const { data: aluno } = await supabase
+        const rowAlunoIdStr = String(row.aluno_id || '').trim()
+        const isRowAlunoUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rowAlunoIdStr)
+        const alunoQuery = supabase
           .from('alunos')
-          .select('id, nome, matricula, codigo, foto, status')
-          .or(`id.eq.${row.aluno_id},matricula.eq.${row.aluno_id}`)
-          .maybeSingle()
+          .select('id, nome, matricula, foto, status, dados')
+        const { data: aluno } = await (isRowAlunoUuid
+          ? alunoQuery.or(`id.eq.${rowAlunoIdStr},matricula.eq.${rowAlunoIdStr}`)
+          : alunoQuery.eq('matricula', rowAlunoIdStr)
+        ).maybeSingle()
 
         // Determinar ID numérico para a catraca
         const numId = aluno
-          ? parseInt((aluno.matricula || aluno.codigo || aluno.id).replace?.(/\D/g, '') ?? String(aluno.matricula || aluno.id), 10)
+          ? parseInt((aluno.matricula || aluno.dados?.codigo || aluno.id).replace?.(/\D/g, '') ?? String(aluno.matricula || aluno.id), 10)
           : parseInt(String(row.aluno_id).replace(/\D/g, ''), 10)
 
         // Marcar como sincronizado ANTES de responder (o dispositivo só volta a pedir quando responder)

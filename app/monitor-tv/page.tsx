@@ -152,7 +152,7 @@ const MonitorStudentCard = React.memo(function MonitorStudentCard({ call, index,
       {/* Text Details & Metadata Container */}
       <div className="tv-card-text-content">
         {/* Shortened Name */}
-        <h2 className="tv-card-name-one-line" title={call.studentName}>
+        <h2 className="tv-card-name-one-line" title={call.studentName} style={{ color: '#ffffff' }}>
           {formatName(call.studentName)}
         </h2>
 
@@ -254,7 +254,7 @@ const MonitorSecondaryCard = React.memo(function MonitorSecondaryCard({ call, in
 
       {/* Info Container */}
       <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
-        <h3 className="tv-secondary-card-name" title={call.studentName}>
+        <h3 className="tv-secondary-card-name" title={call.studentName} style={{ color: '#ffffff' }}>
           {formatName(call.studentName)}
         </h3>
         
@@ -1289,7 +1289,7 @@ function playSchoolChime() {
         .tv-card-name-one-line {
           font-size: 26px;
           font-weight: 900;
-          color: #fff;
+          color: #ffffff !important;
           margin: 0;
           text-transform: uppercase;
           white-space: nowrap;
@@ -1297,7 +1297,7 @@ function playSchoolChime() {
           text-overflow: ellipsis;
           letter-spacing: -0.02em;
           font-family: 'Outfit', sans-serif;
-          text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+          text-shadow: 0 2px 6px rgba(0, 0, 0, 0.8), 0 1px 2px rgba(0, 0, 0, 0.9);
         }
 
         .tv-card-class-badge-modern {
@@ -1333,6 +1333,14 @@ function playSchoolChime() {
           text-overflow: ellipsis;
           max-width: 140px;
           text-shadow: 0 1px 2px rgba(0,0,0,0.4);
+        }
+
+        /* High specificity protection against light-theme overrides */
+        [data-theme='light'] .tv-card-name-one-line,
+        [data-theme='light'] .tv-secondary-card-name,
+        .tv-fullscreen-container h2,
+        .tv-fullscreen-container h3 {
+          color: #ffffff !important;
         }
 
         /* Connection status */
@@ -1467,12 +1475,13 @@ function playSchoolChime() {
           font-family: 'Outfit', sans-serif;
           font-size: 16px;
           font-weight: 800;
-          color: #fff;
+          color: #ffffff !important;
           margin: 0;
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
           text-transform: uppercase;
+          text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
         }
 
         .tv-secondary-card-class {

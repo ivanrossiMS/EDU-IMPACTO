@@ -113,14 +113,18 @@ async function handlePushRequest(req: Request) {
     const row = pending[0]
 
     // Buscar dados do aluno
-    const { data: aluno } = await supabase
+    const rowAlunoIdStr = String(row.aluno_id || '').trim()
+    const isRowAlunoUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rowAlunoIdStr)
+    const alunoQuery = supabase
       .from('alunos')
-      .select('id, nome, matricula, codigo, foto, status')
-      .or(`id.eq.${row.aluno_id},matricula.eq.${row.aluno_id}`)
-      .maybeSingle()
+      .select('id, nome, matricula, foto, status, dados')
+    const { data: aluno } = await (isRowAlunoUuid
+      ? alunoQuery.or(`id.eq.${rowAlunoIdStr},matricula.eq.${rowAlunoIdStr}`)
+      : alunoQuery.eq('matricula', rowAlunoIdStr)
+    ).maybeSingle()
 
     // Calcular ID numérico para a catraca
-    const codigoStr = aluno?.matricula || aluno?.codigo || String(aluno?.id || row.aluno_id)
+    const codigoStr = aluno?.matricula || aluno?.dados?.codigo || String(aluno?.id || row.aluno_id)
     const numId = parseInt(String(codigoStr).replace(/\D/g, ''), 10)
 
     // Marcar como sincronizado

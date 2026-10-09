@@ -209,28 +209,21 @@ export async function dbGetEmprestimos(filtros?: {
   const cleanEmail = (filtros?.colaboradorEmail || '').trim().toLowerCase()
   const cleanNome = (filtros?.colaboradorNome || '').trim().toLowerCase()
 
-  // 1. Tenta tabela dedicada apenas se disponivel
+  // Map para unificar operações de ambas as origens (dedicada + fallback) sem duplicidade
+  const loansMap = new Map<string, CredImpactoEmprestimo>()
+
+  // 1. Tenta buscar na tabela dedicada
   if (isCredImpactoDedicatedAvailable !== false) {
     try {
-      let query = sb
+      const query = sb
         .from('credimpacto_emprestimos')
         .select('*')
         .order('created_at', { ascending: false })
-
-      if (idList.length === 1) {
-        query = query.eq('colaborador_id', idList[0])
-      } else if (idList.length > 1) {
-        query = query.in('colaborador_id', idList)
-      }
-      if (filtros?.status && filtros.status !== 'todos') {
-        query = query.eq('status', filtros.status)
-      }
 
       const { data: emprestimos, error } = await query
 
       if (!error && Array.isArray(emprestimos)) {
         isCredImpactoDedicatedAvailable = true
-        // Busca as parcelas para cada empréstimo
         const empIds = emprestimos.map((e) => e.id)
         let parcelasMap: Record<string, CredImpactoParcela[]> = {}
 
@@ -249,10 +242,10 @@ export async function dbGetEmprestimos(filtros?: {
                 numero: p.numero,
                 competencia: p.competencia,
                 dataVencimento: p.data_vencimento,
-                valorAmortizacao: Number(p.valor_amortizacao),
-                valorJuros: Number(p.valor_juros),
-                valorTotal: Number(p.valor_total),
-                saldoDevedorApos: Number(p.saldo_devedor_apos),
+                valorAmortizacao: Number(p.valor_amortizacao || 0),
+                valorJuros: Number(p.valor_juros || 0),
+                valorTotal: Number(p.valor_total || 0),
+                saldoDevedorApos: Number(p.saldo_devedor_apos || 0),
                 status: p.status,
                 dataPagamento: p.data_pagamento,
                 valorPago: p.valor_pago ? Number(p.valor_pago) : undefined,
@@ -270,10 +263,11 @@ export async function dbGetEmprestimos(filtros?: {
           }
         }
 
-        return emprestimos.map((e) => mapDbRowToEmprestimo(e, parcelasMap[e.id] || []))
-      }
-
-      if (error && isTableMissingError(error)) {
+        for (const e of emprestimos) {
+          const mapped = mapDbRowToEmprestimo(e, parcelasMap[e.id] || [])
+          loansMap.set(mapped.id, mapped)
+        }
+      } else if (error && isTableMissingError(error)) {
         isCredImpactoDedicatedAvailable = false
       }
     } catch (err: any) {
@@ -285,43 +279,59 @@ export async function dbGetEmprestimos(filtros?: {
     }
   }
 
-  // 2. Fallback resiliente usando relatorios_records com prefixo 'credimpacto:emp:'
+  // 2. Busca e mescla do fallback relatorios_records para resiliência máxima
   try {
-    let query = sb
+    const { data: fallbackRows, error: fbError } = await sb
       .from('relatorios_records')
       .select('*')
       .like('id', 'credimpacto:emp:%')
       .order('created_at', { ascending: false })
 
-    const { data, error } = await query
-    if (error) throw error
-
-    let list: CredImpactoEmprestimo[] = (data || []).map((row: any) => ({
-      ...row.dados,
-      id: row.id.replace('credimpacto:emp:', ''),
-      createdAt: row.created_at,
-      updatedAt: row.dados?.updatedAt || row.created_at
-    }))
-
-    const allowedIds = new Set(idList)
-    if (allowedIds.size > 0 || cleanEmail || cleanNome) {
-      list = list.filter((e) => {
-        if (allowedIds.has(e.colaboradorId)) return true
-        if (cleanEmail && e.colaboradorEmail && e.colaboradorEmail.trim().toLowerCase() === cleanEmail) return true
-        if (cleanNome && e.colaboradorNome && e.colaboradorNome.trim().toLowerCase() === cleanNome) return true
-        return false
-      })
+    if (!fbError && Array.isArray(fallbackRows)) {
+      for (const row of fallbackRows) {
+        const id = row.id.replace('credimpacto:emp:', '')
+        const existing = loansMap.get(id)
+        if (!existing || (!existing.parcelas?.length && row.dados?.parcelas?.length)) {
+          loansMap.set(id, {
+            ...row.dados,
+            id,
+            createdAt: row.created_at || row.dados?.createdAt,
+            updatedAt: row.dados?.updatedAt || row.created_at
+          })
+        }
+      }
     }
-
-    if (filtros?.status && filtros.status !== 'todos') {
-      list = list.filter((e) => e.status === filtros.status)
-    }
-
-    return list
   } catch (err: any) {
     console.error('[dbGetEmprestimos fallback error]', err)
-    return []
   }
+
+  let list = Array.from(loansMap.values())
+
+  // Ordena por data de criação descrescente
+  list.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())
+
+  // Filtragem flexível de colaborador (por ID, e-mail ou nome completo)
+  const allowedIds = new Set(idList)
+  if (allowedIds.size > 0 || cleanEmail || cleanNome) {
+    list = list.filter((e) => {
+      if (allowedIds.has(e.colaboradorId)) return true
+      if (cleanEmail && e.colaboradorEmail && e.colaboradorEmail.trim().toLowerCase() === cleanEmail) return true
+      if (cleanNome && e.colaboradorNome && e.colaboradorNome.trim().toLowerCase() === cleanNome) return true
+      return false
+    })
+  }
+
+  if (filtros?.status && filtros.status !== 'todos') {
+    list = list.filter((e) => e.status === filtros.status)
+  }
+
+  if (filtros?.competencia) {
+    list = list.filter((e) =>
+      (e.parcelas || []).some((p) => p.competencia === filtros.competencia)
+    )
+  }
+
+  return list
 }
 
 export async function dbGetEmprestimoById(id: string): Promise<CredImpactoEmprestimo | null> {
@@ -449,20 +459,20 @@ export async function dbSaveEmprestimo(
       codigo_operacao: updatedLoan.codigoOperacao,
       colaborador_id: updatedLoan.colaboradorId,
       colaborador_nome: updatedLoan.colaboradorNome,
-      colaborador_cpf: updatedLoan.colaboradorCpf,
+      colaborador_cpf: updatedLoan.colaboradorCpf || '',
       colaborador_email: updatedLoan.colaboradorEmail || null,
       colaborador_cargo: updatedLoan.colaboradorCargo || null,
       colaborador_matricula: updatedLoan.colaboradorMatricula || null,
-      colaborador_salario_base: updatedLoan.colaboradorSalarioBase || null,
-      valor_solicitado: updatedLoan.valorSolicitado,
-      valor_aprovado: updatedLoan.valorAprovado,
-      quantidade_parcelas: updatedLoan.quantidadeParcelas,
-      taxa_mensal: updatedLoan.taxaMensal,
+      colaborador_salario_base: updatedLoan.colaboradorSalarioBase ? Number(updatedLoan.colaboradorSalarioBase) : null,
+      valor_solicitado: Number(updatedLoan.valorSolicitado || 0),
+      valor_aprovado: Number(updatedLoan.valorAprovado || 0),
+      quantidade_parcelas: Number(updatedLoan.quantidadeParcelas || 1),
+      taxa_mensal: Number(updatedLoan.taxaMensal || 0),
       metodo_calculo: updatedLoan.metodoCalculo,
-      total_juros: updatedLoan.totalJuros,
-      total_a_pagar: updatedLoan.totalAPagar,
-      saldo_devedor_atual: updatedLoan.saldoDevedorAtual,
-      total_amortizado: updatedLoan.totalAmortizado,
+      total_juros: Number(updatedLoan.totalJuros || 0),
+      total_a_pagar: Number(updatedLoan.totalAPagar || 0),
+      saldo_devedor_atual: Number(updatedLoan.saldoDevedorAtual || 0),
+      total_amortizado: Number(updatedLoan.totalAmortizado || 0),
       status: updatedLoan.status,
       motivo_recusa: updatedLoan.motivoRecusa || null,
       justificativa_solicitacao: updatedLoan.justificativaSolicitacao || null,
@@ -476,7 +486,6 @@ export async function dbSaveEmprestimo(
       contrato_conteudo_html: updatedLoan.contratoConteudoHtml || null,
       contrato_hash_sha256: updatedLoan.contratoHashSha256 || null,
       codigo_verificacao_assinatura: updatedLoan.codigoVerificacaoAssinatura || null,
-      termo_autorizacao_desconto: updatedLoan.termoAutorizacaoDesconto || null,
       assinado_em: updatedLoan.assinadoEm || null,
       assinante_ip: updatedLoan.assinanteIp || null,
       assinante_user_agent: updatedLoan.assinanteUserAgent || null,
@@ -492,12 +501,15 @@ export async function dbSaveEmprestimo(
       memoria_calculo: updatedLoan.memoriaCalculo || null,
       dados: {
         ...((updatedLoan as any).dados || {}),
+        colaboradorUnidade: updatedLoan.colaboradorUnidade,
+        termoAutorizacaoDesconto: updatedLoan.termoAutorizacaoDesconto,
         primeiraParcelaCompetencia: updatedLoan.primeiraParcelaCompetencia || updatedLoan.parcelas?.[0]?.competencia,
         primeiraParcelaVencimento: updatedLoan.primeiraParcelaVencimento || updatedLoan.parcelas?.[0]?.dataVencimento,
         assinanteNome: updatedLoan.assinanteNome,
         aprovadoDiretoPorNome: updatedLoan.aprovadoDiretoPorNome,
         aprovadoDiretoPorId: updatedLoan.aprovadoDiretoPorId
       },
+      created_at: updatedLoan.createdAt || nowIso,
       updated_at: nowIso
     }
 
@@ -513,13 +525,13 @@ export async function dbSaveEmprestimo(
           numero: p.numero,
           competencia: p.competencia,
           data_vencimento: p.dataVencimento,
-          valor_amortizacao: p.valorAmortizacao,
-          valor_juros: p.valorJuros,
-          valor_total: p.valorTotal,
-          saldo_devedor_apos: p.saldoDevedorApos,
-          status: p.status,
+          valor_amortizacao: Number(p.valorAmortizacao || 0),
+          valor_juros: Number(p.valorJuros || 0),
+          valor_total: Number(p.valorTotal || 0),
+          saldo_devedor_apos: Number(p.saldoDevedorApos || 0),
+          status: p.status || 'prevista',
           data_pagamento: p.dataPagamento || null,
-          valor_pago: p.valorPago || null,
+          valor_pago: p.valorPago ? Number(p.valorPago) : null,
           metodo_pagamento: p.metodoPagamento || null,
           lote_folha_id: p.loteFolhaId || null,
           comprovante_url: p.comprovanteUrl || null,
@@ -527,14 +539,17 @@ export async function dbSaveEmprestimo(
           responsavel_baixa_id: p.responsavelBaixaId || null,
           responsavel_baixa_nome: p.responsavelBaixaNome || null,
           baixado_em: p.baixadoEm || null,
+          created_at: (p as any).createdAt || updatedLoan.createdAt || nowIso,
           updated_at: nowIso
         }))
 
         await sb.from('credimpacto_parcelas').upsert(parcRows)
       }
+    } else {
+      console.error('[dbSaveEmprestimo dedicated error]', empError)
     }
   } catch (err: any) {
-    // Segue para fallback
+    console.error('[dbSaveEmprestimo dedicated catch]', err)
   }
 
   // 2. Sempre persiste também no fallback resiliente
@@ -577,6 +592,8 @@ export async function dbDeleteEmprestimo(
 
   // 1. Tenta deletar da tabela dedicada
   try {
+    await sb.from('credimpacto_solicitacoes_quitacao').delete().eq('emprestimo_id', id)
+    await sb.from('credimpacto_rescisao_simulacoes').delete().eq('emprestimo_id', id)
     await sb.from('credimpacto_parcelas').delete().eq('emprestimo_id', id)
     await sb.from('credimpacto_emprestimos').delete().eq('id', id)
   } catch (err) {}
@@ -687,7 +704,8 @@ export async function dbConciliarParcela(
 
   targetParcela.status =
     dadosBaixa.metodoPagamento === 'folha_pagamento' ? 'descontada' : 'paga_avulso'
-  targetParcela.valorPago = roundMoney(dadosBaixa.valorPago)
+  const valorEfetivo = dadosBaixa.valorPago && dadosBaixa.valorPago > 0 ? dadosBaixa.valorPago : targetParcela.valorTotal
+  targetParcela.valorPago = roundMoney(valorEfetivo)
   targetParcela.dataPagamento = dadosBaixa.dataPagamento || todayDate
   targetParcela.metodoPagamento = dadosBaixa.metodoPagamento
   targetParcela.comprovanteUrl = dadosBaixa.comprovanteUrl
@@ -927,7 +945,8 @@ function mapDbRowToEmprestimo(e: any, parcelas: CredImpactoParcela[]): CredImpac
     colaboradorEmail: e.colaborador_email || e.colaboradorEmail,
     colaboradorCargo: e.colaborador_cargo || e.colaboradorCargo,
     colaboradorMatricula: e.colaborador_matricula || e.colaboradorMatricula,
-    colaboradorSalarioBase: e.colaborador_salario_base ? Number(e.colaborador_salario_base) : undefined,
+    colaboradorSalarioBase: e.colaborador_salario_base ? Number(e.colaborador_salario_base) : (e.colaboradorSalarioBase ? Number(e.colaboradorSalarioBase) : undefined),
+    colaboradorUnidade: e.dados?.colaboradorUnidade || e.colaborador_unidade || e.colaboradorUnidade || '',
     valorSolicitado: Number(e.valor_solicitado || e.valorSolicitado),
     valorAprovado: Number(e.valor_aprovado || e.valorAprovado),
     quantidadeParcelas: Number(e.quantidade_parcelas || e.quantidadeParcelas),
@@ -952,7 +971,7 @@ function mapDbRowToEmprestimo(e: any, parcelas: CredImpactoParcela[]): CredImpac
     contratoConteudoHtml: e.contrato_conteudo_html || e.contratoConteudoHtml,
     contratoHashSha256: e.contrato_hash_sha256 || e.contratoHashSha256,
     codigoVerificacaoAssinatura: e.codigo_verificacao_assinatura || e.codigoVerificacaoAssinatura,
-    termoAutorizacaoDesconto: e.termo_autorizacao_desconto || e.termoAutorizacaoDesconto,
+    termoAutorizacaoDesconto: e.dados?.termoAutorizacaoDesconto || e.termo_autorizacao_desconto || e.termoAutorizacaoDesconto,
     assinadoEm: e.assinado_em || e.assinadoEm,
     assinanteIp: e.assinante_ip || e.assinanteIp,
     assinanteUserAgent: e.assinante_user_agent || e.assinanteUserAgent,

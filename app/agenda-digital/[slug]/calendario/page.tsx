@@ -468,10 +468,79 @@ export default function ADCalendarioPage({ params }: { params: any }) {
   }
 
   return (
-    <div className="ad-admin-page-container ad-mobile-optimized ad-calendar-mobile-container" style={{ minHeight: '100vh', paddingBottom: 130, fontFamily: 'Outfit, sans-serif' }}>
+    <div className="ad-admin-page-container ad-mobile-optimized ad-calendar-mobile-container" style={{ minHeight: '100vh', paddingBottom: 130, fontFamily: 'Outfit, sans-serif', width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}>
       <style dangerouslySetInnerHTML={{__html: `
+        .ad-calendar-mobile-container {
+          width: 100% !important;
+          max-width: 100% !important;
+          min-width: 0 !important;
+          box-sizing: border-box !important;
+          overflow-x: hidden !important;
+        }
+        .ad-calendar-header {
+          width: 100% !important;
+          max-width: 100% !important;
+          min-width: 0 !important;
+          box-sizing: border-box !important;
+        }
+        .ad-calendar-main-grid {
+          display: grid !important;
+          grid-template-columns: minmax(0, 1fr) 360px !important;
+          gap: 24px !important;
+          align-items: start !important;
+          width: 100% !important;
+          max-width: 100% !important;
+          min-width: 0 !important;
+          box-sizing: border-box !important;
+        }
+        .ad-calendar-events-col,
+        .ad-calendar-birthdays-col {
+          width: 100% !important;
+          max-width: 100% !important;
+          min-width: 0 !important;
+          box-sizing: border-box !important;
+        }
+        .ad-calendar-timeline-row {
+          display: flex !important;
+          gap: 14px !important;
+          align-items: stretch !important;
+          width: 100% !important;
+          max-width: 100% !important;
+          min-width: 0 !important;
+          box-sizing: border-box !important;
+        }
+        .ad-calendar-date-card {
+          width: 82px !important;
+          min-width: 82px !important;
+          max-width: 82px !important;
+          flex-shrink: 0 !important;
+          box-sizing: border-box !important;
+        }
+        .ad-calendar-event-card {
+          flex: 1 1 0% !important;
+          min-width: 0 !important;
+          max-width: 100% !important;
+          box-sizing: border-box !important;
+          overflow: hidden !important;
+        }
+        .ad-calendar-birthdays-card {
+          width: 100% !important;
+          max-width: 100% !important;
+          min-width: 0 !important;
+          box-sizing: border-box !important;
+        }
+        .ad-calendar-birthdays-header h3 {
+          color: #ffffff !important;
+        }
+        .ad-calendar-birthdays-header span {
+          color: rgba(255, 255, 255, 0.95) !important;
+        }
+
         @media (max-width: 992px) {
-          .ad-calendar-main-grid { grid-template-columns: 1fr !important; }
+          .ad-calendar-main-grid {
+            grid-template-columns: minmax(0, 1fr) !important;
+            gap: 20px !important;
+          }
         }
         @media (max-width: 640px) {
           .ad-calendar-header-main {
@@ -479,16 +548,51 @@ export default function ADCalendarioPage({ params }: { params: any }) {
             align-items: stretch !important;
             gap: 12px !important;
           }
-          .ad-calendar-date-card {
-            width: 72px !important;
-            min-width: 72px !important;
-            padding: 12px 4px !important;
+          .ad-calendar-badge {
+            max-width: 100% !important;
+            word-break: break-word !important;
+            white-space: normal !important;
           }
-          .ad-calendar-event-card {
-            padding: 14px 16px !important;
+          .ad-calendar-timeline-row {
+            gap: 10px !important;
+          }
+          .ad-calendar-date-card {
+            width: 68px !important;
+            min-width: 68px !important;
+            max-width: 68px !important;
+            padding: 10px 4px !important;
+            border-radius: 16px !important;
           }
           .ad-calendar-day-num {
-            font-size: 24px !important;
+            font-size: 22px !important;
+          }
+          .ad-calendar-event-card {
+            padding: 12px 14px !important;
+            border-radius: 16px !important;
+          }
+          .ad-calendar-birthdays-card {
+            padding: 16px !important;
+            border-radius: 20px !important;
+          }
+          .ad-calendar-birthdays-header {
+            margin: -16px -16px 14px -16px !important;
+            padding: 12px 16px !important;
+          }
+          .ad-calendar-birthday-item {
+            padding: 8px 10px !important;
+            gap: 8px !important;
+          }
+          .ad-calendar-birthday-avatar {
+            width: 38px !important;
+            height: 38px !important;
+            font-size: 11px !important;
+          }
+          .ad-calendar-birthday-daybadge {
+            padding: 4px 8px !important;
+            border-radius: 10px !important;
+          }
+          .ad-calendar-birthday-daybadge-num {
+            font-size: 13px !important;
           }
         }
       `}} />
@@ -522,7 +626,10 @@ export default function ADCalendarioPage({ params }: { params: any }) {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        position: 'relative'
+        position: 'relative',
+        width: '100%',
+        maxWidth: '100%',
+        boxSizing: 'border-box'
       }}>
         {/* Month Switcher Controls */}
         <div style={{
@@ -532,7 +639,9 @@ export default function ADCalendarioPage({ params }: { params: any }) {
           background: '#f8fafc',
           padding: '5px 8px',
           borderRadius: 16,
-          border: '1px solid #e2e8f0'
+          border: '1px solid #e2e8f0',
+          maxWidth: '100%',
+          boxSizing: 'border-box'
         }}>
           <button
             onClick={() => setViewDate(new Date(year, month - 1, 1))}
@@ -613,10 +722,10 @@ export default function ADCalendarioPage({ params }: { params: any }) {
       </div>
 
       {/* 🚀 LAYOUT PRINCIPAL EM LISTA (2 COLUNAS: LISTA DE EVENTOS + CARD DE ANIVERSARIANTES) */}
-      <div className="ad-calendar-main-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 360px', gap: 24, alignItems: 'start' }}>
+      <div className="ad-calendar-main-grid" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 360px', gap: 24, alignItems: 'start', width: '100%', maxWidth: '100%', minWidth: 0, boxSizing: 'border-box' }}>
         
         {/* 📋 COLUNA ESQUERDA: AGENDA DE EVENTOS EM LISTA TIMELINE */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div className="ad-calendar-events-col" style={{ display: 'flex', flexDirection: 'column', gap: 16, width: '100%', maxWidth: '100%', minWidth: 0, boxSizing: 'border-box' }}>
           
           {Object.keys(meventosAgrupados).length === 0 ? (
             /* Modern Empty State */
@@ -681,7 +790,8 @@ export default function ADCalendarioPage({ params }: { params: any }) {
                   initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
                   key={dateStr}
-                  style={{ display: 'flex', gap: 14, alignItems: 'stretch' }}
+                  className="ad-calendar-timeline-row"
+                  style={{ display: 'flex', gap: 14, alignItems: 'stretch', width: '100%', maxWidth: '100%', minWidth: 0, boxSizing: 'border-box' }}
                 >
                   {/* 🗓️ LEFT DATE CARD */}
                   <div 
@@ -689,6 +799,7 @@ export default function ADCalendarioPage({ params }: { params: any }) {
                     style={{
                       width: 82,
                       minWidth: 82,
+                      maxWidth: 82,
                       background: '#fff',
                       borderRadius: 20,
                       padding: '16px 8px',
@@ -699,7 +810,8 @@ export default function ADCalendarioPage({ params }: { params: any }) {
                       alignItems: 'center',
                       justifyContent: 'center',
                       flexShrink: 0,
-                      position: 'relative'
+                      position: 'relative',
+                      boxSizing: 'border-box'
                     }}
                   >
                     {isToday && (
@@ -756,8 +868,9 @@ export default function ADCalendarioPage({ params }: { params: any }) {
                   <div 
                     className="ad-calendar-event-card"
                     style={{
-                      flex: 1,
+                      flex: '1 1 0%',
                       minWidth: 0,
+                      maxWidth: '100%',
                       background: '#fff',
                       borderRadius: 20,
                       padding: '16px 20px',
@@ -766,10 +879,12 @@ export default function ADCalendarioPage({ params }: { params: any }) {
                       display: 'flex',
                       flexDirection: 'column',
                       justifyContent: 'center',
-                      position: 'relative'
+                      position: 'relative',
+                      boxSizing: 'border-box',
+                      overflow: 'hidden'
                     }}
                   >
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 14, width: '100%', minWidth: 0, boxSizing: 'border-box' }}>
                       {eventsList.map((ev, idx) => {
                         const color = ev.cor ?? TIPO_CORES[ev.tipo] ?? '#6366f1'
                         return (
@@ -784,6 +899,9 @@ export default function ADCalendarioPage({ params }: { params: any }) {
                               borderBottom: idx < eventsList.length - 1 ? '1px solid #f1f5f9' : 'none',
                               position: 'relative',
                               zIndex: 2,
+                              width: '100%',
+                              minWidth: 0,
+                              boxSizing: 'border-box',
                               ...(highlightedEventId === String(ev.id) ? {
                                 boxShadow: '0 0 0 3px #6366f1, 0 8px 24px rgba(99, 102, 241, 0.25)',
                                 borderRadius: 14,
@@ -812,8 +930,8 @@ export default function ADCalendarioPage({ params }: { params: any }) {
                               </div>
                             )}
                             {/* Top Row: Time Badge */}
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, width: '100%', minWidth: 0 }}>
+                              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0, maxWidth: '100%' }}>
                                 {eventsList.length > 1 && (
                                   <div style={{
                                     width: 7,
@@ -834,7 +952,8 @@ export default function ADCalendarioPage({ params }: { params: any }) {
                                   color: color,
                                   fontSize: 11.5,
                                   fontWeight: 700,
-                                  letterSpacing: '0.01em'
+                                  letterSpacing: '0.01em',
+                                  flexShrink: 0
                                 }}>
                                   <Clock size={12} strokeWidth={2.2} />
                                   <span>{(ev as any).diaTodo ? 'Dia Todo' : ev.horaInicio || '08:00'}</span>
@@ -846,7 +965,7 @@ export default function ADCalendarioPage({ params }: { params: any }) {
                             </div>
 
                             {/* Title & Description: Full width for fluid readability */}
-                            <div>
+                            <div style={{ width: '100%', minWidth: 0 }}>
                               <h4 style={{
                                 fontSize: 14.5,
                                 fontWeight: 700,
@@ -854,7 +973,8 @@ export default function ADCalendarioPage({ params }: { params: any }) {
                                 margin: 0,
                                 lineHeight: 1.4,
                                 letterSpacing: '-0.01em',
-                                wordBreak: 'break-word'
+                                wordBreak: 'break-word',
+                                overflowWrap: 'break-word'
                               }}>
                                 {ev.titulo}
                               </h4>
@@ -864,7 +984,9 @@ export default function ADCalendarioPage({ params }: { params: any }) {
                                   color: '#64748b',
                                   margin: '3px 0 0 0',
                                   lineHeight: 1.45,
-                                  fontWeight: 400
+                                  fontWeight: 400,
+                                  wordBreak: 'break-word',
+                                  overflowWrap: 'break-word'
                                 }}>
                                   {ev.descricao}
                                 </p>
@@ -877,10 +999,13 @@ export default function ADCalendarioPage({ params }: { params: any }) {
                                   fontSize: 11.5,
                                   fontWeight: 600,
                                   color: '#64748b',
-                                  marginTop: 4
+                                  marginTop: 4,
+                                  maxWidth: '100%',
+                                  wordBreak: 'break-word',
+                                  overflowWrap: 'break-word'
                                 }}>
-                                  <MapPin size={12} color={color} />
-                                  <span>{ev.local}</span>
+                                  <MapPin size={12} color={color} style={{ flexShrink: 0 }} />
+                                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{ev.local}</span>
                                 </div>
                               )}
                             </div>
@@ -897,11 +1022,12 @@ export default function ADCalendarioPage({ params }: { params: any }) {
         </div>
 
         {/* 🎈 COLUNA DIREITA: APENAS O CARD DE ANIVERSARIANTES DO MÊS */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+        <div className="ad-calendar-birthdays-col" style={{ display: 'flex', flexDirection: 'column', gap: 20, width: '100%', maxWidth: '100%', minWidth: 0, boxSizing: 'border-box' }}>
           {showBirthdays && (
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
+              className="ad-calendar-birthdays-card"
               style={{
                 background: '#fff',
                 borderRadius: 24,
@@ -909,35 +1035,44 @@ export default function ADCalendarioPage({ params }: { params: any }) {
                 boxShadow: '0 15px 35px rgba(236, 72, 153, 0.08)',
                 border: '1px solid rgba(236, 72, 153, 0.15)',
                 position: 'relative',
-                overflow: 'hidden'
+                overflow: 'hidden',
+                width: '100%',
+                maxWidth: '100%',
+                minWidth: 0,
+                boxSizing: 'border-box'
               }}
             >
               {/* Header Decorative Background */}
-              <div style={{
-                margin: '-22px -22px 18px -22px',
-                padding: '18px 22px',
-                background: 'linear-gradient(135deg, #ec4899 0%, #f43f5e 100%)',
-                color: '#fff',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between'
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <div style={{ width: 36, height: 36, borderRadius: 12, background: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <div 
+                className="ad-calendar-birthdays-header"
+                style={{
+                  margin: '-22px -22px 18px -22px',
+                  padding: '18px 22px',
+                  background: 'linear-gradient(135deg, #ec4899 0%, #f43f5e 100%)',
+                  color: '#fff',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  boxSizing: 'border-box',
+                  gap: 10
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: 1 }}>
+                  <div style={{ width: 36, height: 36, borderRadius: 12, background: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                     <Sparkles size={20} />
                   </div>
-                  <div>
-                    <h3 style={{ fontSize: 16, fontWeight: 900, margin: 0, lineHeight: 1.2 }}>Aniversários do Mês</h3>
-                    <span style={{ fontSize: 11, opacity: 0.9, fontWeight: 600 }}>{MESES[month]}</span>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <h3 style={{ color: '#ffffff', fontSize: 16, fontWeight: 900, margin: 0, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Aniversários do Mês</h3>
+                    <span style={{ color: 'rgba(255, 255, 255, 0.95)', fontSize: 11, opacity: 0.9, fontWeight: 600 }}>{MESES[month]}</span>
                   </div>
                 </div>
-                <div style={{ padding: '4px 10px', background: 'rgba(255,255,255,0.25)', borderRadius: 12, fontSize: 12, fontWeight: 900 }}>
+                <div style={{ padding: '4px 10px', background: 'rgba(255,255,255,0.25)', borderRadius: 12, fontSize: 12, fontWeight: 900, flexShrink: 0 }}>
                   {aniversariantes.length}
                 </div>
               </div>
 
               {/* List of Birthdays */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 450, overflowY: 'auto', paddingRight: 2 }} className="ad-date-strip-scroll">
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 450, overflowY: 'auto', paddingRight: 2, width: '100%', minWidth: 0, boxSizing: 'border-box' }} className="ad-date-strip-scroll">
                 {loadingNivers ? (
                   <div style={{ textAlign: 'center', padding: '24px 0', fontSize: 12, color: '#94a3b8' }}>Carregando aniversariantes...</div>
                 ) : aniversariantes.length === 0 ? (
@@ -950,6 +1085,7 @@ export default function ADCalendarioPage({ params }: { params: any }) {
                     <motion.div
                       whileHover={{ x: 4 }}
                       key={p.id || idx}
+                      className="ad-calendar-birthday-item"
                       style={{
                         display: 'flex',
                         gap: 12,
@@ -957,30 +1093,37 @@ export default function ADCalendarioPage({ params }: { params: any }) {
                         padding: '10px 14px',
                         borderRadius: 16,
                         background: p.isProximo ? 'linear-gradient(135deg, rgba(236, 72, 153, 0.08) 0%, rgba(244, 63, 94, 0.04) 100%)' : '#f8fafc',
-                        border: p.isProximo ? '1.5px solid rgba(236, 72, 153, 0.3)' : '1px solid #f1f5f9'
+                        border: p.isProximo ? '1.5px solid rgba(236, 72, 153, 0.3)' : '1px solid #f1f5f9',
+                        width: '100%',
+                        maxWidth: '100%',
+                        minWidth: 0,
+                        boxSizing: 'border-box'
                       }}
                     >
                       {/* Avatar */}
-                      <div style={{
-                        width: 44,
-                        height: 44,
-                        borderRadius: '50%',
-                        flexShrink: 0,
-                        background: p.foto ? `url(${p.foto}) center/cover` : 'linear-gradient(135deg, #f472b6 0%, #ec4899 100%)',
-                        color: '#fff',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontSize: 13,
-                        fontWeight: 900,
-                        boxShadow: '0 4px 10px rgba(236, 72, 153, 0.2)',
-                        border: p.isProximo ? '2px solid #ec4899' : '2px solid #fff'
-                      }}>
+                      <div 
+                        className="ad-calendar-birthday-avatar"
+                        style={{
+                          width: 44,
+                          height: 44,
+                          borderRadius: '50%',
+                          flexShrink: 0,
+                          background: p.foto ? `url(${p.foto}) center/cover` : 'linear-gradient(135deg, #f472b6 0%, #ec4899 100%)',
+                          color: '#fff',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: 13,
+                          fontWeight: 900,
+                          boxShadow: '0 4px 10px rgba(236, 72, 153, 0.2)',
+                          border: p.isProximo ? '2px solid #ec4899' : '2px solid #fff'
+                        }}
+                      >
                         {!p.foto && p.nome.split(' ').map((n:any)=>n[0]).join('').slice(0,2).toUpperCase()}
                       </div>
 
                       {/* Info */}
-                      <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
                         <div style={{ fontSize: 13, fontWeight: 900, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                           {p.nome}
                         </div>
@@ -990,20 +1133,23 @@ export default function ADCalendarioPage({ params }: { params: any }) {
                       </div>
 
                       {/* Day Badge */}
-                      <div style={{
-                        padding: '6px 10px',
-                        borderRadius: 12,
-                        background: p.isProximo ? '#ec4899' : '#fff',
-                        color: p.isProximo ? '#fff' : '#1e293b',
-                        border: p.isProximo ? 'none' : '1px solid #e2e8f0',
-                        textAlign: 'center',
-                        flexShrink: 0,
-                        boxShadow: p.isProximo ? '0 6px 12px rgba(236,72,153,0.3)' : 'none'
-                      }}>
+                      <div 
+                        className="ad-calendar-birthday-daybadge"
+                        style={{
+                          padding: '6px 10px',
+                          borderRadius: 12,
+                          background: p.isProximo ? '#ec4899' : '#fff',
+                          color: p.isProximo ? '#fff' : '#1e293b',
+                          border: p.isProximo ? 'none' : '1px solid #e2e8f0',
+                          textAlign: 'center',
+                          flexShrink: 0,
+                          boxShadow: p.isProximo ? '0 6px 12px rgba(236,72,153,0.3)' : 'none'
+                        }}
+                      >
                         <div style={{ fontSize: 9, fontWeight: 800, opacity: 0.8, textTransform: 'uppercase' }}>
                           {p.isProximo ? 'É HOJE' : 'DIA'}
                         </div>
-                        <div style={{ fontSize: 15, fontWeight: 900, lineHeight: 1 }}>
+                        <div className="ad-calendar-birthday-daybadge-num" style={{ fontSize: 15, fontWeight: 900, lineHeight: 1 }}>
                           {p.dia}
                         </div>
                       </div>

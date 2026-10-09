@@ -1271,14 +1271,16 @@ const StudentSearchRow = React.memo(function StudentSearchRow({ student, activeC
   }, [autorizados, student])
 
   const alreadyCalled = useMemo(() => {
+    const sId = String(student.id || '')
     return activeCalls.some(c =>
-      c.studentId === student.id && (c.status === 'waiting' || c.status === 'called')
+      c.studentId != null && String(c.studentId) === sId && (c.status === 'waiting' || c.status === 'called')
     )
   }, [activeCalls, student.id])
 
   const confirmedCall = useMemo(() => {
+    const sId = String(student.id || '')
     return activeCalls.find(c =>
-      c.studentId === student.id && c.status === 'confirmed'
+      c.studentId != null && String(c.studentId) === sId && c.status === 'confirmed'
     )
   }, [activeCalls, student.id])
   const alreadyConfirmed = !!confirmedCall
@@ -3163,17 +3165,22 @@ function ChamadasContent() {
     guardianId: string, guardianName: string,
     studentPhoto?: string | null,
   ) => {
-    const isConfirmedToday = activeCalls.some(c => c.studentId === studentId && c.status === 'confirmed')
+    const sIdStr = String(studentId || '')
+    const isConfirmedToday = activeCalls.some(c => c.studentId != null && String(c.studentId) === sIdStr && c.status === 'confirmed')
     if (isConfirmedToday) {
       showToast(`${studentName} já teve a saída confirmada hoje!`, false);
       return;
     }
     const hasActive = activeCalls.some(c =>
-      c.studentId === studentId && (c.status === 'waiting' || c.status === 'called')
+      c.studentId != null && String(c.studentId) === sIdStr && (c.status === 'waiting' || c.status === 'called')
     )
     if (hasActive) { showToast(`${studentName} já está em chamada ativa.`, false); return }
     const effectivePhoto = studentPhoto || (studentId ? getCachedStudentPhoto(studentId) : null) || null
-    callStudent(studentId, studentName, studentClass, guardianId, guardianName, 'manual', undefined, effectivePhoto)
+    const res = callStudent(studentId, studentName, studentClass, guardianId, guardianName, 'manual', undefined, effectivePhoto)
+    if (!res) {
+      showToast(`Não foi possível chamar ${studentName}.`, false)
+      return
+    }
     showToast(`${studentName} chamado(a)!`)
     setStudentSearch('')
   }
