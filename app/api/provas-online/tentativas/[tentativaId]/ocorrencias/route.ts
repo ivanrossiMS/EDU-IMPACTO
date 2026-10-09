@@ -128,6 +128,63 @@ export async function POST(
         createdAt: nowIso
       }).catch(() => {})
     }
+  } else if (acaoConfig === 'advertir_cancelar' && prova) {
+    const isMinimizationIncident = 
+      tipo === 'saida_tela' || 
+      tipo === 'saida_tela_cheia' || 
+      tipo === 'perda_foco' ||
+      tipo === 'tentativa_colar'
+
+    if (isMinimizationIncident) {
+      // Check previous infractions of minimization in `recent`
+      const previousMinimizations = recent.filter(r => 
+        r.tipo === 'saida_tela' || 
+        r.tipo === 'saida_tela_cheia' || 
+        r.tipo === 'perda_foco'
+      )
+
+      if (previousMinimizations.length >= 1) {
+        // SECOND OR SUBSEQUENT INFRACTION -> CANCEL EXAM!
+        if (body.respostas && typeof body.respostas === 'object') {
+          tentativa.respostas = { ...tentativa.respostas, ...body.respostas }
+        }
+        const nowIso = new Date().toISOString()
+        tentativa.status = 'entregue'
+        tentativa.entregueEm = nowIso
+        tentativa.motivoCancelamento = `Prova cancelada por reincidência ao minimizar a tela ou sair da avaliação após advertência prévia. Respostas assinaladas até o momento foram salvas e computadas, e as restantes canceladas.`
+        const graded = autoGradeTentativa(prova, tentativa)
+        tentativa.pontuacaoObjetiva = graded.pontuacaoObjetiva
+        tentativa.notaFinal = graded.notaFinal
+        tentativa.statusCorrecao = graded.statusCorrecao
+        tentativa.comprovanteCodigo = graded.comprovanteCodigo
+        tentativa.respostas = graded.respostas
+        tentativa.comprovanteEntrega = {
+          hash: graded.comprovanteCodigo,
+          provaId: prova.id,
+          alunoId: tentativa.alunoId,
+          alunoNome: tentativa.alunoNome,
+          matricula: tentativa.alunoMatricula || '',
+          dataHoraEntrega: nowIso,
+          totalQuestoes: prova.questoes?.length || 0,
+          totalRespostasRegistradas: Object.keys(tentativa.respostas || {}).length,
+          protocolo: graded.comprovanteCodigo
+        }
+        tentativa.updatedAt = nowIso
+        await dbSaveTentativa(tentativa)
+        cancelada = true
+
+        await dbSaveExcecao({
+          id: crypto.randomUUID(),
+          provaId: prova.id,
+          alunoId: tentativa.alunoId,
+          alunoNome: tentativa.alunoNome,
+          tipoExcecao: 'encerramento_antecipado',
+          justificativa: `Cancelamento por reincidência ao minimizar tela ou sair da avaliação: ${descricao}`,
+          autorizadoPor: 'Supervisão Automática (Sistema)',
+          createdAt: nowIso
+        }).catch(() => {})
+      }
+    }
   } else if (acaoConfig === 'suspender') {
     const isSuspensionIncident = 
       tipo === 'saida_tela' || 
@@ -146,6 +203,8 @@ export async function POST(
     ok: true,
     ocorrencia: novaOcorrencia,
     acao: acaoConfig,
+    advertenciaModal: acaoConfig === 'advertir_cancelar' && !cancelada,
+    infracaoNumero: cancelada ? 2 : (acaoConfig === 'advertir_cancelar' ? 1 : 0),
     suspensa,
     cancelada,
     tentativa: cancelada ? tentativa : undefined

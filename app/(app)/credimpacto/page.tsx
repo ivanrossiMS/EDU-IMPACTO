@@ -23,6 +23,7 @@ import { DEFAULT_TERMO_AUTORIZACAO } from '@/lib/credimpacto/contractTemplate'
 import { isCredImpactoAdmin } from '@/lib/credimpacto/authHelper'
 import { toast } from 'sonner'
 import { Landmark } from 'lucide-react'
+import { Capacitor } from '@capacitor/core'
 
 export default function CredImpactoPage() {
   return (
@@ -185,6 +186,20 @@ function CredImpactoContent() {
     loadData()
   }, [loadData])
 
+  // Ajusta a StatusBar no aplicativo mobile nativo para estilo escuro (ícones escuros legíveis sobre fundo claro)
+  useEffect(() => {
+    if (typeof window !== 'undefined' && Capacitor.isNativePlatform()) {
+      import('@capacitor/status-bar').then(({ StatusBar, Style }) => {
+        StatusBar.setStyle({ style: Style.Light }).catch(() => {})
+      })
+      return () => {
+        import('@capacitor/status-bar').then(({ StatusBar, Style }) => {
+          StatusBar.setStyle({ style: Style.Dark }).catch(() => {})
+        })
+      }
+    }
+  }, [])
+
   const pendingRequestsCount = emprestimos.filter(
     (e) => e.status === 'solicitado' || e.status === 'em_analise'
   ).length
@@ -243,8 +258,8 @@ function CredImpactoContent() {
 
   if (isBlocked) {
     return (
-      <div className="min-h-[70vh] flex items-center justify-center p-6">
-        <div className="max-w-md w-full text-center p-8 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl">
+      <div className="min-h-[70vh] flex items-center justify-center p-6" data-theme="light">
+        <div className="max-w-md w-full text-center p-8 rounded-2xl bg-white border border-slate-200 shadow-xl">
           <div className="w-16 h-16 rounded-2xl bg-rose-500/10 text-rose-500 flex items-center justify-center mx-auto mb-4 text-2xl">
             🔒
           </div>
@@ -264,7 +279,7 @@ function CredImpactoContent() {
   }
 
   return (
-    <div className="min-h-screen flex bg-slate-50/60 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
+    <div className="min-h-screen flex bg-slate-50/60 text-slate-900" data-theme="light">
       {/* SIDEBAR DEDICADA DO CREDIMPACTO (DESKTOP - STANDALONE EDGE-TO-EDGE) */}
       <CredImpactoSidebar
         activeTab={activeTab}
@@ -284,7 +299,7 @@ function CredImpactoContent() {
 
       {/* ÁREA DE CONTEÚDO PRINCIPAL (COM SCROLL INDEPENDENTE) */}
       <div className="flex-1 min-w-0 h-screen overflow-y-auto">
-        <div className="p-4 sm:p-6 lg:px-7 lg:py-6 max-w-[1536px] mx-auto space-y-6 pb-28 md:pb-12">
+        <div className="p-4 sm:p-6 lg:px-7 lg:py-6 max-w-[1536px] mx-auto space-y-6 pb-28 md:pb-12 pt-[calc(1rem+env(safe-area-inset-top,0px))] md:pt-6">
           {/* CABEÇALHO SUPERIOR */}
           <CredImpactoHeader
             isAdminOrFinance={isAdminOrFinance}

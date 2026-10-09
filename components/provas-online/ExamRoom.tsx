@@ -707,6 +707,259 @@ function PrintBlockedModal({ isOpen, onClose, triggerSource, timestamp }: PrintB
   )
 }
 
+interface MinimizarAdvertenciaModalProps {
+  isOpen: boolean
+  onClose: () => void
+  timestamp?: string
+  totalQuestoes: number
+  respostasPreenchidas: number
+  onReenterFullscreen?: () => void
+}
+
+function MinimizarAdvertenciaModal({
+  isOpen,
+  onClose,
+  timestamp,
+  totalQuestoes,
+  respostasPreenchidas,
+  onReenterFullscreen
+}: MinimizarAdvertenciaModalProps) {
+  useEffect(() => {
+    if (!isOpen) return
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Enter') {
+        onClose()
+        if (onReenterFullscreen) onReenterFullscreen()
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [isOpen, onClose, onReenterFullscreen])
+
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 10010,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '16px',
+            background: 'rgba(15, 23, 42, 0.82)',
+            backdropFilter: 'blur(14px)',
+            WebkitBackdropFilter: 'blur(14px)'
+          }}
+        >
+          <motion.div
+            initial={{ opacity: 0, scale: 0.92, y: 16 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.94, y: -10 }}
+            transition={{ type: 'spring', damping: 25, stiffness: 350 }}
+            style={{
+              width: '100%',
+              maxWidth: '530px',
+              background: '#ffffff',
+              borderRadius: '26px',
+              border: '2px solid #fde68a',
+              boxShadow: '0 25px 65px -12px rgba(15, 23, 42, 0.5), 0 0 0 1px rgba(245, 158, 11, 0.25)',
+              padding: '30px 26px 24px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '18px',
+              position: 'relative',
+              overflow: 'hidden'
+            }}
+          >
+            {/* Top decorative accent gradient */}
+            <div style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              height: '6px',
+              background: 'linear-gradient(90deg, #f59e0b 0%, #ea580c 50%, #dc2626 100%)'
+            }} />
+
+            {/* Central Warning Icon */}
+            <div style={{
+              width: '70px',
+              height: '70px',
+              borderRadius: '22px',
+              background: 'linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%)',
+              border: '2px solid #fde68a',
+              color: '#d97706',
+              margin: '2px auto 0',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxShadow: '0 10px 25px -4px rgba(217, 119, 6, 0.28)',
+              position: 'relative'
+            }}>
+              <AlertTriangle size={36} strokeWidth={2.3} />
+              <div style={{
+                position: 'absolute',
+                bottom: '-4px',
+                right: '-4px',
+                width: '24px',
+                height: '24px',
+                borderRadius: '50%',
+                background: '#dc2626',
+                color: '#ffffff',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                border: '2px solid #ffffff',
+                boxShadow: '0 2px 6px rgba(0,0,0,0.18)'
+              }}>
+                <AlertOctagon size={13} strokeWidth={2.8} />
+              </div>
+            </div>
+
+            {/* Title & Badge */}
+            <div style={{ textAlign: 'center' }}>
+              <div style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                fontSize: '11px',
+                fontWeight: 800,
+                textTransform: 'uppercase',
+                letterSpacing: '0.08em',
+                color: '#b45309',
+                background: '#fef3c7',
+                border: '1px solid #fde68a',
+                padding: '3px 14px',
+                borderRadius: '20px',
+                marginBottom: '10px'
+              }}>
+                <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#d97706', animation: 'pulse 1.8s infinite' }} />
+                1ª Advertência • Regra de Não Minimizar
+              </div>
+
+              <h2 style={{
+                fontSize: '20px',
+                fontWeight: 900,
+                color: '#0f172a',
+                margin: '0 0 6px',
+                letterSpacing: '-0.02em',
+                lineHeight: 1.25
+              }}>
+                Proibido Minimizar a Tela ou Mudar de Aba!
+              </h2>
+
+              <p style={{
+                fontSize: '13px',
+                color: '#64748b',
+                margin: 0,
+                lineHeight: 1.5
+              }}>
+                Detectamos que você minimizou a janela do navegador, alternou de aba ou perdeu o foco da tela da avaliação{timestamp ? ` às ${timestamp}` : ''}.
+              </p>
+            </div>
+
+            {/* High-visibility Critical Warning Box */}
+            <div style={{
+              background: 'linear-gradient(135deg, #fff1f2 0%, #ffe4e6 100%)',
+              border: '2px solid #fecdd3',
+              borderRadius: '18px',
+              padding: '16px 18px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '8px',
+              boxShadow: '0 4px 14px rgba(225, 29, 72, 0.08)',
+              textAlign: 'left'
+            }}>
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                color: '#be123c',
+                fontSize: '13px',
+                fontWeight: 900
+              }}>
+                <AlertOctagon size={16} color="#e11d48" style={{ flexShrink: 0 }} />
+                <span>ESTA É SUA PRIMEIRA E ÚNICA ADVERTÊNCIA!</span>
+              </div>
+
+              <p style={{
+                fontSize: '12.5px',
+                color: '#9f1239',
+                lineHeight: 1.5,
+                margin: 0,
+                fontWeight: 600
+              }}>
+                Na próxima vez que a tela for minimizada ou você sair da avaliação, sua <strong>prova será imediatamente cancelada e encerrada</strong>.
+              </p>
+
+              <div style={{
+                marginTop: '4px',
+                paddingTop: '8px',
+                borderTop: '1px dashed rgba(225, 29, 72, 0.35)',
+                fontSize: '12px',
+                color: '#881337',
+                lineHeight: 1.45
+              }}>
+                <strong>Critério de Cancelamento:</strong> As respostas registradas até aquele momento ({respostasPreenchidas} de {totalQuestoes} questões) serão consideradas <strong>válidas e enviadas para correção</strong>, mas todas as demais questões não respondidas serão <strong>canceladas e zeradas</strong>.
+              </div>
+            </div>
+
+            {/* Acknowledge Button */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <button
+                type="button"
+                onClick={() => {
+                  onClose()
+                  if (onReenterFullscreen) onReenterFullscreen()
+                }}
+                style={{
+                  width: '100%',
+                  height: '48px',
+                  borderRadius: '16px',
+                  background: 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)',
+                  border: 'none',
+                  color: '#ffffff',
+                  fontSize: '13.5px',
+                  fontWeight: 800,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 14px rgba(2, 132, 199, 0.35)',
+                  transition: 'all 0.15s ease'
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.transform = 'translateY(-1px)'
+                  e.currentTarget.style.boxShadow = '0 6px 18px rgba(2, 132, 199, 0.45)'
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.transform = 'translateY(0)'
+                  e.currentTarget.style.boxShadow = '0 4px 14px rgba(2, 132, 199, 0.35)'
+                }}
+              >
+                <CheckCircle2 size={18} strokeWidth={2.4} />
+                <span>Entendi as Regras, Desejo Continuar a Prova</span>
+              </button>
+
+              <p style={{
+                fontSize: '11px',
+                color: '#94a3b8',
+                textAlign: 'center',
+                margin: 0
+              }}>
+                Mantenha a janela maximizada em primeiro plano até a finalização da entrega.
+              </p>
+            </div>
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
+  )
+}
+
 export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, returnUrl }: ExamRoomProps) {
   const router = useRouter()
 
@@ -798,6 +1051,11 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
     initialTentativa?.motivoCancelamento || null
   )
 
+  // 1-Warning modal state for minimizing window (advertir_cancelar)
+  const [warningModalOpen, setWarningModalOpen] = useState(false)
+  const [warningCount, setWarningCount] = useState(0)
+  const [warningTimestamp, setWarningTimestamp] = useState('')
+
   // Submission & Exit Modals
   const [submitModalOpen, setSubmitModalOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -830,6 +1088,27 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
     (prova.codigoLiberacao && String(prova.codigoLiberacao).trim() !== '') ||
     (prova.exigeCodigoAcesso === true && (prova.codigoLiberacao === undefined || String(prova.codigoLiberacao).trim() !== ''))
   )
+
+  // Sync warning count from existing incidents if student reloads page
+  useEffect(() => {
+    if (!tentativa?.id || !started || actionOnIncident !== 'advertir_cancelar') return
+    if (typeof window !== 'undefined' && sessionStorage.getItem(`edu_warn_minimizar_${tentativa.id}`) === '1') {
+      setWarningCount(1)
+    }
+    fetch(`/api/provas-online/tentativas/${tentativa.id}/ocorrencias`)
+      .then(r => r.json())
+      .then(d => {
+        if (d.ok && Array.isArray(d.ocorrencias)) {
+          const minCount = d.ocorrencias.filter((o: any) => 
+            o.tipo === 'saida_tela' || o.tipo === 'saida_tela_cheia' || o.tipo === 'perda_foco'
+          ).length
+          if (minCount >= 1) {
+            setWarningCount(minCount)
+          }
+        }
+      })
+      .catch(() => {})
+  }, [tentativa?.id, started, actionOnIncident])
 
   // Pedagogical & Accessibility Enhancements
   const [pledgeAccepted, setPledgeAccepted] = useState(false)
@@ -1128,12 +1407,14 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
       })
       const data = await res.json()
 
-      if (data.cancelada || actionOnIncident === 'cancelar') {
+      if (data.cancelada || actionOnIncident === 'cancelar' || (actionOnIncident === 'advertir_cancelar' && warningCount >= 1 && (data.cancelada || !data.ok))) {
         const updatedAttempt: TentativaAluno = data.tentativa || {
           ...tentativa,
           status: 'entregue',
           entregueEm: new Date().toISOString(),
-          motivoCancelamento: 'Prova encerrada e cancelada por infringir a regra de não minimizar ou sair da tela da avaliação.'
+          motivoCancelamento: actionOnIncident === 'advertir_cancelar'
+            ? 'Prova cancelada por reincidência ao minimizar a tela ou sair da avaliação após advertência prévia.'
+            : 'Prova encerrada e cancelada por infringir a regra de não minimizar ou sair da tela da avaliação.'
         }
         setTentativa(updatedAttempt)
         setSubmittedVoucher(updatedAttempt.comprovanteEntrega || {
@@ -1149,11 +1430,25 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
         })
         setCancellationReason(
           updatedAttempt.motivoCancelamento ||
-          'A prova foi encerrada porque você minimizou a janela ou trocou de aba durante a avaliação.'
+          (actionOnIncident === 'advertir_cancelar'
+            ? 'A prova foi cancelada porque você minimizou a janela ou trocou de aba pela segunda vez.'
+            : 'A prova foi encerrada porque você minimizou a janela ou trocou de aba durante a avaliação.')
         )
         setCancelledModalOpen(true)
+        setWarningModalOpen(false)
         setSuspensionAlert(null)
         setStarted(false)
+        return
+      }
+
+      if (actionOnIncident === 'advertir_cancelar' && (data.advertenciaModal || warningCount === 0)) {
+        const timeStr = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+        setWarningTimestamp(timeStr)
+        setWarningCount(prev => prev + 1)
+        setWarningModalOpen(true)
+        if (typeof window !== 'undefined' && tentativa?.id) {
+          sessionStorage.setItem(`edu_warn_minimizar_${tentativa.id}`, '1')
+        }
         return
       }
 
@@ -1161,9 +1456,33 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
         setSuspensionAlert('Prova suspensa automaticamente pela supervisão da prova.')
       }
     } catch (err) {
-      // Ignore network errors in incident logging
+      if (actionOnIncident === 'advertir_cancelar' && warningCount >= 1) {
+        const nowIso = new Date().toISOString()
+        const localCancelled: TentativaAluno = {
+          ...tentativa,
+          status: 'entregue',
+          entregueEm: nowIso,
+          motivoCancelamento: 'Prova cancelada por reincidência ao minimizar a janela ou sair da avaliação.'
+        }
+        setTentativa(localCancelled)
+        setSubmittedVoucher({
+          hash: localCancelled.comprovanteCodigo || `COMP-${(localCancelled.id || '').slice(0, 16)}`,
+          provaId: prova.id,
+          alunoId: localCancelled.alunoId,
+          alunoNome: localCancelled.alunoNome,
+          matricula: localCancelled.alunoMatricula || '',
+          dataHoraEntrega: nowIso,
+          totalQuestoes: prova.questoes?.length || 0,
+          totalRespostasRegistradas: Object.keys(respostas || {}).length,
+          protocolo: `PRT-${Date.now().toString(36).toUpperCase()}`
+        })
+        setCancellationReason('A prova foi cancelada porque você minimizou a janela ou trocou de aba pela segunda vez.')
+        setCancelledModalOpen(true)
+        setWarningModalOpen(false)
+        setStarted(false)
+      }
     }
-  }, [tentativa, started, actionOnIncident, prova.id, prova.questoes?.length, respostas])
+  }, [tentativa, started, actionOnIncident, warningCount, prova.id, prova.questoes?.length, respostas])
 
   // Handler for print & screenshot blocking attempt
   const handlePrintAttempt = useCallback((triggerSource: string = 'PrintScreen / Captura') => {
@@ -1254,7 +1573,7 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
     if (!started || !tentativa || tentativa.status !== 'em_andamento') return
 
     function handleVisibilityChange() {
-      if (!monitorTabSwitch && actionOnIncident !== 'cancelar') return
+      if (!monitorTabSwitch && actionOnIncident !== 'cancelar' && actionOnIncident !== 'advertir_cancelar') return
       if (document.hidden) {
         recordIncident('saida_tela', 'Aluno saiu da aba ou minimizou a janela da prova.')
       } else {
@@ -1265,7 +1584,7 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
     }
 
     function handleWindowBlur() {
-      if (actionOnIncident === 'cancelar') {
+      if (actionOnIncident === 'cancelar' || actionOnIncident === 'advertir_cancelar') {
         setTimeout(() => {
           if (!document.hasFocus() || document.hidden) {
             recordIncident('saida_tela', 'Aluno minimizou a janela ou perdeu o foco da tela da avaliação.')
@@ -1766,7 +2085,9 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
                     Avaliação Encerrada Automaticamente
                   </h2>
                   <p style={{ fontSize: '13.5px', color: '#64748b', margin: 0, lineHeight: 1.55 }}>
-                    Você minimizou a janela do navegador, trocou de aba ou perdeu o foco da tela durante a realização da prova.
+                    {actionOnIncident === 'advertir_cancelar'
+                      ? 'Você minimizou a janela do navegador ou saiu da tela pela 2ª vez após receber a primeira advertência. Conforme a regra, a prova foi cancelada e apenas as respostas até o momento foram preservadas.'
+                      : 'Você minimizou a janela do navegador, trocou de aba ou perdeu o foco da tela durante a realização da prova.'}
                   </p>
                 </div>
 
@@ -2435,6 +2756,45 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
             </div>
           )}
 
+          {/* Warning banner when 'advertir_cancelar' action is enabled */}
+          {actionOnIncident === 'advertir_cancelar' && (
+            <div className="er-banner" style={{
+              padding: '16px 20px',
+              borderRadius: '16px',
+              background: 'linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%)',
+              border: '2px solid #fde68a',
+              boxShadow: '0 4px 14px rgba(217, 119, 6, 0.08)',
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: '14px',
+              color: '#92400e',
+              fontSize: '13px',
+              lineHeight: 1.5
+            }}>
+              <div className="er-banner-icon" style={{
+                width: '38px',
+                height: '38px',
+                borderRadius: '12px',
+                background: '#ffffff',
+                border: '1.5px solid #fde68a',
+                color: '#d97706',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+                boxShadow: '0 2px 8px rgba(217, 119, 6, 0.12)'
+              }}>
+                <AlertTriangle size={20} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <strong style={{ display: 'block', color: '#78350f', fontSize: '14px', fontWeight: 900, marginBottom: '3px' }}>
+                  Aviso Importante: Regra de Não Minimizar (Advertência em Modal e Cancelamento na Reincidência)
+                </strong>
+                Esta avaliação possui política de integridade ativa. É <strong>estritamente proibido minimizar a janela, alternar de aba ou trocar de aplicativo</strong>. Na 1ª infração, será exibido um <strong>aviso em modal no meio da tela</strong>. Caso haja <strong>outra minimização da janela</strong>, a avaliação será <strong>cancelada imediatamente</strong>, sendo válidas apenas as respostas preenchidas até aquele momento e as outras canceladas.
+              </div>
+            </div>
+          )}
+
           {/* Instructions & Guidelines Cards */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
             {/* Instruções Gerais */}
@@ -2534,6 +2894,24 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
                     <AlertOctagon size={15} color="#e11d48" style={{ flexShrink: 0, marginTop: '2px' }} />
                     <span>
                       <strong>Regra de Não Minimizar Ativa:</strong> Sair da aba ou minimizar a janela cancela e encerra a avaliação na hora, computando as respostas até o momento da infração.
+                    </span>
+                  </div>
+                )}
+                {actionOnIncident === 'advertir_cancelar' && (
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: '8px',
+                    padding: '8px 12px',
+                    borderRadius: '10px',
+                    background: '#fffbeb',
+                    border: '1px solid #fde68a',
+                    color: '#92400e',
+                    fontWeight: 600
+                  }}>
+                    <AlertTriangle size={15} color="#d97706" style={{ flexShrink: 0, marginTop: '2px' }} />
+                    <span>
+                      <strong>Regra de Não Minimizar (1 Advertência):</strong> É proibido minimizar ou sair da aba. Na 1ª saída você receberá um aviso em modal no centro da tela. Se houver outra minimização, a prova será cancelada, validando apenas as respostas até o momento da infração.
                     </span>
                   </div>
                 )}
@@ -2678,6 +3056,22 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
                 }}>
                   <AlertOctagon size={14} color="#e11d48" style={{ flexShrink: 0 }} />
                   <span>Estou ciente de que não posso minimizar a janela ou sair da tela, sob pena de encerramento imediato e cômputo apenas das respostas até onde parei.</span>
+                </div>
+              )}
+              {actionOnIncident === 'advertir_cancelar' && (
+                <div style={{
+                  marginTop: '8px',
+                  paddingTop: '8px',
+                  borderTop: '1px dashed rgba(217, 119, 6, 0.4)',
+                  fontSize: '12.5px',
+                  fontWeight: 700,
+                  color: '#b45309',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}>
+                  <AlertTriangle size={14} color="#d97706" style={{ flexShrink: 0 }} />
+                  <span>Estou ciente de que se minimizar a janela ou sair da tela, receberei uma advertência em modal; em caso de reincidência, a avaliação será cancelada até aquele momento.</span>
                 </div>
               )}
             </div>
@@ -3912,7 +4306,7 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
       )}
 
       {/* 3.1 FULLSCREEN ENFORCEMENT OVERLAY */}
-      {requiresFullscreen && started && !isFullscreen && !submittedVoucher && !suspensionAlert && !cancelledModalOpen && (
+      {requiresFullscreen && started && !isFullscreen && !submittedVoucher && !suspensionAlert && !cancelledModalOpen && !warningModalOpen && (
         <div style={{
           position: 'fixed',
           inset: 0,
@@ -4600,6 +4994,20 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
         onClose={() => setPrintBlockedModalOpen(false)}
         triggerSource={lastPrintSource}
         timestamp={lastPrintTimestamp}
+      />
+
+      {/* 5.3 MODAL DE ADVERTÊNCIA DE NÃO MINIMIZAR TELA (1º AVISO) */}
+      <MinimizarAdvertenciaModal
+        isOpen={warningModalOpen}
+        onClose={() => setWarningModalOpen(false)}
+        timestamp={warningTimestamp}
+        totalQuestoes={orderedQuestions.length}
+        respostasPreenchidas={answeredCount}
+        onReenterFullscreen={() => {
+          if (requiresFullscreen) {
+            enterFullscreen()
+          }
+        }}
       />
 
       {/* 6. POPUP FLOATING CALCULATOR */}

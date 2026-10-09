@@ -35,7 +35,7 @@ import { Toaster } from 'sonner'
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="pt-BR" suppressHydrationWarning data-scroll-behavior="smooth" style={{ backgroundColor: '#0A0F24' }}>
+    <html lang="pt-BR" data-theme="light" suppressHydrationWarning data-scroll-behavior="smooth" style={{ backgroundColor: '#0A0F24' }}>
       <head>
         {/* Preconnect para carregamento das fontes */}
         <link rel="preconnect" href="https://fonts.googleapis.com" />

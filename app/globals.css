@@ -1,6 +1,8 @@
 /* Google Fonts are loaded non-blocking via <link> tags in app/layout.tsx */
 @import "tailwindcss";
 
+@custom-variant dark (&:where([data-theme=dark]:not([data-theme=light], [data-theme=light] *), [data-theme=dark] *:not([data-theme=light], [data-theme=light] *), .dark:not([data-theme=light], [data-theme=light] *), .dark *:not([data-theme=light], [data-theme=light] *)));
+
 
 :root {
   /* Brand Colors */
@@ -64,6 +66,7 @@
 
 /* ──────────────── LIGHT MODE ──────────────── */
 [data-theme='light'] {
+  color-scheme: light;
   /* Backgrounds — clean whites/grays */
   --bg-base: 220 20% 96%;
   --bg-surface: 0 0% 100%;

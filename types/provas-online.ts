@@ -130,7 +130,7 @@ export interface ConfigMonitoramentoProva {
   registrarSaidaTela: boolean
   bloquearColar: boolean
   bloquearPrint?: boolean
-  acaoOcorrencia: 'registrar' | 'alertar' | 'suspender' | 'cancelar'
+  acaoOcorrencia: 'registrar' | 'alertar' | 'suspender' | 'cancelar' | 'advertir_cancelar'
 }
 
 export interface ConfigDivulgacaoProva {

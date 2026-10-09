@@ -1626,29 +1626,43 @@ export function ExamWizard({ initialExam, isEditing = false }: ExamWizardProps) 
                     </div>
                   </div>
 
-                  {/* 5. Ação ao detectar ocorrência */}
-                  <div className="sm:col-span-2 p-3.5 sm:p-4 rounded-xl bg-white border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
-                    <div>
-                      <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                        <AlertTriangle size={14} className="text-amber-500" /> Ação ao Detectar Infração
-                      </label>
-                      <p className="text-[11px] text-slate-500 mt-0.5">
-                        Define a consequência caso o aluno saia da tela cheia ou cometa infrações graves de segurança.
-                      </p>
+                  <div className="sm:col-span-2 p-3.5 sm:p-4 rounded-xl bg-white border border-slate-200 flex flex-col justify-between gap-3 shadow-2xs">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 w-full">
+                      <div>
+                        <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                          <AlertTriangle size={14} className="text-amber-500" /> Ação ao Detectar Infração
+                        </label>
+                        <p className="text-[11px] text-slate-500 mt-0.5">
+                          Define a consequência caso o aluno saia da tela cheia ou cometa infrações graves de segurança.
+                        </p>
+                      </div>
+                      <select
+                        value={exam.configuracaoMonitoramento.acaoOcorrencia}
+                        onChange={e => setExam(p => ({
+                          ...p,
+                          configuracaoMonitoramento: { ...p.configuracaoMonitoramento, acaoOcorrencia: e.target.value as any }
+                        }))}
+                        className="w-full sm:w-auto min-w-[280px] h-10 px-3.5 rounded-xl bg-slate-50/60 border border-slate-200 text-slate-900 text-xs font-semibold focus:outline-none focus:border-sky-500 focus:bg-white focus:ring-2 focus:ring-sky-100 cursor-pointer transition-all"
+                      >
+                        <option value="registrar">Apenas Registrar no Relatório</option>
+                        <option value="alertar">Registrar e Alertar o Aluno em Tela</option>
+                        <option value="suspender">Suspender Prova e Exigir Liberação do Professor</option>
+                        <option value="cancelar">Registrar e Cancelar Prova por Infringir Regras (Não Minimizar)</option>
+                        <option value="advertir_cancelar">Avisar em Modal (1º Aviso) e Cancelar se Reincidir (Não Minimizar)</option>
+                      </select>
                     </div>
-                    <select
-                      value={exam.configuracaoMonitoramento.acaoOcorrencia}
-                      onChange={e => setExam(p => ({
-                        ...p,
-                        configuracaoMonitoramento: { ...p.configuracaoMonitoramento, acaoOcorrencia: e.target.value as any }
-                      }))}
-                      className="w-full sm:w-auto min-w-[280px] h-10 px-3.5 rounded-xl bg-slate-50/60 border border-slate-200 text-slate-900 text-xs font-semibold focus:outline-none focus:border-sky-500 focus:bg-white focus:ring-2 focus:ring-sky-100 cursor-pointer transition-all"
-                    >
-                      <option value="registrar">Apenas Registrar no Relatório</option>
-                      <option value="alertar">Registrar e Alertar o Aluno em Tela</option>
-                      <option value="suspender">Suspender Prova e Exigir Liberação do Professor</option>
-                      <option value="cancelar">Registrar e Cancelar Prova por Infringir Regras (Não Minimizar)</option>
-                    </select>
+
+                    {exam.configuracaoMonitoramento.acaoOcorrencia === 'advertir_cancelar' && (
+                      <div className="w-full mt-1 p-3 rounded-xl bg-amber-50/90 border border-amber-200 text-amber-900 text-xs flex items-start gap-2.5">
+                        <AlertTriangle size={15} className="text-amber-600 shrink-0 mt-0.5" />
+                        <div>
+                          <p className="font-bold text-amber-900">Política de 1ª Advertência em Modal + Cancelamento por Reincidência:</p>
+                          <p className="text-[11px] text-amber-800 mt-0.5 leading-relaxed">
+                            Na 1ª vez que o aluno minimizar a tela, um modal no meio da tela alertará que a prova será cancelada na próxima ocorrência. Se houver outra minimização da janela, a prova será cancelada imediatamente, considerando válidas apenas as respostas preenchidas até aquele momento e cancelando as demais.
+                          </p>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
