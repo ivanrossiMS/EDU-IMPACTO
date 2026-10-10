@@ -188,6 +188,7 @@ export function CredImpactoSidebar({
   const userName = currentUser?.nome || currentMe?.nome || 'Colaborador'
   const userCargo = currentMe?.cargo || currentUser?.cargo || currentMe?.perfil || currentUser?.perfil || 'Colaborador'
   const userUnidade = currentMe?.unidade || currentUser?.unidade || ''
+  const showProfileButton = viewMode !== 'colaborador'
 
   return (
     <>
@@ -420,7 +421,7 @@ export function CredImpactoSidebar({
             <div 
               style={{ 
                 display: 'grid', 
-                gridTemplateColumns: 'repeat(3, 1fr)', 
+                gridTemplateColumns: showProfileButton ? 'repeat(3, 1fr)' : 'repeat(2, 1fr)', 
                 gap: 4, 
                 background: 'rgba(0, 0, 0, 0.22)',
                 padding: '3px',
@@ -429,33 +430,35 @@ export function CredImpactoSidebar({
               }}
             >
               {/* 1. Meu Perfil */}
-              <motion.button
-                whileHover={{ scale: 1.02, backgroundColor: 'rgba(168, 85, 247, 0.16)', color: '#ffffff' }}
-                whileTap={{ scale: 0.97 }}
-                onClick={() => {
-                  router.push('/meu-perfil');
-                }}
-                title="Meu Perfil"
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 5,
-                  padding: '6px 4px',
-                  borderRadius: 9,
-                  background: 'transparent',
-                  border: 'none',
-                  color: 'rgba(255, 255, 255, 0.8)',
-                  cursor: 'pointer',
-                  fontSize: 11,
-                  fontWeight: 600,
-                  letterSpacing: '0.01em',
-                  transition: 'all 0.15s ease'
-                }}
-              >
-                <UserCircle size={14} color="#a855f7" style={{ filter: 'drop-shadow(0 0 5px rgba(168, 85, 247, 0.4))', flexShrink: 0 }} />
-                <span>Perfil</span>
-              </motion.button>
+              {showProfileButton && (
+                <motion.button
+                  whileHover={{ scale: 1.02, backgroundColor: 'rgba(168, 85, 247, 0.16)', color: '#ffffff' }}
+                  whileTap={{ scale: 0.97 }}
+                  onClick={() => {
+                    router.push('/meu-perfil');
+                  }}
+                  title="Meu Perfil"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 5,
+                    padding: '6px 4px',
+                    borderRadius: 9,
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'rgba(255, 255, 255, 0.8)',
+                    cursor: 'pointer',
+                    fontSize: 11,
+                    fontWeight: 600,
+                    letterSpacing: '0.01em',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  <UserCircle size={14} color="#a855f7" style={{ filter: 'drop-shadow(0 0 5px rgba(168, 85, 247, 0.4))', flexShrink: 0 }} />
+                  <span>Perfil</span>
+                </motion.button>
+              )}
 
               {/* 2. Trocar Módulo */}
               <motion.button

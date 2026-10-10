@@ -156,8 +156,9 @@ export function ADSidebar() {
     'Administrador Master'
   ].includes(currentUser?.cargo || '')
 
+  const isCollaboratorAgenda = pathname?.startsWith('/agenda-digital/colaborador') || alunoId === 'colaborador'
   const isAdminSection = pathname?.startsWith('/agenda-digital/admin')
-  const shouldShowSwitchProfile = Boolean(isAdminUser || isAdminSection)
+  const shouldShowSwitchProfile = !isCollaboratorAgenda && Boolean(isAdminUser || isAdminSection)
 
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -779,7 +780,9 @@ export function ADSidebar() {
                           whileHover={{ scale: 1.02, backgroundColor: 'rgba(168, 85, 247, 0.16)', color: '#ffffff' }}
                           whileTap={{ scale: 0.97 }}
                           onClick={() => {
-                            if (shouldShowSwitchProfile) {
+                            if (isCollaboratorAgenda) {
+                              router.push(appendMirrorParams('/agenda-digital/colaborador/perfil'));
+                            } else if (shouldShowSwitchProfile) {
                               router.push('/agenda-digital/selecionar-perfil-admin');
                             } else {
                               router.push('/meu-perfil');
@@ -897,7 +900,9 @@ export function ADSidebar() {
                           whileHover={{ scale: 1.1, backgroundColor: 'rgba(168, 85, 247, 0.18)' }}
                           whileTap={{ scale: 0.95 }}
                           onClick={() => {
-                            if (shouldShowSwitchProfile) {
+                            if (isCollaboratorAgenda) {
+                              router.push(appendMirrorParams('/agenda-digital/colaborador/perfil'));
+                            } else if (shouldShowSwitchProfile) {
                               router.push('/agenda-digital/selecionar-perfil-admin');
                             } else {
                               router.push('/meu-perfil');

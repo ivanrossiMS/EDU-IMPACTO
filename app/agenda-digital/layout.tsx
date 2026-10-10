@@ -140,6 +140,7 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
           else if (href.includes('cobrancas')) setNavTargetLabel('Carregando cobranças...')
           else if (href.includes('relatorios')) setNavTargetLabel('Carregando relatórios...')
           else if (href.includes('ajustes')) setNavTargetLabel('Carregando configurações...')
+          else if (href.includes('perfil')) setNavTargetLabel('Carregando perfil...')
           else setNavTargetLabel('Carregando página e dados...')
         }
       }

@@ -37,6 +37,26 @@ export function SidebarProvasOnline() {
   const isStudent = currentUser?.cargo === 'Aluno' || currentUser?.perfil === 'Aluno' || Boolean(currentUser?.aluno_id && currentUser?.cargo !== 'Responsável')
   const isResponsible = (currentUser?.cargo === 'Responsável' || currentUser?.perfil === 'Família' || currentUser?.perfil === 'Responsável') && !isStudent
   const isTeacherOrStaff = !isStudent && !isResponsible
+  const isProfessor = currentUserPerfil === 'Professor' || currentUser?.cargo?.toLowerCase()?.includes('prof') || currentUser?.perfil?.toLowerCase()?.includes('prof')
+
+  const isAdmin = [
+    'Direção',
+    'Administrador',
+    'Diretor Geral',
+    'Administrador Master'
+  ].includes(currentUserPerfil || '') || [
+    'Direção',
+    'Administrador',
+    'Diretor Geral',
+    'Administrador Master'
+  ].includes(currentUser?.perfil || '') || [
+    'Direção',
+    'Administrador',
+    'Diretor Geral',
+    'Administrador Master'
+  ].includes(currentUser?.cargo || '')
+
+  const showProfileButton = isAdmin && !isProfessor && !isStudent && !isResponsible
 
   const handleLogout = async () => {
     setIsLoggingOut(true)
@@ -449,7 +469,7 @@ export function SidebarProvasOnline() {
               <div 
                 style={{ 
                   display: 'grid', 
-                  gridTemplateColumns: 'repeat(3, 1fr)', 
+                  gridTemplateColumns: showProfileButton ? 'repeat(3, 1fr)' : 'repeat(2, 1fr)', 
                   gap: 4, 
                   background: 'rgba(0, 0, 0, 0.22)',
                   padding: '3px',
@@ -458,33 +478,35 @@ export function SidebarProvasOnline() {
                 }}
               >
                 {/* 1. Meu Perfil */}
-                <motion.button
-                  whileHover={{ scale: 1.02, backgroundColor: 'rgba(168, 85, 247, 0.16)', color: '#ffffff' }}
-                  whileTap={{ scale: 0.97 }}
-                  onClick={() => {
-                    router.push('/meu-perfil');
-                  }}
-                  title="Meu Perfil"
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: 5,
-                    padding: '6px 4px',
-                    borderRadius: 9,
-                    background: 'transparent',
-                    border: 'none',
-                    color: 'rgba(255, 255, 255, 0.8)',
-                    cursor: 'pointer',
-                    fontSize: 11,
-                    fontWeight: 600,
-                    letterSpacing: '0.01em',
-                    transition: 'all 0.15s ease'
-                  }}
-                >
-                  <UserCircle size={14} color="#a855f7" style={{ filter: 'drop-shadow(0 0 5px rgba(168, 85, 247, 0.4))', flexShrink: 0 }} />
-                  <span>Perfil</span>
-                </motion.button>
+                {showProfileButton && (
+                  <motion.button
+                    whileHover={{ scale: 1.02, backgroundColor: 'rgba(168, 85, 247, 0.16)', color: '#ffffff' }}
+                    whileTap={{ scale: 0.97 }}
+                    onClick={() => {
+                      router.push('/meu-perfil');
+                    }}
+                    title="Meu Perfil"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 5,
+                      padding: '6px 4px',
+                      borderRadius: 9,
+                      background: 'transparent',
+                      border: 'none',
+                      color: 'rgba(255, 255, 255, 0.8)',
+                      cursor: 'pointer',
+                      fontSize: 11,
+                      fontWeight: 600,
+                      letterSpacing: '0.01em',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    <UserCircle size={14} color="#a855f7" style={{ filter: 'drop-shadow(0 0 5px rgba(168, 85, 247, 0.4))', flexShrink: 0 }} />
+                    <span>Perfil</span>
+                  </motion.button>
+                )}
 
                 {/* 2. Trocar Módulo */}
                 <motion.button
@@ -553,26 +575,28 @@ export function SidebarProvasOnline() {
                   width: '100%' 
                 }}
               >
-                <motion.button
-                  whileHover={{ scale: 1.1, backgroundColor: 'rgba(168, 85, 247, 0.18)' }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={() => router.push('/meu-perfil')}
-                  title="Meu Perfil"
-                  style={{
-                    width: 30,
-                    height: 30,
-                    borderRadius: 8,
-                    background: 'transparent',
-                    border: 'none',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    cursor: 'pointer',
-                    color: '#a855f7'
-                  }}
-                >
-                  <UserCircle size={15} />
-                </motion.button>
+                {showProfileButton && (
+                  <motion.button
+                    whileHover={{ scale: 1.1, backgroundColor: 'rgba(168, 85, 247, 0.18)' }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => router.push('/meu-perfil')}
+                    title="Meu Perfil"
+                    style={{
+                      width: 30,
+                      height: 30,
+                      borderRadius: 8,
+                      background: 'transparent',
+                      border: 'none',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: 'pointer',
+                      color: '#a855f7'
+                    }}
+                  >
+                    <UserCircle size={15} />
+                  </motion.button>
+                )}
                 <motion.button
                   whileHover={{ scale: 1.1, backgroundColor: 'rgba(6, 182, 212, 0.18)' }}
                   whileTap={{ scale: 0.95 }}

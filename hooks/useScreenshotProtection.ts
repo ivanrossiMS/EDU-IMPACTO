@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { Capacitor } from '@capacitor/core'
 import { PrivacyScreen } from '@capacitor-community/privacy-screen'
 
 interface UseScreenshotProtectionOptions {
@@ -32,7 +33,7 @@ export function useScreenshotProtection(options: UseScreenshotProtectionOptions 
   // Gerenciamento do PrivacyScreen no Capacitor (iOS & Android)
   useEffect(() => {
     if (!enabled || !autoEnablePrivacyScreen) {
-      if (typeof window !== 'undefined' && (window as any).Capacitor?.isNativePlatform?.()) {
+      if (typeof window !== 'undefined' && Capacitor.isNativePlatform()) {
         PrivacyScreen.disable().catch(() => {})
       }
       return
@@ -40,7 +41,7 @@ export function useScreenshotProtection(options: UseScreenshotProtectionOptions 
 
     let isScreenProtected = false
     const enablePrivacy = async () => {
-      if (typeof window !== 'undefined' && (window as any).Capacitor?.isNativePlatform?.()) {
+      if (typeof window !== 'undefined' && Capacitor.isNativePlatform()) {
         try {
           await PrivacyScreen.enable()
           isScreenProtected = true
@@ -53,7 +54,7 @@ export function useScreenshotProtection(options: UseScreenshotProtectionOptions 
     enablePrivacy()
 
     return () => {
-      if (isScreenProtected) {
+      if (isScreenProtected && Capacitor.isNativePlatform()) {
         PrivacyScreen.disable().catch(err => {
           console.warn('[useScreenshotProtection] Falha ao desabilitar PrivacyScreen:', err)
         })
@@ -69,7 +70,7 @@ export function useScreenshotProtection(options: UseScreenshotProtectionOptions 
     let recordingListenerHandle: { remove: () => void } | null = null
 
     const setupNativeListeners = async () => {
-      if ((window as any).Capacitor?.isNativePlatform?.()) {
+      if (Capacitor.isNativePlatform()) {
         try {
           // iOS: notificação de screenshot tirado
           pluginListenerHandle = await PrivacyScreen.addListener('screenshotTaken', () => {

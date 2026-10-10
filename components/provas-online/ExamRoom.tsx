@@ -1,8 +1,11 @@
 'use client'
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
+import { Capacitor } from '@capacitor/core'
+import { PrivacyScreen } from '@capacitor-community/privacy-screen'
 import {
   Clock, Shield, AlertTriangle, CheckCircle2, Bookmark,
   ChevronLeft, ChevronRight, Send, Wifi, WifiOff, RefreshCw,
@@ -129,7 +132,16 @@ const ExamRoomStyles = () => (
     /* Responsive Global Rules for ExamRoom */
     @media (max-width: 640px) {
       .er-briefing-wrap {
-        padding: 12px 10px 48px !important;
+        padding-top: max(calc(env(safe-area-inset-top, 0px) + 16px), 38px) !important;
+        padding-bottom: 48px !important;
+        padding-left: max(10px, env(safe-area-inset-left, 0px)) !important;
+        padding-right: max(10px, env(safe-area-inset-right, 0px)) !important;
+      }
+      .er-voucher-wrap {
+        padding-top: max(calc(env(safe-area-inset-top, 0px) + 16px), 38px) !important;
+        padding-bottom: 48px !important;
+        padding-left: max(12px, env(safe-area-inset-left, 0px)) !important;
+        padding-right: max(12px, env(safe-area-inset-right, 0px)) !important;
       }
       .er-briefing-card {
         padding: 16px 14px !important;
@@ -238,10 +250,13 @@ const ExamRoomStyles = () => (
 
       /* Active Exam Room Topbar */
       .er-topbar {
-        padding: 8px 10px !important;
+        padding-top: max(calc(env(safe-area-inset-top, 0px) + 12px), 38px) !important;
+        padding-bottom: 10px !important;
+        padding-left: max(10px, env(safe-area-inset-left, 0px)) !important;
+        padding-right: max(10px, env(safe-area-inset-right, 0px)) !important;
       }
       .er-topbar-inner {
-        gap: 8px !important;
+        gap: 6px !important;
       }
       .er-topbar-logo {
         width: 32px !important;
@@ -418,6 +433,12 @@ interface PrintBlockedModalProps {
 }
 
 function PrintBlockedModal({ isOpen, onClose, triggerSource, timestamp }: PrintBlockedModalProps) {
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
   useEffect(() => {
     if (!isOpen) return
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -429,21 +450,23 @@ function PrintBlockedModal({ isOpen, onClose, triggerSource, timestamp }: PrintB
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [isOpen, onClose])
 
-  return (
+  if (!mounted || typeof document === 'undefined') return null
+
+  return createPortal(
     <AnimatePresence>
       {isOpen && (
         <div
           style={{
             position: 'fixed',
             inset: 0,
-            zIndex: 10005,
+            zIndex: 9999999,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            padding: '16px',
-            background: 'rgba(15, 23, 42, 0.78)',
-            backdropFilter: 'blur(14px)',
-            WebkitBackdropFilter: 'blur(14px)'
+            padding: 'max(20px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(20px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px))',
+            background: 'rgba(15, 23, 42, 0.85)',
+            backdropFilter: 'blur(16px)',
+            WebkitBackdropFilter: 'blur(16px)'
           }}
           onClick={onClose}
         >
@@ -703,7 +726,8 @@ function PrintBlockedModal({ isOpen, onClose, triggerSource, timestamp }: PrintB
           </motion.div>
         </div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
   )
 }
 
@@ -1079,11 +1103,21 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
   const isSingleQuestionPage = prova.configuracaoLayout?.questaoPorPagina !== false
   const isFreeNavigation = prova.configuracaoLayout?.navegacaoLivre !== false
   const allowReturn = prova.configuracaoLayout?.permitirVoltar !== false && !prova.bloquearRetorno
-  const requiresFullscreen = Boolean(prova.configuracaoMonitoramento?.solicitarTelaCheia || prova.exigirTelaCheia)
-  const monitorTabSwitch = prova.configuracaoMonitoramento?.registrarSaidaTela !== false
-  const blockCopyPaste = Boolean(prova.configuracaoMonitoramento?.bloquearColar || prova.bloquearColar)
-  const blockPrint = prova.configuracaoMonitoramento?.bloquearPrint !== false && (prova as any).bloquearPrint !== false
-  const actionOnIncident = prova.configuracaoMonitoramento?.acaoOcorrencia || 'alertar'
+  const configMon = useMemo(() => {
+    let raw = prova.configuracaoMonitoramento || (prova as any).configuracao_monitoramento
+    if (typeof raw === 'string') {
+      try {
+        raw = JSON.parse(raw)
+      } catch {}
+    }
+    return raw || {}
+  }, [prova])
+
+  const requiresFullscreen = Boolean(configMon.solicitarTelaCheia || prova.exigirTelaCheia)
+  const monitorTabSwitch = configMon.registrarSaidaTela !== false
+  const blockCopyPaste = Boolean(configMon.bloquearColar !== false && (prova as any).bloquearColar !== false)
+  const blockPrint = configMon.bloquearPrint !== false && (prova as any).bloquearPrint !== false
+  const actionOnIncident = configMon.acaoOcorrencia || 'alertar'
   const hasPinRequirement = Boolean(
     (prova.codigoLiberacao && String(prova.codigoLiberacao).trim() !== '') ||
     (prova.exigeCodigoAcesso === true && (prova.codigoLiberacao === undefined || String(prova.codigoLiberacao).trim() !== ''))
@@ -1491,6 +1525,11 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
     if (now - lastPrintTriggerRef.current < 1200) return
     lastPrintTriggerRef.current = now
 
+    // Haptic feedback for mobile devices
+    if (typeof window !== 'undefined' && 'vibrate' in navigator) {
+      try { navigator.vibrate([50, 70, 50]) } catch {}
+    }
+
     // Wipe clipboard to prevent pasting captured image
     if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText('Conteúdo protegido contra captura de tela. - EDU IMPACTO').catch(() => {})
@@ -1501,15 +1540,52 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
     setLastPrintTimestamp(timeStr)
     setPrintBlockedModalOpen(true)
 
-    if (tentativa?.id) {
+    const activeTentativaId = tentativa?.id || initialTentativa?.id
+    if (activeTentativaId) {
       recordIncident('captura_tela', `Tentativa de captura de tela/print bloqueada. [Gatilho: ${triggerSource}]`)
     }
-  }, [blockPrint, tentativa?.id, recordIncident])
+  }, [blockPrint, tentativa?.id, initialTentativa?.id, recordIncident])
 
-  // Setup Dedicated Screenshot & Print Blocking Listeners
+  // Setup Dedicated Screenshot & Print Blocking Listeners (Capacitor Native + Web)
   useEffect(() => {
     if (!blockPrint) return
 
+    let pluginListenerHandle: { remove: () => void } | null = null
+    let recordingListenerHandle: { remove: () => void } | null = null
+    let isPrivacyScreenActive = false
+
+    // 1. Native Capacitor (iOS & Android) integration
+    const setupNativeProtection = async () => {
+      if (typeof window !== 'undefined' && Capacitor.isNativePlatform()) {
+        try {
+          await PrivacyScreen.enable()
+          isPrivacyScreenActive = true
+        } catch (err) {
+          console.warn('[ExamRoom] Falha ao habilitar PrivacyScreen nativo:', err)
+        }
+
+        try {
+          pluginListenerHandle = await PrivacyScreen.addListener('screenshotTaken', () => {
+            handlePrintAttempt('Captura Mobile (iOS/Android)')
+          })
+          recordingListenerHandle = await PrivacyScreen.addListener('screenRecordingStarted', () => {
+            handlePrintAttempt('Gravação de Tela Mobile')
+          })
+        } catch (err) {
+          console.warn('[ExamRoom] Erro ao registrar listeners nativos de captura:', err)
+        }
+      }
+    }
+
+    setupNativeProtection()
+
+    // 2. Android custom event from native MainActivity (Android 14+ ScreenCaptureCallback)
+    const handleAndroidScreenshot = () => {
+      handlePrintAttempt('Captura Mobile (Android)')
+    }
+    window.addEventListener('impacto:screenshot-attempt', handleAndroidScreenshot)
+
+    // 3. Desktop Shortcuts & Web Listeners
     function handleKeyDown(e: KeyboardEvent) {
       // 1. PrintScreen key
       if (e.key === 'PrintScreen' || e.code === 'PrintScreen' || e.key === 'Snapshot') {
@@ -1561,10 +1637,50 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
     window.addEventListener('keyup', handleKeyUp, true)
     window.addEventListener('beforeprint', handleBeforePrint)
 
+    // Media query print detection
+    const mediaQueryList = window.matchMedia?.('print')
+    const handleMediaPrint = (mql: MediaQueryListEvent) => {
+      if (mql.matches) {
+        handlePrintAttempt('Modo Impressão do Sistema')
+      }
+    }
+    if (mediaQueryList?.addEventListener) {
+      mediaQueryList.addEventListener('change', handleMediaPrint)
+    }
+
+    // Context menu & drag blocking
+    const handleContextMenu = (e: MouseEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
+    }
+    const handleDragStart = (e: DragEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
+    }
+    window.addEventListener('contextmenu', handleContextMenu, true)
+    window.addEventListener('dragstart', handleDragStart, true)
+
     return () => {
+      if (isPrivacyScreenActive && Capacitor.isNativePlatform()) {
+        PrivacyScreen.disable().catch(err => {
+          console.warn('[ExamRoom] Falha ao desabilitar PrivacyScreen nativo:', err)
+        })
+      }
+      if (pluginListenerHandle) {
+        pluginListenerHandle.remove()
+      }
+      if (recordingListenerHandle) {
+        recordingListenerHandle.remove()
+      }
+      window.removeEventListener('impacto:screenshot-attempt', handleAndroidScreenshot)
       window.removeEventListener('keydown', handleKeyDown, true)
       window.removeEventListener('keyup', handleKeyUp, true)
       window.removeEventListener('beforeprint', handleBeforePrint)
+      if (mediaQueryList?.removeEventListener) {
+        mediaQueryList.removeEventListener('change', handleMediaPrint)
+      }
+      window.removeEventListener('contextmenu', handleContextMenu, true)
+      window.removeEventListener('dragstart', handleDragStart, true)
     }
   }, [blockPrint, handlePrintAttempt])
 
@@ -2409,6 +2525,13 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
             </button>
           </div>
         </motion.div>
+        {/* Modal Ultra Moderno de Bloqueio de Print Screen */}
+        <PrintBlockedModal
+          isOpen={printBlockedModalOpen}
+          onClose={() => setPrintBlockedModalOpen(false)}
+          triggerSource={lastPrintSource}
+          timestamp={lastPrintTimestamp}
+        />
       </div>
     )
   }
@@ -3729,8 +3852,11 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
         backdropFilter: 'blur(20px)',
         WebkitBackdropFilter: 'blur(20px)',
         borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
-        padding: '12px 20px',
-        boxShadow: '0 4px 24px -2px rgba(0, 0, 0, 0.4), inset 0 1px 0 0 rgba(255, 255, 255, 0.1)'
+        boxShadow: '0 4px 24px -2px rgba(0, 0, 0, 0.4), inset 0 1px 0 0 rgba(255, 255, 255, 0.1)',
+        paddingTop: 'max(calc(env(safe-area-inset-top, 0px) + 12px), 14px)',
+        paddingBottom: '12px',
+        paddingLeft: 'max(20px, env(safe-area-inset-left, 0px))',
+        paddingRight: 'max(20px, env(safe-area-inset-right, 0px))',
       }}>
         {/* Linha decorativa de brilho ultra moderna na borda inferior */}
         <div style={{
