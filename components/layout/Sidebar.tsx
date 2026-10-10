@@ -393,6 +393,7 @@ export function Sidebar() {
       )}
 
       <motion.aside
+        className="sidebar-aside"
         initial={false}
         animate={{ 
           width: isMobile ? 285 : (collapsed ? 90 : 285),
@@ -422,12 +423,8 @@ export function Sidebar() {
         <div style={{ padding: '40px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           {!effectiveCollapsed && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-              <div style={{ position: 'relative', width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                 <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(135deg, #FF0080, #7928CA)', borderRadius: 12, opacity: 0.2, filter: 'blur(8px)' }} />
-                 <svg width="36" height="36" viewBox="0 0 40 40" fill="none">
-                    <path d="M8 32L16 8L24 32" stroke="#FF0080" strokeWidth="4" strokeLinecap="round" style={{ filter: 'drop-shadow(0 0 5px #FF0080)' }} />
-                    <path d="M22 32L30 8L38 32" stroke="#00D2FF" strokeWidth="4" strokeLinecap="round" style={{ filter: 'drop-shadow(0 0 5px #00D2FF)' }} />
-                 </svg>
+              <div style={{ position: 'relative', width: 44, height: 44, borderRadius: 12, overflow: 'hidden', border: '1px solid rgba(255,255,255,0.2)', boxShadow: '0 4px 12px rgba(0,0,0,0.3)', flexShrink: 0 }}>
+                <img src="/app-icon.png" alt="Colégio Impacto" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
               </div>
               <div>
                 <div style={{ fontSize: 10, fontWeight: 800, color: 'rgba(255,255,255,0.4)', letterSpacing: '0.15em', textTransform: 'uppercase' }}>Colégio</div>

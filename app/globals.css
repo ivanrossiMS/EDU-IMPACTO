@@ -924,6 +924,49 @@ select option {
   overflow-y: auto;
 }
 
+/* --- Desktop Top Navigation & Full-Width Layout (>= 1280px) --- */
+.desktop-top-nav {
+  display: none;
+}
+
+@media (min-width: 1280px) {
+  .desktop-top-nav {
+    display: block !important;
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 50 !important;
+    width: 100% !important;
+  }
+
+  .sidebar.sidebar-aside,
+  .sidebar-aside {
+    display: none !important;
+  }
+
+  .app-wrapper {
+    flex-direction: column !important;
+    width: 100% !important;
+  }
+
+  .main-content {
+    margin-left: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  .main-content.sidebar-collapsed {
+    margin-left: 0 !important;
+    width: 100% !important;
+  }
+
+  .page-content {
+    padding: 28px 36px 48px;
+    width: 100%;
+    max-width: 1920px;
+    margin: 0 auto;
+  }
+}
+
 /* --- Sidebar Nav Items --- */
 .nav-item {
   display: flex;

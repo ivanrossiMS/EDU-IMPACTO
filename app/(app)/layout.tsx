@@ -2,6 +2,7 @@
 import { performLogout } from "@/lib/auth/logout";
 
 import { Sidebar } from '@/components/layout/Sidebar'
+import { DesktopTopNav } from '@/components/layout/DesktopTopNav'
 import { RouteGuard } from '@/components/layout/RouteGuard'
 import { useApp } from '@/lib/context'
 import { DataProvider } from '@/lib/dataContext'
@@ -241,7 +242,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <div className="app-wrapper" style={{ pointerEvents: 'none', userSelect: 'none' }} suppressHydrationWarning>
         {/* Sidebar fantasma com shimmer */}
         <div
-          className="sidebar"
+          className="sidebar sidebar-aside"
           style={{
             background: 'hsl(var(--bg-sidebar, 220 25% 9%))',
             display: 'flex',
@@ -387,6 +388,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <DialogProvider>
         <WebVitalsReporter />
         <div className="app-wrapper" suppressHydrationWarning>
+          {!hideGlobalSidebar && <DesktopTopNav />}
           {!hideGlobalSidebar && <Sidebar />}
           <div className={`main-content ${!hideGlobalSidebar && sidebarCollapsed && !isMobile ? 'sidebar-collapsed' : ''} ${hideGlobalSidebar ? 'agenda-digital-no-sidebar' : ''}`} suppressHydrationWarning>
             {isMobile && !hideGlobalSidebar && (

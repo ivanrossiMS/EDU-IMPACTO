@@ -22,7 +22,17 @@ import { supabase } from '@/lib/supabase'
 import { format, isAfter, subDays, isSameDay } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 
-export function NotificationPopover() {
+export function NotificationPopover({
+  side = 'top',
+  align = 'start',
+  sideOffset = 12,
+  alignOffset = -10
+}: {
+  side?: 'top' | 'bottom'
+  align?: 'start' | 'end' | 'center'
+  sideOffset?: number
+  alignOffset?: number
+} = {}) {
   const [open, setOpen] = useState(false)
   const [markedRead, setMarkedRead] = useState<string[]>([])
   const [activeTab, setActiveTab] = useState<'all' | 'tarefas' | 'agenda' | 'ocorrencias' | 'comunicado' | 'autorizacao'>('all')
@@ -380,12 +390,12 @@ export function NotificationPopover() {
       <AnimatePresence>
         {open && (
           <Popover.Portal forceMount>
-            <Popover.Content asChild side="top" align="start" sideOffset={12} alignOffset={-10}>
+            <Popover.Content asChild side={side} align={align} sideOffset={sideOffset} alignOffset={alignOffset}>
               <motion.div
                 className="notification-popover-content"
-                initial={{ opacity: 0, y: 100, scale: 0.95 }}
+                initial={{ opacity: 0, y: side === 'top' ? 100 : -20, scale: 0.95 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: 100, scale: 0.95 }}
+                exit={{ opacity: 0, y: side === 'top' ? 100 : -20, scale: 0.95 }}
                 transition={{ type: 'spring', damping: 25, stiffness: 300 }}
                 style={{
                   width: 'min(410px, calc(100vw - 20px))',
@@ -401,7 +411,7 @@ export function NotificationPopover() {
                   overflow: 'hidden',
                   zIndex: 9999,
                   color: '#ffffff',
-                  transformOrigin: 'bottom center'
+                  transformOrigin: side === 'top' ? 'bottom center' : 'top right'
                 }}
               >
                 {/* Header */}

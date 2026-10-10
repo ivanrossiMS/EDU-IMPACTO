@@ -236,6 +236,38 @@ export default function DashboardPage() {
   return (
     <div className="dashboard-container">
 
+      {/* ═══ Header da Visão Geral (Referência) ════════════════════════════ */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+        <div>
+          <h1 className="text-2xl 2xl:text-3xl font-extrabold text-[hsl(var(--text-primary))] tracking-tight">
+            Visão geral
+          </h1>
+          <p className="text-sm text-[hsl(var(--text-secondary))] mt-0.5 font-normal">
+            Acompanhe os indicadores e a rotina do colégio.
+          </p>
+        </div>
+
+        {/* Atalhos Rápidos Compactos: Minhas Tarefas e Calendário */}
+        <div className="flex items-center gap-3">
+          <Link
+            href="/tarefas"
+            className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-semibold rounded-lg bg-[hsl(var(--bg-surface))] text-[hsl(var(--text-primary))] border border-[hsl(var(--border-subtle))] hover:bg-[hsl(var(--bg-hover))] shadow-sm transition-all hover:scale-[1.02] active:scale-[0.98]"
+            title="Acessar Minhas Tarefas"
+          >
+            <ClipboardCheck size={15} className="text-emerald-500" />
+            <span>Minhas tarefas</span>
+          </Link>
+          <Link
+            href="/calendario"
+            className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-semibold rounded-lg bg-[hsl(var(--bg-surface))] text-[hsl(var(--text-primary))] border border-[hsl(var(--border-subtle))] hover:bg-[hsl(var(--bg-hover))] shadow-sm transition-all hover:scale-[1.02] active:scale-[0.98]"
+            title="Acessar Calendário Escolar"
+          >
+            <CalendarIcon size={15} className="text-indigo-500" />
+            <span>Calendário</span>
+          </Link>
+        </div>
+      </div>
+
       {/* ═══ Top Row (4 KPIs) ══════════════════════════════════════════════ */}
       <div className="dashboard-kpi-grid">
         {kpiCards.map((kpi) => (
