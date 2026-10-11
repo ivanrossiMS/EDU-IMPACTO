@@ -9,7 +9,7 @@ import {
   Loader2, Lock, AlertTriangle, CheckCircle2, Info,
   ChevronUp, ChevronDown, ArrowUpDown, FileText, Sun, Moon, ShieldCheck,
   Lightbulb, CloudSun, CircleDot, Clock, CheckCircle, GraduationCap,
-  UserCheck, UserX
+  UserCheck, UserX, Copy
 } from 'lucide-react'
 import { useData } from '@/lib/dataContext'
 import ImportarAlunosModal from '@/components/alunos/ImportarAlunosModal'
@@ -18,6 +18,7 @@ import { useApiQuery } from '@/hooks/useApi'
 import { useQueryClient } from '@tanstack/react-query'
 import * as XLSX from 'xlsx'
 import { formatPhone, isValidStudentPhoto } from '@/lib/utils'
+import { isAlunoIntegralIntermediario } from '@/lib/studentTurmaUtils'
 
 function cleanName(str: any): string {
   if (!str) return ''
@@ -102,7 +103,7 @@ export interface ObservacaoItem {
 }
 
 export default function AlunosPage() {
-  const { cfgNiveisEnsino, cfgCalendarioLetivo, logSystemAction } = useData()
+  const { cfgNiveisEnsino, cfgCalendarioLetivo, cfgPadroesPagamento, logSystemAction } = useData()
   const queryClient = useQueryClient()
   
   const [busca, setBusca] = useState('')
@@ -174,6 +175,20 @@ export default function AlunosPage() {
     frequencia: false,
     obs: false,
     dataCadastro: true,
+    cpf: true,
+    rga: true,
+    sexo: true,
+    corRaca: true,
+    nacionalidade: false,
+    naturalidade: false,
+    cep: false,
+    endereco: false,
+    bairro: false,
+    cidade: false,
+    uf: false,
+    idCenso: false,
+    necessidadesEspeciais: false,
+    necessidadesEspeciaisDesc: false,
     
     // Turma
     historicoTurmas: false,
@@ -426,9 +441,7 @@ export default function AlunosPage() {
       if (exportFields.isIntegralIntermediario) {
         headers.push('INTEGRAL/INTERMEDIÁRIO')
         rowMapper.push(item => {
-          const hList = item.historicoTurmas || item.dados?.historicoTurmas || [];
-          const activeHist = hList.length > 0 ? hList[hList.length - 1] : null;
-          const isIntegralInt = activeHist?.isIntegralIntermediario || activeHist?.modalidade === 'INTEGRAL/INTERMEDIÁRIO' || item.isIntegralIntermediario || item.dados?.isIntegralIntermediario || (item.turma_nome && String(item.turma_nome).includes('INTEGRAL/INTERMEDIÁRIO'));
+          const isIntegralInt = isAlunoIntegralIntermediario(item, todasTurmas);
           return isIntegralInt ? 'SIM' : 'NÃO';
         })
       }
@@ -504,6 +517,74 @@ export default function AlunosPage() {
       if (exportFields.dataCadastro) {
         headers.push('Data de Cadastro')
         rowMapper.push(item => formatDateStr(item.created_at))
+      }
+      if (exportFields.cpf) {
+        headers.push('CPF')
+        rowMapper.push(item => item.cpf || item.dados?.cpf || '')
+      }
+      if (exportFields.rga) {
+        headers.push('RGA')
+        rowMapper.push(item => item.rga || item.dados?.rga || '')
+      }
+      if (exportFields.sexo) {
+        headers.push('Sexo')
+        rowMapper.push(item => item.sexo || item.dados?.sexo || '')
+      }
+      if (exportFields.corRaca) {
+        headers.push('Cor/Raça')
+        rowMapper.push(item => item.corRaca || item.cor_raca || item.dados?.corRaca || item.dados?.cor_raca || '')
+      }
+      if (exportFields.nacionalidade) {
+        headers.push('Nacionalidade')
+        rowMapper.push(item => item.nacionalidade || item.dados?.nacionalidade || '')
+      }
+      if (exportFields.naturalidade) {
+        headers.push('Naturalidade')
+        rowMapper.push(item => {
+          const nat = item.naturalidade || item.dados?.naturalidade || ''
+          const uf = item.naturalidadeUf || item.dados?.naturalidadeUf || item.dados?.naturalidade_uf || ''
+          return uf ? `${nat} - ${uf}` : nat
+        })
+      }
+      if (exportFields.cep) {
+        headers.push('CEP')
+        rowMapper.push(item => item.cep || item.dados?.cep || item.endereco?.cep || item.dados?.endereco?.cep || '')
+      }
+      if (exportFields.endereco) {
+        headers.push('Endereço')
+        rowMapper.push(item => {
+          const end = item.endereco || item.dados?.endereco || item.logradouro || item.dados?.logradouro || ''
+          const num = item.numero || item.dados?.numero || ''
+          const comp = item.complemento || item.dados?.complemento || ''
+          let full = end
+          if (num) full += `, ${num}`
+          if (comp) full += ` (${comp})`
+          return full
+        })
+      }
+      if (exportFields.bairro) {
+        headers.push('Bairro')
+        rowMapper.push(item => item.bairro || item.dados?.bairro || item.dados?.endereco?.bairro || '')
+      }
+      if (exportFields.cidade) {
+        headers.push('Cidade')
+        rowMapper.push(item => item.cidade || item.dados?.cidade || item.dados?.endereco?.cidade || '')
+      }
+      if (exportFields.uf) {
+        headers.push('UF')
+        rowMapper.push(item => item.uf || item.dados?.uf || item.estado || item.dados?.estado || item.dados?.endereco?.uf || '')
+      }
+      if (exportFields.idCenso) {
+        headers.push('ID CENSO')
+        rowMapper.push(item => item.idCenso || item.id_censo || item.dados?.idCenso || item.dados?.id_censo || item.dados?.censo || '')
+      }
+      if (exportFields.necessidadesEspeciais) {
+        headers.push('Necessidades Especiais')
+        rowMapper.push(item => item.necessidadesEspeciais || item.dados?.necessidadesEspeciais || (item.dados?.necessidades_especiais ? 'Sim' : 'Não') || 'Não')
+      }
+      if (exportFields.necessidadesEspeciaisDesc) {
+        headers.push('Detalhes Necessidades Especiais')
+        rowMapper.push(item => item.necessidadesEspeciaisDesc || item.dados?.necessidadesEspeciaisDesc || item.dados?.necessidades_especiais_desc || item.dados?.necessidades_especiais || '')
       }
       
       // --- TURMA ---
@@ -829,10 +910,53 @@ export default function AlunosPage() {
   const [validationErrors, setValidationErrors] = useState<any[]>([])
   const [isValidationModalOpen, setIsValidationModalOpen] = useState(false)
   const [respToDelete, setRespToDelete] = useState<{ index: number; nome: string } | null>(null)
+  const [editingMatriculaIndex, setEditingMatriculaIndex] = useState<number | null>(null)
+  const [matriculaModalData, setMatriculaModalData] = useState<any>(null)
   const hasError = (fieldId: string) => validationErrors.some(e => e.field === fieldId)
 
+  // Estilo dinâmico para campos obrigatórios: borda amarela enquanto vazio, verde após preencher, vermelho em erro
+  const getMandatoryFieldStyle = (
+    value: any,
+    fieldKey: string
+  ): React.CSSProperties => {
+    const isFilled = Boolean(value !== undefined && value !== null && String(value).trim().length > 0);
+    const isError = hasError(fieldKey);
+
+    if (isError) {
+      return {
+        borderColor: '#ef4444',
+        borderWidth: '2px',
+        borderStyle: 'solid',
+        boxShadow: '0 0 0 2px rgba(239, 68, 68, 0.25)',
+        background: '#fff5f5',
+        transition: 'all 0.2s ease-in-out'
+      };
+    }
+
+    if (isFilled) {
+      return {
+        borderColor: '#10b981', // Verde bem visível após preenchimento
+        borderWidth: '2px',
+        borderStyle: 'solid',
+        boxShadow: '0 0 0 2px rgba(16, 185, 129, 0.25)',
+        background: 'rgba(236, 253, 245, 0.6)',
+        transition: 'all 0.2s ease-in-out'
+      };
+    }
+
+    // Pendente / vazio: Borda amarela bem visível
+    return {
+      borderColor: '#eab308', // Amarelo bem visível quando pendente
+      borderWidth: '2px',
+      borderStyle: 'solid',
+      boxShadow: '0 0 0 2px rgba(234, 179, 8, 0.3)',
+      background: 'rgba(254, 252, 232, 0.65)',
+      transition: 'all 0.2s ease-in-out'
+    };
+  };
+
   // Trava a rolagem da página de fundo (body scroll lock) quando qualquer modal está aberto
-  const isAnyModalOpen = isModalOpen || isImportModalOpen || isHelpModalOpen || isFiltrosAvancadosModalOpen || isExportModalOpen || isValidationModalOpen || !!respToDelete
+  const isAnyModalOpen = isModalOpen || isImportModalOpen || isHelpModalOpen || isFiltrosAvancadosModalOpen || isExportModalOpen || isValidationModalOpen || !!respToDelete || editingMatriculaIndex !== null
 
   useEffect(() => {
     if (isAnyModalOpen) {
@@ -912,35 +1036,436 @@ export default function AlunosPage() {
     fetchTodasTurmas()
   }, [])
 
+  // Helpers para novos campos
+  const ESTADOS_BRASIL = [
+    'AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA',
+    'MT', 'MS', 'MG', 'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN',
+    'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO'
+  ]
+
+  const formatCpfMask = (val: string): string => {
+    const digits = val.replace(/\D/g, '').slice(0, 11)
+    if (digits.length <= 3) return digits
+    if (digits.length <= 6) return `${digits.slice(0, 3)}.${digits.slice(3)}`
+    if (digits.length <= 9) return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6)}`
+    return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9, 11)}`
+  }
+
+  const formatCepMask = (val: string): string => {
+    const digits = val.replace(/\D/g, '').slice(0, 8)
+    if (digits.length <= 5) return digits
+    return `${digits.slice(0, 5)}-${digits.slice(5, 8)}`
+  }
+
+  const [loadingCep, setLoadingCep] = useState(false)
+  const [cepFeedback, setCepFeedback] = useState<{ type: 'success' | 'error', message: string } | null>(null)
+
+  const buscarCepAluno = async (rawCep: string) => {
+    const digits = rawCep.replace(/\D/g, '')
+    if (digits.length !== 8) return
+
+    setLoadingCep(true)
+    setCepFeedback(null)
+    try {
+      const res = await fetch(`https://viacep.com.br/ws/${digits}/json/`)
+      if (!res.ok) throw new Error('Falha na requisição')
+      const data = await res.json()
+      if (data.erro) {
+        setCepFeedback({ type: 'error', message: 'CEP não encontrado' })
+      } else {
+        setFormData(prev => ({
+          ...prev,
+          aluno: {
+            ...prev.aluno,
+            endereco: data.logradouro || prev.aluno.endereco || '',
+            bairro: data.bairro || prev.aluno.bairro || '',
+            cidade: data.localidade || prev.aluno.cidade || '',
+            uf: data.uf || prev.aluno.uf || '',
+            complemento: data.complemento && !prev.aluno.complemento ? data.complemento : prev.aluno.complemento
+          }
+        }))
+        setCepFeedback({ type: 'success', message: `${data.localidade} - ${data.uf}` })
+      }
+    } catch {
+      setCepFeedback({ type: 'error', message: 'Erro ao consultar CEP' })
+    } finally {
+      setLoadingCep(false)
+    }
+  }
+
+  const handleCepChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const formatted = formatCepMask(e.target.value)
+    handleInputChange('aluno', 'cep', formatted)
+    const digits = formatted.replace(/\D/g, '')
+    if (digits.length === 8) {
+      buscarCepAluno(digits)
+    } else {
+      setCepFeedback(null)
+    }
+  }
+
+  const [loadingCepResp, setLoadingCepResp] = useState<Record<string, boolean>>({})
+  const [cepFeedbackResp, setCepFeedbackResp] = useState<Record<string, { type: 'success' | 'error', message: string } | null>>({})
+  const [expandedComercialResp, setExpandedComercialResp] = useState<Record<number, boolean>>({})
+
+  const [expandedEnderecoAluno, setExpandedEnderecoAluno] = useState<boolean>(false)
+  const [copiadoParaAlunoIdx, setCopiadoParaAlunoIdx] = useState<number | null>(null)
+
+  const handleCopiarEnderecoResponsavelParaAluno = (index: number) => {
+    const resp = formData.responsaveis[index]
+    if (!resp) return
+
+    setFormData(prev => ({
+      ...prev,
+      aluno: {
+        ...prev.aluno,
+        cep: resp.cep || '',
+        endereco: resp.endereco || '',
+        numero: resp.numero || '',
+        complemento: resp.complemento || '',
+        bairro: resp.bairro || '',
+        cidade: resp.cidade || '',
+        uf: resp.uf || ''
+      }
+    }))
+
+    setCopiadoParaAlunoIdx(index)
+    setTimeout(() => {
+      setCopiadoParaAlunoIdx(null)
+    }, 2500)
+  }
+
+  const toggleComercialResp = (index: number) => {
+    setExpandedComercialResp(prev => ({
+      ...prev,
+      [index]: !prev[index]
+    }))
+  }
+
+  // Handlers para o Modal Detalhado de Matrícula / Turma
+  const handleOpenEditMatriculaModal = (index: number) => {
+    const item = formData.historicoTurmas[index]
+    if (!item) return
+
+    const responsaveisValidos = (formData.responsaveis || []).filter((r: any) => Boolean(r && r.nome && r.nome.trim()))
+    const respFin = responsaveisValidos.find((r: any) => r.isFinanceiro) || responsaveisValidos[0]
+    const respFinNome = respFin ? respFin.nome : ''
+    const normParentesco = (p: string) => {
+      if (!p) return 'Pai'
+      const lower = p.toLowerCase()
+      if (lower === 'pai') return 'Pai'
+      if (lower === 'mae' || lower === 'mãe') return 'Mãe'
+      if (lower.includes('legal')) return 'Responsável Legal'
+      if (lower.includes('padrasto')) return 'Padrasto'
+      if (lower.includes('madrasta')) return 'Madrasta'
+      if (lower.includes('avo') || lower.includes('avó') || lower.includes('avô')) return 'Avô / Avó'
+      if (lower.includes('tio') || lower.includes('tia')) return 'Tio / Tia'
+      return p
+    }
+
+    const anoItem = item.anoLetivo || (cfgCalendarioLetivo?.[0]?.ano ? String(cfgCalendarioLetivo[0].ano) : '2026')
+    const turmaItem = item.serieTurma || item.turma || item.turma_id
+    const padraoInicial = item.padraoPagamento || 
+      cfgPadroesPagamento?.find((p: any) => p.situacao !== 'inativo' && turmaItem && Array.isArray(p.turmaIds) && p.turmaIds.includes(turmaItem))?.nome ||
+      cfgPadroesPagamento?.find((p: any) => p.situacao !== 'inativo' && Number(p.ano) === Number(anoItem))?.nome ||
+      cfgPadroesPagamento?.find((p: any) => p.situacao !== 'inativo')?.nome || 
+      ''
+
+    setEditingMatriculaIndex(index)
+    setMatriculaModalData({
+      ...item,
+      anoLetivo: anoItem,
+      serieTurma: item.serieTurma || '',
+      segmento: item.segmento || '',
+      serie: item.serie || '',
+      modalidade: item.modalidade || (item.isIntegralIntermediario ? 'INTEGRAL/INTERMEDIÁRIO' : ''),
+      dataIngresso: item.dataIngresso || (item.dataInicio ? item.dataInicio.slice(0, 10) : new Date().toISOString().slice(0, 10)),
+      dataResultado: item.dataResultado || '',
+      situacao: item.situacao || item.status || 'Cursando',
+      bolsista: item.bolsista || 'Não',
+      obsDesconto: item.obsDesconto || '',
+      vendedorContrato: item.vendedorContrato || item.responsavelContrato || '',
+      parentescoRespFinanceiro: item.parentescoRespFinanceiro ? normParentesco(item.parentescoRespFinanceiro) : (respFin?.parentesco ? normParentesco(respFin.parentesco) : 'Pai'),
+      nomeRespFinanceiro: item.nomeRespFinanceiro || respFinNome,
+      grupoAlunos: item.grupoAlunos || 'Geral',
+      grupoFormativo: item.grupoFormativo || '---',
+      padraoPagamento: padraoInicial,
+      obsMatricula: item.obsMatricula || item.obs || '',
+      parcelasGeradas: item.parcelasGeradas !== undefined ? item.parcelasGeradas : true,
+      cadastradoEm: item.cadastradoEm || (item.dataInicio ? formatDateTimePtBr(item.dataInicio) : formatDateTimePtBr(new Date().toISOString())),
+      alteradoEm: formatDateTimePtBr(new Date().toISOString())
+    })
+  }
+
+  const handleSaveMatriculaModal = () => {
+    if (editingMatriculaIndex === null || !matriculaModalData) return
+
+    setFormData(prev => {
+      const newHist = [...prev.historicoTurmas]
+      newHist[editingMatriculaIndex] = {
+        ...newHist[editingMatriculaIndex],
+        ...matriculaModalData,
+        status: matriculaModalData.situacao || newHist[editingMatriculaIndex].status || 'Cursando',
+        updatedAt: new Date().toISOString()
+      }
+      return { ...prev, historicoTurmas: newHist }
+    })
+
+    setEditingMatriculaIndex(null)
+    setMatriculaModalData(null)
+  }
+
+  const handleTurmaChangeInModal = (selectedTurmaId: string) => {
+    const tObj = todasTurmas.find((t: any) => String(t.id) === String(selectedTurmaId))
+    const padraoDaTurma = cfgPadroesPagamento?.find((p: any) => 
+      p.situacao !== 'inativo' && (
+        (Array.isArray(p.turmaIds) && p.turmaIds.includes(selectedTurmaId)) ||
+        p.turma === tObj?.nome
+      )
+    )
+    setMatriculaModalData((prev: any) => ({
+      ...prev,
+      serieTurma: selectedTurmaId,
+      segmento: tObj?.segmento || tObj?.dados?.segmento || prev.segmento,
+      serie: tObj?.serie || tObj?.dados?.serie || prev.serie,
+      anoLetivo: tObj?.anoLetivo || tObj?.dados?.anoLetivo || tObj?.ano || prev.anoLetivo,
+      padraoPagamento: padraoDaTurma ? (padraoDaTurma.nome || padraoDaTurma.codigo) : prev.padraoPagamento
+    }))
+  }
+
+  const buscarCepRespResidencial = async (rawCep: string, index: number) => {
+    const digits = rawCep.replace(/\D/g, '')
+    if (digits.length !== 8) return
+
+    const key = `${index}_res`
+    setLoadingCepResp(prev => ({ ...prev, [key]: true }))
+    setCepFeedbackResp(prev => ({ ...prev, [key]: null }))
+    try {
+      const res = await fetch(`https://viacep.com.br/ws/${digits}/json/`)
+      if (!res.ok) throw new Error('Falha na requisição')
+      const data = await res.json()
+      if (data.erro) {
+        setCepFeedbackResp(prev => ({ ...prev, [key]: { type: 'error', message: 'CEP não encontrado' } }))
+      } else {
+        setFormData(prev => {
+          const newArr = [...prev.responsaveis]
+          if (newArr[index]) {
+            newArr[index] = {
+              ...newArr[index],
+              endereco: data.logradouro || newArr[index].endereco || '',
+              bairro: data.bairro || newArr[index].bairro || '',
+              cidade: data.localidade || newArr[index].cidade || '',
+              uf: data.uf || newArr[index].uf || '',
+              complemento: data.complemento && !newArr[index].complemento ? data.complemento : newArr[index].complemento
+            }
+          }
+          return { ...prev, responsaveis: newArr }
+        })
+        setCepFeedbackResp(prev => ({ ...prev, [key]: { type: 'success', message: `${data.localidade} - ${data.uf}` } }))
+      }
+    } catch {
+      setCepFeedbackResp(prev => ({ ...prev, [key]: { type: 'error', message: 'Erro ao consultar CEP' } }))
+    } finally {
+      setLoadingCepResp(prev => ({ ...prev, [key]: false }))
+    }
+  }
+
+  const handleCepRespResidencialChange = (val: string, index: number) => {
+    const formatted = formatCepMask(val)
+    handleInputChange('responsaveis', 'cep', formatted, index)
+    const digits = formatted.replace(/\D/g, '')
+    const key = `${index}_res`
+    if (digits.length === 8) {
+      buscarCepRespResidencial(digits, index)
+    } else {
+      setCepFeedbackResp(prev => ({ ...prev, [key]: null }))
+    }
+  }
+
+  const buscarCepRespComercial = async (rawCep: string, index: number) => {
+    const digits = rawCep.replace(/\D/g, '')
+    if (digits.length !== 8) return
+
+    const key = `${index}_com`
+    setLoadingCepResp(prev => ({ ...prev, [key]: true }))
+    setCepFeedbackResp(prev => ({ ...prev, [key]: null }))
+    try {
+      const res = await fetch(`https://viacep.com.br/ws/${digits}/json/`)
+      if (!res.ok) throw new Error('Falha na requisição')
+      const data = await res.json()
+      if (data.erro) {
+        setCepFeedbackResp(prev => ({ ...prev, [key]: { type: 'error', message: 'CEP não encontrado' } }))
+      } else {
+        setFormData(prev => {
+          const newArr = [...prev.responsaveis]
+          if (newArr[index]) {
+            newArr[index] = {
+              ...newArr[index],
+              comercialEndereco: data.logradouro || newArr[index].comercialEndereco || '',
+              comercialBairro: data.bairro || newArr[index].comercialBairro || '',
+              comercialCidade: data.localidade || newArr[index].comercialCidade || '',
+              comercialUf: data.uf || newArr[index].comercialUf || '',
+              comercialComplemento: data.complemento && !newArr[index].comercialComplemento ? data.complemento : newArr[index].comercialComplemento
+            }
+          }
+          return { ...prev, responsaveis: newArr }
+        })
+        setCepFeedbackResp(prev => ({ ...prev, [key]: { type: 'success', message: `${data.localidade} - ${data.uf}` } }))
+      }
+    } catch {
+      setCepFeedbackResp(prev => ({ ...prev, [key]: { type: 'error', message: 'Erro ao consultar CEP' } }))
+    } finally {
+      setLoadingCepResp(prev => ({ ...prev, [key]: false }))
+    }
+  }
+
+  const handleCepRespComercialChange = (val: string, index: number) => {
+    const formatted = formatCepMask(val)
+    handleInputChange('responsaveis', 'comercialCep', formatted, index)
+    const digits = formatted.replace(/\D/g, '')
+    const key = `${index}_com`
+    if (digits.length === 8) {
+      buscarCepRespComercial(digits, index)
+    } else {
+      setCepFeedbackResp(prev => ({ ...prev, [key]: null }))
+    }
+  }
+
+  const handleCopiarEnderecoResidencialParaComercial = (index: number) => {
+    setFormData(prev => {
+      const newArr = [...prev.responsaveis]
+      const resp = newArr[index]
+      if (!resp) return prev
+      newArr[index] = {
+        ...resp,
+        comercialCep: resp.cep || '',
+        comercialEndereco: resp.endereco || '',
+        comercialNumero: resp.numero || '',
+        comercialComplemento: resp.complemento || '',
+        comercialBairro: resp.bairro || '',
+        comercialCidade: resp.cidade || '',
+        comercialUf: resp.uf || ''
+      }
+      return { ...prev, responsaveis: newArr }
+    })
+    setExpandedComercialResp(prev => ({ ...prev, [index]: true }))
+  }
+
+  const [loadingProximaMatricula, setLoadingProximaMatricula] = useState(false)
+
+  const handleGerarMatriculaAutomatica = async () => {
+    setLoadingProximaMatricula(true)
+    try {
+      const res = await fetch('/api/alunos/proxima-matricula')
+      if (res.ok) {
+        const data = await res.json()
+        if (data?.proximaMatricula) {
+          handleInputChange('aluno', 'codigo', String(data.proximaMatricula))
+          if (hasError('codigo')) {
+            setValidationErrors(prev => prev.filter(err => err.field !== 'codigo'))
+          }
+          return
+        }
+      }
+      calcularMatriculaLocal()
+    } catch (err) {
+      console.warn('Fallback cálculo local de matrícula:', err)
+      calcularMatriculaLocal()
+    } finally {
+      setLoadingProximaMatricula(false)
+    }
+  }
+
+  const calcularMatriculaLocal = () => {
+    let max = 0
+    for (const a of alunos || []) {
+      const raw = String(a.matricula || a.codigo || a.id || '').trim()
+      if (/^\d{1,7}$/.test(raw)) {
+        const num = parseInt(raw, 10)
+        if (num > max && num < 1000000) max = num
+      }
+    }
+    const nextVal = String((max > 0 ? max : 5495) + 1)
+    handleInputChange('aluno', 'codigo', nextVal)
+    if (hasError('codigo')) {
+      setValidationErrors(prev => prev.filter(err => err.field !== 'codigo'))
+    }
+  }
+
   // Form State
   const [formData, setFormData] = useState({
     aluno: {
-      foto: null,
+      foto: null as string | null,
       codigo: '',
       nome: '',
       dataNasc: '',
       telefone: '',
       email: '',
       ativo: true,
-      autorizadoSairSozinho: false
+      autorizadoSairSozinho: false,
+      cpf: '',
+      rga: '',
+      sexo: '',
+      corRaca: '',
+      nacionalidade: 'Brasileira',
+      naturalidade: '',
+      naturalidadeUf: '',
+      cep: '',
+      endereco: '',
+      numero: '',
+      complemento: '',
+      bairro: '',
+      cidade: '',
+      uf: '',
+      idCenso: '',
+      necessidadesEspeciais: 'Não',
+      necessidadesEspeciaisDesc: '',
+      anoCadastro: '2026'
     },
     responsaveis: [{
       id: Math.floor(1000000 + Math.random() * 9000000).toString(),
       nome: '',
+      parentesco: '',
       dataNasc: '',
+      cpf: '',
+      rg: '',
+      rgOrgaoEmissor: '',
+      sexo: '',
+      estadoCivil: '',
+      profissao: '',
+      nacionalidade: 'Brasileira',
+      naturalidade: '',
+      naturalidadeUf: '',
       email: '',
       telefone: '',
-      profissao: '',
       codigo: Math.floor(1000000 + Math.random() * 9000000).toString(),
       codigoAluno: '',
       rfid: '',
-      parentesco: '',
+      // Endereço Residencial
+      cep: '',
+      endereco: '',
+      numero: '',
+      complemento: '',
+      bairro: '',
+      cidade: '',
+      uf: '',
+      // Endereço Comercial
+      comercialEmpresa: '',
+      comercialTelefone: '',
+      comercialCep: '',
+      comercialEndereco: '',
+      comercialNumero: '',
+      comercialComplemento: '',
+      comercialBairro: '',
+      comercialCidade: '',
+      comercialUf: '',
       diasAcesso: ['Seg', 'Ter', 'Qua', 'Qui', 'Sex'],
       isFinanceiro: false,
       isPedagogico: false,
       isOutro: false,
-      proibido: false
-    }],
+      proibido: false,
+      isNewAdded: false
+    }] as any[],
     historicoTurmas: [] as any[],
     observacoes: [] as ObservacaoItem[]
   })
@@ -1103,16 +1628,96 @@ export default function AlunosPage() {
 
   const handleNovoAluno = () => {
     const randCode = Math.floor(1000000 + Math.random() * 9000000).toString();
+    const anoAtual = (() => {
+      const calAtivo = cfgCalendarioLetivo?.find((c: any) => c.status === 'ativo' || c.ativo);
+      if (calAtivo?.ano) return String(calAtivo.ano);
+      if (cfgCalendarioLetivo?.[0]?.ano) return String(cfgCalendarioLetivo[0].ano);
+      return String(new Date().getFullYear());
+    })();
+
     setFormData({
       aluno: {
-        codigo: '', nome: '', dataNasc: '', telefone: '', email: '', ativo: true, autorizadoSairSozinho: false, foto: null
+        codigo: '', 
+        nome: '', 
+        dataNasc: '', 
+        telefone: '', 
+        email: '', 
+        ativo: true, 
+        autorizadoSairSozinho: false, 
+        foto: null,
+        cpf: '',
+        rga: '',
+        sexo: '',
+        corRaca: '',
+        nacionalidade: 'Brasileira',
+        naturalidade: '',
+        naturalidadeUf: '',
+        cep: '',
+        endereco: '',
+        numero: '',
+        complemento: '',
+        bairro: '',
+        cidade: '',
+        uf: '',
+        idCenso: '',
+        necessidadesEspeciais: 'Não',
+        necessidadesEspeciaisDesc: '',
+        anoCadastro: anoAtual
       },
       responsaveis: [{
-        id: randCode, nome: '', dataNasc: '', email: '', telefone: '', profissao: '', codigo: randCode, codigoAluno: '', rfid: '', parentesco: '', diasAcesso: ['Seg', 'Ter', 'Qua', 'Qui', 'Sex'], isFinanceiro: false, isPedagogico: false, isOutro: false, proibido: false
+        id: randCode,
+        codigo: randCode,
+        nome: '',
+        parentesco: '',
+        dataNasc: '',
+        cpf: '',
+        rg: '',
+        rgOrgaoEmissor: '',
+        sexo: '',
+        estadoCivil: '',
+        profissao: '',
+        nacionalidade: 'Brasileira',
+        naturalidade: '',
+        naturalidadeUf: '',
+        email: '',
+        telefone: '',
+        codigoAluno: '',
+        rfid: '',
+        cep: '',
+        endereco: '',
+        numero: '',
+        complemento: '',
+        bairro: '',
+        cidade: '',
+        uf: '',
+        comercialEmpresa: '',
+        comercialTelefone: '',
+        comercialCep: '',
+        comercialEndereco: '',
+        comercialNumero: '',
+        comercialComplemento: '',
+        comercialBairro: '',
+        comercialCidade: '',
+        comercialUf: '',
+        diasAcesso: ['Seg', 'Ter', 'Qua', 'Qui', 'Sex'],
+        isFinanceiro: false,
+        isPedagogico: false,
+        isOutro: false,
+        proibido: false,
+        isNewAdded: false
       }],
       historicoTurmas: [],
       observacoes: []
     })
+    setCepFeedback(null)
+    setLoadingCep(false)
+    setCepFeedbackResp({})
+    setLoadingCepResp({})
+    setExpandedComercialResp({})
+    setExpandedEnderecoAluno(false)
+    setCopiadoParaAlunoIdx(null)
+    setEditingMatriculaIndex(null)
+    setMatriculaModalData(null)
     resetObsInput()
     setBuscaObsText('')
     setFiltroObsCategoria('todas')
@@ -1132,7 +1737,7 @@ export default function AlunosPage() {
 
     // 1. Aluno validation
     if (!formData.aluno.codigo || !formData.aluno.codigo.trim()) {
-      errors.push({ field: 'codigo', label: 'ID do Aluno', tab: 'aluno', tabLabel: 'Dados do Aluno' })
+      errors.push({ field: 'codigo', label: 'ID/Matrícula do Aluno', tab: 'aluno', tabLabel: 'Dados do Aluno' })
     }
     if (!formData.aluno.nome || !formData.aluno.nome.trim()) {
       errors.push({ field: 'nome', label: 'Nome Completo do Aluno', tab: 'aluno', tabLabel: 'Dados do Aluno' })
@@ -1156,6 +1761,10 @@ export default function AlunosPage() {
         }
         if (!resp.parentesco || !resp.parentesco.trim()) {
           errors.push({ field: `resp_${index}_parentesco`, label: `Parentesco${suffix}`, tab: 'responsavel', tabLabel: 'Responsáveis' })
+        }
+        // O e-mail NÃO deve ser obrigatório para o tipo de responsável "outro" nem "pedagógico"
+        if (resp.isFinanceiro && (!resp.email || !resp.email.trim())) {
+          errors.push({ field: `resp_${index}_email`, label: `E-mail${suffix}`, tab: 'responsavel', tabLabel: 'Responsáveis' })
         }
         if (!resp.isFinanceiro && !resp.isPedagogico && !resp.isOutro && resp.parentesco !== 'outro') {
           errors.push({ field: `resp_${index}_tipo`, label: `Tipo de Responsável (Selecione pelo menos um: Financeiro, Pedagógico ou Outro)${suffix}`, tab: 'responsavel', tabLabel: 'Responsáveis' })
@@ -1200,12 +1809,27 @@ export default function AlunosPage() {
       .map(o => `[${formatDateTimePtBr(o.dataHora)}] [${(o.categoria || 'geral').toUpperCase()}]: ${o.texto}`)
       .join('\n\n')
 
+    const anoLetivoCadastro = formData.aluno.anoCadastro || '2026';
+    const finalRga = formData.aluno.codigo 
+      ? `${anoLetivoCadastro}${formData.aluno.codigo}` 
+      : (formData.aluno.rga || `${anoLetivoCadastro}`);
+
+    const hList = formData.historicoTurmas || [];
+    const activeHist = hList.length > 0 ? hList[hList.length - 1] : null;
+    const isIntegralAtivo = activeHist
+      ? Boolean(activeHist.isIntegralIntermediario === true || activeHist.modalidade === 'INTEGRAL/INTERMEDIÁRIO')
+      : false;
+
     const newAluno = {
       id: editingAlunoId || `TEMP-${Date.now()}`,
       ...formData.aluno,
+      rga: finalRga,
+      removerFoto: formData.aluno.foto === null,
       responsavel: formData.responsaveis[0] || null,
       responsaveis: formData.responsaveis,
       historicoTurmas: formData.historicoTurmas,
+      isIntegralIntermediario: isIntegralAtivo,
+      modalidade: isIntegralAtivo ? 'INTEGRAL/INTERMEDIÁRIO' : '',
       observacoes: formData.observacoes || [],
       obs: obsCompilada
     }
@@ -1233,6 +1857,7 @@ export default function AlunosPage() {
         )
         queryClient.invalidateQueries({ queryKey: ['alunos'] })
         queryClient.invalidateQueries({ queryKey: ['alunos-stats'] })
+        queryClient.invalidateQueries({ queryKey: ['responsaveis'] })
         toggleModal()
         setEditingAlunoId(null)
       } else {
@@ -1269,16 +1894,65 @@ export default function AlunosPage() {
       }
     }
 
+    const anoAtual = (() => {
+      const calAtivo = cfgCalendarioLetivo?.find((c: any) => c.status === 'ativo' || c.ativo);
+      if (calAtivo?.ano) return String(calAtivo.ano);
+      if (cfgCalendarioLetivo?.[0]?.ano) return String(cfgCalendarioLetivo[0].ano);
+      return String(new Date().getFullYear());
+    })();
+
+    const anoCadastroResolvido = (() => {
+      if (aluno.rga && /^\d{4}/.test(aluno.rga)) return aluno.rga.slice(0, 4);
+      if (aluno.dados?.rga && /^\d{4}/.test(aluno.dados.rga)) return aluno.dados.rga.slice(0, 4);
+      if (aluno.created_at) {
+        try {
+          const d = new Date(aluno.created_at);
+          if (!isNaN(d.getFullYear())) return String(d.getFullYear());
+        } catch {}
+      }
+      return aluno.dados?.anoCadastro || aluno.dados?.anoLetivo || aluno.anoLetivo || anoAtual;
+    })();
+
+    const studentCodigo = aluno.matricula || aluno.codigo || '';
+
+    setCepFeedback(null);
+    setLoadingCep(false);
+    setCepFeedbackResp({});
+    setLoadingCepResp({});
+    setExpandedComercialResp({});
+    setExpandedEnderecoAluno(false);
+    setCopiadoParaAlunoIdx(null);
+    setEditingMatriculaIndex(null);
+    setMatriculaModalData(null);
+
     setFormData({
       aluno: {
-        codigo: aluno.matricula || aluno.codigo || '',
+        codigo: studentCodigo,
         nome: aluno.nome || '',
         dataNasc: aluno.data_nascimento || aluno.dataNasc || '',
         telefone: aluno.telefone || '',
         email: aluno.email || '',
         ativo: aluno.status === 'Ativo' || aluno.status === 'matriculado',
-        autorizadoSairSozinho: aluno.autorizadoSairSozinho || false,
-        foto: aluno.foto || null
+        autorizadoSairSozinho: aluno.autorizadoSairSozinho || aluno.dados?.autorizadoSairSozinho || false,
+        foto: aluno.foto || null,
+        cpf: aluno.cpf || aluno.dados?.cpf || '',
+        rga: aluno.rga || aluno.dados?.rga || (studentCodigo ? `${anoCadastroResolvido}${studentCodigo}` : ''),
+        sexo: aluno.sexo || aluno.dados?.sexo || '',
+        corRaca: aluno.corRaca || aluno.cor_raca || aluno.dados?.corRaca || aluno.dados?.cor_raca || '',
+        nacionalidade: aluno.nacionalidade || aluno.dados?.nacionalidade || 'Brasileira',
+        naturalidade: aluno.naturalidade || aluno.dados?.naturalidade || '',
+        naturalidadeUf: aluno.naturalidadeUf || aluno.naturalidade_uf || aluno.dados?.naturalidadeUf || aluno.dados?.naturalidade_uf || '',
+        cep: aluno.cep || aluno.dados?.cep || aluno.endereco?.cep || aluno.dados?.endereco?.cep || '',
+        endereco: aluno.endereco || aluno.logradouro || aluno.dados?.endereco || aluno.dados?.logradouro || aluno.dados?.endereco?.logradouro || '',
+        numero: aluno.numero || aluno.dados?.numero || aluno.dados?.endereco?.numero || '',
+        complemento: aluno.complemento || aluno.dados?.complemento || aluno.dados?.endereco?.complemento || '',
+        bairro: aluno.bairro || aluno.dados?.bairro || aluno.dados?.endereco?.bairro || '',
+        cidade: aluno.cidade || aluno.dados?.cidade || aluno.dados?.endereco?.cidade || '',
+        uf: aluno.uf || aluno.dados?.uf || aluno.estado || aluno.dados?.estado || aluno.dados?.endereco?.uf || aluno.dados?.endereco?.estado || '',
+        idCenso: aluno.idCenso || aluno.id_censo || aluno.dados?.idCenso || aluno.dados?.id_censo || aluno.dados?.censo || '',
+        necessidadesEspeciais: aluno.necessidadesEspeciais || aluno.dados?.necessidadesEspeciais || (aluno.dados?.necessidades_especiais ? 'Sim' : 'Não') || 'Não',
+        necessidadesEspeciaisDesc: aluno.necessidadesEspeciaisDesc || aluno.dados?.necessidadesEspeciaisDesc || aluno.dados?.necessidades_especiais_desc || aluno.dados?.necessidades_especiais || '',
+        anoCadastro: anoCadastroResolvido
       },
       responsaveis: (() => {
         const rawResps = (Array.isArray(aluno.responsaveis) && aluno.responsaveis.length > 0)
@@ -1312,6 +1986,31 @@ export default function AlunosPage() {
             if (r.rfid && !existing.rfid) existing.rfid = r.rfid;
             if (r.dataNasc && !existing.dataNasc) existing.dataNasc = r.dataNasc;
             if (r.nome && r.nome.length > existing.nome.length) existing.nome = r.nome;
+            if (r.cpf && !existing.cpf) existing.cpf = r.cpf;
+            if (r.rg && !existing.rg) existing.rg = r.rg;
+            if (r.rgOrgaoEmissor && !existing.rgOrgaoEmissor) existing.rgOrgaoEmissor = r.rgOrgaoEmissor;
+            if (r.sexo && !existing.sexo) existing.sexo = r.sexo;
+            if (r.estadoCivil && !existing.estadoCivil) existing.estadoCivil = r.estadoCivil;
+            if (r.profissao && !existing.profissao) existing.profissao = r.profissao;
+            if (r.nacionalidade && !existing.nacionalidade) existing.nacionalidade = r.nacionalidade;
+            if (r.naturalidade && !existing.naturalidade) existing.naturalidade = r.naturalidade;
+            if (r.naturalidadeUf && !existing.naturalidadeUf) existing.naturalidadeUf = r.naturalidadeUf;
+            if (r.cep && !existing.cep) existing.cep = r.cep;
+            if (r.endereco && !existing.endereco) existing.endereco = r.endereco;
+            if (r.numero && !existing.numero) existing.numero = r.numero;
+            if (r.complemento && !existing.complemento) existing.complemento = r.complemento;
+            if (r.bairro && !existing.bairro) existing.bairro = r.bairro;
+            if (r.cidade && !existing.cidade) existing.cidade = r.cidade;
+            if (r.uf && !existing.uf) existing.uf = r.uf;
+            if (r.comercialEmpresa && !existing.comercialEmpresa) existing.comercialEmpresa = r.comercialEmpresa;
+            if (r.comercialTelefone && !existing.comercialTelefone) existing.comercialTelefone = r.comercialTelefone;
+            if (r.comercialCep && !existing.comercialCep) existing.comercialCep = r.comercialCep;
+            if (r.comercialEndereco && !existing.comercialEndereco) existing.comercialEndereco = r.comercialEndereco;
+            if (r.comercialNumero && !existing.comercialNumero) existing.comercialNumero = r.comercialNumero;
+            if (r.comercialComplemento && !existing.comercialComplemento) existing.comercialComplemento = r.comercialComplemento;
+            if (r.comercialBairro && !existing.comercialBairro) existing.comercialBairro = r.comercialBairro;
+            if (r.comercialCidade && !existing.comercialCidade) existing.comercialCidade = r.comercialCidade;
+            if (r.comercialUf && !existing.comercialUf) existing.comercialUf = r.comercialUf;
           } else {
             uniqueResps.push({ ...r });
           }
@@ -1321,13 +2020,37 @@ export default function AlunosPage() {
             id: '',
             codigo: '',
             nome: '',
+            parentesco: '',
             dataNasc: '',
+            cpf: '',
+            rg: '',
+            rgOrgaoEmissor: '',
+            sexo: '',
+            estadoCivil: '',
+            profissao: '',
+            nacionalidade: 'Brasileira',
+            naturalidade: '',
+            naturalidadeUf: '',
             email: '',
             telefone: '',
-            profissao: '',
             codigoAluno: '',
             rfid: '',
-            parentesco: '',
+            cep: '',
+            endereco: '',
+            numero: '',
+            complemento: '',
+            bairro: '',
+            cidade: '',
+            uf: '',
+            comercialEmpresa: '',
+            comercialTelefone: '',
+            comercialCep: '',
+            comercialEndereco: '',
+            comercialNumero: '',
+            comercialComplemento: '',
+            comercialBairro: '',
+            comercialCidade: '',
+            comercialUf: '',
             diasAcesso: ['Seg', 'Ter', 'Qua', 'Qui', 'Sex'],
             isFinanceiro: false,
             isPedagogico: false,
@@ -1338,22 +2061,49 @@ export default function AlunosPage() {
 
         return uniqueResps.map((r: any) => {
           const respId = String(r.id || r.codigo || '').trim();
+          const d = r.dados || {};
           return {
             id: respId,
             codigo: respId,
             nome: r.nome || '',
-            dataNasc: r.dataNasc || r.data_nasc || '',
+            parentesco: r.parentesco || '',
+            dataNasc: r.dataNasc || r.data_nasc || d.dataNasc || d.data_nasc || '',
+            cpf: r.cpf || d.cpf || '',
+            rg: r.rg || d.rg || '',
+            rgOrgaoEmissor: r.rgOrgaoEmissor || r.orgEmissor || d.rgOrgaoEmissor || d.orgEmissor || '',
+            sexo: r.sexo || d.sexo || '',
+            estadoCivil: r.estadoCivil || r.estado_civil || d.estadoCivil || d.estado_civil || '',
+            profissao: r.profissao || d.profissao || '',
+            nacionalidade: r.nacionalidade || d.nacionalidade || 'Brasileira',
+            naturalidade: r.naturalidade || d.naturalidade || '',
+            naturalidadeUf: r.naturalidadeUf || r.uf || d.naturalidadeUf || d.uf || '',
             email: r.email || '',
             telefone: r.telefone || r.celular || '',
-            profissao: r.profissao || '',
             codigoAluno: r.codigoAluno || '',
             rfid: r.rfid || '',
-            parentesco: r.parentesco || '',
             isFinanceiro: r.isFinanceiro ?? r.resp_financeiro ?? false,
             isPedagogico: r.isPedagogico ?? r.resp_pedagogico ?? false,
             isOutro: r.isOutro ?? r.resp_outro ?? false,
             proibido: r.proibido === true,
-            diasAcesso: r.diasAcesso || r.dias_acesso || ['Seg', 'Ter', 'Qua', 'Qui', 'Sex']
+            diasAcesso: r.diasAcesso || r.dias_acesso || ['Seg', 'Ter', 'Qua', 'Qui', 'Sex'],
+            // Endereço Residencial
+            cep: r.cep || d.cep || '',
+            endereco: r.endereco || r.logradouro || d.endereco || d.logradouro || '',
+            numero: r.numero || d.numero || '',
+            complemento: r.complemento || d.complemento || '',
+            bairro: r.bairro || d.bairro || '',
+            cidade: r.cidade || d.cidade || '',
+            uf: r.uf || r.ufEnd || d.uf || d.ufEnd || '',
+            // Endereço Comercial
+            comercialEmpresa: r.comercialEmpresa || d.comercialEmpresa || '',
+            comercialTelefone: r.comercialTelefone || d.comercialTelefone || '',
+            comercialCep: r.comercialCep || d.comercialCep || '',
+            comercialEndereco: r.comercialEndereco || d.comercialEndereco || '',
+            comercialNumero: r.comercialNumero || d.comercialNumero || '',
+            comercialComplemento: r.comercialComplemento || d.comercialComplemento || '',
+            comercialBairro: r.comercialBairro || d.comercialBairro || '',
+            comercialCidade: r.comercialCidade || d.comercialCidade || '',
+            comercialUf: r.comercialUf || d.comercialUf || ''
           };
         });
       })(),
@@ -1366,7 +2116,7 @@ export default function AlunosPage() {
               segmento: segmento,
               serie: aluno.serie || aluno.dados?.serie || turmaDoAluno?.serie || turmaDoAluno?.dados?.serie || '',
               serieTurma: turmaDoAluno?.id || aluno.turma || '',
-              modalidade: aluno.dados?.modalidade || 'INTEGRAL',
+              modalidade: aluno.dados?.modalidade || '',
               status: 'Matriculado'
             }] : []);
 
@@ -2180,7 +2930,7 @@ export default function AlunosPage() {
                 </th>
                 <th onClick={() => handleSort('id')} style={{ cursor: 'pointer', userSelect: 'none', padding: '10px 12px' }}>
                   <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                    ID {sortField === 'id' ? (sortOrder === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} />) : <ArrowUpDown size={12} style={{ opacity: 0.4 }} />}
+                    ID/Matrícula {sortField === 'id' ? (sortOrder === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} />) : <ArrowUpDown size={12} style={{ opacity: 0.4 }} />}
                   </div>
                 </th>
                 <th onClick={() => handleSort('nome')} style={{ cursor: 'pointer', userSelect: 'none', padding: '10px 12px' }}>
@@ -2258,11 +3008,35 @@ export default function AlunosPage() {
                         })()}
                       </td>
 
-                      <td style={{ fontWeight: 700, color: '#1e293b', fontSize: 12, whiteSpace: 'nowrap' }}>{aluno.matricula || aluno.codigo}</td>
+                      <td style={{ fontWeight: 700, color: '#1e293b', fontSize: 12, whiteSpace: 'nowrap' }}>
+                        <div>{aluno.matricula || aluno.codigo}</div>
+                        {(aluno.rga || aluno.dados?.rga) && (
+                          <div style={{ fontSize: 10, color: '#64748b', fontWeight: 600, marginTop: 2, fontFamily: 'monospace' }}>
+                            RGA: {aluno.rga || aluno.dados?.rga}
+                          </div>
+                        )}
+                        {(aluno.idCenso || aluno.id_censo || aluno.dados?.idCenso || aluno.dados?.id_censo || aluno.dados?.censo) && (
+                          <div style={{ fontSize: 10, color: '#0369a1', fontWeight: 600, marginTop: 1, fontFamily: 'monospace' }} title="ID Censo Escolar (INEP)">
+                            CENSO: {aluno.idCenso || aluno.id_censo || aluno.dados?.idCenso || aluno.dados?.id_censo || aluno.dados?.censo}
+                          </div>
+                        )}
+                      </td>
                       <td style={{ maxWidth: 180, whiteSpace: 'normal', wordBreak: 'break-word' }}>
                         <div style={{ display: 'flex', flexDirection: 'column' }}>
                           <span style={{ fontWeight: 700, color: '#1e293b', fontSize: 13, lineHeight: 1.2 }}>{aluno.nome}</span>
-                          <span style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>{aluno.email}</span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 2 }}>
+                            {aluno.email && <span style={{ fontSize: 11, color: '#64748b' }}>{aluno.email}</span>}
+                            {(aluno.cpf || aluno.dados?.cpf) && (
+                              <span style={{ fontSize: 10, background: '#f1f5f9', color: '#475569', padding: '1px 5px', borderRadius: 4, fontWeight: 600 }}>
+                                CPF: {aluno.cpf || aluno.dados?.cpf}
+                              </span>
+                            )}
+                            {(aluno.necessidadesEspeciais === 'Sim' || aluno.dados?.necessidadesEspeciais === 'Sim' || aluno.dados?.necessidades_especiais) && (
+                              <span style={{ fontSize: 10, background: '#ede9fe', color: '#6d28d9', padding: '1px 5px', borderRadius: 4, fontWeight: 700 }} title={aluno.necessidadesEspeciaisDesc || aluno.dados?.necessidadesEspeciaisDesc || 'Necessidades Especiais'}>
+                                AEE: {aluno.necessidadesEspeciaisDesc || aluno.dados?.necessidadesEspeciaisDesc || 'Sim'}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </td>
                       <td style={{ maxWidth: 220, whiteSpace: 'nowrap' }}>
@@ -2333,9 +3107,7 @@ export default function AlunosPage() {
                       </td>
                       <td style={{ fontWeight: 600, color: '#1d4ed8', fontSize: 12, whiteSpace: 'nowrap' }}>
                         {(() => {
-                          const hList = aluno.historicoTurmas || aluno.dados?.historicoTurmas || [];
-                          const activeHist = hList.length > 0 ? hList[hList.length - 1] : null;
-                          const isIntegralInt = activeHist?.isIntegralIntermediario || activeHist?.modalidade === 'INTEGRAL/INTERMEDIÁRIO' || aluno.dados?.isIntegralIntermediario || aluno.turma_nome?.includes('INTEGRAL/INTERMEDIÁRIO');
+                          const isIntegralInt = isAlunoIntegralIntermediario(aluno, todasTurmas);
                           const turmaNome = aluno.turma_nome || todasTurmas.find((t: any) => String(t.id) === String(aluno.turma))?.nome || aluno.turma;
 
                           return (
@@ -2537,27 +3309,31 @@ export default function AlunosPage() {
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(4px)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
           <div 
             className="glass-card ultra-modal modal-enter-active" 
-            style={{ width: '100%', maxWidth: 800, maxHeight: '90vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
+            style={{ width: '100%', maxWidth: 1080, maxHeight: '92vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
           >
             
             {/* Modal Header */}
-            <div style={{ padding: '24px 32px', background: 'linear-gradient(135deg, #2563eb 0%, #7c3aed 100%)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ padding: '16px 24px', background: 'linear-gradient(135deg, #2563eb 0%, #7c3aed 100%)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(255, 255, 255, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <UserPlus size={20} color="#fff" />
+                <div style={{ width: 38, height: 38, borderRadius: 10, background: 'rgba(255, 255, 255, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <UserPlus size={18} color="#fff" />
                 </div>
                 <div>
-                  <h2 style={{ fontSize: 20, fontWeight: 900, color: '#fff', margin: 0, fontFamily: 'Outfit, sans-serif' }}>Cadastrar Novo Aluno</h2>
-                  <p style={{ fontSize: 12, color: 'rgba(255, 255, 255, 0.8)', margin: 0 }}>Preencha os dados para adicionar ao sistema</p>
+                  <h2 style={{ fontSize: 18, fontWeight: 900, color: '#fff', margin: 0, fontFamily: 'Outfit, sans-serif' }}>
+                    {editingAlunoId ? 'Editar Aluno' : 'Cadastrar Novo Aluno'}
+                  </h2>
+                  <p style={{ fontSize: 11.5, color: 'rgba(255, 255, 255, 0.8)', margin: 0 }}>
+                    {editingAlunoId ? 'Atualize as informações cadastrais do aluno' : 'Preencha os dados para adicionar ao sistema'}
+                  </p>
                 </div>
               </div>
-              <button onClick={toggleModal} style={{ width: 36, height: 36, borderRadius: '50%', border: 'none', background: 'rgba(255, 255, 255, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#fff' }}>
-                <X size={18} />
+              <button onClick={toggleModal} style={{ width: 32, height: 32, borderRadius: '50%', border: 'none', background: 'rgba(255, 255, 255, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#fff' }}>
+                <X size={16} />
               </button>
             </div>
 
             {/* Modal Tabs */}
-            <div style={{ background: 'transparent', padding: '12px 32px', borderBottom: '1px solid rgba(0,0,0,0.05)', display: 'flex', gap: 8, overflowX: 'auto' }}>
+            <div style={{ background: 'transparent', padding: '8px 24px', borderBottom: '1px solid rgba(0,0,0,0.05)', display: 'flex', gap: 8, overflowX: 'auto' }}>
               <button className={`tab-btn ${activeTab === 'aluno' ? 'active' : ''}`} onClick={() => setActiveTab('aluno')}>
                 <Users size={14} /> Dados do Aluno
               </button>
@@ -2578,191 +3354,936 @@ export default function AlunosPage() {
             </div>
 
             {/* Modal Content */}
-            <div style={{ padding: 32, overflowY: 'auto', flex: 1 }}>
+            <div style={{ padding: '16px 20px', overflowY: 'auto', flex: 1 }}>
               
               {/* TAB: DADOS DO ALUNO */}
-              {activeTab === 'aluno' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-                  
-                  {/* Avatar Upload */}
-                   <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
-                    <div 
-                      onClick={() => document.getElementById('foto-aluno-input')?.click()}
-                      style={{ width: 80, height: 80, borderRadius: '20px', background: isValidStudentPhoto(formData.aluno.foto) ? `url(${formData.aluno.foto}) center/cover` : 'rgba(248, 250, 252, 0.8)', border: '2px dashed #cbd5e1', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#3b82f6', transition: 'all 0.2s' }}
-                    >
-                      {!isValidStudentPhoto(formData.aluno.foto) && (
-                        <>
-                          <Camera size={24} />
-                          <span style={{ fontSize: 10, marginTop: 4, fontWeight: 700 }}>Adicionar Foto</span>
-                        </>
-                      )}
-                    </div>
+              {activeTab === 'aluno' && (() => {
+                const anoLetivoCad = formData.aluno.anoCadastro || '2026';
+                const rgaCalculado = formData.aluno.codigo
+                  ? `${anoLetivoCad}${formData.aluno.codigo}`
+                  : `${anoLetivoCad}`;
 
-                    <div>
-                      <p style={{ fontSize: 14, fontWeight: 700, color: '#1e293b', margin: 0 }}>Foto do Aluno</p>
-                      <p style={{ fontSize: 12, color: '#64748b', margin: '2px 0 8px 0' }}>PNG, JPG ou WEBP. Máx 2MB.</p>
-                      <button onClick={() => document.getElementById('foto-aluno-input')?.click()} className="neo-btn neo-btn-secondary" style={{ padding: '6px 12px', fontSize: 12 }}>
-                        <Upload size={12} /> Fazer Upload
-                      </button>
-                      <input 
-                        id="foto-aluno-input" 
-                        type="file" 
-                        accept="image/*" 
-                        style={{ display: 'none' }} 
-                        onChange={(e) => {
-                          const file = e.target.files?.[0]
-                          if (file) {
-                            if (file.size > 10 * 1024 * 1024) {
-                              alert('Arquivo muito grande! Máximo 10MB.');
-                              return;
+                return (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    
+                    {/* CARD 1: FOTO & IDENTIFICAÇÃO PRINCIPAL */}
+                    <div style={{
+                      background: 'rgba(255, 255, 255, 0.85)',
+                      border: '1px solid #e2e8f0',
+                      borderRadius: 14,
+                      padding: '12px 16px',
+                      boxShadow: '0 4px 16px rgba(0, 0, 0, 0.03)',
+                      display: 'flex',
+                      gap: 16,
+                      alignItems: 'center'
+                    }}>
+                      
+                      {/* Avatar do Aluno */}
+                      <div style={{ position: 'relative', width: 84, height: 84, flexShrink: 0 }}>
+                        <div 
+                          onClick={() => document.getElementById('foto-aluno-input')?.click()}
+                          style={{ 
+                            width: 84, 
+                            height: 84, 
+                            borderRadius: '20px', 
+                            background: isValidStudentPhoto(formData.aluno.foto) ? `url(${formData.aluno.foto}) center/cover` : 'rgba(248, 250, 252, 0.9)', 
+                            border: isValidStudentPhoto(formData.aluno.foto) ? '2px solid #e2e8f0' : '2px dashed #cbd5e1', 
+                            boxShadow: isValidStudentPhoto(formData.aluno.foto) ? '0 4px 12px rgba(0,0,0,0.08)' : 'none',
+                            display: 'flex', 
+                            flexDirection: 'column', 
+                            alignItems: 'center', 
+                            justifyContent: 'center', 
+                            cursor: 'pointer', 
+                            color: '#3b82f6', 
+                            transition: 'all 0.2s',
+                            overflow: 'hidden'
+                          }}
+                          onMouseEnter={e => {
+                            if (!isValidStudentPhoto(formData.aluno.foto)) {
+                              e.currentTarget.style.borderColor = '#3b82f6'
+                              e.currentTarget.style.background = '#eff6ff'
                             }
-                            const reader = new FileReader()
-                            reader.onloadend = () => {
-                              const img = new Image();
-                              img.onload = () => {
-                                const canvas = document.createElement('canvas');
-                                const MAX_WIDTH = 500;
-                                const MAX_HEIGHT = 500;
-                                let width = img.width;
-                                let height = img.height;
-                                
-                                if (width > height) {
-                                  if (width > MAX_WIDTH) {
-                                    height *= MAX_WIDTH / width;
-                                    width = MAX_WIDTH;
+                          }}
+                          onMouseLeave={e => {
+                            if (!isValidStudentPhoto(formData.aluno.foto)) {
+                              e.currentTarget.style.borderColor = '#cbd5e1'
+                              e.currentTarget.style.background = 'rgba(248, 250, 252, 0.9)'
+                            }
+                          }}
+                          title={isValidStudentPhoto(formData.aluno.foto) ? 'Clique para alterar a foto' : 'Clique para adicionar foto'}
+                        >
+                          {!isValidStudentPhoto(formData.aluno.foto) && (
+                            <>
+                              <Camera size={22} color="#64748b" />
+                              <span style={{ fontSize: 10, marginTop: 3, fontWeight: 700, color: '#64748b' }}>Foto</span>
+                            </>
+                          )}
+                        </div>
+
+                        {/* Botão de Excluir Foto (quando houver foto) */}
+                        {isValidStudentPhoto(formData.aluno.foto) && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleInputChange('aluno', 'foto', null);
+                              const fileInput = document.getElementById('foto-aluno-input') as HTMLInputElement;
+                              if (fileInput) fileInput.value = '';
+                            }}
+                            title="Excluir foto do aluno"
+                            style={{
+                              position: 'absolute',
+                              top: -4,
+                              right: -4,
+                              width: 24,
+                              height: 24,
+                              borderRadius: '50%',
+                              background: '#ef4444',
+                              color: '#ffffff',
+                              border: '2px solid #ffffff',
+                              boxShadow: '0 2px 6px rgba(239, 68, 68, 0.4)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              cursor: 'pointer',
+                              transition: 'transform 0.15s ease',
+                              zIndex: 10
+                            }}
+                            onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.15)'}
+                            onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
+                          >
+                            <Trash2 size={11} />
+                          </button>
+                        )}
+
+                        {/* Botão de Trocar Foto (quando houver foto) */}
+                        {isValidStudentPhoto(formData.aluno.foto) && (
+                          <button
+                            type="button"
+                            onClick={() => document.getElementById('foto-aluno-input')?.click()}
+                            title="Alterar foto do aluno"
+                            style={{
+                              position: 'absolute',
+                              bottom: -4,
+                              right: -4,
+                              width: 24,
+                              height: 24,
+                              borderRadius: '50%',
+                              background: '#2563eb',
+                              color: '#ffffff',
+                              border: '2px solid #ffffff',
+                              boxShadow: '0 2px 6px rgba(37, 99, 235, 0.4)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              cursor: 'pointer',
+                              transition: 'transform 0.15s ease',
+                              zIndex: 10
+                            }}
+                            onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.15)'}
+                            onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
+                          >
+                            <Camera size={11} />
+                          </button>
+                        )}
+
+                        <input 
+                          id="foto-aluno-input" 
+                          type="file" 
+                          accept="image/*" 
+                          style={{ display: 'none' }} 
+                          onChange={(e) => {
+                            const file = e.target.files?.[0]
+                            if (file) {
+                              if (file.size > 10 * 1024 * 1024) {
+                                alert('Arquivo muito grande! Máximo 10MB.');
+                                return;
+                              }
+                              const reader = new FileReader()
+                              reader.onloadend = () => {
+                                const img = new Image();
+                                img.onload = () => {
+                                  const canvas = document.createElement('canvas');
+                                  const MAX_WIDTH = 500;
+                                  const MAX_HEIGHT = 500;
+                                  let width = img.width;
+                                  let height = img.height;
+                                  
+                                  if (width > height) {
+                                    if (width > MAX_WIDTH) {
+                                      height *= MAX_WIDTH / width;
+                                      width = MAX_WIDTH;
+                                    }
+                                  } else {
+                                    if (height > MAX_HEIGHT) {
+                                      width *= MAX_HEIGHT / height;
+                                      height = MAX_HEIGHT;
+                                    }
                                   }
-                                } else {
-                                  if (height > MAX_HEIGHT) {
-                                    width *= MAX_HEIGHT / height;
-                                    height = MAX_HEIGHT;
+                                  
+                                  canvas.width = width;
+                                  canvas.height = height;
+                                  const ctx = canvas.getContext('2d');
+                                  if (ctx) {
+                                    ctx.drawImage(img, 0, 0, width, height);
+                                    const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+                                    handleInputChange('aluno', 'foto', dataUrl);
+                                  } else {
+                                    handleInputChange('aluno', 'foto', reader.result);
                                   }
+                                };
+                                img.src = reader.result as string;
+                              }
+                              reader.readAsDataURL(file)
+                            }
+                          }}
+                        />
+                      </div>
+
+                      {/* Campos ao lado da foto: 2 Linhas Compactas e Espaçosas */}
+                      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        {/* Linha 1: Nome Completo * e ID/Matrícula * */}
+                        <div style={{ display: 'grid', gridTemplateColumns: '2.2fr 1.1fr', gap: 10 }}>
+                          {/* Nome Completo */}
+                          <div>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 3 }}>
+                              <label style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', margin: 0 }}>
+                                Nome Completo <span style={{ color: '#ef4444', fontWeight: 800 }}>*</span>
+                              </label>
+                              {formData.aluno.nome?.trim() ? (
+                                <span style={{ fontSize: 9.5, fontWeight: 800, color: '#047857', background: '#d1fae5', padding: '1px 6px', borderRadius: 4, textTransform: 'uppercase' }}>
+                                  ✓ Preenchido
+                                </span>
+                              ) : (
+                                <span style={{ fontSize: 9.5, fontWeight: 800, color: '#b45309', background: '#fef3c7', padding: '1px 6px', borderRadius: 4, textTransform: 'uppercase' }}>
+                                  Obrigatório
+                                </span>
+                              )}
+                            </div>
+                            <input 
+                              className="form-input" 
+                              style={{ 
+                                height: 35,
+                                padding: '0 11px',
+                                fontSize: 13,
+                                borderRadius: 8,
+                                fontWeight: 600,
+                                ...getMandatoryFieldStyle(formData.aluno.nome, 'nome')
+                              }}
+                              placeholder="Nome completo do aluno" 
+                              value={formData.aluno.nome || ''} 
+                              onChange={e => {
+                                handleInputChange('aluno', 'nome', e.target.value);
+                                if (hasError('nome')) {
+                                  setValidationErrors(prev => prev.filter(err => err.field !== 'nome'));
                                 }
-                                
-                                canvas.width = width;
-                                canvas.height = height;
-                                const ctx = canvas.getContext('2d');
-                                if (ctx) {
-                                  ctx.drawImage(img, 0, 0, width, height);
-                                  const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
-                                  handleInputChange('aluno', 'foto', dataUrl);
-                                } else {
-                                  handleInputChange('aluno', 'foto', reader.result);
+                              }} 
+                            />
+                          </div>
+
+                          {/* ID/Matrícula */}
+                          <div>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 3 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                                <label style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', margin: 0 }}>
+                                  ID/Matrícula <span style={{ color: '#ef4444', fontWeight: 800 }}>*</span>
+                                </label>
+                                {formData.aluno.codigo?.trim() ? (
+                                  <span style={{ fontSize: 9, fontWeight: 800, color: '#047857', background: '#d1fae5', padding: '1px 5px', borderRadius: 4, textTransform: 'uppercase' }}>
+                                    ✓ OK
+                                  </span>
+                                ) : (
+                                  <span style={{ fontSize: 9, fontWeight: 800, color: '#b45309', background: '#fef3c7', padding: '1px 5px', borderRadius: 4, textTransform: 'uppercase' }}>
+                                    Obrigatório
+                                  </span>
+                                )}
+                              </div>
+                              <button
+                                type="button"
+                                onClick={handleGerarMatriculaAutomatica}
+                                disabled={loadingProximaMatricula}
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: 3,
+                                  fontSize: 9.5,
+                                  fontWeight: 700,
+                                  color: '#2563eb',
+                                  background: 'rgba(37, 99, 235, 0.08)',
+                                  border: '1px solid rgba(37, 99, 235, 0.2)',
+                                  padding: '1px 6px',
+                                  borderRadius: 5,
+                                  cursor: loadingProximaMatricula ? 'wait' : 'pointer',
+                                  transition: 'all 0.15s ease',
+                                  lineHeight: 1.2
+                                }}
+                                onMouseEnter={e => {
+                                  if (!loadingProximaMatricula) {
+                                    e.currentTarget.style.background = '#2563eb'
+                                    e.currentTarget.style.color = '#fff'
+                                  }
+                                }}
+                                onMouseLeave={e => {
+                                  if (!loadingProximaMatricula) {
+                                    e.currentTarget.style.background = 'rgba(37, 99, 235, 0.08)'
+                                    e.currentTarget.style.color = '#2563eb'
+                                  }
+                                }}
+                                title="Preencher próximo ID/Matrícula sequencial do sistema automaticamente"
+                              >
+                                {loadingProximaMatricula ? (
+                                  <Loader2 size={10} style={{ animation: 'spin 1s linear infinite' }} />
+                                ) : (
+                                  <Sparkles size={10} />
+                                )}
+                                Automático
+                              </button>
+                            </div>
+                            <input 
+                              className="form-input" 
+                              style={{ 
+                                height: 35,
+                                padding: '0 11px',
+                                fontSize: 13,
+                                borderRadius: 8,
+                                fontWeight: 700,
+                                ...getMandatoryFieldStyle(formData.aluno.codigo, 'codigo')
+                              }}
+                              placeholder="Ex: 5496" 
+                              value={formData.aluno.codigo || ''} 
+                              onChange={e => {
+                                handleInputChange('aluno', 'codigo', e.target.value);
+                                if (hasError('codigo')) {
+                                  setValidationErrors(prev => prev.filter(err => err.field !== 'codigo'));
                                 }
-                              };
-                              img.src = reader.result as string;
-                            }
-                            reader.readAsDataURL(file)
-                          }
-                        }}
-                      />
+                              }} 
+                            />
+                          </div>
+                        </div>
+
+                        {/* Linha 2: RGA Oficial, CPF e ID CENSO */}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+                          {/* RGA Automático */}
+                          <div>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 3 }}>
+                              <label style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', margin: 0, display: 'flex', alignItems: 'center', gap: 3 }}>
+                                <Lock size={10} color="#64748b" /> RGA (Oficial)
+                              </label>
+                              <span style={{ fontSize: 8.5, fontWeight: 800, background: '#e0f2fe', color: '#0369a1', padding: '1px 5px', borderRadius: 4, textTransform: 'uppercase' }}>
+                                Auto
+                              </span>
+                            </div>
+                            <input 
+                              className="form-input" 
+                              readOnly
+                              tabIndex={-1}
+                              value={rgaCalculado} 
+                              style={{ 
+                                height: 35,
+                                padding: '0 11px',
+                                fontSize: 12.5,
+                                borderRadius: 8,
+                                background: '#f8fafc', 
+                                color: '#1e293b', 
+                                fontWeight: 800, 
+                                borderColor: '#cbd5e1', 
+                                cursor: 'not-allowed', 
+                                fontFamily: 'monospace, sans-serif',
+                                letterSpacing: '0.04em'
+                              }} 
+                              title={`RGA gerado automaticamente: Ano letivo (${anoLetivoCad}) + ID`}
+                            />
+                          </div>
+
+                          {/* CPF */}
+                          <div>
+                            <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
+                              CPF
+                            </label>
+                            <input 
+                              className="form-input" 
+                              style={{ height: 35, padding: '0 11px', fontSize: 13, borderRadius: 8 }}
+                              placeholder="000.000.000-00" 
+                              maxLength={14}
+                              value={formData.aluno.cpf || ''} 
+                              onChange={e => handleInputChange('aluno', 'cpf', formatCpfMask(e.target.value))} 
+                            />
+                          </div>
+
+                          {/* ID CENSO */}
+                          <div>
+                            <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
+                              ID CENSO (INEP)
+                            </label>
+                            <input 
+                              className="form-input" 
+                              style={{ height: 35, padding: '0 11px', fontSize: 13, borderRadius: 8 }}
+                              placeholder="Ex: 123456789012" 
+                              maxLength={20}
+                              value={formData.aluno.idCenso || ''} 
+                              onChange={e => handleInputChange('aluno', 'idCenso', e.target.value)} 
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* CARD 2: DADOS PESSOAIS & ORIGEM */}
+                    <div style={{
+                      background: 'rgba(255, 255, 255, 0.85)',
+                      border: '1px solid #e2e8f0',
+                      borderRadius: 14,
+                      padding: '12px 16px',
+                      boxShadow: '0 4px 16px rgba(0, 0, 0, 0.03)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 8
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 800, color: '#1e293b' }}>
+                        <Users size={14} color="#2563eb" /> Dados Pessoais e Origem
+                      </div>
+
+                      {/* Linha 1: Data Nasc, Sexo, Cor/Raça, Nacionalidade */}
+                      <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 0.9fr 1fr 1fr', gap: 10 }}>
+                        <div>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 3 }}>
+                            <label style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', margin: 0 }}>
+                              Data de Nasc. <span style={{ color: '#ef4444', fontWeight: 800 }}>*</span>
+                            </label>
+                            {formData.aluno.dataNasc?.trim() ? (
+                              <span style={{ fontSize: 9, fontWeight: 800, color: '#047857', background: '#d1fae5', padding: '1px 5px', borderRadius: 4, textTransform: 'uppercase' }}>
+                                ✓ OK
+                              </span>
+                            ) : (
+                              <span style={{ fontSize: 9, fontWeight: 800, color: '#b45309', background: '#fef3c7', padding: '1px 5px', borderRadius: 4, textTransform: 'uppercase' }}>
+                                Obrigatório
+                              </span>
+                            )}
+                          </div>
+                          <input 
+                            type="date" 
+                            className="form-input" 
+                            style={{ 
+                              height: 35,
+                              padding: '0 10px',
+                              fontSize: 12.5,
+                              borderRadius: 8,
+                              ...getMandatoryFieldStyle(formData.aluno.dataNasc, 'dataNasc')
+                            }}
+                            value={formData.aluno.dataNasc || ''} 
+                            onChange={e => {
+                              handleInputChange('aluno', 'dataNasc', e.target.value);
+                              if (hasError('dataNasc')) {
+                                setValidationErrors(prev => prev.filter(err => err.field !== 'dataNasc'));
+                              }
+                            }} 
+                          />
+                        </div>
+
+                        <div>
+                          <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
+                            Sexo
+                          </label>
+                          <select 
+                            className="form-input" 
+                            style={{ height: 35, padding: '0 8px', fontSize: 12.5, borderRadius: 8 }}
+                            value={formData.aluno.sexo || ''} 
+                            onChange={e => handleInputChange('aluno', 'sexo', e.target.value)}
+                          >
+                            <option value="">Selecione...</option>
+                            <option value="Masculino">Masculino</option>
+                            <option value="Feminino">Feminino</option>
+                            <option value="Outro">Outro</option>
+                          </select>
+                        </div>
+
+                        <div>
+                          <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
+                            Cor / Raça
+                          </label>
+                          <select 
+                            className="form-input" 
+                            style={{ height: 35, padding: '0 8px', fontSize: 12.5, borderRadius: 8 }}
+                            value={formData.aluno.corRaca || ''} 
+                            onChange={e => handleInputChange('aluno', 'corRaca', e.target.value)}
+                          >
+                            <option value="">Selecione...</option>
+                            <option value="Branca">Branca</option>
+                            <option value="Preta">Preta</option>
+                            <option value="Parda">Parda</option>
+                            <option value="Amarela">Amarela</option>
+                            <option value="Indígena">Indígena</option>
+                            <option value="Não declarada">Não declarada</option>
+                          </select>
+                        </div>
+
+                        <div>
+                          <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
+                            Nacionalidade
+                          </label>
+                          <input 
+                            className="form-input" 
+                            style={{ height: 35, padding: '0 10px', fontSize: 12.5, borderRadius: 8 }}
+                            placeholder="Ex: Brasileira" 
+                            value={formData.aluno.nacionalidade ?? 'Brasileira'} 
+                            onChange={e => handleInputChange('aluno', 'nacionalidade', e.target.value)} 
+                          />
+                        </div>
+                      </div>
+
+                      {/* Linha 2: Naturalidade, UF Naturalidade, Telefone, E-mail */}
+                      <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.5fr 1fr 1.3fr', gap: 10 }}>
+                        <div>
+                          <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
+                            Naturalidade (Cidade)
+                          </label>
+                          <input 
+                            className="form-input" 
+                            style={{ height: 35, padding: '0 10px', fontSize: 12.5, borderRadius: 8 }}
+                            placeholder="Ex: Cuiabá" 
+                            value={formData.aluno.naturalidade || ''} 
+                            onChange={e => handleInputChange('aluno', 'naturalidade', e.target.value)} 
+                          />
+                        </div>
+
+                        <div>
+                          <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
+                            UF
+                          </label>
+                          <select 
+                            className="form-input" 
+                            style={{ height: 35, padding: '0 6px', fontSize: 12.5, borderRadius: 8 }}
+                            value={formData.aluno.naturalidadeUf || ''} 
+                            onChange={e => handleInputChange('aluno', 'naturalidadeUf', e.target.value)}
+                          >
+                            <option value="">UF...</option>
+                            {ESTADOS_BRASIL.map(uf => (
+                              <option key={uf} value={uf}>{uf}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div>
+                          <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
+                            Telefone / WhatsApp
+                          </label>
+                          <input 
+                            className="form-input" 
+                            style={{ height: 35, padding: '0 10px', fontSize: 12.5, borderRadius: 8 }}
+                            placeholder="(00)00000-0000" 
+                            value={formData.aluno.telefone || ''} 
+                            onChange={e => handleInputChange('aluno', 'telefone', formatPhone(e.target.value))} 
+                          />
+                        </div>
+
+                        <div>
+                          <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
+                            E-mail
+                          </label>
+                          <input 
+                            type="email" 
+                            className="form-input" 
+                            style={{ height: 35, padding: '0 10px', fontSize: 12.5, borderRadius: 8 }}
+                            placeholder="aluno@exemplo.com" 
+                            value={formData.aluno.email || ''} 
+                            onChange={e => handleInputChange('aluno', 'email', e.target.value)} 
+                          />
+                        </div>
+                      </div>
+
+                      {/* Linha 3: Necessidades Especiais */}
+                      <div style={{ 
+                        background: formData.aluno.necessidadesEspeciais === 'Sim' ? 'rgba(238, 242, 255, 0.6)' : '#f8fafc',
+                        border: formData.aluno.necessidadesEspeciais === 'Sim' ? '1px solid #c7d2fe' : '1px solid #e2e8f0',
+                        borderRadius: 10,
+                        padding: '6px 12px',
+                        transition: 'all 0.25s ease'
+                      }}>
+                        <div style={{ 
+                          display: 'grid', 
+                          gridTemplateColumns: formData.aluno.necessidadesEspeciais === 'Sim' ? '180px 1fr' : '180px 1fr', 
+                          gap: 12, 
+                          alignItems: 'center' 
+                        }}>
+                          <div>
+                            <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 2 }}>
+                              Necessidades Especiais?
+                            </label>
+                            <select 
+                              className="form-input" 
+                              style={{ 
+                                height: 33,
+                                padding: '0 8px',
+                                fontSize: 12,
+                                borderRadius: 8,
+                                fontWeight: 700,
+                                borderColor: formData.aluno.necessidadesEspeciais === 'Sim' ? '#6366f1' : undefined,
+                                color: formData.aluno.necessidadesEspeciais === 'Sim' ? '#4338ca' : '#1e293b'
+                              }}
+                              value={formData.aluno.necessidadesEspeciais || 'Não'} 
+                              onChange={e => {
+                                const val = e.target.value;
+                                handleInputChange('aluno', 'necessidadesEspeciais', val);
+                                if (val === 'Não') {
+                                  handleInputChange('aluno', 'necessidadesEspeciaisDesc', '');
+                                }
+                              }}
+                            >
+                              <option value="Não">Não</option>
+                              <option value="Sim">Sim</option>
+                            </select>
+                          </div>
+
+                          {formData.aluno.necessidadesEspeciais === 'Sim' ? (
+                            <div>
+                              <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#4338ca', textTransform: 'uppercase', marginBottom: 2 }}>
+                                Descreva as Necessidades / Laudo Médico
+                              </label>
+                              <input 
+                                className="form-input" 
+                                style={{ 
+                                  height: 33,
+                                  padding: '0 10px',
+                                  fontSize: 12,
+                                  borderRadius: 8,
+                                  borderColor: '#6366f1', 
+                                  boxShadow: '0 0 0 1px rgba(99, 102, 241, 0.2)',
+                                  background: '#fff',
+                                  fontWeight: 500
+                                }}
+                                placeholder="Ex: TEA (Autismo), TDAH, Baixa Visão, Cadeirante, Dislexia..." 
+                                value={formData.aluno.necessidadesEspeciaisDesc || ''} 
+                                onChange={e => handleInputChange('aluno', 'necessidadesEspeciaisDesc', e.target.value)} 
+                                autoFocus
+                              />
+                            </div>
+                          ) : (
+                            <div style={{ fontSize: 11, color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 6, paddingTop: 10 }}>
+                              <span>AEE &bull; Apoio Pedagógico Especializado</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* CARD 3: ENDEREÇO RESIDENCIAL (RECOLHIDO POR PADRÃO) */}
+                    {(() => {
+                      const hasEnderecoAlunoData = Boolean(
+                        formData.aluno.cep ||
+                        formData.aluno.endereco ||
+                        formData.aluno.numero ||
+                        formData.aluno.complemento ||
+                        formData.aluno.bairro ||
+                        formData.aluno.cidade ||
+                        formData.aluno.uf
+                      )
+
+                      return (
+                        <div
+                          style={{
+                            background: expandedEnderecoAluno 
+                              ? 'rgba(255, 255, 255, 0.95)' 
+                              : hasEnderecoAlunoData 
+                                ? 'rgba(239, 246, 255, 0.55)' 
+                                : 'rgba(248, 250, 252, 0.75)',
+                            border: expandedEnderecoAluno 
+                              ? '1px solid #cbd5e1' 
+                              : hasEnderecoAlunoData 
+                                ? '1px solid #bfdbfe' 
+                                : '1px dashed #cbd5e1',
+                            borderRadius: 12,
+                            overflow: 'hidden',
+                            boxShadow: expandedEnderecoAluno ? '0 4px 16px rgba(0, 0, 0, 0.03)' : 'none',
+                            transition: 'all 0.2s ease'
+                          }}
+                        >
+                          {/* ACCORDION HEADER (CLICÁVEL) */}
+                          <div
+                            onClick={() => setExpandedEnderecoAluno(prev => !prev)}
+                            role="button"
+                            tabIndex={0}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault()
+                                setExpandedEnderecoAluno(prev => !prev)
+                              }
+                            }}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              padding: '10px 14px',
+                              cursor: 'pointer',
+                              userSelect: 'none',
+                              background: expandedEnderecoAluno ? 'rgba(241, 245, 249, 0.7)' : 'transparent',
+                              borderBottom: expandedEnderecoAluno ? '1px solid #e2e8f0' : 'none',
+                              transition: 'background 0.15s ease'
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                              <div
+                                style={{
+                                  width: 26,
+                                  height: 26,
+                                  borderRadius: 6,
+                                  background: expandedEnderecoAluno ? 'rgba(37, 99, 235, 0.14)' : 'rgba(37, 99, 235, 0.08)',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center'
+                                }}
+                              >
+                                <MapPin size={14} color="#2563eb" />
+                              </div>
+                              <span style={{ fontSize: 11.5, fontWeight: 800, color: '#1e293b', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+                                Endereço Residencial
+                              </span>
+                              <span style={{ fontSize: 10, color: '#94a3b8', fontWeight: 600 }}>
+                                (Opcional)
+                              </span>
+
+                              {hasEnderecoAlunoData && !expandedEnderecoAluno && (
+                                <span
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: 4,
+                                    fontSize: 10.5,
+                                    fontWeight: 700,
+                                    color: '#059669',
+                                    background: 'rgba(5, 150, 105, 0.09)',
+                                    border: '1px solid rgba(5, 150, 105, 0.25)',
+                                    padding: '2px 8px',
+                                    borderRadius: 999
+                                  }}
+                                >
+                                  <Check size={11} /> Preenchido {formData.aluno.cidade ? `• ${formData.aluno.cidade}${formData.aluno.uf ? `/${formData.aluno.uf}` : ''}` : (formData.aluno.bairro ? `• ${formData.aluno.bairro}` : '')}
+                                </span>
+                              )}
+
+                              {expandedEnderecoAluno && (
+                                <>
+                                  <span style={{ fontSize: 10.5, color: '#64748b' }}>
+                                    Preenchimento automático via CEP
+                                  </span>
+                                  {loadingCep && (
+                                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10.5, color: '#2563eb', fontWeight: 600 }}>
+                                      <Loader2 size={11} className="animate-spin" /> Buscando CEP...
+                                    </span>
+                                  )}
+                                  {cepFeedback?.type === 'success' && (
+                                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10.5, color: '#059669', fontWeight: 700 }}>
+                                      <CheckCircle2 size={12} /> {cepFeedback.message}
+                                    </span>
+                                  )}
+                                  {cepFeedback?.type === 'error' && (
+                                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10.5, color: '#dc2626', fontWeight: 700 }}>
+                                      <AlertTriangle size={12} /> {cepFeedback.message}
+                                    </span>
+                                  )}
+                                </>
+                              )}
+                            </div>
+
+                            <div
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 5,
+                                fontSize: 11,
+                                fontWeight: 700,
+                                color: expandedEnderecoAluno ? '#64748b' : '#2563eb',
+                                background: expandedEnderecoAluno ? '#f1f5f9' : 'rgba(37, 99, 235, 0.08)',
+                                border: expandedEnderecoAluno ? '1px solid #e2e8f0' : '1px solid rgba(37, 99, 235, 0.25)',
+                                borderRadius: 6,
+                                padding: '4px 10px'
+                              }}
+                            >
+                              {expandedEnderecoAluno ? (
+                                <>Recolher <ChevronUp size={13} /></>
+                              ) : (
+                                <>{hasEnderecoAlunoData ? 'Visualizar / Editar' : 'Preencher Endereço'} <ChevronDown size={13} /></>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* ACCORDION CONTENT (EXPANDIDO) */}
+                          {expandedEnderecoAluno && (
+                            <div style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                              {/* Linha 1: CEP, Endereço (Logradouro), Número, Complemento */}
+                              <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 2.3fr 0.8fr 1.1fr', gap: 10, alignItems: 'start' }}>
+                                <div>
+                                  <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
+                                    CEP
+                                  </label>
+                                  <div style={{ position: 'relative' }}>
+                                    <input 
+                                      className="form-input" 
+                                      placeholder="00000-000" 
+                                      maxLength={9}
+                                      value={formData.aluno.cep || ''} 
+                                      onChange={handleCepChange} 
+                                      style={{ height: 35, padding: '0 30px 0 10px', fontSize: 12.5, borderRadius: 8 }}
+                                    />
+                                    <div style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', display: 'flex', alignItems: 'center' }}>
+                                      {loadingCep ? (
+                                        <Loader2 size={13} style={{ animation: 'spin 1s linear infinite', color: '#2563eb' }} />
+                                      ) : cepFeedback?.type === 'success' ? (
+                                        <CheckCircle2 size={13} color="#10b981" />
+                                      ) : cepFeedback?.type === 'error' ? (
+                                        <AlertTriangle size={13} color="#ef4444" />
+                                      ) : (
+                                        <SearchIcon size={12} color="#94a3b8" />
+                                      )}
+                                    </div>
+                                  </div>
+                                  {cepFeedback && (
+                                    <span style={{ 
+                                      fontSize: 9.5, 
+                                      fontWeight: 600, 
+                                      display: 'block', 
+                                      marginTop: 2, 
+                                      color: cepFeedback.type === 'success' ? '#10b981' : '#ef4444' 
+                                    }}>
+                                      {cepFeedback.message}
+                                    </span>
+                                  )}
+                                </div>
+
+                                <div>
+                                  <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
+                                    Endereço (Logradouro)
+                                  </label>
+                                  <input 
+                                    className="form-input" 
+                                    style={{ height: 35, padding: '0 10px', fontSize: 12.5, borderRadius: 8 }}
+                                    placeholder="Rua, Avenida, Alameda..." 
+                                    value={formData.aluno.endereco || ''} 
+                                    onChange={e => handleInputChange('aluno', 'endereco', e.target.value)} 
+                                  />
+                                </div>
+
+                                <div>
+                                  <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
+                                    Número
+                                  </label>
+                                  <input 
+                                    className="form-input" 
+                                    style={{ height: 35, padding: '0 10px', fontSize: 12.5, borderRadius: 8 }}
+                                    placeholder="Nº ou S/N" 
+                                    value={formData.aluno.numero || ''} 
+                                    onChange={e => handleInputChange('aluno', 'numero', e.target.value)} 
+                                  />
+                                </div>
+
+                                <div>
+                                  <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
+                                    Complemento
+                                  </label>
+                                  <input 
+                                    className="form-input" 
+                                    style={{ height: 35, padding: '0 10px', fontSize: 12.5, borderRadius: 8 }}
+                                    placeholder="Apto, Bloco..." 
+                                    value={formData.aluno.complemento || ''} 
+                                    onChange={e => handleInputChange('aluno', 'complemento', e.target.value)} 
+                                  />
+                                </div>
+                              </div>
+
+                              {/* Linha 2: Bairro, Cidade, UF */}
+                              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.8fr 0.6fr', gap: 10 }}>
+                                <div>
+                                  <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
+                                    Bairro
+                                  </label>
+                                  <input 
+                                    className="form-input" 
+                                    style={{ height: 35, padding: '0 10px', fontSize: 12.5, borderRadius: 8 }}
+                                    placeholder="Bairro" 
+                                    value={formData.aluno.bairro || ''} 
+                                    onChange={e => handleInputChange('aluno', 'bairro', e.target.value)} 
+                                  />
+                                </div>
+
+                                <div>
+                                  <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
+                                    Cidade
+                                  </label>
+                                  <input 
+                                    className="form-input" 
+                                    style={{ height: 35, padding: '0 10px', fontSize: 12.5, borderRadius: 8 }}
+                                    placeholder="Cidade" 
+                                    value={formData.aluno.cidade || ''} 
+                                    onChange={e => handleInputChange('aluno', 'cidade', e.target.value)} 
+                                  />
+                                </div>
+
+                                <div>
+                                  <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
+                                    UF
+                                  </label>
+                                  <select 
+                                    className="form-input" 
+                                    style={{ height: 35, padding: '0 6px', fontSize: 12.5, borderRadius: 8 }}
+                                    value={formData.aluno.uf || ''} 
+                                    onChange={e => handleInputChange('aluno', 'uf', e.target.value)}
+                                  >
+                                    <option value="">UF...</option>
+                                    {ESTADOS_BRASIL.map(uf => (
+                                      <option key={uf} value={uf}>{uf}</option>
+                                    ))}
+                                  </select>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })()}
+
+                    {/* CARD 4: SITUAÇÃO & PERMISSÕES */}
+                    <div style={{ display: 'flex', gap: 32, background: 'rgba(248, 250, 252, 0.8)', border: '1px solid #e2e8f0', padding: '10px 16px', borderRadius: 12 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <label className="switch" style={{ transform: 'scale(0.85)', transformOrigin: 'left center' }}>
+                          <input type="checkbox" checked={formData.aluno.ativo} onChange={e => handleInputChange('aluno', 'ativo', e.target.checked)} />
+                          <span className="slider"></span>
+                        </label>
+                        <div>
+                          <p style={{ fontSize: 12, fontWeight: 700, color: '#1e293b', margin: 0 }}>Aluno Ativo</p>
+                          <p style={{ fontSize: 10.5, color: '#64748b', margin: 0 }}>Habilitado no sistema</p>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <label className="switch" style={{ transform: 'scale(0.85)', transformOrigin: 'left center' }}>
+                          <input type="checkbox" checked={formData.aluno.autorizadoSairSozinho} onChange={e => handleInputChange('aluno', 'autorizadoSairSozinho', e.target.checked)} />
+                          <span className="slider"></span>
+                        </label>
+                        <div>
+                          <p style={{ fontSize: 12, fontWeight: 700, color: '#1e293b', margin: 0 }}>Autorizado a Sair Sozinho</p>
+                          <p style={{ fontSize: 10.5, color: '#64748b', margin: 0 }}>Dispensa acompanhamento</p>
+                        </div>
+                      </div>
                     </div>
                   </div>
-
-                  {/* Form Grid */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                    {/* Linha 1 */}
-                    <div style={{ display: 'flex', gap: 16 }}>
-                      <div style={{ flex: '1' }}>
-                        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 6 }}>ID *</label>
-                        <input 
-                          className="form-input" 
-                          style={{ borderColor: hasError('codigo') ? '#ef4444' : undefined, boxShadow: hasError('codigo') ? '0 0 0 1px #ef4444' : undefined }}
-                          placeholder="Ex: AL001" 
-                          value={formData.aluno.codigo || ''} 
-                          onChange={e => {
-                            handleInputChange('aluno', 'codigo', e.target.value);
-                            if (hasError('codigo')) {
-                              setValidationErrors(prev => prev.filter(err => err.field !== 'codigo'));
-                            }
-                          }} 
-                        />
-                      </div>
-                      <div style={{ flex: '3' }}>
-                        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 6 }}>Nome Completo *</label>
-                        <input 
-                          className="form-input" 
-                          style={{ borderColor: hasError('nome') ? '#ef4444' : undefined, boxShadow: hasError('nome') ? '0 0 0 1px #ef4444' : undefined }}
-                          placeholder="Nome do aluno" 
-                          value={formData.aluno.nome || ''} 
-                          onChange={e => {
-                            handleInputChange('aluno', 'nome', e.target.value);
-                            if (hasError('nome')) {
-                              setValidationErrors(prev => prev.filter(err => err.field !== 'nome'));
-                            }
-                          }} 
-                        />
-                      </div>
-                    </div>
-
-                    {/* Linha 2 */}
-                    <div style={{ display: 'flex', gap: 16 }}>
-                      <div style={{ flex: '1' }}>
-                        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 6 }}>Data de Nascimento *</label>
-                        <input 
-                          type="date" 
-                          className="form-input" 
-                          style={{ borderColor: hasError('dataNasc') ? '#ef4444' : undefined, boxShadow: hasError('dataNasc') ? '0 0 0 1px #ef4444' : undefined }}
-                          value={formData.aluno.dataNasc || ''} 
-                          onChange={e => {
-                            handleInputChange('aluno', 'dataNasc', e.target.value);
-                            if (hasError('dataNasc')) {
-                              setValidationErrors(prev => prev.filter(err => err.field !== 'dataNasc'));
-                            }
-                          }} 
-                        />
-                      </div>
-                      <div style={{ flex: '1' }}>
-                        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 6 }}>Telefone</label>
-                        <input className="form-input" placeholder="(00)00000-0000" value={formData.aluno.telefone || ''} onChange={e => handleInputChange('aluno', 'telefone', formatPhone(e.target.value))} />
-                      </div>
-                      <div style={{ flex: '2' }}>
-                        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 6 }}>E-mail</label>
-                        <input type="email" className="form-input" placeholder="email@exemplo.com" value={formData.aluno.email || ''} onChange={e => handleInputChange('aluno', 'email', e.target.value)} />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Toggles */}
-                  <div style={{ display: 'flex', gap: 40, background: 'rgba(248, 250, 252, 0.6)', padding: '16px 20px', borderRadius: 12 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                      <label className="switch">
-                        <input type="checkbox" checked={formData.aluno.ativo} onChange={e => handleInputChange('aluno', 'ativo', e.target.checked)} />
-                        <span className="slider"></span>
-                      </label>
-                      <div>
-                        <p style={{ fontSize: 13, fontWeight: 700, color: '#1e293b', margin: 0 }}>Aluno Ativo</p>
-                        <p style={{ fontSize: 11, color: '#64748b', margin: 0 }}>Habilitado no sistema</p>
-                      </div>
-                    </div>
-
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                      <label className="switch">
-                        <input type="checkbox" checked={formData.aluno.autorizadoSairSozinho} onChange={e => handleInputChange('aluno', 'autorizadoSairSozinho', e.target.checked)} />
-                        <span className="slider"></span>
-                      </label>
-                      <div>
-                        <p style={{ fontSize: 13, fontWeight: 700, color: '#1e293b', margin: 0 }}>Autorizado a Sair Sozinho</p>
-                        <p style={{ fontSize: 11, color: '#64748b', margin: 0 }}>Dispensa acompanhamento</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
+                );
+              })()}
 
               {/* TAB: RESPONSÁVEIS */}
               {activeTab === 'responsavel' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                   
-                  {/* Search Existing */}
-                  <div className="flex flex-wrap items-end gap-3">
-                    <div className="flex-1 min-w-[200px] max-w-[400px] relative">
-                      <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 6 }}>Buscar Responsável Existente</label>
+                  {/* Search Existing & Quick Actions */}
+                  <div className="flex flex-wrap items-end gap-3" style={{ background: 'rgba(248, 250, 252, 0.9)', padding: 14, borderRadius: 12, border: '1px solid #e2e8f0' }}>
+                    <div className="flex-1 min-w-[200px] max-w-[420px] relative">
+                      <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 4 }}>
+                        Buscar Responsável Existente (Nome ou CPF)
+                      </label>
                       <div style={{ position: 'relative' }}>
                         <SearchIcon size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
                         <input 
                           className="form-input" 
-                          style={{ paddingLeft: 36, height: 44 }} 
-                          placeholder="Nome ou CPF do responsável…" 
+                          style={{ paddingLeft: 36, height: 38, fontSize: 13, borderRadius: 8 }} 
+                          placeholder="Digite o nome ou CPF…" 
                           value={buscaResponsavel}
                           onChange={e => setBuscaResponsavel(e.target.value)}
                           onKeyDown={e => e.key === 'Enter' && handleBuscarResponsavel()}
@@ -2771,23 +4292,48 @@ export default function AlunosPage() {
                       
                       {/* Resultados da busca */}
                       {resultadosResponsaveis.length > 0 && (
-                        <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, boxShadow: '0 4px 6px rgba(0,0,0,0.1)', zIndex: 10, maxHeight: 200, overflowY: 'auto', marginTop: 4 }}>
+                        <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, boxShadow: '0 8px 16px rgba(0,0,0,0.1)', zIndex: 30, maxHeight: 220, overflowY: 'auto', marginTop: 4 }}>
                           {resultadosResponsaveis.map(resp => (
                             <div 
                               key={resp.id} 
-                              style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid #f1f5f9' }}
+                              style={{ padding: '9px 12px', cursor: 'pointer', borderBottom: '1px solid #f1f5f9' }}
                               onClick={() => {
+                                const d = resp.dados || {};
                                 const mappedResp = {
                                   id: resp.id || '',
-                                  nome: resp.nome || '',
-                                  dataNasc: resp.data_nasc || resp.dataNasc || '',
-                                  email: resp.email || '',
-                                  telefone: resp.telefone || '',
-                                  profissao: resp.profissao || '',
                                   codigo: resp.codigo || resp.id || '',
+                                  nome: resp.nome || '',
+                                  parentesco: resp.parentesco || '',
+                                  dataNasc: resp.data_nasc || resp.dataNasc || d.dataNasc || d.data_nasc || '',
+                                  cpf: resp.cpf || d.cpf || '',
+                                  rg: resp.rg || d.rg || '',
+                                  rgOrgaoEmissor: resp.rgOrgaoEmissor || resp.orgEmissor || d.rgOrgaoEmissor || d.orgEmissor || '',
+                                  sexo: resp.sexo || d.sexo || '',
+                                  estadoCivil: resp.estado_civil || resp.estadoCivil || d.estadoCivil || d.estado_civil || '',
+                                  profissao: resp.profissao || d.profissao || '',
+                                  nacionalidade: resp.nacionalidade || d.nacionalidade || 'Brasileira',
+                                  naturalidade: resp.naturalidade || d.naturalidade || '',
+                                  naturalidadeUf: resp.naturalidadeUf || resp.uf || d.naturalidadeUf || d.uf || '',
+                                  email: resp.email || '',
+                                  telefone: resp.telefone || resp.celular || '',
                                   codigoAluno: resp.codigoAluno || '',
                                   rfid: resp.rfid || '',
-                                  parentesco: resp.parentesco || '',
+                                  cep: resp.cep || d.cep || '',
+                                  endereco: resp.endereco || resp.logradouro || d.endereco || d.logradouro || '',
+                                  numero: resp.numero || d.numero || '',
+                                  complemento: resp.complemento || d.complemento || '',
+                                  bairro: resp.bairro || d.bairro || '',
+                                  cidade: resp.cidade || d.cidade || '',
+                                  uf: resp.uf || resp.ufEnd || d.uf || d.ufEnd || '',
+                                  comercialEmpresa: resp.comercialEmpresa || d.comercialEmpresa || '',
+                                  comercialTelefone: resp.comercialTelefone || d.comercialTelefone || '',
+                                  comercialCep: resp.comercialCep || d.comercialCep || '',
+                                  comercialEndereco: resp.comercialEndereco || d.comercialEndereco || '',
+                                  comercialNumero: resp.comercialNumero || d.comercialNumero || '',
+                                  comercialComplemento: resp.comercialComplemento || d.comercialComplemento || '',
+                                  comercialBairro: resp.comercialBairro || d.comercialBairro || '',
+                                  comercialCidade: resp.comercialCidade || d.comercialCidade || '',
+                                  comercialUf: resp.comercialUf || d.comercialUf || '',
                                   diasAcesso: resp.dias_acesso || resp.diasAcesso || ['Seg', 'Ter', 'Qua', 'Qui', 'Sex'],
                                   isFinanceiro: resp.isFinanceiro || resp.alunosVinculados?.some((a: any) => a.isFinanceiro) || false,
                                   isPedagogico: resp.isPedagogico || resp.alunosVinculados?.some((a: any) => a.isPedagogico) || false,
@@ -2796,16 +4342,21 @@ export default function AlunosPage() {
                                 }
                                 setFormData({
                                   ...formData,
-                                  responsaveis: [...formData.responsaveis.filter(r => r.id), mappedResp] // Adiciona aos responsáveis
+                                  responsaveis: [...formData.responsaveis.filter(r => r.id), mappedResp]
                                 })
                                 setResultadosResponsaveis([])
                                 setBuscaResponsavel('')
+                                setMostrarFormResponsavel(true)
                               }}
                               onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
                               onMouseLeave={e => e.currentTarget.style.background = '#fff'}
                             >
-                              <div style={{ fontWeight: 600, fontSize: 13 }}>{resp.nome}</div>
-                              <div style={{ fontSize: 11, color: '#64748b' }}>{resp.email}</div>
+                              <div style={{ fontWeight: 600, fontSize: 13, color: '#1e293b' }}>{resp.nome}</div>
+                              <div style={{ fontSize: 11, color: '#64748b', display: 'flex', gap: 10 }}>
+                                {resp.cpf && <span>CPF: {formatCpfMask(resp.cpf)}</span>}
+                                {resp.telefone && <span>Tel: {resp.telefone}</span>}
+                                {resp.email && <span>{resp.email}</span>}
+                              </div>
                             </div>
                           ))}
                         </div>
@@ -2814,30 +4365,194 @@ export default function AlunosPage() {
                     <button 
                       onClick={handleBuscarResponsavel} 
                       className="neo-btn neo-btn-secondary shrink-0" 
-                      style={{ height: 44, padding: '0 24px', minWidth: '100px', fontSize: 14 }}
+                      style={{ height: 38, padding: '0 20px', minWidth: '90px', fontSize: 13, borderRadius: 8 }}
                       disabled={loadingBuscaResp}
                     >
                       {loadingBuscaResp ? 'Buscando...' : 'Buscar'}
                     </button>
-                    <div style={{ fontSize: 13, color: '#64748b', alignSelf: 'center', padding: '0 4px', paddingBottom: 12 }}>ou</div>
+                    <div style={{ fontSize: 12, color: '#94a3b8', alignSelf: 'center', padding: '0 4px', paddingBottom: 6 }}>ou</div>
                     <button onClick={() => {
                       const randCode = Math.floor(1000000 + Math.random() * 9000000).toString();
-                      setFormData({ ...formData, responsaveis: [...formData.responsaveis, { id: randCode, nome: '', dataNasc: '', email: '', telefone: '', profissao: '', codigo: randCode, codigoAluno: '', rfid: '', parentesco: '', diasAcesso: ['Seg', 'Ter', 'Qua', 'Qui', 'Sex'], isFinanceiro: false, isPedagogico: false, isOutro: false, proibido: false, isNewAdded: true } as any] });
+                      setFormData({ 
+                        ...formData, 
+                        responsaveis: [
+                          ...formData.responsaveis, 
+                          { 
+                            id: randCode, 
+                            codigo: randCode, 
+                            nome: '', 
+                            parentesco: '', 
+                            dataNasc: '', 
+                            cpf: '', 
+                            rg: '', 
+                            rgOrgaoEmissor: '', 
+                            sexo: '', 
+                            estadoCivil: '', 
+                            profissao: '', 
+                            nacionalidade: 'Brasileira', 
+                            naturalidade: '', 
+                            naturalidadeUf: '', 
+                            email: '', 
+                            telefone: '', 
+                            codigoAluno: '', 
+                            rfid: '', 
+                            cep: '', 
+                            endereco: '', 
+                            numero: '', 
+                            complemento: '', 
+                            bairro: '', 
+                            cidade: '', 
+                            uf: '', 
+                            comercialEmpresa: '', 
+                            comercialTelefone: '', 
+                            comercialCep: '', 
+                            comercialEndereco: '', 
+                            comercialNumero: '', 
+                            comercialComplemento: '', 
+                            comercialBairro: '', 
+                            comercialCidade: '', 
+                            comercialUf: '', 
+                            diasAcesso: ['Seg', 'Ter', 'Qua', 'Qui', 'Sex'], 
+                            isFinanceiro: false, 
+                            isPedagogico: false, 
+                            isOutro: false, 
+                            proibido: false, 
+                            isNewAdded: true 
+                          } as any
+                        ] 
+                      });
                       setMostrarFormResponsavel(true);
-                    }} className="neo-btn neo-btn-primary shrink-0" style={{ height: 44, padding: '0 24px', fontSize: 14 }}>
-                      <Plus size={16} /> Novo Responsável
+                    }} className="neo-btn neo-btn-primary shrink-0" style={{ height: 38, padding: '0 20px', fontSize: 13, borderRadius: 8 }}>
+                      <Plus size={15} /> Novo Responsável
                     </button>
                   </div>
 
-                  {mostrarFormResponsavel && (
-                    <>
-                      <div style={{ height: '1px', background: '#e2e8f0' }} />
-                      
+                  {(mostrarFormResponsavel || formData.responsaveis.length > 0) && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                       {formData.responsaveis.map((resp, index) => (
-                        <div key={index} style={{ border: hasError(`resp_${index}_tipo`) || hasError(`resp_${index}_id`) || hasError(`resp_${index}_nome`) || hasError(`resp_${index}_parentesco`) ? '1px solid #ef4444' : '1px solid #e2e8f0', padding: 16, borderRadius: 12, marginBottom: 16, background: 'rgba(255,255,255,0.5)', transition: 'all 0.2s' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-                            <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e293b' }}>Responsável #{index + 1} *</h3>
+                        <div 
+                          key={index} 
+                          style={{ 
+                            border: hasError(`resp_${index}_tipo`) || hasError(`resp_${index}_id`) || hasError(`resp_${index}_nome`) || hasError(`resp_${index}_parentesco`) || hasError(`resp_${index}_email`)
+                              ? '1.5px solid #ef4444' 
+                              : '1px solid #e2e8f0', 
+                            padding: '16px 18px', 
+                            borderRadius: 14, 
+                            background: '#ffffff', 
+                            boxShadow: '0 4px 16px rgba(0, 0, 0, 0.03)',
+                            transition: 'all 0.2s' 
+                          }}
+                        >
+                          {/* Card Header: Title & Action Toggles */}
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, paddingBottom: 10, borderBottom: '1px solid #f1f5f9' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                              <div style={{ width: 28, height: 28, borderRadius: 8, background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 12, fontWeight: 800 }}>
+                                {index + 1}
+                              </div>
+                              <div>
+                                <h3 style={{ fontSize: 14, fontWeight: 800, color: '#1e293b', margin: 0 }}>
+                                  Responsável #{index + 1} *
+                                </h3>
+                                <p style={{ fontSize: 11, color: '#64748b', margin: 0 }}>
+                                  {resp.nome ? resp.nome : 'Preencha os dados do responsável'}
+                                </p>
+                              </div>
+                            </div>
+
                             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const val = !resp.isFinanceiro;
+                                  handleInputChange('responsaveis', 'isFinanceiro', val, index);
+                                  if (val || resp.isPedagogico || resp.isOutro) {
+                                    setValidationErrors(prev => prev.filter(err => err.field !== `resp_${index}_tipo`));
+                                  }
+                                  if (!val) {
+                                    setValidationErrors(prev => prev.filter(err => err.field !== `resp_${index}_email`));
+                                  }
+                                }}
+                                style={{
+                                  padding: '5px 14px',
+                                  borderRadius: '20px',
+                                  fontSize: 11,
+                                  fontWeight: 700,
+                                  border: '1px solid',
+                                  borderColor: resp.isFinanceiro ? '#10b981' : hasError(`resp_${index}_tipo`) ? '#ef4444' : '#e2e8f0',
+                                  background: resp.isFinanceiro ? '#10b981' : '#fff',
+                                  color: resp.isFinanceiro ? '#fff' : '#64748b',
+                                  cursor: 'pointer',
+                                  transition: 'all 0.2s',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: 5
+                                }}
+                              >
+                                {resp.isFinanceiro && <Check size={11} />} Financeiro
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const val = !resp.isPedagogico;
+                                  handleInputChange('responsaveis', 'isPedagogico', val, index);
+                                  if (val || resp.isFinanceiro || resp.isOutro) {
+                                    setValidationErrors(prev => prev.filter(err => err.field !== `resp_${index}_tipo`));
+                                  }
+                                  if (!resp.isFinanceiro) {
+                                    setValidationErrors(prev => prev.filter(err => err.field !== `resp_${index}_email`));
+                                  }
+                                }}
+                                style={{
+                                  padding: '5px 14px',
+                                  borderRadius: '20px',
+                                  fontSize: 11,
+                                  fontWeight: 700,
+                                  border: '1px solid',
+                                  borderColor: resp.isPedagogico ? '#8b5cf6' : hasError(`resp_${index}_tipo`) ? '#ef4444' : '#e2e8f0',
+                                  background: resp.isPedagogico ? '#8b5cf6' : '#fff',
+                                  color: resp.isPedagogico ? '#fff' : '#64748b',
+                                  cursor: 'pointer',
+                                  transition: 'all 0.2s',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: 5
+                                }}
+                              >
+                                {resp.isPedagogico && <Check size={11} />} Pedagógico
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const val = !resp.isOutro;
+                                  handleInputChange('responsaveis', 'isOutro', val, index);
+                                  if (val || resp.isFinanceiro || resp.isPedagogico) {
+                                    setValidationErrors(prev => prev.filter(err => err.field !== `resp_${index}_tipo`));
+                                  }
+                                  if (!resp.isFinanceiro) {
+                                    setValidationErrors(prev => prev.filter(err => err.field !== `resp_${index}_email`));
+                                  }
+                                }}
+                                style={{
+                                  padding: '5px 14px',
+                                  borderRadius: '20px',
+                                  fontSize: 11,
+                                  fontWeight: 700,
+                                  border: '1px solid',
+                                  borderColor: resp.isOutro ? '#f59e0b' : hasError(`resp_${index}_tipo`) ? '#ef4444' : '#e2e8f0',
+                                  background: resp.isOutro ? '#f59e0b' : '#fff',
+                                  color: resp.isOutro ? '#fff' : '#64748b',
+                                  cursor: 'pointer',
+                                  transition: 'all 0.2s',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: 5
+                                }}
+                              >
+                                {resp.isOutro && <Check size={11} />} Outro
+                              </button>
+
                               <button
                                 type="button"
                                 onClick={() => {
@@ -2847,266 +4562,847 @@ export default function AlunosPage() {
                                   });
                                 }}
                                 style={{
-                                  padding: '4px',
-                                  borderRadius: '50%',
-                                  border: 'none',
-                                  background: 'none',
+                                  padding: '6px',
+                                  borderRadius: '8px',
+                                  border: '1px solid #fee2e2',
+                                  background: '#fef2f2',
                                   color: '#ef4444',
                                   cursor: 'pointer',
                                   transition: 'all 0.2s',
                                   display: 'flex',
                                   alignItems: 'center',
-                                  justifyContent: 'center'
+                                  justifyContent: 'center',
+                                  marginLeft: 4
                                 }}
                                 title="Remover responsável"
                               >
-                                <Trash2 size={16} />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const val = !resp.isFinanceiro;
-                                  handleInputChange('responsaveis', 'isFinanceiro', val, index);
-                                  if (val || resp.isPedagogico || resp.isOutro) {
-                                    setValidationErrors(prev => prev.filter(err => err.field !== `resp_${index}_tipo`));
-                                  }
-                                }}
-                                style={{
-                                  padding: '4px 12px',
-                                  borderRadius: '20px',
-                                  fontSize: 11,
-                                  fontWeight: 700,
-                                  border: '1px solid',
-                                  borderColor: resp.isFinanceiro ? '#10b981' : hasError(`resp_${index}_tipo`) ? '#ef4444' : '#e2e8f0',
-                                  background: resp.isFinanceiro ? '#10b981' : '#fff',
-                                  color: resp.isFinanceiro ? '#fff' : '#64748b',
-                                  cursor: 'pointer',
-                                  transition: 'all 0.2s'
-                                }}
-                              >
-                                Financeiro
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const val = !resp.isPedagogico;
-                                  handleInputChange('responsaveis', 'isPedagogico', val, index);
-                                  if (val || resp.isFinanceiro || resp.isOutro) {
-                                    setValidationErrors(prev => prev.filter(err => err.field !== `resp_${index}_tipo`));
-                                  }
-                                }}
-                                style={{
-                                  padding: '4px 12px',
-                                  borderRadius: '20px',
-                                  fontSize: 11,
-                                  fontWeight: 700,
-                                  border: '1px solid',
-                                  borderColor: resp.isPedagogico ? '#8b5cf6' : hasError(`resp_${index}_tipo`) ? '#ef4444' : '#e2e8f0',
-                                  background: resp.isPedagogico ? '#8b5cf6' : '#fff',
-                                  color: resp.isPedagogico ? '#fff' : '#64748b',
-                                  cursor: 'pointer',
-                                  transition: 'all 0.2s'
-                                }}
-                              >
-                                Pedagógico
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const val = !resp.isOutro;
-                                  handleInputChange('responsaveis', 'isOutro', val, index);
-                                  if (val || resp.isFinanceiro || resp.isPedagogico) {
-                                    setValidationErrors(prev => prev.filter(err => err.field !== `resp_${index}_tipo`));
-                                  }
-                                }}
-                                style={{
-                                  padding: '4px 12px',
-                                  borderRadius: '20px',
-                                  fontSize: 11,
-                                  fontWeight: 700,
-                                  border: '1px solid',
-                                  borderColor: resp.isOutro ? '#f59e0b' : hasError(`resp_${index}_tipo`) ? '#ef4444' : '#e2e8f0',
-                                  background: resp.isOutro ? '#f59e0b' : '#fff',
-                                  color: resp.isOutro ? '#fff' : '#64748b',
-                                  cursor: 'pointer',
-                                  transition: 'all 0.2s'
-                                }}
-                              >
-                                Outro
+                                <Trash2 size={15} />
                               </button>
                             </div>
                           </div>
 
-                          {/* Dynamic Badges on Top of Card */}
-                          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 16 }}>
-                            {resp.isFinanceiro && (
-                              <span style={{ padding: '2px 8px', borderRadius: '12px', fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', background: 'rgba(16, 185, 129, 0.1)', color: '#10b981', border: '1px solid rgba(16, 185, 129, 0.2)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                                <Check size={10} /> Financeiro
+                          {/* Dynamic warning if no role selected */}
+                          {!resp.isFinanceiro && !resp.isPedagogico && !resp.isOutro && resp.parentesco !== 'outro' && (
+                            <div style={{ marginBottom: 12 }}>
+                              <span className="pulse-warning" style={{ padding: '3px 10px', borderRadius: '12px', fontSize: '10.5px', fontWeight: 800, textTransform: 'uppercase', background: '#fee2e2', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                                <AlertTriangle size={11} /> Selecione o tipo do responsável: Financeiro, Pedagógico ou Outro *
                               </span>
-                            )}
-                            {resp.isPedagogico && (
-                              <span style={{ padding: '2px 8px', borderRadius: '12px', fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', background: 'rgba(139, 92, 246, 0.1)', color: '#8b5cf6', border: '1px solid rgba(139, 92, 246, 0.2)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                                <Check size={10} /> Pedagógico
-                              </span>
-                            )}
-                            {resp.isOutro && (
-                              <span style={{ padding: '2px 8px', borderRadius: '12px', fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', background: 'rgba(245, 158, 11, 0.1)', color: '#f59e0b', border: '1px solid rgba(245, 158, 11, 0.2)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                                <Check size={10} /> Outro
-                              </span>
-                            )}
-                            {!resp.isFinanceiro && !resp.isPedagogico && !resp.isOutro && resp.parentesco !== 'outro' && (
-                              <span className="pulse-warning" style={{ padding: '2px 8px', borderRadius: '12px', fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', background: '#fee2e2', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                                <AlertTriangle size={10} /> Tipo Obrigatório *
-                              </span>
-                            )}
-                          </div>
-                          
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                    {/* Linha 1 */}
-                    <div style={{ display: 'flex', gap: 16 }}>
-                      <div style={{ flex: '1', maxWidth: '100px' }}>
-                        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 6 }}>ID *</label>
-                        <input 
-                          className="form-input" 
-                          style={{ borderColor: hasError(`resp_${index}_id`) ? '#ef4444' : undefined, boxShadow: hasError(`resp_${index}_id`) ? '0 0 0 1px #ef4444' : undefined }}
-                          placeholder="Ex: RESP001" 
-                          value={resp.id || resp.codigo || ''} 
-                          onChange={e => {
-                            const val = e.target.value;
-                            handleInputChange('responsaveis', 'id', val, index);
-                            handleInputChange('responsaveis', 'codigo', val, index);
-                            if (hasError(`resp_${index}_id`)) {
-                              setValidationErrors(prev => prev.filter(err => err.field !== `resp_${index}_id`));
-                            }
-                          }} 
-                        />
-                      </div>
-                      <div style={{ flex: '3.5' }}>
-                        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 6 }}>Nome Completo *</label>
-                        <input 
-                          className="form-input" 
-                          style={{ borderColor: hasError(`resp_${index}_nome`) ? '#ef4444' : undefined, boxShadow: hasError(`resp_${index}_nome`) ? '0 0 0 1px #ef4444' : undefined }}
-                          placeholder="Nome do responsável" 
-                          value={resp.nome || ''} 
-                          onChange={e => {
-                            handleInputChange('responsaveis', 'nome', e.target.value, index);
-                            if (hasError(`resp_${index}_nome`)) {
-                              setValidationErrors(prev => prev.filter(err => err.field !== `resp_${index}_nome`));
-                            }
-                          }} 
-                        />
-                      </div>
-                      <div style={{ flex: '1.5' }}>
-                        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 6 }}>Parentesco *</label>
-                        <select 
-                          className="form-input" 
-                          style={{ borderColor: hasError(`resp_${index}_parentesco`) ? '#ef4444' : undefined, boxShadow: hasError(`resp_${index}_parentesco`) ? '0 0 0 1px #ef4444' : undefined }}
-                          value={resp.parentesco || ''} 
-                          onChange={e => {
-                            handleInputChange('responsaveis', 'parentesco', e.target.value, index);
-                            if (hasError(`resp_${index}_parentesco`)) {
-                              setValidationErrors(prev => prev.filter(err => err.field !== `resp_${index}_parentesco`));
-                            }
-                          }}
-                        >
-                          <option value="">Selecione…</option>
-                          <option value="pai">Pai</option>
-                          <option value="mae">Mãe</option>
-                          <option value="outro">Outro</option>
-                        </select>
-                      </div>
-                    </div>
+                            </div>
+                          )}
 
-                    {/* Linha 2 */}
-                    <div style={{ display: 'flex', gap: 16 }}>
-                      <div style={{ flex: '1.5' }}>
-                        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 6 }}>Data de Nascimento</label>
-                        <input type="date" className="form-input" value={resp.dataNasc || ''} onChange={e => handleInputChange('responsaveis', 'dataNasc', e.target.value, index)} />
-                      </div>
-                      <div style={{ flex: '2.5' }}>
-                        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 6 }}>E-mail</label>
-                        <input type="email" className="form-input" placeholder="email@exemplo.com" value={resp.email || ''} onChange={e => handleInputChange('responsaveis', 'email', e.target.value, index)} />
-                      </div>
-                      <div style={{ flex: '1.5' }}>
-                        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 6 }}>Telefone</label>
-                        <input className="form-input" placeholder="(00)00000-0000" value={resp.telefone || ''} onChange={e => handleInputChange('responsaveis', 'telefone', formatPhone(e.target.value), index)} />
-                      </div>
-                    </div>
+                          {/* SUB-SECTION 1: DADOS PESSOAIS & DOCUMENTOS */}
+                          <div style={{ background: 'rgba(248, 250, 252, 0.8)', border: '1px solid #e2e8f0', borderRadius: 10, padding: '12px 14px', marginBottom: 12 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+                              <Shield size={13} color="#2563eb" />
+                              <span style={{ fontSize: 11, fontWeight: 800, color: '#1e293b', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+                                Identificação & Documentos
+                              </span>
+                            </div>
 
-                    {/* Linha 3 */}
-                    <div style={{ display: 'flex', gap: 16 }}>
-                      <div style={{ flex: '2' }}>
-                        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 6 }}>Profissão</label>
-                        <input className="form-input" placeholder="Ex: Professor" value={resp.profissao || ''} onChange={e => handleInputChange('responsaveis', 'profissao', e.target.value, index)} />
-                      </div>
-                      <div style={{ flex: '2' }}>
-                        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 6 }}>Cartão RFID</label>
-                        <div style={{ position: 'relative' }}>
-                          <CreditCard size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
-                          <input className="form-input" style={{ paddingLeft: 36 }} placeholder="Aproxime o cartão…" value={resp.rfid || ''} onChange={e => handleInputChange('responsaveis', 'rfid', e.target.value, index)} />
-                        </div>
-                      </div>
-                      <div style={{ flex: '1.5' }}>
-                        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 6 }}>Vínculo</label>
-                        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                          <span style={{ padding: '8px 12px', background: 'rgba(59, 130, 246, 0.1)', border: '1px solid rgba(59, 130, 246, 0.2)', borderRadius: '10px', fontSize: 13, fontWeight: 700, color: '#1d4ed8', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                            <Tag size={12} /> {formData.aluno.codigo || 'Novo Aluno'}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                              {/* Linha 1: ID, Nome Completo, Parentesco */}
+                              <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr 180px', gap: 10 }}>
+                                <div>
+                                  <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
+                                    ID *
+                                  </label>
+                                  <input 
+                                    className="form-input" 
+                                    style={{ ...getMandatoryFieldStyle(resp.id || resp.codigo, `resp_${index}_id`), height: 35, padding: '0 10px', fontSize: 12.5, borderRadius: 8 }}
+                                    placeholder="Ex: RESP001" 
+                                    value={resp.id || resp.codigo || ''} 
+                                    onChange={e => {
+                                      const val = e.target.value;
+                                      handleInputChange('responsaveis', 'id', val, index);
+                                      handleInputChange('responsaveis', 'codigo', val, index);
+                                      if (hasError(`resp_${index}_id`)) {
+                                        setValidationErrors(prev => prev.filter(err => err.field !== `resp_${index}_id`));
+                                      }
+                                    }} 
+                                  />
+                                </div>
 
-                          {/* Dias de Acesso */}
-                          <div style={{ marginTop: 16 }}>
-                            <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 8 }}>Dias Permitidos para Retirada (RFID)</label>
-                            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                              {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab'].map(dia => {
-                                const isSelected = resp.diasAcesso?.includes(dia);
-                                const showAsSelected = isSelected && !resp.proibido;
-                                return (
-                                  <button
-                                    key={dia}
-                                    type="button"
-                                    onClick={() => {
-                                      if (resp.proibido) return;
-                                      const currentDias = resp.diasAcesso || [];
-                                      const newDias = isSelected
-                                        ? currentDias.filter((d: string) => d !== dia)
-                                        : [...currentDias, dia];
-                                      handleInputChange('responsaveis', 'diasAcesso', newDias, index);
-                                    }}
-                                    style={{
-                                      width: 40,
-                                      height: 40,
-                                      borderRadius: '50%',
-                                      border: '1px solid',
-                                      borderColor: showAsSelected ? '#10b981' : '#ef4444',
-                                      background: showAsSelected ? '#10b981' : '#fff',
-                                      color: showAsSelected ? '#fff' : '#ef4444',
-                                      fontWeight: 700,
-                                      fontSize: 12,
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      justifyContent: 'center',
-                                      cursor: resp.proibido ? 'not-allowed' : 'pointer',
-                                      transition: 'all 0.2s',
-                                      boxShadow: showAsSelected ? '0 4px 12px rgba(16, 185, 129, 0.3)' : 'none',
-                                      opacity: resp.proibido ? 0.7 : 1
+                                <div>
+                                  <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
+                                    Nome Completo *
+                                  </label>
+                                  <input 
+                                    className="form-input" 
+                                    style={{ ...getMandatoryFieldStyle(resp.nome, `resp_${index}_nome`), height: 35, padding: '0 10px', fontSize: 12.5, borderRadius: 8 }}
+                                    placeholder="Nome do responsável" 
+                                    value={resp.nome || ''} 
+                                    onChange={e => {
+                                      handleInputChange('responsaveis', 'nome', e.target.value, index);
+                                      if (hasError(`resp_${index}_nome`)) {
+                                        setValidationErrors(prev => prev.filter(err => err.field !== `resp_${index}_nome`));
+                                      }
+                                    }} 
+                                  />
+                                </div>
+
+                                <div>
+                                  <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
+                                    Parentesco *
+                                  </label>
+                                  <select 
+                                    className="form-input" 
+                                    style={{ ...getMandatoryFieldStyle(resp.parentesco, `resp_${index}_parentesco`), height: 35, padding: '0 10px', fontSize: 12.5, borderRadius: 8 }}
+                                    value={resp.parentesco || ''} 
+                                    onChange={e => {
+                                      handleInputChange('responsaveis', 'parentesco', e.target.value, index);
+                                      if (hasError(`resp_${index}_parentesco`)) {
+                                        setValidationErrors(prev => prev.filter(err => err.field !== `resp_${index}_parentesco`));
+                                      }
                                     }}
                                   >
-                                    {dia.substring(0, 1)}
-                                  </button>
-                                );
-                              })}
+                                    <option value="">Selecione…</option>
+                                    <option value="pai">Pai</option>
+                                    <option value="mae">Mãe</option>
+                                    <option value="responsavel_legal">Responsável Legal</option>
+                                    <option value="padrasto">Padrasto</option>
+                                    <option value="madrasta">Madrasta</option>
+                                    <option value="avo">Avô / Avó</option>
+                                    <option value="tio">Tio / Tia</option>
+                                    <option value="irmao">Irmão / Irmã</option>
+                                    <option value="outro">Outro</option>
+                                  </select>
+                                </div>
+                              </div>
+
+                              {/* Linha 2: CPF, RG, Órgão Emissor, Data Nasc */}
+                              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr 1.1fr', gap: 10 }}>
+                                <div>
+                                  <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
+                                    CPF
+                                  </label>
+                                  <input 
+                                    className="form-input" 
+                                    style={{ height: 35, padding: '0 10px', fontSize: 12.5, borderRadius: 8 }}
+                                    placeholder="000.000.000-00" 
+                                    value={resp.cpf || ''} 
+                                    onChange={e => handleInputChange('responsaveis', 'cpf', formatCpfMask(e.target.value), index)} 
+                                  />
+                                </div>
+
+                                <div>
+                                  <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
+                                    RG
+                                  </label>
+                                  <input 
+                                    className="form-input" 
+                                    style={{ height: 35, padding: '0 10px', fontSize: 12.5, borderRadius: 8 }}
+                                    placeholder="Número do RG" 
+                                    value={resp.rg || ''} 
+                                    onChange={e => handleInputChange('responsaveis', 'rg', e.target.value, index)} 
+                                  />
+                                </div>
+
+                                <div>
+                                  <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
+                                    Órgão Emissor / UF
+                                  </label>
+                                  <input 
+                                    className="form-input" 
+                                    style={{ height: 35, padding: '0 10px', fontSize: 12.5, borderRadius: 8 }}
+                                    placeholder="Ex: SSP/SP" 
+                                    value={resp.rgOrgaoEmissor || ''} 
+                                    onChange={e => handleInputChange('responsaveis', 'rgOrgaoEmissor', e.target.value, index)} 
+                                  />
+                                </div>
+
+                                <div>
+                                  <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
+                                    Data de Nascimento
+                                  </label>
+                                  <input 
+                                    type="date" 
+                                    className="form-input" 
+                                    style={{ height: 35, padding: '0 10px', fontSize: 12.5, borderRadius: 8 }}
+                                    value={resp.dataNasc || ''} 
+                                    onChange={e => handleInputChange('responsaveis', 'dataNasc', e.target.value, index)} 
+                                  />
+                                </div>
+                              </div>
+
+                              {/* Linha 3: Sexo, Estado Civil, Profissão, Naturalidade com UF, Nacionalidade */}
+                              <div style={{ display: 'grid', gridTemplateColumns: '130px 150px 1.3fr 1.4fr 120px', gap: 10 }}>
+                                <div>
+                                  <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
+                                    Sexo
+                                  </label>
+                                  <select 
+                                    className="form-input" 
+                                    style={{ height: 35, padding: '0 8px', fontSize: 12.5, borderRadius: 8 }}
+                                    value={resp.sexo || ''} 
+                                    onChange={e => handleInputChange('responsaveis', 'sexo', e.target.value, index)}
+                                  >
+                                    <option value="">Selecione...</option>
+                                    <option value="Masculino">Masculino</option>
+                                    <option value="Feminino">Feminino</option>
+                                    <option value="Outro">Outro</option>
+                                  </select>
+                                </div>
+
+                                <div>
+                                  <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
+                                    Estado Civil
+                                  </label>
+                                  <select 
+                                    className="form-input" 
+                                    style={{ height: 35, padding: '0 8px', fontSize: 12.5, borderRadius: 8 }}
+                                    value={resp.estadoCivil || ''} 
+                                    onChange={e => handleInputChange('responsaveis', 'estadoCivil', e.target.value, index)}
+                                  >
+                                    <option value="">Selecione...</option>
+                                    <option value="Solteiro(a)">Solteiro(a)</option>
+                                    <option value="Casado(a)">Casado(a)</option>
+                                    <option value="Divorciado(a)">Divorciado(a)</option>
+                                    <option value="Viúvo(a)">Viúvo(a)</option>
+                                    <option value="União Estável">União Estável</option>
+                                    <option value="Separado(a)">Separado(a)</option>
+                                  </select>
+                                </div>
+
+                                <div>
+                                  <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
+                                    Profissão
+                                  </label>
+                                  <input 
+                                    className="form-input" 
+                                    style={{ height: 35, padding: '0 10px', fontSize: 12.5, borderRadius: 8 }}
+                                    placeholder="Ex: Engenheiro(a)..." 
+                                    value={resp.profissao || ''} 
+                                    onChange={e => handleInputChange('responsaveis', 'profissao', e.target.value, index)} 
+                                  />
+                                </div>
+
+                                <div>
+                                  <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
+                                    Naturalidade (Cidade / UF)
+                                  </label>
+                                  <div style={{ display: 'flex', gap: 6 }}>
+                                    <input 
+                                      className="form-input" 
+                                      style={{ height: 35, padding: '0 10px', fontSize: 12.5, borderRadius: 8, flex: 1 }}
+                                      placeholder="Cidade natal" 
+                                      value={resp.naturalidade || ''} 
+                                      onChange={e => handleInputChange('responsaveis', 'naturalidade', e.target.value, index)} 
+                                    />
+                                    <select 
+                                      className="form-input" 
+                                      style={{ width: 75, height: 35, padding: '0 4px', fontSize: 12.5, borderRadius: 8 }}
+                                      value={resp.naturalidadeUf || ''} 
+                                      onChange={e => handleInputChange('responsaveis', 'naturalidadeUf', e.target.value, index)}
+                                    >
+                                      <option value="">UF...</option>
+                                      {ESTADOS_BRASIL.map(uf => (
+                                        <option key={uf} value={uf}>{uf}</option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                </div>
+
+                                <div>
+                                  <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
+                                    Nacionalidade
+                                  </label>
+                                  <input 
+                                    className="form-input" 
+                                    style={{ height: 35, padding: '0 10px', fontSize: 12.5, borderRadius: 8 }}
+                                    placeholder="Ex: Brasileira" 
+                                    value={resp.nacionalidade || 'Brasileira'} 
+                                    onChange={e => handleInputChange('responsaveis', 'nacionalidade', e.target.value, index)} 
+                                  />
+                                </div>
+                              </div>
+
+                              {/* Linha 4: Contato & Acesso */}
+                              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.6fr 1.2fr 120px', gap: 10 }}>
+                                <div>
+                                  <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
+                                    Telefone / WhatsApp
+                                  </label>
+                                  <input 
+                                    className="form-input" 
+                                    style={{ height: 35, padding: '0 10px', fontSize: 12.5, borderRadius: 8 }}
+                                    placeholder="(00)00000-0000" 
+                                    value={resp.telefone || ''} 
+                                    onChange={e => handleInputChange('responsaveis', 'telefone', formatPhone(e.target.value), index)} 
+                                  />
+                                </div>
+
+                                <div>
+                                  <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
+                                    E-mail {resp.isFinanceiro ? '*' : ''}
+                                  </label>
+                                  <input 
+                                    type="email" 
+                                    className="form-input" 
+                                    style={{ 
+                                      ...(resp.isFinanceiro 
+                                        ? getMandatoryFieldStyle(resp.email, `resp_${index}_email`)
+                                        : hasError(`resp_${index}_email`)
+                                          ? {
+                                              borderColor: '#ef4444',
+                                              borderWidth: '2px',
+                                              borderStyle: 'solid',
+                                              boxShadow: '0 0 0 2px rgba(239, 68, 68, 0.25)',
+                                              background: '#fff5f5',
+                                              transition: 'all 0.2s ease-in-out'
+                                            }
+                                          : {}), 
+                                      height: 35, 
+                                      padding: '0 10px', 
+                                      fontSize: 12.5, 
+                                      borderRadius: 8 
+                                    }}
+                                    placeholder="email@exemplo.com" 
+                                    value={resp.email || ''} 
+                                    onChange={e => {
+                                      handleInputChange('responsaveis', 'email', e.target.value, index)
+                                      if (hasError(`resp_${index}_email`)) {
+                                        setValidationErrors(prev => prev.filter(err => err.field !== `resp_${index}_email`))
+                                      }
+                                    }} 
+                                  />
+                                </div>
+
+                                <div>
+                                  <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
+                                    Cartão RFID
+                                  </label>
+                                  <div style={{ position: 'relative' }}>
+                                    <CreditCard size={13} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                                    <input 
+                                      className="form-input" 
+                                      style={{ height: 35, paddingLeft: 30, paddingRight: 8, fontSize: 12.5, borderRadius: 8 }} 
+                                      placeholder="Aproxime o cartão…" 
+                                      value={resp.rfid || ''} 
+                                      onChange={e => handleInputChange('responsaveis', 'rfid', e.target.value, index)} 
+                                    />
+                                  </div>
+                                </div>
+
+                                <div>
+                                  <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
+                                    Vínculo Aluno
+                                  </label>
+                                  <div style={{ height: 35, display: 'flex', alignItems: 'center' }}>
+                                    <span style={{ width: '100%', height: 35, padding: '0 8px', background: 'rgba(59, 130, 246, 0.08)', border: '1px solid rgba(59, 130, 246, 0.25)', borderRadius: 8, fontSize: 11.5, fontWeight: 700, color: '#1d4ed8', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
+                                      <Tag size={12} /> {formData.aluno.codigo || 'Novo'}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* SUB-SECTION 2: ENDEREÇO RESIDENCIAL COM VIACEP */}
+                          <div style={{ background: 'rgba(248, 250, 252, 0.8)', border: '1px solid #e2e8f0', borderRadius: 10, padding: '12px 14px', marginBottom: 12 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <MapPin size={13} color="#2563eb" />
+                                <span style={{ fontSize: 11, fontWeight: 800, color: '#1e293b', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+                                  Endereço Residencial
+                                </span>
+                                {loadingCepResp[`${index}_res`] && (
+                                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10.5, color: '#2563eb', fontWeight: 600 }}>
+                                    <Loader2 size={11} className="animate-spin" /> Buscando CEP...
+                                  </span>
+                                )}
+                                {cepFeedbackResp[`${index}_res`]?.type === 'success' && (
+                                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10.5, color: '#059669', fontWeight: 700 }}>
+                                    <CheckCircle2 size={12} /> {cepFeedbackResp[`${index}_res`]?.message}
+                                  </span>
+                                )}
+                                {cepFeedbackResp[`${index}_res`]?.type === 'error' && (
+                                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10.5, color: '#dc2626', fontWeight: 700 }}>
+                                    <AlertTriangle size={12} /> {cepFeedbackResp[`${index}_res`]?.message}
+                                  </span>
+                                )}
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() => handleCopiarEnderecoResponsavelParaAluno(index)}
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: 5,
+                                  fontSize: 11,
+                                  fontWeight: 700,
+                                  color: copiadoParaAlunoIdx === index ? '#059669' : '#2563eb',
+                                  background: copiadoParaAlunoIdx === index ? 'rgba(5, 150, 105, 0.1)' : 'rgba(37, 99, 235, 0.08)',
+                                  border: copiadoParaAlunoIdx === index ? '1px solid rgba(5, 150, 105, 0.3)' : '1px solid rgba(37, 99, 235, 0.25)',
+                                  borderRadius: 6,
+                                  padding: '4px 10px',
+                                  cursor: 'pointer',
+                                  transition: 'all 0.15s ease'
+                                }}
+                                title="Copia este endereço residencial diretamente para o cadastro do aluno"
+                              >
+                                {copiadoParaAlunoIdx === index ? (
+                                  <>
+                                    <Check size={11} /> Copiado para o Aluno!
+                                  </>
+                                ) : (
+                                  <>
+                                    <Copy size={11} /> Copiar para o Aluno
+                                  </>
+                                )}
+                              </button>
+                            </div>
+
+                            <div style={{ display: 'grid', gridTemplateColumns: '130px 1fr 100px 160px', gap: 10, marginBottom: 10 }}>
+                              <div>
+                                <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
+                                  CEP
+                                </label>
+                                <input
+                                  className="form-input"
+                                  style={{ height: 35, padding: '0 10px', fontSize: 12.5, borderRadius: 8 }}
+                                  placeholder="00000-000"
+                                  value={resp.cep || ''}
+                                  onChange={e => handleCepRespResidencialChange(e.target.value, index)}
+                                />
+                              </div>
+                              <div>
+                                <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
+                                  Endereço / Logradouro
+                                </label>
+                                <input
+                                  className="form-input"
+                                  style={{ height: 35, padding: '0 10px', fontSize: 12.5, borderRadius: 8 }}
+                                  placeholder="Rua, Avenida, Travessa..."
+                                  value={resp.endereco || ''}
+                                  onChange={e => handleInputChange('responsaveis', 'endereco', e.target.value, index)}
+                                />
+                              </div>
+                              <div>
+                                <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
+                                  Número
+                                </label>
+                                <input
+                                  className="form-input"
+                                  style={{ height: 35, padding: '0 10px', fontSize: 12.5, borderRadius: 8 }}
+                                  placeholder="Nº"
+                                  value={resp.numero || ''}
+                                  onChange={e => handleInputChange('responsaveis', 'numero', e.target.value, index)}
+                                />
+                              </div>
+                              <div>
+                                <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
+                                  Complemento
+                                </label>
+                                <input
+                                  className="form-input"
+                                  style={{ height: 35, padding: '0 10px', fontSize: 12.5, borderRadius: 8 }}
+                                  placeholder="Apto, Bloco..."
+                                  value={resp.complemento || ''}
+                                  onChange={e => handleInputChange('responsaveis', 'complemento', e.target.value, index)}
+                                />
+                              </div>
+                            </div>
+
+                            <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.5fr 90px', gap: 10 }}>
+                              <div>
+                                <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
+                                  Bairro
+                                </label>
+                                <input
+                                  className="form-input"
+                                  style={{ height: 35, padding: '0 10px', fontSize: 12.5, borderRadius: 8 }}
+                                  placeholder="Bairro"
+                                  value={resp.bairro || ''}
+                                  onChange={e => handleInputChange('responsaveis', 'bairro', e.target.value, index)}
+                                />
+                              </div>
+                              <div>
+                                <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
+                                  Cidade
+                                </label>
+                                <input
+                                  className="form-input"
+                                  style={{ height: 35, padding: '0 10px', fontSize: 12.5, borderRadius: 8 }}
+                                  placeholder="Cidade"
+                                  value={resp.cidade || ''}
+                                  onChange={e => handleInputChange('responsaveis', 'cidade', e.target.value, index)}
+                                />
+                              </div>
+                              <div>
+                                <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
+                                  UF
+                                </label>
+                                <select
+                                  className="form-input"
+                                  style={{ height: 35, padding: '0 6px', fontSize: 12.5, borderRadius: 8 }}
+                                  value={resp.uf || ''}
+                                  onChange={e => handleInputChange('responsaveis', 'uf', e.target.value, index)}
+                                >
+                                  <option value="">UF...</option>
+                                  {ESTADOS_BRASIL.map(uf => (
+                                    <option key={uf} value={uf}>{uf}</option>
+                                  ))}
+                                </select>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* SUB-SECTION 3: ENDEREÇO COMERCIAL COM VIACEP (RECOLHIDO POR PADRÃO) */}
+                          {(() => {
+                            const isExpandedComercial = !!expandedComercialResp[index]
+                            const hasComercialData = Boolean(
+                              resp.comercialEmpresa ||
+                              resp.comercialTelefone ||
+                              resp.comercialCep ||
+                              resp.comercialEndereco ||
+                              resp.comercialNumero ||
+                              resp.comercialComplemento ||
+                              resp.comercialBairro ||
+                              resp.comercialCidade ||
+                              resp.comercialUf
+                            )
+
+                            return (
+                              <div
+                                style={{
+                                  background: isExpandedComercial 
+                                    ? 'rgba(248, 250, 252, 0.9)' 
+                                    : hasComercialData 
+                                      ? 'rgba(245, 243, 255, 0.5)' 
+                                      : 'rgba(248, 250, 252, 0.6)',
+                                  border: isExpandedComercial 
+                                    ? '1px solid #cbd5e1' 
+                                    : hasComercialData 
+                                      ? '1px solid #ddd6fe' 
+                                      : '1px dashed #cbd5e1',
+                                  borderRadius: 10,
+                                  marginBottom: 12,
+                                  overflow: 'hidden',
+                                  transition: 'all 0.2s ease'
+                                }}
+                              >
+                                {/* ACCORDION HEADER (CLICÁVEL) */}
+                                <div
+                                  onClick={() => toggleComercialResp(index)}
+                                  role="button"
+                                  tabIndex={0}
+                                  onKeyDown={e => {
+                                    if (e.key === 'Enter' || e.key === ' ') {
+                                      e.preventDefault()
+                                      toggleComercialResp(index)
+                                    }
+                                  }}
+                                  style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    padding: '10px 14px',
+                                    cursor: 'pointer',
+                                    userSelect: 'none',
+                                    background: isExpandedComercial ? 'rgba(241, 245, 249, 0.7)' : 'transparent',
+                                    borderBottom: isExpandedComercial ? '1px solid #e2e8f0' : 'none',
+                                    transition: 'background 0.15s ease'
+                                  }}
+                                >
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                                    <div
+                                      style={{
+                                        width: 26,
+                                        height: 26,
+                                        borderRadius: 6,
+                                        background: isExpandedComercial ? 'rgba(124, 58, 237, 0.12)' : 'rgba(124, 58, 237, 0.08)',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center'
+                                      }}
+                                    >
+                                      <Briefcase size={14} color="#7c3aed" />
+                                    </div>
+                                    <span style={{ fontSize: 11.5, fontWeight: 800, color: '#1e293b', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+                                      Endereço Comercial / Trabalho
+                                    </span>
+                                    <span style={{ fontSize: 10, color: '#94a3b8', fontWeight: 600 }}>
+                                      (Opcional)
+                                    </span>
+
+                                    {hasComercialData && !isExpandedComercial && (
+                                      <span
+                                        style={{
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          gap: 4,
+                                          fontSize: 10.5,
+                                          fontWeight: 700,
+                                          color: '#059669',
+                                          background: 'rgba(5, 150, 105, 0.09)',
+                                          border: '1px solid rgba(5, 150, 105, 0.25)',
+                                          padding: '2px 8px',
+                                          borderRadius: 999
+                                        }}
+                                      >
+                                        <Check size={11} /> Preenchido {resp.comercialEmpresa ? `• ${resp.comercialEmpresa}` : ''}
+                                      </span>
+                                    )}
+
+                                    {isExpandedComercial && (
+                                      <>
+                                        {loadingCepResp[`${index}_com`] && (
+                                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10.5, color: '#7c3aed', fontWeight: 600 }}>
+                                            <Loader2 size={11} className="animate-spin" /> Buscando CEP...
+                                          </span>
+                                        )}
+                                        {cepFeedbackResp[`${index}_com`]?.type === 'success' && (
+                                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10.5, color: '#059669', fontWeight: 700 }}>
+                                            <CheckCircle2 size={12} /> {cepFeedbackResp[`${index}_com`]?.message}
+                                          </span>
+                                        )}
+                                        {cepFeedbackResp[`${index}_com`]?.type === 'error' && (
+                                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10.5, color: '#dc2626', fontWeight: 700 }}>
+                                            <AlertTriangle size={12} /> {cepFeedbackResp[`${index}_com`]?.message}
+                                          </span>
+                                        )}
+                                      </>
+                                    )}
+                                  </div>
+
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                    {isExpandedComercial && (
+                                      <button
+                                        type="button"
+                                        onClick={e => {
+                                          e.stopPropagation()
+                                          handleCopiarEnderecoResidencialParaComercial(index)
+                                        }}
+                                        style={{
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          gap: 5,
+                                          fontSize: 11,
+                                          fontWeight: 700,
+                                          color: '#4f46e5',
+                                          background: 'rgba(79, 70, 229, 0.08)',
+                                          border: '1px solid rgba(79, 70, 229, 0.25)',
+                                          borderRadius: 6,
+                                          padding: '4px 10px',
+                                          cursor: 'pointer',
+                                          transition: 'all 0.15s ease'
+                                        }}
+                                        title="Preenche o endereço comercial com os dados do residencial"
+                                      >
+                                        <Copy size={11} /> Copiar do Residencial
+                                      </button>
+                                    )}
+
+                                    <div
+                                      style={{
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: 5,
+                                        fontSize: 11,
+                                        fontWeight: 700,
+                                        color: isExpandedComercial ? '#64748b' : '#7c3aed',
+                                        background: isExpandedComercial ? '#f1f5f9' : 'rgba(124, 58, 237, 0.08)',
+                                        border: isExpandedComercial ? '1px solid #e2e8f0' : '1px solid rgba(124, 58, 237, 0.25)',
+                                        borderRadius: 6,
+                                        padding: '4px 10px'
+                                      }}
+                                    >
+                                      {isExpandedComercial ? (
+                                        <>Recolher <ChevronUp size={13} /></>
+                                      ) : (
+                                        <>{hasComercialData ? 'Visualizar / Editar' : 'Preencher Endereço Comercial'} <ChevronDown size={13} /></>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* ACCORDION CONTENT (EXPANDIDO) */}
+                                {isExpandedComercial && (
+                                  <div style={{ padding: '12px 14px' }}>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1.2fr 130px', gap: 10, marginBottom: 10 }}>
+                                      <div>
+                                        <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
+                                          Empresa / Local de Trabalho
+                                        </label>
+                                        <input
+                                          className="form-input"
+                                          style={{ height: 35, padding: '0 10px', fontSize: 12.5, borderRadius: 8 }}
+                                          placeholder="Ex: Empresa XYZ / Autônomo"
+                                          value={resp.comercialEmpresa || ''}
+                                          onChange={e => handleInputChange('responsaveis', 'comercialEmpresa', e.target.value, index)}
+                                        />
+                                      </div>
+                                      <div>
+                                        <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
+                                          Telefone Comercial
+                                        </label>
+                                        <input
+                                          className="form-input"
+                                          style={{ height: 35, padding: '0 10px', fontSize: 12.5, borderRadius: 8 }}
+                                          placeholder="(00) 0000-0000"
+                                          value={resp.comercialTelefone || ''}
+                                          onChange={e => handleInputChange('responsaveis', 'comercialTelefone', formatPhone(e.target.value), index)}
+                                        />
+                                      </div>
+                                      <div>
+                                        <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
+                                          CEP Comercial
+                                        </label>
+                                        <input
+                                          className="form-input"
+                                          style={{ height: 35, padding: '0 10px', fontSize: 12.5, borderRadius: 8 }}
+                                          placeholder="00000-000"
+                                          value={resp.comercialCep || ''}
+                                          onChange={e => handleCepRespComercialChange(e.target.value, index)}
+                                        />
+                                      </div>
+                                    </div>
+
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 100px 160px', gap: 10, marginBottom: 10 }}>
+                                      <div>
+                                        <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
+                                          Endereço Comercial / Logradouro
+                                        </label>
+                                        <input
+                                          className="form-input"
+                                          style={{ height: 35, padding: '0 10px', fontSize: 12.5, borderRadius: 8 }}
+                                          placeholder="Rua, Avenida, Bloco empresarial..."
+                                          value={resp.comercialEndereco || ''}
+                                          onChange={e => handleInputChange('responsaveis', 'comercialEndereco', e.target.value, index)}
+                                        />
+                                      </div>
+                                      <div>
+                                        <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
+                                          Número
+                                        </label>
+                                        <input
+                                          className="form-input"
+                                          style={{ height: 35, padding: '0 10px', fontSize: 12.5, borderRadius: 8 }}
+                                          placeholder="Nº"
+                                          value={resp.comercialNumero || ''}
+                                          onChange={e => handleInputChange('responsaveis', 'comercialNumero', e.target.value, index)}
+                                        />
+                                      </div>
+                                      <div>
+                                        <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
+                                          Complemento / Sala
+                                        </label>
+                                        <input
+                                          className="form-input"
+                                          style={{ height: 35, padding: '0 10px', fontSize: 12.5, borderRadius: 8 }}
+                                          placeholder="Sala, Andar, Galpão..."
+                                          value={resp.comercialComplemento || ''}
+                                          onChange={e => handleInputChange('responsaveis', 'comercialComplemento', e.target.value, index)}
+                                        />
+                                      </div>
+                                    </div>
+
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.5fr 90px', gap: 10 }}>
+                                      <div>
+                                        <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
+                                          Bairro
+                                        </label>
+                                        <input
+                                          className="form-input"
+                                          style={{ height: 35, padding: '0 10px', fontSize: 12.5, borderRadius: 8 }}
+                                          placeholder="Bairro"
+                                          value={resp.comercialBairro || ''}
+                                          onChange={e => handleInputChange('responsaveis', 'comercialBairro', e.target.value, index)}
+                                        />
+                                      </div>
+                                      <div>
+                                        <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
+                                          Cidade
+                                        </label>
+                                        <input
+                                          className="form-input"
+                                          style={{ height: 35, padding: '0 10px', fontSize: 12.5, borderRadius: 8 }}
+                                          placeholder="Cidade"
+                                          value={resp.comercialCidade || ''}
+                                          onChange={e => handleInputChange('responsaveis', 'comercialCidade', e.target.value, index)}
+                                        />
+                                      </div>
+                                      <div>
+                                        <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
+                                          UF
+                                        </label>
+                                        <select
+                                          className="form-input"
+                                          style={{ height: 35, padding: '0 6px', fontSize: 12.5, borderRadius: 8 }}
+                                          value={resp.comercialUf || ''}
+                                          onChange={e => handleInputChange('responsaveis', 'comercialUf', e.target.value, index)}
+                                        >
+                                          <option value="">UF...</option>
+                                          {ESTADOS_BRASIL.map(uf => (
+                                            <option key={uf} value={uf}>{uf}</option>
+                                          ))}
+                                        </select>
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          })()}
+
+                          {/* SUB-SECTION 4: DIAS DE ACESSO & LIBERADO / PROIBIDO */}
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, padding: '10px 14px', background: 'rgba(248, 250, 252, 0.8)', border: '1px solid #e2e8f0', borderRadius: 10 }}>
+                            <div>
+                              <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 6 }}>
+                                Dias Permitidos para Retirada (RFID)
+                              </label>
+                              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                                {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab'].map(dia => {
+                                  const isSelected = resp.diasAcesso?.includes(dia);
+                                  const showAsSelected = isSelected && !resp.proibido;
+                                  return (
+                                    <button
+                                      key={dia}
+                                      type="button"
+                                      onClick={() => {
+                                        if (resp.proibido) return;
+                                        const currentDias = resp.diasAcesso || [];
+                                        const newDias = isSelected
+                                          ? currentDias.filter((d: string) => d !== dia)
+                                          : [...currentDias, dia];
+                                        handleInputChange('responsaveis', 'diasAcesso', newDias, index);
+                                      }}
+                                      style={{
+                                        width: 32,
+                                        height: 32,
+                                        borderRadius: '50%',
+                                        border: '1px solid',
+                                        borderColor: showAsSelected ? '#10b981' : '#e2e8f0',
+                                        background: showAsSelected ? '#10b981' : '#fff',
+                                        color: showAsSelected ? '#fff' : '#64748b',
+                                        fontWeight: 700,
+                                        fontSize: 11,
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        cursor: resp.proibido ? 'not-allowed' : 'pointer',
+                                        transition: 'all 0.2s',
+                                        boxShadow: showAsSelected ? '0 2px 8px rgba(16, 185, 129, 0.25)' : 'none',
+                                        opacity: resp.proibido ? 0.6 : 1
+                                      }}
+                                    >
+                                      {dia.substring(0, 1)}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                               <button
                                 type="button"
                                 onClick={() => handleInputChange('responsaveis', 'proibido', !resp.proibido, index)}
                                 style={{
-                                  height: 40,
+                                  height: 34,
                                   padding: '0 16px',
                                   borderRadius: '20px',
-                                  fontSize: 13,
+                                  fontSize: 12,
                                   fontWeight: 700,
                                   border: '1px solid',
                                   borderColor: resp.proibido ? '#ef4444' : '#10b981',
@@ -3116,26 +5412,82 @@ export default function AlunosPage() {
                                   transition: 'all 0.2s',
                                   display: 'flex',
                                   alignItems: 'center',
-                                  justifyContent: 'center',
-                                  marginLeft: 'auto'
+                                  gap: 6
                                 }}
                               >
-                                {resp.proibido ? 'Proibido' : 'Liberado'}
+                                {resp.proibido ? (
+                                  <>
+                                    <UserX size={14} /> Entrada Proibida
+                                  </>
+                                ) : (
+                                  <>
+                                    <UserCheck size={14} /> Entrada Liberada
+                                  </>
+                                )}
                               </button>
                             </div>
                           </div>
                         </div>
                       ))}
 
+                      {/* Botão Adicionar Outro Responsável */}
                       <button 
+                        type="button"
                         onClick={() => {
                           const randCode = Math.floor(1000000 + Math.random() * 9000000).toString();
-                          setFormData({ ...formData, responsaveis: [...formData.responsaveis, { id: randCode, nome: '', dataNasc: '', email: '', telefone: '', profissao: '', codigo: randCode, codigoAluno: '', rfid: '', parentesco: '', diasAcesso: ['Seg', 'Ter', 'Qua', 'Qui', 'Sex'], isFinanceiro: false, isPedagogico: false, isOutro: false, proibido: false }] })
+                          setFormData({ 
+                            ...formData, 
+                            responsaveis: [
+                              ...formData.responsaveis, 
+                              { 
+                                id: randCode, 
+                                codigo: randCode, 
+                                nome: '', 
+                                parentesco: '', 
+                                dataNasc: '', 
+                                cpf: '', 
+                                rg: '', 
+                                rgOrgaoEmissor: '', 
+                                sexo: '', 
+                                estadoCivil: '', 
+                                profissao: '', 
+                                nacionalidade: 'Brasileira', 
+                                naturalidade: '', 
+                                naturalidadeUf: '', 
+                                email: '', 
+                                telefone: '', 
+                                codigoAluno: '', 
+                                rfid: '', 
+                                cep: '', 
+                                endereco: '', 
+                                numero: '', 
+                                complemento: '', 
+                                bairro: '', 
+                                cidade: '', 
+                                uf: '', 
+                                comercialEmpresa: '', 
+                                comercialTelefone: '', 
+                                comercialCep: '', 
+                                comercialEndereco: '', 
+                                comercialNumero: '', 
+                                comercialComplemento: '', 
+                                comercialBairro: '', 
+                                comercialCidade: '', 
+                                comercialUf: '', 
+                                diasAcesso: ['Seg', 'Ter', 'Qua', 'Qui', 'Sex'], 
+                                isFinanceiro: false, 
+                                isPedagogico: false, 
+                                isOutro: false, 
+                                proibido: false,
+                                isNewAdded: true
+                              }
+                            ] 
+                          })
                         }} 
                         className="neo-btn" 
                         style={{ 
                           width: '100%', 
-                          padding: '16px', 
+                          padding: '14px', 
                           borderRadius: '12px', 
                           border: '2px dashed #3b82f6', 
                           background: 'rgba(59, 130, 246, 0.05)', 
@@ -3145,13 +5497,14 @@ export default function AlunosPage() {
                           alignItems: 'center', 
                           justifyContent: 'center', 
                           gap: 8,
-                          marginTop: 16,
-                          transition: 'all 0.2s'
+                          marginTop: 6,
+                          transition: 'all 0.2s',
+                          cursor: 'pointer'
                         }}
                       >
-                        <Plus size={18} /> Adicionar Outro Responsável
+                        <Plus size={16} /> Adicionar Outro Responsável
                       </button>
-                    </>
+                    </div>
                   )}
                 </div>
               )}
@@ -3167,7 +5520,7 @@ export default function AlunosPage() {
                     <button 
                       onClick={(e) => {
                         e.preventDefault();
-                        const novoHist = [...formData.historicoTurmas, { id: `HIST-${Date.now()}`, anoLetivo: '', segmento: '', serie: '', serieTurma: '', modalidade: 'INTEGRAL' }];
+                        const novoHist = [...formData.historicoTurmas, { id: `HIST-${Date.now()}`, anoLetivo: '', segmento: '', serie: '', serieTurma: '', modalidade: '', isIntegralIntermediario: false }];
                         setFormData(prev => ({ ...prev, historicoTurmas: novoHist }));
                       }}
                       style={{ background: '#f8fafc', color: '#3b82f6', border: '1px solid #e2e8f0', padding: '8px 16px', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
@@ -3199,24 +5552,60 @@ export default function AlunosPage() {
                       
                       return (
                         <div key={hist.id || index} style={{ background: '#f8fafc', border: `1px solid ${isActive ? '#86efac' : '#e2e8f0'}`, borderRadius: 12, padding: 16, position: 'relative' }}>
-                          <div style={{ position: 'absolute', top: 12, right: 12, display: 'flex', gap: 8 }}>
+                          <div style={{ position: 'absolute', top: 12, right: 12, display: 'flex', gap: 8, alignItems: 'center' }}>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                handleOpenEditMatriculaModal(index);
+                              }}
+                              style={{
+                                background: '#eff6ff',
+                                color: '#2563eb',
+                                border: '1px solid #bfdbfe',
+                                padding: '5px 12px',
+                                borderRadius: 7,
+                                cursor: 'pointer',
+                                fontSize: 11.5,
+                                fontWeight: 700,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 5,
+                                transition: 'all 0.15s ease'
+                              }}
+                              title="Editar dados completos da matrícula / turma"
+                            >
+                              <Edit size={13} /> Editar
+                            </button>
                             <button 
+                              type="button"
                               onClick={(e) => {
                                 e.preventDefault();
                                 const newHist = formData.historicoTurmas.filter((_, i) => i !== index);
                                 setFormData(prev => ({ ...prev, historicoTurmas: newHist }));
                               }}
                               style={{ background: 'white', color: '#ef4444', border: '1px solid #fee2e2', padding: 6, borderRadius: 6, cursor: 'pointer' }}
+                              title="Remover este vínculo"
                             >
                               <Trash2 size={16} />
                             </button>
                           </div>
 
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
                             <h4 style={{ fontSize: 14, fontWeight: 700, color: '#334155', margin: 0 }}>Vínculo #{sortedPos + 1}</h4>
                             <span style={{ background: badgeBg, color: badgeColor, fontSize: 11, fontWeight: 700, padding: '4px 8px', borderRadius: 4, textTransform: 'uppercase' }}>
-                              {badgeText}
+                              {hist.situacao || badgeText}
                             </span>
+                            {hist.bolsista && hist.bolsista !== 'Não' && (
+                              <span style={{ background: 'rgba(124, 58, 237, 0.1)', color: '#7c3aed', fontSize: 10.5, fontWeight: 700, padding: '2px 8px', borderRadius: 999 }}>
+                                Bolsista: {hist.bolsista}
+                              </span>
+                            )}
+                            {hist.dataIngresso && (
+                              <span style={{ fontSize: 10.5, color: '#64748b', fontWeight: 600 }}>
+                                Ingresso: {hist.dataIngresso.includes('-') ? hist.dataIngresso.split('-').reverse().join('/') : hist.dataIngresso}
+                              </span>
+                            )}
                           </div>
 
                       <div style={{ display: 'grid', gridTemplateColumns: '0.9fr 1.1fr 1.1fr 1.3fr auto', gap: 12, alignItems: 'end' }}>
@@ -3224,7 +5613,7 @@ export default function AlunosPage() {
                           <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 6 }}>Ano Letivo *</label>
                           <select 
                             className="form-input" 
-                            style={{ borderColor: hasError(`hist_${index}_anoLetivo`) ? '#ef4444' : undefined, boxShadow: hasError(`hist_${index}_anoLetivo`) ? '0 0 0 1px #ef4444' : undefined }}
+                            style={getMandatoryFieldStyle(hist.anoLetivo, `hist_${index}_anoLetivo`)}
                             value={hist.anoLetivo} 
                             onChange={e => {
                               const newHist = [...formData.historicoTurmas];
@@ -3245,8 +5634,7 @@ export default function AlunosPage() {
                           <select 
                             className="form-input" 
                             style={{ 
-                              borderColor: hasError(`hist_${index}_segmento`) ? '#ef4444' : undefined, 
-                              boxShadow: hasError(`hist_${index}_segmento`) ? '0 0 0 1px #ef4444' : undefined,
+                              ...getMandatoryFieldStyle(hist.segmento, `hist_${index}_segmento`),
                               opacity: !hist.anoLetivo ? 0.6 : 1,
                               cursor: !hist.anoLetivo ? 'not-allowed' : 'pointer'
                             }}
@@ -3294,8 +5682,7 @@ export default function AlunosPage() {
                           <select 
                             className="form-input" 
                             style={{ 
-                              borderColor: hasError(`hist_${index}_serie`) ? '#ef4444' : undefined, 
-                              boxShadow: hasError(`hist_${index}_serie`) ? '0 0 0 1px #ef4444' : undefined,
+                              ...getMandatoryFieldStyle(hist.serie, `hist_${index}_serie`),
                               opacity: (!hist.anoLetivo || !hist.segmento) ? 0.6 : 1,
                               cursor: (!hist.anoLetivo || !hist.segmento) ? 'not-allowed' : 'pointer'
                             }}
@@ -3343,8 +5730,7 @@ export default function AlunosPage() {
                           <select 
                             className="form-input" 
                             style={{ 
-                              borderColor: hasError(`hist_${index}_serieTurma`) ? '#ef4444' : undefined, 
-                              boxShadow: hasError(`hist_${index}_serieTurma`) ? '0 0 0 1px #ef4444' : undefined,
+                              ...getMandatoryFieldStyle(hist.serieTurma, `hist_${index}_serieTurma`),
                               opacity: (!hist.anoLetivo || !hist.segmento || !hist.serie) ? 0.6 : 1,
                               cursor: (!hist.anoLetivo || !hist.segmento || !hist.serie) ? 'not-allowed' : 'pointer'
                             }}
@@ -3760,7 +6146,7 @@ export default function AlunosPage() {
             </div>
 
             {/* Modal Footer */}
-            <div style={{ padding: '20px 32px', borderTop: '1px solid rgba(0,0,0,0.05)', background: 'transparent', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ padding: '12px 24px', borderTop: '1px solid rgba(0,0,0,0.05)', background: 'transparent', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div style={{ display: 'flex', gap: 4, alignItems: 'center', fontSize: 12, color: '#64748b' }}>
                 <span style={{ width: 8, height: 8, borderRadius: '50%', background: activeTab === 'aluno' ? '#1d4ed8' : '#e2e8f0' }}></span>
                 <span style={{ width: 8, height: 8, borderRadius: '50%', background: activeTab === 'responsavel' ? '#1d4ed8' : '#e2e8f0' }}></span>
@@ -3813,13 +6199,614 @@ export default function AlunosPage() {
                     </>
                   ) : (
                     <>
-                      <Check size={16} /> Finalizar Cadastro
+                      <Check size={16} /> {editingAlunoId ? 'Salvar Alterações' : 'Finalizar Cadastro'}
                     </>
                   )}
                 </button>
               </div>
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DETALHADO DE MATRÍCULA / TURMA (CONFORME IMAGEM 2) */}
+      {editingMatriculaIndex !== null && matriculaModalData !== null && (
+        <div 
+          style={{ 
+            position: 'fixed', 
+            inset: 0, 
+            background: 'rgba(15, 23, 42, 0.55)', 
+            backdropFilter: 'blur(5px)', 
+            zIndex: 500, 
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'center', 
+            padding: 20 
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setEditingMatriculaIndex(null)
+              setMatriculaModalData(null)
+            }
+          }}
+        >
+          <div 
+            className="glass-card ultra-modal modal-enter-active modal-turma-matricula" 
+            style={{ 
+              width: '100%', 
+              maxWidth: 860, 
+              maxHeight: '92vh', 
+              display: 'flex', 
+              flexDirection: 'column', 
+              overflow: 'hidden',
+              background: '#ffffff',
+              borderRadius: 16,
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+              border: '1px solid rgba(226, 232, 240, 0.9)'
+            }}
+          >
+            <style>{`
+              .modal-turma-matricula .form-input,
+              .modal-turma-matricula input:not([type="checkbox"]):not([type="radio"]),
+              .modal-turma-matricula select {
+                height: 42px !important;
+                min-height: 42px !important;
+                padding: 0 12px !important;
+                font-size: 13.5px !important;
+                line-height: normal !important;
+                box-sizing: border-box !important;
+                border-radius: 8px !important;
+                border: 1px solid #cbd5e1 !important;
+                background-color: #ffffff !important;
+                color: #0f172a !important;
+              }
+              .modal-turma-matricula .form-input:focus,
+              .modal-turma-matricula input:not([type="checkbox"]):not([type="radio"]):focus,
+              .modal-turma-matricula select:focus {
+                border-color: #3b82f6 !important;
+                box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15) !important;
+                outline: none !important;
+              }
+              .modal-turma-matricula textarea.form-input {
+                height: auto !important;
+                min-height: 80px !important;
+                padding: 10px 12px !important;
+                font-size: 13px !important;
+                line-height: 1.5 !important;
+                box-sizing: border-box !important;
+                border-radius: 8px !important;
+                border: 1px solid #cbd5e1 !important;
+                background-color: #ffffff !important;
+                color: #0f172a !important;
+              }
+              .modal-turma-matricula textarea.form-input:focus {
+                border-color: #3b82f6 !important;
+                box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15) !important;
+                outline: none !important;
+              }
+            `}</style>
+
+            {/* Modal Header */}
+            <div 
+              style={{ 
+                padding: '16px 22px', 
+                background: 'linear-gradient(135deg, #1e40af 0%, #3b82f6 100%)', 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                alignItems: 'center',
+                color: '#fff'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ width: 34, height: 34, borderRadius: 8, background: 'rgba(255, 255, 255, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <GraduationCap size={18} color="#fff" />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: 16, fontWeight: 800, margin: 0, fontFamily: 'Outfit, sans-serif' }}>
+                    Turma / Matrícula - Aluno(a): {formData.aluno.nome || 'Novo Aluno'}
+                  </h3>
+                  <p style={{ fontSize: 11, color: 'rgba(255, 255, 255, 0.85)', margin: '2px 0 0' }}>
+                    Configurações pedagógicas, financeiras e administrativas do vínculo
+                  </p>
+                </div>
+              </div>
+              <button 
+                type="button"
+                onClick={() => {
+                  setEditingMatriculaIndex(null)
+                  setMatriculaModalData(null)
+                }} 
+                style={{ 
+                  width: 30, 
+                  height: 30, 
+                  borderRadius: '50%', 
+                  border: 'none', 
+                  background: 'rgba(255, 255, 255, 0.2)', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'center', 
+                  cursor: 'pointer', 
+                  color: '#fff',
+                  transition: 'background 0.2s'
+                }}
+              >
+                <X size={15} />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div style={{ padding: '20px 24px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
+              
+              {/* Linha 1: Ano Letivo *, Turma *, Ingresso / Matrícula */}
+              <div style={{ display: 'grid', gridTemplateColumns: '0.9fr 1.8fr 1.1fr', gap: 12 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#475569', textTransform: 'uppercase', marginBottom: 5 }}>
+                    Ano Letivo *
+                  </label>
+                  <select
+                    className="form-input"
+                    style={{ height: 42, minHeight: 42, padding: '0 12px', fontSize: 13.5, fontWeight: 600, borderRadius: 8, lineHeight: 'normal' }}
+                    value={matriculaModalData.anoLetivo || ''}
+                    onChange={e => {
+                      const newAno = e.target.value
+                      const turmasNovoAno = todasTurmas.filter((t: any) => String(t.ano || t.anoLetivo || t.dados?.anoLetivo || '') === String(newAno))
+                      const mantemTurma = turmasNovoAno.some((t: any) => String(t.id) === String(matriculaModalData.serieTurma))
+                      setMatriculaModalData((prev: any) => ({
+                        ...prev,
+                        anoLetivo: newAno,
+                        serieTurma: mantemTurma ? prev.serieTurma : ''
+                      }))
+                    }}
+                  >
+                    <option value="">Selecione o ano...</option>
+                    {cfgCalendarioLetivo?.map((c: any) => (
+                      <option key={c.id} value={c.ano}>{c.ano}</option>
+                    ))}
+                    {(!cfgCalendarioLetivo || cfgCalendarioLetivo.length === 0) && (
+                      <>
+                        <option value="2026">2026</option>
+                        <option value="2025">2025</option>
+                        <option value="2024">2024</option>
+                      </>
+                    )}
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#475569', textTransform: 'uppercase', marginBottom: 5 }}>
+                    Turma *
+                  </label>
+                  {(() => {
+                    const turmasFiltradas = matriculaModalData.anoLetivo 
+                      ? todasTurmas.filter((t: any) => String(t.ano || t.anoLetivo || t.dados?.anoLetivo || '') === String(matriculaModalData.anoLetivo))
+                      : [];
+
+                    return (
+                      <select
+                        className="form-input"
+                        style={{ 
+                          height: 42, 
+                          minHeight: 42, 
+                          padding: '0 12px', 
+                          fontSize: 13.5, 
+                          fontWeight: 600, 
+                          borderRadius: 8, 
+                          lineHeight: 'normal',
+                          background: !matriculaModalData.anoLetivo ? '#f8fafc' : '#ffffff',
+                          cursor: !matriculaModalData.anoLetivo ? 'not-allowed' : 'pointer'
+                        }}
+                        disabled={!matriculaModalData.anoLetivo}
+                        value={matriculaModalData.serieTurma || ''}
+                        onChange={e => handleTurmaChangeInModal(e.target.value)}
+                      >
+                        {!matriculaModalData.anoLetivo ? (
+                          <option value="">Selecione o ano letivo primeiro...</option>
+                        ) : turmasFiltradas.length === 0 ? (
+                          <option value="">Nenhuma turma cadastrada para {matriculaModalData.anoLetivo}</option>
+                        ) : (
+                          <option value="">Selecione a turma...</option>
+                        )}
+                        {turmasFiltradas.map((t: any) => (
+                          <option key={t.id} value={t.id}>
+                            {t.nome} {t.serie ? `- ${t.serie}` : ''} {t.turno ? `(${t.turno})` : ''}
+                          </option>
+                        ))}
+                      </select>
+                    );
+                  })()}
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#475569', textTransform: 'uppercase', marginBottom: 5 }}>
+                    Ingresso / Matrícula
+                  </label>
+                  <input
+                    type="date"
+                    className="form-input"
+                    style={{ height: 42, minHeight: 42, padding: '0 12px', fontSize: 13.5, borderRadius: 8, lineHeight: 'normal' }}
+                    value={matriculaModalData.dataIngresso || ''}
+                    onChange={e => setMatriculaModalData((prev: any) => ({ ...prev, dataIngresso: e.target.value }))}
+                  />
+                </div>
+              </div>
+
+              {/* Linha 2: Situação, Bolsista, Data Resultado, Obs Desconto */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1.1fr 1fr 1.3fr', gap: 12 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#475569', textTransform: 'uppercase', marginBottom: 5 }}>
+                    Situação
+                  </label>
+                  <select
+                    className="form-input"
+                    style={{ height: 42, minHeight: 42, padding: '0 12px', fontSize: 13.5, fontWeight: 600, borderRadius: 8, lineHeight: 'normal' }}
+                    value={matriculaModalData.situacao || 'Cursando'}
+                    onChange={e => setMatriculaModalData((prev: any) => ({ ...prev, situacao: e.target.value }))}
+                  >
+                    <optgroup label="Em Andamento">
+                      <option value="Cursando">Cursando</option>
+                      <option value="Matriculado">Matriculado</option>
+                      <option value="Confirmado Web">Confirmado Web</option>
+                      <option value="Aguardando Deferimento">Aguardando Deferimento</option>
+                    </optgroup>
+                    <optgroup label="Conclusão / Aprovação">
+                      <option value="Aprovado(a)">Aprovado(a)</option>
+                      <option value="Aprovado(a) Cons. Classe">Aprovado(a) Cons. Classe</option>
+                      <option value="Concluído">Concluído</option>
+                      <option value="Promovido(a)">Promovido(a)</option>
+                      <option value="Classificado(a)">Classificado(a)</option>
+                      <option value="Avanço Escolar">Avanço Escolar</option>
+                      <option value="Progressão Parcial">Progressão Parcial</option>
+                    </optgroup>
+                    <optgroup label="Movimentação / Saída">
+                      <option value="Transferido(a)">Transferido(a)</option>
+                      <option value="Desistente">Desistente</option>
+                      <option value="Evadido(a)">Evadido(a)</option>
+                      <option value="Remanejado(a)">Remanejado(a)</option>
+                      <option value="Matrícula Cancelada">Matrícula Cancelada</option>
+                      <option value="Matrícula Trancada">Matrícula Trancada</option>
+                      <option value="Matrícula Indeferida">Matrícula Indeferida</option>
+                    </optgroup>
+                    <optgroup label="Retenção / Reprovação">
+                      <option value="Reprovado(a)">Reprovado(a)</option>
+                      <option value="Reprovado por Faltas">Reprovado por Faltas</option>
+                      <option value="Retido(a)">Retido(a)</option>
+                    </optgroup>
+                    <optgroup label="Outros">
+                      <option value="Não Informado">Não Informado</option>
+                    </optgroup>
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#475569', textTransform: 'uppercase', marginBottom: 5 }}>
+                    Bolsista
+                  </label>
+                  <select
+                    className="form-input"
+                    style={{ height: 42, minHeight: 42, padding: '0 12px', fontSize: 13.5, borderRadius: 8, lineHeight: 'normal' }}
+                    value={matriculaModalData.bolsista || 'Não'}
+                    onChange={e => setMatriculaModalData((prev: any) => ({ ...prev, bolsista: e.target.value }))}
+                  >
+                    <option value="Não">Não</option>
+                    <option value="Sim (100% - Integral)">Sim (100% - Integral)</option>
+                    <option value="Sim (50% - Parcial)">Sim (50% - Parcial)</option>
+                    <option value="Sim (30% - Parcial)">Sim (30% - Parcial)</option>
+                    <option value="Sim (25% - Parcial)">Sim (25% - Parcial)</option>
+                    <option value="Bolsa Atleta">Bolsa Atleta</option>
+                    <option value="Bolsa Mérito">Bolsa Mérito</option>
+                    <option value="Filho de Colaborador">Filho de Colaborador</option>
+                    <option value="Outro Convênio">Outro Convênio</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#475569', textTransform: 'uppercase', marginBottom: 5 }}>
+                    Data Resultado
+                  </label>
+                  <input
+                    type="date"
+                    className="form-input"
+                    style={{ height: 42, minHeight: 42, padding: '0 12px', fontSize: 13.5, borderRadius: 8, lineHeight: 'normal' }}
+                    value={matriculaModalData.dataResultado || ''}
+                    onChange={e => setMatriculaModalData((prev: any) => ({ ...prev, dataResultado: e.target.value }))}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#475569', textTransform: 'uppercase', marginBottom: 5 }}>
+                    Obs Desconto
+                  </label>
+                  <input
+                    className="form-input"
+                    style={{ height: 42, minHeight: 42, padding: '0 12px', fontSize: 13.5, borderRadius: 8, lineHeight: 'normal' }}
+                    placeholder="Ex: Desconto pontualidade..."
+                    value={matriculaModalData.obsDesconto || ''}
+                    onChange={e => setMatriculaModalData((prev: any) => ({ ...prev, obsDesconto: e.target.value }))}
+                  />
+                </div>
+              </div>
+
+              {/* Linha 3: Responsável pela criação do contrato */}
+              <div>
+                <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#475569', textTransform: 'uppercase', marginBottom: 5 }}>
+                  Responsável pela criação do contrato
+                </label>
+                <input
+                  className="form-input"
+                  style={{ height: 42, minHeight: 42, padding: '0 12px', fontSize: 13.5, borderRadius: 8, background: '#f8fafc', lineHeight: 'normal' }}
+                  placeholder="Ex: Ivan Rossi"
+                  value={matriculaModalData.vendedorContrato || ''}
+                  onChange={e => setMatriculaModalData((prev: any) => ({ ...prev, vendedorContrato: e.target.value }))}
+                />
+              </div>
+
+              {/* Linha 4: Parentesco Resp. Financeiro + Seleção e Grupo Alunos */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: 12 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#475569', textTransform: 'uppercase', marginBottom: 5 }}>
+                    Parentesco & Responsável Financeiro
+                  </label>
+                  <div style={{ display: 'grid', gridTemplateColumns: '145px 1fr', gap: 8 }}>
+                    <select
+                      className="form-input"
+                      style={{ height: 42, minHeight: 42, padding: '0 10px', fontSize: 13, borderRadius: 8, lineHeight: 'normal' }}
+                      value={matriculaModalData.parentescoRespFinanceiro || 'Pai'}
+                      onChange={e => setMatriculaModalData((prev: any) => ({ ...prev, parentescoRespFinanceiro: e.target.value }))}
+                    >
+                      <option value="Pai">Pai</option>
+                      <option value="Mãe">Mãe</option>
+                      <option value="Responsável Legal">Responsável Legal</option>
+                      <option value="Padrasto">Padrasto</option>
+                      <option value="Madrasta">Madrasta</option>
+                      <option value="Avô / Avó">Avô / Avó</option>
+                      <option value="Tio / Tia">Tio / Tia</option>
+                      <option value="Outro">Outro</option>
+                    </select>
+
+                    {(() => {
+                      // Filtra SOMENTE os responsáveis cadastrados para este aluno com nome preenchido
+                      const responsaveisDoAluno = (formData.responsaveis || []).filter((r: any) => Boolean(r && r.nome && r.nome.trim().length > 0))
+
+                      return (
+                        <select
+                          className="form-input"
+                          style={{ height: 42, minHeight: 42, padding: '0 12px', fontSize: 13, borderRadius: 8, lineHeight: 'normal' }}
+                          value={matriculaModalData.nomeRespFinanceiro || ''}
+                          onChange={e => {
+                            const val = e.target.value
+                            const found = responsaveisDoAluno.find((r: any) => 
+                              r.nome === val || 
+                              (val && (val.includes(r.nome) || (r.id && val.includes(String(r.id)))))
+                            )
+                            const normParentesco = (p: string) => {
+                              if (!p) return ''
+                              const lower = p.toLowerCase()
+                              if (lower === 'pai') return 'Pai'
+                              if (lower === 'mae' || lower === 'mãe') return 'Mãe'
+                              if (lower.includes('legal')) return 'Responsável Legal'
+                              if (lower.includes('padrasto')) return 'Padrasto'
+                              if (lower.includes('madrasta')) return 'Madrasta'
+                              if (lower.includes('avo') || lower.includes('avó') || lower.includes('avô')) return 'Avô / Avó'
+                              if (lower.includes('tio') || lower.includes('tia')) return 'Tio / Tia'
+                              return p
+                            }
+                            setMatriculaModalData((prev: any) => ({
+                              ...prev,
+                              nomeRespFinanceiro: val,
+                              parentescoRespFinanceiro: found?.parentesco ? normParentesco(found.parentesco) : prev.parentescoRespFinanceiro
+                            }))
+                          }}
+                        >
+                          {responsaveisDoAluno.length === 0 ? (
+                            <option value="">Nenhum responsável cadastrado para este aluno</option>
+                          ) : (
+                            <option value="">Selecione o responsável financeiro...</option>
+                          )}
+                          {responsaveisDoAluno.map((r: any, idx: number) => {
+                            const cod = r.id || r.codigo || `#${idx + 1}`
+                            const parentescoLabel = r.parentesco ? (r.parentesco === 'pai' ? 'Pai' : r.parentesco === 'mae' ? 'Mãe' : r.parentesco) : ''
+                            const finBadge = r.isFinanceiro ? ' [Financeiro]' : ''
+                            const label = `${cod} - ${r.nome}${parentescoLabel ? ` (${parentescoLabel})` : ''}${finBadge}`
+                            return (
+                              <option key={r.id || idx} value={r.nome}>
+                                {label}
+                              </option>
+                            )
+                          })}
+                          {/* Se houver um valor salvo que não está na lista atual, exibe para não perder */}
+                          {matriculaModalData.nomeRespFinanceiro && 
+                           !responsaveisDoAluno.some((r: any) => r.nome === matriculaModalData.nomeRespFinanceiro || matriculaModalData.nomeRespFinanceiro.includes(r.nome)) && (
+                            <option value={matriculaModalData.nomeRespFinanceiro}>
+                              {matriculaModalData.nomeRespFinanceiro} (Outro)
+                            </option>
+                          )}
+                        </select>
+                      )
+                    })()}
+                  </div>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#475569', textTransform: 'uppercase', marginBottom: 5 }}>
+                    Grupo Alunos
+                  </label>
+                  <select
+                    className="form-input"
+                    style={{ height: 42, minHeight: 42, padding: '0 12px', fontSize: 13.5, borderRadius: 8, lineHeight: 'normal' }}
+                    value={matriculaModalData.grupoAlunos || 'Geral'}
+                    onChange={e => setMatriculaModalData((prev: any) => ({ ...prev, grupoAlunos: e.target.value }))}
+                  >
+                    <option value="Geral">Geral</option>
+                    <option value="Novato">Novato</option>
+                    <option value="Veterano">Veterano</option>
+                    <option value="Bolsista">Bolsista</option>
+                    <option value="Transferência">Transferência</option>
+                    <option value="Inclusão / AEE">Inclusão / AEE</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Linha 5: Grupo Formativo & Padrão de pagamentos */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.2fr', gap: 12 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#475569', textTransform: 'uppercase', marginBottom: 5 }}>
+                    Grupo Formativo
+                  </label>
+                  <input
+                    className="form-input"
+                    style={{ height: 42, minHeight: 42, padding: '0 12px', fontSize: 13.5, borderRadius: 8, background: '#f8fafc', lineHeight: 'normal' }}
+                    placeholder="---"
+                    value={matriculaModalData.grupoFormativo || ''}
+                    onChange={e => setMatriculaModalData((prev: any) => ({ ...prev, grupoFormativo: e.target.value }))}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#475569', textTransform: 'uppercase', marginBottom: 5 }}>
+                    Padrão de pagamentos
+                  </label>
+                  {(() => {
+                    const ativos = (cfgPadroesPagamento || []).filter((p: any) => p.situacao !== 'inativo');
+                    const turmaSel = matriculaModalData?.serieTurma;
+                    const daTurma = turmaSel ? ativos.filter((p: any) => Array.isArray(p.turmaIds) && p.turmaIds.includes(turmaSel)) : [];
+                    const anoSel = matriculaModalData?.anoLetivo ? Number(matriculaModalData.anoLetivo) : null;
+                    const doAno = anoSel ? ativos.filter((p: any) => !daTurma.some((d: any) => d.id === p.id) && Number(p.ano) === anoSel) : [];
+                    const outros = ativos.filter((p: any) => !daTurma.some((d: any) => d.id === p.id) && !doAno.some((d: any) => d.id === p.id));
+                    const padroesOrdenados = [...daTurma, ...doAno, ...outros];
+
+                    return (
+                      <select
+                        className="form-input"
+                        style={{ height: 42, minHeight: 42, padding: '0 12px', fontSize: 13.5, borderRadius: 8, lineHeight: 'normal' }}
+                        value={matriculaModalData.padraoPagamento || ''}
+                        onChange={e => setMatriculaModalData((prev: any) => ({ ...prev, padraoPagamento: e.target.value }))}
+                      >
+                        <option value="">Selecione o padrão de pagamento...</option>
+                        {padroesOrdenados.map((p: any) => {
+                          const isDaTurma = daTurma.some((d: any) => d.id === p.id);
+                          const turmaTag = isDaTurma ? '★ [Da Turma] ' : '';
+                          const cod = p.codigo ? `${p.codigo} - ` : '';
+                          const anoTxt = p.ano ? ` (${p.ano})` : '';
+                          const valorTxt = p.anuidade ? ` - R$ ${Number(p.anuidade).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '';
+                          return (
+                            <option key={p.id} value={p.nome || p.codigo}>
+                              {turmaTag}{cod}{p.nome}{anoTxt}{valorTxt}
+                            </option>
+                          );
+                        })}
+                        {padroesOrdenados.length === 0 && (
+                          <>
+                            <option value="FUND1/2026">FUND1/2026</option>
+                            <option value="FUND2/2026">FUND2/2026</option>
+                            <option value="MEDIO/2026">MEDIO/2026</option>
+                            <option value="INFANTIL/2026">INFANTIL/2026</option>
+                          </>
+                        )}
+                        {matriculaModalData.padraoPagamento && 
+                         !padroesOrdenados.some((p: any) => (p.nome === matriculaModalData.padraoPagamento || p.codigo === matriculaModalData.padraoPagamento)) && (
+                          <option value={matriculaModalData.padraoPagamento}>
+                            {matriculaModalData.padraoPagamento} (Gravado)
+                          </option>
+                        )}
+                      </select>
+                    );
+                  })()}
+                </div>
+              </div>
+
+              {/* Linha 6: Observações sobre esta matrícula */}
+              <div>
+                <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#475569', textTransform: 'uppercase', marginBottom: 5 }}>
+                  Observações sobre esta matrícula
+                </label>
+                <textarea
+                  className="form-input"
+                  rows={3}
+                  style={{ width: '100%', minHeight: 80, padding: '10px 12px', fontSize: 13, borderRadius: 8, resize: 'vertical', lineHeight: 1.5 }}
+                  placeholder="Observações administrativas ou pedagógicas sobre esta matrícula..."
+                  value={matriculaModalData.obsMatricula || ''}
+                  onChange={e => setMatriculaModalData((prev: any) => ({ ...prev, obsMatricula: e.target.value }))}
+                />
+              </div>
+
+              {/* Modal Footer */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 10, paddingTop: 14, borderTop: '1px solid #e2e8f0', flexWrap: 'wrap', gap: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    onClick={() => setMatriculaModalData((prev: any) => ({ ...prev, parcelasGeradas: !prev.parcelasGeradas }))}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      padding: '6px 12px',
+                      borderRadius: 8,
+                      fontSize: 12,
+                      fontWeight: 700,
+                      background: matriculaModalData.parcelasGeradas ? 'rgba(16, 185, 129, 0.12)' : 'rgba(239, 68, 68, 0.1)',
+                      color: matriculaModalData.parcelasGeradas ? '#059669' : '#dc2626',
+                      border: matriculaModalData.parcelasGeradas ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid rgba(239, 68, 68, 0.3)',
+                      cursor: 'pointer'
+                    }}
+                    title="Clique para alternar o status das parcelas"
+                  >
+                    <Check size={14} /> {matriculaModalData.parcelasGeradas ? 'Parcelas Geradas' : 'Parcelas Pendentes'}
+                  </button>
+                  <span style={{ fontSize: 11, color: '#94a3b8' }}>
+                    Cadastrado em - {matriculaModalData.cadastradoEm || '26/01/2026'} / Alterado em - {matriculaModalData.alteradoEm || formatDateTimePtBr(new Date().toISOString())}
+                  </span>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <button
+                    type="button"
+                    onClick={handleSaveMatriculaModal}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      padding: '8px 20px',
+                      borderRadius: 8,
+                      fontSize: 13,
+                      fontWeight: 700,
+                      color: '#fff',
+                      background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
+                      border: 'none',
+                      cursor: 'pointer',
+                      boxShadow: '0 4px 12px rgba(37, 99, 235, 0.35)',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    <Check size={15} /> Gravar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingMatriculaIndex(null)
+                      setMatriculaModalData(null)
+                    }}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      padding: '8px 16px',
+                      borderRadius: 8,
+                      fontSize: 13,
+                      fontWeight: 600,
+                      color: '#64748b',
+                      background: '#fff',
+                      border: '1px solid #cbd5e1',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    <X size={15} /> Fechar
+                  </button>
+                </div>
+              </div>
+
+            </div>
           </div>
         </div>
       )}
@@ -4585,10 +7572,24 @@ export default function AlunosPage() {
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10, marginBottom: 18 }}>
                   {[
                     { key: 'id', label: 'ID / Matrícula' },
+                    { key: 'rga', label: 'RGA' },
                     { key: 'nome', label: 'Nome Completo' },
+                    { key: 'cpf', label: 'CPF' },
                     { key: 'email', label: 'E-mail' },
                     { key: 'telefone', label: 'Telefone' },
                     { key: 'dataNasc', label: 'Data de Nascimento' },
+                    { key: 'sexo', label: 'Sexo' },
+                    { key: 'corRaca', label: 'Cor / Raça' },
+                    { key: 'nacionalidade', label: 'Nacionalidade' },
+                    { key: 'naturalidade', label: 'Naturalidade (com UF)' },
+                    { key: 'cep', label: 'CEP' },
+                    { key: 'endereco', label: 'Endereço Completo' },
+                    { key: 'bairro', label: 'Bairro' },
+                    { key: 'cidade', label: 'Cidade' },
+                    { key: 'uf', label: 'UF' },
+                    { key: 'idCenso', label: 'ID CENSO (INEP)' },
+                    { key: 'necessidadesEspeciais', label: 'Necessidades Especiais' },
+                    { key: 'necessidadesEspeciaisDesc', label: 'Detalhes Necessidades Especiais' },
                     { key: 'status', label: 'Status' },
                     { key: 'sairSozinho', label: 'Autorização Saída' },
                     { key: 'isIntegralIntermediario', label: 'INTEGRAL/INTERMEDIÁRIO' },

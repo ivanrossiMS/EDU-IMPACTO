@@ -62,6 +62,24 @@ export interface Aluno {
   emailResponsavel?: string
   telResponsavel?: string
   senhaApp?: string
+  // Dados adicionais
+  rga?: string
+  sexo?: string
+  corRaca?: string
+  nacionalidade?: string
+  naturalidade?: string
+  naturalidadeUf?: string
+  cep?: string
+  endereco?: string
+  numero?: string
+  complemento?: string
+  bairro?: string
+  cidade?: string
+  uf?: string
+  idCenso?: string
+  necessidadesEspeciais?: string
+  necessidadesEspeciaisDesc?: string
+  dados?: any
 }
 
 export interface DisciplinaTurma {
@@ -181,7 +199,44 @@ export interface Agendamento {
 }
 
 export interface Responsavel {
-  nome: string; cpf: string; autorizacao: string; assinatura: string | null
+  nome: string; cpf: string; autorizacao?: string; assinatura?: string | null
+  id?: string
+  codigo?: string
+  parentesco?: string
+  dataNasc?: string
+  rg?: string
+  rgOrgaoEmissor?: string
+  sexo?: string
+  estadoCivil?: string
+  profissao?: string
+  nacionalidade?: string
+  naturalidade?: string
+  naturalidadeUf?: string
+  email?: string
+  telefone?: string
+  rfid?: string
+  cep?: string
+  endereco?: string
+  numero?: string
+  complemento?: string
+  bairro?: string
+  cidade?: string
+  uf?: string
+  comercialEmpresa?: string
+  comercialTelefone?: string
+  comercialCep?: string
+  comercialEndereco?: string
+  comercialNumero?: string
+  comercialComplemento?: string
+  comercialBairro?: string
+  comercialCidade?: string
+  comercialUf?: string
+  diasAcesso?: string[]
+  isFinanceiro?: boolean
+  isPedagogico?: boolean
+  isOutro?: boolean
+  proibido?: boolean
+  dados?: any
 }
 
 export interface Unidade {
@@ -717,6 +772,13 @@ export interface ConfigPadraoPagamento {
   situacao: 'ativo' | 'inativo'
   parcelas: ParcelaPadrao[]
   createdAt: string
+  segmento?: string
+  descontoTipo?: 'reais' | 'percentual'
+  descontoValor?: number
+  eventoId?: string
+  eventoDescricao?: string
+  turmaIds?: string[]
+  turmas?: string[]
 }
 
 

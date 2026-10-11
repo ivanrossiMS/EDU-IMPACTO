@@ -267,43 +267,63 @@ export default function ADAdminTurmas() {
 
   // ── Resolver colaboradores efetivos de um grupo ───────────────────────────────
   const resolveColaboradoresGrupo = (grupo: GrupoDigital): string[] => {
-    return grupo.colaboradoresIds || []
+    const diretos = grupo.colaboradoresIds || []
+    const equipeVinculada = (equipes || []).find(e => 
+      e.id === grupo.id || 
+      (grupo.equipesIds || []).includes(e.id) ||
+      (e.nome && grupo.nome && e.nome.trim().toLowerCase() === grupo.nome.trim().toLowerCase())
+    )
+    const deEquipe = equipeVinculada?.membrosIds || []
+    const todosRaw = [...diretos, ...deEquipe]
+
+    // Mapear para o ID canônico de apenasColaboradores para evitar duplicidades se tiver id e auth_id
+    const resolvedIds = todosRaw.map(rawId => {
+      const u = (apenasColaboradores || []).find((f: any) => f.id === rawId || (f.auth_id && f.auth_id === rawId))
+      return u?.id || rawId
+    })
+    return Array.from(new Set(resolvedIds))
   }
 
   useEffect(() => {
     if (turmas.length > 0 && (alunos || []).length > 0) setIsLoaded(true)
   }, [turmas, alunos, grupos])
 
-  useEffect(() => {
-    if (isLoaded && (grupos || []).length === 0 && turmas.length > 0 && (alunos || []).length > 0) {
-      handleAutoSync()
-    }
-  }, [isLoaded])
-
   // ─── Sincronização com ERP ───────────────────────────────────────────────────
   const handleAutoSync = () => {
-    if (!turmas?.length || !alunos?.length) return
+    if (!turmas?.length || !alunos?.length || !grupos) return
+
+    const gruposMap = new Map<string, GrupoDigital>()
+    
+    // 1. Preservar TODOS os grupos existentes (incluindo grupos manuais e equipe escolar)
+    ;(grupos || []).forEach(g => {
+      gruposMap.set(g.id, { ...g })
+    })
+
+    // 2. Atualizar ou adicionar turmas do ERP
     const turmasFiltradas = turmas.filter(t => !anoParaImportar || String(t.ano) === String(anoParaImportar))
-    const novos: GrupoDigital[] = turmasFiltradas.map(t => {
-      // O aluno só é incluído na turma se a turma `t` for a turma CURSANDO (matriculado atual) do aluno no ano letivo.
-      // Turmas de HISTÓRICO (ANTERIOR) são ignoradas.
+    turmasFiltradas.forEach(t => {
+      const syncKey = `sync-${t.id}`
+      const grupoExistente = (grupos || []).find(g => g.syncId === syncKey || g.id === syncKey || g.nome === t.nome)
       const alunosDaTurma = (alunos || []).filter(a => isAlunoCursandoTurma(a, t, t.ano))
-      const grupoExistente = (grupos || []).find(g => g.syncId === `sync-${t.id}` || g.id === `sync-${t.id}` || g.nome === t.nome)
-      return {
+      
+      const grupoAtualizado: GrupoDigital = {
         id: grupoExistente?.id || crypto.randomUUID(),
-        syncId: `sync-${t.id}`,
+        syncId: syncKey,
         nome: t.nome,
         cor: grupoExistente?.cor || DEFAULT_COLORS[Math.floor(Math.random() * DEFAULT_COLORS.length)],
         alunosIds: alunosDaTurma.map(a => a.id),
         colaboradoresIds: grupoExistente?.colaboradoresIds || [],
         equipesIds: grupoExistente?.equipesIds || [],
         ano: String(t.ano),
+        isGlobalAccess: grupoExistente?.isGlobalAccess || false,
+        isEquipeEscolar: grupoExistente?.isEquipeEscolar || false,
       }
+      gruposMap.set(grupoAtualizado.id, grupoAtualizado)
     })
-    novos.sort(compareTurmasBySerie)
-    // Preservar grupos criados manualmente
-    const gruposManuais = (grupos || []).filter(g => !g.syncId && !g.id.startsWith('sync-')).sort(compareTurmasBySerie)
-    setGrupos([...gruposManuais, ...novos])
+
+    const listaFinal = Array.from(gruposMap.values())
+    listaFinal.sort(compareTurmasBySerie)
+    setGrupos(listaFinal)
   }
 
   // ─── Ações de Grupo de Turma ─────────────────────────────────────────────────
@@ -333,7 +353,9 @@ export default function ADAdminTurmas() {
 
   const removerColaboradorDireto = (id: string) => {
     if (!activeGrupo) return
-    setGrupos((grupos || []).map(g => g.id === activeGrupo.id ? { ...g, colaboradoresIds: (g.colaboradoresIds || []).filter(c => c !== id) } : g))
+    const colabInfo = (apenasColaboradores || []).find((f: any) => f.id === id || f.auth_id === id)
+    const removeIds = [id, colabInfo?.id, colabInfo?.auth_id].filter(Boolean)
+    setGrupos((grupos || []).map(g => g.id === activeGrupo.id ? { ...g, colaboradoresIds: (g.colaboradoresIds || []).filter(c => !removeIds.includes(c)) } : g))
   }
 
   // Busca colaboradores
@@ -358,9 +380,9 @@ export default function ADAdminTurmas() {
       if (turmaERP) return isAlunoCursandoTurma(a, turmaERP, activeGrupo.ano || turmaERP?.ano)
       return (activeGrupo.alunosIds || []).includes(a.id) || isAlunoCursandoTurma(a, activeGrupo, activeGrupo.ano)
     })
-    const colsDiretos = (apenasColaboradores || []).filter((u: any) => (activeGrupo.colaboradoresIds || []).includes(u.id))
+    const colsDiretos = (apenasColaboradores || []).filter((u: any) => (activeGrupo.colaboradoresIds || []).includes(u.id) || (u.auth_id && (activeGrupo.colaboradoresIds || []).includes(u.auth_id)))
     const todosCols = resolveColaboradoresGrupo(activeGrupo)
-    const todosFuncionarios = (apenasColaboradores || []).filter((u: any) => todosCols.includes(u.id))
+    const todosFuncionarios = (apenasColaboradores || []).filter((u: any) => todosCols.includes(u.id) || (u.auth_id && todosCols.includes(u.auth_id)))
 
     return (
       <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -693,9 +715,10 @@ export default function ADAdminTurmas() {
           <p style={{ color: 'hsl(var(--text-muted))', marginTop: 4 }}>Organize grupos digitais de turmas para comunicação eficiente.</p>
         </div>
         <div className="ad-turmas-actions" style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-          <select className="form-input" style={{ width: 140, borderRadius: 20, fontSize: 13 }} value={anoParaImportar} onChange={e => setAnoParaImportar(e.target.value)}>
+          <select className="form-input" style={{ width: 150, borderRadius: 20, fontSize: 13 }} value={anoParaImportar} onChange={e => setAnoParaImportar(e.target.value)}>
             <option value="">Todos Anos</option>
             {cfgCalendarioLetivo.map((c: any) => <option key={c.ano} value={c.ano}>{c.ano}</option>)}
+            <option value="Equipe Escolar">Equipe Escolar</option>
           </select>
           <motion.button 
             whileHover={{ scale: 1.04 }} 
@@ -720,17 +743,36 @@ export default function ADAdminTurmas() {
       {abaLista === 'turmas' && (() => {
         // Agrupar turmas por ano letivo
         const gruposPorAno: Record<string, GrupoDigital[]> = {};
-        (grupos || []).forEach(g => {
+        ;(grupos || []).forEach(g => {
           const turmaId = g.syncId ? g.syncId.replace('sync-', '') : (g.id.startsWith('sync-') ? g.id.replace('sync-', '') : null)
           const turmaERP = turmaId ? turmas.find(t => String(t.id) === turmaId) : null
           const ano = g.ano !== undefined && g.ano !== null ? g.ano : (turmaERP?.ano ? String(turmaERP.ano) : '')
           const grupoAno = g.isEquipeEscolar ? 'Equipe Escolar' : (ano || 'Outros / Sem Ano Letivo')
           if (!gruposPorAno[grupoAno]) gruposPorAno[grupoAno] = []
           gruposPorAno[grupoAno].push(g)
+        });
+
+        // Garantir que equipes de agenda/equipes apareçam em Equipe Escolar caso ainda não estejam em grupos
+        ;(equipes || []).forEach((eq: any) => {
+          if (!gruposPorAno['Equipe Escolar']) gruposPorAno['Equipe Escolar'] = []
+          const jaExiste = gruposPorAno['Equipe Escolar'].some(g => g.id === eq.id || g.nome === eq.nome)
+          if (!jaExiste) {
+            gruposPorAno['Equipe Escolar'].push({
+              id: eq.id,
+              nome: eq.nome,
+              cor: eq.cor || '#4f46e5',
+              alunosIds: [],
+              colaboradoresIds: eq.membrosIds || [],
+              ano: 'Equipe Escolar',
+              isEquipeEscolar: true
+            })
+          }
         })
 
-        // Ordenar anos em ordem decrescente (2025, 2024, etc.), deixando "Outros" pro final
+        // Ordenar anos em ordem decrescente (2027, 2026, etc.), deixando Equipe Escolar e "Outros" organizados
         let anosOrdenados = Object.keys(gruposPorAno).sort((a, b) => {
+          if (a === 'Equipe Escolar') return 1;
+          if (b === 'Equipe Escolar') return -1;
           if (a === 'Outros / Sem Ano Letivo') return 1;
           if (b === 'Outros / Sem Ano Letivo') return -1;
           return b.localeCompare(a);
@@ -787,7 +829,7 @@ export default function ADAdminTurmas() {
                     </thead>
                     <tbody>
                       {gruposPorAno[ano].map(g => {
-                        const todosColabs = resolveColaboradoresGrupo(g).filter(colId => (apenasColaboradores || []).some((f: any) => f.id === colId))
+                        const todosColabs = resolveColaboradoresGrupo(g).filter(colId => (apenasColaboradores || []).some((f: any) => f.id === colId || (f.auth_id && f.auth_id === colId)))
                         const turmaERP = turmas.find(t => (g.syncId && (g.syncId === `sync-${t.id}` || g.id === `sync-${t.id}`)) || t.nome === g.nome)
                         const alunosDoGrupoCount = (alunos || []).filter((a: any) => {
                           if (turmaERP) return isAlunoCursandoTurma(a, turmaERP, g.ano || turmaERP?.ano)
@@ -823,7 +865,7 @@ export default function ADAdminTurmas() {
                             <td style={{ padding: '16px 20px' }}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: -6 }}>
                                 {todosColabs.slice(0, 4).map((colId, idx) => {
-                                  const info = (apenasColaboradores || []).find((f: any) => f.id === colId)
+                                  const info = (apenasColaboradores || []).find((f: any) => f.id === colId || (f.auth_id && f.auth_id === colId))
                                   return <div key={colId} style={{ marginLeft: idx > 0 ? -10 : 0, border: '2px solid white', borderRadius: '50%', zIndex: 10 - idx }}><UserAvatar userId={colId} name={info?.nome || 'C'} size={28} fotoUrl={info?.foto || info?.fotoUrl || info?.avatarUrl} /></div>
                                 })}
                                 {todosColabs.length > 4 && <div style={{ marginLeft: -10, width: 28, height: 28, borderRadius: 14, background: 'hsl(var(--bg-muted))', border: '2px solid white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 800 }}>+{todosColabs.length - 4}</div>}
@@ -848,7 +890,7 @@ export default function ADAdminTurmas() {
                 {/* Mobile Cards View */}
                 <div className="ad-turmas-cards-wrap">
                   {gruposPorAno[ano].map(g => {
-                    const todosColabs = resolveColaboradoresGrupo(g).filter(colId => (apenasColaboradores || []).some((f: any) => f.id === colId))
+                    const todosColabs = resolveColaboradoresGrupo(g).filter(colId => (apenasColaboradores || []).some((f: any) => f.id === colId || (f.auth_id && f.auth_id === colId)))
                     const turmaERP = turmas.find(t => (g.syncId && (g.syncId === `sync-${t.id}` || g.id === `sync-${t.id}`)) || t.nome === g.nome)
                     const alunosDoGrupoCount = (alunos || []).filter((a: any) => {
                       if (turmaERP) return isAlunoCursandoTurma(a, turmaERP, g.ano || turmaERP?.ano)

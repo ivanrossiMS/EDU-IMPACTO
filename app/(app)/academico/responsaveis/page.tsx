@@ -1,13 +1,81 @@
 'use client'
 
 import React, { useState, useMemo, useEffect } from 'react'
-import { Plus, Search, Trash2, Edit2, Phone, Mail, Users, Filter, Download, Tag, CreditCard, X, Save, Loader2, ChevronLeft, ChevronRight } from 'lucide-react'
+import { 
+  Plus, Search, Trash2, Edit2, Phone, Mail, Users, Filter, Download, 
+  Tag, CreditCard, X, Save, Loader2, ChevronLeft, ChevronRight,
+  MapPin, Briefcase, Check, ChevronDown, ChevronUp, AlertTriangle, CheckCircle2, Copy
+} from 'lucide-react'
 import { TableSkeleton } from '@/components/skeletons/TableSkeleton'
 import { UpdatingIndicator } from '@/components/skeletons/States'
 import { useApiQuery } from '@/hooks/useApi'
 import { useQueryClient } from '@tanstack/react-query'
 import { useData } from '@/lib/dataContext'
 import { formatPhone } from '@/lib/utils'
+
+const ESTADOS_BRASIL = [
+  'AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA',
+  'MT', 'MS', 'MG', 'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN',
+  'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO'
+]
+
+const formatCpfMask = (val: string): string => {
+  const digits = val.replace(/\D/g, '').slice(0, 11)
+  if (digits.length <= 3) return digits
+  if (digits.length <= 6) return `${digits.slice(0, 3)}.${digits.slice(3)}`
+  if (digits.length <= 9) return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6)}`
+  return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9, 11)}`
+}
+
+const formatCepMask = (val: string): string => {
+  const digits = val.replace(/\D/g, '').slice(0, 8)
+  if (digits.length <= 5) return digits
+  return `${digits.slice(0, 5)}-${digits.slice(5, 8)}`
+}
+
+const createEmptyResponsavel = () => ({
+  id: '',
+  nome: '',
+  dataNasc: '',
+  email: '',
+  telefone: '',
+  profissao: '',
+  rfid: '',
+  parentesco: '',
+  cpf: '',
+  rg: '',
+  rgOrgaoEmissor: '',
+  sexo: '',
+  estadoCivil: '',
+  nacionalidade: 'Brasileira',
+  naturalidade: '',
+  naturalidadeUf: '',
+  // Residencial
+  cep: '',
+  endereco: '',
+  numero: '',
+  complemento: '',
+  bairro: '',
+  cidade: '',
+  uf: '',
+  // Comercial
+  comercialEmpresa: '',
+  comercialTelefone: '',
+  comercialCep: '',
+  comercialEndereco: '',
+  comercialNumero: '',
+  comercialComplemento: '',
+  comercialBairro: '',
+  comercialCidade: '',
+  comercialUf: '',
+  // Acesso e vínculos
+  diasAcesso: ['Seg', 'Ter', 'Qua', 'Qui', 'Sex'],
+  isFinanceiro: false,
+  isPedagogico: false,
+  isOutro: false,
+  proibido: false,
+  alunosVinculados: [] as any[]
+})
 
 export default function ResponsaveisPage() {
   const queryClient = useQueryClient()
@@ -36,15 +104,181 @@ export default function ResponsaveisPage() {
   const [buscaAluno, setBuscaAluno] = useState('')
   const [resultadosAlunos, setResultadosAlunos] = useState<any[]>([])
   
-  // Estado do formulário do modal
-  const [formResponsaveis, setFormResponsaveis] = useState([{ 
-    id: '', nome: '', dataNasc: '', 
-    email: '', telefone: '', profissao: '', rfid: '', 
-    parentesco: '', diasAcesso: ['Seg', 'Ter', 'Qua', 'Qui', 'Sex'], 
-    isFinanceiro: false, isPedagogico: false, isOutro: false, proibido: false,
-    alunosVinculados: [] as string[]
-  }])
+  // Estado do formulário do modal com todos os campos espelhados
+  const [formResponsaveis, setFormResponsaveis] = useState([createEmptyResponsavel()])
   const [loading, setLoading] = useState(false)
+
+  const [validationErrors, setValidationErrors] = useState<{ field: string; message: string }[]>([])
+  const hasError = (fieldKey: string) => validationErrors.some(e => e.field === fieldKey)
+
+  const getMandatoryFieldStyle = (
+    value: any,
+    fieldKey: string
+  ): React.CSSProperties => {
+    const isFilled = Boolean(value !== undefined && value !== null && String(value).trim().length > 0)
+    const isError = hasError(fieldKey)
+
+    if (isError) {
+      return {
+        borderColor: '#ef4444',
+        borderWidth: '2px',
+        borderStyle: 'solid',
+        boxShadow: '0 0 0 2px rgba(239, 68, 68, 0.25)',
+        background: '#fff5f5',
+        transition: 'all 0.2s ease-in-out'
+      }
+    }
+
+    if (isFilled) {
+      return {
+        borderColor: '#10b981', // Verde bem visível após preenchimento
+        borderWidth: '2px',
+        borderStyle: 'solid',
+        boxShadow: '0 0 0 2px rgba(16, 185, 129, 0.25)',
+        background: 'rgba(236, 253, 245, 0.6)',
+        transition: 'all 0.2s ease-in-out'
+      }
+    }
+
+    // Pendente / vazio: Borda amarela bem visível
+    return {
+      borderColor: '#eab308', // Amarelo bem visível quando pendente
+      borderWidth: '2px',
+      borderStyle: 'solid',
+      boxShadow: '0 0 0 2px rgba(234, 179, 8, 0.3)',
+      background: 'rgba(254, 252, 232, 0.65)',
+      transition: 'all 0.2s ease-in-out'
+    }
+  }
+
+  const [loadingCep, setLoadingCep] = useState<Record<string, boolean>>({})
+  const [cepFeedback, setCepFeedback] = useState<Record<string, { type: 'success' | 'error', message: string } | null>>({})
+  const [expandedComercial, setExpandedComercial] = useState<Record<number, boolean>>({})
+
+  const toggleComercial = (index: number) => {
+    setExpandedComercial(prev => ({
+      ...prev,
+      [index]: !prev[index]
+    }))
+  }
+
+  const buscarCepResidencial = async (rawCep: string, index: number) => {
+    const digits = rawCep.replace(/\D/g, '')
+    if (digits.length !== 8) return
+
+    const key = `${index}_res`
+    setLoadingCep(prev => ({ ...prev, [key]: true }))
+    setCepFeedback(prev => ({ ...prev, [key]: null }))
+    try {
+      const res = await fetch(`https://viacep.com.br/ws/${digits}/json/`)
+      if (!res.ok) throw new Error('Falha na requisição')
+      const data = await res.json()
+      if (data.erro) {
+        setCepFeedback(prev => ({ ...prev, [key]: { type: 'error', message: 'CEP não encontrado' } }))
+      } else {
+        setFormResponsaveis(prev => {
+          const newArr = [...prev]
+          if (newArr[index]) {
+            newArr[index] = {
+              ...newArr[index],
+              endereco: data.logradouro || newArr[index].endereco || '',
+              bairro: data.bairro || newArr[index].bairro || '',
+              cidade: data.localidade || newArr[index].cidade || '',
+              uf: data.uf || newArr[index].uf || '',
+              complemento: data.complemento && !newArr[index].complemento ? data.complemento : newArr[index].complemento
+            }
+          }
+          return newArr
+        })
+        setCepFeedback(prev => ({ ...prev, [key]: { type: 'success', message: `${data.localidade} - ${data.uf}` } }))
+      }
+    } catch {
+      setCepFeedback(prev => ({ ...prev, [key]: { type: 'error', message: 'Erro ao consultar CEP' } }))
+    } finally {
+      setLoadingCep(prev => ({ ...prev, [key]: false }))
+    }
+  }
+
+  const handleCepResidencialChange = (val: string, index: number) => {
+    const formatted = formatCepMask(val)
+    handleInputChange('cep', formatted, index)
+    const digits = formatted.replace(/\D/g, '')
+    const key = `${index}_res`
+    if (digits.length === 8) {
+      buscarCepResidencial(digits, index)
+    } else {
+      setCepFeedback(prev => ({ ...prev, [key]: null }))
+    }
+  }
+
+  const buscarCepComercial = async (rawCep: string, index: number) => {
+    const digits = rawCep.replace(/\D/g, '')
+    if (digits.length !== 8) return
+
+    const key = `${index}_com`
+    setLoadingCep(prev => ({ ...prev, [key]: true }))
+    setCepFeedback(prev => ({ ...prev, [key]: null }))
+    try {
+      const res = await fetch(`https://viacep.com.br/ws/${digits}/json/`)
+      if (!res.ok) throw new Error('Falha na requisição')
+      const data = await res.json()
+      if (data.erro) {
+        setCepFeedback(prev => ({ ...prev, [key]: { type: 'error', message: 'CEP não encontrado' } }))
+      } else {
+        setFormResponsaveis(prev => {
+          const newArr = [...prev]
+          if (newArr[index]) {
+            newArr[index] = {
+              ...newArr[index],
+              comercialEndereco: data.logradouro || newArr[index].comercialEndereco || '',
+              comercialBairro: data.bairro || newArr[index].comercialBairro || '',
+              comercialCidade: data.localidade || newArr[index].comercialCidade || '',
+              comercialUf: data.uf || newArr[index].comercialUf || '',
+              comercialComplemento: data.complemento && !newArr[index].comercialComplemento ? data.complemento : newArr[index].comercialComplemento
+            }
+          }
+          return newArr
+        })
+        setCepFeedback(prev => ({ ...prev, [key]: { type: 'success', message: `${data.localidade} - ${data.uf}` } }))
+      }
+    } catch {
+      setCepFeedback(prev => ({ ...prev, [key]: { type: 'error', message: 'Erro ao consultar CEP' } }))
+    } finally {
+      setLoadingCep(prev => ({ ...prev, [key]: false }))
+    }
+  }
+
+  const handleCepComercialChange = (val: string, index: number) => {
+    const formatted = formatCepMask(val)
+    handleInputChange('comercialCep', formatted, index)
+    const digits = formatted.replace(/\D/g, '')
+    const key = `${index}_com`
+    if (digits.length === 8) {
+      buscarCepComercial(digits, index)
+    } else {
+      setCepFeedback(prev => ({ ...prev, [key]: null }))
+    }
+  }
+
+  const handleCopiarEnderecoResidencialParaComercial = (index: number) => {
+    setFormResponsaveis(prev => {
+      const newArr = [...prev]
+      const resp = newArr[index]
+      if (!resp) return prev
+      newArr[index] = {
+        ...resp,
+        comercialCep: resp.cep || '',
+        comercialEndereco: resp.endereco || '',
+        comercialNumero: resp.numero || '',
+        comercialComplemento: resp.complemento || '',
+        comercialBairro: resp.bairro || '',
+        comercialCidade: resp.cidade || '',
+        comercialUf: resp.uf || ''
+      }
+      return newArr
+    })
+    setExpandedComercial(prev => ({ ...prev, [index]: true }))
+  }
 
   // Query para buscar responsáveis (Cache via React Query)
   const { data: apiResponse, isLoading: loadingList, isFetching } = useApiQuery<{ data: any[], total: number }>(
@@ -106,34 +340,68 @@ export default function ResponsaveisPage() {
 
   const handleNovoResponsavel = () => {
     setEditingResponsavel(null)
-    setFormResponsaveis([{ 
-      id: '', nome: '', dataNasc: '', 
-      email: '', telefone: '', profissao: '', rfid: '', 
-      parentesco: '', diasAcesso: ['Seg', 'Ter', 'Qua', 'Qui', 'Sex'], 
-      isFinanceiro: false, isPedagogico: false, isOutro: false, proibido: false,
-      alunosVinculados: []
-    }])
+    setFormResponsaveis([createEmptyResponsavel()])
+    setValidationErrors([])
+    setExpandedComercial({ 0: false })
     setIsModalOpen(true)
   }
 
   const handleEdit = (resp: any) => {
     setEditingResponsavel(resp)
+    const d = resp.dados || {}
+    const hasComercial = Boolean(
+      resp.comercialEmpresa || d.comercialEmpresa ||
+      resp.comercialTelefone || d.comercialTelefone ||
+      resp.comercialCep || d.comercialCep ||
+      resp.comercialEndereco || d.comercialEndereco ||
+      resp.comercialNumero || d.comercialNumero ||
+      resp.comercialComplemento || d.comercialComplemento ||
+      resp.comercialBairro || d.comercialBairro ||
+      resp.comercialCidade || d.comercialCidade ||
+      resp.comercialUf || d.comercialUf
+    )
     setFormResponsaveis([{
       id: resp.id || '',
       nome: resp.nome || '',
-      dataNasc: resp.data_nasc || resp.dataNasc || '',
+      dataNasc: resp.dataNasc || resp.data_nasc || d.dataNasc || '',
       email: resp.email || '',
       telefone: resp.telefone || '',
-      profissao: resp.profissao || '',
+      profissao: resp.profissao || d.profissao || '',
       rfid: resp.rfid || '',
-      parentesco: resp.alunosVinculados?.find((a: any) => a.parentesco)?.parentesco || resp.parentesco || '',
-      diasAcesso: resp.dias_acesso || resp.diasAcesso || ['Seg', 'Ter', 'Qua', 'Qui', 'Sex'],
-      isFinanceiro: resp.alunosVinculados?.some((a: any) => a.isFinanceiro) || false,
-      isPedagogico: resp.alunosVinculados?.some((a: any) => a.isPedagogico) || false,
-      isOutro: resp.alunosVinculados?.some((a: any) => a.isOutro) || false,
+      parentesco: resp.parentesco || (resp.alunosVinculados?.[0]?.parentesco) || '',
+      diasAcesso: resp.diasAcesso || resp.dias_acesso || d.diasAcesso || ['Seg', 'Ter', 'Qua', 'Qui', 'Sex'],
+      isFinanceiro: resp.isFinanceiro ?? resp.alunosVinculados?.some((a: any) => a.isFinanceiro) ?? false,
+      isPedagogico: resp.isPedagogico ?? resp.alunosVinculados?.some((a: any) => a.isPedagogico) ?? false,
+      isOutro: resp.isOutro ?? resp.alunosVinculados?.some((a: any) => a.isOutro) ?? false,
       proibido: resp.proibido === true,
-      alunosVinculados: resp.alunosVinculados || resp.aluno_responsavel?.map((ar: any) => ar.aluno_id) || []
+      cpf: resp.cpf || d.cpf || '',
+      rg: resp.rg || d.rg || '',
+      rgOrgaoEmissor: resp.rgOrgaoEmissor || d.rgOrgaoEmissor || d.orgEmissor || '',
+      sexo: resp.sexo || d.sexo || '',
+      estadoCivil: resp.estadoCivil || resp.estado_civil || d.estadoCivil || '',
+      nacionalidade: resp.nacionalidade || d.nacionalidade || 'Brasileira',
+      naturalidade: resp.naturalidade || d.naturalidade || '',
+      naturalidadeUf: resp.naturalidadeUf || d.naturalidadeUf || '',
+      cep: resp.cep || d.cep || '',
+      endereco: resp.endereco || d.endereco || d.logradouro || '',
+      numero: resp.numero || d.numero || '',
+      complemento: resp.complemento || d.complemento || '',
+      bairro: resp.bairro || d.bairro || '',
+      cidade: resp.cidade || d.cidade || '',
+      uf: resp.uf || d.uf || d.ufEnd || '',
+      comercialEmpresa: resp.comercialEmpresa || d.comercialEmpresa || '',
+      comercialTelefone: resp.comercialTelefone || d.comercialTelefone || '',
+      comercialCep: resp.comercialCep || d.comercialCep || '',
+      comercialEndereco: resp.comercialEndereco || d.comercialEndereco || '',
+      comercialNumero: resp.comercialNumero || d.comercialNumero || '',
+      comercialComplemento: resp.comercialComplemento || d.comercialComplemento || '',
+      comercialBairro: resp.comercialBairro || d.comercialBairro || '',
+      comercialCidade: resp.comercialCidade || d.comercialCidade || '',
+      comercialUf: resp.comercialUf || d.comercialUf || '',
+      alunosVinculados: resp.alunosVinculados || []
     }])
+    setExpandedComercial({ 0: hasComercial })
+    setValidationErrors([])
     setIsModalOpen(true)
   }
 
@@ -165,6 +433,24 @@ export default function ResponsaveisPage() {
   }
 
   const handleSave = async () => {
+    // Validação de campos obrigatórios: Nome Completo e E-mail (se Financeiro)
+    const errors: { field: string; message: string }[] = []
+    formResponsaveis.forEach((resp, idx) => {
+      if (!resp.nome || !resp.nome.trim()) {
+        errors.push({ field: `resp_${idx}_nome`, message: 'Nome Completo é obrigatório' })
+      }
+      // O e-mail NÃO deve ser obrigatório para o tipo "outro" nem "pedagógico", apenas para "financeiro"
+      if (resp.isFinanceiro && (!resp.email || !resp.email.trim())) {
+        errors.push({ field: `resp_${idx}_email`, message: 'E-mail é obrigatório para o Responsável Financeiro' })
+      }
+    })
+
+    if (errors.length > 0) {
+      setValidationErrors(errors)
+      alert('Por favor, preencha os campos obrigatórios destacados.')
+      return
+    }
+
     setLoading(true)
     try {
       const resp = formResponsaveis[0] // Assume apenas um item
@@ -203,6 +489,7 @@ export default function ResponsaveisPage() {
       )
       
       queryClient.invalidateQueries({ queryKey: ['responsaveis'] })
+      queryClient.invalidateQueries({ queryKey: ['alunos'] })
       setIsModalOpen(false)
       setEditingResponsavel(null)
     } catch (e: any) {
@@ -312,6 +599,9 @@ export default function ResponsaveisPage() {
                   <td style={{ padding: '14px 16px' }}>
                     <div style={{ display: 'flex', flexDirection: 'column' }}>
                       <span style={{ fontWeight: 700, color: '#1e293b' }}>{resp.nome}</span>
+                      {(resp.cpf || resp.dados?.cpf) && (
+                        <span style={{ fontSize: 11, color: '#64748b' }}>CPF: {formatCpfMask(resp.cpf || resp.dados?.cpf)}</span>
+                      )}
                     </div>
                   </td>
                   <td style={{ padding: '14px 16px' }}>
@@ -582,13 +872,13 @@ export default function ResponsaveisPage() {
       {/* Modal Idêntico ao de Alunos Passo Responsável com Cabeçalho Gradiente */}
       {isModalOpen && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-          <div style={{ background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)', borderRadius: 16, width: 'min(900px, 95vw)', maxHeight: '90vh', overflowY: 'auto', padding: 24, boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)' }}>
+          <div style={{ background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)', borderRadius: 16, width: 'min(980px, 96vw)', maxHeight: '90vh', overflowY: 'auto', padding: 24, boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)' }}>
             
             {/* Header do Modal com Gradiente Escuro Ultra Moderno */}
             <div style={{ background: 'linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%)', margin: '-24px -24px 20px -24px', padding: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#fff' }}>
               <div>
                 <h2 style={{ fontSize: 20, fontWeight: 900, color: '#fff', margin: 0 }}>{editingResponsavel ? 'Editar Responsável' : 'Novo Responsável'}</h2>
-                <p style={{ fontSize: 14, color: '#94a3b8', marginTop: 4 }}>Preencha os dados do responsável abaixo</p>
+                <p style={{ fontSize: 14, color: '#94a3b8', marginTop: 4 }}>Preencha os dados completos do responsável abaixo</p>
               </div>
               <button onClick={() => setIsModalOpen(false)} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: '50%', width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#fff' }}>
                 <X size={20} />
@@ -597,121 +887,709 @@ export default function ResponsaveisPage() {
 
             {/* Conteúdo do Modal */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-              {formResponsaveis.map((resp, index) => (
-                <div key={index} style={{ border: '1px solid #e2e8f0', padding: 16, borderRadius: 12, background: 'rgba(255,255,255,0.5)' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-                    <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e293b' }}>Dados do Responsável #{index + 1}</h3>
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      <button
-                        type="button"
-                        onClick={() => handleInputChange('isFinanceiro', !resp.isFinanceiro, index)}
-                        style={{
-                          padding: '4px 12px',
-                          borderRadius: '20px',
-                          fontSize: 11,
-                          fontWeight: 700,
-                          border: '1px solid',
-                          borderColor: resp.isFinanceiro ? '#10b981' : '#e2e8f0',
-                          background: resp.isFinanceiro ? '#10b981' : '#fff',
-                          color: resp.isFinanceiro ? '#fff' : '#64748b',
-                          cursor: 'pointer',
-                          transition: 'all 0.2s'
-                        }}
-                      >
-                        Financeiro
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleInputChange('isPedagogico', !resp.isPedagogico, index)}
-                        style={{
-                          padding: '4px 12px',
-                          borderRadius: '20px',
-                          fontSize: 11,
-                          fontWeight: 700,
-                          border: '1px solid',
-                          borderColor: resp.isPedagogico ? '#8b5cf6' : '#e2e8f0',
-                          background: resp.isPedagogico ? '#8b5cf6' : '#fff',
-                          color: resp.isPedagogico ? '#fff' : '#64748b',
-                          cursor: 'pointer',
-                          transition: 'all 0.2s'
-                        }}
-                      >
-                        Pedagógico
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleInputChange('isOutro', !resp.isOutro, index)}
-                        style={{
-                          padding: '4px 12px',
-                          borderRadius: '20px',
-                          fontSize: 11,
-                          fontWeight: 700,
-                          border: '1px solid',
-                          borderColor: resp.isOutro ? '#f59e0b' : '#e2e8f0',
-                          background: resp.isOutro ? '#f59e0b' : '#fff',
-                          color: resp.isOutro ? '#fff' : '#64748b',
-                          cursor: 'pointer',
-                          transition: 'all 0.2s'
-                        }}
-                      >
-                        Outro
-                      </button>
-                    </div>
-                  </div>
-                  
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                    {/* Linha 1 */}
-                    <div style={{ display: 'flex', gap: 16 }}>
-                      <div style={{ flex: '1', maxWidth: '100px' }}>
-                        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 6 }}>ID</label>
-                        <input className="form-input" placeholder="Ex: RESP001" value={resp.id} onChange={e => handleInputChange('id', e.target.value, index)} />
-                      </div>
-                      <div style={{ flex: '3.5' }}>
-                        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 6 }}>Nome Completo *</label>
-                        <input className="form-input" placeholder="Nome do responsável" value={resp.nome} onChange={e => handleInputChange('nome', e.target.value, index)} />
-                      </div>
-                      <div style={{ flex: '1.5' }}>
-                        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 6 }}>Parentesco *</label>
-                        <select className="form-input" value={resp.parentesco} onChange={e => handleInputChange('parentesco', e.target.value, index)}>
-                          <option value="">Selecione…</option>
-                          <option value="pai">Pai</option>
-                          <option value="mae">Mãe</option>
-                          <option value="outro">Outro</option>
-                        </select>
-                      </div>
-                    </div>
+              {formResponsaveis.map((resp, index) => {
+                const isExpandedComercial = !!expandedComercial[index]
+                const hasComercialData = Boolean(
+                  resp.comercialEmpresa ||
+                  resp.comercialTelefone ||
+                  resp.comercialCep ||
+                  resp.comercialEndereco ||
+                  resp.comercialNumero ||
+                  resp.comercialComplemento ||
+                  resp.comercialBairro ||
+                  resp.comercialCidade ||
+                  resp.comercialUf
+                )
 
-                    {/* Linha 2 */}
-                    <div style={{ display: 'flex', gap: 16 }}>
-                      <div style={{ flex: '1.5' }}>
-                        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 6 }}>Data de Nascimento</label>
-                        <input type="date" className="form-input" value={resp.dataNasc} onChange={e => handleInputChange('dataNasc', e.target.value, index)} />
-                      </div>
-                      <div style={{ flex: '2.5' }}>
-                        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 6 }}>E-mail *</label>
-                        <input type="email" className="form-input" placeholder="email@exemplo.com" value={resp.email} onChange={e => handleInputChange('email', e.target.value, index)} />
-                      </div>
-                      <div style={{ flex: '1.5' }}>
-                        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 6 }}>Telefone *</label>
-                        <input className="form-input" placeholder="(00)00000-0000" value={resp.telefone} onChange={e => handleInputChange('telefone', formatPhone(e.target.value), index)} />
+                return (
+                  <div key={index} style={{ border: '1px solid #e2e8f0', padding: 18, borderRadius: 12, background: 'rgba(255,255,255,0.7)', boxShadow: '0 2px 8px rgba(0,0,0,0.03)' }}>
+                    {/* Header do Card com Badges */}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+                      <h3 style={{ fontSize: 14, fontWeight: 800, color: '#1e293b', margin: 0 }}>
+                        {formResponsaveis.length > 1 ? `Dados do Responsável #${index + 1}` : 'Dados do Responsável'}
+                      </h3>
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const val = !resp.isFinanceiro;
+                            handleInputChange('isFinanceiro', val, index);
+                            if (!val) {
+                              setValidationErrors(prev => prev.filter(err => err.field !== `resp_${index}_email`));
+                            }
+                          }}
+                          style={{
+                            padding: '5px 14px',
+                            borderRadius: '20px',
+                            fontSize: 11.5,
+                            fontWeight: 700,
+                            border: '1px solid',
+                            borderColor: resp.isFinanceiro ? '#10b981' : '#e2e8f0',
+                            background: resp.isFinanceiro ? '#10b981' : '#fff',
+                            color: resp.isFinanceiro ? '#fff' : '#64748b',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s',
+                            boxShadow: resp.isFinanceiro ? '0 2px 6px rgba(16, 185, 129, 0.3)' : 'none'
+                          }}
+                        >
+                          Financeiro
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            handleInputChange('isPedagogico', !resp.isPedagogico, index);
+                            if (!resp.isFinanceiro) {
+                              setValidationErrors(prev => prev.filter(err => err.field !== `resp_${index}_email`));
+                            }
+                          }}
+                          style={{
+                            padding: '5px 14px',
+                            borderRadius: '20px',
+                            fontSize: 11.5,
+                            fontWeight: 700,
+                            border: '1px solid',
+                            borderColor: resp.isPedagogico ? '#8b5cf6' : '#e2e8f0',
+                            background: resp.isPedagogico ? '#8b5cf6' : '#fff',
+                            color: resp.isPedagogico ? '#fff' : '#64748b',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s',
+                            boxShadow: resp.isPedagogico ? '0 2px 6px rgba(139, 92, 246, 0.3)' : 'none'
+                          }}
+                        >
+                          Pedagógico
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            handleInputChange('isOutro', !resp.isOutro, index);
+                            if (!resp.isFinanceiro) {
+                              setValidationErrors(prev => prev.filter(err => err.field !== `resp_${index}_email`));
+                            }
+                          }}
+                          style={{
+                            padding: '5px 14px',
+                            borderRadius: '20px',
+                            fontSize: 11.5,
+                            fontWeight: 700,
+                            border: '1px solid',
+                            borderColor: resp.isOutro ? '#f59e0b' : '#e2e8f0',
+                            background: resp.isOutro ? '#f59e0b' : '#fff',
+                            color: resp.isOutro ? '#fff' : '#64748b',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s',
+                            boxShadow: resp.isOutro ? '0 2px 6px rgba(245, 158, 11, 0.3)' : 'none'
+                          }}
+                        >
+                          Outro
+                        </button>
                       </div>
                     </div>
-
-                    {/* Linha 3 */}
-                    <div style={{ display: 'flex', gap: 16 }}>
-                      <div style={{ flex: '2' }}>
-                        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 6 }}>Profissão</label>
-                        <input className="form-input" placeholder="Ex: Professor" value={resp.profissao} onChange={e => handleInputChange('profissao', e.target.value, index)} />
+                    
+                    {/* SUB-SECTION 1: DADOS PESSOAIS E DOCUMENTOS */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                      {/* Linha 1: ID, Nome Completo *, Parentesco */}
+                      <div style={{ display: 'grid', gridTemplateColumns: '110px 1fr 220px', gap: 12 }}>
+                        <div>
+                          <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 5 }}>ID</label>
+                          <input 
+                            className="form-input" 
+                            style={{ height: 40, padding: '0 12px', fontSize: 13, borderRadius: 8, boxSizing: 'border-box' }}
+                            placeholder="Ex: RESP001" 
+                            value={resp.id} 
+                            onChange={e => handleInputChange('id', e.target.value, index)} 
+                          />
+                        </div>
+                        <div>
+                          <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 5 }}>Nome Completo *</label>
+                          <input 
+                            className="form-input" 
+                            style={{ ...getMandatoryFieldStyle(resp.nome, `resp_${index}_nome`), height: 40, padding: '0 12px', fontSize: 13, borderRadius: 8, boxSizing: 'border-box' }}
+                            placeholder="Nome do responsável" 
+                            value={resp.nome} 
+                            onChange={e => {
+                              handleInputChange('nome', e.target.value, index)
+                              if (hasError(`resp_${index}_nome`)) {
+                                setValidationErrors(prev => prev.filter(err => err.field !== `resp_${index}_nome`))
+                              }
+                            }} 
+                          />
+                        </div>
+                        <div>
+                          <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 5 }}>Parentesco</label>
+                          <select 
+                            className="form-input" 
+                            style={{ height: 40, padding: '0 12px', fontSize: 13, borderRadius: 8, boxSizing: 'border-box' }}
+                            value={resp.parentesco} 
+                            onChange={e => handleInputChange('parentesco', e.target.value, index)}
+                          >
+                            <option value="">Selecione…</option>
+                            <option value="pai">Pai</option>
+                            <option value="mae">Mãe</option>
+                            <option value="responsavel_legal">Responsável Legal</option>
+                            <option value="padrasto">Padrasto</option>
+                            <option value="madrasta">Madrasta</option>
+                            <option value="avo">Avô / Avó</option>
+                            <option value="tio">Tio / Tia</option>
+                            <option value="irmao">Irmão / Irmã</option>
+                            <option value="outro">Outro</option>
+                          </select>
+                        </div>
                       </div>
-                      <div style={{ flex: '2' }}>
-                        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 6 }}>Cartão RFID</label>
-                        <div style={{ position: 'relative' }}>
-                          <CreditCard size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
-                          <input className="form-input" style={{ paddingLeft: 36 }} placeholder="Aproxime o cartão…" value={resp.rfid} onChange={e => handleInputChange('rfid', e.target.value, index)} />
+
+                      {/* Linha 2: CPF, RG, Órgão Emissor / UF, Data de Nascimento */}
+                      <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr 1.1fr', gap: 12 }}>
+                        <div>
+                          <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 5 }}>CPF</label>
+                          <input 
+                            className="form-input" 
+                            style={{ height: 40, padding: '0 12px', fontSize: 13, borderRadius: 8, boxSizing: 'border-box' }}
+                            placeholder="000.000.000-00" 
+                            value={resp.cpf || ''} 
+                            onChange={e => handleInputChange('cpf', formatCpfMask(e.target.value), index)} 
+                          />
+                        </div>
+                        <div>
+                          <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 5 }}>RG</label>
+                          <input 
+                            className="form-input" 
+                            style={{ height: 40, padding: '0 12px', fontSize: 13, borderRadius: 8, boxSizing: 'border-box' }}
+                            placeholder="Número do RG" 
+                            value={resp.rg || ''} 
+                            onChange={e => handleInputChange('rg', e.target.value, index)} 
+                          />
+                        </div>
+                        <div>
+                          <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 5 }}>Órgão Emissor / UF</label>
+                          <input 
+                            className="form-input" 
+                            style={{ height: 40, padding: '0 12px', fontSize: 13, borderRadius: 8, boxSizing: 'border-box' }}
+                            placeholder="Ex: SSP/SP" 
+                            value={resp.rgOrgaoEmissor || ''} 
+                            onChange={e => handleInputChange('rgOrgaoEmissor', e.target.value, index)} 
+                          />
+                        </div>
+                        <div>
+                          <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 5 }}>Data de Nascimento</label>
+                          <input 
+                            type="date" 
+                            className="form-input" 
+                            style={{ height: 40, padding: '0 12px', fontSize: 13, borderRadius: 8, boxSizing: 'border-box' }}
+                            value={resp.dataNasc || ''} 
+                            onChange={e => handleInputChange('dataNasc', e.target.value, index)} 
+                          />
+                        </div>
+                      </div>
+
+                      {/* Linha 3: Sexo, Estado Civil, Profissão, Naturalidade com UF, Nacionalidade */}
+                      <div style={{ display: 'grid', gridTemplateColumns: '130px 160px 1.2fr 1.5fr 130px', gap: 12 }}>
+                        <div>
+                          <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 5 }}>Sexo</label>
+                          <select 
+                            className="form-input" 
+                            style={{ height: 40, padding: '0 10px', fontSize: 13, borderRadius: 8, boxSizing: 'border-box' }}
+                            value={resp.sexo || ''} 
+                            onChange={e => handleInputChange('sexo', e.target.value, index)}
+                          >
+                            <option value="">Selecione...</option>
+                            <option value="Masculino">Masculino</option>
+                            <option value="Feminino">Feminino</option>
+                            <option value="Outro">Outro</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 5 }}>Estado Civil</label>
+                          <select 
+                            className="form-input" 
+                            style={{ height: 40, padding: '0 10px', fontSize: 13, borderRadius: 8, boxSizing: 'border-box' }}
+                            value={resp.estadoCivil || ''} 
+                            onChange={e => handleInputChange('estadoCivil', e.target.value, index)}
+                          >
+                            <option value="">Selecione...</option>
+                            <option value="Solteiro(a)">Solteiro(a)</option>
+                            <option value="Casado(a)">Casado(a)</option>
+                            <option value="Divorciado(a)">Divorciado(a)</option>
+                            <option value="Viúvo(a)">Viúvo(a)</option>
+                            <option value="União Estável">União Estável</option>
+                            <option value="Separado(a)">Separado(a)</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 5 }}>Profissão</label>
+                          <input 
+                            className="form-input" 
+                            style={{ height: 40, padding: '0 12px', fontSize: 13, borderRadius: 8, boxSizing: 'border-box' }}
+                            placeholder="Ex: Engenheiro(a)..." 
+                            value={resp.profissao || ''} 
+                            onChange={e => handleInputChange('profissao', e.target.value, index)} 
+                          />
+                        </div>
+                        <div>
+                          <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 5 }}>Naturalidade (Cidade / UF)</label>
+                          <div style={{ display: 'flex', gap: 6 }}>
+                            <input 
+                              className="form-input" 
+                              style={{ height: 40, padding: '0 12px', fontSize: 13, borderRadius: 8, flex: 1, boxSizing: 'border-box' }}
+                              placeholder="Cidade natal" 
+                              value={resp.naturalidade || ''} 
+                              onChange={e => handleInputChange('naturalidade', e.target.value, index)} 
+                            />
+                            <select 
+                              className="form-input" 
+                              style={{ width: 80, height: 40, padding: '0 6px', fontSize: 13, borderRadius: 8, boxSizing: 'border-box' }}
+                              value={resp.naturalidadeUf || ''} 
+                              onChange={e => handleInputChange('naturalidadeUf', e.target.value, index)}
+                            >
+                              <option value="">UF...</option>
+                              {ESTADOS_BRASIL.map(uf => (
+                                <option key={uf} value={uf}>{uf}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                        <div>
+                          <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 5 }}>Nacionalidade</label>
+                          <input 
+                            className="form-input" 
+                            style={{ height: 40, padding: '0 12px', fontSize: 13, borderRadius: 8, boxSizing: 'border-box' }}
+                            placeholder="Ex: Brasileira" 
+                            value={resp.nacionalidade || 'Brasileira'} 
+                            onChange={e => handleInputChange('nacionalidade', e.target.value, index)} 
+                          />
+                        </div>
+                      </div>
+
+                      {/* Linha 4: Contato & Acesso */}
+                      <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.6fr 1.2fr', gap: 12 }}>
+                        <div>
+                          <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 5 }}>Telefone / WhatsApp</label>
+                          <input 
+                            className="form-input" 
+                            style={{ height: 40, padding: '0 12px', fontSize: 13, borderRadius: 8, boxSizing: 'border-box' }}
+                            placeholder="(00)00000-0000" 
+                            value={resp.telefone || ''} 
+                            onChange={e => handleInputChange('telefone', formatPhone(e.target.value), index)} 
+                          />
+                        </div>
+                        <div>
+                          <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 5 }}>
+                            E-mail {resp.isFinanceiro ? '*' : ''}
+                          </label>
+                          <input 
+                            type="email" 
+                            className="form-input" 
+                            style={{ 
+                              ...(resp.isFinanceiro 
+                                ? getMandatoryFieldStyle(resp.email, `resp_${index}_email`)
+                                : hasError(`resp_${index}_email`)
+                                  ? {
+                                      borderColor: '#ef4444',
+                                      borderWidth: '2px',
+                                      borderStyle: 'solid',
+                                      boxShadow: '0 0 0 2px rgba(239, 68, 68, 0.25)',
+                                      background: '#fff5f5'
+                                    }
+                                  : {}), 
+                              height: 40, 
+                              padding: '0 12px', 
+                              fontSize: 13, 
+                              borderRadius: 8,
+                              boxSizing: 'border-box'
+                            }}
+                            placeholder="email@exemplo.com" 
+                            value={resp.email || ''} 
+                            onChange={e => {
+                              handleInputChange('email', e.target.value, index)
+                              if (hasError(`resp_${index}_email`)) {
+                                setValidationErrors(prev => prev.filter(err => err.field !== `resp_${index}_email`))
+                              }
+                            }} 
+                          />
+                        </div>
+                        <div>
+                          <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 5 }}>Cartão RFID</label>
+                          <div style={{ position: 'relative' }}>
+                            <CreditCard size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                            <input 
+                              className="form-input" 
+                              style={{ height: 40, paddingLeft: 36, paddingRight: 12, fontSize: 13, borderRadius: 8, boxSizing: 'border-box' }} 
+                              placeholder="Aproxime o cartão…" 
+                              value={resp.rfid || ''} 
+                              onChange={e => handleInputChange('rfid', e.target.value, index)} 
+                            />
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
+
+                    {/* SUB-SECTION 2: ENDEREÇO RESIDENCIAL COM VIACEP */}
+                    <div style={{ background: 'rgba(248, 250, 252, 0.8)', border: '1px solid #e2e8f0', borderRadius: 10, padding: '14px 16px', marginTop: 16 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <MapPin size={14} color="#2563eb" />
+                          <span style={{ fontSize: 12, fontWeight: 800, color: '#1e293b', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+                            Endereço Residencial
+                          </span>
+                          {loadingCep[`${index}_res`] && (
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#2563eb', fontWeight: 600 }}>
+                              <Loader2 size={12} className="animate-spin" /> Buscando CEP...
+                            </span>
+                          )}
+                          {cepFeedback[`${index}_res`]?.type === 'success' && (
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#059669', fontWeight: 700 }}>
+                              <CheckCircle2 size={13} /> {cepFeedback[`${index}_res`]?.message}
+                            </span>
+                          )}
+                          {cepFeedback[`${index}_res`]?.type === 'error' && (
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#dc2626', fontWeight: 700 }}>
+                              <AlertTriangle size={13} /> {cepFeedback[`${index}_res`]?.message}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: '140px 1fr 100px 160px', gap: 12, marginBottom: 12 }}>
+                        <div>
+                          <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 5 }}>CEP</label>
+                          <input
+                            className="form-input"
+                            style={{ height: 40, padding: '0 12px', fontSize: 13, borderRadius: 8, boxSizing: 'border-box' }}
+                            placeholder="00000-000"
+                            value={resp.cep || ''}
+                            onChange={e => handleCepResidencialChange(e.target.value, index)}
+                          />
+                        </div>
+                        <div>
+                          <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 5 }}>Endereço / Logradouro</label>
+                          <input
+                            className="form-input"
+                            style={{ height: 40, padding: '0 12px', fontSize: 13, borderRadius: 8, boxSizing: 'border-box' }}
+                            placeholder="Rua, Avenida, Travessa..."
+                            value={resp.endereco || ''}
+                            onChange={e => handleInputChange('endereco', e.target.value, index)}
+                          />
+                        </div>
+                        <div>
+                          <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 5 }}>Número</label>
+                          <input
+                            className="form-input"
+                            style={{ height: 40, padding: '0 12px', fontSize: 13, borderRadius: 8, boxSizing: 'border-box' }}
+                            placeholder="Nº"
+                            value={resp.numero || ''}
+                            onChange={e => handleInputChange('numero', e.target.value, index)}
+                          />
+                        </div>
+                        <div>
+                          <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 5 }}>Complemento</label>
+                          <input
+                            className="form-input"
+                            style={{ height: 40, padding: '0 12px', fontSize: 13, borderRadius: 8, boxSizing: 'border-box' }}
+                            placeholder="Apto, Bloco..."
+                            value={resp.complemento || ''}
+                            onChange={e => handleInputChange('complemento', e.target.value, index)}
+                          />
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.5fr 90px', gap: 12 }}>
+                        <div>
+                          <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 5 }}>Bairro</label>
+                          <input
+                            className="form-input"
+                            style={{ height: 40, padding: '0 12px', fontSize: 13, borderRadius: 8, boxSizing: 'border-box' }}
+                            placeholder="Bairro"
+                            value={resp.bairro || ''}
+                            onChange={e => handleInputChange('bairro', e.target.value, index)}
+                          />
+                        </div>
+                        <div>
+                          <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 5 }}>Cidade</label>
+                          <input
+                            className="form-input"
+                            style={{ height: 40, padding: '0 12px', fontSize: 13, borderRadius: 8, boxSizing: 'border-box' }}
+                            placeholder="Cidade"
+                            value={resp.cidade || ''}
+                            onChange={e => handleInputChange('cidade', e.target.value, index)}
+                          />
+                        </div>
+                        <div>
+                          <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 5 }}>UF</label>
+                          <select
+                            className="form-input"
+                            style={{ height: 40, padding: '0 8px', fontSize: 13, borderRadius: 8, boxSizing: 'border-box' }}
+                            value={resp.uf || ''}
+                            onChange={e => handleInputChange('uf', e.target.value, index)}
+                          >
+                            <option value="">UF...</option>
+                            {ESTADOS_BRASIL.map(uf => (
+                              <option key={uf} value={uf}>{uf}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* SUB-SECTION 3: ENDEREÇO COMERCIAL (RECOLHIDO POR PADRÃO COM ACCORDION) */}
+                    <div
+                      style={{
+                        background: isExpandedComercial 
+                          ? 'rgba(248, 250, 252, 0.9)' 
+                          : hasComercialData 
+                            ? 'rgba(245, 243, 255, 0.5)' 
+                            : 'rgba(248, 250, 252, 0.6)',
+                        border: isExpandedComercial 
+                          ? '1px solid #cbd5e1' 
+                          : hasComercialData 
+                            ? '1px solid #ddd6fe' 
+                            : '1px dashed #cbd5e1',
+                        borderRadius: 10,
+                        marginTop: 14,
+                        overflow: 'hidden',
+                        transition: 'all 0.2s ease'
+                      }}
+                    >
+                      {/* Accordion Header */}
+                      <div
+                        onClick={() => toggleComercial(index)}
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault()
+                            toggleComercial(index)
+                          }
+                        }}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '12px 16px',
+                          cursor: 'pointer',
+                          userSelect: 'none',
+                          background: isExpandedComercial ? 'rgba(241, 245, 249, 0.7)' : 'transparent',
+                          borderBottom: isExpandedComercial ? '1px solid #e2e8f0' : 'none',
+                          transition: 'background 0.15s ease'
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                          <div
+                            style={{
+                              width: 28,
+                              height: 28,
+                              borderRadius: 6,
+                              background: isExpandedComercial ? 'rgba(124, 58, 237, 0.12)' : 'rgba(124, 58, 237, 0.08)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center'
+                            }}
+                          >
+                            <Briefcase size={14} color="#7c3aed" />
+                          </div>
+                          <span style={{ fontSize: 12, fontWeight: 800, color: '#1e293b', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+                            Endereço Comercial / Trabalho
+                          </span>
+                          <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600 }}>
+                            (Opcional)
+                          </span>
+
+                          {hasComercialData && !isExpandedComercial && (
+                            <span
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 4,
+                                fontSize: 11,
+                                fontWeight: 700,
+                                color: '#059669',
+                                background: 'rgba(5, 150, 105, 0.09)',
+                                border: '1px solid rgba(5, 150, 105, 0.25)',
+                                padding: '2px 8px',
+                                borderRadius: 999
+                              }}
+                            >
+                              <Check size={11} /> Preenchido {resp.comercialEmpresa ? `• ${resp.comercialEmpresa}` : ''}
+                            </span>
+                          )}
+
+                          {isExpandedComercial && (
+                            <>
+                              {loadingCep[`${index}_com`] && (
+                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#7c3aed', fontWeight: 600 }}>
+                                  <Loader2 size={12} className="animate-spin" /> Buscando CEP...
+                                </span>
+                              )}
+                              {cepFeedback[`${index}_com`]?.type === 'success' && (
+                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#059669', fontWeight: 700 }}>
+                                  <CheckCircle2 size={13} /> {cepFeedback[`${index}_com`]?.message}
+                                </span>
+                              )}
+                              {cepFeedback[`${index}_com`]?.type === 'error' && (
+                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#dc2626', fontWeight: 700 }}>
+                                  <AlertTriangle size={13} /> {cepFeedback[`${index}_com`]?.message}
+                                </span>
+                              )}
+                            </>
+                          )}
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          {isExpandedComercial && (
+                            <button
+                              type="button"
+                              onClick={e => {
+                                e.stopPropagation()
+                                handleCopiarEnderecoResidencialParaComercial(index)
+                              }}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 5,
+                                fontSize: 11.5,
+                                fontWeight: 700,
+                                color: '#4f46e5',
+                                background: 'rgba(79, 70, 229, 0.08)',
+                                border: '1px solid rgba(79, 70, 229, 0.25)',
+                                borderRadius: 6,
+                                padding: '5px 12px',
+                                cursor: 'pointer',
+                                transition: 'all 0.15s ease'
+                              }}
+                              title="Preenche o endereço comercial com os dados do residencial"
+                            >
+                              <Copy size={12} /> Copiar do Residencial
+                            </button>
+                          )}
+
+                          <div
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 5,
+                              fontSize: 11.5,
+                              fontWeight: 700,
+                              color: isExpandedComercial ? '#64748b' : '#7c3aed',
+                              background: isExpandedComercial ? '#f1f5f9' : 'rgba(124, 58, 237, 0.08)',
+                              border: isExpandedComercial ? '1px solid #e2e8f0' : '1px solid rgba(124, 58, 237, 0.25)',
+                              borderRadius: 6,
+                              padding: '5px 12px'
+                            }}
+                          >
+                            {isExpandedComercial ? (
+                              <>Recolher <ChevronUp size={13} /></>
+                            ) : (
+                              <>{hasComercialData ? 'Visualizar / Editar' : 'Preencher Endereço Comercial'} <ChevronDown size={13} /></>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Accordion Content (Expandido) */}
+                      {isExpandedComercial && (
+                        <div style={{ padding: '14px 16px' }}>
+                          <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1.2fr 140px', gap: 12, marginBottom: 12 }}>
+                            <div>
+                              <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 5 }}>Empresa / Local de Trabalho</label>
+                              <input
+                                className="form-input"
+                                style={{ height: 40, padding: '0 12px', fontSize: 13, borderRadius: 8, boxSizing: 'border-box' }}
+                                placeholder="Ex: Empresa XYZ / Autônomo"
+                                value={resp.comercialEmpresa || ''}
+                                onChange={e => handleInputChange('comercialEmpresa', e.target.value, index)}
+                              />
+                            </div>
+                            <div>
+                              <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 5 }}>Telefone Comercial</label>
+                              <input
+                                className="form-input"
+                                style={{ height: 40, padding: '0 12px', fontSize: 13, borderRadius: 8, boxSizing: 'border-box' }}
+                                placeholder="(00) 0000-0000"
+                                value={resp.comercialTelefone || ''}
+                                onChange={e => handleInputChange('comercialTelefone', formatPhone(e.target.value), index)}
+                              />
+                            </div>
+                            <div>
+                              <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 5 }}>CEP Comercial</label>
+                              <input
+                                className="form-input"
+                                style={{ height: 40, padding: '0 12px', fontSize: 13, borderRadius: 8, boxSizing: 'border-box' }}
+                                placeholder="00000-000"
+                                value={resp.comercialCep || ''}
+                                onChange={e => handleCepComercialChange(e.target.value, index)}
+                              />
+                            </div>
+                          </div>
+
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 100px 160px', gap: 12, marginBottom: 12 }}>
+                            <div>
+                              <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 5 }}>Endereço Comercial / Logradouro</label>
+                              <input
+                                className="form-input"
+                                style={{ height: 40, padding: '0 12px', fontSize: 13, borderRadius: 8, boxSizing: 'border-box' }}
+                                placeholder="Rua, Avenida, Bloco empresarial..."
+                                value={resp.comercialEndereco || ''}
+                                onChange={e => handleInputChange('comercialEndereco', e.target.value, index)}
+                              />
+                            </div>
+                            <div>
+                              <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 5 }}>Número</label>
+                              <input
+                                className="form-input"
+                                style={{ height: 40, padding: '0 12px', fontSize: 13, borderRadius: 8, boxSizing: 'border-box' }}
+                                placeholder="Nº"
+                                value={resp.comercialNumero || ''}
+                                onChange={e => handleInputChange('comercialNumero', e.target.value, index)}
+                              />
+                            </div>
+                            <div>
+                              <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 5 }}>Complemento / Sala</label>
+                              <input
+                                className="form-input"
+                                style={{ height: 40, padding: '0 12px', fontSize: 13, borderRadius: 8, boxSizing: 'border-box' }}
+                                placeholder="Sala, Andar, Galpão..."
+                                value={resp.comercialComplemento || ''}
+                                onChange={e => handleInputChange('comercialComplemento', e.target.value, index)}
+                              />
+                            </div>
+                          </div>
+
+                          <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.5fr 90px', gap: 12 }}>
+                            <div>
+                              <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 5 }}>Bairro</label>
+                              <input
+                                className="form-input"
+                                style={{ height: 40, padding: '0 12px', fontSize: 13, borderRadius: 8, boxSizing: 'border-box' }}
+                                placeholder="Bairro"
+                                value={resp.comercialBairro || ''}
+                                onChange={e => handleInputChange('comercialBairro', e.target.value, index)}
+                              />
+                            </div>
+                            <div>
+                              <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 5 }}>Cidade</label>
+                              <input
+                                className="form-input"
+                                style={{ height: 40, padding: '0 12px', fontSize: 13, borderRadius: 8, boxSizing: 'border-box' }}
+                                placeholder="Cidade"
+                                value={resp.comercialCidade || ''}
+                                onChange={e => handleInputChange('comercialCidade', e.target.value, index)}
+                              />
+                            </div>
+                            <div>
+                              <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 5 }}>UF</label>
+                              <select
+                                className="form-input"
+                                style={{ height: 40, padding: '0 8px', fontSize: 13, borderRadius: 8, boxSizing: 'border-box' }}
+                                value={resp.comercialUf || ''}
+                                onChange={e => handleInputChange('comercialUf', e.target.value, index)}
+                              >
+                                <option value="">UF...</option>
+                                {ESTADOS_BRASIL.map(uf => (
+                                  <option key={uf} value={uf}>{uf}</option>
+                                ))}
+                              </select>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
 
                   {/* Dias de Acesso */}
                   <div style={{ marginTop: 16 }}>
@@ -845,11 +1723,12 @@ export default function ResponsaveisPage() {
                     </div>
                   </div>
                 </div>
-              ))}
+              )
+            })}
 
               {!editingResponsavel && (
                 <button 
-                  onClick={() => setFormResponsaveis([...formResponsaveis, { id: '', nome: '', dataNasc: '', email: '', telefone: '', profissao: '', rfid: '', parentesco: '', diasAcesso: ['Seg', 'Ter', 'Qua', 'Qui', 'Sex'], isFinanceiro: false, isPedagogico: false, isOutro: false, proibido: false, alunosVinculados: [] }])} 
+                  onClick={() => setFormResponsaveis([...formResponsaveis, createEmptyResponsavel()])} 
                   style={{ 
                     width: '100%', 
                     padding: '16px', 

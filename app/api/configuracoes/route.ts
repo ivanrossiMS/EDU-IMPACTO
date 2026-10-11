@@ -106,7 +106,33 @@ export async function POST(request: Request) {
 
   const supabase = getAdminClient();
   try {
-    const { chave, valor } = await request.json()
+    const body = await request.json()
+    
+    // Suporte a salvamento em lote de múltiplas configurações de uma só vez
+    if (Array.isArray(body?.items) && body.items.length > 0) {
+      const rows = body.items
+        .filter((it: any) => it && it.chave)
+        .map((it: any) => ({
+          chave: it.chave,
+          valor: it.valor,
+          updated_at: new Date().toISOString()
+        }))
+
+      if (rows.length === 0) {
+        return NextResponse.json({ error: 'Nenhum item válido com chave fornecido' }, { status: 400 })
+      }
+
+      const { data, error } = await supabase
+        .from('configuracoes')
+        .upsert(rows)
+        .select()
+
+      if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+      globalCache.clear()
+      return NextResponse.json({ ok: true, count: data?.length || rows.length, data })
+    }
+
+    const { chave, valor } = body
     if (!chave) return NextResponse.json({ error: 'chave required' }, { status: 400 })
 
     const { data, error } = await supabase

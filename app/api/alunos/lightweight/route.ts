@@ -40,6 +40,7 @@ export async function GET(req: Request) {
     const timeoutId = setTimeout(() => controller.abort(), 25_000)
 
     const turma = (url.searchParams.get('turma') || '').trim()
+    const anoParam = (url.searchParams.get('ano') || url.searchParams.get('anoLetivo') || '').trim()
 
     let targetTurmaObj: any = null
     let allTurmasList: any[] = []
@@ -124,13 +125,25 @@ export async function GET(req: Request) {
       }
     })
 
+    const effectiveAno = targetTurmaObj?.ano ? String(targetTurmaObj.ano) : (anoParam || undefined)
     if (turma) {
       formatted = formatted.filter((aluno: any) =>
-        isAlunoCursandoTurma(aluno, targetTurmaObj || turma, undefined, allTurmasList)
+        isAlunoCursandoTurma(aluno, targetTurmaObj || turma, effectiveAno, allTurmasList)
       )
     }
 
-    const responseData = { data: formatted, total: turma ? formatted.length : (count || 0), page, limit };
+    if (anoParam && !turma) {
+      formatted = formatted.filter((aluno: any) => {
+        const hist = (aluno as any).historicoTurmas || aluno.dados?.historicoTurmas
+        if (Array.isArray(hist) && hist.length > 0) {
+          return hist.some((h: any) => String(h.anoLetivo || h.ano || '').trim() === anoParam)
+        }
+        const sAno = String((aluno as any).anoLetivo || (aluno as any).ano_letivo || aluno.dados?.anoLetivo || aluno.dados?.ano_letivo || '').trim()
+        return sAno === anoParam
+      })
+    }
+
+    const responseData = { data: formatted, total: (turma || (anoParam && !turma)) ? formatted.length : (count || 0), page, limit };
     
     if (!search) {
       inMemoryCache.set(cacheKey, { data: responseData, ts: Date.now() });

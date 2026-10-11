@@ -267,6 +267,8 @@ export async function recordAuditLog(input: AuditLogInput): Promise<boolean> {
   }
 }
 
+export const logAudit = recordAuditLog
+
 /**
  * Limpeza automática periódica (executada no máximo 1 vez a cada 24 horas).
  */

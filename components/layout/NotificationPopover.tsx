@@ -19,6 +19,7 @@ import { useApp } from '@/lib/context'
 import { useSupabaseArray } from '@/lib/useSupabaseCollection'
 import { useBroadcastRealtime } from '@/lib/hooks/useBroadcastRealtime'
 import { supabase } from '@/lib/supabase'
+import { checkIsCollaboratorOrTeacher, checkIsAdmin, checkIsStaffManagement } from '@/lib/chatPermissions'
 import { format, isAfter, subDays, isSameDay } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 
@@ -34,19 +35,19 @@ export function NotificationPopover({
   alignOffset?: number
 } = {}) {
   const [open, setOpen] = useState(false)
-  const [markedRead, setMarkedRead] = useState<string[]>([])
   const [activeTab, setActiveTab] = useState<'all' | 'tarefas' | 'agenda' | 'ocorrencias' | 'comunicado' | 'autorizacao'>('all')
 
   const dataContext = useData()
   const tarefas = dataContext?.tarefas || []
   const eventosAgenda = dataContext?.eventosAgenda || []
   const ocorrencias = dataContext?.ocorrencias || []
-  const { currentUser } = useApp()
+  const turmas = dataContext?.turmas || []
+  const { currentUser, hydrated } = useApp()
   const pathname = usePathname()
   const { on: onRealtime } = useBroadcastRealtime()
 
   // Comunicados recentes
-  const [comunicados] = useSupabaseArray<any>('comunicados?order=created_at.desc&limit=10')
+  const [comunicados] = useSupabaseArray<any>('comunicados?order=created_at.desc&limit=15')
 
   // ── Sincronização em tempo real das Autorizações Especiais do Dia ────────────
   const [saidaCalls, setSaidaCalls] = useState<any[]>([])
@@ -210,32 +211,214 @@ export function NotificationPopover({
     }
   }, [])
 
-  // ── Derive notifications ──────────────────────────────────────────────────
+  // ── Identificação e Permissões do Colaborador Individual ───────────────────
+  const isColab = useMemo(() => {
+    return checkIsCollaboratorOrTeacher(currentUser?.cargo, currentUser?.perfil, currentUser)
+  }, [currentUser])
+
+  const isAdmin = useMemo(() => {
+    return checkIsAdmin(currentUser?.cargo, currentUser?.perfil)
+  }, [currentUser])
+
+  const isManagement = useMemo(() => {
+    return isAdmin || checkIsStaffManagement(currentUser?.cargo, currentUser?.perfil)
+  }, [currentUser, isAdmin])
+
+  const myName = (currentUser?.nome || '').trim().toLowerCase()
+  const myId = String(currentUser?.id || '').trim()
+  const mySystemUserId = String(currentUser?.system_user_id || '').trim()
+  const myColabId = String(currentUser?.colaborador_id || '').trim()
+  const myEmail = (currentUser?.email || '').trim().toLowerCase()
+
+  // Turmas vinculadas ao colaborador logado
+  const myTurmaSet = useMemo(() => {
+    const set = new Set<string>()
+    if (!currentUser) return set
+
+    ;(turmas || []).forEach((t: any) => {
+      const profName = (t.professor || '').toLowerCase().trim()
+      const tNome = (t.nome || '').toLowerCase().trim()
+      const tCodigo = String(t.codigo || '').toLowerCase().trim()
+      const tId = String(t.id || '').toLowerCase().trim()
+
+      const isProfOfTurma = profName && (
+        profName === myName ||
+        profName.includes(myName) ||
+        myName.includes(profName)
+      )
+
+      let isDisciplinaProf = false
+      if (Array.isArray(t.disciplinas)) {
+        isDisciplinaProf = t.disciplinas.some((d: any) => {
+          const dProf = (d.professor || '').toLowerCase().trim()
+          return dProf && (dProf === myName || dProf.includes(myName) || myName.includes(dProf))
+        })
+      }
+
+      let isDadosColab = false
+      const dadosColabs: string[] = [
+        ...(Array.isArray(t.dados?.colaboradoresIds) ? t.dados.colaboradoresIds : []),
+        ...(Array.isArray(t.dados?.professores) ? t.dados.professores : []),
+      ].map(String)
+      if (dadosColabs.length > 0) {
+        isDadosColab = dadosColabs.includes(myId) ||
+          (Boolean(myColabId) && dadosColabs.includes(myColabId)) ||
+          (Boolean(mySystemUserId) && dadosColabs.includes(mySystemUserId))
+      }
+
+      if (isProfOfTurma || isDisciplinaProf || isDadosColab) {
+        if (tNome) set.add(tNome)
+        if (tCodigo) set.add(tCodigo)
+        if (tId) set.add(tId)
+      }
+    })
+    return set
+  }, [turmas, currentUser, myName, myId, myColabId, mySystemUserId])
+
+  // ── Controle Persistente de Notificações Lidas (Isolado por Usuário) ────────
+  const [markedRead, setMarkedRead] = useState<string[]>([])
+
+  const isItemRead = useCallback((id: string, rawId?: string) => {
+    return markedRead.includes(id) || (Boolean(rawId) && markedRead.includes(rawId!))
+  }, [markedRead])
+
+  useEffect(() => {
+    if (!currentUser?.id) {
+      setMarkedRead([])
+      return
+    }
+
+    const userId = currentUser.id
+    // 1. Carregamento imediato do cache local (sem delay ou flicker ao navegar)
+    try {
+      const cached = localStorage.getItem(`edu_notif_read_${userId}`)
+      if (cached) {
+        const parsed = JSON.parse(cached)
+        if (Array.isArray(parsed)) {
+          setMarkedRead(parsed)
+        }
+      }
+    } catch {}
+
+    // 2. Sincronização resiliente com o banco de dados Supabase
+    let isMounted = true
+    const sysId = currentUser.system_user_id || ''
+    const colabId = currentUser.colaborador_id || ''
+    const params = new URLSearchParams({
+      userId,
+      systemUserId: sysId,
+      colaboradorId: colabId,
+      _t: String(Date.now())
+    })
+
+    fetch(`/api/agenda/notificacoes/reads?${params.toString()}`, {
+      headers: { 'Cache-Control': 'no-cache' },
+      cache: 'no-store'
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (!isMounted || !data?.reads || !Array.isArray(data.reads)) return
+        setMarkedRead(prev => {
+          const merged = Array.from(new Set([...prev, ...data.reads]))
+          try {
+            localStorage.setItem(`edu_notif_read_${userId}`, JSON.stringify(merged))
+          } catch {}
+          return merged
+        })
+      })
+      .catch(err => {
+        console.warn('[NotificationPopover] Erro ao sincronizar leituras com servidor:', err)
+      })
+
+    // 3. Listener para sincronização instantânea entre abas e componentes da interface
+    const handleSync = (e: any) => {
+      if (e?.detail?.userId === userId && Array.isArray(e?.detail?.readIds)) {
+        setMarkedRead(e.detail.readIds)
+      }
+    }
+    window.addEventListener('edu:notif-read-sync', handleSync)
+
+    return () => {
+      isMounted = false
+      window.removeEventListener('edu:notif-read-sync', handleSync)
+    }
+  }, [currentUser?.id, currentUser?.system_user_id, currentUser?.colaborador_id])
+
+  // ── Derive notifications filtradas estritamente para o Colaborador Individual ─
   const notifications = useMemo(() => {
+    // Apenas colaboradores individuais têm acesso às notificações de gestão escolar
+    if (!currentUser || !isColab) return []
+
     const list: any[] = []
     const now = new Date()
     const fiveDaysAgo = subDays(now, 5)
 
-    // 1. Pendentes Tarefas
-    tarefas.filter(t => t.status === 'pendente').forEach(t => {
-      list.push({
-        id: `tarefa-${t.id}`,
-        type: 'tarefa',
-        title: t.titulo,
-        subtitle: t.responsavel || 'Para você',
-        date: t.prazo ? new Date(t.prazo) : new Date(),
-        icon: <ClipboardCheck size={16} color="#3b82f6" />,
-        bg: '#eff6ff',
-        link: '/tarefas'
-      })
-    })
+    // 1. Pendentes Tarefas — Apenas tarefas atribuídas ao colaborador ou criadas por ele
+    tarefas
+      .filter(t => t.status === 'pendente')
+      .filter(t => {
+        const resp = (t.responsavel || '').trim().toLowerCase()
+        const criadoPor = (t.criado_por || '').trim().toLowerCase()
+        const usuarioId = String((t as any).usuario_id || (t as any).responsavel_id || '').trim()
 
-    // 2. Novos Eventos do Calendário (criados ou que vão acontecer em breve)
+        const isAssignedToMe =
+          (resp && (resp === myName || resp === myId || (myEmail && resp === myEmail))) ||
+          (usuarioId && (usuarioId === myId || usuarioId === myColabId || usuarioId === mySystemUserId))
+        const isCreatedByMe =
+          criadoPor && (criadoPor === myName || criadoPor === myId)
+
+        return isAssignedToMe || isCreatedByMe
+      })
+      .forEach(t => {
+        list.push({
+          id: `tarefa-${t.id}`,
+          rawId: String(t.id),
+          type: 'tarefa',
+          title: t.titulo,
+          subtitle: t.responsavel || 'Para você',
+          date: t.prazo ? new Date(t.prazo) : new Date(),
+          icon: <ClipboardCheck size={16} color="#3b82f6" />,
+          bg: '#eff6ff',
+          link: '/tarefas'
+        })
+      })
+
+    // 2. Novos Eventos do Calendário — Relevantes para a atuação do colaborador
     eventosAgenda.forEach(e => {
       const eDate = new Date(e.data)
-      if (isAfter(eDate, subDays(now, 1)) && !isAfter(eDate, new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000))) {
+      if (!isAfter(eDate, subDays(now, 1)) || isAfter(eDate, new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000))) {
+        return
+      }
+
+      const eTurmas: string[] = Array.isArray(e.turmas) ? e.turmas.map(String) : []
+      const eTurmasLower = eTurmas.map(t => t.trim().toLowerCase())
+
+      // Evento geral (sem restrição de turma ou institucional/feriado)
+      const isGeneralEvent =
+        eTurmas.length === 0 ||
+        eTurmasLower.some(t => t === 'todos' || t === 'toda a escola' || t === 'geral' || t === 'institucional' || t.includes('feriado'))
+
+      const isCreator = e.criadoPor && (e.criadoPor.trim().toLowerCase() === myName || e.criadoPor === myId)
+
+      const isConfirmedParticipant = Array.isArray(e.confirmados) && (
+        e.confirmados.includes(myId) || e.confirmados.includes(myName)
+      )
+
+      // Gestão vê eventos de Direção, Coordenação ou gerais
+      const matchesManagement = isManagement && (
+        isGeneralEvent ||
+        eTurmasLower.some(t => t.includes('direção') || t.includes('direcao') || t.includes('coordena') || t.includes('admin'))
+      )
+
+      // Professor vê eventos das suas turmas ou de docentes
+      const matchesTeacherTurma = eTurmasLower.some(t => 
+        myTurmaSet.has(t) || t.includes('professores') || t.includes('docentes') || t.includes('pedagóg') || t.includes('pedagog')
+      )
+
+      if (isGeneralEvent || isCreator || isConfirmedParticipant || matchesManagement || matchesTeacherTurma) {
         list.push({
           id: `evento-${e.id}`,
+          rawId: String(e.id),
           type: 'agenda',
           title: e.titulo,
           subtitle: format(eDate, "dd 'de' MMM", { locale: ptBR }),
@@ -247,13 +430,23 @@ export function NotificationPopover({
       }
     })
 
-    // 3. Ocorrências recentes (últimos 5 dias)
+    // 3. Ocorrências recentes — Do colaborador, de suas turmas ou institucionais (Gestão)
     ocorrencias.forEach((o: any) => {
       const dateStr = o.created_at || o.data || o.data_registro
       const oDate = dateStr ? new Date(dateStr) : new Date()
-      if (isAfter(oDate, fiveDaysAgo)) {
+      if (!isAfter(oDate, fiveDaysAgo)) return
+
+      const oResp = (o.responsavel || o.professor || o.criado_por || '').trim().toLowerCase()
+      const oTurma = (o.turma || o.turmaNome || '').trim().toLowerCase()
+
+      const isMine = oResp === myName || oResp === myId
+      const isMyClass = Boolean(oTurma && myTurmaSet.has(oTurma))
+      const isRelevant = isMine || isMyClass || isManagement
+
+      if (isRelevant) {
         list.push({
           id: `ocorr-${o.id}`,
+          rawId: String(o.id),
           type: 'ocorrencia',
           title: o.tipo || o.tipo_id || 'Nova Ocorrência',
           subtitle: o.alunoNome || o.aluno_nome || 'Aluno',
@@ -265,26 +458,63 @@ export function NotificationPopover({
       }
     })
 
-    // 4. Comunicados recentes
+    // 4. Comunicados recentes — Apenas de equipe, turmas do colaborador ou gerais (NUNCA relatório individual de aluno)
     comunicados.forEach(c => {
+      const cId = String(c.id || '')
+      // Ignora terminantemente relatórios individuais de alunos (AD-COM-REL-STU-)
+      if (cId.startsWith('AD-COM-REL-STU-') || c.tipoRelatorio === 'individual' || c.dados?.tipoRelatorio === 'individual') {
+        return
+      }
+
       const cDate = c.created_at ? new Date(c.created_at) : new Date()
-      if (isAfter(cDate, fiveDaysAgo)) {
-        const isAdmin = currentUser?.perfil === 'Admin' || currentUser?.perfil === 'Diretor'
-        const link = isAdmin
+      if (!isAfter(cDate, fiveDaysAgo)) return
+
+      const destino = String(c.dados?.destino || c.destino || '').trim().toLowerCase()
+      const isGeral = destino === 'todos' || destino === 'toda a escola' || destino === 'interno' || destino === 'todas'
+
+      const colabIds: string[] = [
+        ...(c.dados?.colaboradoresIds || []),
+        ...(c.colaboradoresIds || []),
+        ...(c.dados?.destinatarios || []),
+        ...(c.destinatarios || []),
+        ...(c.dados?.funcionariosIds || []),
+        ...(c.funcionariosIds || [])
+      ].map(String)
+
+      const isDirectTarget =
+        colabIds.includes(myId) ||
+        (Boolean(myColabId) && colabIds.includes(myColabId)) ||
+        (Boolean(mySystemUserId) && colabIds.includes(mySystemUserId)) ||
+        (Boolean(myEmail) && colabIds.includes(myEmail))
+
+      const isAuthor =
+        (c.autor && c.autor.trim().toLowerCase() === myName) ||
+        (c.dados?.autorId && (c.dados.autorId === myId || c.dados.autorId === mySystemUserId))
+
+      const cTurmas: string[] = [
+        ...(Array.isArray(c.dados?.turmas) ? c.dados.turmas : []),
+        ...(Array.isArray(c.turmas) ? c.turmas : []),
+        ...(c.turma ? [c.turma] : [])
+      ].map(t => String(t).trim().toLowerCase())
+
+      const matchesTurma = cTurmas.some(tName => myTurmaSet.has(tName))
+      const isRelevant = isGeral || isDirectTarget || isAuthor || matchesTurma || isManagement
+
+      if (isRelevant) {
+        const link = isManagement
           ? '/agenda-digital/admin/comunicados'
-          : currentUser?.id
-            ? `/agenda-digital/colaborador/comunicados`
-            : '/agenda-digital/comunicados'
+          : '/agenda-digital/colaborador/comunicados'
 
         list.push({
           id: `comun-${c.id}`,
+          rawId: String(c.id),
           type: 'comunicado',
           title: c.titulo || 'Novo Comunicado',
-          subtitle: c.turma || 'Agenda Digital',
+          subtitle: c.turma || (isGeral ? 'Geral' : 'Agenda Digital'),
           date: cDate,
           icon: <Megaphone size={16} color="#8b5cf6" />,
           bg: '#f5f3ff',
-          link: link
+          link
         })
       }
     })
@@ -305,6 +535,19 @@ export function NotificationPopover({
     })
 
     specialAuthEntries.forEach((c: any) => {
+      const targetUserIds = Array.isArray(c.targetUserIds)
+        ? c.targetUserIds.map(String)
+        : (Array.isArray(c.dados?.targetUserIds) ? c.dados.targetUserIds.map(String) : [])
+
+      const isTargeted =
+        targetUserIds.length === 0 ||
+        targetUserIds.includes(myId) ||
+        (Boolean(mySystemUserId) && targetUserIds.includes(mySystemUserId)) ||
+        (Boolean(myColabId) && targetUserIds.includes(myColabId)) ||
+        isAdmin
+
+      if (!isTargeted) return
+
       const sId = c.studentId ? String(c.studentId).trim() : ''
       const sName = c.studentName ? c.studentName.trim().toLowerCase() : ''
       const confirmedCall = (sId ? confirmedMap.get(sId) : null) || (sName ? confirmedMap.get(sName) : null)
@@ -323,7 +566,6 @@ export function NotificationPopover({
         }
       }
 
-      // Horário previsto da autorização
       let targetTimeStr = ''
       const rawTargetTime = c.targetTime || c.target_time || c.dados?.targetTime || c.horarioPrevisto || null
       if (rawTargetTime && rawTargetTime !== 'Indefinido') {
@@ -341,6 +583,7 @@ export function NotificationPopover({
 
       list.push({
         id: `spec-auth-${c.id}`,
+        rawId: String(c.id),
         type: 'autorizacao',
         title: `Autorização Especial: ${c.studentName || 'Aluno'}`,
         subtitle,
@@ -355,11 +598,97 @@ export function NotificationPopover({
       })
     })
 
-    // Sort by date desc
+    // Ordenação decrescente por data
     return list.sort((a, b) => b.date.getTime() - a.date.getTime())
-  }, [tarefas, eventosAgenda, ocorrencias, comunicados, saidaCalls, currentUser])
+  }, [
+    tarefas,
+    eventosAgenda,
+    ocorrencias,
+    comunicados,
+    saidaCalls,
+    currentUser,
+    isColab,
+    isAdmin,
+    isManagement,
+    myName,
+    myId,
+    mySystemUserId,
+    myColabId,
+    myEmail,
+    myTurmaSet
+  ])
 
-  const unreadCount = notifications.filter(n => !markedRead.includes(n.id)).length
+  // Contagem de pendentes não lidas
+  const unreadCount = useMemo(() => {
+    return notifications.filter(n => !isItemRead(n.id, n.rawId)).length
+  }, [notifications, isItemRead])
+
+  // Marcar item individual como lido
+  const markItemAsRead = useCallback((item: { id: string; rawId?: string; type: string }) => {
+    if (!currentUser?.id) return
+    if (isItemRead(item.id, item.rawId)) return
+
+    const userId = currentUser.id
+    const toAdd = [item.id, item.rawId].filter(Boolean) as string[]
+    const updated = Array.from(new Set([...markedRead, ...toAdd]))
+    setMarkedRead(updated)
+
+    try {
+      localStorage.setItem(`edu_notif_read_${userId}`, JSON.stringify(updated))
+    } catch {}
+
+    try {
+      window.dispatchEvent(new CustomEvent('edu:notif-read-sync', {
+        detail: { userId, readIds: updated }
+      }))
+    } catch {}
+
+    fetch('/api/agenda/notificacoes/reads', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        userId,
+        systemUserId: currentUser.system_user_id,
+        colaboradorId: currentUser.colaborador_id,
+        perfil: currentUser.perfil || 'colaborador',
+        items: [{ id: item.id, rawId: item.rawId, type: item.type }]
+      })
+    }).catch(err => console.warn('[NotificationPopover] Falha ao persistir leitura:', err))
+  }, [currentUser, markedRead, isItemRead])
+
+  // Marcar todas como lidas (do usuário atual)
+  const markAllAsRead = useCallback(() => {
+    if (!currentUser?.id) return
+    const unreadItems = notifications.filter(n => !isItemRead(n.id, n.rawId))
+    if (unreadItems.length === 0) return
+
+    const userId = currentUser.id
+    const toAdd = unreadItems.flatMap(n => [n.id, n.rawId]).filter(Boolean) as string[]
+    const updated = Array.from(new Set([...markedRead, ...toAdd]))
+    setMarkedRead(updated)
+
+    try {
+      localStorage.setItem(`edu_notif_read_${userId}`, JSON.stringify(updated))
+    } catch {}
+
+    try {
+      window.dispatchEvent(new CustomEvent('edu:notif-read-sync', {
+        detail: { userId, readIds: updated }
+      }))
+    } catch {}
+
+    fetch('/api/agenda/notificacoes/reads', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        userId,
+        systemUserId: currentUser.system_user_id,
+        colaboradorId: currentUser.colaborador_id,
+        perfil: currentUser.perfil || 'colaborador',
+        items: unreadItems.map(n => ({ id: n.id, rawId: n.rawId, type: n.type }))
+      })
+    }).catch(err => console.warn('[NotificationPopover] Falha ao persistir marcar todas:', err))
+  }, [currentUser, notifications, markedRead, isItemRead])
 
   const filteredNotifications = notifications.filter(n => {
     if (activeTab === 'all') return true
@@ -367,6 +696,19 @@ export function NotificationPopover({
   })
 
   const now = new Date()
+
+  // Se não estiver hidratado ou o usuário logado não for colaborador, não exibe as notificações de gestão
+  if (!hydrated) {
+    return (
+      <div style={{ width: 32, height: 32, borderRadius: 10, background: 'rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Bell size={17} color="rgba(255,255,255,0.4)" />
+      </div>
+    )
+  }
+
+  if (!currentUser || !isColab) {
+    return null
+  }
 
   return (
     <Popover.Root open={open} onOpenChange={setOpen}>
@@ -427,7 +769,7 @@ export function NotificationPopover({
                   </div>
                   {unreadCount > 0 && (
                     <button
-                      onClick={() => setMarkedRead(notifications.map(n => n.id))}
+                      onClick={markAllAsRead}
                       style={{ fontSize: 12, fontWeight: 700, color: '#60a5fa', background: 'transparent', border: 'none', cursor: 'pointer', padding: '6px 12px', borderRadius: 20 }}
                       onMouseOver={e => e.currentTarget.style.background = 'rgba(96,165,250,0.1)'}
                       onMouseOut={e => e.currentTarget.style.background = 'transparent'}
@@ -455,8 +797,8 @@ export function NotificationPopover({
                     { id: 'ocorrencia', label: 'Ocorrências' }
                   ].map(tab => {
                     const count = tab.id === 'all'
-                      ? notifications.length
-                      : notifications.filter(n => n.type === tab.id).length
+                      ? unreadCount
+                      : notifications.filter(n => n.type === tab.id && !isItemRead(n.id, n.rawId)).length
                     const isActive = activeTab === tab.id
 
                     return (
@@ -537,14 +879,14 @@ export function NotificationPopover({
                     </div>
                   ) : (
                     filteredNotifications.slice(0, activeTab === 'all' ? 15 : 30).map((item, i) => {
-                      const isRead = markedRead.includes(item.id)
+                      const isRead = isItemRead(item.id, item.rawId)
                       return (
                         <motion.a
                           href={item.link}
                           key={item.id}
                           onClick={() => {
                             if (!isRead) {
-                              setMarkedRead(prev => [...prev, item.id])
+                              markItemAsRead(item)
                             }
                           }}
                           initial={{ opacity: 0, x: -10 }}

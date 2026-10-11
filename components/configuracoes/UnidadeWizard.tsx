@@ -124,7 +124,7 @@ function ResponsavelCard({ title, emoji, data, onChange }: {
             style={{ resize: 'vertical', fontFamily: 'inherit' }} />
         </Field>
         <SignatureUpload
-          value={data.assinatura}
+          value={data.assinatura || null}
           onChange={v => onChange({ ...data, assinatura: v })}
           label="Imagem da assinatura"
         />

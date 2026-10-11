@@ -15,19 +15,31 @@
 export function getAlunoTurmaCursando(aluno: any, anoLetivo?: string | number): string {
   if (!aluno) return ''
   const hist = aluno.historicoTurmas || aluno.dados?.historicoTurmas
+  const targetAnoStr = anoLetivo !== undefined && anoLetivo !== null && String(anoLetivo).trim() !== '' ? String(anoLetivo).trim() : ''
+  const studentAno = String(aluno.anoLetivo || aluno.ano_letivo || aluno.dados?.anoLetivo || aluno.dados?.ano_letivo || '').trim()
+
   if (Array.isArray(hist) && hist.length > 0) {
-    if (anoLetivo !== undefined && anoLetivo !== null && String(anoLetivo).trim() !== '') {
-      const matchingYear = hist.filter((h: any) => String(h.anoLetivo || '').trim() === String(anoLetivo).trim())
+    if (targetAnoStr) {
+      const matchingYear = hist.filter((h: any) => String(h.anoLetivo || h.ano || '').trim() === targetAnoStr)
       if (matchingYear.length > 0) {
         const lastHist = matchingYear[matchingYear.length - 1]
         return String(lastHist.serieTurma || lastHist.turma || '').trim()
       }
+      if (studentAno && studentAno === targetAnoStr) {
+        return String(aluno.turma || '').trim()
+      }
+      return ''
     }
     const lastHist = hist[hist.length - 1]
     if (lastHist?.serieTurma || lastHist?.turma) {
       return String(lastHist.serieTurma || lastHist.turma).trim()
     }
   }
+
+  if (targetAnoStr && studentAno && studentAno !== targetAnoStr) {
+    return ''
+  }
+
   return String(aluno.turma || '').trim()
 }
 
@@ -37,20 +49,37 @@ export function getAlunoTurmaCursando(aluno: any, anoLetivo?: string | number): 
 export function getAlunoVinculosAtivos(aluno: any, anoLetivo?: string | number): any[] {
   if (!aluno) return []
   const hist = aluno.historicoTurmas || aluno.dados?.historicoTurmas
+  const targetAnoStr = anoLetivo !== undefined && anoLetivo !== null && String(anoLetivo).trim() !== '' ? String(anoLetivo).trim() : ''
+  const studentAno = String(aluno.anoLetivo || aluno.ano_letivo || aluno.dados?.anoLetivo || aluno.dados?.ano_letivo || '').trim()
+
   if (Array.isArray(hist) && hist.length > 0) {
-    if (anoLetivo !== undefined && anoLetivo !== null && String(anoLetivo).trim() !== '') {
-      const matchingYear = hist.filter((h: any) => String(h.anoLetivo || '').trim() === String(anoLetivo).trim())
+    if (targetAnoStr) {
+      const matchingYear = hist.filter((h: any) => String(h.anoLetivo || h.ano || '').trim() === targetAnoStr)
       if (matchingYear.length > 0) {
         return [matchingYear[matchingYear.length - 1]]
       }
+      // Se foi solicitado um ano letivo específico e o aluno tem histórico, mas nenhum desse ano:
+      // se o aluno pertence a outro ano, não possui vínculo ativo no ano solicitado
+      if (studentAno && studentAno !== targetAnoStr) {
+        return []
+      }
+      return []
     }
     return [hist[hist.length - 1]]
   }
+
+  if (targetAnoStr && studentAno && studentAno !== targetAnoStr) {
+    return []
+  }
+
   return [{
     turma: aluno.turma,
     serieTurma: aluno.turma,
     serie: aluno.serie || aluno.dados?.serie,
-    anoLetivo: anoLetivo || aluno.anoLetivo || aluno.ano_letivo || aluno.dados?.anoLetivo,
+    segmento: aluno.segmento || aluno.dados?.segmento,
+    turno: aluno.turno || aluno.dados?.turno,
+    unidade: aluno.unidade || aluno.dados?.unidade,
+    anoLetivo: studentAno || targetAnoStr,
     isIntegralIntermediario: aluno.isIntegralIntermediario || aluno.dados?.isIntegralIntermediario,
     modalidade: aluno.modalidade || aluno.dados?.modalidade
   }]
@@ -295,6 +324,12 @@ export function getSerieKey(str: any): string {
 export function isAlunoCursandoTurma(aluno: any, turmaRef: any, anoLetivo?: string | number, turmasList?: any[]): boolean {
   if (!aluno || !turmaRef) return false
 
+  // Alunos inativos, cancelados, evadidos ou transferidos não cursam turmas ativas
+  const status = String(aluno.status || '').toLowerCase()
+  if (['inativo', 'inativa', 'evadido', 'transferido', 'cancelado'].includes(status)) {
+    return false
+  }
+
   const norm = (str: any) => String(str || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '')
 
   // Resolve string turmaRef if turmasList provided
@@ -310,117 +345,153 @@ export function isAlunoCursandoTurma(aluno: any, turmaRef: any, anoLetivo?: stri
   const tTurno = typeof resolvedTurma === 'object' && resolvedTurma && resolvedTurma.turno ? String(resolvedTurma.turno).trim() : ''
   const tSerie = typeof resolvedTurma === 'object' && resolvedTurma && (resolvedTurma.serie || resolvedTurma.dados?.serie) ? String(resolvedTurma.serie || resolvedTurma.dados?.serie).trim() : ''
   const tSegmento = typeof resolvedTurma === 'object' && resolvedTurma && (resolvedTurma.segmento || resolvedTurma.dados?.segmento) ? String(resolvedTurma.segmento || resolvedTurma.dados?.segmento).trim() : ''
+  const tUnidade = typeof resolvedTurma === 'object' && resolvedTurma && (resolvedTurma.unidade || resolvedTurma.dados?.unidade) ? String(resolvedTurma.unidade || resolvedTurma.dados?.unidade).trim() : ''
   const tAno = typeof resolvedTurma === 'object' && resolvedTurma ? (resolvedTurma.ano || resolvedTurma.anoLetivo || '') : (anoLetivo || '')
 
-  // 1. Check direct property aluno.turma
+  const normTNome = norm(tNome)
+  const normTId = norm(tId)
+  const normTCod = tCod ? norm(tCod) : ''
+  const targetSerieKey = getSerieKey(tSerie) || getSerieKey(tNome)
+  const targetSegKey = getSegmentoKey(tSegmento)
+  const targetAnoStr = tAno !== undefined && tAno !== null && String(tAno).trim() !== '' ? String(tAno).trim() : ''
+
+  const studentRootAno = String(aluno.anoLetivo || aluno.ano_letivo || aluno.dados?.anoLetivo || aluno.dados?.ano_letivo || '').trim()
+
+  // Buscar os vínculos ativos para o ano letivo correspondente
+  const vinculos = getAlunoVinculosAtivos(aluno, targetAnoStr)
+
+  // Se a turma possui ano letivo definido e o aluno não tem vínculos nem ano compatível para esse ano:
+  if (targetAnoStr) {
+    if (vinculos.length === 0 && (!studentRootAno || studentRootAno !== targetAnoStr)) {
+      return false
+    }
+  }
+
+  // 1. Check direct property aluno.turma (somente se ano coincidir)
+  const isDirectYearMatch = !targetAnoStr || !studentRootAno || studentRootAno === targetAnoStr
   const directTurma = String(aluno.turma || '').trim()
-  if (directTurma !== '') {
+  if (isDirectYearMatch && directTurma !== '') {
     const directNorm = norm(directTurma)
-    if (directNorm === norm(tNome) || directNorm === norm(tId) || (tCod && directNorm === norm(tCod))) {
-      return true
+    if (normTId && directNorm === normTId) return true
+    if (normTCod && directNorm === normTCod) return true
+    if (normTNome && directNorm === normTNome) {
+      const studentSerieKey = getSerieKey(aluno.serie || aluno.dados?.serie)
+      if (!targetSerieKey || !studentSerieKey || targetSerieKey === studentSerieKey) {
+        return true
+      }
     }
   }
 
   // 2. Check direct property aluno.turma_nome
   const directTurmaNome = String(aluno.turma_nome || '').trim()
-  if (directTurmaNome !== '') {
+  if (isDirectYearMatch && directTurmaNome !== '') {
     const directNorm = norm(directTurmaNome)
-    if (directNorm === norm(tNome) || directNorm === norm(tId) || (tCod && directNorm === norm(tCod))) {
-      return true
+    if (normTNome && directNorm === normTNome) {
+      const studentSerieKey = getSerieKey(aluno.serie || aluno.dados?.serie)
+      if (!targetSerieKey || !studentSerieKey || targetSerieKey === studentSerieKey) {
+        return true
+      }
     }
   }
 
   // 3. Check active vinculos in historicoTurmas & turmasAdicionais
-  const vinculos = getAlunoVinculosAtivos(aluno, anoLetivo || tAno)
-
   for (const v of vinculos) {
-    const vTurma = String(v.serieTurma || v.turma || '').trim()
+    if (!v || v.status === 'Inativo' || v.status === 'Anterior' || v.status === 'Transferido') continue
+
+    const vAno = String(v.anoLetivo || v.ano || '').trim()
+    if (targetAnoStr && vAno && vAno !== targetAnoStr) continue
+
+    const vTurma = String(v.serieTurma || v.turma || v.turmaId || '').trim()
     if (vTurma !== '') {
       const vNorm = norm(vTurma)
-      if (vNorm === norm(tNome) || vNorm === norm(tId) || (tCod && vNorm === norm(tCod))) {
-        return true
+      if (normTId && vNorm === normTId) return true
+      if (normTCod && vNorm === normTCod) return true
+      if (normTNome && vNorm === normTNome) {
+        const vSerieKey = getSerieKey(v.serie)
+        if (!targetSerieKey || !vSerieKey || targetSerieKey === vSerieKey) {
+          return true
+        }
       }
     }
 
     if (Array.isArray(v.turmasAdicionais)) {
       for (const sub of v.turmasAdicionais) {
+        if (!sub || sub.status === 'Inativo' || sub.status === 'Anterior') continue
         const subTurma = String(sub.serieTurma || sub.turma || sub.nome || '').trim()
         if (subTurma !== '') {
           const subNorm = norm(subTurma)
-          if (subNorm === norm(tNome) || subNorm === norm(tId) || (tCod && subNorm === norm(tCod))) {
-            return true
-          }
+          if (normTId && subNorm === normTId) return true
+          if (normTCod && subNorm === normTCod) return true
+          if (normTNome && subNorm === normTNome) return true
         }
       }
     }
   }
 
   // 4. Dual-Enrollment check for Integral/Intermediário classes!
-  const tNormNome = norm(tNome)
   const tNormTurno = norm(tTurno)
-  const isIntegralTurma = tNormNome.includes('integral') || tNormNome.includes('intermediario') ||
+  const isIntegralTurma = normTNome.includes('integral') || normTNome.includes('intermediario') ||
                           tNormTurno.includes('integral') || tNormTurno.includes('intermediario') ||
-                          (typeof resolvedTurma === 'object' && Boolean(resolvedTurma.isIntegralIntermediario || resolvedTurma.dados?.isIntegralIntermediario))
+                          Boolean(resolvedTurma?.isIntegralIntermediario || resolvedTurma?.dados?.isIntegralIntermediario)
 
   if (isIntegralTurma) {
-    const hasExplicitIntegral = Boolean(
-      aluno.isIntegralIntermediario === true ||
-      aluno.dados?.isIntegralIntermediario === true ||
-      aluno.modalidade === 'INTEGRAL/INTERMEDIÁRIO' ||
-      aluno.dados?.modalidade === 'INTEGRAL/INTERMEDIÁRIO' ||
-      aluno.integral_tipo || aluno.dados?.integral_tipo ||
-      String(aluno.turno || aluno.turno_nome || aluno.dados?.turno || '').toLowerCase().includes('integral') ||
-      String(aluno.turno || aluno.turno_nome || aluno.dados?.turno || '').toLowerCase().includes('intermediario')
-    ) || vinculos.some(v => 
-      v.isIntegralIntermediario === true || 
-      v.modalidade === 'INTEGRAL/INTERMEDIÁRIO' ||
-      v.modalidade === 'Integral/Intermediário' ||
-      v.integral_tipo ||
-      String(v.turno || '').toLowerCase().includes('integral') ||
-      String(v.turno || '').toLowerCase().includes('intermediario')
-    )
+    for (const v of vinculos) {
+      if (!v || v.status === 'Inativo' || v.status === 'Anterior' || v.status === 'Transferido') continue
 
-    if (hasExplicitIntegral) {
-      const targetSerieKey = getSerieKey(tSerie) || getSerieKey(tNome)
-
-      if (targetSerieKey) {
-        // Resolve student's main class from turmasList if available
-        const mainTurmaObj = Array.isArray(turmasList) && turmasList.length > 0
-          ? turmasList.find(t => 
-              String(t.id) === directTurma || 
-              String(t.codigo) === directTurma || 
-              String(t.nome) === directTurma ||
-              (aluno.turma_nome && String(t.nome).toLowerCase() === String(aluno.turma_nome).toLowerCase())
-            )
-          : null
-
-        const targetSegKey = getSegmentoKey(tSegmento)
-
-        for (const v of vinculos) {
-          const vSegmento = v.segmento || aluno.segmento || aluno.dados?.segmento || mainTurmaObj?.dados?.segmento || mainTurmaObj?.segmento || ''
-          const vSegKey = getSegmentoKey(vSegmento)
-
-          if (targetSegKey && vSegKey && targetSegKey !== vSegKey) {
-            continue
-          }
-
-          const vinculoSerieKey = getSerieKey(v.serie) ||
-                                  getSerieKey(v.serieTurma) ||
-                                  getSerieKey(v.turma) ||
-                                  getSerieKey(aluno.serie) ||
-                                  getSerieKey(aluno.turma_nome) ||
-                                  getSerieKey(aluno.turma) ||
-                                  getSerieKey(mainTurmaObj?.serie) ||
-                                  getSerieKey(mainTurmaObj?.nome) ||
-                                  getSerieKey(aluno.dados?.serie)
-
-          if (vinculoSerieKey && vinculoSerieKey === targetSerieKey) {
-            return true
-          }
-        }
-      } else {
-        return true
+      // a) Ano Letivo: DEVE coincidir rigorosamente com o ano da turma
+      const vAno = String(v.anoLetivo || v.ano || studentRootAno || '').trim()
+      if (targetAnoStr && vAno && vAno !== targetAnoStr) {
+        continue
       }
+
+      // b) Modalidade / Turno Integral: o aluno precisa ser Integral no vínculo ativo deste ano letivo
+      const isVinculoIntegral = Boolean(
+        v.isIntegralIntermediario === true ||
+        String(v.modalidade || '').toUpperCase().includes('INTEGRAL') ||
+        String(v.modalidade || '').toUpperCase().includes('INTERMEDIARIO') ||
+        String(v.turno || '').toLowerCase().includes('integral') ||
+        String(v.turno || '').toLowerCase().includes('intermediario') ||
+        aluno.isIntegralIntermediario === true ||
+        aluno.dados?.isIntegralIntermediario === true ||
+        String(aluno.modalidade || aluno.dados?.modalidade || '').toUpperCase().includes('INTEGRAL')
+      )
+
+      if (!isVinculoIntegral) continue
+
+      // c) Segmento: se a turma tiver segmento definido, deve coincidir
+      if (targetSegKey) {
+        const vSegmento = v.segmento || aluno.segmento || aluno.dados?.segmento || ''
+        const vSegKey = getSegmentoKey(vSegmento)
+        if (vSegKey && targetSegKey !== vSegKey) {
+          continue
+        }
+      }
+
+      // d) Série / Ano Escolar: se a turma tiver série definida, deve coincidir
+      if (targetSerieKey) {
+        const vinculoSerieKey = getSerieKey(v.serie) ||
+                                getSerieKey(v.serieTurma) ||
+                                getSerieKey(v.turma) ||
+                                getSerieKey(aluno.serie) ||
+                                getSerieKey(aluno.turma_nome) ||
+                                getSerieKey(aluno.turma) ||
+                                getSerieKey(aluno.dados?.serie)
+
+        if (!vinculoSerieKey || vinculoSerieKey !== targetSerieKey) {
+          continue
+        }
+      }
+
+      // e) Unidade: se a turma tiver unidade definida, deve coincidir
+      if (tUnidade && tUnidade.trim() !== '') {
+        const studentUnidade = String(v.unidade || aluno.unidade || aluno.dados?.unidade || '').trim()
+        if (studentUnidade && studentUnidade.toLowerCase() !== tUnidade.trim().toLowerCase()) {
+          continue
+        }
+      }
+
+      // Todos os critérios de ano letivo, segmento, série, turno e unidade foram atendidos
+      return true
     }
   }
 
@@ -674,18 +745,19 @@ export function getAlunoTurnosAtivos(aluno: any, turmas: any[] = [], grupos: any
     }
   }
 
-  // 4. From historicoTurmas & turmasAdicionais
+  // 4. From historicoTurmas & turmasAdicionais (apenas vínculos ativos do ano vigente)
   const hist = aluno.historicoTurmas || aluno.dados?.historicoTurmas
-  if (Array.isArray(hist)) {
-    hist.forEach((ht: any) => {
-      if (!ht || ht.status === 'Inativo') return
+  if (Array.isArray(hist) && hist.length > 0) {
+    const vinculosAtivos = getAlunoVinculosAtivos(aluno, anoLetivo)
+    vinculosAtivos.forEach((ht: any) => {
+      if (!ht || ht.status === 'Inativo' || ht.status === 'Anterior' || ht.status === 'Transferido') return
       checkAndAdd(ht.turno)
       checkAndAdd(ht.modalidade)
       checkAndAdd(ht.serieTurma)
       checkAndAdd(ht.turma)
       if (Array.isArray(ht.turmasAdicionais)) {
         ht.turmasAdicionais.forEach((sub: any) => {
-          if (!sub || sub.status === 'Inativo') return
+          if (!sub || sub.status === 'Inativo' || sub.status === 'Anterior') return
           checkAndAdd(sub.turno)
           checkAndAdd(sub.modalidade)
           checkAndAdd(sub.serieTurma)
@@ -976,7 +1048,112 @@ export function getAlunoNomesTurmasEGrupos(aluno: any, turmas: any[] = [], grupo
 export function isAlunoIntegralIntermediario(aluno: any, turmas: any[] = [], grupos: any[] = [], anoLetivo?: string | number): boolean {
   if (!aluno) return false;
 
-  // 1. Explicit true flag on student
+  // Alunos inativos não são contabilizados como integral
+  const status = String(aluno.status || '').toLowerCase();
+  if (['inativo', 'inativa', 'evadido', 'transferido', 'cancelado'].includes(status)) return false;
+
+  const targetAnoStr = anoLetivo !== undefined && anoLetivo !== null && String(anoLetivo).trim() !== '' ? String(anoLetivo).trim() : '';
+  const studentAno = String(aluno.anoLetivo || aluno.ano_letivo || aluno.dados?.anoLetivo || aluno.dados?.ano_letivo || '').trim();
+
+  const hist = aluno.historicoTurmas || aluno.dados?.historicoTurmas;
+  const hasHist = Array.isArray(hist) && hist.length > 0;
+
+  if (hasHist) {
+    // Quando o aluno possui histórico de turmas estruturado:
+    // Apenas o vínculo ATUAL / CURSANDO (último vínculo ativo do ano vigente) define a modalidade do aluno.
+    // Vínculos anteriores (histórico anterior) NÃO devem contabilizar o aluno como integral/intermediário!
+    let vinculosAtivos: any[] = [];
+    if (targetAnoStr) {
+      const matchingYear = hist.filter((h: any) => String(h.anoLetivo || h.ano || '').trim() === targetAnoStr);
+      if (matchingYear.length > 0) {
+        vinculosAtivos = [matchingYear[matchingYear.length - 1]];
+      } else {
+        if (studentAno && studentAno !== targetAnoStr) {
+          return false;
+        }
+      }
+    }
+    if (vinculosAtivos.length === 0) {
+      if (!targetAnoStr) {
+        vinculosAtivos = [hist[hist.length - 1]];
+      } else {
+        return false;
+      }
+    }
+
+    for (const v of vinculosAtivos) {
+      if (!v || v.status === 'Inativo' || v.status === 'Anterior' || v.status === 'Transferido') continue;
+
+      if (v.isIntegralIntermediario === true || v.modalidade === 'INTEGRAL/INTERMEDIÁRIO') {
+        return true;
+      }
+
+      const vTurno = String(v.turno || '').toLowerCase();
+      if (vTurno.includes('integral') || vTurno.includes('intermediario') || vTurno.includes('intermediário')) {
+        return true;
+      }
+
+      if (Array.isArray(v.turmasAdicionais)) {
+        for (const sub of v.turmasAdicionais) {
+          if (!sub || sub.status === 'Inativo' || sub.status === 'Anterior') continue;
+          if (sub.isIntegralIntermediario === true || sub.modalidade === 'INTEGRAL/INTERMEDIÁRIO') {
+            return true;
+          }
+          const subSt = String(sub.serieTurma || sub.turma || sub.nome || '').toLowerCase();
+          if ((subSt.includes('integral') || subSt.includes('intermediario')) && !subSt.includes('matutino') && !subSt.includes('vespertino')) {
+            return true;
+          }
+        }
+      }
+
+      if (Array.isArray(turmas) && turmas.length > 0) {
+        const vTurmaId = String(v.serieTurma || v.turma || v.turmaId || '').trim();
+        if (vTurmaId) {
+          const tObj = turmas.find((t: any) => String(t.id) === vTurmaId || String(t.codigo) === vTurmaId || String(t.nome).trim() === vTurmaId);
+          if (tObj) {
+            const tNome = String(tObj.nome || tObj.dados?.nome || '').toLowerCase();
+            const tTurno = String(tObj.turno || tObj.dados?.turno || '').toLowerCase();
+            const tMod = String(tObj.modalidade || tObj.dados?.modalidade || '').toLowerCase();
+            if (
+              tTurno.includes('integral') || tTurno.includes('intermediario') || tTurno.includes('intermediário') ||
+              tMod.includes('integral/intermediário') ||
+              ((tNome.includes('integral') || tNome.includes('intermediario')) && !tNome.includes('matutino') && !tNome.includes('vespertino'))
+            ) {
+              return true;
+            }
+          }
+        }
+      }
+    }
+
+    if (Array.isArray(grupos) && grupos.length > 0) {
+      const cleanStudentId = String(aluno.id || '').replace(/^(a_|_ALU)/, '');
+      for (const g of grupos) {
+        let aIds = g.alunosIds || g.dados?.alunosIds || [];
+        if (typeof aIds === 'string') {
+          try { aIds = JSON.parse(aIds); } catch { aIds = []; }
+        }
+        const isMember = (Array.isArray(aIds) ? aIds : []).some(
+          (id: any) => String(id).replace(/^(a_|_ALU)/, '') === cleanStudentId
+        );
+        const gNome = String(g.nome || g.dados?.nome || '').toLowerCase();
+        if (isMember && (gNome.includes('integral') || gNome.includes('intermediario') || gNome.includes('intermediário'))) {
+          return true;
+        }
+      }
+    }
+
+    // Se possui histórico de turmas e o vínculo atual não é integral, NÃO é integral.
+    // Campos legados na raiz do aluno não devem sobrepor o vínculo ativo.
+    return false;
+  }
+
+  // Se não possui histórico de turmas mas um ano específico foi solicitado e o aluno é de outro ano:
+  if (targetAnoStr && studentAno && studentAno !== targetAnoStr) {
+    return false;
+  }
+
+  // 1. Explicit true flag on student (quando NÃO possui histórico estruturado)
   if (aluno.isIntegralIntermediario === true || aluno.dados?.isIntegralIntermediario === true) return true;
 
   const directTurno = String(aluno.turno || aluno.turno_nome || aluno.dados?.turno || '').toLowerCase();
@@ -985,7 +1162,7 @@ export function isAlunoIntegralIntermediario(aluno: any, turmas: any[] = [], gru
   const directModalidade = String(aluno.modalidade || aluno.dados?.modalidade || '').toLowerCase();
   if (directModalidade.includes('integral/intermediário')) return true;
 
-  // 2. Active turmas for student
+  // 2. Active turmas for student (quando não tem histórico)
   if (Array.isArray(turmas) && turmas.length > 0) {
     for (const t of turmas) {
       if (isAlunoCursandoTurma(aluno, t, anoLetivo || t.ano)) {
@@ -1003,13 +1180,13 @@ export function isAlunoIntegralIntermediario(aluno: any, turmas: any[] = [], gru
     }
   }
 
-  // 3. Matching active groups in agenda/grupos
+  // 3. Matching active groups in agenda/grupos (quando não tem histórico)
   if (Array.isArray(grupos) && grupos.length > 0) {
     const cleanStudentId = String(aluno.id || '').replace(/^(a_|_ALU)/, '');
     for (const g of grupos) {
       let aIds = g.alunosIds || g.dados?.alunosIds || [];
       if (typeof aIds === 'string') {
-        try { aIds = JSON.parse(aIds) } catch { aIds = [] }
+        try { aIds = JSON.parse(aIds); } catch { aIds = []; }
       }
       const isMember = (Array.isArray(aIds) ? aIds : []).some(
         (id: any) => String(id).replace(/^(a_|_ALU)/, '') === cleanStudentId
@@ -1017,24 +1194,6 @@ export function isAlunoIntegralIntermediario(aluno: any, turmas: any[] = [], gru
       const gNome = String(g.nome || g.dados?.nome || '').toLowerCase();
       if (isMember && (gNome.includes('integral') || gNome.includes('intermediario') || gNome.includes('intermediário'))) {
         return true;
-      }
-    }
-  }
-
-  // 4. historicoTurmas & turmasAdicionais (Apenas vínculos ativos/específicos)
-  const hist = aluno.historicoTurmas || aluno.dados?.historicoTurmas;
-  if (Array.isArray(hist) && hist.length > 0) {
-    for (const ht of hist) {
-      if (ht.status === 'Inativo') continue;
-      if (ht.isIntegralIntermediario === true || ht.modalidade === 'INTEGRAL/INTERMEDIÁRIO') return true;
-      if (Array.isArray(ht.turmasAdicionais)) {
-        for (const sub of ht.turmasAdicionais) {
-          if (sub.isIntegralIntermediario === true || sub.modalidade === 'INTEGRAL/INTERMEDIÁRIO') return true;
-          const subSt = String(sub.serieTurma || sub.turma || '').toLowerCase();
-          if ((subSt.includes('integral') || subSt.includes('intermediario')) && !subSt.includes('matutino') && !subSt.includes('vespertino')) {
-            return true;
-          }
-        }
       }
     }
   }

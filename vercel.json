@@ -7,6 +7,14 @@
     {
       "path": "/api/cron/alertas-financeiros",
       "schedule": "0 12 * * *"
+    },
+    {
+      "path": "/api/cron/lembretes-calendario",
+      "schedule": "0 0 * * *"
+    },
+    {
+      "path": "/api/cron/limpeza-orfaos",
+      "schedule": "0 3 * * *"
     }
   ]
 }

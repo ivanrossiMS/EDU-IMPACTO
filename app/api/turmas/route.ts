@@ -66,16 +66,32 @@ export async function GET(request: Request) {
         getCachedTurmasAndGrupos()
       ])
 
-      totalAlunosMatriculados = activeAlunos.length
-      totalAlunosIntegral = activeAlunos.filter((a: any) => isAlunoIntegralIntermediario(a)).length
+      const yearFilter = ano ? parseInt(ano) : null
+      const alunosDoAno = yearFilter
+        ? activeAlunos.filter((a: any) => {
+            const hist = a.historicoTurmas || a.dados?.historicoTurmas
+            if (Array.isArray(hist) && hist.length > 0) {
+              return hist.some((h: any) => String(h.anoLetivo || h.ano || '').trim() === String(yearFilter))
+            }
+            const sAno = String(a.anoLetivo || a.ano_letivo || a.dados?.anoLetivo || a.dados?.ano_letivo || '').trim()
+            return sAno === String(yearFilter)
+          })
+        : activeAlunos
 
-      capacidadeTotal = (allTurmas || []).reduce((acc: number, t: any) => acc + (parseInt(t.capacidade) || 30), 0)
+      totalAlunosMatriculados = alunosDoAno.length
+      totalAlunosIntegral = alunosDoAno.filter((a: any) => isAlunoIntegralIntermediario(a, allTurmas, [], yearFilter || undefined)).length
+
+      const turmasDoAno = yearFilter
+        ? (allTurmas || []).filter((t: any) => parseInt(t.ano) === yearFilter)
+        : (allTurmas || [])
+
+      capacidadeTotal = turmasDoAno.reduce((acc: number, t: any) => acc + (parseInt(t.capacidade) || 30), 0)
       vagasOcupadasPercent = capacidadeTotal > 0 ? Math.round((totalAlunosMatriculados / capacidadeTotal) * 100) : 0
 
       // Calcular matriculados por turma em tempo real para os itens da tabela
       if (data && data.length > 0) {
         data.forEach((t: any) => {
-          const countAlunos = activeAlunos.filter((a: any) => isAlunoCursandoTurma(a, t, t.ano)).length;
+          const countAlunos = activeAlunos.filter((a: any) => isAlunoCursandoTurma(a, t, t.ano, allTurmas)).length;
           t.matriculados = countAlunos;
         })
       }

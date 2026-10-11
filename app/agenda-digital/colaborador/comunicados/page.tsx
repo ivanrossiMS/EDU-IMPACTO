@@ -24,6 +24,7 @@ import { ImagePinchZoomModal } from '@/components/agenda/ImagePinchZoomModal'
 import { seedComunicadosRespostasCache, prefetchComunicadoMessages, getGlobalCachedMessages } from '@/lib/comunicadosRespostasCache'
 import { DestinatariosModal } from '../../components/agenda/DestinatariosModal'
 import NovoComunicadoModal from '../../components/agenda/NovoComunicadoModal'
+import { AgendaLuxuryLoader } from '@/components/agenda/AgendaLuxuryLoader'
 import { ReportsSelectionModal } from '@/components/agenda/ReportsSelectionModal'
 import { ReportFillerModal } from '@/components/agenda/ReportFillerModal'
 import { ReportPayloadView } from '@/components/DynamicReports/ReportPayloadView'
@@ -123,7 +124,8 @@ function ColaboradorComunicadosContent() {
   const queryClient = useQueryClient()
   const { turmas = [] } = useData()
   const [showComposer, setShowComposer] = useState(false)
-      const [destinatario, setDestinatario] = useState<any>(null) // Legacy
+  const [isPreparingNovo, setIsPreparingNovo] = useState(false)
+  const [destinatario, setDestinatario] = useState<any>(null) // Legacy
 
   // Modal Composer States
   const [editComId, setEditComId] = useState<string | null>(null)
@@ -732,16 +734,44 @@ function ColaboradorComunicadosContent() {
     
   }
 
+  const isRecipientsDataLoading = Boolean(
+    alunosLoading ||
+    colabLoading ||
+    !alunos ||
+    alunos.length === 0 ||
+    !colaboradores ||
+    colaboradores.length === 0
+  )
+
   const handleNovo = () => {
     setEditComId(null)
-    
-    
-        
-    
-    
     setSelectedDest([])
-    setShowComposer(true)
+    
+    if (isRecipientsDataLoading) {
+      setIsPreparingNovo(true)
+    } else {
+      setShowComposer(true)
+    }
   }
+
+  // Monitora o carregamento dos dados e avança para o editor assim que tudo estiver carregado
+  useEffect(() => {
+    if (!isPreparingNovo) return
+
+    if (!isRecipientsDataLoading) {
+      const timer = setTimeout(() => {
+        setIsPreparingNovo(false)
+        setShowComposer(true)
+      }, 350)
+      return () => clearTimeout(timer)
+    }
+
+    const failsafe = setTimeout(() => {
+      setIsPreparingNovo(false)
+      setShowComposer(true)
+    }, 5000)
+    return () => clearTimeout(failsafe)
+  }, [isPreparingNovo, isRecipientsDataLoading])
 
   const handleEditComunicado = (c: any) => {
     setEditComId(c.id)
@@ -2591,6 +2621,18 @@ function ColaboradorComunicadosContent() {
           </Portal>
         )}
       </AnimatePresence>
+
+      {/* Loader luxuoso ao clicar em Novo Comunicado enquanto dados ainda estiverem carregando */}
+      <AgendaLuxuryLoader
+        isLoading={isPreparingNovo}
+        statusText="Carregando destinatários, turmas e contatos..."
+        subtitle="NOVO COMUNICADO"
+        minDisplayTimeMs={650}
+        onFinished={() => {
+          setIsPreparingNovo(false)
+          setShowComposer(true)
+        }}
+      />
 
       {/* Modal Composer */}
       <NovoComunicadoModal

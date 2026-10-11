@@ -273,7 +273,8 @@ export default function TurmasPage() {
     setIsAlunosModalOpen(true)
     setLoadingAlunos(true)
     try {
-      const res = await fetch(`/api/alunos?turma=${turma.id}&limit=100`)
+      const turmaAno = turma.ano || ano
+      const res = await fetch(`/api/alunos?turma=${turma.id}&ano=${turmaAno}&limit=100`)
       const data = await res.json()
       setAlunosDaTurma(data.data || [])
     } catch (error) {
@@ -288,7 +289,7 @@ export default function TurmasPage() {
     setLoadingIntegralAlunos(true)
     setSearchIntegralModal('')
     try {
-      const res = await fetch('/api/alunos?integralIntermediario=sim&limit=1000')
+      const res = await fetch(`/api/alunos?integralIntermediario=sim&ano=${ano}&limit=1000`)
       const data = await res.json()
       setAlunosIntegralList(data.data || [])
     } catch (error) {

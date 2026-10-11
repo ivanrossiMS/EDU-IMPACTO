@@ -57,7 +57,7 @@ export async function getCachedActiveAlunos(): Promise<any[]> {
 
   const { data } = await supabaseServer
     .from('alunos')
-    .select('id, turma, status, dados')
+    .select('id, nome, matricula, turma, serie, turno, unidade, status, dados')
     .or('status.neq.inativo,status.is.null')
 
   const result = data || []

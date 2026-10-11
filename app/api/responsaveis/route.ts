@@ -30,7 +30,12 @@ export async function GET(request: Request) {
 
     if (search) {
       const searchClean = search.trim()
-      query = query.or(`nome.ilike.%${searchClean}%,email.ilike.%${searchClean}%,telefone.ilike.%${searchClean}%,rfid.ilike.%${searchClean}%`)
+      const cleanDigits = searchClean.replace(/\D/g, '')
+      if (cleanDigits.length >= 3) {
+        query = query.or(`nome.ilike.%${searchClean}%,email.ilike.%${searchClean}%,telefone.ilike.%${searchClean}%,rfid.ilike.%${searchClean}%,dados->>cpf.ilike.%${cleanDigits}%`)
+      } else {
+        query = query.or(`nome.ilike.%${searchClean}%,email.ilike.%${searchClean}%,telefone.ilike.%${searchClean}%,rfid.ilike.%${searchClean}%`)
+      }
     }
 
     if (rfid) {
@@ -133,45 +138,73 @@ export async function GET(request: Request) {
     }
 
     // Formatar dados
-    const formattedData = responsaveisData.map((resp: any) => ({
-      ...resp,
-      dataNasc: resp.data_nasc,
-      diasAcesso: resp.dias_acesso,
-      alunosVinculados: links
-        .filter((l: any) => String(l.responsavel_id).trim() === String(resp.id).trim())
-        .map((l: any) => {
-          const targetRef = String(l.aluno_id).trim().toLowerCase()
-          const targetUnpadded = targetRef.replace(/^0+/, '')
-          const aluno = students.find((s: any) => {
-            const sId = String(s.id || '').trim().toLowerCase()
-            const sMat = String(s.matricula || '').trim().toLowerCase()
-            const sCod = String(s.codigo || '').trim().toLowerCase()
-            const sDCod = String(s.dados?.codigo || '').trim().toLowerCase()
-            const sDCodAlu = String(s.dados?.codigoAluno || '').trim().toLowerCase()
-            const sDId = String(s.dados?.id || '').trim().toLowerCase()
-            return (
-              sId === targetRef || (targetUnpadded && sId.replace(/^0+/, '') === targetUnpadded) ||
-              sMat === targetRef || (targetUnpadded && sMat.replace(/^0+/, '') === targetUnpadded) ||
-              sCod === targetRef || (targetUnpadded && sCod.replace(/^0+/, '') === targetUnpadded) ||
-              sDCod === targetRef || (targetUnpadded && sDCod.replace(/^0+/, '') === targetUnpadded) ||
-              sDCodAlu === targetRef || (targetUnpadded && sDCodAlu.replace(/^0+/, '') === targetUnpadded) ||
-              sDId === targetRef || (targetUnpadded && sDId.replace(/^0+/, '') === targetUnpadded)
-            )
-          }) || {}
-          return {
-            ...aluno,
-            id: aluno.id || l.aluno_id,
-            nome: aluno.nome || `Aluno (${l.aluno_id})`,
-            status: aluno.status || aluno.dados?.status || 'ativo',
-            foto: aluno.foto || aluno.foto_url || aluno.dados?.foto || null,
-            parentesco: l.parentesco,
-            isFinanceiro: l.resp_financeiro === true,
-            isPedagogico: l.resp_pedagogico === true,
-            isOutro: l.resp_outro === true
-          }
-        })
-        .filter((a: any) => a.id || a.nome) || []
-    }))
+    const formattedData = responsaveisData.map((resp: any) => {
+      const d = resp.dados || {}
+      return {
+        ...resp,
+        dataNasc: resp.data_nasc || d.dataNasc || d.data_nasc || '',
+        diasAcesso: resp.dias_acesso || d.diasAcesso || d.dias_acesso || ['Seg', 'Ter', 'Qua', 'Qui', 'Sex'],
+        cpf: d.cpf || resp.cpf || '',
+        rg: d.rg || resp.rg || '',
+        rgOrgaoEmissor: d.rgOrgaoEmissor || d.orgEmissor || '',
+        sexo: d.sexo || resp.sexo || '',
+        estadoCivil: d.estadoCivil || resp.estado_civil || '',
+        profissao: d.profissao || resp.profissao || '',
+        nacionalidade: d.nacionalidade || 'Brasileira',
+        naturalidade: d.naturalidade || '',
+        naturalidadeUf: d.naturalidadeUf || '',
+        cep: d.cep || '',
+        endereco: d.endereco || d.logradouro || '',
+        numero: d.numero || '',
+        complemento: d.complemento || '',
+        bairro: d.bairro || '',
+        cidade: d.cidade || '',
+        uf: d.uf || d.ufEnd || '',
+        comercialEmpresa: d.comercialEmpresa || '',
+        comercialTelefone: d.comercialTelefone || '',
+        comercialCep: d.comercialCep || '',
+        comercialEndereco: d.comercialEndereco || '',
+        comercialNumero: d.comercialNumero || '',
+        comercialComplemento: d.comercialComplemento || '',
+        comercialBairro: d.comercialBairro || '',
+        comercialCidade: d.comercialCidade || '',
+        comercialUf: d.comercialUf || '',
+        alunosVinculados: links
+          .filter((l: any) => String(l.responsavel_id).trim() === String(resp.id).trim())
+          .map((l: any) => {
+            const targetRef = String(l.aluno_id).trim().toLowerCase()
+            const targetUnpadded = targetRef.replace(/^0+/, '')
+            const aluno = students.find((s: any) => {
+              const sId = String(s.id || '').trim().toLowerCase()
+              const sMat = String(s.matricula || '').trim().toLowerCase()
+              const sCod = String(s.codigo || '').trim().toLowerCase()
+              const sDCod = String(s.dados?.codigo || '').trim().toLowerCase()
+              const sDCodAlu = String(s.dados?.codigoAluno || '').trim().toLowerCase()
+              const sDId = String(s.dados?.id || '').trim().toLowerCase()
+              return (
+                sId === targetRef || (targetUnpadded && sId.replace(/^0+/, '') === targetUnpadded) ||
+                sMat === targetRef || (targetUnpadded && sMat.replace(/^0+/, '') === targetUnpadded) ||
+                sCod === targetRef || (targetUnpadded && sCod.replace(/^0+/, '') === targetUnpadded) ||
+                sDCod === targetRef || (targetUnpadded && sDCod.replace(/^0+/, '') === targetUnpadded) ||
+                sDCodAlu === targetRef || (targetUnpadded && sDCodAlu.replace(/^0+/, '') === targetUnpadded) ||
+                sDId === targetRef || (targetUnpadded && sDId.replace(/^0+/, '') === targetUnpadded)
+              )
+            }) || {}
+            return {
+              ...aluno,
+              id: aluno.id || l.aluno_id,
+              nome: aluno.nome || `Aluno (${l.aluno_id})`,
+              status: aluno.status || aluno.dados?.status || 'ativo',
+              foto: aluno.foto || aluno.foto_url || aluno.dados?.foto || null,
+              parentesco: l.parentesco,
+              isFinanceiro: l.resp_financeiro === true,
+              isPedagogico: l.resp_pedagogico === true,
+              isOutro: l.resp_outro === true
+            }
+          })
+          .filter((a: any) => a.id || a.nome) || []
+      }
+    })
 
     return NextResponse.json({
       data: formattedData,
@@ -182,6 +215,79 @@ export async function GET(request: Request) {
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 400 })
   }
+}
+
+// ─── Helper: Preparar dados do responsável para salvar em colunas válidas e dados JSONB ─
+function prepareResponsavelData(item: any, existingDados: any = {}) {
+  const dados = { ...(existingDados || {}), ...(item.dados || {}) }
+
+  if (item.cpf !== undefined) dados.cpf = String(item.cpf).replace(/\D/g, '')
+  if (item.rg !== undefined) dados.rg = String(item.rg).trim()
+  if (item.rgOrgaoEmissor !== undefined || item.orgEmissor !== undefined) {
+    dados.rgOrgaoEmissor = item.rgOrgaoEmissor || item.orgEmissor || ''
+    dados.orgEmissor = dados.rgOrgaoEmissor
+  }
+  if (item.sexo !== undefined) dados.sexo = item.sexo
+  if (item.estadoCivil !== undefined || item.estado_civil !== undefined) {
+    dados.estadoCivil = item.estadoCivil || item.estado_civil
+  }
+  if (item.nacionalidade !== undefined) dados.nacionalidade = item.nacionalidade || 'Brasileira'
+  if (item.naturalidade !== undefined) dados.naturalidade = item.naturalidade
+  if (item.naturalidadeUf !== undefined) dados.naturalidadeUf = item.naturalidadeUf
+  if (item.profissao !== undefined) dados.profissao = item.profissao
+
+  // Endereço Residencial
+  if (item.cep !== undefined) dados.cep = item.cep
+  if (item.endereco !== undefined || item.logradouro !== undefined) {
+    dados.endereco = item.endereco || item.logradouro
+    dados.logradouro = dados.endereco
+  }
+  if (item.numero !== undefined) dados.numero = item.numero
+  if (item.complemento !== undefined) dados.complemento = item.complemento
+  if (item.bairro !== undefined) dados.bairro = item.bairro
+  if (item.cidade !== undefined) dados.cidade = item.cidade
+  if (item.uf !== undefined || item.ufEnd !== undefined) {
+    dados.uf = item.uf || item.ufEnd
+    dados.ufEnd = dados.uf
+  }
+
+  // Endereço Comercial
+  if (item.comercialEmpresa !== undefined) dados.comercialEmpresa = item.comercialEmpresa
+  if (item.comercialTelefone !== undefined) dados.comercialTelefone = item.comercialTelefone
+  if (item.comercialCep !== undefined) dados.comercialCep = item.comercialCep
+  if (item.comercialEndereco !== undefined) dados.comercialEndereco = item.comercialEndereco
+  if (item.comercialNumero !== undefined) dados.comercialNumero = item.comercialNumero
+  if (item.comercialComplemento !== undefined) dados.comercialComplemento = item.comercialComplemento
+  if (item.comercialBairro !== undefined) dados.comercialBairro = item.comercialBairro
+  if (item.comercialCidade !== undefined) dados.comercialCidade = item.comercialCidade
+  if (item.comercialUf !== undefined) dados.comercialUf = item.comercialUf
+
+  // Construir dataToSave APENAS com colunas válidas da tabela responsaveis
+  const dataToSave: Record<string, any> = { dados }
+
+  if (item.id && String(item.id).trim() !== '' && !String(item.id).startsWith('TEMP-')) {
+    dataToSave.id = String(item.id).trim()
+  }
+  if (item.nome !== undefined) dataToSave.nome = item.nome
+  if (item.email !== undefined) dataToSave.email = item.email ? String(item.email).trim().toLowerCase() : null
+  if (item.telefone !== undefined) dataToSave.telefone = item.telefone
+  if (item.celular !== undefined) dataToSave.celular = item.celular
+  if (item.rfid !== undefined) dataToSave.rfid = item.rfid
+  if (item.codigo !== undefined) dataToSave.codigo = item.codigo
+  if (item.proibido !== undefined) dataToSave.proibido = item.proibido === true
+  
+  const dataNasc = item.dataNasc || item.data_nasc
+  if (dataNasc !== undefined) dataToSave.data_nasc = dataNasc || null
+  
+  const diasAcesso = item.diasAcesso || item.dias_acesso
+  if (diasAcesso !== undefined) dataToSave.dias_acesso = diasAcesso
+  
+  const estadoCivil = item.estadoCivil || item.estado_civil
+  if (estadoCivil !== undefined) dataToSave.estado_civil = estadoCivil
+  
+  if (item.profissao !== undefined) dataToSave.profissao = item.profissao
+
+  return dataToSave
 }
 
 // ─── POST: Criar ou atualizar responsável ─────────────────────────────────────
@@ -197,40 +303,11 @@ export async function POST(request: Request) {
     }
 
     const item = body
-    
-    // Remove campos calculados ou de relação antes de salvar
-    const { aluno_responsavel, alunosVinculados, alunos_vinculados, dataNasc, isFinanceiro, isPedagogico, isOutro, diasAcesso, parentesco, cpf, rg, ...dataToSave } = item
-    
-    // Se tiver ID válido, mantém para o upsert atualizar, senão remove para o Supabase gerar um UUID
-    if (item.id && item.id.trim() !== '' && !item.id.startsWith('TEMP-')) {
-      dataToSave.id = item.id
-    } else {
-      delete dataToSave.id
-    }
-    
-    // Mapeia camelCase para snake_case
-    if (dataNasc) {
-      dataToSave.data_nasc = dataNasc
-    }
-    
-    // Salva os dias de acesso na nova coluna dedicada
-    if (diasAcesso) {
-      dataToSave.dias_acesso = diasAcesso
-    }
-
-    // Mapeia CPF e RG para dados JSONB
-    const dados = { ...(item.dados || {}) }
-    if (cpf) {
-      dados.cpf = String(cpf).replace(/\D/g, '')
-    }
-    if (rg) {
-      dados.rg = String(rg).trim()
-    }
-    dataToSave.dados = dados
+    const dataToSave = prepareResponsavelData(item)
     
     const { data: queryData, error } = await supabase
       .from('responsaveis')
-      .insert(dataToSave) // Use insert for creation!
+      .insert(dataToSave)
       .select()
     
     if (error) throw new Error(error.message)
@@ -240,14 +317,15 @@ export async function POST(request: Request) {
     
     // Salvar vínculos se existirem
     let links: any[] = []
-    if (alunos_vinculados && Array.isArray(alunos_vinculados)) {
-      links = alunos_vinculados.map((v: any) => ({
+    const alunosVinculados = item.alunos_vinculados || item.alunosVinculados
+    if (alunosVinculados && Array.isArray(alunosVinculados)) {
+      links = alunosVinculados.map((v: any) => ({
         aluno_id: String(v.aluno_id || v.id).trim(),
         responsavel_id: String(data.id).trim(),
-        parentesco: v.parentesco || 'mae',
-        resp_pedagogico: v.resp_pedagogico ?? true,
-        resp_financeiro: v.resp_financeiro ?? true,
-        resp_outro: v.resp_outro ?? false
+        parentesco: v.parentesco || item.parentesco || 'mae',
+        resp_pedagogico: v.resp_pedagogico ?? item.isPedagogico ?? true,
+        resp_financeiro: v.resp_financeiro ?? item.isFinanceiro ?? true,
+        resp_outro: v.resp_outro ?? item.isOutro ?? false
       }))
       
       if (links.length > 0) {
@@ -274,33 +352,16 @@ export async function PUT(request: Request) {
 
     if (!id) return NextResponse.json({ error: 'ID é obrigatório para atualização' }, { status: 400 })
 
-    const { aluno_responsavel, alunosVinculados, alunos_vinculados, dataNasc, isFinanceiro, isPedagogico, isOutro, diasAcesso, parentesco, cpf, rg, id: bodyId, ...dataToSave } = body
-    
-    if (dataNasc) {
-      dataToSave.data_nasc = dataNasc
-    }
-    
-    if (diasAcesso) {
-      dataToSave.dias_acesso = diasAcesso
-    }
+    const alunos_vinculados = body.alunos_vinculados || body.alunosVinculados
 
-    // Mapeia CPF e RG para dados JSONB preservando os existentes no banco
-    const dados = { ...(body.dados || {}) }
     const { data: existingResp } = await supabase
       .from('responsaveis')
       .select('dados')
       .eq('id', id)
       .maybeSingle()
-    if (existingResp?.dados) {
-      Object.assign(dados, existingResp.dados)
-    }
-    if (cpf) {
-      dados.cpf = String(cpf).replace(/\D/g, '')
-    }
-    if (rg) {
-      dados.rg = String(rg).trim()
-    }
-    dataToSave.dados = dados
+
+    const dataToSave = prepareResponsavelData(body, existingResp?.dados)
+    delete dataToSave.id // id é usado na cláusula .eq('id', id)
     
     const { data: queryData, error } = await supabase
       .from('responsaveis')

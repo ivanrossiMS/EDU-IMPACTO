@@ -1,13 +1,14 @@
 'use client'
 
-import { useState, useRef } from 'react'
-import { Save, Shield, Bell, Palette, Eye, EyeOff, Upload, RefreshCw, Plus, Trash2, CheckCircle, ChevronRight, Lock, Pencil } from 'lucide-react'
+import { useState, useRef, useEffect } from 'react'
+import { Save, Shield, Bell, Palette, Eye, EyeOff, Upload, RefreshCw, Plus, Trash2, CheckCircle, ChevronRight, Lock, Pencil, Loader2 } from 'lucide-react'
 import { useApp } from '@/lib/context'
 import { newId } from '@/lib/dataContext'
 import { useLocalStorage } from '@/lib/useLocalStorage'
 import BackupSection from '@/components/configuracoes/BackupSection'
 import MediaManagerSection from '@/components/configuracoes/MediaManagerSection'
 import { FormModal, ConfirmModal } from '@/components/ui/CrudModal'
+import { uploadFileToSupabase } from '@/lib/upload/uploadClient'
 
 /* ─── Section definitions ─────────────────────────────────────── */
 const CONFIG_SECTIONS = [
@@ -18,44 +19,18 @@ const CONFIG_SECTIONS = [
   { id: 'midia',       icon: '📁', label: 'Mídia & Arquivos', desc: 'Gerenciador de arquivos do banco de dados' },
 ]
 
-const MODULES_CONFIG = [
-  { key: 'academico', icon: '🎓', nome: 'Acadêmico' },
-  { key: 'financeiro', icon: '💰', nome: 'Financeiro' },
-  { key: 'rh', icon: '👤', nome: 'RH' },
-  { key: 'comunicacao', icon: '💬', nome: 'Comunicação' },
-  { key: 'ia', icon: '🤖', nome: 'Inteligência IA' },
-  { key: 'bi', icon: '📊', nome: 'BI & Relatórios' },
-  { key: 'relatorios', icon: '📑', nome: 'Relatórios Gov.' },
-  { key: 'multiUnidades', icon: '🏫', nome: 'Multi-Unidades' },
-  { key: 'transporte', icon: '🚌', nome: 'Transporte Escolar' },
-  { key: 'cantina', icon: '🍽️', nome: 'Cantina' },
-  { key: 'patrimonio', icon: '📦', nome: 'Patrimônio' },
-  { key: 'almoxarifado', icon: '📚', nome: 'Almoxarifado' },
-  { key: 'portais', icon: '🌐', nome: 'Portais' },
-  { key: 'administrativo', icon: '🗂️', nome: 'Administrativo' },
-  { key: 'crm', icon: '🎯', nome: 'CRM & Captação' },
-]
-
-
-
-/* ─── User type ───────────────────────────────────────────────── */
-interface SysUser {
-  id: string; nome: string; email: string; perfil: string; status: 'ativo' | 'inativo'; twofa: boolean; ultimo_acesso: string
-}
-const USER_BLANK: Omit<SysUser, 'id'> = { nome: '', email: '', perfil: 'Professor', status: 'ativo', twofa: false, ultimo_acesso: '' }
-const PERFIS = ['Diretor Geral', 'Coordenador', 'Secretária', 'Professor', 'Financeiro', 'Família']
-
 type ToggleState = Record<string, boolean>
 
 /* ══════════════════════════════════════════════════════════════ */
 export default function ConfiguracoesPage() {
-  const { theme, setTheme, sidebarTheme, setSidebarTheme, activeModules, setModuleActive, currentUserPerfil, setCurrentUserPerfil } = useApp()
-  const isDiretorGeral = currentUserPerfil === 'Diretor Geral'
+  const { theme, setTheme, sidebarTheme, setSidebarTheme, currentUserPerfil } = useApp()
   const [section, setSection] = useState('aparencia')
   const [saved, setSaved] = useState(false)
+  const [saving, setSaving] = useState(false)
   const [showKey, setShowKey] = useState(false)
+  const [uploadingLogo, setUploadingLogo] = useState(false)
 
-  /* Logo persisted in localStorage */
+  /* Logo persisted in localStorage e no banco */
   const [logoDataUrl, setLogoDataUrl] = useLocalStorage<string | null>('edu-logo', null)
   /* School name persisted */
   const [schoolName, setSchoolName] = useLocalStorage<string>('edu-school-name', 'IMPACTO EDU')
@@ -71,18 +46,110 @@ export default function ConfiguracoesPage() {
   const [securityToggles, setSecurityToggles] = useLocalStorage<ToggleState>('edu-security', { twofa: false, sessoes: false, auditoria: true, inatividade: true, lgpd: true })
   const [notifToggles, setNotifToggles] = useLocalStorage<ToggleState>('edu-notif', { email: false, push: false, whatsapp: false, sms: false, telegram: false })
 
+  // Sincroniza a aba ativa com parâmetro de URL (?aba=midia)
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search)
+      const tab = params.get('aba') || params.get('secao') || params.get('tab')
+      if (tab && CONFIG_SECTIONS.some(s => s.id === tab)) {
+        setSection(tab)
+      }
+    }
+  }, [])
+
+  const changeSection = (id: string) => {
+    setSection(id)
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href)
+      url.searchParams.set('aba', id)
+      window.history.replaceState({}, '', url.toString())
+    }
+  }
+
+  // Carrega configurações persistidas no banco na inicialização
+  useEffect(() => {
+    fetch('/api/configuracoes?chaves=edu-school-name,edu-primary-color,edu-accent-color,edu-domain,edu-slogan,edu-security,edu-notif,cfgEscolaLogo')
+      .then(res => res.json())
+      .then(data => {
+        if (data && typeof data === 'object') {
+          if (data['edu-school-name']) setSchoolName(data['edu-school-name'])
+          if (data['edu-primary-color']) setPrimaryColor(data['edu-primary-color'])
+          if (data['edu-accent-color']) setAccentColor(data['edu-accent-color'])
+          if (data['edu-domain']) setDomain(data['edu-domain'])
+          if (data['edu-slogan']) setSlogan(data['edu-slogan'])
+          if (data['edu-security']) setSecurityToggles(data['edu-security'])
+          if (data['edu-notif']) setNotifToggles(data['edu-notif'])
+          if (data['cfgEscolaLogo']) setLogoDataUrl(data['cfgEscolaLogo'])
+        }
+      })
+      .catch(err => console.warn('Erro ao carregar configurações do banco:', err))
+  }, [])
 
   const toggle = (state: ToggleState, setState: (v: ToggleState) => void, key: string) => setState({ ...state, [key]: !state[key] })
 
-  const handleSave = () => { setSaved(true); setTimeout(() => setSaved(false), 2500) }
+  // Salvar alterações de forma persistente no banco de dados
+  const handleSave = async () => {
+    setSaving(true)
+    try {
+      const items = [
+        { chave: 'edu-school-name', valor: schoolName },
+        { chave: 'edu-primary-color', valor: primaryColor },
+        { chave: 'edu-accent-color', valor: accentColor },
+        { chave: 'edu-domain', valor: domain },
+        { chave: 'edu-slogan', valor: slogan },
+        { chave: 'edu-security', valor: securityToggles },
+        { chave: 'edu-notif', valor: notifToggles },
+      ]
+      if (logoDataUrl) {
+        items.push({ chave: 'cfgEscolaLogo', valor: logoDataUrl })
+      }
 
-  /* Logo upload handler */
-  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const res = await fetch('/api/configuracoes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items })
+      })
+
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}))
+        throw new Error(errJson.error || 'Falha ao salvar configurações.')
+      }
+
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2500)
+    } catch (err: any) {
+      alert(err.message || 'Erro ao salvar alterações.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  /* Logo upload com upload direto para o Storage */
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-    const reader = new FileReader()
-    reader.onload = ev => setLogoDataUrl(ev.target?.result as string)
-    reader.readAsDataURL(file)
+    setUploadingLogo(true)
+    try {
+      const result = await uploadFileToSupabase({
+        bucket: 'comunicados-midia',
+        folder: 'avatars',
+        file,
+        usageType: 'fixed'
+      })
+      if (result.ok && result.url) {
+        setLogoDataUrl(result.url)
+      } else {
+        const reader = new FileReader()
+        reader.onload = ev => setLogoDataUrl(ev.target?.result as string)
+        reader.readAsDataURL(file)
+      }
+    } catch {
+      const reader = new FileReader()
+      reader.onload = ev => setLogoDataUrl(ev.target?.result as string)
+      reader.readAsDataURL(file)
+    } finally {
+      setUploadingLogo(false)
+    }
   }
 
   const Toggle = ({ active, onToggle }: { active: boolean; onToggle: () => void }) => (
@@ -98,8 +165,25 @@ export default function ConfiguracoesPage() {
           <h1 className="page-title" style={{ color: '#0f172a' }}>Configurações do Sistema</h1>
           <p className="page-subtitle" style={{ color: '#64748b' }}>Gerenciamento, segurança e personalização da plataforma</p>
         </div>
-        <button className="btn btn-primary btn-sm" onClick={handleSave}>
-          {saved ? <><CheckCircle size={13} style={{ color: '#34d399' }} />Salvo!</> : <><Save size={13} />Salvar Alterações</>}
+        <button 
+          className="btn btn-primary btn-sm" 
+          onClick={handleSave}
+          disabled={saving}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+        >
+          {saving ? (
+            <>
+              <Loader2 className="animate-spin" size={13} /> Salvando...
+            </>
+          ) : saved ? (
+            <>
+              <CheckCircle size={13} style={{ color: '#34d399' }} /> Salvo!
+            </>
+          ) : (
+            <>
+              <Save size={13} /> Salvar Alterações
+            </>
+          )}
         </button>
       </div>
 
@@ -107,8 +191,23 @@ export default function ConfiguracoesPage() {
         {/* Sidebar navigation */}
         <div className="card" style={{ padding: '10px', background: '#ffffff', border: '1px solid #e2e8f0' }}>
           {CONFIG_SECTIONS.map(s => (
-            <button key={s.id} onClick={() => setSection(s.id)}
-              style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px', borderRadius: 8, width: '100%', textAlign: 'left', background: section === s.id ? 'rgba(59,130,246,0.1)' : 'transparent', border: `1px solid ${section === s.id ? 'rgba(59,130,246,0.3)' : 'transparent'}`, cursor: 'pointer', marginBottom: 2 }}>
+            <button 
+              key={s.id} 
+              onClick={() => changeSection(s.id)}
+              style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: 12, 
+                padding: '12px', 
+                borderRadius: 8, 
+                width: '100%', 
+                textAlign: 'left', 
+                background: section === s.id ? 'rgba(59,130,246,0.1)' : 'transparent', 
+                border: `1px solid ${section === s.id ? 'rgba(59,130,246,0.3)' : 'transparent'}`, 
+                cursor: 'pointer', 
+                marginBottom: 2 
+              }}
+            >
               <span style={{ fontSize: 20 }}>{s.icon}</span>
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 13, fontWeight: 600, color: section === s.id ? '#2563eb' : '#0f172a' }}>{s.label}</div>
@@ -125,6 +224,44 @@ export default function ConfiguracoesPage() {
           {/* ── APARÊNCIA ── */}
           {section === 'aparencia' && (
             <>
+              {/* Identidade Visual / Nome e Logo */}
+              <div className="card" style={{ padding: '24px', background: '#ffffff', border: '1px solid #e2e8f0' }}>
+                <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 16, color: '#0f172a' }}>🏫 Identidade da Escola</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 16, alignItems: 'center' }}>
+                  <div>
+                    <label className="form-label" style={{ color: '#0f172a' }}>Nome da Instituição</label>
+                    <input 
+                      className="form-input" 
+                      value={schoolName} 
+                      onChange={e => setSchoolName(e.target.value)} 
+                      style={{ color: '#0f172a', background: '#ffffff', borderColor: '#cbd5e1', fontSize: 14, fontWeight: 600 }} 
+                      placeholder="Ex: COLEGIO IMPACTO"
+                    />
+                  </div>
+                  <div>
+                    <label className="form-label" style={{ color: '#0f172a' }}>Logotipo</label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <input 
+                        ref={logoInputRef}
+                        type="file" 
+                        accept="image/*" 
+                        onChange={handleLogoUpload} 
+                        style={{ display: 'none' }} 
+                      />
+                      <button 
+                        type="button" 
+                        className="btn btn-secondary btn-sm" 
+                        onClick={() => logoInputRef.current?.click()}
+                        disabled={uploadingLogo}
+                      >
+                        {uploadingLogo ? <Loader2 className="animate-spin" size={13} /> : <Upload size={13} />}
+                        {logoDataUrl ? 'Alterar Logo' : 'Enviar Logo'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               {/* Colors + Theme */}
               <div className="card" style={{ padding: '24px', background: '#ffffff', border: '1px solid #e2e8f0' }}>
                 <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 16, color: '#0f172a' }}>🖌 Paleta de Cores & Tema</div>
@@ -159,7 +296,13 @@ export default function ConfiguracoesPage() {
                 <div style={{ marginTop: 16, padding: '16px', background: '#f8fafc', borderRadius: 12, border: '1px solid #e2e8f0' }}>
                   <div style={{ fontSize: 12, color: '#64748b', marginBottom: 10 }}>Pré-visualização:</div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                    <div style={{ width: 36, height: 36, borderRadius: 8, background: primaryColor, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 800, fontSize: 14, fontFamily: 'Outfit, sans-serif' }}>{schoolName[0]}</div>
+                    {logoDataUrl ? (
+                      <img src={logoDataUrl} alt="Logo" style={{ height: 36, objectFit: 'contain', borderRadius: 6 }} />
+                    ) : (
+                      <div style={{ width: 36, height: 36, borderRadius: 8, background: primaryColor, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 800, fontSize: 14, fontFamily: 'Outfit, sans-serif' }}>
+                        {schoolName[0] || 'E'}
+                      </div>
+                    )}
                     <span style={{ fontWeight: 800, fontSize: 16, fontFamily: 'Outfit, sans-serif', color: primaryColor }}>{schoolName}</span>
                     <button style={{ background: accentColor, color: '#fff', border: 'none', borderRadius: 8, padding: '6px 14px', fontSize: 12, fontWeight: 700, cursor: 'pointer', marginLeft: 'auto' }}>Botão destaque</button>
                   </div>
@@ -205,8 +348,6 @@ export default function ConfiguracoesPage() {
               </div>
             </div>
           )}
-
-
 
           {/* ── SEGURANÇA ── */}
           {section === 'seguranca' && (

@@ -259,15 +259,31 @@ export async function POST(request: Request) {
     if (Array.isArray(body)) {
       if (body.length === 0) return NextResponse.json({ ok: true, count: 0 })
       const rows = body.map(buildRowAuth)
+
+      // Identificar apenas eventos novos ou modificados para evitar timeout em salvamentos de lote
+      const { data: existingRows } = await supabase
+        .from('eventos_agenda')
+        .select('id, titulo, data, turmas')
+        .in('id', rows.map(r => r.id))
+
+      const existingMap = new Map((existingRows || []).map((e: any) => [e.id, e]))
+      const changedRows = rows.filter(r => {
+        const prev = existingMap.get(r.id)
+        if (!prev) return true // Novo evento
+        if (prev.titulo !== r.titulo || prev.data !== r.data) return true // Título ou data mudou
+        if (JSON.stringify(prev.turmas || []) !== JSON.stringify(r.turmas || [])) return true // Turmas mudaram
+        return false
+      })
+
       const { error } = await supabase.from('eventos_agenda').upsert(rows)
       if (error) throw new Error(error.message)
       
-      // Disparar Push (Background)
-      for (const row of rows) {
+      // Disparar Push apenas para eventos que foram criados ou alterados
+      for (const row of changedRows) {
         await dispatchPushNotifications(supabase, row);
       }
 
-      return NextResponse.json({ ok: true, count: rows.length })
+      return NextResponse.json({ ok: true, count: rows.length, updatedCount: changedRows.length })
     }
 
     const row = buildRowAuth(body)

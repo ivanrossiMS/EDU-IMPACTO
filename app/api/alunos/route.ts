@@ -93,6 +93,7 @@ export async function GET(request: Request) {
     const withPhoto = url.searchParams.get('withPhoto') === 'true'
     const observacoesParam = url.searchParams.get('observacoes') || 'todos'
     let integralIntermediario = url.searchParams.get('integralIntermediario') || ''
+    const anoParam = url.searchParams.get('ano') || url.searchParams.get('anoLetivo') || ''
 
     const from = (page - 1) * limit
     const to = from + limit - 1
@@ -110,8 +111,13 @@ export async function GET(request: Request) {
       .select(queryFields as any, { count: 'exact' })
 
     if (search) {
-      // Busca por nome, ID, matricula ou e-mail
-      query = query.or(`nome.ilike.%${search}%,id.ilike.%${search}%,matricula.ilike.%${search}%,email.ilike.%${search}%`)
+      // Busca por nome, ID, matricula, e-mail, CPF ou RGA
+      const cleanDigits = search.replace(/\D/g, '')
+      if (cleanDigits.length >= 3) {
+        query = query.or(`nome.ilike.%${search}%,id.ilike.%${search}%,matricula.ilike.%${search}%,email.ilike.%${search}%,dados->>cpf.ilike.%${cleanDigits}%,dados->>rga.ilike.%${search}%,dados->>idCenso.ilike.%${search}%,dados->>id_censo.ilike.%${search}%`)
+      } else {
+        query = query.or(`nome.ilike.%${search}%,id.ilike.%${search}%,matricula.ilike.%${search}%,email.ilike.%${search}%,dados->>rga.ilike.%${search}%,dados->>idCenso.ilike.%${search}%,dados->>id_censo.ilike.%${search}%`)
+      }
     }
 
     if (status === 'ativo') {
@@ -577,25 +583,38 @@ export async function GET(request: Request) {
         finalLightweight = formatted.filter((s: any) => !isValidStudentPhoto(s.foto))
       }
 
+      const effectiveAno = targetTurma?.ano ? String(targetTurma.ano) : (anoParam || undefined)
+
       if (turma) {
         finalLightweight = finalLightweight.filter((student: any) =>
-          isAlunoCursandoTurma(student, targetTurma || turma, undefined, turmasData)
+          isAlunoCursandoTurma(student, targetTurma || turma, effectiveAno, turmasData)
         );
       }
 
       if (integralIntermediario === 'sim' || integralIntermediario === 'true') {
         finalLightweight = finalLightweight.filter((student: any) =>
-          isAlunoIntegralIntermediario(student)
+          isAlunoIntegralIntermediario(student, turmasData, [], effectiveAno)
         );
       } else if (integralIntermediario === 'nao' || integralIntermediario === 'false') {
         finalLightweight = finalLightweight.filter((student: any) =>
-          !isAlunoIntegralIntermediario(student)
+          !isAlunoIntegralIntermediario(student, turmasData, [], effectiveAno)
         );
+      }
+
+      if (anoParam && !turma) {
+        finalLightweight = finalLightweight.filter((student: any) => {
+          const hist = student.historicoTurmas || student.dados?.historicoTurmas
+          if (Array.isArray(hist) && hist.length > 0) {
+            return hist.some((h: any) => String(h.anoLetivo || h.ano || '').trim() === String(anoParam).trim())
+          }
+          const sAno = String(student.anoLetivo || student.ano_letivo || student.dados?.anoLetivo || student.dados?.ano_letivo || '').trim()
+          return sAno === String(anoParam).trim()
+        });
       }
 
       return NextResponse.json({
         data: finalLightweight,
-        total: turma ? finalLightweight.length : (count || 0),
+        total: (turma || (anoParam && !turma)) ? finalLightweight.length : (count || 0),
         page,
         limit
       }, {
@@ -707,8 +726,34 @@ export async function GET(request: Request) {
           const isFin = l.resp_financeiro === true || l.tipo === 'financeiro' || resp.isFinanceiro === true
           const isOut = l.resp_outro === true || l.tipo === 'outro' || l.tipo === 'outros' || resp.isOutro === true
           const parentesco = l.parentesco || resp.parentesco || (isPed ? 'Resp. Pedagógico' : (isFin ? 'Resp. Financeiro' : (isOut ? 'Outros' : 'Responsável')))
+          const d = resp.dados || {}
           return {
             ...resp,
+            cpf: d.cpf || resp.cpf || '',
+            rg: d.rg || resp.rg || '',
+            rgOrgaoEmissor: d.rgOrgaoEmissor || d.orgEmissor || '',
+            sexo: d.sexo || resp.sexo || '',
+            estadoCivil: d.estadoCivil || resp.estado_civil || '',
+            profissao: d.profissao || resp.profissao || '',
+            nacionalidade: d.nacionalidade || 'Brasileira',
+            naturalidade: d.naturalidade || '',
+            naturalidadeUf: d.naturalidadeUf || '',
+            cep: d.cep || '',
+            endereco: d.endereco || d.logradouro || '',
+            numero: d.numero || '',
+            complemento: d.complemento || '',
+            bairro: d.bairro || '',
+            cidade: d.cidade || '',
+            uf: d.uf || d.ufEnd || '',
+            comercialEmpresa: d.comercialEmpresa || '',
+            comercialTelefone: d.comercialTelefone || '',
+            comercialCep: d.comercialCep || '',
+            comercialEndereco: d.comercialEndereco || '',
+            comercialNumero: d.comercialNumero || '',
+            comercialComplemento: d.comercialComplemento || '',
+            comercialBairro: d.comercialBairro || '',
+            comercialCidade: d.comercialCidade || '',
+            comercialUf: d.comercialUf || '',
             parentesco,
             isFinanceiro: isFin,
             isPedagogico: isPed,
@@ -805,25 +850,38 @@ export async function GET(request: Request) {
       finalFormattedData = formattedData.filter((s: any) => !isValidStudentPhoto(s.foto) && !(isBulk && Boolean(s.dados?.foto || s.dados?.avatarUrl || s.dados?.fotoUrl)))
     }
 
+    const effectiveAno = targetTurma?.ano ? String(targetTurma.ano) : (anoParam || undefined)
+
     if (turma) {
       finalFormattedData = finalFormattedData.filter((student: any) =>
-        isAlunoCursandoTurma(student, targetTurma || turma, undefined, turmasData)
+        isAlunoCursandoTurma(student, targetTurma || turma, effectiveAno, turmasData)
       );
     }
 
     if (integralIntermediario === 'sim' || integralIntermediario === 'true') {
       finalFormattedData = finalFormattedData.filter((student: any) =>
-        isAlunoIntegralIntermediario(student)
+        isAlunoIntegralIntermediario(student, turmasData, [], effectiveAno)
       );
     } else if (integralIntermediario === 'nao' || integralIntermediario === 'false') {
       finalFormattedData = finalFormattedData.filter((student: any) =>
-        !isAlunoIntegralIntermediario(student)
+        !isAlunoIntegralIntermediario(student, turmasData, [], effectiveAno)
       );
+    }
+
+    if (anoParam && !turma) {
+      finalFormattedData = finalFormattedData.filter((student: any) => {
+        const hist = student.historicoTurmas || student.dados?.historicoTurmas
+        if (Array.isArray(hist) && hist.length > 0) {
+          return hist.some((h: any) => String(h.anoLetivo || h.ano || '').trim() === String(anoParam).trim())
+        }
+        const sAno = String(student.anoLetivo || student.ano_letivo || student.dados?.anoLetivo || student.dados?.ano_letivo || '').trim()
+        return sAno === String(anoParam).trim()
+      });
     }
 
     return NextResponse.json({
       data: finalFormattedData,
-      total: turma ? finalFormattedData.length : (count || 0),
+      total: (turma || (anoParam && !turma)) ? finalFormattedData.length : (count || 0),
       page,
       limit
     })
@@ -917,18 +975,49 @@ export async function POST(request: Request) {
       if (resp.rg) {
         dados.rg = String(resp.rg).trim()
       }
-      if (resp.orgEmissor) dados.orgEmissor = resp.orgEmissor
+      if (resp.rgOrgaoEmissor || resp.orgEmissor) {
+        dados.rgOrgaoEmissor = resp.rgOrgaoEmissor || resp.orgEmissor
+        dados.orgEmissor = dados.rgOrgaoEmissor
+      }
       if (resp.nacionalidade) dados.nacionalidade = resp.nacionalidade
       if (resp.naturalidade) dados.naturalidade = resp.naturalidade
-      if (resp.uf) dados.uf = resp.uf
+      if (resp.naturalidadeUf) dados.naturalidadeUf = resp.naturalidadeUf
       if (resp.sexo) dados.sexo = resp.sexo
+      if (resp.estadoCivil || resp.estado_civil) {
+        dados.estadoCivil = resp.estadoCivil || resp.estado_civil
+        respDataToSave.estado_civil = dados.estadoCivil
+      }
+      if (resp.profissao) {
+        dados.profissao = resp.profissao
+        respDataToSave.profissao = resp.profissao
+      }
+
+      // Endereço Residencial
       if (resp.cep) dados.cep = resp.cep
-      if (resp.logradouro) dados.logradouro = resp.logradouro
+      if (resp.endereco || resp.logradouro) {
+        dados.endereco = resp.endereco || resp.logradouro
+        dados.logradouro = dados.endereco
+      }
       if (resp.numero) dados.numero = resp.numero
       if (resp.complemento) dados.complemento = resp.complemento
       if (resp.bairro) dados.bairro = resp.bairro
       if (resp.cidade) dados.cidade = resp.cidade
-      if (resp.ufEnd) dados.ufEnd = resp.ufEnd
+      if (resp.uf || resp.ufEnd) {
+        dados.uf = resp.uf || resp.ufEnd
+        dados.ufEnd = dados.uf
+      }
+
+      // Endereço Comercial
+      if (resp.comercialEmpresa) dados.comercialEmpresa = resp.comercialEmpresa
+      if (resp.comercialTelefone) dados.comercialTelefone = resp.comercialTelefone
+      if (resp.comercialCep) dados.comercialCep = resp.comercialCep
+      if (resp.comercialEndereco) dados.comercialEndereco = resp.comercialEndereco
+      if (resp.comercialNumero) dados.comercialNumero = resp.comercialNumero
+      if (resp.comercialComplemento) dados.comercialComplemento = resp.comercialComplemento
+      if (resp.comercialBairro) dados.comercialBairro = resp.comercialBairro
+      if (resp.comercialCidade) dados.comercialCidade = resp.comercialCidade
+      if (resp.comercialUf) dados.comercialUf = resp.comercialUf
+
       respDataToSave.dados = dados
       
       const dataNasc = resp.dataNasc || resp.data_nasc
@@ -1134,9 +1223,16 @@ export async function PUT(request: Request) {
       .eq('id', id)
       .maybeSingle()
 
+    const isExplicitPhotoRemoval = body.removerFoto === true || body.foto === null || body.foto === '' || body.deleteFoto === true
+
     if (existingStudent) {
-      if (!row.foto && existingStudent.foto) row.foto = existingStudent.foto
-      if (!(row as any).foto_url && (existingStudent as any).foto_url) (row as any).foto_url = (existingStudent as any).foto_url
+      if (isExplicitPhotoRemoval) {
+        row.foto = null
+        ;(row as any).foto_url = null
+      } else {
+        if (!row.foto && existingStudent.foto) row.foto = existingStudent.foto
+        if (!(row as any).foto_url && (existingStudent as any).foto_url) (row as any).foto_url = (existingStudent as any).foto_url
+      }
       if (!row.data_nascimento && existingStudent.data_nascimento) row.data_nascimento = existingStudent.data_nascimento
       if (!row.serie && existingStudent.serie) row.serie = existingStudent.serie
       if (!row.turno && existingStudent.turno) row.turno = existingStudent.turno
@@ -1145,6 +1241,20 @@ export async function PUT(request: Request) {
       if (!('email' in body) && existingStudent.email) row.email = existingStudent.email
       if (!('telefone' in body || 'celular' in body) && existingStudent.telefone) row.telefone = existingStudent.telefone
       row.dados = { ...(existingStudent.dados || {}), ...(row.dados || {}) }
+      if (row.dados && Array.isArray(row.dados.historicoTurmas) && row.dados.historicoTurmas.length > 0) {
+        const lastHist = row.dados.historicoTurmas[row.dados.historicoTurmas.length - 1];
+        const isLastIntegral = Boolean(lastHist && (lastHist.isIntegralIntermediario === true || lastHist.modalidade === 'INTEGRAL/INTERMEDIÁRIO'));
+        row.dados.isIntegralIntermediario = isLastIntegral;
+        if (!isLastIntegral && (row.dados.modalidade === 'INTEGRAL/INTERMEDIÁRIO' || row.dados.modalidade === 'INTEGRAL')) {
+          row.dados.modalidade = '';
+        }
+      }
+      if (isExplicitPhotoRemoval && row.dados) {
+        row.dados.foto = null
+        row.dados.foto_url = null
+        row.dados.fotoUrl = null
+        row.dados.avatarUrl = null
+      }
     }
 
     if (row.email) {
@@ -1305,18 +1415,49 @@ export async function PUT(request: Request) {
       if (resp.rg) {
         dados.rg = String(resp.rg).trim()
       }
-      if (resp.orgEmissor) dados.orgEmissor = resp.orgEmissor
+      if (resp.rgOrgaoEmissor || resp.orgEmissor) {
+        dados.rgOrgaoEmissor = resp.rgOrgaoEmissor || resp.orgEmissor
+        dados.orgEmissor = dados.rgOrgaoEmissor
+      }
       if (resp.nacionalidade) dados.nacionalidade = resp.nacionalidade
       if (resp.naturalidade) dados.naturalidade = resp.naturalidade
-      if (resp.uf) dados.uf = resp.uf
+      if (resp.naturalidadeUf) dados.naturalidadeUf = resp.naturalidadeUf
       if (resp.sexo) dados.sexo = resp.sexo
+      if (resp.estadoCivil || resp.estado_civil) {
+        dados.estadoCivil = resp.estadoCivil || resp.estado_civil
+        respDataToSave.estado_civil = dados.estadoCivil
+      }
+      if (resp.profissao) {
+        dados.profissao = resp.profissao
+        respDataToSave.profissao = resp.profissao
+      }
+
+      // Endereço Residencial
       if (resp.cep) dados.cep = resp.cep
-      if (resp.logradouro) dados.logradouro = resp.logradouro
+      if (resp.endereco || resp.logradouro) {
+        dados.endereco = resp.endereco || resp.logradouro
+        dados.logradouro = dados.endereco
+      }
       if (resp.numero) dados.numero = resp.numero
       if (resp.complemento) dados.complemento = resp.complemento
       if (resp.bairro) dados.bairro = resp.bairro
       if (resp.cidade) dados.cidade = resp.cidade
-      if (resp.ufEnd) dados.ufEnd = resp.ufEnd
+      if (resp.uf || resp.ufEnd) {
+        dados.uf = resp.uf || resp.ufEnd
+        dados.ufEnd = dados.uf
+      }
+
+      // Endereço Comercial
+      if (resp.comercialEmpresa) dados.comercialEmpresa = resp.comercialEmpresa
+      if (resp.comercialTelefone) dados.comercialTelefone = resp.comercialTelefone
+      if (resp.comercialCep) dados.comercialCep = resp.comercialCep
+      if (resp.comercialEndereco) dados.comercialEndereco = resp.comercialEndereco
+      if (resp.comercialNumero) dados.comercialNumero = resp.comercialNumero
+      if (resp.comercialComplemento) dados.comercialComplemento = resp.comercialComplemento
+      if (resp.comercialBairro) dados.comercialBairro = resp.comercialBairro
+      if (resp.comercialCidade) dados.comercialCidade = resp.comercialCidade
+      if (resp.comercialUf) dados.comercialUf = resp.comercialUf
+
       respDataToSave.dados = dados
       
       const dataNasc = resp.dataNasc || resp.data_nasc
@@ -1957,9 +2098,17 @@ function buildRow(a: any) {
     activeSerie = mainTurma.serie || activeSerie;
     rest.anoLetivo = mainTurma.anoLetivo;
 
-    if (mainTurma.isIntegralIntermediario === true || mainTurma.modalidade === 'INTEGRAL/INTERMEDIÁRIO') {
-      rest.isIntegralIntermediario = true;
+    const isMainIntegral = Boolean(
+      mainTurma.isIntegralIntermediario === true || 
+      mainTurma.modalidade === 'INTEGRAL/INTERMEDIÁRIO'
+    );
+    rest.isIntegralIntermediario = isMainIntegral;
+    if (isMainIntegral) {
       rest.modalidade = 'INTEGRAL/INTERMEDIÁRIO';
+    } else {
+      if (rest.modalidade === 'INTEGRAL/INTERMEDIÁRIO' || rest.modalidade === 'INTEGRAL') {
+        rest.modalidade = '';
+      }
     }
   }
 

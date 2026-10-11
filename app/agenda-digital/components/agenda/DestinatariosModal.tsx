@@ -10,6 +10,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useData } from '@/lib/dataContext'
 import { useSupabaseArray } from '@/lib/useSupabaseCollection'
 import { isAlunoCursandoTurma, compareTurmasBySerie, getTurmaSerieWeight } from '@/lib/studentTurmaUtils'
+import { AgendaLuxuryLoader } from '@/components/agenda/AgendaLuxuryLoader'
 
 interface DestinatariosModalProps {
   isOpen: boolean
@@ -422,7 +423,7 @@ export function DestinatariosModal({
     }
     const timer = setTimeout(() => {
       setLoadTimeoutPassed(true)
-    }, 10000)
+    }, 6000)
     return () => clearTimeout(timer)
   }, [isOpen])
 
@@ -600,11 +601,11 @@ export function DestinatariosModal({
   }
 
   // Verificação rigorosa de carregamento: só deve parar quando carregar TUDO
-  const isAnyHookLoading = loadingTurmas || loadingGrupos || loadingAlunos || loadingColabs
-  const isWaitingForAlunos = loadingAlunos && alunos.length === 0
-  const isWaitingForTurmas = (loadingTurmas || Boolean(data?.turmasLoading)) && turmas.length === 0
-  const isWaitingForColabs = loadingColabs && colaboradores.length === 0
-  const isWaitingForGrupos = loadingGrupos && gruposManuais.length === 0
+  const isAnyHookLoading = Boolean(loadingTurmas || loadingGrupos || loadingAlunos || loadingColabs)
+  const isWaitingForAlunos = !loadTimeoutPassed && (loadingAlunos || alunos.length === 0)
+  const isWaitingForTurmas = !loadTimeoutPassed && (loadingTurmas || Boolean(data?.turmasLoading) || turmas.length === 0)
+  const isWaitingForColabs = !loadTimeoutPassed && (loadingColabs || colaboradores.length === 0)
+  const isWaitingForGrupos = !loadTimeoutPassed && (loadingGrupos || gruposManuais.length === 0)
 
   const isLoadingData = !loadTimeoutPassed && (isAnyHookLoading || isWaitingForAlunos || isWaitingForTurmas || isWaitingForColabs || isWaitingForGrupos)
 
@@ -1704,6 +1705,13 @@ export function DestinatariosModal({
             transition={{ duration: 0.2 }}
             onClick={onClose}
             className="dest-modal-backdrop"
+          />
+
+          <AgendaLuxuryLoader
+            isLoading={isOpen && isLoadingData}
+            statusText="Carregando turmas, alunos e contatos escolares..."
+            subtitle="SELECIONAR DESTINATÁRIOS"
+            minDisplayTimeMs={600}
           />
 
           <motion.div 

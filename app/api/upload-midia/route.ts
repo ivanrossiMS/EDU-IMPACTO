@@ -39,23 +39,32 @@ export async function POST(request: Request) {
     const file = formData.get('file') as File | null
     const requestedBucket = formData.get('bucket') as string
     
-    // VALIDATION: Only allow specific buckets to prevent arbitrary file uploads
-    const ALLOWED_BUCKETS = ['comunicados-midia', 'fotos-perfil', 'documentos']
+    // VALIDATION: Permite todos os buckets ativos do ecossistema EDU-IMPACTO
+    const ALLOWED_BUCKETS = ['comunicados-midia', 'documentos', 'simulados-arquivos', 'credimpacto', 'fotos-perfil']
     const bucket = ALLOWED_BUCKETS.includes(requestedBucket) ? requestedBucket : 'comunicados-midia'
     
     if (!file) {
       return NextResponse.json({ error: 'Nenhum arquivo enviado' }, { status: 400 })
     }
 
-    // VALIDATION: Intelligent MIME type checking (prevents rejecting mobile files without browser MIME)
+    // VALIDATION: Suporte robusto a imagens, vídeos, áudios, PDFs e documentos de escritório
     const mimeType = resolveMimeType(file.name, file.type)
     const allowedTypes = [
-      'image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/bmp', 'image/heic', 'image/heif',
+      'image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/bmp', 'image/svg+xml', 'image/heic', 'image/heif',
       'application/pdf', 
       'video/mp4', 'video/webm', 'video/quicktime', 'video/x-m4v', 'video/3gpp', 'video/x-matroska', 'video/x-msvideo',
+      'audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/ogg', 'audio/webm', 'audio/aac', 'audio/m4a', 'audio/x-m4a',
+      'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'text/plain', 'text/csv', 'application/json', 'application/zip', 'application/x-zip-compressed',
       'application/octet-stream'
     ]
-    if (!allowedTypes.includes(mimeType) && !mimeType.startsWith('image/') && !mimeType.startsWith('video/')) {
+    if (
+      !allowedTypes.includes(mimeType) && 
+      !mimeType.startsWith('image/') && 
+      !mimeType.startsWith('video/') && 
+      !mimeType.startsWith('audio/')
+    ) {
       return NextResponse.json({ error: `Tipo de arquivo não permitido: ${mimeType}` }, { status: 415 })
     }
 
@@ -69,8 +78,10 @@ export async function POST(request: Request) {
     const safeBaseName = baseName.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 60)
     const safeExt = ext.replace(/[^a-zA-Z0-9.]/g, '').slice(0, 10)
     const requestedFolder = formData.get('folder') as string
-    const folder = requestedFolder ? requestedFolder.replace(/[^a-zA-Z0-9_-]/g, '') : 'uploads'
-    const filePath = `${folder}/${Date.now()}_${safeBaseName || 'file'}${safeExt}`
+    const folder = requestedFolder 
+      ? requestedFolder.replace(/[^a-zA-Z0-9_\/-]/g, '').replace(/^\/+|\/+$/g, '') 
+      : 'uploads'
+    const filePath = `${folder || 'uploads'}/${Date.now()}_${safeBaseName || 'file'}${safeExt}`
 
     const usageType = formData.get('usageType') as string
     const cacheControl = usageType === 'fixed' ? '31536000' : '2592000'

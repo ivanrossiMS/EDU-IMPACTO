@@ -15,7 +15,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Faltam parâmetros obrigatórios: bucket, fileName' }, { status: 400 })
     }
 
-    const ALLOWED_BUCKETS = ['comunicados-midia', 'fotos-perfil', 'documentos']
+    const ALLOWED_BUCKETS = ['comunicados-midia', 'documentos', 'simulados-arquivos', 'credimpacto', 'fotos-perfil']
     const bucket = ALLOWED_BUCKETS.includes(requestedBucket) ? requestedBucket : 'comunicados-midia'
 
     const supabase = createAdminClient()
@@ -24,7 +24,7 @@ export async function POST(request: Request) {
     const baseName = fileName.includes('.') ? fileName.slice(0, fileName.lastIndexOf('.')) : fileName
     const safeBaseName = baseName.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 60)
     const safeExt = ext.replace(/[^a-zA-Z0-9.]/g, '').slice(0, 10)
-    const cleanFolder = String(folder || 'uploads').replace(/[^a-zA-Z0-9_-]/g, '') || 'uploads'
+    const cleanFolder = String(folder || 'uploads').replace(/[^a-zA-Z0-9_\/-]/g, '').replace(/^\/+|\/+$/g, '') || 'uploads'
     const filePath = `${cleanFolder}/${Date.now()}_${safeBaseName || 'file'}${safeExt}`
 
     const { data, error } = await supabase.storage

@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 import { DestinatariosModal } from '../../components/agenda/DestinatariosModal'
 import NovoComunicadoModal from '../../components/agenda/NovoComunicadoModal'
+import { AgendaLuxuryLoader } from '@/components/agenda/AgendaLuxuryLoader'
 import { ComunicadoReportModal } from '@/components/agenda/ComunicadoReportModal'
 import { ReportsSelectionModal } from '@/components/agenda/ReportsSelectionModal'
 import { isAlunoCursandoTurma } from '@/lib/studentTurmaUtils'
@@ -78,7 +79,7 @@ export default function ADAdminComunicados() {
   const { currentUser } = useApp()
   const { setComunicados, setComunicadosLocally, adAlert, adConfirm, isDataLoading: isGlobalDataLoading, chatGroups } = useAgendaDigital()
   const { turmas = [] } = useData();
-  const [alunos] = useSupabaseArray<any>('alunos/lightweight?limit=2000');
+  const [alunos, , { loading: alunosLoading }] = useSupabaseArray<any>('alunos/lightweight?limit=2000');
   const { forms, setDisparos } = useFormularios()
   const { templates: relatoriosTemplates } = useRelatorios()
   
@@ -271,6 +272,7 @@ export default function ADAdminComunicados() {
   const [showMonthlyReport, setShowMonthlyReport] = useState(false);
   const [showEngagementDashboard, setShowEngagementDashboard] = useState(false);
   const [colaboradores, setColaboradores] = useState<{id?: string, nome: string, cargo?: string, perfil?: string}[]>([]);
+  const [colabsLoading, setColabsLoading] = useState(true);
   const [dbAuthors, setDbAuthors] = useState<string[]>([]);
   const [dbRoles, setDbRoles] = useState<string[]>([]);
 
@@ -322,6 +324,8 @@ export default function ADAdminComunicados() {
         }
       } catch (e) {
         console.error('Error fetching colaboradores and authors:', e);
+      } finally {
+        setColabsLoading(false);
       }
     };
     fetchColaboradoresAndAuthors();
@@ -677,16 +681,45 @@ export default function ADAdminComunicados() {
     setShowComposer(true)
   }
 
+  const [isPreparingNovo, setIsPreparingNovo] = useState(false);
+
+  const isRecipientsDataLoading = Boolean(
+    alunosLoading ||
+    colabsLoading ||
+    !alunos ||
+    alunos.length === 0 ||
+    !colaboradores ||
+    colaboradores.length === 0
+  );
+
   const handleNovo = () => {
     setEditComId(null)
-    
-    
-        
-    
-    
     setSelectedDest([])
-    setShowComposer(true)
+    if (isRecipientsDataLoading) {
+      setIsPreparingNovo(true)
+    } else {
+      setShowComposer(true)
+    }
   }
+
+  // Monitora o carregamento dos dados e avança para o editor assim que tudo estiver pronto
+  useEffect(() => {
+    if (!isPreparingNovo) return
+
+    if (!isRecipientsDataLoading) {
+      const timer = setTimeout(() => {
+        setIsPreparingNovo(false)
+        setShowComposer(true)
+      }, 350)
+      return () => clearTimeout(timer)
+    }
+
+    const failsafe = setTimeout(() => {
+      setIsPreparingNovo(false)
+      setShowComposer(true)
+    }, 5000)
+    return () => clearTimeout(failsafe)
+  }, [isPreparingNovo, isRecipientsDataLoading])
 
   const handleBulkDelete = () => {
     adConfirm(`Tem certeza que deseja excluir ${selectedComs.length} comunicado(s)? Esta ação é irreversível.`, 'Excluir Comunicados', async () => {
@@ -1123,6 +1156,38 @@ export default function ADAdminComunicados() {
               }}
             >
               <RotateCw size={15} strokeWidth={2.2} className={isRefreshing ? 'ad-spin-icon' : ''} />
+            </button>
+
+            <button
+              onClick={handleNovo}
+              type="button"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                height: 38,
+                padding: '0 16px',
+                borderRadius: 12,
+                fontSize: 13,
+                fontWeight: 700,
+                background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
+                color: '#ffffff',
+                border: 'none',
+                boxShadow: '0 4px 12px rgba(79, 70, 229, 0.3)',
+                cursor: 'pointer',
+                transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)'
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.transform = 'translateY(-1px)';
+                e.currentTarget.style.boxShadow = '0 6px 16px rgba(79, 70, 229, 0.4)';
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = '0 4px 12px rgba(79, 70, 229, 0.3)';
+              }}
+            >
+              <Plus size={15} strokeWidth={2.5} />
+              <span>Novo</span>
             </button>
           </div>
         </div>
@@ -1801,6 +1866,18 @@ export default function ADAdminComunicados() {
 </ClientPortal>)}</AnimatePresence>
 
       
+      {/* Loader luxuoso ao clicar em Novo Comunicado enquanto dados ainda estiverem carregando */}
+      <AgendaLuxuryLoader
+        isLoading={isPreparingNovo}
+        statusText="Carregando destinatários, turmas e contatos..."
+        subtitle="NOVO COMUNICADO"
+        minDisplayTimeMs={650}
+        onFinished={() => {
+          setIsPreparingNovo(false)
+          setShowComposer(true)
+        }}
+      />
+
       {/* Modal Composer */}
       <NovoComunicadoModal
         isOpen={showComposer}

@@ -134,8 +134,12 @@ export function useSupabaseCollection<T>(
   }
 
   const [state, setState] = useState<T>(getBootValue)
-  // If we don't have memory cache, we are actively loading. Prevents empty screen flashes.
-  const [loading, setLoading] = useState(!getCacheEntry<T>(endpoint))
+  // If we don't have memory cache with valid populated data, we are actively loading. Prevents empty screen flashes.
+  const [loading, setLoading] = useState<boolean>(() => {
+    const cached = getCacheEntry<T>(endpoint)
+    const hasValidData = Boolean(cached && cached.data !== undefined && cached.data !== null)
+    return !hasValidData
+  })
   const [error, setError] = useState<string | null>(null)
   const isMounted = useRef(true)
   // Optimistic lock: timestamp until which server responses should be merged, not replaced
@@ -167,7 +171,7 @@ export function useSupabaseCollection<T>(
     const existing = getCacheEntry<T>(endpoint)
 
     // Cache HIT and still fresh → skip fetch entirely
-    if (existing && !isStale(existing)) {
+    if (existing && existing.data !== undefined && existing.data !== null && !isStale(existing)) {
       if (isMounted.current && !cancelled) {
         // Don't overwrite optimistic local state during lock window
         if (Date.now() >= optimisticLockUntil.current) {
@@ -179,7 +183,7 @@ export function useSupabaseCollection<T>(
     }
 
     // Cache HIT but stale → show cached data immediately, revalidate in background
-    if (existing) {
+    if (existing && existing.data !== undefined && existing.data !== null) {
       setState(existing.data)
       const isCacheEmpty = Array.isArray(existing.data) ? existing.data.length === 0 : !existing.data;
       setLoading(isCacheEmpty)
