@@ -62,25 +62,28 @@ function formatName(fullName: string) {
 
 // ── Clock Component (Isolates 1-second interval to avoid re-rendering main tree) ──
 const TVLiveClock = React.memo(function TVLiveClock() {
-  const [clock, setClock] = useState(() =>
-    new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-  )
+  const [clock, setClock] = useState<string | null>(null)
+
   useEffect(() => {
-    const tick = () =>
-      setClock(new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }))
-    const iv = setInterval(tick, 1000)
+    const formatTime = () =>
+      new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    setClock(formatTime())
+    const iv = setInterval(() => setClock(formatTime()), 1000)
     return () => clearInterval(iv)
   }, [])
 
   return (
-    <div style={{
-      display: 'flex', alignItems: 'center', gap: 12,
-      fontFamily: 'monospace', fontSize: 32, fontWeight: 900, color: '#f1f5f9',
-      background: 'rgba(0,0,0,0.3)', padding: '10px 24px', borderRadius: 16,
-      border: '1.5px solid rgba(255,255,255,0.06)'
-    }}>
+    <div
+      suppressHydrationWarning
+      style={{
+        display: 'flex', alignItems: 'center', gap: 12,
+        fontFamily: 'monospace', fontSize: 32, fontWeight: 900, color: '#f1f5f9',
+        background: 'rgba(0,0,0,0.3)', padding: '10px 24px', borderRadius: 16,
+        border: '1.5px solid rgba(255,255,255,0.06)'
+      }}
+    >
       <Clock size={24} color="#06b6d4" />
-      {clock}
+      <span suppressHydrationWarning>{clock || '--:--:--'}</span>
     </div>
   )
 })

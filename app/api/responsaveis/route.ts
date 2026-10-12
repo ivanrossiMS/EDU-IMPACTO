@@ -12,14 +12,160 @@ export async function GET(request: Request) {
 
   try {
     const { searchParams } = new URL(request.url)
+    const id = searchParams.get('id')
+    const alunoIdOf = searchParams.get('aluno_id_of')
+    const cpfParam = searchParams.get('cpf')
+    const qParam = searchParams.get('q')
+    const search = searchParams.get('search') || qParam || ''
+    const rfid = searchParams.get('rfid') || ''
+
+    // ── Otimização 1: Sub-consulta direta de vínculos de um responsável (?aluno_id_of=...) ──
+    if (alunoIdOf) {
+      const { data: links, error: linkErr } = await supabase
+        .from('aluno_responsavel')
+        .select('*')
+        .eq('responsavel_id', alunoIdOf)
+
+      if (linkErr) return NextResponse.json({ error: linkErr.message }, { status: 400 })
+      if (!links || links.length === 0) return NextResponse.json({ data: [] })
+
+      const alunoIds = Array.from(new Set(links.map(l => String(l.aluno_id).trim()).filter(Boolean)))
+      let students: any[] = []
+      if (alunoIds.length > 0) {
+        const formatRef = (r: string) => /[ ,()\/]/.test(r) ? `"${r.replace(/"/g, '\\"')}"` : r
+        const formattedAll = alunoIds.map(formatRef).join(',')
+        const { data: stList } = await supabase
+          .from('alunos')
+          .select('id, nome, matricula, turma, status, foto, foto_url')
+          .or(`id.in.(${formattedAll}),matricula.in.(${formattedAll})`)
+        students = stList || []
+      }
+
+      const formattedLinks = links.map(l => {
+        const alu = students.find(s => String(s.id).trim() === String(l.aluno_id).trim() || String(s.matricula).trim() === String(l.aluno_id).trim())
+        return {
+          ...l,
+          aluno: alu ? { nome: alu.nome, turma: alu.turma, matricula: alu.matricula, status: alu.status } : null
+        }
+      })
+
+      return NextResponse.json({ data: formattedLinks })
+    }
+
+    // ── Otimização 2: Busca pontual por ID (?id=...) sem varredura de tabela ──
+    if (id) {
+      const { data: singleResp, error: singleErr } = await supabase
+        .from('responsaveis')
+        .select('*')
+        .eq('id', id)
+        .maybeSingle()
+
+      if (singleErr) return NextResponse.json({ error: singleErr.message }, { status: 400 })
+      if (!singleResp) return NextResponse.json({ error: 'Responsável não encontrado' }, { status: 404 })
+
+      const { data: links } = await supabase
+        .from('aluno_responsavel')
+        .select('*')
+        .eq('responsavel_id', id)
+
+      let students: any[] = []
+      if (links && links.length > 0) {
+        const studentIds = Array.from(new Set(links.map(l => String(l.aluno_id).trim()).filter(Boolean)))
+        if (studentIds.length > 0) {
+          const formatRef = (r: string) => /[ ,()\/]/.test(r) ? `"${r.replace(/"/g, '\\"')}"` : r
+          const formattedAll = studentIds.map(formatRef).join(',')
+          const { data: stList } = await supabase
+            .from('alunos')
+            .select('id, nome, matricula, status, foto, foto_url, turma, dados')
+            .or(`id.in.(${formattedAll}),matricula.in.(${formattedAll})`)
+          students = stList || []
+        }
+      }
+
+      const d = singleResp.dados || {}
+      const endObj = {
+        cep: d.cep || singleResp.cep || '',
+        logradouro: d.endereco || d.logradouro || singleResp.endereco || '',
+        numero: d.numero || singleResp.numero || '',
+        complemento: d.complemento || singleResp.complemento || '',
+        bairro: d.bairro || singleResp.bairro || '',
+        cidade: d.cidade || singleResp.cidade || '',
+        estado: d.uf || d.ufEnd || singleResp.uf || ''
+      }
+
+      const formattedSingle = {
+        ...singleResp,
+        dataNasc: singleResp.data_nasc || d.dataNasc || d.data_nasc || '',
+        data_nasc: singleResp.data_nasc || d.dataNasc || d.data_nasc || '',
+        diasAcesso: singleResp.dias_acesso || d.diasAcesso || d.dias_acesso || ['Seg', 'Ter', 'Qua', 'Qui', 'Sex'],
+        cpf: d.cpf || singleResp.cpf || '',
+        rg: d.rg || singleResp.rg || '',
+        rgOrgaoEmissor: d.rgOrgaoEmissor || d.orgEmissor || '',
+        org_emissor: d.rgOrgaoEmissor || d.orgEmissor || singleResp.org_emissor || '',
+        sexo: d.sexo || singleResp.sexo || '',
+        estadoCivil: d.estadoCivil || singleResp.estado_civil || '',
+        estado_civil: d.estadoCivil || singleResp.estado_civil || '',
+        profissao: d.profissao || singleResp.profissao || '',
+        nacionalidade: d.nacionalidade || 'Brasileira',
+        naturalidade: d.naturalidade || '',
+        naturalidadeUf: d.naturalidadeUf || '',
+        uf: d.uf || d.ufEnd || singleResp.uf || '',
+        cep: d.cep || singleResp.cep || '',
+        endereco: endObj,
+        logradouro: endObj.logradouro,
+        numero: endObj.numero,
+        complemento: endObj.complemento,
+        bairro: endObj.bairro,
+        cidade: endObj.cidade,
+        estado: endObj.estado,
+        comercialEmpresa: d.comercialEmpresa || '',
+        comercialTelefone: d.comercialTelefone || '',
+        comercialCep: d.comercialCep || '',
+        comercialEndereco: d.comercialEndereco || '',
+        comercialNumero: d.comercialNumero || '',
+        comercialComplemento: d.comercialComplemento || '',
+        comercialBairro: d.comercialBairro || '',
+        comercialCidade: d.comercialCidade || '',
+        comercialUf: d.comercialUf || '',
+        alunosVinculados: (links || []).map((l: any) => {
+          const targetRef = String(l.aluno_id).trim().toLowerCase()
+          const targetUnpadded = targetRef.replace(/^0+/, '')
+          const aluno = students.find((s: any) => {
+            const sId = String(s.id || '').trim().toLowerCase()
+            const sMat = String(s.matricula || '').trim().toLowerCase()
+            return sId === targetRef || (targetUnpadded && sId.replace(/^0+/, '') === targetUnpadded) ||
+                   sMat === targetRef || (targetUnpadded && sMat.replace(/^0+/, '') === targetUnpadded)
+          }) || {}
+          return {
+            ...aluno,
+            id: aluno.id || l.aluno_id,
+            nome: aluno.nome || `Aluno (${l.aluno_id})`,
+            status: aluno.status || aluno.dados?.status || 'ativo',
+            foto: aluno.foto || aluno.foto_url || aluno.dados?.foto || null,
+            parentesco: l.parentesco,
+            isFinanceiro: l.resp_financeiro === true,
+            isPedagogico: l.resp_pedagogico === true,
+            isOutro: l.resp_outro === true
+          }
+        })
+      }
+
+      return NextResponse.json({
+        ...formattedSingle,
+        data: [formattedSingle],
+        total: 1,
+        page: 1,
+        limit: 1
+      })
+    }
+
     const pageParam = searchParams.get('page')
     const limitParam = searchParams.get('limit')
-    const all = searchParams.get('all') === 'true' || (!pageParam && !limitParam)
+    const isExplicitAll = searchParams.get('all') === 'true'
+    const all = isExplicitAll || (!pageParam && !limitParam && !cpfParam && !rfid)
 
     const page = parseInt(pageParam || '1')
-    const limit = parseInt(limitParam || '10')
-    const search = searchParams.get('search') || ''
-    const rfid = searchParams.get('rfid') || ''
+    const limit = parseInt(limitParam || (isExplicitAll ? '1000' : (rfid ? '5' : '10')))
     
     const from = (page - 1) * limit
     const to = from + limit - 1
@@ -27,6 +173,13 @@ export async function GET(request: Request) {
     let query = supabase
       .from('responsaveis')
       .select('*', { count: 'exact' })
+
+    if (cpfParam) {
+      const cleanDigits = cpfParam.replace(/\D/g, '')
+      if (cleanDigits) {
+        query = query.or(`cpf.eq.${cleanDigits},dados->>cpf.eq.${cleanDigits},dados->>cpf.ilike.%${cleanDigits}%`)
+      }
+    }
 
     if (search) {
       const searchClean = search.trim()

@@ -281,6 +281,391 @@ function extractLogStudentId(log: any): string | null {
   return null
 }
 
+export interface PushSenderInfo {
+  id?: string | null
+  nome: string
+  friendlyName?: string
+  subtitulo?: string | null
+  tipo: 'colaborador' | 'responsavel' | 'aluno' | 'sistema' | 'portaria' | 'outro'
+  foto?: string | null
+  email?: string | null
+  initials?: string
+}
+
+function getSenderInitials(name: string): string {
+  if (!name) return '?'
+  const parts = name.trim().split(/\s+/).filter(Boolean)
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+}
+
+function getFriendlySenderName(fullName: string): string {
+  if (!fullName) return 'Sistema'
+  const parts = fullName.trim().split(/\s+/).filter(Boolean)
+  if (parts.length <= 2) return fullName
+  return `${parts[0]} ${parts[1]}`
+}
+
+async function batchResolveSenders(logs: any[], supabase: any): Promise<Map<string, PushSenderInfo>> {
+  const result = new Map<string, PushSenderInfo>()
+  if (!logs || logs.length === 0) return result
+
+  const momentoIds = new Set<string>()
+  const comunicadoIds = new Set<string>()
+  const callIds = new Set<string>()
+  const eventoIds = new Set<string>()
+  const directUserIds = new Set<string>()
+
+  for (const l of logs) {
+    if (l.user_id) directUserIds.add(String(l.user_id))
+
+    let meta: any = null
+    try {
+      meta = typeof l.onesignal_response === 'string'
+        ? JSON.parse(l.onesignal_response)?._metadata
+        : l.onesignal_response?._metadata
+    } catch {}
+
+    if (meta?.sender_id) directUserIds.add(String(meta.sender_id))
+    if (meta?.author_id) directUserIds.add(String(meta.author_id))
+    if (meta?.authorId) directUserIds.add(String(meta.authorId))
+
+    if (l.type === 'momentos') {
+      const baseId = l.item_id ? String(l.item_id).split('_aluno_')[0].split('_perfil_')[0] : null
+      if (baseId) momentoIds.add(baseId)
+    } else if (l.type === 'comunicados') {
+      const baseId = l.item_id ? String(l.item_id).split('_aluno_')[0].split('_perfil_')[0] : null
+      if (baseId) comunicadoIds.add(baseId)
+    } else if (l.type === 'saida') {
+      const m = l.item_id ? String(l.item_id).match(/^(?:chamada|saida)_([0-9a-f-]{36})/i) : null
+      if (m) callIds.add(m[1])
+      if (meta?.saida_id) callIds.add(String(meta.saida_id))
+    } else if (l.type === 'calendario') {
+      const baseId = l.item_id ? String(l.item_id).replace(/-reminder.*$/, '').split('_aluno_')[0] : null
+      if (baseId) eventoIds.add(baseId)
+    }
+  }
+
+  // Buscar dados em lote de forma paralela
+  const [momsRes, comsRes, callsRes, evsRes, sysUsersRes] = await Promise.all([
+    momentoIds.size > 0
+      ? supabase.from('momentos').select('id, dados').in('id', Array.from(momentoIds))
+      : Promise.resolve({ data: [] }),
+    comunicadoIds.size > 0
+      ? supabase.from('comunicados').select('id, autor, dados, titulo').in('id', Array.from(comunicadoIds))
+      : Promise.resolve({ data: [] }),
+    callIds.size > 0
+      ? supabase.from('saida_calls').select('id, dados').in('id', Array.from(callIds))
+      : Promise.resolve({ data: [] }),
+    eventoIds.size > 0
+      ? supabase.from('eventos_agenda').select('id, titulo, criado_por, dados').in('id', Array.from(eventoIds))
+      : Promise.resolve({ data: [] }),
+    supabase.from('system_users').select('id, auth_id, nome, email, perfil, cargo, dados')
+  ])
+
+  const momMap = new Map<string, any>((momsRes.data || []).map((m: any) => [String(m.id), m]))
+  const comMap = new Map<string, any>((comsRes.data || []).map((c: any) => [String(c.id), c]))
+  const callMap = new Map<string, any>((callsRes.data || []).map((c: any) => [String(c.id), c]))
+  const evMap = new Map<string, any>((evsRes.data || []).map((e: any) => [String(e.id), e]))
+  const sysUserList: any[] = sysUsersRes.data || []
+
+  function findUser(idOrAuthId?: string | null, name?: string | null, email?: string | null) {
+    if (idOrAuthId) {
+      const u = sysUserList.find(x => x.id === idOrAuthId || x.auth_id === idOrAuthId)
+      if (u) return u
+    }
+    if (email) {
+      const cleanEmail = email.toLowerCase().trim()
+      const u = sysUserList.find(x => x.email && x.email.toLowerCase().trim() === cleanEmail)
+      if (u) return u
+    }
+    if (name) {
+      const cleanName = name.toLowerCase().trim()
+      if (cleanName.length >= 3) {
+        const u = sysUserList.find(x => x.nome && x.nome.toLowerCase().trim() === cleanName)
+        if (u) return u
+        const u2 = sysUserList.find(x => x.nome && (x.nome.toLowerCase().includes(cleanName) || cleanName.includes(x.nome.toLowerCase())))
+        if (u2) return u2
+      }
+    }
+    return null
+  }
+
+  for (const l of logs) {
+    let sender: PushSenderInfo | null = null
+    let meta: any = null
+    try {
+      meta = typeof l.onesignal_response === 'string'
+        ? JSON.parse(l.onesignal_response)?._metadata
+        : l.onesignal_response?._metadata
+    } catch {}
+
+    // 1. Checagem direta por user_id ou meta.sender_id
+    const directId = l.user_id || meta?.sender_id || meta?.author_id || meta?.authorId
+    if (directId) {
+      const u = findUser(directId, meta?.sender_name || meta?.author, meta?.sender_email)
+      if (u) {
+        sender = {
+          id: u.id,
+          nome: u.nome,
+          friendlyName: getFriendlySenderName(u.nome),
+          subtitulo: u.cargo || u.perfil || 'Administrador',
+          tipo: 'colaborador',
+          foto: u.foto || u.dados?.foto || null,
+          email: u.email,
+          initials: getSenderInitials(u.nome)
+        }
+      }
+    }
+
+    // 2. Chat: se tem meta.sender_name
+    if (!sender && l.type === 'chat' && meta?.sender_name) {
+      const u = findUser(meta?.sender_id, meta.sender_name)
+      sender = {
+        id: u?.id || meta?.sender_id || null,
+        nome: u?.nome || meta.sender_name,
+        friendlyName: getFriendlySenderName(u?.nome || meta.sender_name),
+        subtitulo: u?.cargo || u?.perfil || meta?.sender_perfil || 'Mensagem do Chat',
+        tipo: 'colaborador',
+        foto: u?.foto || u?.dados?.foto || null,
+        email: u?.email || null,
+        initials: getSenderInitials(u?.nome || meta.sender_name)
+      }
+    }
+
+    // 3. Momentos
+    if (!sender && l.type === 'momentos') {
+      const baseId = l.item_id ? String(l.item_id).split('_aluno_')[0].split('_perfil_')[0] : null
+      const m = baseId ? momMap.get(baseId) : null
+      const authorName = m?.dados?.author || m?.dados?.autor || meta?.author || meta?.autor
+      const authorId = m?.dados?.authorId || m?.dados?.author_id || meta?.authorId || meta?.author_id
+
+      const u = findUser(authorId, authorName)
+      if (u) {
+        sender = {
+          id: u.id,
+          nome: u.nome,
+          friendlyName: getFriendlySenderName(u.nome),
+          subtitulo: u.cargo || u.perfil || 'Professora',
+          tipo: 'colaborador',
+          foto: u.foto || u.dados?.foto || null,
+          email: u.email,
+          initials: getSenderInitials(u.nome)
+        }
+      } else if (authorName) {
+        sender = {
+          nome: authorName,
+          friendlyName: getFriendlySenderName(authorName),
+          subtitulo: 'Professora / Coordenação',
+          tipo: 'colaborador',
+          foto: null,
+          initials: getSenderInitials(authorName)
+        }
+      } else {
+        sender = {
+          nome: 'Equipe Pedagógica',
+          friendlyName: 'Equipe Pedagógica',
+          subtitulo: 'Momentos & Mídia',
+          tipo: 'colaborador',
+          foto: null,
+          initials: 'EP'
+        }
+      }
+    }
+
+    // 4. Comunicados
+    if (!sender && l.type === 'comunicados') {
+      const baseId = l.item_id ? String(l.item_id).split('_aluno_')[0].split('_perfil_')[0] : null
+      const c = baseId ? comMap.get(baseId) : null
+      let authorName = c?.autor || c?.dados?.autor || c?.dados?.autor_nome || meta?.author || meta?.autor
+      let authorId = c?.dados?.autorId || meta?.authorId || meta?.author_id
+      let authorCargo = c?.dados?.autorCargo || meta?.author_cargo
+      let authorFoto = c?.dados?.autorFoto || meta?.author_foto
+
+      if (!authorName && l.message) {
+        const m1 = l.message.match(/enviada por\s+([^.]+)/i)
+        const m2 = l.message.match(/^(.+?)\s+enviou uma mensagem/i)
+        const m3 = l.message.match(/^(.+?)\s+disponibilizou o relatório/i)
+        const m4 = l.message.match(/^(.+?)\s+enviou um novo comunicado/i)
+        authorName = (m1 ? m1[1] : (m2 ? m2[1] : (m3 ? m3[1] : (m4 ? m4[1] : null))))?.trim()
+      }
+
+      const u = findUser(authorId, authorName)
+      if (u) {
+        sender = {
+          id: u.id,
+          nome: u.nome,
+          friendlyName: getFriendlySenderName(u.nome),
+          subtitulo: u.cargo || u.perfil || authorCargo || 'Colaborador',
+          tipo: 'colaborador',
+          foto: u.foto || u.dados?.foto || authorFoto || null,
+          email: u.email,
+          initials: getSenderInitials(u.nome)
+        }
+      } else if (authorName) {
+        sender = {
+          nome: authorName,
+          friendlyName: getFriendlySenderName(authorName),
+          subtitulo: authorCargo || 'Colaborador',
+          tipo: 'colaborador',
+          foto: authorFoto || null,
+          initials: getSenderInitials(authorName)
+        }
+      } else {
+        sender = {
+          nome: 'Coordenação Escolar',
+          friendlyName: 'Coordenação',
+          subtitulo: 'Comunicado Escolar',
+          tipo: 'colaborador',
+          foto: null,
+          initials: 'CE'
+        }
+      }
+    }
+
+    // 5. Portaria & Saída
+    if (!sender && l.type === 'saida') {
+      const match = l.item_id ? String(l.item_id).match(/^(?:chamada|saida)_([0-9a-f-]{36})/i) : null
+      const call = match ? callMap.get(match[1]) : (meta?.saida_id ? callMap.get(meta.saida_id) : null)
+      const guardian = call?.dados?.guardianName || meta?.guardian_name
+      if (guardian) {
+        sender = {
+          nome: guardian,
+          friendlyName: getFriendlySenderName(guardian),
+          subtitulo: call?.dados?.source === 'app' ? 'Responsável (App)' : 'Responsável',
+          tipo: 'responsavel',
+          foto: null,
+          initials: getSenderInitials(guardian)
+        }
+      } else if (l.title && l.title.includes('Chamada')) {
+        sender = {
+          nome: 'Portaria & Saída',
+          friendlyName: 'Portaria',
+          subtitulo: 'Chamada de Portão',
+          tipo: 'portaria',
+          foto: null,
+          initials: 'PS'
+        }
+      } else {
+        sender = {
+          nome: 'Portaria Escolar',
+          friendlyName: 'Portaria',
+          subtitulo: 'Saída Confirmada',
+          tipo: 'portaria',
+          foto: null,
+          initials: 'PE'
+        }
+      }
+    }
+
+    // 6. Frequência
+    if (!sender && l.type === 'frequencia') {
+      sender = {
+        nome: 'Secretaria Acadêmica',
+        friendlyName: 'Secretaria',
+        subtitulo: 'Registro de Frequência',
+        tipo: 'sistema',
+        foto: null,
+        initials: 'SA'
+      }
+    }
+
+    // 7. Calendário & Eventos
+    if (!sender && l.type === 'calendario') {
+      const isRem = (l.item_id && l.item_id.includes('-reminder')) ||
+                    (l.title && l.title.includes('Lembrete')) ||
+                    (l.message && l.message.startsWith('Lembrete'))
+      if (isRem) {
+        sender = {
+          nome: 'Sistema (Automático)',
+          friendlyName: 'Lembrete Auto',
+          subtitulo: 'Lembrete da Véspera',
+          tipo: 'sistema',
+          foto: null,
+          initials: 'LA'
+        }
+      } else {
+        const baseId = l.item_id ? String(l.item_id).split('_aluno_')[0] : null
+        const ev = baseId ? evMap.get(baseId) : null
+        const u = findUser(null, ev?.criado_por)
+        sender = {
+          id: u?.id || null,
+          nome: u?.nome || ev?.criado_por || 'Coordenação Escolar',
+          friendlyName: getFriendlySenderName(u?.nome || ev?.criado_por || 'Coordenação Escolar'),
+          subtitulo: u?.cargo || u?.perfil || 'Calendário de Eventos',
+          tipo: 'colaborador',
+          foto: u?.foto || u?.dados?.foto || null,
+          initials: getSenderInitials(u?.nome || ev?.criado_por || 'Coordenação Escolar')
+        }
+      }
+    }
+
+    // 8. Teste / Diagnóstico
+    if (!sender && l.type === 'test') {
+      sender = {
+        nome: 'Administrador Master',
+        friendlyName: 'Administrador',
+        subtitulo: 'Simulação Manual de Push',
+        tipo: 'colaborador',
+        foto: null,
+        initials: 'AM'
+      }
+    }
+
+    // 9. Notas / Boletim
+    if (!sender && l.type === 'notas') {
+      sender = {
+        nome: 'Secretaria Acadêmica',
+        friendlyName: 'Secretaria',
+        subtitulo: 'Boletim & Notas',
+        tipo: 'sistema',
+        foto: null,
+        initials: 'SA'
+      }
+    }
+
+    // 10. Ocorrências
+    if (!sender && l.type === 'ocorrencias') {
+      sender = {
+        nome: 'Coordenação Disciplinar',
+        friendlyName: 'Coordenação',
+        subtitulo: 'Registro de Ocorrência',
+        tipo: 'colaborador',
+        foto: null,
+        initials: 'CD'
+      }
+    }
+
+    // 11. Cobranças
+    if (!sender && l.type === 'cobrancas') {
+      sender = {
+        nome: 'Departamento Financeiro',
+        friendlyName: 'Financeiro',
+        subtitulo: 'Cobrança & Mensalidade',
+        tipo: 'sistema',
+        foto: null,
+        initials: 'DF'
+      }
+    }
+
+    // Fallback geral
+    if (!sender) {
+      sender = {
+        nome: 'Colégio Impacto',
+        friendlyName: 'Colégio Impacto',
+        subtitulo: 'Sistema Escolar',
+        tipo: 'sistema',
+        foto: null,
+        initials: 'CI'
+      }
+    }
+
+    result.set(l.id, sender)
+  }
+
+  return result
+}
+
 async function resolveLogFullDetails(logIdOrLog: string | any, supabase: any) {
   let log = logIdOrLog
   if (typeof logIdOrLog === 'string') {
@@ -735,8 +1120,12 @@ async function resolveLogFullDetails(logIdOrLog: string | any, supabase: any) {
     } catch {}
   }
 
+  const sendersMap = await batchResolveSenders([log], supabase)
+  const sender = sendersMap.get(log.id) || null
+
   return {
     logId: log.id,
+    sender,
     recipients,
     summary,
     targetAliases: Array.from(targetAliases),
@@ -803,7 +1192,13 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: logsErr.message }, { status: 400 })
       }
 
-      return NextResponse.json({ logs: logs || [] })
+      const sendersMap = await batchResolveSenders(logs || [], supabase)
+      const enriched = (logs || []).map((l: any) => ({
+        ...l,
+        sender: sendersMap.get(l.id) || null
+      }))
+
+      return NextResponse.json({ logs: enriched })
     }
 
     // 2.0.1b Detalhes completos de destinatários e leitura de um log
@@ -911,9 +1306,44 @@ export async function GET(request: Request) {
         query = query.eq('status', filterStatus)
       }
 
-      // 4. Filtro por Busca Textual
+      // 4. Filtro por Busca Textual (com suporte a Remetente/Autor)
       if (filterSearch) {
-        query = query.or(`title.ilike.%${filterSearch}%,message.ilike.%${filterSearch}%,item_id.ilike.%${filterSearch}%`)
+        const searchOrs: string[] = [
+          `title.ilike.%${filterSearch}%`,
+          `message.ilike.%${filterSearch}%`,
+          `item_id.ilike.%${filterSearch}%`
+        ]
+
+        try {
+          const [{ data: matchedUsers }, { data: matchedMoms }, { data: matchedComs }] = await Promise.all([
+            supabase.from('system_users').select('id, auth_id').ilike('nome', `%${filterSearch}%`).limit(10),
+            supabase.from('momentos').select('id').ilike('dados->>author', `%${filterSearch}%`).limit(25),
+            supabase.from('comunicados').select('id').or(`autor.ilike.%${filterSearch}%,dados->>autor.ilike.%${filterSearch}%`).limit(25)
+          ])
+
+          if (matchedUsers && matchedUsers.length > 0) {
+            matchedUsers.forEach((u: any) => {
+              if (u.id) searchOrs.push(`user_id.eq.${u.id}`)
+              if (u.auth_id) searchOrs.push(`user_id.eq.${u.auth_id}`)
+            })
+          }
+
+          if (matchedMoms && matchedMoms.length > 0) {
+            matchedMoms.forEach((m: any) => {
+              if (m.id) searchOrs.push(`item_id.ilike.%${m.id}%`)
+            })
+          }
+
+          if (matchedComs && matchedComs.length > 0) {
+            matchedComs.forEach((c: any) => {
+              if (c.id) searchOrs.push(`item_id.ilike.%${c.id}%`)
+            })
+          }
+        } catch (searchEnhanceErr) {
+          console.warn('Aviso ao expandir busca por autor:', searchEnhanceErr)
+        }
+
+        query = query.or(searchOrs.join(','))
       }
 
       // 5. Filtro por Usuário Específico
@@ -1153,7 +1583,10 @@ export async function GET(request: Request) {
         })
       }
 
-      // 3. Enriquecer logs com indicador de leitura, telemetria e resumo de destinatários
+      // 3. Resolução semântica de quem enviou (Remetente / Autor / Sistema) em lote
+      const sendersMap = await batchResolveSenders(logs || [], supabase)
+
+      // 4. Enriquecer logs com indicador de leitura, telemetria, remetente e resumo de destinatários
       const enrichedLogs = (logs || []).map((log: any) => {
         let oneSignalId = null
         let oneSignalErrors = null
@@ -1227,6 +1660,7 @@ export async function GET(request: Request) {
 
         return {
           ...log,
+          sender: sendersMap.get(log.id) || null,
           oneSignalId,
           oneSignalErrors,
           isRead: Boolean(matchedRead),

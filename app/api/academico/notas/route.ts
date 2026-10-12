@@ -11,6 +11,8 @@ export async function GET(request: Request) {
   const supabase = await createProtectedClient();
   const { searchParams } = new URL(request.url)
   const turmaId = searchParams.get('turma_id')
+  const limitParam = searchParams.get('limit')
+  const limit = limitParam ? Math.min(Math.max(parseInt(limitParam, 10) || 50, 1), 1000) : (turmaId ? 500 : 100)
 
   let query = supabase.from('academico_notas_lancamento').select(`
     id, turma_id, disciplina, bimestre, esquema_id, criado_por, created_at,
@@ -20,7 +22,7 @@ export async function GET(request: Request) {
         detalhe_id, valor
       )
     )
-  `).order('created_at', { ascending: false })
+  `).order('created_at', { ascending: false }).limit(limit)
 
   if (turmaId) query = query.eq('turma_id', turmaId)
 
@@ -28,7 +30,9 @@ export async function GET(request: Request) {
   if (error) {
     console.error('GET /api/academico/notas query error:', error);
     // Fallback temporário para tabela antiga caso a migração ainda não tenha rodado
-    const fallback = await supabase.from('lancamentos_nota').select('*').order('created_at', { ascending: false })
+    let fallbackQuery = supabase.from('lancamentos_nota').select('*').order('created_at', { ascending: false }).limit(limit)
+    if (turmaId) fallbackQuery = fallbackQuery.eq('turma_id', turmaId)
+    const fallback = await fallbackQuery
     if (fallback.data && !fallback.error) {
       return NextResponse.json((fallback.data || []).map(row => ({ ...row, ...(row.dados || {}) })))
     }

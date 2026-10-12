@@ -29,7 +29,7 @@ import { useApp } from '@/lib/context'
 import {
   CheckCircle2, Clock, Search, Megaphone, X, GraduationCap,
   UserCheck, ChevronRight, RotateCcw, RefreshCw, Trash2, Pin,
-  Users, Sparkles, AlertCircle, Volume2, VolumeX
+  Users, Sparkles, AlertCircle, Volume2, VolumeX, History
 } from 'lucide-react'
 
 type FilterType = 'all' | 'waiting' | 'confirmed' | 'saiu_sozinho' | 'cancelled' | 'blocked'
@@ -3521,104 +3521,233 @@ function ChamadasContent() {
         <SpecialExitSticker showToast={showToast} />
       </div>
 
-      {/* ── FILTERS ─────────────────────────────────────────────────── */}
-      {/* ── FILTERS ROW (ABAS NA ESQUERDA + ZERAR CHAMADAS ALINHADO À DIREITA) ── */}
+      {/* ── HISTÓRICO TOOLBAR CARD (FILTROS, BUSCA E ZERAR NA MESMA LINHA) ── */}
       <div style={{
+        background: 'hsl(var(--bg-elevated))',
+        border: '1px solid hsl(var(--border-subtle))',
+        borderRadius: 18,
+        padding: '10px 16px',
+        marginBottom: 20,
+        boxShadow: '0 4px 20px -2px rgba(0, 0, 0, 0.05), 0 1px 3px rgba(0, 0, 0, 0.02)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
         gap: 12,
-        marginBottom: 14,
         flexWrap: 'wrap',
       }}>
         {/* Left: Histórico Label + Tabs */}
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-          <div style={{ fontSize: 11, fontWeight: 800, color: 'hsl(var(--text-muted))', marginRight: 4 }}>HISTÓRICO</div>
-          {FILTERS.map(f => (
-            <button key={f.key} type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); setFilter(f.key); }} style={{
-              padding: '7px 12px', borderRadius: 100, fontSize: isMobile ? 11 : 12, fontWeight: 700,
-              border: `1px solid ${filter === f.key ? f.color : 'hsl(var(--border-subtle))'}`,
-              background: filter === f.key ? `${f.color}12` : 'hsl(var(--bg-elevated))',
-              color: filter === f.key ? f.color : 'hsl(var(--text-muted))',
-              cursor: 'pointer', transition: 'all 0.15s',
-              display: 'flex', alignItems: 'center', gap: 5,
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          flexWrap: 'wrap',
+          flex: isMobile ? '1 1 100%' : '0 1 auto',
+        }}>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            paddingRight: 8,
+            borderRight: '1px solid hsl(var(--border-subtle))',
+            marginRight: 2,
+            userSelect: 'none',
+          }}>
+            <History size={15} style={{ color: 'hsl(var(--text-muted))' }} />
+            <span style={{
+              fontSize: 11,
+              fontWeight: 800,
+              letterSpacing: '0.06em',
+              color: 'hsl(var(--text-muted))',
+              textTransform: 'uppercase',
             }}>
-              {f.label}
-              <span style={{
-                background: filter === f.key ? `${f.color}20` : 'hsl(var(--bg-overlay))',
-                color: filter === f.key ? f.color : 'hsl(var(--text-muted))',
-                borderRadius: 100, fontSize: 10, padding: '1px 7px', fontWeight: 900,
-              }}>{f.count}</span>
-            </button>
-          ))}
+              Histórico
+            </span>
+          </div>
+
+          {FILTERS.map(f => {
+            const isActive = filter === f.key
+            return (
+              <button
+                key={f.key}
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  setFilter(f.key)
+                }}
+                style={{
+                  height: 34,
+                  padding: '0 12px',
+                  borderRadius: 100,
+                  fontSize: isMobile ? 11 : 12,
+                  fontWeight: isActive ? 700 : 600,
+                  border: `1px solid ${isActive ? f.color : 'hsl(var(--border-subtle))'}`,
+                  background: isActive ? `${f.color}15` : 'hsl(var(--bg-surface))',
+                  color: isActive ? f.color : 'hsl(var(--text-secondary))',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  boxShadow: isActive ? `0 2px 8px ${f.color}25` : 'none',
+                  whiteSpace: 'nowrap',
+                }}
+                onMouseEnter={e => {
+                  if (!isActive) {
+                    const el = e.currentTarget
+                    el.style.background = 'hsl(var(--bg-hover))'
+                    el.style.borderColor = 'hsl(var(--border-default))'
+                    el.style.color = 'hsl(var(--text-primary))'
+                  }
+                }}
+                onMouseLeave={e => {
+                  if (!isActive) {
+                    const el = e.currentTarget
+                    el.style.background = 'hsl(var(--bg-surface))'
+                    el.style.borderColor = 'hsl(var(--border-subtle))'
+                    el.style.color = 'hsl(var(--text-secondary))'
+                  }
+                }}
+              >
+                {f.label}
+                <span style={{
+                  background: isActive ? f.color : 'hsl(var(--bg-overlay))',
+                  color: isActive ? '#fff' : 'hsl(var(--text-muted))',
+                  borderRadius: 100,
+                  fontSize: 10,
+                  padding: '1px 6px',
+                  fontWeight: 800,
+                  minWidth: 16,
+                  textAlign: 'center',
+                  transition: 'all 0.15s ease',
+                }}>
+                  {f.count}
+                </span>
+              </button>
+            )
+          })}
         </div>
 
-        {/* Right: Zerar Chamadas (Na linha das abas, alinhado à direita) */}
-        {isAdmin && (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.preventDefault()
-              e.stopPropagation()
-              setConfirmClearAll(true)
-            }}
-            style={{
-              marginLeft: 'auto',
-              padding: '8px 16px', borderRadius: 10, fontSize: 12, fontWeight: 700,
-              border: 'none', background: 'rgba(239,68,68,0.1)', color: '#ef4444',
-              cursor: 'pointer', transition: 'all 0.15s',
-              display: 'flex', alignItems: 'center', gap: 6,
-              whiteSpace: 'nowrap',
-            }}
-            onMouseEnter={e => {
-              const el = e.currentTarget as HTMLButtonElement
-              el.style.background = '#ef4444'
-              el.style.color = '#fff'
-            }}
-            onMouseLeave={e => {
-              const el = e.currentTarget as HTMLButtonElement
-              el.style.background = 'rgba(239,68,68,0.1)'
-              el.style.color = '#ef4444'
-            }}
-          >
-            <X size={14}/> Zerar Chamadas
-          </button>
-        )}
-      </div>
+        {/* Right: Search Input + Zerar Chamadas */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+          flex: isMobile ? '1 1 100%' : '0 0 auto',
+          marginLeft: isMobile ? 0 : 'auto',
+          justifyContent: isMobile ? 'space-between' : 'flex-end',
+        }}>
+          {/* Search Input */}
+          <div style={{
+            position: 'relative',
+            width: isMobile ? '100%' : 240,
+            flex: isMobile ? 1 : 'none',
+          }}>
+            <Search
+              size={14}
+              style={{
+                position: 'absolute',
+                left: 11,
+                top: '50%',
+                transform: 'translateY(-50%)',
+                color: 'hsl(var(--text-muted))',
+                pointerEvents: 'none',
+              }}
+            />
+            <input
+              value={callSearch}
+              onChange={e => setCallSearch(e.target.value)}
+              placeholder="Filtrar histórico..."
+              style={{
+                width: '100%',
+                height: 34,
+                padding: '0 28px 0 32px',
+                borderRadius: 10,
+                fontSize: 12,
+                border: '1px solid hsl(var(--border-subtle))',
+                background: 'hsl(var(--bg-surface))',
+                color: 'hsl(var(--text-primary))',
+                outline: 'none',
+                boxSizing: 'border-box',
+                transition: 'all 0.2s ease',
+              }}
+              onFocus={e => {
+                e.currentTarget.style.borderColor = 'hsl(var(--brand-primary, 217 91% 60%))'
+                e.currentTarget.style.boxShadow = '0 0 0 2px rgba(59, 130, 246, 0.15)'
+              }}
+              onBlur={e => {
+                e.currentTarget.style.borderColor = 'hsl(var(--border-subtle))'
+                e.currentTarget.style.boxShadow = 'none'
+              }}
+            />
+            {callSearch && (
+              <button
+                type="button"
+                onClick={() => setCallSearch('')}
+                style={{
+                  position: 'absolute',
+                  right: 8,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  color: 'hsl(var(--text-muted))',
+                  padding: 3,
+                  display: 'flex',
+                  alignItems: 'center',
+                  borderRadius: 4,
+                }}
+              >
+                <X size={13} />
+              </button>
+            )}
+          </div>
 
-      {/* ── SEARCH INPUT (FILTRAR HISTÓRICO) ─────────────────────────── */}
-      <div style={{ position: 'relative', marginBottom: 20 }}>
-        <Search size={15} style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: 'hsl(var(--text-muted))', pointerEvents: 'none' }} />
-        <input
-          value={callSearch}
-          onChange={e => setCallSearch(e.target.value)}
-          placeholder="Filtrar histórico..."
-          style={{
-            width: '100%',
-            padding: '10px 16px 10px 38px',
-            borderRadius: 12,
-            fontSize: 13,
-            border: '1px solid hsl(var(--border-subtle))',
-            background: 'hsl(var(--bg-elevated))',
-            color: 'hsl(var(--text-primary))',
-            outline: 'none',
-            boxSizing: 'border-box',
-            transition: 'all 0.2s ease',
-          }}
-        />
-        {callSearch && (
-          <button
-            type="button"
-            onClick={() => setCallSearch('')}
-            style={{
-              position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)',
-              background: 'none', border: 'none', cursor: 'pointer',
-              color: 'hsl(var(--text-muted))', padding: 4, display: 'flex', alignItems: 'center',
-            }}
-          >
-            <X size={14} />
-          </button>
-        )}
+          {/* Zerar Chamadas */}
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                setConfirmClearAll(true)
+              }}
+              style={{
+                height: 34,
+                padding: '0 14px',
+                borderRadius: 10,
+                fontSize: 12,
+                fontWeight: 700,
+                border: '1px solid rgba(239, 68, 68, 0.25)',
+                background: 'rgba(239, 68, 68, 0.08)',
+                color: '#ef4444',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                whiteSpace: 'nowrap',
+                flexShrink: 0,
+              }}
+              onMouseEnter={e => {
+                const el = e.currentTarget as HTMLButtonElement
+                el.style.background = '#ef4444'
+                el.style.color = '#fff'
+                el.style.boxShadow = '0 2px 8px rgba(239, 68, 68, 0.25)'
+              }}
+              onMouseLeave={e => {
+                const el = e.currentTarget as HTMLButtonElement
+                el.style.background = 'rgba(239, 68, 68, 0.08)'
+                el.style.color = '#ef4444'
+                el.style.boxShadow = 'none'
+              }}
+            >
+              <Trash2 size={13} />
+              <span>Zerar Chamadas</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* ── CALL GRID ────────────────────────────────────────────────── */}

@@ -13,8 +13,10 @@ export async function GET(request: Request) {
   const turmaId = searchParams.get('turma_id')
   const ano = searchParams.get('ano')
   const tipo = searchParams.get('tipo')
+  const limitParam = searchParams.get('limit')
+  const limit = limitParam ? Math.min(Math.max(1, parseInt(limitParam)), 2000) : 500
 
-  let query = supabase.from('diario_conteudos').select('*').order('data', { ascending: false })
+  let query = supabase.from('diario_conteudos').select('*').order('data', { ascending: false }).limit(limit)
   if (turmaId) query = query.eq('turma_id', turmaId)
   if (ano) query = query.eq('ano', ano)
   if (tipo) query = query.eq('tipo', tipo)

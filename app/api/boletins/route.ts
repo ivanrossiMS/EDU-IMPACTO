@@ -4,6 +4,7 @@ import { supabaseServer as supabase } from '@/lib/supabaseServer'
 import { getLoggedUserAccessStartDate } from '@/lib/server/visibility'
 import { sendAgendaPushNotification } from '@/lib/server/agendaNotifications'
 import { getResponsavelIdsForTargets } from '@/lib/server/notificationHelper'
+import { getCachedTurmasAndGrupos } from '@/lib/server/turmasGruposCache'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,8 +16,12 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url)
     const turma_id = searchParams.get('turma_id') || searchParams.get('turma_ids')
     const aluno_id = searchParams.get('aluno_id')
+    const limitParam = searchParams.get('limit')
+    const limit = limitParam 
+      ? Math.min(Math.max(parseInt(limitParam, 10) || 50, 1), 2000) 
+      : (aluno_id ? 100 : (turma_id ? 1000 : 300))
     
-    let query = supabase.from('boletins').select('*')
+    let query = supabase.from('boletins').select('*').order('created_at', { ascending: false }).limit(limit)
     
     const accessStartDate = await getLoggedUserAccessStartDate()
     if (accessStartDate && !aluno_id) {
@@ -48,13 +53,19 @@ export async function GET(request: Request) {
     
     const boletinsData = data || []
     
-    // Buscar nomes das turmas com supabaseServer para contornar RLS de Família
+    // Buscar nomes das turmas com cache em memória (TTL 60s) para contornar RLS e acelerar resposta
     const turmaIds = [...new Set(boletinsData.map((b: any) => b.turma_id || b.turma).filter(Boolean))]
     let turmasDict: Record<string, string> = {}
     if (turmaIds.length > 0) {
-      const { data: turmasData } = await supabase.from('turmas').select('id, nome').in('id', turmaIds)
-      if (turmasData) {
-        turmasData.forEach(t => { turmasDict[t.id] = t.nome })
+      const { allTurmas } = await getCachedTurmasAndGrupos()
+      allTurmas.forEach(t => { if (t?.id && t?.nome) turmasDict[t.id] = t.nome })
+
+      const missingIds = turmaIds.filter(id => !turmasDict[id])
+      if (missingIds.length > 0) {
+        const { data: fallbackTurmas } = await supabase.from('turmas').select('id, nome').in('id', missingIds)
+        if (fallbackTurmas) {
+          fallbackTurmas.forEach(t => { turmasDict[t.id] = t.nome })
+        }
       }
     }
     

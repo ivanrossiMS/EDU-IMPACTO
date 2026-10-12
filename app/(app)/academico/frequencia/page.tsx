@@ -777,20 +777,21 @@ export default function FrequenciaPage() {
     return []
   }, [apiTurmasResp, contextTurmas])
   
+  // ⚡ OTIMIZAÇÃO: Cache inteligente (staleTime 60s) — elimina download repetido de 25MB a cada clique/troca de aba
   const { data: apiResponse, isLoading: loadingAlunos, isFetching: fetchingAlunos } = useApiQuery<{data: any[], meta: any}>(
     ['alunos-core-frequencia'], 
     '/api/alunos', 
     { lightweight: true, all: true, limit: 2000 },
-    { noCache: true }
+    { staleTime: 90_000, gcTime: 300_000 }
   )
   const alunos = apiResponse?.data || []
 
-  // Lista global de responsáveis vindos do módulo /academico/responsaveis (/api/responsaveis)
+  // Lista de responsáveis com cache estendido (raramente sofrem alterações durante a chamada)
   const { data: allResponsaveisResp } = useApiQuery<any>(
     ['all-responsaveis-frequencia'],
     '/api/responsaveis',
-    { all: true, limit: 5000 },
-    { noCache: true }
+    { all: true, limit: 2000 },
+    { staleTime: 180_000, gcTime: 600_000 }
   )
 
   const allResponsaveisList = useMemo(() => {
@@ -803,16 +804,16 @@ export default function FrequenciaPage() {
   const { data: allFreqs, isLoading: loadingAllFreqs, isFetching: fetchingAllFreqs, refetch: refetchAllFreqs } = useApiQuery<any[]>(
     ['all-frequencias'],
     '/api/academico/frequencias',
-    { limit: 10000 },
-    { noCache: true }
+    { limit: 5000 },
+    { staleTime: 30_000, gcTime: 180_000 }
   )
 
-  // Eventos de acesso de portaria (Catraca)
+  // Eventos de acesso de portaria (Catraca) com cache inteligente
   const { data: portariaEventsResponse } = useApiQuery<any>(
     ['portaria-eventos-relatorio'],
     '/api/portaria/eventos',
-    { limit: 5000 },
-    { noCache: true }
+    { limit: 2000 },
+    { staleTime: 45_000, gcTime: 180_000 }
   )
 
   const portariaEventsList = useMemo(() => {
@@ -822,12 +823,12 @@ export default function FrequenciaPage() {
     return []
   }, [portariaEventsResponse])
 
-  // Saídas confirmadas em /chamadas (/api/saida/calls)
+  // Saídas confirmadas em /chamadas (/api/saida/calls) com cache inteligente
   const { data: saidaCallsResponse, refetch: refetchSaidaCalls } = useApiQuery<any>(
     ['saida-calls-frequencia'],
     '/api/saida/calls',
-    { limit: 5000 },
-    { noCache: true }
+    { limit: 2000 },
+    { staleTime: 45_000, gcTime: 180_000 }
   )
 
   const saidaCallsList = useMemo(() => {

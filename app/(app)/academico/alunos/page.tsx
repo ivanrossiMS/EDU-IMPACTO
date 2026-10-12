@@ -2143,6 +2143,97 @@ export default function AlunosPage() {
     setActiveTab('aluno')
     setValidationErrors([])
     setIsValidationModalOpen(false)
+
+    // Master-Detail Pattern: Hidratação assíncrona dos detalhes profundos do aluno e responsáveis
+    if (aluno.id) {
+      fetch(`/api/alunos/${aluno.id}`)
+        .then(res => res.json())
+        .then(json => {
+          if (json.data) {
+            const full = json.data;
+            const fullTurma = todasTurmas.find((t: any) => String(t.id) === String(full.turma) || t.nome === full.turma);
+            const fullSeg = fullTurma?.dados?.segmento || full.segmento || '';
+            if (fullSeg) setSegmentoSelecionado(fullSeg);
+
+            setFormData(prev => {
+              // Confirma que o usuário ainda está com a modal aberta neste mesmo aluno
+              if (prev.aluno.codigo !== studentCodigo && prev.aluno.nome !== (aluno.nome || '')) return prev;
+
+              const fullD = full.dados || {};
+              const fullResps = Array.isArray(full.responsaveis) && full.responsaveis.length > 0 ? full.responsaveis : prev.responsaveis;
+
+              return {
+                ...prev,
+                aluno: {
+                  ...prev.aluno,
+                  cpf: full.cpf || fullD.cpf || prev.aluno.cpf,
+                  rga: full.rga || fullD.rga || prev.aluno.rga,
+                  sexo: full.sexo || fullD.sexo || prev.aluno.sexo,
+                  corRaca: full.corRaca || full.cor_raca || fullD.corRaca || prev.aluno.corRaca,
+                  nacionalidade: full.nacionalidade || fullD.nacionalidade || prev.aluno.nacionalidade,
+                  naturalidade: full.naturalidade || fullD.naturalidade || prev.aluno.naturalidade,
+                  naturalidadeUf: full.naturalidadeUf || fullD.naturalidadeUf || prev.aluno.naturalidadeUf,
+                  cep: full.cep || fullD.cep || prev.aluno.cep,
+                  endereco: full.endereco || full.logradouro || fullD.endereco || prev.aluno.endereco,
+                  numero: full.numero || fullD.numero || prev.aluno.numero,
+                  complemento: full.complemento || fullD.complemento || prev.aluno.complemento,
+                  bairro: full.bairro || fullD.bairro || prev.aluno.bairro,
+                  cidade: full.cidade || fullD.cidade || prev.aluno.cidade,
+                  uf: full.uf || fullD.uf || prev.aluno.uf,
+                  idCenso: full.idCenso || fullD.idCenso || prev.aluno.idCenso,
+                  necessidadesEspeciais: full.necessidadesEspeciais || fullD.necessidadesEspeciais || prev.aluno.necessidadesEspeciais,
+                  necessidadesEspeciaisDesc: full.necessidadesEspeciaisDesc || fullD.necessidadesEspeciaisDesc || prev.aluno.necessidadesEspeciaisDesc,
+                },
+                responsaveis: fullResps.map((r: any) => {
+                  const d = r.dados || {};
+                  return {
+                    id: String(r.id || r.codigo || ''),
+                    codigo: String(r.codigo || r.id || ''),
+                    nome: r.nome || '',
+                    parentesco: r.parentesco || '',
+                    dataNasc: r.dataNasc || r.data_nasc || d.dataNasc || d.data_nasc || '',
+                    cpf: r.cpf || d.cpf || '',
+                    rg: r.rg || d.rg || '',
+                    rgOrgaoEmissor: r.rgOrgaoEmissor || r.orgEmissor || d.rgOrgaoEmissor || '',
+                    sexo: r.sexo || d.sexo || '',
+                    estadoCivil: r.estadoCivil || r.estado_civil || d.estadoCivil || '',
+                    profissao: r.profissao || d.profissao || '',
+                    nacionalidade: r.nacionalidade || d.nacionalidade || 'Brasileira',
+                    naturalidade: r.naturalidade || d.naturalidade || '',
+                    naturalidadeUf: r.naturalidadeUf || r.uf || d.naturalidadeUf || '',
+                    email: r.email || '',
+                    telefone: r.telefone || r.celular || '',
+                    codigoAluno: r.codigoAluno || '',
+                    rfid: r.rfid || '',
+                    isFinanceiro: r.isFinanceiro ?? r.resp_financeiro ?? false,
+                    isPedagogico: r.isPedagogico ?? r.resp_pedagogico ?? false,
+                    isOutro: r.isOutro ?? r.resp_outro ?? false,
+                    proibido: r.proibido === true,
+                    diasAcesso: r.diasAcesso || r.dias_acesso || ['Seg', 'Ter', 'Qua', 'Qui', 'Sex'],
+                    cep: r.cep || d.cep || '',
+                    endereco: r.endereco || r.logradouro || d.endereco || '',
+                    numero: r.numero || d.numero || '',
+                    complemento: r.complemento || d.complemento || '',
+                    bairro: r.bairro || d.bairro || '',
+                    cidade: r.cidade || d.cidade || '',
+                    uf: r.uf || r.ufEnd || d.uf || '',
+                    comercialEmpresa: r.comercialEmpresa || d.comercialEmpresa || '',
+                    comercialTelefone: r.comercialTelefone || d.comercialTelefone || '',
+                    comercialCep: r.comercialCep || d.comercialCep || '',
+                    comercialEndereco: r.comercialEndereco || d.comercialEndereco || '',
+                    comercialNumero: r.comercialNumero || d.comercialNumero || '',
+                    comercialComplemento: r.comercialComplemento || d.comercialComplemento || '',
+                    comercialBairro: r.comercialBairro || d.comercialBairro || '',
+                    comercialCidade: r.comercialCidade || d.comercialCidade || '',
+                    comercialUf: r.comercialUf || d.comercialUf || ''
+                  };
+                })
+              };
+            });
+          }
+        })
+        .catch(err => console.error('Erro ao carregar detalhes completos do aluno:', err));
+    }
   }
 
   const toggleStatus = async (aluno: any) => {
@@ -2612,21 +2703,21 @@ export default function AlunosPage() {
 
         /* Tabs */
         .tab-btn {
-          padding: 12px 20px;
-          border-radius: 14px;
+          padding: 8px 14px;
+          border-radius: 8px;
           font-weight: 700;
-          font-size: 13px;
+          font-size: 12px;
           transition: all 0.2s;
           display: flex;
           align-items: center;
-          gap: 8px;
+          gap: 6px;
           font-family: 'Outfit', sans-serif;
         }
         
         .tab-btn.active {
           background: #fff;
           color: #1d4ed8;
-          box-shadow: 0 8px 16px rgba(0, 0, 0, 0.04);
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
         }
         
         .tab-btn:not(.active) {
@@ -3313,40 +3404,40 @@ export default function AlunosPage() {
           >
             
             {/* Modal Header */}
-            <div style={{ padding: '16px 24px', background: 'linear-gradient(135deg, #2563eb 0%, #7c3aed 100%)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div style={{ width: 38, height: 38, borderRadius: 10, background: 'rgba(255, 255, 255, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <UserPlus size={18} color="#fff" />
+            <div style={{ padding: '14px 20px', background: 'linear-gradient(135deg, #2563eb 0%, #7c3aed 100%)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ width: 34, height: 34, borderRadius: 8, background: 'rgba(255, 255, 255, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <UserPlus size={17} color="#fff" />
                 </div>
                 <div>
-                  <h2 style={{ fontSize: 18, fontWeight: 900, color: '#fff', margin: 0, fontFamily: 'Outfit, sans-serif' }}>
+                  <h2 style={{ fontSize: 16, fontWeight: 800, color: '#fff', margin: 0, fontFamily: 'Outfit, sans-serif' }}>
                     {editingAlunoId ? 'Editar Aluno' : 'Cadastrar Novo Aluno'}
                   </h2>
-                  <p style={{ fontSize: 11.5, color: 'rgba(255, 255, 255, 0.8)', margin: 0 }}>
+                  <p style={{ fontSize: 11, color: 'rgba(255, 255, 255, 0.85)', margin: 0 }}>
                     {editingAlunoId ? 'Atualize as informações cadastrais do aluno' : 'Preencha os dados para adicionar ao sistema'}
                   </p>
                 </div>
               </div>
-              <button onClick={toggleModal} style={{ width: 32, height: 32, borderRadius: '50%', border: 'none', background: 'rgba(255, 255, 255, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#fff' }}>
-                <X size={16} />
+              <button onClick={toggleModal} style={{ width: 30, height: 30, borderRadius: '50%', border: 'none', background: 'rgba(255, 255, 255, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#fff' }}>
+                <X size={15} />
               </button>
             </div>
 
             {/* Modal Tabs */}
-            <div style={{ background: 'transparent', padding: '8px 24px', borderBottom: '1px solid rgba(0,0,0,0.05)', display: 'flex', gap: 8, overflowX: 'auto' }}>
+            <div style={{ background: '#f8fafc', padding: '6px 20px', borderBottom: '1px solid #e2e8f0', display: 'flex', gap: 6, overflowX: 'auto' }}>
               <button className={`tab-btn ${activeTab === 'aluno' ? 'active' : ''}`} onClick={() => setActiveTab('aluno')}>
-                <Users size={14} /> Dados do Aluno
+                <Users size={13} /> Dados do Aluno
               </button>
               <button className={`tab-btn ${activeTab === 'responsavel' ? 'active' : ''}`} onClick={() => { setActiveTab('responsavel'); setMostrarFormResponsavel(true); }}>
-                <Shield size={14} /> Responsáveis
+                <Shield size={13} /> Responsáveis
               </button>
               <button className={`tab-btn ${activeTab === 'turma' ? 'active' : ''}`} onClick={() => setActiveTab('turma')}>
-                <Tag size={14} /> Vínculo de Turma
+                <Tag size={13} /> Vínculo de Turma
               </button>
               <button className={`tab-btn ${activeTab === 'observacoes' ? 'active' : ''}`} onClick={() => setActiveTab('observacoes')}>
-                <FileText size={14} /> Observações
+                <FileText size={13} /> Observações
                 {(formData.observacoes?.length || 0) > 0 && (
-                  <span style={{ marginLeft: 6, background: activeTab === 'observacoes' ? '#fff' : '#3b82f6', color: activeTab === 'observacoes' ? '#1d4ed8' : '#fff', fontSize: 10, fontWeight: 800, padding: '2px 6px', borderRadius: 10 }}>
+                  <span style={{ marginLeft: 6, background: activeTab === 'observacoes' ? '#fff' : '#3b82f6', color: activeTab === 'observacoes' ? '#1d4ed8' : '#fff', fontSize: 10, fontWeight: 800, padding: '1px 5px', borderRadius: 8 }}>
                     {formData.observacoes.length}
                   </span>
                 )}
@@ -3354,7 +3445,7 @@ export default function AlunosPage() {
             </div>
 
             {/* Modal Content */}
-            <div style={{ padding: '16px 20px', overflowY: 'auto', flex: 1 }}>
+            <div style={{ padding: '14px 20px', overflowY: 'auto', flex: 1 }}>
               
               {/* TAB: DADOS DO ALUNO */}
               {activeTab === 'aluno' && (() => {
@@ -3364,903 +3455,473 @@ export default function AlunosPage() {
                   : `${anoLetivoCad}`;
 
                 return (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                     
-                    {/* CARD 1: FOTO & IDENTIFICAÇÃO PRINCIPAL */}
+                    {/* CARD PRINCIPAL: PERFIL DO ALUNO */}
                     <div style={{
-                      background: 'rgba(255, 255, 255, 0.85)',
+                      background: '#ffffff',
                       border: '1px solid #e2e8f0',
-                      borderRadius: 14,
-                      padding: '12px 16px',
-                      boxShadow: '0 4px 16px rgba(0, 0, 0, 0.03)',
-                      display: 'flex',
-                      gap: 16,
-                      alignItems: 'center'
-                    }}>
-                      
-                      {/* Avatar do Aluno */}
-                      <div style={{ position: 'relative', width: 84, height: 84, flexShrink: 0 }}>
-                        <div 
-                          onClick={() => document.getElementById('foto-aluno-input')?.click()}
-                          style={{ 
-                            width: 84, 
-                            height: 84, 
-                            borderRadius: '20px', 
-                            background: isValidStudentPhoto(formData.aluno.foto) ? `url(${formData.aluno.foto}) center/cover` : 'rgba(248, 250, 252, 0.9)', 
-                            border: isValidStudentPhoto(formData.aluno.foto) ? '2px solid #e2e8f0' : '2px dashed #cbd5e1', 
-                            boxShadow: isValidStudentPhoto(formData.aluno.foto) ? '0 4px 12px rgba(0,0,0,0.08)' : 'none',
-                            display: 'flex', 
-                            flexDirection: 'column', 
-                            alignItems: 'center', 
-                            justifyContent: 'center', 
-                            cursor: 'pointer', 
-                            color: '#3b82f6', 
-                            transition: 'all 0.2s',
-                            overflow: 'hidden'
-                          }}
-                          onMouseEnter={e => {
-                            if (!isValidStudentPhoto(formData.aluno.foto)) {
-                              e.currentTarget.style.borderColor = '#3b82f6'
-                              e.currentTarget.style.background = '#eff6ff'
-                            }
-                          }}
-                          onMouseLeave={e => {
-                            if (!isValidStudentPhoto(formData.aluno.foto)) {
-                              e.currentTarget.style.borderColor = '#cbd5e1'
-                              e.currentTarget.style.background = 'rgba(248, 250, 252, 0.9)'
-                            }
-                          }}
-                          title={isValidStudentPhoto(formData.aluno.foto) ? 'Clique para alterar a foto' : 'Clique para adicionar foto'}
-                        >
-                          {!isValidStudentPhoto(formData.aluno.foto) && (
-                            <>
-                              <Camera size={22} color="#64748b" />
-                              <span style={{ fontSize: 10, marginTop: 3, fontWeight: 700, color: '#64748b' }}>Foto</span>
-                            </>
-                          )}
-                        </div>
-
-                        {/* Botão de Excluir Foto (quando houver foto) */}
-                        {isValidStudentPhoto(formData.aluno.foto) && (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleInputChange('aluno', 'foto', null);
-                              const fileInput = document.getElementById('foto-aluno-input') as HTMLInputElement;
-                              if (fileInput) fileInput.value = '';
-                            }}
-                            title="Excluir foto do aluno"
-                            style={{
-                              position: 'absolute',
-                              top: -4,
-                              right: -4,
-                              width: 24,
-                              height: 24,
-                              borderRadius: '50%',
-                              background: '#ef4444',
-                              color: '#ffffff',
-                              border: '2px solid #ffffff',
-                              boxShadow: '0 2px 6px rgba(239, 68, 68, 0.4)',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              cursor: 'pointer',
-                              transition: 'transform 0.15s ease',
-                              zIndex: 10
-                            }}
-                            onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.15)'}
-                            onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
-                          >
-                            <Trash2 size={11} />
-                          </button>
-                        )}
-
-                        {/* Botão de Trocar Foto (quando houver foto) */}
-                        {isValidStudentPhoto(formData.aluno.foto) && (
-                          <button
-                            type="button"
-                            onClick={() => document.getElementById('foto-aluno-input')?.click()}
-                            title="Alterar foto do aluno"
-                            style={{
-                              position: 'absolute',
-                              bottom: -4,
-                              right: -4,
-                              width: 24,
-                              height: 24,
-                              borderRadius: '50%',
-                              background: '#2563eb',
-                              color: '#ffffff',
-                              border: '2px solid #ffffff',
-                              boxShadow: '0 2px 6px rgba(37, 99, 235, 0.4)',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              cursor: 'pointer',
-                              transition: 'transform 0.15s ease',
-                              zIndex: 10
-                            }}
-                            onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.15)'}
-                            onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
-                          >
-                            <Camera size={11} />
-                          </button>
-                        )}
-
-                        <input 
-                          id="foto-aluno-input" 
-                          type="file" 
-                          accept="image/*" 
-                          style={{ display: 'none' }} 
-                          onChange={(e) => {
-                            const file = e.target.files?.[0]
-                            if (file) {
-                              if (file.size > 10 * 1024 * 1024) {
-                                alert('Arquivo muito grande! Máximo 10MB.');
-                                return;
-                              }
-                              const reader = new FileReader()
-                              reader.onloadend = () => {
-                                const img = new Image();
-                                img.onload = () => {
-                                  const canvas = document.createElement('canvas');
-                                  const MAX_WIDTH = 500;
-                                  const MAX_HEIGHT = 500;
-                                  let width = img.width;
-                                  let height = img.height;
-                                  
-                                  if (width > height) {
-                                    if (width > MAX_WIDTH) {
-                                      height *= MAX_WIDTH / width;
-                                      width = MAX_WIDTH;
-                                    }
-                                  } else {
-                                    if (height > MAX_HEIGHT) {
-                                      width *= MAX_HEIGHT / height;
-                                      height = MAX_HEIGHT;
-                                    }
-                                  }
-                                  
-                                  canvas.width = width;
-                                  canvas.height = height;
-                                  const ctx = canvas.getContext('2d');
-                                  if (ctx) {
-                                    ctx.drawImage(img, 0, 0, width, height);
-                                    const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
-                                    handleInputChange('aluno', 'foto', dataUrl);
-                                  } else {
-                                    handleInputChange('aluno', 'foto', reader.result);
-                                  }
-                                };
-                                img.src = reader.result as string;
-                              }
-                              reader.readAsDataURL(file)
-                            }
-                          }}
-                        />
-                      </div>
-
-                      {/* Campos ao lado da foto: 2 Linhas Compactas e Espaçosas */}
-                      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                        {/* Linha 1: Nome Completo * e ID/Matrícula * */}
-                        <div style={{ display: 'grid', gridTemplateColumns: '2.2fr 1.1fr', gap: 10 }}>
-                          {/* Nome Completo */}
-                          <div>
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 3 }}>
-                              <label style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', margin: 0 }}>
-                                Nome Completo <span style={{ color: '#ef4444', fontWeight: 800 }}>*</span>
-                              </label>
-                              {formData.aluno.nome?.trim() ? (
-                                <span style={{ fontSize: 9.5, fontWeight: 800, color: '#047857', background: '#d1fae5', padding: '1px 6px', borderRadius: 4, textTransform: 'uppercase' }}>
-                                  ✓ Preenchido
-                                </span>
-                              ) : (
-                                <span style={{ fontSize: 9.5, fontWeight: 800, color: '#b45309', background: '#fef3c7', padding: '1px 6px', borderRadius: 4, textTransform: 'uppercase' }}>
-                                  Obrigatório
-                                </span>
-                              )}
-                            </div>
-                            <input 
-                              className="form-input" 
-                              style={{ 
-                                height: 35,
-                                padding: '0 11px',
-                                fontSize: 13,
-                                borderRadius: 8,
-                                fontWeight: 600,
-                                ...getMandatoryFieldStyle(formData.aluno.nome, 'nome')
-                              }}
-                              placeholder="Nome completo do aluno" 
-                              value={formData.aluno.nome || ''} 
-                              onChange={e => {
-                                handleInputChange('aluno', 'nome', e.target.value);
-                                if (hasError('nome')) {
-                                  setValidationErrors(prev => prev.filter(err => err.field !== 'nome'));
-                                }
-                              }} 
-                            />
-                          </div>
-
-                          {/* ID/Matrícula */}
-                          <div>
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 3 }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                                <label style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', margin: 0 }}>
-                                  ID/Matrícula <span style={{ color: '#ef4444', fontWeight: 800 }}>*</span>
-                                </label>
-                                {formData.aluno.codigo?.trim() ? (
-                                  <span style={{ fontSize: 9, fontWeight: 800, color: '#047857', background: '#d1fae5', padding: '1px 5px', borderRadius: 4, textTransform: 'uppercase' }}>
-                                    ✓ OK
-                                  </span>
-                                ) : (
-                                  <span style={{ fontSize: 9, fontWeight: 800, color: '#b45309', background: '#fef3c7', padding: '1px 5px', borderRadius: 4, textTransform: 'uppercase' }}>
-                                    Obrigatório
-                                  </span>
-                                )}
-                              </div>
-                              <button
-                                type="button"
-                                onClick={handleGerarMatriculaAutomatica}
-                                disabled={loadingProximaMatricula}
-                                style={{
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: 3,
-                                  fontSize: 9.5,
-                                  fontWeight: 700,
-                                  color: '#2563eb',
-                                  background: 'rgba(37, 99, 235, 0.08)',
-                                  border: '1px solid rgba(37, 99, 235, 0.2)',
-                                  padding: '1px 6px',
-                                  borderRadius: 5,
-                                  cursor: loadingProximaMatricula ? 'wait' : 'pointer',
-                                  transition: 'all 0.15s ease',
-                                  lineHeight: 1.2
-                                }}
-                                onMouseEnter={e => {
-                                  if (!loadingProximaMatricula) {
-                                    e.currentTarget.style.background = '#2563eb'
-                                    e.currentTarget.style.color = '#fff'
-                                  }
-                                }}
-                                onMouseLeave={e => {
-                                  if (!loadingProximaMatricula) {
-                                    e.currentTarget.style.background = 'rgba(37, 99, 235, 0.08)'
-                                    e.currentTarget.style.color = '#2563eb'
-                                  }
-                                }}
-                                title="Preencher próximo ID/Matrícula sequencial do sistema automaticamente"
-                              >
-                                {loadingProximaMatricula ? (
-                                  <Loader2 size={10} style={{ animation: 'spin 1s linear infinite' }} />
-                                ) : (
-                                  <Sparkles size={10} />
-                                )}
-                                Automático
-                              </button>
-                            </div>
-                            <input 
-                              className="form-input" 
-                              style={{ 
-                                height: 35,
-                                padding: '0 11px',
-                                fontSize: 13,
-                                borderRadius: 8,
-                                fontWeight: 700,
-                                ...getMandatoryFieldStyle(formData.aluno.codigo, 'codigo')
-                              }}
-                              placeholder="Ex: 5496" 
-                              value={formData.aluno.codigo || ''} 
-                              onChange={e => {
-                                handleInputChange('aluno', 'codigo', e.target.value);
-                                if (hasError('codigo')) {
-                                  setValidationErrors(prev => prev.filter(err => err.field !== 'codigo'));
-                                }
-                              }} 
-                            />
-                          </div>
-                        </div>
-
-                        {/* Linha 2: RGA Oficial, CPF e ID CENSO */}
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
-                          {/* RGA Automático */}
-                          <div>
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 3 }}>
-                              <label style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', margin: 0, display: 'flex', alignItems: 'center', gap: 3 }}>
-                                <Lock size={10} color="#64748b" /> RGA (Oficial)
-                              </label>
-                              <span style={{ fontSize: 8.5, fontWeight: 800, background: '#e0f2fe', color: '#0369a1', padding: '1px 5px', borderRadius: 4, textTransform: 'uppercase' }}>
-                                Auto
-                              </span>
-                            </div>
-                            <input 
-                              className="form-input" 
-                              readOnly
-                              tabIndex={-1}
-                              value={rgaCalculado} 
-                              style={{ 
-                                height: 35,
-                                padding: '0 11px',
-                                fontSize: 12.5,
-                                borderRadius: 8,
-                                background: '#f8fafc', 
-                                color: '#1e293b', 
-                                fontWeight: 800, 
-                                borderColor: '#cbd5e1', 
-                                cursor: 'not-allowed', 
-                                fontFamily: 'monospace, sans-serif',
-                                letterSpacing: '0.04em'
-                              }} 
-                              title={`RGA gerado automaticamente: Ano letivo (${anoLetivoCad}) + ID`}
-                            />
-                          </div>
-
-                          {/* CPF */}
-                          <div>
-                            <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
-                              CPF
-                            </label>
-                            <input 
-                              className="form-input" 
-                              style={{ height: 35, padding: '0 11px', fontSize: 13, borderRadius: 8 }}
-                              placeholder="000.000.000-00" 
-                              maxLength={14}
-                              value={formData.aluno.cpf || ''} 
-                              onChange={e => handleInputChange('aluno', 'cpf', formatCpfMask(e.target.value))} 
-                            />
-                          </div>
-
-                          {/* ID CENSO */}
-                          <div>
-                            <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
-                              ID CENSO (INEP)
-                            </label>
-                            <input 
-                              className="form-input" 
-                              style={{ height: 35, padding: '0 11px', fontSize: 13, borderRadius: 8 }}
-                              placeholder="Ex: 123456789012" 
-                              maxLength={20}
-                              value={formData.aluno.idCenso || ''} 
-                              onChange={e => handleInputChange('aluno', 'idCenso', e.target.value)} 
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* CARD 2: DADOS PESSOAIS & ORIGEM */}
-                    <div style={{
-                      background: 'rgba(255, 255, 255, 0.85)',
-                      border: '1px solid #e2e8f0',
-                      borderRadius: 14,
-                      padding: '12px 16px',
-                      boxShadow: '0 4px 16px rgba(0, 0, 0, 0.03)',
+                      borderRadius: 12,
+                      padding: '14px 16px',
+                      boxShadow: '0 1px 4px rgba(15, 23, 42, 0.03)',
                       display: 'flex',
                       flexDirection: 'column',
-                      gap: 8
+                      gap: 12
                     }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 800, color: '#1e293b' }}>
-                        <Users size={14} color="#2563eb" /> Dados Pessoais e Origem
-                      </div>
-
-                      {/* Linha 1: Data Nasc, Sexo, Cor/Raça, Nacionalidade */}
-                      <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 0.9fr 1fr 1fr', gap: 10 }}>
-                        <div>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 3 }}>
-                            <label style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', margin: 0 }}>
-                              Data de Nasc. <span style={{ color: '#ef4444', fontWeight: 800 }}>*</span>
-                            </label>
-                            {formData.aluno.dataNasc?.trim() ? (
-                              <span style={{ fontSize: 9, fontWeight: 800, color: '#047857', background: '#d1fae5', padding: '1px 5px', borderRadius: 4, textTransform: 'uppercase' }}>
-                                ✓ OK
-                              </span>
-                            ) : (
-                              <span style={{ fontSize: 9, fontWeight: 800, color: '#b45309', background: '#fef3c7', padding: '1px 5px', borderRadius: 4, textTransform: 'uppercase' }}>
-                                Obrigatório
-                              </span>
-                            )}
-                          </div>
-                          <input 
-                            type="date" 
-                            className="form-input" 
-                            style={{ 
-                              height: 35,
-                              padding: '0 10px',
-                              fontSize: 12.5,
-                              borderRadius: 8,
-                              ...getMandatoryFieldStyle(formData.aluno.dataNasc, 'dataNasc')
-                            }}
-                            value={formData.aluno.dataNasc || ''} 
-                            onChange={e => {
-                              handleInputChange('aluno', 'dataNasc', e.target.value);
-                              if (hasError('dataNasc')) {
-                                setValidationErrors(prev => prev.filter(err => err.field !== 'dataNasc'));
-                              }
-                            }} 
-                          />
-                        </div>
-
-                        <div>
-                          <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
-                            Sexo
-                          </label>
-                          <select 
-                            className="form-input" 
-                            style={{ height: 35, padding: '0 8px', fontSize: 12.5, borderRadius: 8 }}
-                            value={formData.aluno.sexo || ''} 
-                            onChange={e => handleInputChange('aluno', 'sexo', e.target.value)}
-                          >
-                            <option value="">Selecione...</option>
-                            <option value="Masculino">Masculino</option>
-                            <option value="Feminino">Feminino</option>
-                            <option value="Outro">Outro</option>
-                          </select>
-                        </div>
-
-                        <div>
-                          <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
-                            Cor / Raça
-                          </label>
-                          <select 
-                            className="form-input" 
-                            style={{ height: 35, padding: '0 8px', fontSize: 12.5, borderRadius: 8 }}
-                            value={formData.aluno.corRaca || ''} 
-                            onChange={e => handleInputChange('aluno', 'corRaca', e.target.value)}
-                          >
-                            <option value="">Selecione...</option>
-                            <option value="Branca">Branca</option>
-                            <option value="Preta">Preta</option>
-                            <option value="Parda">Parda</option>
-                            <option value="Amarela">Amarela</option>
-                            <option value="Indígena">Indígena</option>
-                            <option value="Não declarada">Não declarada</option>
-                          </select>
-                        </div>
-
-                        <div>
-                          <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
-                            Nacionalidade
-                          </label>
-                          <input 
-                            className="form-input" 
-                            style={{ height: 35, padding: '0 10px', fontSize: 12.5, borderRadius: 8 }}
-                            placeholder="Ex: Brasileira" 
-                            value={formData.aluno.nacionalidade ?? 'Brasileira'} 
-                            onChange={e => handleInputChange('aluno', 'nacionalidade', e.target.value)} 
-                          />
-                        </div>
-                      </div>
-
-                      {/* Linha 2: Naturalidade, UF Naturalidade, Telefone, E-mail */}
-                      <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.5fr 1fr 1.3fr', gap: 10 }}>
-                        <div>
-                          <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
-                            Naturalidade (Cidade)
-                          </label>
-                          <input 
-                            className="form-input" 
-                            style={{ height: 35, padding: '0 10px', fontSize: 12.5, borderRadius: 8 }}
-                            placeholder="Ex: Cuiabá" 
-                            value={formData.aluno.naturalidade || ''} 
-                            onChange={e => handleInputChange('aluno', 'naturalidade', e.target.value)} 
-                          />
-                        </div>
-
-                        <div>
-                          <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
-                            UF
-                          </label>
-                          <select 
-                            className="form-input" 
-                            style={{ height: 35, padding: '0 6px', fontSize: 12.5, borderRadius: 8 }}
-                            value={formData.aluno.naturalidadeUf || ''} 
-                            onChange={e => handleInputChange('aluno', 'naturalidadeUf', e.target.value)}
-                          >
-                            <option value="">UF...</option>
-                            {ESTADOS_BRASIL.map(uf => (
-                              <option key={uf} value={uf}>{uf}</option>
-                            ))}
-                          </select>
-                        </div>
-
-                        <div>
-                          <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
-                            Telefone / WhatsApp
-                          </label>
-                          <input 
-                            className="form-input" 
-                            style={{ height: 35, padding: '0 10px', fontSize: 12.5, borderRadius: 8 }}
-                            placeholder="(00)00000-0000" 
-                            value={formData.aluno.telefone || ''} 
-                            onChange={e => handleInputChange('aluno', 'telefone', formatPhone(e.target.value))} 
-                          />
-                        </div>
-
-                        <div>
-                          <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
-                            E-mail
-                          </label>
-                          <input 
-                            type="email" 
-                            className="form-input" 
-                            style={{ height: 35, padding: '0 10px', fontSize: 12.5, borderRadius: 8 }}
-                            placeholder="aluno@exemplo.com" 
-                            value={formData.aluno.email || ''} 
-                            onChange={e => handleInputChange('aluno', 'email', e.target.value)} 
-                          />
-                        </div>
-                      </div>
-
-                      {/* Linha 3: Necessidades Especiais */}
-                      <div style={{ 
-                        background: formData.aluno.necessidadesEspeciais === 'Sim' ? 'rgba(238, 242, 255, 0.6)' : '#f8fafc',
-                        border: formData.aluno.necessidadesEspeciais === 'Sim' ? '1px solid #c7d2fe' : '1px solid #e2e8f0',
-                        borderRadius: 10,
-                        padding: '6px 12px',
-                        transition: 'all 0.25s ease'
-                      }}>
-                        <div style={{ 
-                          display: 'grid', 
-                          gridTemplateColumns: formData.aluno.necessidadesEspeciais === 'Sim' ? '180px 1fr' : '180px 1fr', 
-                          gap: 12, 
-                          alignItems: 'center' 
-                        }}>
-                          <div>
-                            <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 2 }}>
-                              Necessidades Especiais?
-                            </label>
-                            <select 
-                              className="form-input" 
+                      {/* Top Row: Foto + Dados Principais */}
+                      <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
+                        
+                        {/* Avatar do Aluno */}
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                          <div style={{ position: 'relative', width: 78, height: 78 }}>
+                            <div 
+                              onClick={() => document.getElementById('foto-aluno-input')?.click()}
                               style={{ 
-                                height: 33,
-                                padding: '0 8px',
-                                fontSize: 12,
-                                borderRadius: 8,
-                                fontWeight: 700,
-                                borderColor: formData.aluno.necessidadesEspeciais === 'Sim' ? '#6366f1' : undefined,
-                                color: formData.aluno.necessidadesEspeciais === 'Sim' ? '#4338ca' : '#1e293b'
+                                width: 78, 
+                                height: 78, 
+                                borderRadius: '14px', 
+                                background: isValidStudentPhoto(formData.aluno.foto) 
+                                  ? `url(${formData.aluno.foto}) center/cover no-repeat` 
+                                  : 'linear-gradient(135deg, #f8fafc 0%, #edf2f7 100%)', 
+                                border: isValidStudentPhoto(formData.aluno.foto) ? '2px solid #e2e8f0' : '2px dashed #cbd5e1', 
+                                boxShadow: isValidStudentPhoto(formData.aluno.foto) ? '0 2px 8px rgba(0,0,0,0.06)' : 'none',
+                                display: 'flex', 
+                                flexDirection: 'column', 
+                                alignItems: 'center', 
+                                justifyContent: 'center', 
+                                cursor: 'pointer', 
+                                color: '#3b82f6', 
+                                transition: 'all 0.2s ease',
+                                overflow: 'hidden'
                               }}
-                              value={formData.aluno.necessidadesEspeciais || 'Não'} 
-                              onChange={e => {
-                                const val = e.target.value;
-                                handleInputChange('aluno', 'necessidadesEspeciais', val);
-                                if (val === 'Não') {
-                                  handleInputChange('aluno', 'necessidadesEspeciaisDesc', '');
+                              onMouseEnter={e => {
+                                if (!isValidStudentPhoto(formData.aluno.foto)) {
+                                  e.currentTarget.style.borderColor = '#3b82f6'
+                                  e.currentTarget.style.background = '#eff6ff'
                                 }
                               }}
+                              onMouseLeave={e => {
+                                if (!isValidStudentPhoto(formData.aluno.foto)) {
+                                  e.currentTarget.style.borderColor = '#cbd5e1'
+                                  e.currentTarget.style.background = 'linear-gradient(135deg, #f8fafc 0%, #edf2f7 100%)'
+                                }
+                              }}
+                              title={isValidStudentPhoto(formData.aluno.foto) ? 'Clique para alterar a foto' : 'Clique para adicionar foto'}
                             >
-                              <option value="Não">Não</option>
-                              <option value="Sim">Sim</option>
-                            </select>
-                          </div>
+                              {!isValidStudentPhoto(formData.aluno.foto) ? (
+                                <>
+                                  <Camera size={20} color="#64748b" />
+                                  <span style={{ fontSize: 9.5, marginTop: 2, fontWeight: 700, color: '#64748b' }}>Foto</span>
+                                </>
+                              ) : null}
+                            </div>
 
-                          {formData.aluno.necessidadesEspeciais === 'Sim' ? (
-                            <div>
-                              <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#4338ca', textTransform: 'uppercase', marginBottom: 2 }}>
-                                Descreva as Necessidades / Laudo Médico
+                            {/* Botão de Excluir Foto */}
+                            {isValidStudentPhoto(formData.aluno.foto) && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleInputChange('aluno', 'foto', null);
+                                  const fileInput = document.getElementById('foto-aluno-input') as HTMLInputElement;
+                                  if (fileInput) fileInput.value = '';
+                                }}
+                                title="Excluir foto do aluno"
+                                style={{
+                                  position: 'absolute',
+                                  top: -4,
+                                  right: -4,
+                                  width: 20,
+                                  height: 20,
+                                  borderRadius: '50%',
+                                  background: '#ef4444',
+                                  color: '#ffffff',
+                                  border: '2px solid #ffffff',
+                                  boxShadow: '0 2px 5px rgba(239, 68, 68, 0.4)',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  cursor: 'pointer',
+                                  transition: 'transform 0.15s ease',
+                                  zIndex: 10
+                                }}
+                                onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.15)'}
+                                onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
+                              >
+                                <Trash2 size={9} />
+                              </button>
+                            )}
+
+                            {/* Botão de Trocar Foto */}
+                            {isValidStudentPhoto(formData.aluno.foto) && (
+                              <button
+                                type="button"
+                                onClick={() => document.getElementById('foto-aluno-input')?.click()}
+                                title="Alterar foto do aluno"
+                                style={{
+                                  position: 'absolute',
+                                  bottom: -4,
+                                  right: -4,
+                                  width: 20,
+                                  height: 20,
+                                  borderRadius: '50%',
+                                  background: '#2563eb',
+                                  color: '#ffffff',
+                                  border: '2px solid #ffffff',
+                                  boxShadow: '0 2px 5px rgba(37, 99, 235, 0.4)',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  cursor: 'pointer',
+                                  transition: 'transform 0.15s ease',
+                                  zIndex: 10
+                                }}
+                                onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.15)'}
+                                onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
+                              >
+                                <Camera size={9} />
+                              </button>
+                            )}
+
+                            <input 
+                              id="foto-aluno-input" 
+                              type="file" 
+                              accept="image/*" 
+                              style={{ display: 'none' }} 
+                              onChange={(e) => {
+                                const file = e.target.files?.[0]
+                                if (file) {
+                                  if (file.size > 10 * 1024 * 1024) {
+                                    alert('Arquivo muito grande! Máximo 10MB.');
+                                    return;
+                                  }
+                                  const reader = new FileReader()
+                                  reader.onloadend = () => {
+                                    const img = new Image();
+                                    img.onload = () => {
+                                      const canvas = document.createElement('canvas');
+                                      const MAX_WIDTH = 500;
+                                      const MAX_HEIGHT = 500;
+                                      let width = img.width;
+                                      let height = img.height;
+                                      
+                                      if (width > height) {
+                                        if (width > MAX_WIDTH) {
+                                          height *= MAX_WIDTH / width;
+                                          width = MAX_WIDTH;
+                                        }
+                                      } else {
+                                        if (height > MAX_HEIGHT) {
+                                          width *= MAX_HEIGHT / height;
+                                          height = MAX_HEIGHT;
+                                        }
+                                      }
+                                      
+                                      canvas.width = width;
+                                      canvas.height = height;
+                                      const ctx = canvas.getContext('2d');
+                                      if (ctx) {
+                                        ctx.drawImage(img, 0, 0, width, height);
+                                        const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+                                        handleInputChange('aluno', 'foto', dataUrl);
+                                      } else {
+                                        handleInputChange('aluno', 'foto', reader.result);
+                                      }
+                                    };
+                                    img.src = reader.result as string;
+                                  }
+                                  reader.readAsDataURL(file)
+                                }
+                              }}
+                            />
+                          </div>
+                          <span style={{ fontSize: 9.5, color: '#94a3b8', fontWeight: 600 }}>Foto Perfil</span>
+                        </div>
+
+                        {/* Campos ao lado da foto */}
+                        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                          {/* LINHA 1: ID/Matrícula (PRIMEIRO!) e Nome Completo (DEPOIS!) */}
+                          <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                            {/* ID/Matrícula */}
+                            <div style={{ width: 195, flexShrink: 0 }}>
+                              <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.03em', marginBottom: 4, whiteSpace: 'nowrap' }}>
+                                ID / Matrícula <span style={{ color: '#ef4444' }}>*</span>
+                              </label>
+                              <div style={{ display: 'flex', gap: 5 }}>
+                                <input 
+                                  className="form-input" 
+                                  style={{ 
+                                    flex: 1,
+                                    height: 32,
+                                    padding: '0 8px',
+                                    fontSize: 12,
+                                    borderRadius: 6,
+                                    fontWeight: 700,
+                                    background: '#fff',
+                                    ...getMandatoryFieldStyle(formData.aluno.codigo, 'codigo')
+                                  }}
+                                  placeholder="Ex: 5496" 
+                                  value={formData.aluno.codigo || ''} 
+                                  onChange={e => {
+                                    handleInputChange('aluno', 'codigo', e.target.value);
+                                    if (hasError('codigo')) {
+                                      setValidationErrors(prev => prev.filter(err => err.field !== 'codigo'));
+                                    }
+                                  }} 
+                                />
+                                <button
+                                  type="button"
+                                  onClick={handleGerarMatriculaAutomatica}
+                                  disabled={loadingProximaMatricula}
+                                  style={{
+                                    height: 32,
+                                    padding: '0 8px',
+                                    borderRadius: 6,
+                                    background: '#eff6ff',
+                                    color: '#2563eb',
+                                    border: '1px solid #bfdbfe',
+                                    fontSize: 11,
+                                    fontWeight: 700,
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: 3,
+                                    cursor: loadingProximaMatricula ? 'wait' : 'pointer',
+                                    whiteSpace: 'nowrap',
+                                    transition: 'all 0.15s ease'
+                                  }}
+                                  title="Gerar próximo ID/Matrícula sequencial automaticamente"
+                                >
+                                  {loadingProximaMatricula ? (
+                                    <Loader2 size={11} style={{ animation: 'spin 1s linear infinite' }} />
+                                  ) : (
+                                    <Sparkles size={11} />
+                                  )}
+                                  Auto
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Nome Completo */}
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.03em', marginBottom: 4, whiteSpace: 'nowrap' }}>
+                                Nome Completo do Aluno <span style={{ color: '#ef4444' }}>*</span>
                               </label>
                               <input 
                                 className="form-input" 
                                 style={{ 
-                                  height: 33,
-                                  padding: '0 10px',
-                                  fontSize: 12,
-                                  borderRadius: 8,
-                                  borderColor: '#6366f1', 
-                                  boxShadow: '0 0 0 1px rgba(99, 102, 241, 0.2)',
+                                  width: '100%',
+                                  height: 32, 
+                                  padding: '0 10px', 
+                                  fontSize: 12.5, 
+                                  borderRadius: 6, 
+                                  fontWeight: 600,
                                   background: '#fff',
-                                  fontWeight: 500
+                                  ...getMandatoryFieldStyle(formData.aluno.nome, 'nome')
                                 }}
-                                placeholder="Ex: TEA (Autismo), TDAH, Baixa Visão, Cadeirante, Dislexia..." 
-                                value={formData.aluno.necessidadesEspeciaisDesc || ''} 
-                                onChange={e => handleInputChange('aluno', 'necessidadesEspeciaisDesc', e.target.value)} 
-                                autoFocus
+                                placeholder="Nome completo do aluno" 
+                                value={formData.aluno.nome || ''} 
+                                onChange={e => {
+                                  handleInputChange('aluno', 'nome', e.target.value);
+                                  if (hasError('nome')) {
+                                    setValidationErrors(prev => prev.filter(err => err.field !== 'nome'));
+                                  }
+                                }} 
                               />
                             </div>
-                          ) : (
-                            <div style={{ fontSize: 11, color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 6, paddingTop: 10 }}>
-                              <span>AEE &bull; Apoio Pedagógico Especializado</span>
+                          </div>
+
+                          {/* LINHA 2: Data de Nasc, WhatsApp e E-mail */}
+                          <div style={{ display: 'grid', gridTemplateColumns: '150px 1.1fr 1.3fr', gap: 10 }}>
+                            {/* Data de Nasc */}
+                            <div>
+                              <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.03em', marginBottom: 4, whiteSpace: 'nowrap' }}>
+                                Data de Nasc. <span style={{ color: '#ef4444' }}>*</span>
+                              </label>
+                              <input 
+                                type="date" 
+                                className="form-input" 
+                                style={{ 
+                                  width: '100%',
+                                  height: 32, 
+                                  padding: '0 8px', 
+                                  fontSize: 12, 
+                                  borderRadius: 6,
+                                  background: '#fff',
+                                  ...getMandatoryFieldStyle(formData.aluno.dataNasc, 'dataNasc')
+                                }}
+                                value={formData.aluno.dataNasc || ''} 
+                                onChange={e => {
+                                  handleInputChange('aluno', 'dataNasc', e.target.value);
+                                  if (hasError('dataNasc')) {
+                                    setValidationErrors(prev => prev.filter(err => err.field !== 'dataNasc'));
+                                  }
+                                }} 
+                              />
                             </div>
+
+                            {/* WhatsApp / Telefone */}
+                            <div>
+                              <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.03em', marginBottom: 4, whiteSpace: 'nowrap' }}>
+                                WhatsApp / Celular
+                              </label>
+                              <div style={{ position: 'relative' }}>
+                                <Phone size={13} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                                <input 
+                                  className="form-input" 
+                                  style={{ width: '100%', height: 32, paddingLeft: 28, paddingRight: 8, fontSize: 12, borderRadius: 6, background: '#fff' }}
+                                  placeholder="(00) 00000-0000" 
+                                  value={formData.aluno.telefone || ''} 
+                                  onChange={e => handleInputChange('aluno', 'telefone', formatPhone(e.target.value))} 
+                                />
+                              </div>
+                            </div>
+
+                            {/* E-mail */}
+                            <div>
+                              <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.03em', marginBottom: 4, whiteSpace: 'nowrap' }}>
+                                E-mail do Aluno
+                              </label>
+                              <div style={{ position: 'relative' }}>
+                                <Mail size={13} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                                <input 
+                                  type="email" 
+                                  className="form-input" 
+                                  style={{ width: '100%', height: 32, paddingLeft: 28, paddingRight: 8, fontSize: 12, borderRadius: 6, background: '#fff' }}
+                                  placeholder="aluno@exemplo.com" 
+                                  value={formData.aluno.email || ''} 
+                                  onChange={e => handleInputChange('aluno', 'email', e.target.value)} 
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Seção Inferior: Necessidades Especiais (AEE) */}
+                      <div style={{ 
+                        background: '#f8fafc', 
+                        border: '1px solid #e2e8f0', 
+                        borderRadius: 8, 
+                        padding: '8px 12px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 5
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <Info size={12} color="#6366f1" />
+                          <span style={{ fontSize: 10, fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+                            Necessidades Especiais / AEE (Apoio Pedagógico)
+                          </span>
+                        </div>
+
+                        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                          <select 
+                            className="form-input" 
+                            style={{ 
+                              height: 30,
+                              width: 80,
+                              padding: '0 6px',
+                              fontSize: 12,
+                              borderRadius: 6,
+                              fontWeight: 700,
+                              background: '#fff',
+                              borderColor: formData.aluno.necessidadesEspeciais === 'Sim' ? '#6366f1' : undefined,
+                              color: formData.aluno.necessidadesEspeciais === 'Sim' ? '#4338ca' : '#1e293b'
+                            }}
+                            value={formData.aluno.necessidadesEspeciais || 'Não'} 
+                            onChange={e => {
+                              const val = e.target.value;
+                              handleInputChange('aluno', 'necessidadesEspeciais', val);
+                              if (val === 'Não') {
+                                handleInputChange('aluno', 'necessidadesEspeciaisDesc', '');
+                              }
+                            }}
+                          >
+                            <option value="Não">Não</option>
+                            <option value="Sim">Sim</option>
+                          </select>
+
+                          {formData.aluno.necessidadesEspeciais === 'Sim' ? (
+                            <input 
+                              className="form-input" 
+                              style={{ 
+                                flex: 1,
+                                height: 30,
+                                padding: '0 10px',
+                                fontSize: 12,
+                                borderRadius: 6,
+                                borderColor: '#6366f1', 
+                                boxShadow: '0 0 0 2px rgba(99, 102, 241, 0.15)',
+                                background: '#fff',
+                                fontWeight: 500
+                              }}
+                              placeholder="Descreva as necessidades: TEA, TDAH, Baixa Visão, Deficiência Física..." 
+                              value={formData.aluno.necessidadesEspeciaisDesc || ''} 
+                              onChange={e => handleInputChange('aluno', 'necessidadesEspeciaisDesc', e.target.value)} 
+                              autoFocus
+                            />
+                          ) : (
+                            <span style={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic', display: 'flex', alignItems: 'center', gap: 4 }}>
+                              Nenhuma necessidade especial informada para este aluno.
+                            </span>
                           )}
                         </div>
                       </div>
                     </div>
 
-                    {/* CARD 3: ENDEREÇO RESIDENCIAL (RECOLHIDO POR PADRÃO) */}
-                    {(() => {
-                      const hasEnderecoAlunoData = Boolean(
-                        formData.aluno.cep ||
-                        formData.aluno.endereco ||
-                        formData.aluno.numero ||
-                        formData.aluno.complemento ||
-                        formData.aluno.bairro ||
-                        formData.aluno.cidade ||
-                        formData.aluno.uf
-                      )
-
-                      return (
-                        <div
-                          style={{
-                            background: expandedEnderecoAluno 
-                              ? 'rgba(255, 255, 255, 0.95)' 
-                              : hasEnderecoAlunoData 
-                                ? 'rgba(239, 246, 255, 0.55)' 
-                                : 'rgba(248, 250, 252, 0.75)',
-                            border: expandedEnderecoAluno 
-                              ? '1px solid #cbd5e1' 
-                              : hasEnderecoAlunoData 
-                                ? '1px solid #bfdbfe' 
-                                : '1px dashed #cbd5e1',
-                            borderRadius: 12,
-                            overflow: 'hidden',
-                            boxShadow: expandedEnderecoAluno ? '0 4px 16px rgba(0, 0, 0, 0.03)' : 'none',
-                            transition: 'all 0.2s ease'
-                          }}
-                        >
-                          {/* ACCORDION HEADER (CLICÁVEL) */}
-                          <div
-                            onClick={() => setExpandedEnderecoAluno(prev => !prev)}
-                            role="button"
-                            tabIndex={0}
-                            onKeyDown={e => {
-                              if (e.key === 'Enter' || e.key === ' ') {
-                                e.preventDefault()
-                                setExpandedEnderecoAluno(prev => !prev)
-                              }
-                            }}
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'space-between',
-                              padding: '10px 14px',
-                              cursor: 'pointer',
-                              userSelect: 'none',
-                              background: expandedEnderecoAluno ? 'rgba(241, 245, 249, 0.7)' : 'transparent',
-                              borderBottom: expandedEnderecoAluno ? '1px solid #e2e8f0' : 'none',
-                              transition: 'background 0.15s ease'
-                            }}
-                          >
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                              <div
-                                style={{
-                                  width: 26,
-                                  height: 26,
-                                  borderRadius: 6,
-                                  background: expandedEnderecoAluno ? 'rgba(37, 99, 235, 0.14)' : 'rgba(37, 99, 235, 0.08)',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center'
-                                }}
-                              >
-                                <MapPin size={14} color="#2563eb" />
-                              </div>
-                              <span style={{ fontSize: 11.5, fontWeight: 800, color: '#1e293b', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
-                                Endereço Residencial
-                              </span>
-                              <span style={{ fontSize: 10, color: '#94a3b8', fontWeight: 600 }}>
-                                (Opcional)
-                              </span>
-
-                              {hasEnderecoAlunoData && !expandedEnderecoAluno && (
-                                <span
-                                  style={{
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: 4,
-                                    fontSize: 10.5,
-                                    fontWeight: 700,
-                                    color: '#059669',
-                                    background: 'rgba(5, 150, 105, 0.09)',
-                                    border: '1px solid rgba(5, 150, 105, 0.25)',
-                                    padding: '2px 8px',
-                                    borderRadius: 999
-                                  }}
-                                >
-                                  <Check size={11} /> Preenchido {formData.aluno.cidade ? `• ${formData.aluno.cidade}${formData.aluno.uf ? `/${formData.aluno.uf}` : ''}` : (formData.aluno.bairro ? `• ${formData.aluno.bairro}` : '')}
-                                </span>
-                              )}
-
-                              {expandedEnderecoAluno && (
-                                <>
-                                  <span style={{ fontSize: 10.5, color: '#64748b' }}>
-                                    Preenchimento automático via CEP
-                                  </span>
-                                  {loadingCep && (
-                                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10.5, color: '#2563eb', fontWeight: 600 }}>
-                                      <Loader2 size={11} className="animate-spin" /> Buscando CEP...
-                                    </span>
-                                  )}
-                                  {cepFeedback?.type === 'success' && (
-                                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10.5, color: '#059669', fontWeight: 700 }}>
-                                      <CheckCircle2 size={12} /> {cepFeedback.message}
-                                    </span>
-                                  )}
-                                  {cepFeedback?.type === 'error' && (
-                                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10.5, color: '#dc2626', fontWeight: 700 }}>
-                                      <AlertTriangle size={12} /> {cepFeedback.message}
-                                    </span>
-                                  )}
-                                </>
-                              )}
-                            </div>
-
-                            <div
-                              style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: 5,
-                                fontSize: 11,
-                                fontWeight: 700,
-                                color: expandedEnderecoAluno ? '#64748b' : '#2563eb',
-                                background: expandedEnderecoAluno ? '#f1f5f9' : 'rgba(37, 99, 235, 0.08)',
-                                border: expandedEnderecoAluno ? '1px solid #e2e8f0' : '1px solid rgba(37, 99, 235, 0.25)',
-                                borderRadius: 6,
-                                padding: '4px 10px'
-                              }}
-                            >
-                              {expandedEnderecoAluno ? (
-                                <>Recolher <ChevronUp size={13} /></>
-                              ) : (
-                                <>{hasEnderecoAlunoData ? 'Visualizar / Editar' : 'Preencher Endereço'} <ChevronDown size={13} /></>
-                              )}
-                            </div>
-                          </div>
-
-                          {/* ACCORDION CONTENT (EXPANDIDO) */}
-                          {expandedEnderecoAluno && (
-                            <div style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-                              {/* Linha 1: CEP, Endereço (Logradouro), Número, Complemento */}
-                              <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 2.3fr 0.8fr 1.1fr', gap: 10, alignItems: 'start' }}>
-                                <div>
-                                  <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
-                                    CEP
-                                  </label>
-                                  <div style={{ position: 'relative' }}>
-                                    <input 
-                                      className="form-input" 
-                                      placeholder="00000-000" 
-                                      maxLength={9}
-                                      value={formData.aluno.cep || ''} 
-                                      onChange={handleCepChange} 
-                                      style={{ height: 35, padding: '0 30px 0 10px', fontSize: 12.5, borderRadius: 8 }}
-                                    />
-                                    <div style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', display: 'flex', alignItems: 'center' }}>
-                                      {loadingCep ? (
-                                        <Loader2 size={13} style={{ animation: 'spin 1s linear infinite', color: '#2563eb' }} />
-                                      ) : cepFeedback?.type === 'success' ? (
-                                        <CheckCircle2 size={13} color="#10b981" />
-                                      ) : cepFeedback?.type === 'error' ? (
-                                        <AlertTriangle size={13} color="#ef4444" />
-                                      ) : (
-                                        <SearchIcon size={12} color="#94a3b8" />
-                                      )}
-                                    </div>
-                                  </div>
-                                  {cepFeedback && (
-                                    <span style={{ 
-                                      fontSize: 9.5, 
-                                      fontWeight: 600, 
-                                      display: 'block', 
-                                      marginTop: 2, 
-                                      color: cepFeedback.type === 'success' ? '#10b981' : '#ef4444' 
-                                    }}>
-                                      {cepFeedback.message}
-                                    </span>
-                                  )}
-                                </div>
-
-                                <div>
-                                  <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
-                                    Endereço (Logradouro)
-                                  </label>
-                                  <input 
-                                    className="form-input" 
-                                    style={{ height: 35, padding: '0 10px', fontSize: 12.5, borderRadius: 8 }}
-                                    placeholder="Rua, Avenida, Alameda..." 
-                                    value={formData.aluno.endereco || ''} 
-                                    onChange={e => handleInputChange('aluno', 'endereco', e.target.value)} 
-                                  />
-                                </div>
-
-                                <div>
-                                  <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
-                                    Número
-                                  </label>
-                                  <input 
-                                    className="form-input" 
-                                    style={{ height: 35, padding: '0 10px', fontSize: 12.5, borderRadius: 8 }}
-                                    placeholder="Nº ou S/N" 
-                                    value={formData.aluno.numero || ''} 
-                                    onChange={e => handleInputChange('aluno', 'numero', e.target.value)} 
-                                  />
-                                </div>
-
-                                <div>
-                                  <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
-                                    Complemento
-                                  </label>
-                                  <input 
-                                    className="form-input" 
-                                    style={{ height: 35, padding: '0 10px', fontSize: 12.5, borderRadius: 8 }}
-                                    placeholder="Apto, Bloco..." 
-                                    value={formData.aluno.complemento || ''} 
-                                    onChange={e => handleInputChange('aluno', 'complemento', e.target.value)} 
-                                  />
-                                </div>
-                              </div>
-
-                              {/* Linha 2: Bairro, Cidade, UF */}
-                              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.8fr 0.6fr', gap: 10 }}>
-                                <div>
-                                  <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
-                                    Bairro
-                                  </label>
-                                  <input 
-                                    className="form-input" 
-                                    style={{ height: 35, padding: '0 10px', fontSize: 12.5, borderRadius: 8 }}
-                                    placeholder="Bairro" 
-                                    value={formData.aluno.bairro || ''} 
-                                    onChange={e => handleInputChange('aluno', 'bairro', e.target.value)} 
-                                  />
-                                </div>
-
-                                <div>
-                                  <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
-                                    Cidade
-                                  </label>
-                                  <input 
-                                    className="form-input" 
-                                    style={{ height: 35, padding: '0 10px', fontSize: 12.5, borderRadius: 8 }}
-                                    placeholder="Cidade" 
-                                    value={formData.aluno.cidade || ''} 
-                                    onChange={e => handleInputChange('aluno', 'cidade', e.target.value)} 
-                                  />
-                                </div>
-
-                                <div>
-                                  <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
-                                    UF
-                                  </label>
-                                  <select 
-                                    className="form-input" 
-                                    style={{ height: 35, padding: '0 6px', fontSize: 12.5, borderRadius: 8 }}
-                                    value={formData.aluno.uf || ''} 
-                                    onChange={e => handleInputChange('aluno', 'uf', e.target.value)}
-                                  >
-                                    <option value="">UF...</option>
-                                    {ESTADOS_BRASIL.map(uf => (
-                                      <option key={uf} value={uf}>{uf}</option>
-                                    ))}
-                                  </select>
-                                </div>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      )
-                    })()}
-
-                    {/* CARD 4: SITUAÇÃO & PERMISSÕES */}
-                    <div style={{ display: 'flex', gap: 32, background: 'rgba(248, 250, 252, 0.8)', border: '1px solid #e2e8f0', padding: '10px 16px', borderRadius: 12 }}>
+                    {/* CARD 2: SITUAÇÃO & PERMISSÕES */}
+                    <div style={{ 
+                      display: 'grid', 
+                      gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', 
+                      gap: 10, 
+                      background: 'rgba(248, 250, 252, 0.9)', 
+                      border: '1px solid #e2e8f0', 
+                      padding: '10px 14px', 
+                      borderRadius: 10 
+                    }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <label className="switch" style={{ transform: 'scale(0.85)', transformOrigin: 'left center' }}>
+                        <label className="switch" style={{ transform: 'scale(0.8)', transformOrigin: 'left center', flexShrink: 0 }}>
                           <input type="checkbox" checked={formData.aluno.ativo} onChange={e => handleInputChange('aluno', 'ativo', e.target.checked)} />
                           <span className="slider"></span>
                         </label>
                         <div>
-                          <p style={{ fontSize: 12, fontWeight: 700, color: '#1e293b', margin: 0 }}>Aluno Ativo</p>
-                          <p style={{ fontSize: 10.5, color: '#64748b', margin: 0 }}>Habilitado no sistema</p>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                            <p style={{ fontSize: 12, fontWeight: 700, color: '#1e293b', margin: 0 }}>Aluno Ativo</p>
+                            <span style={{ 
+                              fontSize: 9, 
+                              fontWeight: 800, 
+                              padding: '1px 5px', 
+                              borderRadius: 4, 
+                              background: formData.aluno.ativo ? '#dcfce7' : '#f1f5f9', 
+                              color: formData.aluno.ativo ? '#166534' : '#64748b' 
+                            }}>
+                              {formData.aluno.ativo ? 'ATIVO' : 'INATIVO'}
+                            </span>
+                          </div>
+                          <p style={{ fontSize: 10.5, color: '#64748b', margin: '1px 0 0 0' }}>Matrícula habilitada e presente nas chamadas</p>
                         </div>
                       </div>
 
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <label className="switch" style={{ transform: 'scale(0.85)', transformOrigin: 'left center' }}>
+                        <label className="switch" style={{ transform: 'scale(0.8)', transformOrigin: 'left center', flexShrink: 0 }}>
                           <input type="checkbox" checked={formData.aluno.autorizadoSairSozinho} onChange={e => handleInputChange('aluno', 'autorizadoSairSozinho', e.target.checked)} />
                           <span className="slider"></span>
                         </label>
                         <div>
-                          <p style={{ fontSize: 12, fontWeight: 700, color: '#1e293b', margin: 0 }}>Autorizado a Sair Sozinho</p>
-                          <p style={{ fontSize: 10.5, color: '#64748b', margin: 0 }}>Dispensa acompanhamento</p>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                            <p style={{ fontSize: 12, fontWeight: 700, color: '#1e293b', margin: 0 }}>Autorizado a Sair Sozinho</p>
+                            <span style={{ 
+                              fontSize: 9, 
+                              fontWeight: 800, 
+                              padding: '1px 5px', 
+                              borderRadius: 4, 
+                              background: formData.aluno.autorizadoSairSozinho ? '#dbeafe' : '#f1f5f9', 
+                              color: formData.aluno.autorizadoSairSozinho ? '#1e40af' : '#64748b' 
+                            }}>
+                              {formData.aluno.autorizadoSairSozinho ? 'AUTORIZADO' : 'NÃO'}
+                            </span>
+                          </div>
+                          <p style={{ fontSize: 10.5, color: '#64748b', margin: '1px 0 0 0' }}>Pode deixar a unidade desacompanhado de responsável</p>
                         </div>
                       </div>
                     </div>
@@ -4270,33 +3931,110 @@ export default function AlunosPage() {
 
               {/* TAB: RESPONSÁVEIS */}
               {activeTab === 'responsavel' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                   
-                  {/* Search Existing & Quick Actions */}
-                  <div className="flex flex-wrap items-end gap-3" style={{ background: 'rgba(248, 250, 252, 0.9)', padding: 14, borderRadius: 12, border: '1px solid #e2e8f0' }}>
-                    <div className="flex-1 min-w-[200px] max-w-[420px] relative">
-                      <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 4 }}>
+                  {/* Barra de Busca e Ações Rápidas */}
+                  <div style={{ 
+                    background: '#ffffff', 
+                    padding: '10px 14px', 
+                    borderRadius: 10, 
+                    border: '1px solid #e2e8f0',
+                    boxShadow: '0 1px 4px rgba(15, 23, 42, 0.03)',
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    alignItems: 'flex-end',
+                    gap: 10
+                  }}>
+                    <div style={{ flex: 1, minWidth: 240, position: 'relative' }}>
+                      <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.03em', marginBottom: 4 }}>
                         Buscar Responsável Existente (Nome ou CPF)
                       </label>
                       <div style={{ position: 'relative' }}>
-                        <SearchIcon size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                        <SearchIcon size={13} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
                         <input 
                           className="form-input" 
-                          style={{ paddingLeft: 36, height: 38, fontSize: 13, borderRadius: 8 }} 
-                          placeholder="Digite o nome ou CPF…" 
+                          style={{ paddingLeft: 30, paddingRight: buscaResponsavel ? 28 : 10, height: 32, fontSize: 12, borderRadius: 6, background: '#fff' }} 
+                          placeholder="Digite o nome ou CPF para buscar…" 
                           value={buscaResponsavel}
                           onChange={e => setBuscaResponsavel(e.target.value)}
                           onKeyDown={e => e.key === 'Enter' && handleBuscarResponsavel()}
                         />
+                        {buscaResponsavel && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setBuscaResponsavel('');
+                              setResultadosResponsaveis([]);
+                            }}
+                            style={{
+                              position: 'absolute',
+                              right: 6,
+                              top: '50%',
+                              transform: 'translateY(-50%)',
+                              background: '#f1f5f9',
+                              border: 'none',
+                              borderRadius: '50%',
+                              width: 20,
+                              height: 20,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              cursor: 'pointer',
+                              color: '#64748b'
+                            }}
+                            title="Limpar busca"
+                          >
+                            <X size={11} />
+                          </button>
+                        )}
                       </div>
                       
                       {/* Resultados da busca */}
                       {resultadosResponsaveis.length > 0 && (
-                        <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, boxShadow: '0 8px 16px rgba(0,0,0,0.1)', zIndex: 30, maxHeight: 220, overflowY: 'auto', marginTop: 4 }}>
+                        <div style={{ 
+                          position: 'absolute', 
+                          top: '100%', 
+                          left: 0, 
+                          right: 0, 
+                          background: '#fff', 
+                          border: '1px solid #cbd5e1', 
+                          borderRadius: 8, 
+                          boxShadow: '0 8px 20px rgba(0,0,0,0.12)', 
+                          zIndex: 40, 
+                          maxHeight: 240, 
+                          overflowY: 'auto', 
+                          marginTop: 4 
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', position: 'sticky', top: 0, zIndex: 2 }}>
+                            <span style={{ fontSize: 10.5, fontWeight: 700, color: '#475569' }}>
+                              {resultadosResponsaveis.length} {resultadosResponsaveis.length === 1 ? 'responsável encontrado' : 'responsáveis encontrados'}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setResultadosResponsaveis([])}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 3,
+                                fontSize: 10,
+                                fontWeight: 700,
+                                color: '#dc2626',
+                                background: '#fee2e2',
+                                border: '1px solid #fecaca',
+                                borderRadius: 5,
+                                padding: '2px 6px',
+                                cursor: 'pointer',
+                                transition: 'all 0.15s ease'
+                              }}
+                              title="Fechar resultados da busca"
+                            >
+                              <X size={11} /> Fechar
+                            </button>
+                          </div>
                           {resultadosResponsaveis.map(resp => (
                             <div 
                               key={resp.id} 
-                              style={{ padding: '9px 12px', cursor: 'pointer', borderBottom: '1px solid #f1f5f9' }}
+                              style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid #f1f5f9', transition: 'background 0.15s' }}
                               onClick={() => {
                                 const d = resp.dados || {};
                                 const mappedResp = {
@@ -4351,8 +4089,8 @@ export default function AlunosPage() {
                               onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
                               onMouseLeave={e => e.currentTarget.style.background = '#fff'}
                             >
-                              <div style={{ fontWeight: 600, fontSize: 13, color: '#1e293b' }}>{resp.nome}</div>
-                              <div style={{ fontSize: 11, color: '#64748b', display: 'flex', gap: 10 }}>
+                              <div style={{ fontWeight: 600, fontSize: 12, color: '#1e293b' }}>{resp.nome}</div>
+                              <div style={{ fontSize: 10.5, color: '#64748b', display: 'flex', gap: 8, marginTop: 2 }}>
                                 {resp.cpf && <span>CPF: {formatCpfMask(resp.cpf)}</span>}
                                 {resp.telefone && <span>Tel: {resp.telefone}</span>}
                                 {resp.email && <span>{resp.email}</span>}
@@ -4362,73 +4100,81 @@ export default function AlunosPage() {
                         </div>
                       )}
                     </div>
+
                     <button 
                       onClick={handleBuscarResponsavel} 
                       className="neo-btn neo-btn-secondary shrink-0" 
-                      style={{ height: 38, padding: '0 20px', minWidth: '90px', fontSize: 13, borderRadius: 8 }}
+                      style={{ height: 32, padding: '0 14px', fontSize: 12, borderRadius: 6 }}
                       disabled={loadingBuscaResp}
                     >
                       {loadingBuscaResp ? 'Buscando...' : 'Buscar'}
                     </button>
-                    <div style={{ fontSize: 12, color: '#94a3b8', alignSelf: 'center', padding: '0 4px', paddingBottom: 6 }}>ou</div>
-                    <button onClick={() => {
-                      const randCode = Math.floor(1000000 + Math.random() * 9000000).toString();
-                      setFormData({ 
-                        ...formData, 
-                        responsaveis: [
-                          ...formData.responsaveis, 
-                          { 
-                            id: randCode, 
-                            codigo: randCode, 
-                            nome: '', 
-                            parentesco: '', 
-                            dataNasc: '', 
-                            cpf: '', 
-                            rg: '', 
-                            rgOrgaoEmissor: '', 
-                            sexo: '', 
-                            estadoCivil: '', 
-                            profissao: '', 
-                            nacionalidade: 'Brasileira', 
-                            naturalidade: '', 
-                            naturalidadeUf: '', 
-                            email: '', 
-                            telefone: '', 
-                            codigoAluno: '', 
-                            rfid: '', 
-                            cep: '', 
-                            endereco: '', 
-                            numero: '', 
-                            complemento: '', 
-                            bairro: '', 
-                            cidade: '', 
-                            uf: '', 
-                            comercialEmpresa: '', 
-                            comercialTelefone: '', 
-                            comercialCep: '', 
-                            comercialEndereco: '', 
-                            comercialNumero: '', 
-                            comercialComplemento: '', 
-                            comercialBairro: '', 
-                            comercialCidade: '', 
-                            comercialUf: '', 
-                            diasAcesso: ['Seg', 'Ter', 'Qua', 'Qui', 'Sex'], 
-                            isFinanceiro: false, 
-                            isPedagogico: false, 
-                            isOutro: false, 
-                            proibido: false, 
-                            isNewAdded: true 
-                          } as any
-                        ] 
-                      });
-                      setMostrarFormResponsavel(true);
-                    }} className="neo-btn neo-btn-primary shrink-0" style={{ height: 38, padding: '0 20px', fontSize: 13, borderRadius: 8 }}>
-                      <Plus size={15} /> Novo Responsável
+
+                    <div style={{ fontSize: 11, color: '#94a3b8', alignSelf: 'center', padding: '0 2px', paddingBottom: 2 }}>ou</div>
+
+                    <button 
+                      onClick={() => {
+                        const randCode = Math.floor(1000000 + Math.random() * 9000000).toString();
+                        setFormData({ 
+                          ...formData, 
+                          responsaveis: [
+                            ...formData.responsaveis, 
+                            { 
+                              id: randCode, 
+                              codigo: randCode, 
+                              nome: '', 
+                              parentesco: '', 
+                              dataNasc: '', 
+                              cpf: '', 
+                              rg: '', 
+                              rgOrgaoEmissor: '', 
+                              sexo: '', 
+                              estadoCivil: '', 
+                              profissao: '', 
+                              nacionalidade: 'Brasileira', 
+                              naturalidade: '', 
+                              naturalidadeUf: '', 
+                              email: '', 
+                              telefone: '', 
+                              codigoAluno: '', 
+                              rfid: '', 
+                              cep: '', 
+                              endereco: '', 
+                              numero: '', 
+                              complemento: '', 
+                              bairro: '', 
+                              cidade: '', 
+                              uf: '', 
+                              comercialEmpresa: '', 
+                              comercialTelefone: '', 
+                              comercialCep: '', 
+                              comercialEndereco: '', 
+                              comercialNumero: '', 
+                              comercialComplemento: '', 
+                              comercialBairro: '', 
+                              comercialCidade: '', 
+                              comercialUf: '', 
+                              diasAcesso: ['Seg', 'Ter', 'Qua', 'Qui', 'Sex'], 
+                              isFinanceiro: false, 
+                              isPedagogico: false, 
+                              isOutro: false, 
+                              proibido: false, 
+                              isNewAdded: true 
+                            } as any
+                          ] 
+                        });
+                        setMostrarFormResponsavel(true);
+                      }} 
+                      className="neo-btn neo-btn-primary shrink-0" 
+                      style={{ height: 32, padding: '0 14px', fontSize: 12, borderRadius: 6, display: 'flex', alignItems: 'center', gap: 5 }}
+                    >
+                      <Plus size={13} /> Novo Responsável
                     </button>
                   </div>
 
+                  {/* Lista de Cards de Responsáveis */}
                   {(mostrarFormResponsavel || formData.responsaveis.length > 0) && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                       {formData.responsaveis.map((resp, index) => (
                         <div 
                           key={index} 
@@ -4436,30 +4182,50 @@ export default function AlunosPage() {
                             border: hasError(`resp_${index}_tipo`) || hasError(`resp_${index}_id`) || hasError(`resp_${index}_nome`) || hasError(`resp_${index}_parentesco`) || hasError(`resp_${index}_email`)
                               ? '1.5px solid #ef4444' 
                               : '1px solid #e2e8f0', 
-                            padding: '16px 18px', 
-                            borderRadius: 14, 
+                            padding: '12px 14px', 
+                            borderRadius: 10, 
                             background: '#ffffff', 
-                            boxShadow: '0 4px 16px rgba(0, 0, 0, 0.03)',
-                            transition: 'all 0.2s' 
+                            boxShadow: '0 1px 4px rgba(15, 23, 42, 0.03)',
+                            transition: 'all 0.15s ease',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: 10
                           }}
                         >
-                          {/* Card Header: Title & Action Toggles */}
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, paddingBottom: 10, borderBottom: '1px solid #f1f5f9' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                              <div style={{ width: 28, height: 28, borderRadius: 8, background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 12, fontWeight: 800 }}>
+                          {/* Cabeçalho do Card: Identificação + Seleção de Tipos + Ação Excluir */}
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: 8, borderBottom: '1px solid #f1f5f9', flexWrap: 'wrap', gap: 8 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <div style={{ width: 24, height: 24, borderRadius: 6, background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 11, fontWeight: 800 }}>
                                 {index + 1}
                               </div>
                               <div>
-                                <h3 style={{ fontSize: 14, fontWeight: 800, color: '#1e293b', margin: 0 }}>
-                                  Responsável #{index + 1} *
-                                </h3>
-                                <p style={{ fontSize: 11, color: '#64748b', margin: 0 }}>
-                                  {resp.nome ? resp.nome : 'Preencha os dados do responsável'}
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                  <h3 style={{ fontSize: 13, fontWeight: 800, color: '#1e293b', margin: 0 }}>
+                                    Responsável #{index + 1}
+                                  </h3>
+                                  <span style={{ 
+                                    fontSize: 10, 
+                                    fontWeight: 700, 
+                                    color: '#2563eb', 
+                                    background: '#eff6ff', 
+                                    border: '1px solid #dbeafe', 
+                                    padding: '1px 6px', 
+                                    borderRadius: 4, 
+                                    display: 'inline-flex', 
+                                    alignItems: 'center', 
+                                    gap: 3 
+                                  }}>
+                                    <Tag size={10} /> Vínculo: {formData.aluno.codigo ? `Aluno #${formData.aluno.codigo}` : 'Aluno Atual'}
+                                  </span>
+                                </div>
+                                <p style={{ fontSize: 10.5, color: '#64748b', margin: '1px 0 0 0' }}>
+                                  {resp.nome?.trim() ? resp.nome : 'Preencha os dados do responsável'}
                                 </p>
                               </div>
                             </div>
 
-                            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                            <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                              {/* Chip Financeiro */}
                               <button
                                 type="button"
                                 onClick={() => {
@@ -4473,24 +4239,25 @@ export default function AlunosPage() {
                                   }
                                 }}
                                 style={{
-                                  padding: '5px 14px',
-                                  borderRadius: '20px',
-                                  fontSize: 11,
+                                  padding: '3px 10px',
+                                  borderRadius: '14px',
+                                  fontSize: 10.5,
                                   fontWeight: 700,
                                   border: '1px solid',
                                   borderColor: resp.isFinanceiro ? '#10b981' : hasError(`resp_${index}_tipo`) ? '#ef4444' : '#e2e8f0',
-                                  background: resp.isFinanceiro ? '#10b981' : '#fff',
-                                  color: resp.isFinanceiro ? '#fff' : '#64748b',
+                                  background: resp.isFinanceiro ? '#ecfdf5' : '#f8fafc',
+                                  color: resp.isFinanceiro ? '#059669' : '#64748b',
                                   cursor: 'pointer',
-                                  transition: 'all 0.2s',
+                                  transition: 'all 0.15s ease',
                                   display: 'flex',
                                   alignItems: 'center',
-                                  gap: 5
+                                  gap: 4
                                 }}
                               >
                                 {resp.isFinanceiro && <Check size={11} />} Financeiro
                               </button>
 
+                              {/* Chip Pedagógico */}
                               <button
                                 type="button"
                                 onClick={() => {
@@ -4504,24 +4271,25 @@ export default function AlunosPage() {
                                   }
                                 }}
                                 style={{
-                                  padding: '5px 14px',
-                                  borderRadius: '20px',
-                                  fontSize: 11,
+                                  padding: '3px 10px',
+                                  borderRadius: '14px',
+                                  fontSize: 10.5,
                                   fontWeight: 700,
                                   border: '1px solid',
-                                  borderColor: resp.isPedagogico ? '#8b5cf6' : hasError(`resp_${index}_tipo`) ? '#ef4444' : '#e2e8f0',
-                                  background: resp.isPedagogico ? '#8b5cf6' : '#fff',
-                                  color: resp.isPedagogico ? '#fff' : '#64748b',
+                                  borderColor: resp.isPedagogico ? '#6366f1' : hasError(`resp_${index}_tipo`) ? '#ef4444' : '#e2e8f0',
+                                  background: resp.isPedagogico ? '#eef2ff' : '#f8fafc',
+                                  color: resp.isPedagogico ? '#4f46e5' : '#64748b',
                                   cursor: 'pointer',
-                                  transition: 'all 0.2s',
+                                  transition: 'all 0.15s ease',
                                   display: 'flex',
                                   alignItems: 'center',
-                                  gap: 5
+                                  gap: 4
                                 }}
                               >
                                 {resp.isPedagogico && <Check size={11} />} Pedagógico
                               </button>
 
+                              {/* Chip Outro */}
                               <button
                                 type="button"
                                 onClick={() => {
@@ -4535,24 +4303,25 @@ export default function AlunosPage() {
                                   }
                                 }}
                                 style={{
-                                  padding: '5px 14px',
-                                  borderRadius: '20px',
-                                  fontSize: 11,
+                                  padding: '3px 10px',
+                                  borderRadius: '14px',
+                                  fontSize: 10.5,
                                   fontWeight: 700,
                                   border: '1px solid',
                                   borderColor: resp.isOutro ? '#f59e0b' : hasError(`resp_${index}_tipo`) ? '#ef4444' : '#e2e8f0',
-                                  background: resp.isOutro ? '#f59e0b' : '#fff',
-                                  color: resp.isOutro ? '#fff' : '#64748b',
+                                  background: resp.isOutro ? '#fffbeb' : '#f8fafc',
+                                  color: resp.isOutro ? '#d97706' : '#64748b',
                                   cursor: 'pointer',
-                                  transition: 'all 0.2s',
+                                  transition: 'all 0.15s ease',
                                   display: 'flex',
                                   alignItems: 'center',
-                                  gap: 5
+                                  gap: 4
                                 }}
                               >
                                 {resp.isOutro && <Check size={11} />} Outro
                               </button>
 
+                              {/* Excluir Responsável */}
                               <button
                                 type="button"
                                 onClick={() => {
@@ -4562,279 +4331,130 @@ export default function AlunosPage() {
                                   });
                                 }}
                                 style={{
-                                  padding: '6px',
-                                  borderRadius: '8px',
+                                  width: 26,
+                                  height: 26,
+                                  borderRadius: '6px',
                                   border: '1px solid #fee2e2',
                                   background: '#fef2f2',
                                   color: '#ef4444',
                                   cursor: 'pointer',
-                                  transition: 'all 0.2s',
+                                  transition: 'all 0.15s ease',
                                   display: 'flex',
                                   alignItems: 'center',
                                   justifyContent: 'center',
-                                  marginLeft: 4
+                                  marginLeft: 2
                                 }}
-                                title="Remover responsável"
+                                title="Remover este responsável"
                               >
-                                <Trash2 size={15} />
+                                <Trash2 size={13} />
                               </button>
                             </div>
                           </div>
 
-                          {/* Dynamic warning if no role selected */}
+                          {/* Aviso se nenhum tipo estiver selecionado */}
                           {!resp.isFinanceiro && !resp.isPedagogico && !resp.isOutro && resp.parentesco !== 'outro' && (
-                            <div style={{ marginBottom: 12 }}>
-                              <span className="pulse-warning" style={{ padding: '3px 10px', borderRadius: '12px', fontSize: '10.5px', fontWeight: 800, textTransform: 'uppercase', background: '#fee2e2', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                                <AlertTriangle size={11} /> Selecione o tipo do responsável: Financeiro, Pedagógico ou Outro *
+                            <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 6, padding: '6px 10px' }}>
+                              <span style={{ fontSize: '10.5px', fontWeight: 700, color: '#dc2626', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                                <AlertTriangle size={12} /> Selecione o tipo deste responsável: Financeiro, Pedagógico ou Outro *
                               </span>
                             </div>
                           )}
 
-                          {/* SUB-SECTION 1: DADOS PESSOAIS & DOCUMENTOS */}
-                          <div style={{ background: 'rgba(248, 250, 252, 0.8)', border: '1px solid #e2e8f0', borderRadius: 10, padding: '12px 14px', marginBottom: 12 }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
-                              <Shield size={13} color="#2563eb" />
-                              <span style={{ fontSize: 11, fontWeight: 800, color: '#1e293b', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
-                                Identificação & Documentos
-                              </span>
+                          {/* Bloco de Campos do Responsável */}
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                            {/* Linha 1: ID, Nome Completo, Parentesco */}
+                            <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr 160px', gap: 10 }}>
+                              <div>
+                                <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.03em', marginBottom: 4, whiteSpace: 'nowrap' }}>
+                                  ID / Código <span style={{ color: '#ef4444' }}>*</span>
+                                </label>
+                                <input 
+                                  className="form-input" 
+                                  style={{ ...getMandatoryFieldStyle(resp.id || resp.codigo, `resp_${index}_id`), height: 32, padding: '0 8px', fontSize: 12, borderRadius: 6, fontWeight: 700, background: '#fff' }}
+                                  placeholder="Ex: RESP001" 
+                                  value={resp.id || resp.codigo || ''} 
+                                  onChange={e => {
+                                    const val = e.target.value;
+                                    handleInputChange('responsaveis', 'id', val, index);
+                                    handleInputChange('responsaveis', 'codigo', val, index);
+                                    if (hasError(`resp_${index}_id`)) {
+                                      setValidationErrors(prev => prev.filter(err => err.field !== `resp_${index}_id`));
+                                    }
+                                  }} 
+                                />
+                              </div>
+
+                              <div>
+                                <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.03em', marginBottom: 4, whiteSpace: 'nowrap' }}>
+                                  Nome Completo <span style={{ color: '#ef4444' }}>*</span>
+                                </label>
+                                <input 
+                                  className="form-input" 
+                                  style={{ ...getMandatoryFieldStyle(resp.nome, `resp_${index}_nome`), height: 32, padding: '0 10px', fontSize: 12.5, borderRadius: 6, fontWeight: 600, background: '#fff' }}
+                                  placeholder="Nome completo do responsável" 
+                                  value={resp.nome || ''} 
+                                  onChange={e => {
+                                    handleInputChange('responsaveis', 'nome', e.target.value, index);
+                                    if (hasError(`resp_${index}_nome`)) {
+                                      setValidationErrors(prev => prev.filter(err => err.field !== `resp_${index}_nome`));
+                                    }
+                                  }} 
+                                />
+                              </div>
+
+                              <div>
+                                <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.03em', marginBottom: 4, whiteSpace: 'nowrap' }}>
+                                  Parentesco / Vínculo <span style={{ color: '#ef4444' }}>*</span>
+                                </label>
+                                <select 
+                                  className="form-input" 
+                                  style={{ ...getMandatoryFieldStyle(resp.parentesco, `resp_${index}_parentesco`), height: 32, padding: '0 8px', fontSize: 12, borderRadius: 6, fontWeight: 600, background: '#fff' }}
+                                  value={resp.parentesco || ''} 
+                                  onChange={e => {
+                                    handleInputChange('responsaveis', 'parentesco', e.target.value, index);
+                                    if (hasError(`resp_${index}_parentesco`)) {
+                                      setValidationErrors(prev => prev.filter(err => err.field !== `resp_${index}_parentesco`));
+                                    }
+                                  }}
+                                >
+                                  <option value="">Selecione…</option>
+                                  <option value="pai">Pai</option>
+                                  <option value="mae">Mãe</option>
+                                  <option value="responsavel_legal">Responsável Legal</option>
+                                  <option value="padrasto">Padrasto</option>
+                                  <option value="madrasta">Madrasta</option>
+                                  <option value="avo">Avô / Avó</option>
+                                  <option value="tio">Tio / Tia</option>
+                                  <option value="irmao">Irmão / Irmã</option>
+                                  <option value="outro">Outro</option>
+                                </select>
+                              </div>
                             </div>
 
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                              {/* Linha 1: ID, Nome Completo, Parentesco */}
-                              <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr 180px', gap: 10 }}>
-                                <div>
-                                  <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
-                                    ID *
-                                  </label>
+                            {/* Linha 2: WhatsApp, E-mail, Cartão RFID e Vínculo Aluno */}
+                            <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 1.4fr 1.1fr 130px', gap: 10 }}>
+                              <div>
+                                <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.03em', marginBottom: 4, whiteSpace: 'nowrap' }}>
+                                  WhatsApp / Celular
+                                </label>
+                                <div style={{ position: 'relative' }}>
+                                  <Phone size={13} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
                                   <input 
                                     className="form-input" 
-                                    style={{ ...getMandatoryFieldStyle(resp.id || resp.codigo, `resp_${index}_id`), height: 35, padding: '0 10px', fontSize: 12.5, borderRadius: 8 }}
-                                    placeholder="Ex: RESP001" 
-                                    value={resp.id || resp.codigo || ''} 
-                                    onChange={e => {
-                                      const val = e.target.value;
-                                      handleInputChange('responsaveis', 'id', val, index);
-                                      handleInputChange('responsaveis', 'codigo', val, index);
-                                      if (hasError(`resp_${index}_id`)) {
-                                        setValidationErrors(prev => prev.filter(err => err.field !== `resp_${index}_id`));
-                                      }
-                                    }} 
-                                  />
-                                </div>
-
-                                <div>
-                                  <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
-                                    Nome Completo *
-                                  </label>
-                                  <input 
-                                    className="form-input" 
-                                    style={{ ...getMandatoryFieldStyle(resp.nome, `resp_${index}_nome`), height: 35, padding: '0 10px', fontSize: 12.5, borderRadius: 8 }}
-                                    placeholder="Nome do responsável" 
-                                    value={resp.nome || ''} 
-                                    onChange={e => {
-                                      handleInputChange('responsaveis', 'nome', e.target.value, index);
-                                      if (hasError(`resp_${index}_nome`)) {
-                                        setValidationErrors(prev => prev.filter(err => err.field !== `resp_${index}_nome`));
-                                      }
-                                    }} 
-                                  />
-                                </div>
-
-                                <div>
-                                  <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
-                                    Parentesco *
-                                  </label>
-                                  <select 
-                                    className="form-input" 
-                                    style={{ ...getMandatoryFieldStyle(resp.parentesco, `resp_${index}_parentesco`), height: 35, padding: '0 10px', fontSize: 12.5, borderRadius: 8 }}
-                                    value={resp.parentesco || ''} 
-                                    onChange={e => {
-                                      handleInputChange('responsaveis', 'parentesco', e.target.value, index);
-                                      if (hasError(`resp_${index}_parentesco`)) {
-                                        setValidationErrors(prev => prev.filter(err => err.field !== `resp_${index}_parentesco`));
-                                      }
-                                    }}
-                                  >
-                                    <option value="">Selecione…</option>
-                                    <option value="pai">Pai</option>
-                                    <option value="mae">Mãe</option>
-                                    <option value="responsavel_legal">Responsável Legal</option>
-                                    <option value="padrasto">Padrasto</option>
-                                    <option value="madrasta">Madrasta</option>
-                                    <option value="avo">Avô / Avó</option>
-                                    <option value="tio">Tio / Tia</option>
-                                    <option value="irmao">Irmão / Irmã</option>
-                                    <option value="outro">Outro</option>
-                                  </select>
-                                </div>
-                              </div>
-
-                              {/* Linha 2: CPF, RG, Órgão Emissor, Data Nasc */}
-                              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr 1.1fr', gap: 10 }}>
-                                <div>
-                                  <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
-                                    CPF
-                                  </label>
-                                  <input 
-                                    className="form-input" 
-                                    style={{ height: 35, padding: '0 10px', fontSize: 12.5, borderRadius: 8 }}
-                                    placeholder="000.000.000-00" 
-                                    value={resp.cpf || ''} 
-                                    onChange={e => handleInputChange('responsaveis', 'cpf', formatCpfMask(e.target.value), index)} 
-                                  />
-                                </div>
-
-                                <div>
-                                  <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
-                                    RG
-                                  </label>
-                                  <input 
-                                    className="form-input" 
-                                    style={{ height: 35, padding: '0 10px', fontSize: 12.5, borderRadius: 8 }}
-                                    placeholder="Número do RG" 
-                                    value={resp.rg || ''} 
-                                    onChange={e => handleInputChange('responsaveis', 'rg', e.target.value, index)} 
-                                  />
-                                </div>
-
-                                <div>
-                                  <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
-                                    Órgão Emissor / UF
-                                  </label>
-                                  <input 
-                                    className="form-input" 
-                                    style={{ height: 35, padding: '0 10px', fontSize: 12.5, borderRadius: 8 }}
-                                    placeholder="Ex: SSP/SP" 
-                                    value={resp.rgOrgaoEmissor || ''} 
-                                    onChange={e => handleInputChange('responsaveis', 'rgOrgaoEmissor', e.target.value, index)} 
-                                  />
-                                </div>
-
-                                <div>
-                                  <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
-                                    Data de Nascimento
-                                  </label>
-                                  <input 
-                                    type="date" 
-                                    className="form-input" 
-                                    style={{ height: 35, padding: '0 10px', fontSize: 12.5, borderRadius: 8 }}
-                                    value={resp.dataNasc || ''} 
-                                    onChange={e => handleInputChange('responsaveis', 'dataNasc', e.target.value, index)} 
-                                  />
-                                </div>
-                              </div>
-
-                              {/* Linha 3: Sexo, Estado Civil, Profissão, Naturalidade com UF, Nacionalidade */}
-                              <div style={{ display: 'grid', gridTemplateColumns: '130px 150px 1.3fr 1.4fr 120px', gap: 10 }}>
-                                <div>
-                                  <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
-                                    Sexo
-                                  </label>
-                                  <select 
-                                    className="form-input" 
-                                    style={{ height: 35, padding: '0 8px', fontSize: 12.5, borderRadius: 8 }}
-                                    value={resp.sexo || ''} 
-                                    onChange={e => handleInputChange('responsaveis', 'sexo', e.target.value, index)}
-                                  >
-                                    <option value="">Selecione...</option>
-                                    <option value="Masculino">Masculino</option>
-                                    <option value="Feminino">Feminino</option>
-                                    <option value="Outro">Outro</option>
-                                  </select>
-                                </div>
-
-                                <div>
-                                  <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
-                                    Estado Civil
-                                  </label>
-                                  <select 
-                                    className="form-input" 
-                                    style={{ height: 35, padding: '0 8px', fontSize: 12.5, borderRadius: 8 }}
-                                    value={resp.estadoCivil || ''} 
-                                    onChange={e => handleInputChange('responsaveis', 'estadoCivil', e.target.value, index)}
-                                  >
-                                    <option value="">Selecione...</option>
-                                    <option value="Solteiro(a)">Solteiro(a)</option>
-                                    <option value="Casado(a)">Casado(a)</option>
-                                    <option value="Divorciado(a)">Divorciado(a)</option>
-                                    <option value="Viúvo(a)">Viúvo(a)</option>
-                                    <option value="União Estável">União Estável</option>
-                                    <option value="Separado(a)">Separado(a)</option>
-                                  </select>
-                                </div>
-
-                                <div>
-                                  <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
-                                    Profissão
-                                  </label>
-                                  <input 
-                                    className="form-input" 
-                                    style={{ height: 35, padding: '0 10px', fontSize: 12.5, borderRadius: 8 }}
-                                    placeholder="Ex: Engenheiro(a)..." 
-                                    value={resp.profissao || ''} 
-                                    onChange={e => handleInputChange('responsaveis', 'profissao', e.target.value, index)} 
-                                  />
-                                </div>
-
-                                <div>
-                                  <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
-                                    Naturalidade (Cidade / UF)
-                                  </label>
-                                  <div style={{ display: 'flex', gap: 6 }}>
-                                    <input 
-                                      className="form-input" 
-                                      style={{ height: 35, padding: '0 10px', fontSize: 12.5, borderRadius: 8, flex: 1 }}
-                                      placeholder="Cidade natal" 
-                                      value={resp.naturalidade || ''} 
-                                      onChange={e => handleInputChange('responsaveis', 'naturalidade', e.target.value, index)} 
-                                    />
-                                    <select 
-                                      className="form-input" 
-                                      style={{ width: 75, height: 35, padding: '0 4px', fontSize: 12.5, borderRadius: 8 }}
-                                      value={resp.naturalidadeUf || ''} 
-                                      onChange={e => handleInputChange('responsaveis', 'naturalidadeUf', e.target.value, index)}
-                                    >
-                                      <option value="">UF...</option>
-                                      {ESTADOS_BRASIL.map(uf => (
-                                        <option key={uf} value={uf}>{uf}</option>
-                                      ))}
-                                    </select>
-                                  </div>
-                                </div>
-
-                                <div>
-                                  <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
-                                    Nacionalidade
-                                  </label>
-                                  <input 
-                                    className="form-input" 
-                                    style={{ height: 35, padding: '0 10px', fontSize: 12.5, borderRadius: 8 }}
-                                    placeholder="Ex: Brasileira" 
-                                    value={resp.nacionalidade || 'Brasileira'} 
-                                    onChange={e => handleInputChange('responsaveis', 'nacionalidade', e.target.value, index)} 
-                                  />
-                                </div>
-                              </div>
-
-                              {/* Linha 4: Contato & Acesso */}
-                              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.6fr 1.2fr 120px', gap: 10 }}>
-                                <div>
-                                  <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
-                                    Telefone / WhatsApp
-                                  </label>
-                                  <input 
-                                    className="form-input" 
-                                    style={{ height: 35, padding: '0 10px', fontSize: 12.5, borderRadius: 8 }}
-                                    placeholder="(00)00000-0000" 
+                                    style={{ width: '100%', height: 32, paddingLeft: 28, paddingRight: 8, fontSize: 12, borderRadius: 6, background: '#fff' }}
+                                    placeholder="(00) 00000-0000" 
                                     value={resp.telefone || ''} 
                                     onChange={e => handleInputChange('responsaveis', 'telefone', formatPhone(e.target.value), index)} 
                                   />
                                 </div>
+                              </div>
 
-                                <div>
-                                  <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
-                                    E-mail {resp.isFinanceiro ? '*' : ''}
-                                  </label>
+                              <div>
+                                <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.03em', marginBottom: 4, whiteSpace: 'nowrap' }}>
+                                  E-mail {resp.isFinanceiro ? <span style={{ color: '#ef4444' }}>*</span> : ''}
+                                </label>
+                                <div style={{ position: 'relative' }}>
+                                  <Mail size={13} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
                                   <input 
                                     type="email" 
                                     className="form-input" 
@@ -4851,10 +4471,13 @@ export default function AlunosPage() {
                                               transition: 'all 0.2s ease-in-out'
                                             }
                                           : {}), 
-                                      height: 35, 
-                                      padding: '0 10px', 
-                                      fontSize: 12.5, 
-                                      borderRadius: 8 
+                                      width: '100%',
+                                      height: 32, 
+                                      paddingLeft: 28, 
+                                      paddingRight: 8, 
+                                      fontSize: 12, 
+                                      borderRadius: 6,
+                                      background: '#fff'
                                     }}
                                     placeholder="email@exemplo.com" 
                                     value={resp.email || ''} 
@@ -4866,493 +4489,54 @@ export default function AlunosPage() {
                                     }} 
                                   />
                                 </div>
+                              </div>
 
-                                <div>
-                                  <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
-                                    Cartão RFID
-                                  </label>
-                                  <div style={{ position: 'relative' }}>
-                                    <CreditCard size={13} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
-                                    <input 
-                                      className="form-input" 
-                                      style={{ height: 35, paddingLeft: 30, paddingRight: 8, fontSize: 12.5, borderRadius: 8 }} 
-                                      placeholder="Aproxime o cartão…" 
-                                      value={resp.rfid || ''} 
-                                      onChange={e => handleInputChange('responsaveis', 'rfid', e.target.value, index)} 
-                                    />
-                                  </div>
+                              <div>
+                                <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.03em', marginBottom: 4, whiteSpace: 'nowrap' }}>
+                                  Cartão RFID
+                                </label>
+                                <div style={{ position: 'relative' }}>
+                                  <CreditCard size={13} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                                  <input 
+                                    className="form-input" 
+                                    style={{ width: '100%', height: 32, paddingLeft: 28, paddingRight: 8, fontSize: 12, borderRadius: 6, background: '#fff' }} 
+                                    placeholder="Aproxime o cartão…" 
+                                    value={resp.rfid || ''} 
+                                    onChange={e => handleInputChange('responsaveis', 'rfid', e.target.value, index)} 
+                                  />
                                 </div>
+                              </div>
 
-                                <div>
-                                  <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
-                                    Vínculo Aluno
-                                  </label>
-                                  <div style={{ height: 35, display: 'flex', alignItems: 'center' }}>
-                                    <span style={{ width: '100%', height: 35, padding: '0 8px', background: 'rgba(59, 130, 246, 0.08)', border: '1px solid rgba(59, 130, 246, 0.25)', borderRadius: 8, fontSize: 11.5, fontWeight: 700, color: '#1d4ed8', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
-                                      <Tag size={12} /> {formData.aluno.codigo || 'Novo'}
-                                    </span>
-                                  </div>
+                              <div>
+                                <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.03em', marginBottom: 4, whiteSpace: 'nowrap' }}>
+                                  Vínculo com Aluno
+                                </label>
+                                <div style={{ height: 32, display: 'flex', alignItems: 'center' }}>
+                                  <span style={{ width: '100%', height: 32, padding: '0 8px', background: 'rgba(59, 130, 246, 0.08)', border: '1px solid rgba(59, 130, 246, 0.25)', borderRadius: 6, fontSize: 11, fontWeight: 700, color: '#1d4ed8', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 4, whiteSpace: 'nowrap' }}>
+                                    <Tag size={11} /> {formData.aluno.codigo ? `Aluno #${formData.aluno.codigo}` : 'Aluno Atual'}
+                                  </span>
                                 </div>
                               </div>
                             </div>
                           </div>
 
-                          {/* SUB-SECTION 2: ENDEREÇO RESIDENCIAL COM VIACEP */}
-                          <div style={{ background: 'rgba(248, 250, 252, 0.8)', border: '1px solid #e2e8f0', borderRadius: 10, padding: '12px 14px', marginBottom: 12 }}>
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                <MapPin size={13} color="#2563eb" />
-                                <span style={{ fontSize: 11, fontWeight: 800, color: '#1e293b', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
-                                  Endereço Residencial
-                                </span>
-                                {loadingCepResp[`${index}_res`] && (
-                                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10.5, color: '#2563eb', fontWeight: 600 }}>
-                                    <Loader2 size={11} className="animate-spin" /> Buscando CEP...
-                                  </span>
-                                )}
-                                {cepFeedbackResp[`${index}_res`]?.type === 'success' && (
-                                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10.5, color: '#059669', fontWeight: 700 }}>
-                                    <CheckCircle2 size={12} /> {cepFeedbackResp[`${index}_res`]?.message}
-                                  </span>
-                                )}
-                                {cepFeedbackResp[`${index}_res`]?.type === 'error' && (
-                                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10.5, color: '#dc2626', fontWeight: 700 }}>
-                                    <AlertTriangle size={12} /> {cepFeedbackResp[`${index}_res`]?.message}
-                                  </span>
-                                )}
-                              </div>
-
-                              <button
-                                type="button"
-                                onClick={() => handleCopiarEnderecoResponsavelParaAluno(index)}
-                                style={{
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: 5,
-                                  fontSize: 11,
-                                  fontWeight: 700,
-                                  color: copiadoParaAlunoIdx === index ? '#059669' : '#2563eb',
-                                  background: copiadoParaAlunoIdx === index ? 'rgba(5, 150, 105, 0.1)' : 'rgba(37, 99, 235, 0.08)',
-                                  border: copiadoParaAlunoIdx === index ? '1px solid rgba(5, 150, 105, 0.3)' : '1px solid rgba(37, 99, 235, 0.25)',
-                                  borderRadius: 6,
-                                  padding: '4px 10px',
-                                  cursor: 'pointer',
-                                  transition: 'all 0.15s ease'
-                                }}
-                                title="Copia este endereço residencial diretamente para o cadastro do aluno"
-                              >
-                                {copiadoParaAlunoIdx === index ? (
-                                  <>
-                                    <Check size={11} /> Copiado para o Aluno!
-                                  </>
-                                ) : (
-                                  <>
-                                    <Copy size={11} /> Copiar para o Aluno
-                                  </>
-                                )}
-                              </button>
-                            </div>
-
-                            <div style={{ display: 'grid', gridTemplateColumns: '130px 1fr 100px 160px', gap: 10, marginBottom: 10 }}>
-                              <div>
-                                <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
-                                  CEP
-                                </label>
-                                <input
-                                  className="form-input"
-                                  style={{ height: 35, padding: '0 10px', fontSize: 12.5, borderRadius: 8 }}
-                                  placeholder="00000-000"
-                                  value={resp.cep || ''}
-                                  onChange={e => handleCepRespResidencialChange(e.target.value, index)}
-                                />
-                              </div>
-                              <div>
-                                <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
-                                  Endereço / Logradouro
-                                </label>
-                                <input
-                                  className="form-input"
-                                  style={{ height: 35, padding: '0 10px', fontSize: 12.5, borderRadius: 8 }}
-                                  placeholder="Rua, Avenida, Travessa..."
-                                  value={resp.endereco || ''}
-                                  onChange={e => handleInputChange('responsaveis', 'endereco', e.target.value, index)}
-                                />
-                              </div>
-                              <div>
-                                <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
-                                  Número
-                                </label>
-                                <input
-                                  className="form-input"
-                                  style={{ height: 35, padding: '0 10px', fontSize: 12.5, borderRadius: 8 }}
-                                  placeholder="Nº"
-                                  value={resp.numero || ''}
-                                  onChange={e => handleInputChange('responsaveis', 'numero', e.target.value, index)}
-                                />
-                              </div>
-                              <div>
-                                <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
-                                  Complemento
-                                </label>
-                                <input
-                                  className="form-input"
-                                  style={{ height: 35, padding: '0 10px', fontSize: 12.5, borderRadius: 8 }}
-                                  placeholder="Apto, Bloco..."
-                                  value={resp.complemento || ''}
-                                  onChange={e => handleInputChange('responsaveis', 'complemento', e.target.value, index)}
-                                />
-                              </div>
-                            </div>
-
-                            <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.5fr 90px', gap: 10 }}>
-                              <div>
-                                <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
-                                  Bairro
-                                </label>
-                                <input
-                                  className="form-input"
-                                  style={{ height: 35, padding: '0 10px', fontSize: 12.5, borderRadius: 8 }}
-                                  placeholder="Bairro"
-                                  value={resp.bairro || ''}
-                                  onChange={e => handleInputChange('responsaveis', 'bairro', e.target.value, index)}
-                                />
-                              </div>
-                              <div>
-                                <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
-                                  Cidade
-                                </label>
-                                <input
-                                  className="form-input"
-                                  style={{ height: 35, padding: '0 10px', fontSize: 12.5, borderRadius: 8 }}
-                                  placeholder="Cidade"
-                                  value={resp.cidade || ''}
-                                  onChange={e => handleInputChange('responsaveis', 'cidade', e.target.value, index)}
-                                />
-                              </div>
-                              <div>
-                                <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
-                                  UF
-                                </label>
-                                <select
-                                  className="form-input"
-                                  style={{ height: 35, padding: '0 6px', fontSize: 12.5, borderRadius: 8 }}
-                                  value={resp.uf || ''}
-                                  onChange={e => handleInputChange('responsaveis', 'uf', e.target.value, index)}
-                                >
-                                  <option value="">UF...</option>
-                                  {ESTADOS_BRASIL.map(uf => (
-                                    <option key={uf} value={uf}>{uf}</option>
-                                  ))}
-                                </select>
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* SUB-SECTION 3: ENDEREÇO COMERCIAL COM VIACEP (RECOLHIDO POR PADRÃO) */}
-                          {(() => {
-                            const isExpandedComercial = !!expandedComercialResp[index]
-                            const hasComercialData = Boolean(
-                              resp.comercialEmpresa ||
-                              resp.comercialTelefone ||
-                              resp.comercialCep ||
-                              resp.comercialEndereco ||
-                              resp.comercialNumero ||
-                              resp.comercialComplemento ||
-                              resp.comercialBairro ||
-                              resp.comercialCidade ||
-                              resp.comercialUf
-                            )
-
-                            return (
-                              <div
-                                style={{
-                                  background: isExpandedComercial 
-                                    ? 'rgba(248, 250, 252, 0.9)' 
-                                    : hasComercialData 
-                                      ? 'rgba(245, 243, 255, 0.5)' 
-                                      : 'rgba(248, 250, 252, 0.6)',
-                                  border: isExpandedComercial 
-                                    ? '1px solid #cbd5e1' 
-                                    : hasComercialData 
-                                      ? '1px solid #ddd6fe' 
-                                      : '1px dashed #cbd5e1',
-                                  borderRadius: 10,
-                                  marginBottom: 12,
-                                  overflow: 'hidden',
-                                  transition: 'all 0.2s ease'
-                                }}
-                              >
-                                {/* ACCORDION HEADER (CLICÁVEL) */}
-                                <div
-                                  onClick={() => toggleComercialResp(index)}
-                                  role="button"
-                                  tabIndex={0}
-                                  onKeyDown={e => {
-                                    if (e.key === 'Enter' || e.key === ' ') {
-                                      e.preventDefault()
-                                      toggleComercialResp(index)
-                                    }
-                                  }}
-                                  style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'space-between',
-                                    padding: '10px 14px',
-                                    cursor: 'pointer',
-                                    userSelect: 'none',
-                                    background: isExpandedComercial ? 'rgba(241, 245, 249, 0.7)' : 'transparent',
-                                    borderBottom: isExpandedComercial ? '1px solid #e2e8f0' : 'none',
-                                    transition: 'background 0.15s ease'
-                                  }}
-                                >
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                                    <div
-                                      style={{
-                                        width: 26,
-                                        height: 26,
-                                        borderRadius: 6,
-                                        background: isExpandedComercial ? 'rgba(124, 58, 237, 0.12)' : 'rgba(124, 58, 237, 0.08)',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center'
-                                      }}
-                                    >
-                                      <Briefcase size={14} color="#7c3aed" />
-                                    </div>
-                                    <span style={{ fontSize: 11.5, fontWeight: 800, color: '#1e293b', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
-                                      Endereço Comercial / Trabalho
-                                    </span>
-                                    <span style={{ fontSize: 10, color: '#94a3b8', fontWeight: 600 }}>
-                                      (Opcional)
-                                    </span>
-
-                                    {hasComercialData && !isExpandedComercial && (
-                                      <span
-                                        style={{
-                                          display: 'inline-flex',
-                                          alignItems: 'center',
-                                          gap: 4,
-                                          fontSize: 10.5,
-                                          fontWeight: 700,
-                                          color: '#059669',
-                                          background: 'rgba(5, 150, 105, 0.09)',
-                                          border: '1px solid rgba(5, 150, 105, 0.25)',
-                                          padding: '2px 8px',
-                                          borderRadius: 999
-                                        }}
-                                      >
-                                        <Check size={11} /> Preenchido {resp.comercialEmpresa ? `• ${resp.comercialEmpresa}` : ''}
-                                      </span>
-                                    )}
-
-                                    {isExpandedComercial && (
-                                      <>
-                                        {loadingCepResp[`${index}_com`] && (
-                                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10.5, color: '#7c3aed', fontWeight: 600 }}>
-                                            <Loader2 size={11} className="animate-spin" /> Buscando CEP...
-                                          </span>
-                                        )}
-                                        {cepFeedbackResp[`${index}_com`]?.type === 'success' && (
-                                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10.5, color: '#059669', fontWeight: 700 }}>
-                                            <CheckCircle2 size={12} /> {cepFeedbackResp[`${index}_com`]?.message}
-                                          </span>
-                                        )}
-                                        {cepFeedbackResp[`${index}_com`]?.type === 'error' && (
-                                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10.5, color: '#dc2626', fontWeight: 700 }}>
-                                            <AlertTriangle size={12} /> {cepFeedbackResp[`${index}_com`]?.message}
-                                          </span>
-                                        )}
-                                      </>
-                                    )}
-                                  </div>
-
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                    {isExpandedComercial && (
-                                      <button
-                                        type="button"
-                                        onClick={e => {
-                                          e.stopPropagation()
-                                          handleCopiarEnderecoResidencialParaComercial(index)
-                                        }}
-                                        style={{
-                                          display: 'inline-flex',
-                                          alignItems: 'center',
-                                          gap: 5,
-                                          fontSize: 11,
-                                          fontWeight: 700,
-                                          color: '#4f46e5',
-                                          background: 'rgba(79, 70, 229, 0.08)',
-                                          border: '1px solid rgba(79, 70, 229, 0.25)',
-                                          borderRadius: 6,
-                                          padding: '4px 10px',
-                                          cursor: 'pointer',
-                                          transition: 'all 0.15s ease'
-                                        }}
-                                        title="Preenche o endereço comercial com os dados do residencial"
-                                      >
-                                        <Copy size={11} /> Copiar do Residencial
-                                      </button>
-                                    )}
-
-                                    <div
-                                      style={{
-                                        display: 'inline-flex',
-                                        alignItems: 'center',
-                                        gap: 5,
-                                        fontSize: 11,
-                                        fontWeight: 700,
-                                        color: isExpandedComercial ? '#64748b' : '#7c3aed',
-                                        background: isExpandedComercial ? '#f1f5f9' : 'rgba(124, 58, 237, 0.08)',
-                                        border: isExpandedComercial ? '1px solid #e2e8f0' : '1px solid rgba(124, 58, 237, 0.25)',
-                                        borderRadius: 6,
-                                        padding: '4px 10px'
-                                      }}
-                                    >
-                                      {isExpandedComercial ? (
-                                        <>Recolher <ChevronUp size={13} /></>
-                                      ) : (
-                                        <>{hasComercialData ? 'Visualizar / Editar' : 'Preencher Endereço Comercial'} <ChevronDown size={13} /></>
-                                      )}
-                                    </div>
-                                  </div>
-                                </div>
-
-                                {/* ACCORDION CONTENT (EXPANDIDO) */}
-                                {isExpandedComercial && (
-                                  <div style={{ padding: '12px 14px' }}>
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1.2fr 130px', gap: 10, marginBottom: 10 }}>
-                                      <div>
-                                        <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
-                                          Empresa / Local de Trabalho
-                                        </label>
-                                        <input
-                                          className="form-input"
-                                          style={{ height: 35, padding: '0 10px', fontSize: 12.5, borderRadius: 8 }}
-                                          placeholder="Ex: Empresa XYZ / Autônomo"
-                                          value={resp.comercialEmpresa || ''}
-                                          onChange={e => handleInputChange('responsaveis', 'comercialEmpresa', e.target.value, index)}
-                                        />
-                                      </div>
-                                      <div>
-                                        <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
-                                          Telefone Comercial
-                                        </label>
-                                        <input
-                                          className="form-input"
-                                          style={{ height: 35, padding: '0 10px', fontSize: 12.5, borderRadius: 8 }}
-                                          placeholder="(00) 0000-0000"
-                                          value={resp.comercialTelefone || ''}
-                                          onChange={e => handleInputChange('responsaveis', 'comercialTelefone', formatPhone(e.target.value), index)}
-                                        />
-                                      </div>
-                                      <div>
-                                        <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
-                                          CEP Comercial
-                                        </label>
-                                        <input
-                                          className="form-input"
-                                          style={{ height: 35, padding: '0 10px', fontSize: 12.5, borderRadius: 8 }}
-                                          placeholder="00000-000"
-                                          value={resp.comercialCep || ''}
-                                          onChange={e => handleCepRespComercialChange(e.target.value, index)}
-                                        />
-                                      </div>
-                                    </div>
-
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 100px 160px', gap: 10, marginBottom: 10 }}>
-                                      <div>
-                                        <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
-                                          Endereço Comercial / Logradouro
-                                        </label>
-                                        <input
-                                          className="form-input"
-                                          style={{ height: 35, padding: '0 10px', fontSize: 12.5, borderRadius: 8 }}
-                                          placeholder="Rua, Avenida, Bloco empresarial..."
-                                          value={resp.comercialEndereco || ''}
-                                          onChange={e => handleInputChange('responsaveis', 'comercialEndereco', e.target.value, index)}
-                                        />
-                                      </div>
-                                      <div>
-                                        <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
-                                          Número
-                                        </label>
-                                        <input
-                                          className="form-input"
-                                          style={{ height: 35, padding: '0 10px', fontSize: 12.5, borderRadius: 8 }}
-                                          placeholder="Nº"
-                                          value={resp.comercialNumero || ''}
-                                          onChange={e => handleInputChange('responsaveis', 'comercialNumero', e.target.value, index)}
-                                        />
-                                      </div>
-                                      <div>
-                                        <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
-                                          Complemento / Sala
-                                        </label>
-                                        <input
-                                          className="form-input"
-                                          style={{ height: 35, padding: '0 10px', fontSize: 12.5, borderRadius: 8 }}
-                                          placeholder="Sala, Andar, Galpão..."
-                                          value={resp.comercialComplemento || ''}
-                                          onChange={e => handleInputChange('responsaveis', 'comercialComplemento', e.target.value, index)}
-                                        />
-                                      </div>
-                                    </div>
-
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.5fr 90px', gap: 10 }}>
-                                      <div>
-                                        <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
-                                          Bairro
-                                        </label>
-                                        <input
-                                          className="form-input"
-                                          style={{ height: 35, padding: '0 10px', fontSize: 12.5, borderRadius: 8 }}
-                                          placeholder="Bairro"
-                                          value={resp.comercialBairro || ''}
-                                          onChange={e => handleInputChange('responsaveis', 'comercialBairro', e.target.value, index)}
-                                        />
-                                      </div>
-                                      <div>
-                                        <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
-                                          Cidade
-                                        </label>
-                                        <input
-                                          className="form-input"
-                                          style={{ height: 35, padding: '0 10px', fontSize: 12.5, borderRadius: 8 }}
-                                          placeholder="Cidade"
-                                          value={resp.comercialCidade || ''}
-                                          onChange={e => handleInputChange('responsaveis', 'comercialCidade', e.target.value, index)}
-                                        />
-                                      </div>
-                                      <div>
-                                        <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
-                                          UF
-                                        </label>
-                                        <select
-                                          className="form-input"
-                                          style={{ height: 35, padding: '0 6px', fontSize: 12.5, borderRadius: 8 }}
-                                          value={resp.comercialUf || ''}
-                                          onChange={e => handleInputChange('responsaveis', 'comercialUf', e.target.value, index)}
-                                        >
-                                          <option value="">UF...</option>
-                                          {ESTADOS_BRASIL.map(uf => (
-                                            <option key={uf} value={uf}>{uf}</option>
-                                          ))}
-                                        </select>
-                                      </div>
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
-                            )
-                          })()}
-
-                          {/* SUB-SECTION 4: DIAS DE ACESSO & LIBERADO / PROIBIDO */}
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, padding: '10px 14px', background: 'rgba(248, 250, 252, 0.8)', border: '1px solid #e2e8f0', borderRadius: 10 }}>
+                          {/* Seção Inferior: Dias Permitidos & Retirada Liberada/Proibida */}
+                          <div style={{ 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            justifyContent: 'space-between', 
+                            flexWrap: 'wrap', 
+                            gap: 10, 
+                            padding: '8px 12px', 
+                            background: '#f8fafc', 
+                            border: '1px solid #e2e8f0', 
+                            borderRadius: 8 
+                          }}>
                             <div>
-                              <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 6 }}>
+                              <label style={{ display: 'block', fontSize: 10, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.03em', marginBottom: 4 }}>
                                 Dias Permitidos para Retirada (RFID)
                               </label>
-                              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                              <div style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
                                 {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab'].map(dia => {
                                   const isSelected = resp.diasAcesso?.includes(dia);
                                   const showAsSelected = isSelected && !resp.proibido;
@@ -5369,21 +4553,21 @@ export default function AlunosPage() {
                                         handleInputChange('responsaveis', 'diasAcesso', newDias, index);
                                       }}
                                       style={{
-                                        width: 32,
-                                        height: 32,
-                                        borderRadius: '50%',
+                                        width: 28,
+                                        height: 28,
+                                        borderRadius: '6px',
                                         border: '1px solid',
                                         borderColor: showAsSelected ? '#10b981' : '#e2e8f0',
                                         background: showAsSelected ? '#10b981' : '#fff',
                                         color: showAsSelected ? '#fff' : '#64748b',
                                         fontWeight: 700,
-                                        fontSize: 11,
+                                        fontSize: 10.5,
                                         display: 'flex',
                                         alignItems: 'center',
                                         justifyContent: 'center',
                                         cursor: resp.proibido ? 'not-allowed' : 'pointer',
-                                        transition: 'all 0.2s',
-                                        boxShadow: showAsSelected ? '0 2px 8px rgba(16, 185, 129, 0.25)' : 'none',
+                                        transition: 'all 0.15s ease',
+                                        boxShadow: showAsSelected ? '0 1px 4px rgba(16, 185, 129, 0.2)' : 'none',
                                         opacity: resp.proibido ? 0.6 : 1
                                       }}
                                     >
@@ -5399,29 +4583,32 @@ export default function AlunosPage() {
                                 type="button"
                                 onClick={() => handleInputChange('responsaveis', 'proibido', !resp.proibido, index)}
                                 style={{
-                                  height: 34,
-                                  padding: '0 16px',
-                                  borderRadius: '20px',
-                                  fontSize: 12,
+                                  height: 30,
+                                  padding: '0 12px',
+                                  borderRadius: '16px',
+                                  fontSize: 11,
                                   fontWeight: 700,
                                   border: '1px solid',
                                   borderColor: resp.proibido ? '#ef4444' : '#10b981',
                                   background: resp.proibido ? '#ef4444' : '#10b981',
                                   color: '#fff',
                                   cursor: 'pointer',
-                                  transition: 'all 0.2s',
+                                  transition: 'all 0.15s ease',
                                   display: 'flex',
                                   alignItems: 'center',
-                                  gap: 6
+                                  gap: 5,
+                                  boxShadow: resp.proibido 
+                                    ? '0 1px 4px rgba(239, 68, 68, 0.25)' 
+                                    : '0 1px 4px rgba(16, 185, 129, 0.25)'
                                 }}
                               >
                                 {resp.proibido ? (
                                   <>
-                                    <UserX size={14} /> Entrada Proibida
+                                    <UserX size={13} /> Retirada Proibida
                                   </>
                                 ) : (
                                   <>
-                                    <UserCheck size={14} /> Entrada Liberada
+                                    <UserCheck size={13} /> Retirada Liberada
                                   </>
                                 )}
                               </button>
@@ -5487,22 +4674,23 @@ export default function AlunosPage() {
                         className="neo-btn" 
                         style={{ 
                           width: '100%', 
-                          padding: '14px', 
-                          borderRadius: '12px', 
-                          border: '2px dashed #3b82f6', 
-                          background: 'rgba(59, 130, 246, 0.05)', 
+                          padding: '10px', 
+                          borderRadius: '8px', 
+                          border: '1px dashed #3b82f6', 
+                          background: 'rgba(59, 130, 246, 0.04)', 
                           color: '#1d4ed8', 
+                          fontSize: 12,
                           fontWeight: 700, 
                           display: 'flex', 
                           alignItems: 'center', 
                           justifyContent: 'center', 
-                          gap: 8,
-                          marginTop: 6,
-                          transition: 'all 0.2s',
+                          gap: 6,
+                          marginTop: 4,
+                          transition: 'all 0.15s ease',
                           cursor: 'pointer'
                         }}
                       >
-                        <Plus size={16} /> Adicionar Outro Responsável
+                        <Plus size={14} /> Adicionar Outro Responsável
                       </button>
                     </div>
                   )}
@@ -5511,11 +4699,11 @@ export default function AlunosPage() {
 
               {/* TAB: TURMA (HISTÓRICO) */}
               {activeTab === 'turma' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div>
-                      <h3 style={{ fontSize: 16, fontWeight: 700, color: '#1e293b', margin: 0 }}>Histórico de Turmas</h3>
-                      <p style={{ fontSize: 13, color: '#64748b', margin: '4px 0 0 0' }}>Gerencie os vínculos do aluno com turmas e anos letivos.</p>
+                      <h3 style={{ fontSize: 14, fontWeight: 800, color: '#1e293b', margin: 0 }}>Histórico de Turmas</h3>
+                      <p style={{ fontSize: 11, color: '#64748b', margin: '2px 0 0 0' }}>Gerencie os vínculos do aluno com turmas e anos letivos.</p>
                     </div>
                     <button 
                       onClick={(e) => {
@@ -5523,9 +4711,9 @@ export default function AlunosPage() {
                         const novoHist = [...formData.historicoTurmas, { id: `HIST-${Date.now()}`, anoLetivo: '', segmento: '', serie: '', serieTurma: '', modalidade: '', isIntegralIntermediario: false }];
                         setFormData(prev => ({ ...prev, historicoTurmas: novoHist }));
                       }}
-                      style={{ background: '#f8fafc', color: '#3b82f6', border: '1px solid #e2e8f0', padding: '8px 16px', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
+                      style={{ background: '#f8fafc', color: '#3b82f6', border: '1px solid #e2e8f0', padding: '6px 12px', borderRadius: 6, fontSize: 11.5, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, transition: 'all 0.15s ease' }}
                     >
-                      <Plus size={16} /> Adicionar Vínculo
+                      <Plus size={13} /> Adicionar Vínculo
                     </button>
                   </div>
                   
@@ -5551,32 +4739,8 @@ export default function AlunosPage() {
                       const badgeText = isActive ? 'Matriculado (Cursando)' : 'Histórico (Anterior)';
                       
                       return (
-                        <div key={hist.id || index} style={{ background: '#f8fafc', border: `1px solid ${isActive ? '#86efac' : '#e2e8f0'}`, borderRadius: 12, padding: 16, position: 'relative' }}>
-                          <div style={{ position: 'absolute', top: 12, right: 12, display: 'flex', gap: 8, alignItems: 'center' }}>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.preventDefault();
-                                handleOpenEditMatriculaModal(index);
-                              }}
-                              style={{
-                                background: '#eff6ff',
-                                color: '#2563eb',
-                                border: '1px solid #bfdbfe',
-                                padding: '5px 12px',
-                                borderRadius: 7,
-                                cursor: 'pointer',
-                                fontSize: 11.5,
-                                fontWeight: 700,
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: 5,
-                                transition: 'all 0.15s ease'
-                              }}
-                              title="Editar dados completos da matrícula / turma"
-                            >
-                              <Edit size={13} /> Editar
-                            </button>
+                        <div key={hist.id || index} style={{ background: '#ffffff', border: `1px solid ${isActive ? '#86efac' : '#e2e8f0'}`, borderRadius: 10, padding: '12px 14px', position: 'relative', boxShadow: '0 1px 4px rgba(0,0,0,0.03)' }}>
+                          <div style={{ position: 'absolute', top: 10, right: 10, display: 'flex', gap: 6, alignItems: 'center' }}>
                             <button 
                               type="button"
                               onClick={(e) => {
@@ -5584,36 +4748,43 @@ export default function AlunosPage() {
                                 const newHist = formData.historicoTurmas.filter((_, i) => i !== index);
                                 setFormData(prev => ({ ...prev, historicoTurmas: newHist }));
                               }}
-                              style={{ background: 'white', color: '#ef4444', border: '1px solid #fee2e2', padding: 6, borderRadius: 6, cursor: 'pointer' }}
+                              style={{ background: '#fff', color: '#ef4444', border: '1px solid #fee2e2', width: 26, height: 26, borderRadius: 6, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s ease' }}
                               title="Remover este vínculo"
                             >
-                              <Trash2 size={16} />
+                              <Trash2 size={13} />
                             </button>
                           </div>
 
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
-                            <h4 style={{ fontSize: 14, fontWeight: 700, color: '#334155', margin: 0 }}>Vínculo #{sortedPos + 1}</h4>
-                            <span style={{ background: badgeBg, color: badgeColor, fontSize: 11, fontWeight: 700, padding: '4px 8px', borderRadius: 4, textTransform: 'uppercase' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
+                            <h4 style={{ fontSize: 13, fontWeight: 800, color: '#1e293b', margin: 0 }}>Vínculo #{sortedPos + 1}</h4>
+                            <span style={{ background: badgeBg, color: badgeColor, fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 4, textTransform: 'uppercase' }}>
                               {hist.situacao || badgeText}
                             </span>
                             {hist.bolsista && hist.bolsista !== 'Não' && (
-                              <span style={{ background: 'rgba(124, 58, 237, 0.1)', color: '#7c3aed', fontSize: 10.5, fontWeight: 700, padding: '2px 8px', borderRadius: 999 }}>
+                              <span style={{ background: 'rgba(124, 58, 237, 0.08)', color: '#7c3aed', fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 999 }}>
                                 Bolsista: {hist.bolsista}
                               </span>
                             )}
                             {hist.dataIngresso && (
-                              <span style={{ fontSize: 10.5, color: '#64748b', fontWeight: 600 }}>
+                              <span style={{ fontSize: 10, color: '#64748b', fontWeight: 600 }}>
                                 Ingresso: {hist.dataIngresso.includes('-') ? hist.dataIngresso.split('-').reverse().join('/') : hist.dataIngresso}
                               </span>
                             )}
                           </div>
 
-                      <div style={{ display: 'grid', gridTemplateColumns: '0.9fr 1.1fr 1.1fr 1.3fr auto', gap: 12, alignItems: 'end' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: '100px 1.1fr 1fr 1.8fr auto', gap: 10, alignItems: 'end' }}>
                         <div>
-                          <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 6 }}>Ano Letivo *</label>
+                          <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.03em', marginBottom: 4, whiteSpace: 'nowrap' }}>Ano Letivo *</label>
                           <select 
                             className="form-input" 
-                            style={getMandatoryFieldStyle(hist.anoLetivo, `hist_${index}_anoLetivo`)}
+                            style={{
+                              ...getMandatoryFieldStyle(hist.anoLetivo, `hist_${index}_anoLetivo`),
+                              height: 32,
+                              padding: '0 8px',
+                              fontSize: 12,
+                              borderRadius: 6,
+                              background: '#fff'
+                            }}
                             value={hist.anoLetivo} 
                             onChange={e => {
                               const newHist = [...formData.historicoTurmas];
@@ -5630,11 +4801,16 @@ export default function AlunosPage() {
                         </div>
 
                         <div>
-                          <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 6 }}>Segmento *</label>
+                          <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.03em', marginBottom: 4, whiteSpace: 'nowrap' }}>Segmento *</label>
                           <select 
                             className="form-input" 
                             style={{ 
                               ...getMandatoryFieldStyle(hist.segmento, `hist_${index}_segmento`),
+                              height: 32,
+                              padding: '0 8px',
+                              fontSize: 12,
+                              borderRadius: 6,
+                              background: '#fff',
                               opacity: !hist.anoLetivo ? 0.6 : 1,
                               cursor: !hist.anoLetivo ? 'not-allowed' : 'pointer'
                             }}
@@ -5678,11 +4854,16 @@ export default function AlunosPage() {
                         </div>
 
                         <div>
-                          <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 6 }}>Série *</label>
+                          <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.03em', marginBottom: 4, whiteSpace: 'nowrap' }}>Série *</label>
                           <select 
                             className="form-input" 
                             style={{ 
                               ...getMandatoryFieldStyle(hist.serie, `hist_${index}_serie`),
+                              height: 32,
+                              padding: '0 8px',
+                              fontSize: 12,
+                              borderRadius: 6,
+                              background: '#fff',
                               opacity: (!hist.anoLetivo || !hist.segmento) ? 0.6 : 1,
                               cursor: (!hist.anoLetivo || !hist.segmento) ? 'not-allowed' : 'pointer'
                             }}
@@ -5726,11 +4907,16 @@ export default function AlunosPage() {
                         </div>
 
                         <div>
-                          <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 6 }}>Turma *</label>
+                          <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.03em', marginBottom: 4, whiteSpace: 'nowrap' }}>Turma *</label>
                           <select 
                             className="form-input" 
                             style={{ 
                               ...getMandatoryFieldStyle(hist.serieTurma, `hist_${index}_serieTurma`),
+                              height: 32,
+                              padding: '0 8px',
+                              fontSize: 12,
+                              borderRadius: 6,
+                              background: '#fff',
                               opacity: (!hist.anoLetivo || !hist.segmento || !hist.serie) ? 0.6 : 1,
                               cursor: (!hist.anoLetivo || !hist.segmento || !hist.serie) ? 'not-allowed' : 'pointer'
                             }}
@@ -5823,7 +5009,7 @@ export default function AlunosPage() {
                         </div>
 
                         <div>
-                          <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 6 }}>Turno / Modalidade</label>
+                          <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.03em', marginBottom: 4, whiteSpace: 'nowrap' }}>Turno / Modalidade</label>
                           <button
                             type="button"
                             onClick={(e) => {
@@ -5836,21 +5022,21 @@ export default function AlunosPage() {
                             }}
                             style={{
                               border: (hist.isIntegralIntermediario || hist.modalidade === 'INTEGRAL/INTERMEDIÁRIO') ? 'none' : '1px solid #cbd5e1',
-                              borderRadius: 10,
-                              padding: '0 16px',
-                              height: 40,
-                              fontSize: 11,
+                              borderRadius: 6,
+                              padding: '0 10px',
+                              height: 32,
+                              fontSize: 10.5,
                               fontWeight: 700,
-                              background: (hist.isIntegralIntermediario || hist.modalidade === 'INTEGRAL/INTERMEDIÁRIO') ? '#2563eb' : '#f8fafc',
+                              background: (hist.isIntegralIntermediario || hist.modalidade === 'INTEGRAL/INTERMEDIÁRIO') ? '#2563eb' : '#fff',
                               color: (hist.isIntegralIntermediario || hist.modalidade === 'INTEGRAL/INTERMEDIÁRIO') ? '#ffffff' : '#64748b',
                               cursor: 'pointer',
-                              transition: 'all 0.2s',
+                              transition: 'all 0.15s ease',
                               whiteSpace: 'nowrap',
-                              boxShadow: (hist.isIntegralIntermediario || hist.modalidade === 'INTEGRAL/INTERMEDIÁRIO') ? '0 2px 6px rgba(37,99,235,0.35)' : 'none',
+                              boxShadow: (hist.isIntegralIntermediario || hist.modalidade === 'INTEGRAL/INTERMEDIÁRIO') ? '0 2px 6px rgba(37,99,235,0.25)' : 'none',
                               display: 'inline-flex',
                               alignItems: 'center',
                               justifyContent: 'center',
-                              gap: 6
+                              gap: 4
                             }}
                           >
                             {(hist.isIntegralIntermediario || hist.modalidade === 'INTEGRAL/INTERMEDIÁRIO') && <span>✓</span>}
@@ -5863,13 +5049,13 @@ export default function AlunosPage() {
                 });
               })()}
                   
-                  <div style={{ background: 'rgba(59,130,246,0.05)', padding: '16px 20px', borderRadius: 12, display: 'flex', alignItems: 'center', gap: 12 }}>
-                    <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#1d4ed8' }}>
-                      <Sparkles size={16} />
+                  <div style={{ background: 'rgba(59,130,246,0.04)', border: '1px solid rgba(59,130,246,0.12)', padding: '10px 14px', borderRadius: 10, display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <div style={{ width: 28, height: 28, borderRadius: 7, background: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#2563eb', flexShrink: 0 }}>
+                      <Sparkles size={14} />
                     </div>
                     <div>
-                      <p style={{ fontSize: 13, fontWeight: 700, color: '#1e293b', margin: 0 }}>Dica de Secretário</p>
-                      <p style={{ fontSize: 11, color: '#64748b', margin: 0 }}>O último vínculo adicionado será considerado como a turma atual (Matriculado) do aluno para acesso às agendas e catracas do ano vigente.</p>
+                      <p style={{ fontSize: 12, fontWeight: 700, color: '#1e293b', margin: 0 }}>Dica de Secretário</p>
+                      <p style={{ fontSize: 10.5, color: '#64748b', margin: '2px 0 0 0' }}>O último vínculo adicionado será considerado como a turma atual (Matriculado) do aluno para acesso às agendas e catracas do ano vigente.</p>
                     </div>
                   </div>
                 </div>
@@ -5877,26 +5063,26 @@ export default function AlunosPage() {
 
               {/* TAB: OBSERVAÇÕES */}
               {activeTab === 'observacoes' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                   {/* Header info */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'rgba(59, 130, 246, 0.05)', padding: '16px 20px', borderRadius: 12, border: '1px solid rgba(59, 130, 246, 0.15)' }}>
-                    <div style={{ width: 36, height: 36, borderRadius: 10, background: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', flexShrink: 0 }}>
-                      <FileText size={18} />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'rgba(59, 130, 246, 0.04)', padding: '10px 14px', borderRadius: 10, border: '1px solid rgba(59, 130, 246, 0.12)' }}>
+                    <div style={{ width: 30, height: 30, borderRadius: 8, background: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', flexShrink: 0 }}>
+                      <FileText size={15} />
                     </div>
                     <div>
-                      <h3 style={{ fontSize: 15, fontWeight: 700, color: '#1e293b', margin: 0 }}>Central de Anotações & Histórico de Observações</h3>
-                      <p style={{ fontSize: 12, color: '#64748b', margin: '2px 0 0 0' }}>Cadastre observações pedagógicas, comportamentais, de saúde ou gerais com carimbo oficial de data e horário.</p>
+                      <h3 style={{ fontSize: 13, fontWeight: 800, color: '#1e293b', margin: 0 }}>Central de Anotações & Histórico de Observações</h3>
+                      <p style={{ fontSize: 11, color: '#64748b', margin: '1px 0 0 0' }}>Cadastre observações pedagógicas, comportamentais, de saúde ou gerais com carimbo oficial de data e horário.</p>
                     </div>
                   </div>
 
                   {/* Form Card for Adding / Editing Observation */}
-                  <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, padding: 20, boxShadow: '0 4px 12px rgba(0,0,0,0.03)', display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, padding: '12px 14px', boxShadow: '0 1px 4px rgba(15, 23, 42, 0.03)', display: 'flex', flexDirection: 'column', gap: 10 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <label style={{ fontSize: 12, fontWeight: 800, color: '#334155', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <Sparkles size={14} color="#3b82f6" /> {editingObsId ? 'Editar Observação' : 'Nova Observação'}
+                      <label style={{ fontSize: 10.5, fontWeight: 800, color: '#334155', textTransform: 'uppercase', letterSpacing: '0.03em', display: 'flex', alignItems: 'center', gap: 5 }}>
+                        <Sparkles size={12} color="#3b82f6" /> {editingObsId ? 'Editar Observação' : 'Nova Observação'}
                       </label>
                       {editingObsId && (
-                        <button onClick={resetObsInput} style={{ fontSize: 11, fontWeight: 700, color: '#64748b', background: '#f1f5f9', border: 'none', padding: '4px 10px', borderRadius: 12, cursor: 'pointer' }}>
+                        <button onClick={resetObsInput} style={{ fontSize: 10.5, fontWeight: 700, color: '#64748b', background: '#f1f5f9', border: 'none', padding: '3px 8px', borderRadius: 6, cursor: 'pointer' }}>
                           Cancelar Edição
                         </button>
                       )}
@@ -5906,8 +5092,8 @@ export default function AlunosPage() {
                     <div>
                       <textarea
                         className="form-input"
-                        rows={3}
-                        style={{ width: '100%', resize: 'vertical', padding: '12px 14px', fontSize: 13, minHeight: 80, lineHeight: 1.5 }}
+                        rows={2}
+                        style={{ width: '100%', resize: 'vertical', padding: '8px 10px', fontSize: 12, minHeight: 56, lineHeight: 1.4, borderRadius: 6 }}
                         placeholder="Digite os detalhes da observação sobre o aluno..."
                         value={novaObsTexto}
                         onChange={e => setNovaObsTexto(e.target.value)}
@@ -5915,27 +5101,27 @@ export default function AlunosPage() {
                     </div>
 
                     {/* Inputs Grid: Date/Time + Category */}
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16, alignItems: 'end' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10, alignItems: 'end' }}>
                       <div>
-                        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 6 }}>
-                          <Clock size={12} style={{ display: 'inline', marginRight: 4 }} /> Data e Horário de Inserção *
+                        <label style={{ display: 'block', fontSize: 10, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.03em', marginBottom: 4 }}>
+                          <Clock size={11} style={{ display: 'inline', marginRight: 3 }} /> Data e Horário de Inserção *
                         </label>
                         <input
                           type="datetime-local"
                           className="form-input"
-                          style={{ fontSize: 13, height: 42 }}
+                          style={{ fontSize: 12, height: 32, padding: '0 8px', borderRadius: 6, background: '#fff' }}
                           value={novaObsDataHora}
                           onChange={e => setNovaObsDataHora(e.target.value)}
                         />
                       </div>
 
                       <div>
-                        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 6 }}>
+                        <label style={{ display: 'block', fontSize: 10, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.03em', marginBottom: 4 }}>
                           Categoria da Anotação
                         </label>
                         <select
                           className="form-input"
-                          style={{ fontSize: 13, height: 42 }}
+                          style={{ fontSize: 12, height: 32, padding: '0 8px', borderRadius: 6, background: '#fff' }}
                           value={novaObsCategoria}
                           onChange={e => setNovaObsCategoria(e.target.value as any)}
                         >
@@ -5950,24 +5136,24 @@ export default function AlunosPage() {
                     </div>
 
                     {/* Action Button */}
-                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 4 }}>
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 2 }}>
                       {editingObsId ? (
                         <button
                           type="button"
                           onClick={handleSalvarEdicaoObservacao}
                           className="neo-btn neo-btn-primary"
-                          style={{ height: 40, padding: '0 20px', fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}
+                          style={{ height: 32, padding: '0 14px', fontSize: 12, borderRadius: 6, display: 'flex', alignItems: 'center', gap: 5 }}
                         >
-                          <Check size={16} /> Salvar Alteração
+                          <Check size={14} /> Salvar Alteração
                         </button>
                       ) : (
                         <button
                           type="button"
                           onClick={handleAdicionarObservacao}
                           className="neo-btn neo-btn-primary"
-                          style={{ height: 40, padding: '0 20px', fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}
+                          style={{ height: 32, padding: '0 14px', fontSize: 12, borderRadius: 6, display: 'flex', alignItems: 'center', gap: 5 }}
                         >
-                          <Plus size={16} /> Adicionar Observação
+                          <Plus size={14} /> Adicionar Observação
                         </button>
                       )}
                     </div>
@@ -6146,22 +5332,22 @@ export default function AlunosPage() {
             </div>
 
             {/* Modal Footer */}
-            <div style={{ padding: '12px 24px', borderTop: '1px solid rgba(0,0,0,0.05)', background: 'transparent', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ padding: '10px 20px', borderTop: '1px solid #e2e8f0', background: '#fafbfc', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div style={{ display: 'flex', gap: 4, alignItems: 'center', fontSize: 12, color: '#64748b' }}>
-                <span style={{ width: 8, height: 8, borderRadius: '50%', background: activeTab === 'aluno' ? '#1d4ed8' : '#e2e8f0' }}></span>
-                <span style={{ width: 8, height: 8, borderRadius: '50%', background: activeTab === 'responsavel' ? '#1d4ed8' : '#e2e8f0' }}></span>
-                <span style={{ width: 8, height: 8, borderRadius: '50%', background: activeTab === 'turma' ? '#1d4ed8' : '#e2e8f0' }}></span>
-                <span style={{ width: 8, height: 8, borderRadius: '50%', background: activeTab === 'observacoes' ? '#1d4ed8' : '#e2e8f0' }}></span>
+                <span style={{ width: 7, height: 7, borderRadius: '50%', background: activeTab === 'aluno' ? '#1d4ed8' : '#e2e8f0' }}></span>
+                <span style={{ width: 7, height: 7, borderRadius: '50%', background: activeTab === 'responsavel' ? '#1d4ed8' : '#e2e8f0' }}></span>
+                <span style={{ width: 7, height: 7, borderRadius: '50%', background: activeTab === 'turma' ? '#1d4ed8' : '#e2e8f0' }}></span>
+                <span style={{ width: 7, height: 7, borderRadius: '50%', background: activeTab === 'observacoes' ? '#1d4ed8' : '#e2e8f0' }}></span>
               </div>
               
-              <div style={{ display: 'flex', gap: 12 }}>
-                <button onClick={toggleModal} className="neo-btn neo-btn-secondary" style={{ padding: '10px 20px', fontSize: 13 }}>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={toggleModal} className="neo-btn neo-btn-secondary" style={{ height: 34, padding: '0 16px', fontSize: 12, borderRadius: 8 }}>
                   Cancelar
                 </button>
                 {activeTab !== 'observacoes' ? (
                   <button 
                     className="neo-btn neo-btn-primary" 
-                    style={{ padding: '10px 20px', fontSize: 13 }}
+                    style={{ height: 34, padding: '0 16px', fontSize: 12, borderRadius: 8 }}
                     onClick={() => {
                       const nextTab = activeTab === 'aluno' ? 'responsavel' : activeTab === 'responsavel' ? 'turma' : 'observacoes';
                       setActiveTab(nextTab);
@@ -6176,22 +5362,24 @@ export default function AlunosPage() {
                   className="neo-btn neo-btn-primary" 
                   disabled={isSubmitting}
                   style={{ 
-                    padding: '10px 24px', 
-                    fontSize: 13, 
+                    height: 34,
+                    padding: '0 18px', 
+                    fontSize: 12, 
+                    borderRadius: 8,
                     background: isSubmitting ? 'linear-gradient(135deg, #059669 0%, #047857 100%)' : 'linear-gradient(135deg, #10b981 0%, #059669 100%)', 
-                    boxShadow: isSubmitting ? '0 0 15px rgba(16, 185, 129, 0.6)' : '0 4px 12px rgba(16, 185, 129, 0.25)',
+                    boxShadow: isSubmitting ? '0 0 15px rgba(16, 185, 129, 0.6)' : '0 2px 8px rgba(16, 185, 129, 0.25)',
                     position: 'relative',
                     overflow: 'hidden',
                     pointerEvents: isSubmitting ? 'none' : 'auto',
                     transition: 'all 0.3s ease',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: 8
+                    gap: 6
                   }}
                 >
                   {isSubmitting ? (
                     <>
-                      <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
+                      <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />
                       <span>Concluindo...</span>
                       <style>{`
                         @keyframes spin { 100% { transform: rotate(360deg); } }
@@ -6199,7 +5387,7 @@ export default function AlunosPage() {
                     </>
                   ) : (
                     <>
-                      <Check size={16} /> {editingAlunoId ? 'Salvar Alterações' : 'Finalizar Cadastro'}
+                      <Check size={14} /> {editingAlunoId ? 'Salvar Alterações' : 'Finalizar Cadastro'}
                     </>
                   )}
                 </button>

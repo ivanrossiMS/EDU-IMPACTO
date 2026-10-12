@@ -9,8 +9,15 @@ export async function GET(request: Request) {
   if (errorResponse) return errorResponse
 
   try {
+    const { searchParams } = new URL(request.url)
+    const limitParam = searchParams.get('limit')
+    const limit = limitParam ? Math.min(parseInt(limitParam, 10), 1000) : 300
     const supabase = await createProtectedClient()
-    const { data, error } = await supabase.from('autorizacoes').select('id, dados, created_at')
+    const { data, error } = await supabase
+      .from('autorizacoes')
+      .select('id, dados, created_at')
+      .order('created_at', { ascending: false })
+      .limit(limit)
     if (error) throw new Error(error.message)
     const result = (data || []).map(row => ({ ...row, ...(row.dados || {}) }))
     return NextResponse.json(result, {

@@ -525,7 +525,18 @@ export async function POST(request: Request) {
                     message: `Um novo conteúdo para ${student.aluno_nome} foi compartilhado. Confira!`,
                     targetUserIds: student.responsaveis_ids,
                     targetUrl: `/agenda-digital/${student.aluno_id}/momentos?id=${row.id}`,
-                    metadata: { aluno_id: student.aluno_id, perfil_destino: 'familia', item_id: String(row.id), rota: 'momentos', targetUrl: `/agenda-digital/${student.aluno_id}/momentos?id=${row.id}` }
+                    senderUserId: user.id,
+                    metadata: {
+                      aluno_id: student.aluno_id,
+                      perfil_destino: 'familia',
+                      item_id: String(row.id),
+                      rota: 'momentos',
+                      targetUrl: `/agenda-digital/${student.aluno_id}/momentos?id=${row.id}`,
+                      author: row.dados?.author || row.dados?.autor || user.user_metadata?.nome,
+                      author_id: row.dados?.authorId || user.id,
+                      author_cargo: user.user_metadata?.cargo || 'Professor(a)',
+                      author_foto: user.user_metadata?.foto || null,
+                    }
                   }).catch(err => console.error('Momento Push Error:', err))
                 )
               }
@@ -543,7 +554,18 @@ export async function POST(request: Request) {
                     message: `Novas fotos e atividades da turma de ${nomeAluno} foram compartilhadas. Confira!`,
                     targetUserIds: student.responsaveis_ids,
                     targetUrl: `/agenda-digital/${student.aluno_id}/momentos?id=${row.id}`,
-                    metadata: { aluno_id: student.aluno_id, perfil_destino: 'familia', item_id: String(row.id), rota: 'momentos', targetUrl: `/agenda-digital/${student.aluno_id}/momentos?id=${row.id}` }
+                    senderUserId: user.id,
+                    metadata: {
+                      aluno_id: student.aluno_id,
+                      perfil_destino: 'familia',
+                      item_id: String(row.id),
+                      rota: 'momentos',
+                      targetUrl: `/agenda-digital/${student.aluno_id}/momentos?id=${row.id}`,
+                      author: row.dados?.author || row.dados?.autor || user.user_metadata?.nome,
+                      author_id: row.dados?.authorId || user.id,
+                      author_cargo: user.user_metadata?.cargo || 'Professor(a)',
+                      author_foto: user.user_metadata?.foto || null,
+                    }
                   }).catch(err => console.error('Momento Push Error Turma Batch:', err))
                 );
               }
@@ -564,7 +586,17 @@ export async function POST(request: Request) {
                 message: msgMomento,
                 targetUserIds: directColaboradores,
                 targetUrl: `/agenda-digital/colaborador/momentos?id=${row.id}`,
-                metadata: { perfil_destino: 'colaborador', item_id: String(row.id), rota: 'momentos', targetUrl: `/agenda-digital/colaborador/momentos?id=${row.id}` }
+                senderUserId: user.id,
+                metadata: {
+                  perfil_destino: 'colaborador',
+                  item_id: String(row.id),
+                  rota: 'momentos',
+                  targetUrl: `/agenda-digital/colaborador/momentos?id=${row.id}`,
+                  author: autorMomento,
+                  author_id: row.dados?.authorId || user.id,
+                  author_cargo: user.user_metadata?.cargo || 'Professor(a)',
+                  author_foto: user.user_metadata?.foto || null,
+                }
               }).catch(err => console.error('Momento Push Error Colab:', err))
             )
           }
@@ -604,7 +636,18 @@ export async function POST(request: Request) {
                   message: `Um novo conteúdo para ${student.aluno_nome} foi compartilhado. Confira!`,
                   targetUserIds: student.responsaveis_ids,
                   targetUrl: `/agenda-digital/${student.aluno_id}/momentos?id=${data.id}`,
-                  metadata: { aluno_id: student.aluno_id, perfil_destino: 'familia', item_id: String(data.id), rota: 'momentos', targetUrl: `/agenda-digital/${student.aluno_id}/momentos?id=${data.id}` }
+                  senderUserId: user.id,
+                  metadata: {
+                    aluno_id: student.aluno_id,
+                    perfil_destino: 'familia',
+                    item_id: String(data.id),
+                    rota: 'momentos',
+                    targetUrl: `/agenda-digital/${student.aluno_id}/momentos?id=${data.id}`,
+                    author: data.dados?.author || data.dados?.autor || user.user_metadata?.nome,
+                    author_id: data.dados?.authorId || user.id,
+                    author_cargo: user.user_metadata?.cargo || 'Professor(a)',
+                    author_foto: user.user_metadata?.foto || null,
+                  }
                 }).catch(err => console.error('Momento Push Error:', err))
               )
             }
@@ -622,7 +665,18 @@ export async function POST(request: Request) {
                   message: `Novas fotos e atividades da turma de ${nomeAluno} foram compartilhadas. Confira!`,
                   targetUserIds: student.responsaveis_ids,
                   targetUrl: `/agenda-digital/${student.aluno_id}/momentos?id=${data.id}`,
-                  metadata: { aluno_id: student.aluno_id, perfil_destino: 'familia', item_id: String(data.id), rota: 'momentos', targetUrl: `/agenda-digital/${student.aluno_id}/momentos?id=${data.id}` }
+                  senderUserId: user.id,
+                  metadata: {
+                    aluno_id: student.aluno_id,
+                    perfil_destino: 'familia',
+                    item_id: String(data.id),
+                    rota: 'momentos',
+                    targetUrl: `/agenda-digital/${student.aluno_id}/momentos?id=${data.id}`,
+                    author: data.dados?.author || data.dados?.autor || user.user_metadata?.nome,
+                    author_id: data.dados?.authorId || user.id,
+                    author_cargo: user.user_metadata?.cargo || 'Professor(a)',
+                    author_foto: user.user_metadata?.foto || null,
+                  }
                 }).catch(err => console.error('Momento Push Error Turma:', err))
               );
             }
@@ -643,7 +697,17 @@ export async function POST(request: Request) {
               message: msgMomento,
               targetUserIds: directColaboradores,
               targetUrl: `/agenda-digital/colaborador/momentos?id=${data.id}`,
-              metadata: { perfil_destino: 'colaborador', item_id: String(data.id), rota: 'momentos', targetUrl: `/agenda-digital/colaborador/momentos?id=${data.id}` }
+              senderUserId: user.id,
+              metadata: {
+                perfil_destino: 'colaborador',
+                item_id: String(data.id),
+                rota: 'momentos',
+                targetUrl: `/agenda-digital/colaborador/momentos?id=${data.id}`,
+                author: autorMomento,
+                author_id: data.dados?.authorId || user.id,
+                author_cargo: user.user_metadata?.cargo || 'Professor(a)',
+                author_foto: user.user_metadata?.foto || null,
+              }
             }).catch(err => console.error('Momento Push Error Colab:', err))
           )
         }

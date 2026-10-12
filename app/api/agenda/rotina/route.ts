@@ -14,6 +14,8 @@ export async function GET(request: Request) {
     const turma = searchParams.get('turma') || searchParams.get('turma_id')
     const supabase = await createProtectedClient()
     const accessStartDate = await getLoggedUserAccessStartDate()
+    const limitParam = searchParams.get('limit')
+    const limit = limitParam ? Math.min(parseInt(limitParam, 10), 1000) : 300
     let query = supabase.from('rotina_items').select('*')
     if (turma) {
       query = query.eq('turma', turma)
@@ -21,6 +23,7 @@ export async function GET(request: Request) {
     if (accessStartDate && !turma) {
       query = query.gte('created_at', accessStartDate.toISOString())
     }
+    query = query.order('created_at', { ascending: false }).limit(limit)
     const { data, error } = await query
     if (error) throw new Error(error.message)
     return NextResponse.json(data || [], {

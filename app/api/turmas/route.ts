@@ -129,18 +129,18 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Nome da turma é obrigatório' }, { status: 400 })
     }
 
-    let id = ''
-    let exists = true
-    let attempts = 0
-    while (exists && attempts < 10) {
-      id = Math.floor(1000 + Math.random() * 9000).toString() // 4 dígitos
-      const { data } = await supabaseServer.from('turmas').select('id').eq('id', id)
-      if (!data || data.length === 0) exists = false
-      attempts++
-    }
-    
-    if (exists) {
-      throw new Error('Não foi possível gerar um ID único para a turma')
+    // ⚡ OTIMIZAÇÃO: Geração sem loop de rede sequencial (1 única leitura local de checagem)
+    let id = body.id ? String(body.id).trim() : ''
+    if (!id) {
+      const { data: recentTurmas } = await supabaseServer.from('turmas').select('id').order('created_at', { ascending: false }).limit(50)
+      const existingIds = new Set((recentTurmas || []).map((t: any) => String(t.id)))
+      let cand = Math.floor(1000 + Math.random() * 9000).toString()
+      let attempts = 0
+      while (existingIds.has(cand) && attempts < 15) {
+        cand = Math.floor(1000 + Math.random() * 9000).toString()
+        attempts++
+      }
+      id = existingIds.has(cand) ? `${cand}-${Date.now().toString(36).slice(-3).toUpperCase()}` : cand
     }
     
     const newTurma = {

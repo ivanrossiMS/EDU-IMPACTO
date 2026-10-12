@@ -38,17 +38,35 @@ export async function GET(request: Request) {
     }
     const chartStartMonth = last6Months[0]
 
-    // Todas as queries em paralelo via Promise.all — reduz latência total
+    // ⚡ OTIMIZAÇÃO HIGH PERFORMANCE: Tenta executar via RPC agregada nativa no PostgreSQL (< 15ms)
+    let rpcKpis: any = null
+    try {
+      const { data: rpcRes, error: rpcErr } = await supabase.rpc('get_dashboard_executivo_kpis', {
+        p_mes_atual: mes,
+        p_mes_anterior: mesPrev
+      })
+      if (!rpcErr && rpcRes) {
+        rpcKpis = rpcRes
+      }
+    } catch {
+      // Fallback gracioso para queries em memória caso a RPC não tenha sido executada
+    }
+
+    // Consultas otimizadas — se tiver RPC, dispensa download pesado de resAlunosAll
     const [
       resNovasMatriculas,
       resAlunosAll, resFuncionarios, resTurmas,
       resChartReceita
     ] = await Promise.all([
-      supabase.from('alunos').select('id', { count: 'exact', head: true })
-        .eq('status', 'matriculado')
-        .gte('created_at', `${mes}-01`)
-        .lt('created_at', `${monthIndex === 11 ? yearNum + 1 : yearNum}-${String((monthIndex === 11 ? 0 : monthIndex + 1) + 1).padStart(2, '0')}-01`),
-      supabase.from('alunos').select('id, status, dados, risco_evasao'),
+      rpcKpis
+        ? Promise.resolve({ count: rpcKpis.novasMatriculas })
+        : supabase.from('alunos').select('id', { count: 'exact', head: true })
+            .eq('status', 'matriculado')
+            .gte('created_at', `${mes}-01`)
+            .lt('created_at', `${monthIndex === 11 ? yearNum + 1 : yearNum}-${String((monthIndex === 11 ? 0 : monthIndex + 1) + 1).padStart(2, '0')}-01`),
+      rpcKpis
+        ? Promise.resolve({ data: [] }) // Economiza tráfego de milhares de JSONBs
+        : supabase.from('alunos').select('id, status, dados, risco_evasao'),
       supabase.from('funcionarios').select('id', { count: 'exact', head: true }).eq('status', 'ativo'),
       supabase.from('turmas').select('capacidade, matriculados'),
       supabase.from('titulos').select('valor, pagamento').eq('status', 'pago').gte('pagamento', `${chartStartMonth}-01`),
@@ -59,14 +77,14 @@ export async function GET(request: Request) {
 
     const alunosVal = resAlunosAll.data ?? []
     
-    let totalAlunos = 0
-    let inadimplentes = 0
-    let riscoAlto = 0
-    let riscoMedio = 0
-    let riscoBaixo = 0
+    let totalAlunos = rpcKpis?.totalAlunos ?? 0
+    let inadimplentes = rpcKpis?.inadimplentes ?? 0
+    let riscoAlto = rpcKpis?.riscoAlto ?? 0
+    let riscoMedio = rpcKpis?.riscoMedio ?? 0
+    let riscoBaixo = rpcKpis?.riscoBaixo ?? 0
 
-    let receitaMes = 0
-    let receitaPrev = 0
+    let receitaMes = rpcKpis?.receitaMes ?? 0
+    let receitaPrev = rpcKpis?.receitaPrev ?? 0
     const recMap: Record<string, number> = {}
 
     // 1. Process avulso Titulos
@@ -74,73 +92,76 @@ export async function GET(request: Request) {
       const k = (t.pagamento as string)?.slice(0, 7)
       if (k) {
         recMap[k] = (recMap[k] ?? 0) + (Number(t.valor) || 0)
-        if (k === mes) receitaMes += (Number(t.valor) || 0)
-        if (k === mesPrev) receitaPrev += (Number(t.valor) || 0)
+        if (!rpcKpis) {
+          if (k === mes) receitaMes += (Number(t.valor) || 0)
+          if (k === mesPrev) receitaPrev += (Number(t.valor) || 0)
+        }
       }
     }
 
-    const formatter = new Intl.DateTimeFormat('en-US', {
-      timeZone: 'America/Sao_Paulo',
-      year: 'numeric', month: 'numeric', day: 'numeric'
-    })
-    const spDateStr = formatter.format(new Date()) // M/D/YYYY
-    const [mmSP, ddSP, yyyySP] = spDateStr.split('/')
-    const hojeStart = new Date(`${yyyySP}-${mmSP.padStart(2, '0')}-${ddSP.padStart(2, '0')}T00:00:00-03:00`)
+    if (!rpcKpis) {
+      const formatter = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'America/Sao_Paulo',
+        year: 'numeric', month: 'numeric', day: 'numeric'
+      })
+      const spDateStr = formatter.format(new Date()) // M/D/YYYY
+      const [mmSP, ddSP, yyyySP] = spDateStr.split('/')
+      const hojeStart = new Date(`${yyyySP}-${mmSP.padStart(2, '0')}-${ddSP.padStart(2, '0')}T00:00:00-03:00`)
 
-    // 2. Process Alunos (Active status, Risco, Inadimplencia, and Parcelas Paid)
-    for (const a of alunosVal) {
-      if (a.status === 'matriculado') {
-        totalAlunos++
-        if (a.risco_evasao === 'alto') riscoAlto++
-        else if (a.risco_evasao === 'medio') riscoMedio++
-        else if (a.risco_evasao === 'baixo') riscoBaixo++
+      // 2. Process Alunos (Active status, Risco, Inadimplencia, and Parcelas Paid) - Legacy Fallback
+      for (const a of alunosVal) {
+        if (a.status === 'matriculado') {
+          totalAlunos++
+          if (a.risco_evasao === 'alto') riscoAlto++
+          else if (a.risco_evasao === 'medio') riscoMedio++
+          else if (a.risco_evasao === 'baixo') riscoBaixo++
 
-        const pacs = a.dados?.parcelas || []
-        const hasOverdue = pacs.some((p: any) => {
-          if (p.status === 'pendente' && p.vencimento) {
-            let dt: Date | null = null
-            if (p.vencimento.includes('/')) {
-              const [dd, mm, yyyy] = p.vencimento.split('/')
-              dt = new Date(`${yyyy}-${mm}-${dd}T12:00:00Z`)
-            } else {
-              dt = new Date(`${p.vencimento}T12:00:00Z`)
+          const pacs = a.dados?.parcelas || []
+          const hasOverdue = pacs.some((p: any) => {
+            if (p.status === 'pendente' && p.vencimento) {
+              let dt: Date | null = null
+              if (p.vencimento.includes('/')) {
+                const [dd, mm, yyyy] = p.vencimento.split('/')
+                dt = new Date(`${yyyy}-${mm}-${dd}T12:00:00Z`)
+              } else {
+                dt = new Date(`${p.vencimento}T12:00:00Z`)
+              }
+              return dt && (dt.getTime() < hojeStart.getTime())
             }
-            return dt && (dt.getTime() < hojeStart.getTime())
-          }
-          return false
-        })
-        if (hasOverdue) inadimplentes++
-      }
+            return false
+          })
+          if (hasOverdue) inadimplentes++
+        }
 
-      // Receita das parcelas do jsonb
-      const pacs = a.dados?.parcelas || []
-      for (const p of pacs) {
-        if (p.status === 'pago' && p.dtPagto) {
-          let k = ''
-          if (p.dtPagto.includes('/')) {
-            const [dd, mm, yyyy] = p.dtPagto.split('/')
-            k = `${yyyy}-${mm}`
-          } else {
-            k = p.dtPagto.slice(0, 7)
+        // Receita das parcelas do jsonb
+        const pacs = a.dados?.parcelas || []
+        for (const p of pacs) {
+          if (p.status === 'pago' && p.dtPagto) {
+            let k = ''
+            if (p.dtPagto.includes('/')) {
+              const [dd, mm, yyyy] = p.dtPagto.split('/')
+              k = `${yyyy}-${mm}`
+            } else {
+              k = p.dtPagto.slice(0, 7)
+            }
+            const val = Number(p.valorFinal || p.valor) || 0
+            
+            if (last6Months.includes(k)) {
+               recMap[k] = (recMap[k] ?? 0) + val
+            }
+            if (k === mes) receitaMes += val
+            if (k === mesPrev) receitaPrev += val
           }
-          const val = Number(p.valorFinal || p.valor) || 0
-          
-          if (last6Months.includes(k)) {
-             recMap[k] = (recMap[k] ?? 0) + val
-          }
-          if (k === mes) receitaMes += val
-          if (k === mesPrev) receitaPrev += val
         }
       }
     }
 
     const inadimplenciaRate = totalAlunos > 0 ? (inadimplentes / totalAlunos) * 100 : 0
-
     const varReceita = receitaPrev > 0 ? ((receitaMes - receitaPrev) / receitaPrev) * 100 : 0
 
     const turmasArr = resTurmas.data ?? []
-    const capTotal = turmasArr.reduce((s: number, t: any) => s + (Number(t.capacidade) || 0), 0)
-    const taxaOcupacao = capTotal > 0 ? (totalAlunos / capTotal) * 100 : 0
+    const capTotal = rpcKpis?.capacidadeTotal ?? turmasArr.reduce((s: number, t: any) => s + (Number(t.capacidade) || 0), 0)
+    const taxaOcupacao = rpcKpis?.taxaOcupacao ?? (capTotal > 0 ? (totalAlunos / capTotal) * 100 : 0)
 
     // Gráfico receita x despesa — últimos 6 meses
     const desMap: Record<string, number> = {}

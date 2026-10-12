@@ -186,62 +186,71 @@ export async function POST(request: Request) {
       const { error } = await supabase.from('frequencias').upsert(rows)
       if (error) return NextResponse.json({ error: error.message }, { status: 400 })
 
-      // Lote otimizado para não dar timeout no Vercel/Netlify
-      const targetData = await getStudentTargetsForComunicados({ targetStudents: rows.map(r => String(r.aluno_id)) })
-      
-      const pushPromises = items.map(async (item) => {
-        // Se notifyPush for explicitamente false (nenhuma alteração de frequência), ignora o disparo
-        if (item.notifyPush === false) return
-
-        const row = item.row
-        const rowAlunoIdClean = String(row.aluno_id || '').replace(/^0+/, '')
-        const studentInfo = targetData.students.find(s => {
-          const sIdClean = String(s.aluno_id || '').replace(/^0+/, '')
-          return String(s.aluno_id) === String(row.aluno_id) || sIdClean === rowAlunoIdClean
-        })
-        if (!studentInfo || studentInfo.responsaveis_ids.length === 0) return
-
-        const nomeAluno = studentInfo.aluno_nome || 'o aluno'
-        const isJustified = Boolean(row.justificativa && String(row.justificativa).trim().length > 0)
-        const isPresent = row.presente !== false && !isJustified
-
-        let pushTitle = '✅ Presença Confirmada'
-        let pushMsg = `A presença de ${nomeAluno} foi confirmada na escola.`
-
-        if (isJustified) {
-          pushTitle = '📋 Falta Justificada'
-          pushMsg = `Foi registrada uma falta justificada para ${nomeAluno}.`
-        } else if (!isPresent) {
-          pushTitle = '❌ Falta Registrada'
-          pushMsg = `Foi registrada uma falta para ${nomeAluno}.`
-        }
-
-        // ItemId único por salvamento usando timestamp para evitar travamento na deduplicação de push
-        const pushItemId = `${row.id}_${Date.now()}`
-
+      // ⚡ OTIMIZAÇÃO: Processamento de Push em background assíncrono (não bloqueia a resposta HTTP do professor)
+      const dispatchBatchPushes = async () => {
         try {
-          await sendAgendaPushNotification({
-            type: 'frequencia',
-            itemId: pushItemId,
-            title: pushTitle,
-            message: pushMsg,
-            targetUserIds: studentInfo.responsaveis_ids,
-            targetUrl: `/agenda-digital/${row.aluno_id}/frequencia`,
-            metadata: {
-              aluno_id: String(row.aluno_id),
-              turma_id: String(row.turma_id),
-              data: String(row.data)
+          const targetData = await getStudentTargetsForComunicados({ targetStudents: rows.map(r => String(r.aluno_id)) })
+          
+          const pushPromises = items.map(async (item) => {
+            if (item.notifyPush === false) return
+
+            const row = item.row
+            const rowAlunoIdClean = String(row.aluno_id || '').replace(/^0+/, '')
+            const studentInfo = targetData.students.find(s => {
+              const sIdClean = String(s.aluno_id || '').replace(/^0+/, '')
+              return String(s.aluno_id) === String(row.aluno_id) || sIdClean === rowAlunoIdClean
+            })
+            if (!studentInfo || studentInfo.responsaveis_ids.length === 0) return
+
+            const nomeAluno = studentInfo.aluno_nome || 'o aluno'
+            const isJustified = Boolean(row.justificativa && String(row.justificativa).trim().length > 0)
+            const isPresent = row.presente !== false && !isJustified
+
+            let pushTitle = '✅ Presença Confirmada'
+            let pushMsg = `A presença de ${nomeAluno} foi confirmada na escola.`
+
+            if (isJustified) {
+              pushTitle = '📋 Falta Justificada'
+              pushMsg = `Foi registrada uma falta justificada para ${nomeAluno}.`
+            } else if (!isPresent) {
+              pushTitle = '❌ Falta Registrada'
+              pushMsg = `Foi registrada uma falta para ${nomeAluno}.`
+            }
+
+            const pushItemId = `${row.id}_${Date.now()}`
+
+            try {
+              await sendAgendaPushNotification({
+                type: 'frequencia',
+                itemId: pushItemId,
+                title: pushTitle,
+                message: pushMsg,
+                targetUserIds: studentInfo.responsaveis_ids,
+                targetUrl: `/agenda-digital/${row.aluno_id}/frequencia`,
+                metadata: {
+                  aluno_id: String(row.aluno_id),
+                  turma_id: String(row.turma_id),
+                  data: String(row.data)
+                }
+              })
+            } catch (err) {
+              console.error('Frequencia Push Error:', err)
             }
           })
-        } catch (err) {
-          console.error('Frequencia Push Error:', err)
-        }
-      })
 
-      // Executa os envios em paralelo e não bloqueia 100% caso demore muito, enviando em chunks
-      const chunkSize = 50
-      for (let i = 0; i < pushPromises.length; i += chunkSize) {
-        await Promise.all(pushPromises.slice(i, i + chunkSize))
+          const chunkSize = 25
+          for (let i = 0; i < pushPromises.length; i += chunkSize) {
+            await Promise.all(pushPromises.slice(i, i + chunkSize))
+          }
+        } catch (err) {
+          console.error('[Frequencias Background Push Error]', err)
+        }
+      }
+
+      if (typeof (globalThis as any).waitUntil === 'function') {
+        (globalThis as any).waitUntil(dispatchBatchPushes())
+      } else {
+        dispatchBatchPushes().catch(err => console.error('[Frequencias Push Catch]', err))
       }
 
       return NextResponse.json({ ok: true, count: rows.length })

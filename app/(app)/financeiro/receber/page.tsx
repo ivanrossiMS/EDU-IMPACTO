@@ -90,11 +90,15 @@ export default function ContasReceberPage() {
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 25
 
-  // ⚡ Otimização 2: Bypass do contexto global para cache local assíncrono (Reduz congelamento de UI)
+  // ⚡ Otimização 2: Bypass do contexto global para cache local assíncrono com filtro indexado
   const { data: apiResponse, isLoading: loadingTitulos, isFetching: isFetchingTitulos } = useApiQuery<{data: any[]}>(['titulos-receber', search, tabStatus, filtroMes, filtroAno, filtroMetodo], '/api/titulos', { 
     limit: 1000,
     search: search === '' ? undefined : search,
-    status: tabStatus === 'todos' ? undefined : tabStatus
+    status: tabStatus === 'todos' ? undefined : tabStatus,
+    origemLanca: 'manual_receber'
+  }, {
+    staleTime: 30_000,
+    gcTime: 300_000
   })
   
   // Utiliza a API Enterprise Cacheada como Fonte da Verdade. Se não tiver loaded ainda, exibe o contexto (redução de saltos na tela)

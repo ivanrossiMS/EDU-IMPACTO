@@ -60,6 +60,7 @@ export function PushHistoryDetailModal({
 
   // Detalhes completos dos destinatários e leitura
   const [detailsData, setDetailsData] = useState<{
+    sender?: any
     recipients: RecipientItem[]
     summary: string
     targetAliases: string[]
@@ -69,6 +70,9 @@ export function PushHistoryDetailModal({
   } | null>(null)
   const [isLoadingDetails, setIsLoadingDetails] = useState(false)
   const [showTechnicalAliases, setShowTechnicalAliases] = useState(false)
+
+  // Remetente resolvido (direto do log ou dos detalhes)
+  const effectiveSender = detailsData?.sender || log?.sender || null
 
   // Detecção de lembrete e agendamento
   const isReminder = Boolean(log?.isReminder || (detailsData as any)?.isReminder || log?.item_id?.includes('-reminder') || log?.title?.toLowerCase().includes('lembrete'))
@@ -417,8 +421,78 @@ export function PushHistoryDetailModal({
             </div>
           )}
 
-          {/* Cards de Resumo: Data, Destinatários e Leitura no App */}
+          {/* Cards de Resumo: Remetente, Data, Destinatários e Leitura no App */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 12 }}>
+            {/* Card: Quem Enviou / Remetente */}
+            <div style={{
+              padding: 14,
+              borderRadius: 14,
+              background: 'hsl(var(--bg-main))',
+              border: '1px solid hsl(var(--border-subtle))',
+            }}>
+              <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 5 }}>
+                <User size={12} color="#6366f1" /> Quem Enviou
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
+                {effectiveSender?.foto ? (
+                  <img
+                    src={effectiveSender.foto}
+                    alt={effectiveSender.nome}
+                    style={{
+                      width: 32,
+                      height: 32,
+                      borderRadius: '50%',
+                      objectFit: 'cover',
+                      border: '1.5px solid hsl(var(--border-subtle))',
+                      flexShrink: 0,
+                    }}
+                    onError={(e) => {
+                      (e.currentTarget as HTMLElement).style.display = 'none'
+                    }}
+                  />
+                ) : (
+                  <div style={{
+                    width: 32,
+                    height: 32,
+                    borderRadius: '50%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: 11,
+                    fontWeight: 800,
+                    flexShrink: 0,
+                    background:
+                      effectiveSender?.tipo === 'sistema'
+                        ? 'rgba(100, 116, 139, 0.12)'
+                        : effectiveSender?.tipo === 'portaria'
+                        ? 'rgba(14, 165, 233, 0.12)'
+                        : effectiveSender?.tipo === 'responsavel'
+                        ? 'rgba(16, 185, 129, 0.12)'
+                        : 'rgba(99, 102, 241, 0.12)',
+                    color:
+                      effectiveSender?.tipo === 'sistema'
+                        ? '#64748b'
+                        : effectiveSender?.tipo === 'portaria'
+                        ? '#0284c7'
+                        : effectiveSender?.tipo === 'responsavel'
+                        ? '#059669'
+                        : '#4f46e5',
+                    border: '1px solid hsl(var(--border-subtle))',
+                  }}>
+                    {effectiveSender?.initials || <User size={14} />}
+                  </div>
+                )}
+                <div style={{ minWidth: 0, overflow: 'hidden' }}>
+                  <div style={{ fontSize: 13, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {effectiveSender?.nome || 'Sistema Escolar'}
+                  </div>
+                  <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {effectiveSender?.subtitulo || 'Disparo Automático'}
+                  </div>
+                </div>
+              </div>
+            </div>
+
             {/* Card 1: Data e Horário */}
             <div style={{
               padding: 14,

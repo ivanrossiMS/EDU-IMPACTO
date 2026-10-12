@@ -17,8 +17,9 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
     const { data: byId } = await supabase
       .from('alunos')
       .select('*')
-      .eq('id', id)
-      .single()
+      .or(`id.eq.${id},matricula.eq.${id}`)
+      .limit(1)
+      .maybeSingle()
 
     const student = byId || null
 
@@ -58,18 +59,51 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
     const linkedResponsaveis = (links || []).filter((l: any) => studentRefs.includes(String(l.aluno_id).trim()))
       .map((l: any) => {
         const resp = responsaveis.find((r: any) => String(r.id).trim() === String(l.responsavel_id).trim()) || {}
+        const d = resp.dados || {}
+        const isPed = l.resp_pedagogico === true || l.tipo === 'pedagogico' || resp.isPedagogico === true
+        const isFin = l.resp_financeiro === true || l.tipo === 'financeiro' || resp.isFinanceiro === true
+        const isOut = l.resp_outro === true || l.tipo === 'outro' || l.tipo === 'outros' || resp.isOutro === true
+        const parentesco = l.parentesco || resp.parentesco || (isPed ? 'Resp. Pedagógico' : (isFin ? 'Resp. Financeiro' : (isOut ? 'Outros' : 'Responsável')))
+
         return {
           ...resp,
-          parentesco: l.parentesco,
-          isFinanceiro: l.resp_financeiro,
-          respFinanceiro: l.resp_financeiro,
-          isPedagogico: l.resp_pedagogico,
-          respPedagogico: l.resp_pedagogico,
-          isOutro: l.resp_outro,
-          dataNasc: resp.data_nasc,
-          diasAcesso: resp.dias_acesso,
+          cpf: d.cpf || resp.cpf || '',
+          rg: d.rg || resp.rg || '',
+          rgOrgaoEmissor: d.rgOrgaoEmissor || d.orgEmissor || '',
+          sexo: d.sexo || resp.sexo || '',
+          estadoCivil: d.estadoCivil || resp.estado_civil || '',
+          profissao: d.profissao || resp.profissao || '',
+          nacionalidade: d.nacionalidade || 'Brasileira',
+          naturalidade: d.naturalidade || '',
+          naturalidadeUf: d.naturalidadeUf || '',
+          cep: d.cep || '',
+          endereco: d.endereco || d.logradouro || '',
+          numero: d.numero || '',
+          complemento: d.complemento || '',
+          bairro: d.bairro || '',
+          cidade: d.cidade || '',
+          uf: d.uf || d.ufEnd || '',
+          comercialEmpresa: d.comercialEmpresa || '',
+          comercialTelefone: d.comercialTelefone || '',
+          comercialCep: d.comercialCep || '',
+          comercialEndereco: d.comercialEndereco || '',
+          comercialNumero: d.comercialNumero || '',
+          comercialComplemento: d.comercialComplemento || '',
+          comercialBairro: d.comercialBairro || '',
+          comercialCidade: d.comercialCidade || '',
+          comercialUf: d.comercialUf || '',
+          parentesco,
+          isFinanceiro: isFin,
+          respFinanceiro: isFin,
+          isPedagogico: isPed,
+          respPedagogico: isPed,
+          isOutro: isOut,
+          respOutro: isOut,
+          dataNasc: resp.data_nasc || d.dataNasc || d.data_nasc || '',
+          diasAcesso: resp.dias_acesso || d.diasAcesso || d.dias_acesso || ['Seg', 'Ter', 'Qua', 'Qui', 'Sex'],
+          proibido: resp.proibido === true,
         }
-      }).filter((r: any) => r.id)
+      }).filter((r: any) => r.id || r.nome)
 
     const fallbackResponsaveis = student.dados?.responsaveis || []
 
@@ -84,8 +118,11 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
           .maybeSingle()
 
         if (matchedResp) {
+          const d = matchedResp.dados || {}
           finalResponsaveis = [{
             ...matchedResp,
+            cpf: d.cpf || matchedResp.cpf || '',
+            rg: d.rg || matchedResp.rg || '',
             parentesco: 'mae',
             isFinanceiro: true,
             isPedagogico: true,
@@ -104,10 +141,19 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
       }
     }
 
+    let turmaInfo: any = null
+    if (student.turma) {
+      const { data: t } = await supabase.from('turmas').select('*').or(`id.eq.${student.turma},codigo.eq.${student.turma},nome.eq.${student.turma}`).limit(1).maybeSingle()
+      turmaInfo = t
+    }
+
     const formattedStudent = {
       ...student,
       ...(student.dados || {}),
       responsaveis: finalResponsaveis,
+      turma_nome: turmaInfo?.nome || student.turma || '',
+      turma_segmento: turmaInfo?.dados?.segmento || turmaInfo?.segmento || student.segmento || student.dados?.segmento || '',
+      turma_anoLetivo: turmaInfo?.ano !== undefined ? String(turmaInfo.ano) : (student.anoLetivo || student.ano_letivo || student.dados?.anoLetivo || '')
     }
 
     return NextResponse.json({ data: formattedStudent })

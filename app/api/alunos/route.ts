@@ -200,9 +200,33 @@ export async function GET(request: Request) {
         const { data: tRes2 } = await supabase.from('turmas').select('*').eq('nome', turma).maybeSingle()
         targetTurma = tRes2
       }
+
+      const turmaTokens = Array.from(new Set([
+        turma,
+        targetTurma?.id ? String(targetTurma.id) : null,
+        targetTurma?.codigo ? String(targetTurma.codigo) : null,
+        targetTurma?.nome ? String(targetTurma.nome) : null,
+      ].filter(Boolean))) as string[]
+
+      const orClauses: string[] = []
+      turmaTokens.forEach(tok => {
+        const safe = /[ ,()\/]/.test(tok) ? `"${tok.replace(/"/g, '\\"')}"` : tok
+        orClauses.push(`turma.eq.${safe}`)
+        orClauses.push(`dados->>turma.eq.${safe}`)
+        orClauses.push(`dados->historicoTurmas.cs.[{"serieTurma":"${tok}"}]`)
+        orClauses.push(`dados->historicoTurmas.cs.[{"turma":"${tok}"}]`)
+      })
+      if (orClauses.length > 0) {
+        query = query.or(orClauses.join(','))
+      }
     }
 
     // Aplicação de Filtros Avançados
+    if (integralIntermediario === 'sim' || integralIntermediario === 'true') {
+      query = query.or('dados->isIntegralIntermediario.eq.true,dados->modalidade.ilike.%integral%')
+    } else if (integralIntermediario === 'nao' || integralIntermediario === 'false') {
+      query = query.or('dados->isIntegralIntermediario.eq.false,dados->isIntegralIntermediario.is.null')
+    }
     if (dataCadastroInicio) {
       query = query.gte('created_at', dataCadastroInicio + 'T00:00:00.000Z')
     }
@@ -270,10 +294,10 @@ export async function GET(request: Request) {
     } else {
       queryExec = query.order(dbSortField, { ascending: sortOrder === 'asc' });
     }
-    if (!turma) {
+    if (!all) {
       queryExec = queryExec.range(from, from + limit - 1)
     } else {
-      queryExec = queryExec.limit(10000)
+      queryExec = queryExec.limit(limit)
     }
 
     const { data: students, error: studentsError, count } = await queryExec

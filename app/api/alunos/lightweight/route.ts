@@ -45,9 +45,18 @@ export async function GET(req: Request) {
     let targetTurmaObj: any = null
     let allTurmasList: any[] = []
     if (turma) {
-      const { data: tData } = await supabase.from('turmas').select('*')
-      allTurmasList = tData || []
-      targetTurmaObj = allTurmasList.find(t => String(t.id) === turma || String(t.nome) === turma || String(t.codigo) === turma) || turma
+      const { data: tData } = await supabase
+        .from('turmas')
+        .select('id, nome, codigo, ano, serie, dados')
+        .or(`id.eq.${turma},nome.eq.${turma},codigo.eq.${turma}`)
+        .limit(1)
+        .maybeSingle()
+      if (tData) {
+        targetTurmaObj = tData
+        allTurmasList = [tData]
+      } else {
+        targetTurmaObj = turma
+      }
     }
 
     // Seleção mínima — apenas campos usados em listas e seletores
@@ -72,11 +81,28 @@ export async function GET(req: Request) {
       .or('status.neq.inativo,status.is.null')
       .order('nome')
 
-    if (!turma) {
-      query = query.range(from, to)
-    } else {
-      query = query.limit(10000)
+    if (turma) {
+      const turmaTokens = Array.from(new Set([
+        turma,
+        targetTurmaObj?.id ? String(targetTurmaObj.id) : null,
+        targetTurmaObj?.codigo ? String(targetTurmaObj.codigo) : null,
+        targetTurmaObj?.nome ? String(targetTurmaObj.nome) : null,
+      ].filter(Boolean))) as string[]
+
+      const orClauses: string[] = []
+      turmaTokens.forEach(tok => {
+        const safe = /[ ,()\/]/.test(tok) ? `"${tok.replace(/"/g, '\\"')}"` : tok
+        orClauses.push(`turma.eq.${safe}`)
+        orClauses.push(`dados->>turma.eq.${safe}`)
+        orClauses.push(`dados->historicoTurmas.cs.[{"serieTurma":"${tok}"}]`)
+        orClauses.push(`dados->historicoTurmas.cs.[{"turma":"${tok}"}]`)
+      })
+      if (orClauses.length > 0) {
+        query = query.or(orClauses.join(','))
+      }
     }
+
+    query = query.range(from, to)
 
     if (search) {
       query = query.or(`nome.ilike.%${search}%,matricula.ilike.%${search}%`)

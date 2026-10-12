@@ -1161,7 +1161,17 @@ export async function POST(request: Request) {
                       message: `${row.autor} disponibilizou o relatório diário de ${formatFriendlyStudentName(student.aluno_nome)}. Confira!`,
                       targetUserIds: student.responsaveis_ids,
                       targetUrl: `/agenda-digital/${student.aluno_id}/comunicados?id=${row.id}`,
-                      metadata: { aluno_id: student.aluno_id, perfil_destino: 'familiar', item_id: String(row.id), rota: 'comunicados' }
+                      senderUserId: user.id,
+                      metadata: {
+                        aluno_id: student.aluno_id,
+                        perfil_destino: 'familiar',
+                        item_id: String(row.id),
+                        rota: 'comunicados',
+                        author: row.autor || user.user_metadata?.nome,
+                        author_id: row.dados?.autorId || user.id,
+                        author_cargo: row.dados?.autorCargo || user.user_metadata?.cargo,
+                        author_foto: row.dados?.autorFoto || user.user_metadata?.foto,
+                      }
                     }).catch(err => console.error("Push Error Report Batch:", err))
                   );
                 }
@@ -1177,7 +1187,17 @@ export async function POST(request: Request) {
                       message: `${row.autor} enviou uma mensagem para ${student.aluno_nome}`,
                       targetUserIds: student.responsaveis_ids,
                       targetUrl: `/agenda-digital/${student.aluno_id}/comunicados?id=${row.id}`,
-                      metadata: { aluno_id: student.aluno_id, perfil_destino: 'familiar', item_id: String(row.id), rota: 'comunicados' }
+                      senderUserId: user.id,
+                      metadata: {
+                        aluno_id: student.aluno_id,
+                        perfil_destino: 'familiar',
+                        item_id: String(row.id),
+                        rota: 'comunicados',
+                        author: row.autor || user.user_metadata?.nome,
+                        author_id: row.dados?.autorId || user.id,
+                        author_cargo: row.dados?.autorCargo || user.user_metadata?.cargo,
+                        author_foto: row.dados?.autorFoto || user.user_metadata?.foto,
+                      }
                     }).catch(err => console.error("Push Error:", err))
                   );
                 }
@@ -1195,7 +1215,17 @@ export async function POST(request: Request) {
                       message: `${row.autor} enviou um novo comunicado para a turma de ${nomeAluno}. Confira!`,
                       targetUserIds: student.responsaveis_ids,
                       targetUrl: `/agenda-digital/${student.aluno_id}/comunicados?id=${row.id}`,
-                      metadata: { aluno_id: student.aluno_id, perfil_destino: 'familiar', item_id: String(row.id), rota: 'comunicados' }
+                      senderUserId: user.id,
+                      metadata: {
+                        aluno_id: student.aluno_id,
+                        perfil_destino: 'familiar',
+                        item_id: String(row.id),
+                        rota: 'comunicados',
+                        author: row.autor || user.user_metadata?.nome,
+                        author_id: row.dados?.autorId || user.id,
+                        author_cargo: row.dados?.autorCargo || user.user_metadata?.cargo,
+                        author_foto: row.dados?.autorFoto || user.user_metadata?.foto,
+                      }
                     }).catch(err => console.error("Push Error Turma Batch:", err))
                   );
                 }
@@ -1212,7 +1242,17 @@ export async function POST(request: Request) {
                 message: `Você tem uma nova mensagem enviada por ${row.autor}.`,
                 targetUserIds: directColaboradores,
                 targetUrl: `/agenda-digital/colaborador/comunicados?id=${row.id}`,
-                metadata: { perfil_destino: 'colaborador', item_id: String(row.id), rota: 'comunicados', targetUrl: `/agenda-digital/colaborador/comunicados?id=${row.id}` }
+                senderUserId: user.id,
+                metadata: {
+                  perfil_destino: 'colaborador',
+                  item_id: String(row.id),
+                  rota: 'comunicados',
+                  targetUrl: `/agenda-digital/colaborador/comunicados?id=${row.id}`,
+                  author: row.autor || user.user_metadata?.nome,
+                  author_id: row.dados?.autorId || user.id,
+                  author_cargo: row.dados?.autorCargo || user.user_metadata?.cargo,
+                  author_foto: row.dados?.autorFoto || user.user_metadata?.foto,
+                }
               }).catch(err => console.error("Push Error Colab:", err))
             );
           }
@@ -1326,7 +1366,17 @@ export async function POST(request: Request) {
                   message: `${data.autor} disponibilizou o relatório diário de ${formatFriendlyStudentName(student.aluno_nome)}. Confira!`,
                   targetUserIds: student.responsaveis_ids,
                   targetUrl: `/agenda-digital/${student.aluno_id}/comunicados?id=${data.id}`,
-                  metadata: { aluno_id: student.aluno_id, perfil_destino: 'familiar', item_id: String(data.id), rota: 'comunicados' }
+                  senderUserId: user.id,
+                  metadata: {
+                    aluno_id: student.aluno_id,
+                    perfil_destino: 'familiar',
+                    item_id: String(data.id),
+                    rota: 'comunicados',
+                    author: data.autor || user.user_metadata?.nome,
+                    author_id: data.dados?.autorId || user.id,
+                    author_cargo: data.dados?.autorCargo || user.user_metadata?.cargo,
+                    author_foto: data.dados?.autorFoto || user.user_metadata?.foto,
+                  }
                 }).catch(err => console.error("Push Error Report Single:", err))
               );
             }
@@ -1342,7 +1392,17 @@ export async function POST(request: Request) {
                   message: `${data.autor} enviou uma mensagem para ${student.aluno_nome}`,
                   targetUserIds: student.responsaveis_ids,
                   targetUrl: `/agenda-digital/${student.aluno_id}/comunicados?id=${data.id}`,
-                  metadata: { aluno_id: student.aluno_id, perfil_destino: 'familiar', item_id: String(data.id), rota: 'comunicados' }
+                  senderUserId: user.id,
+                  metadata: {
+                    aluno_id: student.aluno_id,
+                    perfil_destino: 'familiar',
+                    item_id: String(data.id),
+                    rota: 'comunicados',
+                    author: data.autor || user.user_metadata?.nome,
+                    author_id: data.dados?.autorId || user.id,
+                    author_cargo: data.dados?.autorCargo || user.user_metadata?.cargo,
+                    author_foto: data.dados?.autorFoto || user.user_metadata?.foto,
+                  }
                 }).catch(err => console.error("Push Error:", err))
               );
             }
@@ -1360,7 +1420,17 @@ export async function POST(request: Request) {
                   message: `${data.autor} enviou um novo comunicado para a turma de ${nomeAluno}. Confira!`,
                   targetUserIds: student.responsaveis_ids,
                   targetUrl: `/agenda-digital/${student.aluno_id}/comunicados?id=${data.id}`,
-                  metadata: { aluno_id: student.aluno_id, perfil_destino: 'familiar', item_id: String(data.id), rota: 'comunicados' }
+                  senderUserId: user.id,
+                  metadata: {
+                    aluno_id: student.aluno_id,
+                    perfil_destino: 'familiar',
+                    item_id: String(data.id),
+                    rota: 'comunicados',
+                    author: data.autor || user.user_metadata?.nome,
+                    author_id: data.dados?.autorId || user.id,
+                    author_cargo: data.dados?.autorCargo || user.user_metadata?.cargo,
+                    author_foto: data.dados?.autorFoto || user.user_metadata?.foto,
+                  }
                 }).catch(err => console.error("Push Error Turma:", err))
               );
             }
@@ -1378,7 +1448,17 @@ export async function POST(request: Request) {
             message: `Você tem uma nova mensagem enviada por ${data.autor}.`,
             targetUserIds: directColaboradores,
             targetUrl: `/agenda-digital/colaborador/comunicados?id=${data.id}`,
-            metadata: { perfil_destino: 'colaborador', item_id: String(data.id), rota: 'comunicados', targetUrl: `/agenda-digital/colaborador/comunicados?id=${data.id}` }
+            senderUserId: user.id,
+            metadata: {
+              perfil_destino: 'colaborador',
+              item_id: String(data.id),
+              rota: 'comunicados',
+              targetUrl: `/agenda-digital/colaborador/comunicados?id=${data.id}`,
+              author: data.autor || user.user_metadata?.nome,
+              author_id: data.dados?.autorId || user.id,
+              author_cargo: data.dados?.autorCargo || user.user_metadata?.cargo,
+              author_foto: data.dados?.autorFoto || user.user_metadata?.foto,
+            }
           }).catch(err => console.error("Push Error Colab:", err))
         );
       } else {

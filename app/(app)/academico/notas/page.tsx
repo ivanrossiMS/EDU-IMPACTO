@@ -51,7 +51,8 @@ export default function NotasPage() {
   const { data: apiResponse, isLoading: loadingAlunosCore, isFetching: fetchingAlunosCore } = useApiQuery<{data: any[], meta: any}>(
     ['alunos-core-notas'], 
     '/api/alunos', 
-    { limit: 2000 }
+    { limit: 2000, lightweight: 'true' },
+    { staleTime: 60000, gcTime: 120000 }
   )
   const alunos = apiResponse?.data || []
   

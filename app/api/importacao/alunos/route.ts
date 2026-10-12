@@ -12,30 +12,82 @@ function normalize(v: string | null | undefined): string {
     .trim()
 }
 
-function normDate(v: string | null | undefined): string | null {
-  if (!v) return null
-  const s = v.trim()
+function normDate(v: any): string | null {
+  if (v === undefined || v === null || v === '') return null
+  if (typeof v === 'number' && v > 30000 && v < 60000) {
+    try {
+      const utc_days = Math.floor(v - 25569)
+      const date = new Date(utc_days * 86400 * 1000)
+      if (!isNaN(date.getTime())) {
+        const y = date.getUTCFullYear()
+        const m = String(date.getUTCMonth() + 1).padStart(2, '0')
+        const d = String(date.getUTCDate()).padStart(2, '0')
+        return `${y}-${m}-${d}`
+      }
+    } catch {}
+  }
+  const s = String(v).trim()
   if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s
-  const m = s.match(/^(\d{2})[\/\-](\d{2})[\/\-](\d{4})$/)
-  if (m) return `${m[3]}-${m[2]}-${m[1]}`
+  const m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/)
+  if (m) {
+    const d = m[1].padStart(2, '0')
+    const mo = m[2].padStart(2, '0')
+    return `${m[3]}-${mo}-${d}`
+  }
   return null
+}
+
+function cleanDigits(v: any): string {
+  if (!v) return ''
+  return String(v).replace(/\D/g, '')
 }
 
 export async function POST(request: Request) {
   try {
     const supabase = await createProtectedClient()
     const body = await request.json()
-    const { rows, mapping, config, tipoResponsavelConfig, tipoTurmaConfig, hasHeaders, headers, step, inativarAusentes, accumulatedIds } = body as { 
-      rows: any[][]; 
-      mapping: Record<string, string>; 
-      config: string;
-      tipoResponsavelConfig?: 'acrescentar' | 'substituir';
-      tipoTurmaConfig?: 'acrescentar' | 'substituir';
-      hasHeaders: boolean;
-      headers: any[] | null;
-      step?: number;
-      inativarAusentes?: boolean;
-      accumulatedIds?: string[];
+    const {
+      rows,
+      mapping,
+      config = 'manter',
+      tipoResponsavelConfig = 'acrescentar',
+      tipoTurmaConfig = 'acrescentar',
+      hasHeaders = true,
+      headers = null,
+      step = 2,
+      inativarAusentes = false,
+      accumulatedIds = [],
+      batchId = `LOTE-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`,
+      isLastChunk = false,
+      batchTracker = {
+        alunoIdsCriados: [],
+        alunoIdsAtualizados: [],
+        respIdsCriados: [],
+        vinculoIdsCriados: [],
+        alunosInativados: [],
+        previousSnapshots: {}
+      }
+    } = body as {
+      rows: any[][]
+      mapping: Record<string, string>
+      config?: string
+      tipoResponsavelConfig?: 'acrescentar' | 'substituir'
+      tipoTurmaConfig?: 'acrescentar' | 'substituir'
+      hasHeaders?: boolean
+      headers?: any[] | null
+      step?: number
+      inativarAusentes?: boolean
+      accumulatedIds?: string[]
+      batchId?: string
+      isLastChunk?: boolean
+      batchTracker?: {
+        alunoIdsCriados: string[]
+        alunoIdsAtualizados: string[]
+        respIdsCriados: string[]
+        vinculoIdsCriados: string[]
+        alunosInativados: string[]
+        previousSnapshots: Record<string, any>
+      }
     }
 
     const stringHeaders = headers ? headers.map(h => String(h ?? '').trim()) : null
@@ -47,33 +99,37 @@ export async function POST(request: Request) {
     let inseridos = 0
     let atualizados = 0
     let erros = 0
-    const erroDetails: { linha: number; msg: string }[] = []
+    const erroDetails: { linha: number; alunoNome?: string; msg: string; rawRow?: any }[] = []
     const processedAlunoIds: string[] = [...(accumulatedIds || [])]
-    
-    // Carregar todas as turmas em memória para vinculação flexível (Insensível a acentos/caixa)
+
+    // 1. Carregar turmas em memória para mapeamento flexível e rápido
     const { data: allTurmas } = await supabase.from('turmas').select('id, nome, serie, turno, dados')
-    const turmasMap = new Map<string, { id: string, nome: string, segmento?: string, serie?: string }>()
+    const turmasMap = new Map<string, { id: string; nome: string; segmento?: string; serie?: string }>()
     allTurmas?.forEach((t: any) => {
       const tSeg = t.segmento || t.dados?.segmento || ''
       const tSerie = t.serie || t.dados?.serie || ''
-      const tObj = { 
-        id: t.id, 
-        nome: t.nome,
-        segmento: tSeg,
-        serie: tSerie
-      }
+      const tObj = { id: t.id, nome: t.nome, segmento: tSeg, serie: tSerie }
       turmasMap.set(normalize(t.nome), tObj)
     })
 
+    // 2. Cache em memória para reaproveitamento inteligente de responsáveis (Irmãos)
+    // Permite que irmãos na mesma planilha vinculem ao mesmo responsável sem duplicidade!
+    const respCacheByCpf = new Map<string, any>()
+    const respCacheByNamePhone = new Map<string, any>()
+
     for (const [index, row] of rows.entries()) {
       try {
-        // 1. Extrair dados baseados no mapeamento
-        const alunoData: any = {}
-        const respData: any = {}
+        const isRowEmpty = row.every((c: any) => c === undefined || c === null || String(c).trim() === '')
+        if (isRowEmpty) continue
+
+        // Extrair campos de aluno, resp1 e resp2
+        const alunoData: Record<string, any> = {}
+        const resp1Data: Record<string, any> = {}
+        const resp2Data: Record<string, any> = {}
 
         Object.entries(mapping).forEach(([column, target]) => {
-          if (!target) return // Ignora colunas não mapeadas
-          let value;
+          if (!target) return
+          let value: any
           if (hasHeaders && stringHeaders) {
             const colIdx = stringHeaders.indexOf(column)
             if (colIdx !== -1) value = row[colIdx]
@@ -82,94 +138,55 @@ export async function POST(request: Request) {
             if (!isNaN(colIdx)) value = row[colIdx]
           }
 
-          if (value === undefined || value === null || value === '') return
+          if (value === undefined || value === null || String(value).trim() === '') return
 
           if (target.startsWith('aluno_')) {
-            const field = target.replace('aluno_', '')
-            alunoData[field] = value
+            alunoData[target.replace('aluno_', '')] = value
+          } else if (target.startsWith('resp1_')) {
+            resp1Data[target.replace('resp1_', '')] = value
+          } else if (target.startsWith('resp2_')) {
+            resp2Data[target.replace('resp2_', '')] = value
           } else if (target.startsWith('resp_')) {
-            const field = target.replace('resp_', '')
-            respData[field] = value
+            // Suporte retrocompatível
+            resp1Data[target.replace('resp_', '')] = value
           }
         })
 
-        if (index === 0) {
-          console.log(`[Import] mapping:`, mapping)
-          console.log(`[Import] headers:`, headers)
-        }
-        console.log(`[Import] Linha ${index + 2} respData extraído:`, respData)
-
-        // Checar se a linha inteira é vazia (linhas em branco no final da planilha)
-        const isRowEmpty = row.every((cell: any) => cell === undefined || cell === null || String(cell).trim() === '')
-        if (isRowEmpty) {
-          continue
-        }
-
-        const isOnlyRespUpdate = (step === 3 || step === 4) && !alunoData.nome && !alunoData.codigo && respData.nome && respData.rfid !== undefined;
-
-        if (!alunoData.nome && !alunoData.codigo && !isOnlyRespUpdate) {
-          console.log('[Import] Linha', index, 'Nome e Código do aluno vazios ou não mapeados')
-          erros++
-          erroDetails.push({ linha: index + 2, msg: 'Nome ou Código do aluno deve ser mapeado' })
-          continue
-        }
-
+        // Modo isolado legado (atualizar apenas RFID do responsável pelo nome)
+        const isOnlyRespUpdate = (step === 3 || step === 4) && !alunoData.nome && !alunoData.codigo && resp1Data.nome && resp1Data.rfid !== undefined
         if (isOnlyRespUpdate) {
-          const { data: foundResps } = await supabase.from('responsaveis').select('*').ilike('nome', `%${respData.nome.trim()}%`);
-          let targetResp = null;
-          if (foundResps && foundResps.length > 0) {
-            targetResp = foundResps.find((r:any) => normalize(r.nome) === normalize(respData.nome));
-            if (!targetResp) targetResp = foundResps[0];
-          }
-
+          const { data: foundResps } = await supabase.from('responsaveis').select('*').ilike('nome', `%${String(resp1Data.nome).trim()}%`)
+          let targetResp = foundResps?.find((r: any) => normalize(r.nome) === normalize(resp1Data.nome)) || foundResps?.[0]
           if (targetResp) {
-            const { error: updateError } = await supabase.from('responsaveis').update({ rfid: String(respData.rfid) }).eq('id', targetResp.id);
-            if (updateError) {
-              erros++
-              erroDetails.push({ linha: index + 2, msg: `Erro ao atualizar RFID de ${respData.nome}: ${updateError.message}` })
-            } else {
-              atualizados++
-            }
+            await supabase.from('responsaveis').update({ rfid: String(resp1Data.rfid) }).eq('id', targetResp.id)
+            atualizados++
           } else {
             erros++
-            erroDetails.push({ linha: index + 2, msg: `Responsável não encontrado: ${respData.nome}.` })
+            erroDetails.push({ linha: index + 2, alunoNome: resp1Data.nome, msg: `Responsável não encontrado: ${resp1Data.nome}` })
           }
-          continue;
+          continue
         }
 
-        // Normalizar datas
-        if (alunoData.data_nascimento) alunoData.data_nascimento = normDate(String(alunoData.data_nascimento))
-        if (respData.data_nasc) respData.data_nasc = normDate(String(respData.data_nasc))
-        // Filtrar campos válidos do aluno e jogar o resto em 'dados' (JSONB)
-        const validAlunoColumns = [
-          'id', 'nome', 'matricula', 'turma', 'serie', 'turno', 'status', 'email', 
-          'data_nascimento', 'responsavel', 'responsavel_financeiro', 'responsavel_pedagogico', 
-          'telefone', 'inadimplente', 'risco_evasao', 'media', 'frequencia', 'obs', 'unidade', 'foto', 'dados', 'updated_at'
-        ]
-
-        const filteredAlunoData: any = {}
-        const extraData: any = {}
-
-        Object.entries(alunoData).forEach(([key, val]) => {
-          if (validAlunoColumns.includes(key)) {
-            filteredAlunoData[key] = val
-          } else if (key !== 'codigo') {
-            extraData[key] = val
-          }
-        })
-
-        if (Object.keys(extraData).length > 0) {
-          filteredAlunoData.dados = extraData
+        // Validação básica do aluno
+        if (!alunoData.nome && !alunoData.codigo) {
+          erros++
+          erroDetails.push({ linha: index + 2, msg: 'Nome ou Código do aluno deve estar preenchido', rawRow: row })
+          continue
         }
 
-        // Resolver nome da turma para ID (Normalizado)
+        // Normalização de dados do aluno
+        if (alunoData.data_nascimento) alunoData.data_nascimento = normDate(alunoData.data_nascimento)
+        if (alunoData.cpf) alunoData.cpf = cleanDigits(alunoData.cpf)
+        if (alunoData.telefone) alunoData.telefone = cleanDigits(alunoData.telefone)
+
+        // Resolução flexível de turma
         let resolvedTurmaId = ''
-        let resolvedSegmento = ''
-        let resolvedSerie = ''
+        let resolvedSegmento = alunoData.segmento || ''
+        let resolvedSerie = alunoData.serie || ''
+
         if (alunoData.turma) {
           const normTurma = normalize(alunoData.turma)
-          let found: any = turmasMap.get(normTurma)
-
+          let found = turmasMap.get(normTurma)
           if (!found && allTurmas) {
             const matched: any = allTurmas.find((t: any) => {
               const nName = normalize(t.nome)
@@ -184,467 +201,375 @@ export async function POST(request: Request) {
               }
             }
           }
-
           if (found) {
             resolvedTurmaId = found.id
-            resolvedSegmento = found.segmento || ''
-            resolvedSerie = found.serie || ''
-            filteredAlunoData.turma = found.id
-            if (found.segmento) {
-              if (!filteredAlunoData.dados) filteredAlunoData.dados = {}
-              filteredAlunoData.dados.segmento = found.segmento
-            }
+            resolvedSegmento = found.segmento || resolvedSegmento
+            resolvedSerie = found.serie || resolvedSerie
           }
         }
 
-        const finalSerie = alunoData.serie || resolvedSerie || filteredAlunoData.serie || ''
-        if (finalSerie) {
-          filteredAlunoData.serie = finalSerie
-          if (!filteredAlunoData.dados) filteredAlunoData.dados = {}
-          filteredAlunoData.dados.serie = finalSerie
-        }
-
-        const identifier = alunoData.codigo
-        if (identifier && !filteredAlunoData.matricula) {
-          filteredAlunoData.matricula = identifier
-        }
-
-        // 2. Buscar aluno existente
+        // 3. Buscar aluno existente no banco (por ID, Matrícula ou Nome Exato)
         let existingAluno: any = null
+        const identifier = alunoData.codigo || alunoData.matricula
 
         if (identifier) {
-          const { data } = await supabase
-            .from('alunos')
-            .select('*')
-            .eq('id', identifier)
-            .maybeSingle()
-          existingAluno = data
-
+          const { data: byId } = await supabase.from('alunos').select('*').eq('id', identifier).maybeSingle()
+          existingAluno = byId
           if (!existingAluno) {
-            const { data: byMatricula } = await supabase
-              .from('alunos')
-              .select('*')
-              .eq('matricula', identifier)
-              .maybeSingle()
-            existingAluno = byMatricula
+            const { data: byMatr } = await supabase.from('alunos').select('*').eq('matricula', identifier).maybeSingle()
+            existingAluno = byMatr
           }
         }
-
         if (!existingAluno && alunoData.nome) {
-          const { data } = await supabase
-            .from('alunos')
-            .select('*')
-            .eq('nome', alunoData.nome)
-            .maybeSingle()
-          existingAluno = data
+          const { data: byNome } = await supabase.from('alunos').select('*').eq('nome', alunoData.nome.trim()).maybeSingle()
+          existingAluno = byNome
         }
 
-        if (!existingAluno && (step === 3 || step === 4)) {
-          throw new Error(`Aluno com ID/Matrícula ou Nome "${identifier || alunoData.nome || ''}" não encontrado. Cadastre o aluno primeiro no Passo 1.`)
-        }
+        // Montar dados para inserção / atualização
+        const validAlunoColumns = [
+          'id', 'nome', 'matricula', 'turma', 'serie', 'turno', 'status', 'email',
+          'data_nascimento', 'responsavel', 'responsavel_financeiro', 'responsavel_pedagogico',
+          'telefone', 'inadimplente', 'risco_evasao', 'media', 'frequencia', 'obs', 'unidade', 'foto', 'dados', 'codigo'
+        ]
 
-        // 3. Aplicar lógica de Merge
-        const defaults = {
-          turma: '',
-          serie: '',
-          turno: '',
-          status: 'matriculado',
-          inadimplente: false,
-          risco_evasao: 'baixo',
-          frequencia: 100,
-          unidade: 'Unidade Centro',
-          updated_at: new Date().toISOString()
-        }
+        const filteredAlunoData: any = {}
+        const extraData: any = existingAluno?.dados ? { ...existingAluno.dados } : {}
 
-        let finalAlunoData = { ...filteredAlunoData }
-        let isUpdate = false
+        // Mapear campos de endereço e saúde para dentro de 'dados'
+        if (alunoData.cep) extraData.cep = alunoData.cep
+        if (alunoData.endereco) extraData.endereco = alunoData.endereco
+        if (alunoData.numero) extraData.numero = alunoData.numero
+        if (alunoData.bairro) extraData.bairro = alunoData.bairro
+        if (alunoData.cidade) extraData.cidade = alunoData.cidade
+        if (alunoData.uf) extraData.uf = alunoData.uf
+        if (alunoData.sexo) extraData.sexo = alunoData.sexo
+        if (alunoData.rg) extraData.rg = alunoData.rg
+        if (resolvedSegmento) extraData.segmento = resolvedSegmento
 
-        if (existingAluno) {
-          isUpdate = true
-          if (config === 'manter') {
-            Object.keys(filteredAlunoData).forEach(key => {
-              if (existingAluno[key] !== null && existingAluno[key] !== undefined && existingAluno[key] !== '') {
-                delete finalAlunoData[key]
-              }
-            })
-            finalAlunoData = { ...existingAluno, ...finalAlunoData }
-          } else {
-            finalAlunoData = { ...existingAluno, ...filteredAlunoData }
-          }
-        } else {
-          const identifier = alunoData.codigo
-          finalAlunoData.id = identifier || `AL-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
-          finalAlunoData = { ...defaults, ...finalAlunoData }
-        }
-
-        if (alunoData.ativo !== undefined) {
-          finalAlunoData.status = String(alunoData.ativo).toLowerCase() === 'sim' || alunoData.ativo === true ? 'matriculado' : 'inativo'
-        }
-
+        // Pode sair sozinho
         if (alunoData.autorizadoSairSozinho !== undefined) {
-          if (!finalAlunoData.dados) finalAlunoData.dados = {}
-          finalAlunoData.dados.autorizadoSairSozinho = String(alunoData.autorizadoSairSozinho).toLowerCase() === 'sim' || alunoData.autorizadoSairSozinho === true
+          const strSozinho = String(alunoData.autorizadoSairSozinho).toLowerCase()
+          extraData.autorizadoSairSozinho = strSozinho === 'sim' || strSozinho === 's' || strSozinho === 'true' || alunoData.autorizadoSairSozinho === true
         }
 
-        const rawIntegral = alunoData.isIntegralIntermediario ?? alunoData.aluno_isIntegralIntermediario ?? alunoData.integralIntermediario ?? alunoData.integral_intermediario
-
-        if (rawIntegral !== undefined && rawIntegral !== null) {
-          if (!finalAlunoData.dados) finalAlunoData.dados = {}
-          const normStr = String(rawIntegral).toLowerCase().trim()
-          const isIntegralBool = normStr === 'sim' || normStr === 's' || normStr === 'true' || normStr === '1' || normStr === 'integral/intermediário' || rawIntegral === true
-
-          finalAlunoData.dados.isIntegralIntermediario = isIntegralBool
-
-          let historico = Array.isArray(finalAlunoData.dados.historicoTurmas) ? [...finalAlunoData.dados.historicoTurmas] : []
-          if (historico.length === 0 && Array.isArray(existingAluno?.dados?.historicoTurmas)) {
-            historico = [...existingAluno.dados.historicoTurmas]
-          }
-
-          if (historico.length > 0) {
-            const lastIndex = historico.length - 1
-            historico[lastIndex] = {
-              ...historico[lastIndex],
-              isIntegralIntermediario: isIntegralBool,
-              modalidade: isIntegralBool ? 'INTEGRAL/INTERMEDIÁRIO' : (historico[lastIndex].modalidade || ''),
-              serie: finalSerie || historico[lastIndex].serie || ''
-            }
-            finalAlunoData.dados.historicoTurmas = historico
-          }
+        // Integral / Intermediário
+        if (alunoData.isIntegralIntermediario !== undefined) {
+          const strInt = String(alunoData.isIntegralIntermediario).toLowerCase()
+          extraData.isIntegralIntermediario = strInt === 'sim' || strInt === 's' || strInt === 'true' || alunoData.isIntegralIntermediario === true
         }
 
-        // Processar Histórico de Turmas
-        if (alunoData.turma && resolvedTurmaId) {
-          const isIntegralBool = finalAlunoData.dados?.isIntegralIntermediario === true
+        // Copiar colunas válidas
+        Object.entries(alunoData).forEach(([k, val]) => {
+          if (validAlunoColumns.includes(k)) {
+            filteredAlunoData[k] = val
+          } else if (!['codigo', 'cep', 'endereco', 'numero', 'bairro', 'cidade', 'uf', 'sexo', 'rg', 'segmento', 'autorizadoSairSozinho', 'isIntegralIntermediario'].includes(k)) {
+            extraData[k] = val
+          }
+        })
+
+        if (identifier) {
+          filteredAlunoData.matricula = identifier
+          filteredAlunoData.codigo = identifier
+        }
+        if (resolvedTurmaId) {
+          filteredAlunoData.turma = resolvedTurmaId
+        }
+        if (resolvedSerie) {
+          filteredAlunoData.serie = resolvedSerie
+        }
+
+        // Status ativo / inativo
+        if (alunoData.ativo !== undefined) {
+          const strAtivo = String(alunoData.ativo).toLowerCase()
+          filteredAlunoData.status = (strAtivo === 'sim' || strAtivo === 's' || strAtivo === 'true' || alunoData.ativo === true) ? 'matriculado' : 'inativo'
+        }
+
+        // Processamento de Histórico de Turmas
+        if (resolvedTurmaId) {
           const novoVinculo: any = {
             id: `HIST-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
             anoLetivo: alunoData.ano_letivo || new Date().getFullYear().toString(),
-            segmento: resolvedSegmento || finalAlunoData.dados?.segmento || '',
-            serie: finalSerie,
+            segmento: resolvedSegmento || '',
+            serie: resolvedSerie || '',
             serieTurma: resolvedTurmaId
           }
-          if (isIntegralBool) {
+          if (extraData.isIntegralIntermediario) {
             novoVinculo.isIntegralIntermediario = true
             novoVinculo.modalidade = 'INTEGRAL/INTERMEDIÁRIO'
           }
-          
-          if (!finalAlunoData.dados) finalAlunoData.dados = {}
-          const historicoAnterior = Array.isArray(existingAluno?.dados?.historicoTurmas) ? existingAluno.dados.historicoTurmas : []
-          
+
+          const histAnterior = Array.isArray(existingAluno?.dados?.historicoTurmas) ? existingAluno.dados.historicoTurmas : []
           if (tipoTurmaConfig === 'substituir') {
-            finalAlunoData.dados.historicoTurmas = [novoVinculo]
+            extraData.historicoTurmas = [novoVinculo]
           } else {
-            // Evita duplicar se já existir exatamente a mesma turma e ano letivo
-            const jaExisteIndex = historicoAnterior.findIndex((h: any) => h.serieTurma === resolvedTurmaId && String(h.anoLetivo) === String(novoVinculo.anoLetivo))
-            
-            if (jaExisteIndex === -1) {
-              finalAlunoData.dados.historicoTurmas = [...historicoAnterior, novoVinculo]
+            const idx = histAnterior.findIndex((h: any) => h.serieTurma === resolvedTurmaId && String(h.anoLetivo) === String(novoVinculo.anoLetivo))
+            if (idx === -1) {
+              extraData.historicoTurmas = [...histAnterior, novoVinculo]
             } else {
-              historicoAnterior[jaExisteIndex].serie = finalSerie || historicoAnterior[jaExisteIndex].serie || ''
-              if (isIntegralBool) {
-                historicoAnterior[jaExisteIndex].isIntegralIntermediario = true
-                historicoAnterior[jaExisteIndex].modalidade = 'INTEGRAL/INTERMEDIÁRIO'
+              histAnterior[idx].serie = resolvedSerie || histAnterior[idx].serie
+              extraData.historicoTurmas = [...histAnterior]
+            }
+          }
+        }
+
+        // Tag do lote para rastreabilidade e rollback
+        extraData.importBatchId = batchId
+        extraData.lastImportDate = new Date().toISOString()
+        filteredAlunoData.dados = extraData
+        filteredAlunoData.updated_at = new Date().toISOString()
+
+        let isUpdate = false
+        let finalAlunoId = existingAluno?.id
+
+        if (existingAluno) {
+          isUpdate = true
+          // Salvar snapshot para rollback
+          batchTracker.previousSnapshots[existingAluno.id] = {
+            turma: existingAluno.turma,
+            serie: existingAluno.serie,
+            status: existingAluno.status,
+            dados: existingAluno.dados
+          }
+
+          let mergedData = { ...existingAluno, ...filteredAlunoData }
+          if (config === 'manter') {
+            Object.keys(filteredAlunoData).forEach(k => {
+              if (existingAluno[k] !== null && existingAluno[k] !== undefined && existingAluno[k] !== '') {
+                delete filteredAlunoData[k]
               }
-              finalAlunoData.dados.historicoTurmas = [...historicoAnterior]
-            }
+            })
+            mergedData = { ...existingAluno, ...filteredAlunoData }
           }
-          
-          // Sempre define a turma recém importada como a turma atual
-          finalAlunoData.turma = resolvedTurmaId
-        } else if (finalSerie) {
-          if (!finalAlunoData.dados) finalAlunoData.dados = {}
-          let historico = Array.isArray(finalAlunoData.dados.historicoTurmas) ? [...finalAlunoData.dados.historicoTurmas] : []
-          if (historico.length === 0 && Array.isArray(existingAluno?.dados?.historicoTurmas)) {
-            historico = [...existingAluno.dados.historicoTurmas]
-          }
-          if (historico.length > 0) {
-            historico[historico.length - 1] = {
-              ...historico[historico.length - 1],
-              serie: finalSerie,
-              segmento: resolvedSegmento || historico[historico.length - 1].segmento || ''
-            }
-            finalAlunoData.dados.historicoTurmas = historico
-          } else {
-            finalAlunoData.dados.historicoTurmas = [{
-              id: `HIST-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-              anoLetivo: alunoData.ano_letivo || new Date().getFullYear().toString(),
-              segmento: resolvedSegmento || '',
-              serie: finalSerie,
-              serieTurma: ''
-            }]
-          }
+          const { error: updErr } = await supabase.from('alunos').update(mergedData).eq('id', existingAluno.id)
+          if (updErr) throw new Error(`Erro ao atualizar aluno: ${updErr.message}`)
+          atualizados++
+          batchTracker.alunoIdsAtualizados.push(existingAluno.id)
+        } else {
+          finalAlunoId = identifier || `AL-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+          filteredAlunoData.id = finalAlunoId
+          filteredAlunoData.status = filteredAlunoData.status || 'matriculado'
+          filteredAlunoData.created_at = new Date().toISOString()
+
+          const { error: insErr } = await supabase.from('alunos').insert(filteredAlunoData)
+          if (insErr) throw new Error(`Erro ao cadastrar aluno: ${insErr.message}`)
+          inseridos++
+          batchTracker.alunoIdsCriados.push(finalAlunoId)
         }
 
-        // Salvar Aluno
-        const { error: studentError } = await supabase
-          .from('alunos')
-          .upsert(finalAlunoData)
-
-        if (studentError) {
-          console.error('[Import] Linha', index, 'Erro Supabase:', studentError)
-          throw new Error(`Erro ao salvar aluno: ${studentError.message}`)
+        if (finalAlunoId) {
+          processedAlunoIds.push(finalAlunoId)
         }
 
-        if (isUpdate) atualizados++
-        else inseridos++
-        
-        if (finalAlunoData.id) {
-          processedAlunoIds.push(finalAlunoData.id)
-        }
+        // 4. PROCESSAR RESPONSÁVEIS (Deduplicação Inteligente de Irmãos e Família)
+        const processResponsible = async (respInfo: Record<string, any>, defaultParentesco: string) => {
+          if (!respInfo || !respInfo.nome || String(respInfo.nome).trim() === '') return null
 
-        // 4. Processar Responsáveis
-        const processResp = async (respData: any) => {
-          if (!respData.nome && !respData.id) return null
+          const respNomeTrim = String(respInfo.nome).trim()
+          const respCpfClean = cleanDigits(respInfo.cpf)
+          const respTelClean = cleanDigits(respInfo.telefone)
 
-          let existingResp: any = null
-          if (respData.id) {
-            const { data } = await supabase
-              .from('responsaveis')
-              .select('*')
-              .eq('id', respData.id)
-              .maybeSingle()
+          // 1º: Verificar no cache da sessão atual (mesma planilha de alunos)
+          let cachedResp = null
+          if (respCpfClean && respCacheByCpf.has(respCpfClean)) {
+            cachedResp = respCacheByCpf.get(respCpfClean)
+          } else if (respCacheByNamePhone.has(`${normalize(respNomeTrim)}_${respTelClean}`)) {
+            cachedResp = respCacheByNamePhone.get(`${normalize(respNomeTrim)}_${respTelClean}`)
+          }
+
+          let existingResp: any = cachedResp
+
+          // 2º: Se não achou no cache, buscar no banco pelo CPF ou Nome+Telefone
+          if (!existingResp && respCpfClean) {
+            const { data } = await supabase.from('responsaveis').select('*').eq('cpf', respCpfClean).maybeSingle()
+            existingResp = data
+          }
+          if (!existingResp && respTelClean) {
+            const { data } = await supabase.from('responsaveis').select('*').ilike('nome', respNomeTrim).eq('celular', respTelClean).maybeSingle()
+            existingResp = data
+          }
+          if (!existingResp) {
+            const { data } = await supabase.from('responsaveis').select('*').ilike('nome', respNomeTrim).maybeSingle()
             existingResp = data
           }
 
-          let finalRespData = { ...respData }
-          
+          const respObj: any = {
+            nome: respNomeTrim,
+            updated_at: new Date().toISOString()
+          }
+          if (respCpfClean) respObj.cpf = respCpfClean
+          if (respTelClean) {
+            respObj.telefone = respTelClean
+            respObj.celular = respTelClean
+          }
+          if (respInfo.email) respObj.email = String(respInfo.email).trim()
+          if (respInfo.profissao) respObj.profissao = String(respInfo.profissao).trim()
+          if (respInfo.rfid) respObj.rfid = String(respInfo.rfid).trim()
+          if (respInfo.data_nasc) respObj.data_nasc = normDate(respInfo.data_nasc)
+
+          let savedRespId: string
+
           if (existingResp) {
-            if (config === 'manter') {
-              Object.keys(respData).forEach(key => {
-                if (existingResp[key] !== null && existingResp[key] !== undefined && existingResp[key] !== '') {
-                  delete finalRespData[key]
-                }
-              })
-              finalRespData = { ...existingResp, ...finalRespData }
-            } else {
-              finalRespData = { ...existingResp, ...respData }
-            }
+            savedRespId = existingResp.id
+            const mergedResp = { ...existingResp, ...respObj }
+            await supabase.from('responsaveis').update(mergedResp).eq('id', savedRespId)
           } else {
-            finalRespData.id = respData.id || crypto.randomUUID()
+            savedRespId = crypto.randomUUID()
+            respObj.id = savedRespId
+            respObj.created_at = new Date().toISOString()
+            respObj.parentesco = respInfo.parentesco || defaultParentesco
+            respObj.dados = { importBatchId: batchId }
+            const { error: insRespErr } = await supabase.from('responsaveis').insert(respObj)
+            if (insRespErr) throw new Error(`Erro ao salvar responsável: ${insRespErr.message}`)
+            batchTracker.respIdsCriados.push(savedRespId)
           }
 
-          if (respData.autorizado_retirar !== undefined) {
-            finalRespData.proibido = 
-              String(respData.autorizado_retirar).toLowerCase() === 'proibido' || 
-              String(respData.autorizado_retirar).toLowerCase() === 'não'
-          }
+          // Guardar no cache de sessão para os próximos irmãos na mesma planilha
+          if (respCpfClean) respCacheByCpf.set(respCpfClean, { ...existingResp, ...respObj, id: savedRespId })
+          respCacheByNamePhone.set(`${normalize(respNomeTrim)}_${respTelClean}`, { ...existingResp, ...respObj, id: savedRespId })
 
-          if (finalRespData.proibido) {
-            // Se o responsável está proibido, não tem dias de acesso permitidos
-            finalRespData.dias_acesso = []
-          } else if (respData.restricao_dia !== undefined && String(respData.restricao_dia).trim() !== '') {
-            const dayMap: { [key: string]: string } = {
-              'seg': 'Seg', 'segunda': 'Seg', 'segunda-feira': 'Seg',
-              'ter': 'Ter', 'terça': 'Ter', 'terça-feira': 'Ter',
-              'qua': 'Qua', 'quarta': 'Qua', 'quarta-feira': 'Qua',
-              'qui': 'Qui', 'quinta': 'Qui', 'quinta-feira': 'Qui',
-              'sex': 'Sex', 'sexta': 'Sex', 'sexta-feira': 'Sex'
-            }
-            const prohibitedDays = String(respData.restricao_dia).split(',')
-              .map(d => d.trim().toLowerCase())
-              .map(d => dayMap[d] || (d.charAt(0).toUpperCase() + d.slice(1)))
-            
-            const allDays = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex']
-            const allowedDays = allDays.filter(d => !prohibitedDays.includes(d))
-            
-            finalRespData.dias_acesso = allowedDays
-          } else {
-            // Se estiver vazio na planilha, o padrão é liberar todos os dias
-            finalRespData.dias_acesso = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex']
-          }
-
-          // Mapeia CPF e RG para dentro da coluna JSONB dados
-          const dados = finalRespData.dados || {}
-          if (respData.cpf) {
-            dados.cpf = String(respData.cpf).replace(/\D/g, '')
-          }
-          if (respData.rg) {
-            dados.rg = String(respData.rg).trim()
-          }
-          finalRespData.dados = dados
-
-          const validRespColumns = [
-            'id', 'nome', 'data_nasc', 'telefone', 'celular', 'email', 
-            'profissao', 'rfid', 'proibido', 'dias_acesso', 'dados'
-          ]
-          
-          const filteredRespData: any = {}
-          Object.keys(finalRespData).forEach(key => {
-            if (validRespColumns.includes(key)) {
-              filteredRespData[key] = finalRespData[key]
-            }
-          })
-
-          const { data: savedResp, error: respError } = await supabase
-            .from('responsaveis')
-            .upsert(filteredRespData)
-            .select()
-            .single()
-
-          if (respError) throw new Error(`Erro ao salvar responsável ${respData.nome}: ${respError.message}`)
-          return savedResp
-        }
-
-        const savedResp = await processResp(respData)
-
-        // 5. Vincular Responsáveis (Acrescentando com Preservação Inteligente)
-        const linkResp = async (respId: string, parentescoRaw: string | undefined, autorizado: any, tipoRaw: string | undefined) => {
-          if (!respId) return
-
+          // 5. Vincular Responsável ao Aluno na tabela aluno_responsavel
           const { data: existingLink } = await supabase
             .from('aluno_responsavel')
             .select('*')
-            .eq('aluno_id', finalAlunoData.id)
-            .eq('responsavel_id', respId)
+            .eq('aluno_id', finalAlunoId)
+            .eq('responsavel_id', savedRespId)
             .maybeSingle()
 
-          const isParentescoMapped = Object.values(mapping).includes('resp_parentesco')
-          const hasParentescoValue = respData.hasOwnProperty('parentesco') && respData.parentesco !== undefined && respData.parentesco !== null && respData.parentesco !== ''
+          const isFin = String(respInfo.financeiro || '').toLowerCase() === 'sim' || respInfo.financeiro === true
+          const isPed = String(respInfo.pedagogico || '').toLowerCase() === 'sim' || respInfo.pedagogico === true || (!respInfo.financeiro && !respInfo.pedagogico)
+          const isRetirar = String(respInfo.retirar || '').toLowerCase() !== 'não'
 
-          const isTipoMapped = Object.values(mapping).includes('resp_tipo')
-          const hasTipoValue = respData.hasOwnProperty('tipo') && respData.tipo !== undefined && respData.tipo !== null && respData.tipo !== ''
-
-          const parseTipo = (tipoStr: string | undefined) => {
-            const s = String(tipoStr || '').toLowerCase()
-            return {
-              isFin: s.includes('finan'),
-              isPed: s.includes('pedag'),
-              isOutro: s.includes('outro') || (!s.includes('finan') && !s.includes('pedag') && s !== '')
-            }
-          }
-
-          const flags = parseTipo(tipoRaw)
+          const parentescoFinal = respInfo.parentesco || defaultParentesco
 
           if (!existingLink) {
-            // === NOVO VÍNCULO ===
-            const isProibido = String(autorizado).toLowerCase() === 'não'
-            
-            // Determinar parentesco para novo vínculo
-            let finalParentesco = 'outro'
-            if (isParentescoMapped && hasParentescoValue && parentescoRaw) {
-              finalParentesco = parentescoRaw
-            } else if (step === 3) {
-              finalParentesco = 'outro'
-            }
-
-            // Determinar tipo de responsável para novo vínculo
-            const finalFin = isTipoMapped && hasTipoValue ? flags.isFin : false
-            const finalPed = isTipoMapped && hasTipoValue ? flags.isPed : false
-            let finalOutro = isTipoMapped && hasTipoValue ? flags.isOutro : (isProibido || (!finalFin && !finalPed))
-
-            // REGRA ESPECIAL: Se o parentesco for 'outro' e não houver papel financeiro ou pedagógico associado, força o tipo como 'Outro'
-            if (finalParentesco.toLowerCase() === 'outro' && !finalFin && !finalPed) {
-              finalOutro = true
-            }
-
-            console.log(`[Import] Inserindo novo vínculo para aluno ${finalAlunoData.id} e resp ${respId} com parentesco "${finalParentesco}"`)
-            const { error: linkError } = await supabase
-              .from('aluno_responsavel')
-              .insert({
-                aluno_id: finalAlunoData.id,
-                responsavel_id: respId,
-                parentesco: finalParentesco,
-                resp_outro: finalOutro,
-                resp_financeiro: finalFin,
-                resp_pedagogico: finalPed
-              })
-
-            if (linkError) throw new Error(`Erro ao vincular responsável: ${linkError.message}`)
-            
-            if (isProibido) {
-              await supabase.from('responsaveis').update({ proibido: true }).eq('id', respId)
-            }
+            const linkId = crypto.randomUUID()
+            const { error: linkErr } = await supabase.from('aluno_responsavel').insert({
+              id: linkId,
+              aluno_id: finalAlunoId,
+              responsavel_id: savedRespId,
+              parentesco: parentescoFinal,
+              resp_financeiro: isFin,
+              resp_pedagogico: isPed,
+              resp_outro: !isFin && !isPed,
+              autorizacao_retirada: isRetirar,
+              created_at: new Date().toISOString()
+            })
+            if (!linkErr) batchTracker.vinculoIdsCriados.push(linkId)
           } else {
-            // === VÍNCULO EXISTENTE (PRESERVAÇÃO INTELIGENTE) ===
-            // Grau de Parentesco: SÓ altera se estiver ativamente mapeado e fornecido!
-            const finalParentesco = (isParentescoMapped && hasParentescoValue && parentescoRaw) 
-              ? parentescoRaw 
-              : existingLink.parentesco
-
-            // Tipo de Responsável: SÓ altera se estiver ativamente mapeado e fornecido!
-            let finalFin = existingLink.resp_financeiro
-            let finalPed = existingLink.resp_pedagogico
-            let finalOutro = existingLink.resp_outro
-
-            if (isTipoMapped && hasTipoValue) {
-              if (tipoResponsavelConfig === 'substituir') {
-                // Substituir: limpa os papéis antigos e aplica estritamente os novos
-                finalFin = flags.isFin
-                finalPed = flags.isPed
-                finalOutro = flags.isOutro
-              } else {
-                // Acrescentar (Padrão): soma as permissões/papéis
-                finalFin = existingLink.resp_financeiro || flags.isFin
-                finalPed = existingLink.resp_pedagogico || flags.isPed
-                finalOutro = existingLink.resp_outro || flags.isOutro
-              }
-            }
-
-            // REGRA ESPECIAL: Se o parentesco for 'outro' e não houver papel financeiro ou pedagógico associado, força o tipo como 'Outro'
-            if (finalParentesco.toLowerCase() === 'outro' && !finalFin && !finalPed) {
-              finalOutro = true
-            }
-
-            console.log(`[Import] Atualizando vínculo existente para aluno ${finalAlunoData.id} e resp ${respId}. Parentesco final: "${finalParentesco}" (Mapeado: ${isParentescoMapped}), Estratégia: ${tipoResponsavelConfig || 'acrescentar'}, Fin: ${finalFin}, Ped: ${finalPed}`)
-            const { error: updateError } = await supabase
-              .from('aluno_responsavel')
-              .update({
-                resp_financeiro: finalFin,
-                resp_pedagogico: finalPed,
-                resp_outro: finalOutro,
-                parentesco: finalParentesco
-              })
-              .eq('aluno_id', finalAlunoData.id)
-              .eq('responsavel_id', respId)
-
-            if (updateError) throw new Error(`Erro ao atualizar vínculo do responsável: ${updateError.message}`)
+            const updatedFin = tipoResponsavelConfig === 'substituir' ? isFin : (existingLink.resp_financeiro || isFin)
+            const updatedPed = tipoResponsavelConfig === 'substituir' ? isPed : (existingLink.resp_pedagogico || isPed)
+            await supabase.from('aluno_responsavel').update({
+              resp_financeiro: updatedFin,
+              resp_pedagogico: updatedPed,
+              parentesco: parentescoFinal || existingLink.parentesco,
+              autorizacao_retirada: isRetirar
+            }).eq('id', existingLink.id)
           }
+
+          return savedRespId
         }
 
-        console.log(`[Import] Linha ${index + 2}: respData.parentesco original = "${respData.parentesco}"`)
-        let parentesco: string | undefined = undefined
-        if (respData.parentesco !== undefined && respData.parentesco !== null && respData.parentesco !== '') {
-          const p = String(respData.parentesco).trim().toLowerCase()
-          if (p.includes('pai')) parentesco = 'pai'
-          else if (p.includes('mãe') || p.includes('mae')) parentesco = 'mae'
-          else parentesco = 'outro'
+        // Processar Responsável 1 (Mãe / Principal)
+        if (resp1Data.nome) {
+          await processResponsible(resp1Data, resp1Data.parentesco || 'Mãe')
         }
 
-        console.log(`[Import] Linha ${index + 2}: parentesco final = "${parentesco}"`)
-        if (savedResp) await linkResp(savedResp.id, parentesco, respData.autorizado_retirar, respData.tipo)
+        // Processar Responsável 2 (Pai / Secundário)
+        if (resp2Data.nome) {
+          await processResponsible(resp2Data, resp2Data.parentesco || 'Pai')
+        }
 
       } catch (e: any) {
         erros++
-        erroDetails.push({ linha: index + 2, msg: e.message })
+        erroDetails.push({
+          linha: index + 2,
+          alunoNome: row[1] || 'Aluno',
+          msg: e.message,
+          rawRow: row
+        })
       }
     }
 
-    if (step === 2 && inativarAusentes && processedAlunoIds.length > 0) {
-      console.log(`[Import] Inativando alunos ausentes... Mantendo ativos apenas os ${processedAlunoIds.length} alunos processados.`)
-      const formattedIds = processedAlunoIds.map(id => `'${String(id).replace(/'/g, "''")}'`).join(',')
-      const { error: inativacaoError } = await supabase
+    // 6. INATIVAÇÃO DE AUSENTES (Executa somente no último chunk se solicitado)
+    if (isLastChunk && inativarAusentes && processedAlunoIds.length > 0) {
+      console.log(`[Import] Inativando alunos não listados na planilha (${processedAlunoIds.length} ativos preservados)...`)
+      
+      const { data: absentStudents } = await supabase
         .from('alunos')
-        .update({ status: 'inativo' })
-        .not('id', 'in', `(${formattedIds})`)
-        .neq('status', 'inativo') // opcional, para não atualizar atoa
+        .select('id')
+        .not('id', 'in', `(${processedAlunoIds.map(id => `'${id}'`).join(',')})`)
+        .neq('status', 'inativo')
 
-      if (inativacaoError) {
-        console.error('[Import] Erro ao inativar alunos ausentes:', inativacaoError)
-        erroDetails.push({ linha: 0, msg: `Erro ao inativar alunos ausentes: ${inativacaoError.message}` })
-      } else {
-        console.log('[Import] Inativação concluída com sucesso.')
+      if (absentStudents && absentStudents.length > 0) {
+        const absentIds = absentStudents.map((s: any) => s.id)
+        batchTracker.alunosInativados = absentIds
+
+        await supabase
+          .from('alunos')
+          .update({ status: 'inativo', updated_at: new Date().toISOString() })
+          .in('id', absentIds)
       }
+    }
+
+    // 7. REGISTRAR LOTE NA TABELA CONFIGURACOES (Somente no último chunk)
+    if (isLastChunk) {
+      const batchRecord = {
+        id: batchId,
+        data: new Date().toISOString(),
+        total: processedAlunoIds.length,
+        inseridos: batchTracker.alunoIdsCriados.length,
+        atualizados: batchTracker.alunoIdsAtualizados.length,
+        erros: erroDetails.length,
+        status: 'concluido',
+        ...batchTracker
+      }
+
+      // Salvar registro individual do lote
+      await supabase.from('configuracoes').upsert({
+        chave: `import_batch_${batchId}`,
+        valor: batchRecord,
+        updated_at: new Date().toISOString()
+      })
+
+      // Atualizar lista histórica de lotes
+      const { data: currentListConfig } = await supabase
+        .from('configuracoes')
+        .select('valor')
+        .eq('chave', 'import_batches_list')
+        .maybeSingle()
+
+      const currentList = Array.isArray(currentListConfig?.valor) ? currentListConfig.valor : []
+      const updatedList = [
+        {
+          id: batchId,
+          data: batchRecord.data,
+          total: batchRecord.total,
+          inseridos: batchRecord.inseridos,
+          atualizados: batchRecord.atualizados,
+          erros: batchRecord.erros,
+          status: 'concluido'
+        },
+        ...currentList.slice(0, 19) // Mantém os 20 últimos lotes
+      ]
+
+      await supabase.from('configuracoes').upsert({
+        chave: 'import_batches_list',
+        valor: updatedList,
+        updated_at: new Date().toISOString()
+      })
     }
 
     return NextResponse.json({
       ok: true,
+      batchId,
       total: rows.length,
       inseridos,
       atualizados,
       erros,
-      erroDetails: erroDetails,
-      processedIds: processedAlunoIds
+      erroDetails,
+      processedIds: processedAlunoIds,
+      batchTracker
     })
-
   } catch (e: any) {
     console.error('[POST /api/importacao/alunos]', e)
     return NextResponse.json({ error: e.message }, { status: 500 })

@@ -34,6 +34,10 @@ export async function GET(request: Request) {
     }
 
     if (status && status !== 'todos') query = query.eq('status', status)
+    const origemLanca = searchParams.get('origemLanca')
+    if (origemLanca) {
+      query = query.filter('dados->>origemLanca', 'eq', origemLanca)
+    }
     if (aluno) {
       const safeAluno = aluno.replace(/[%_().,]/g, '')
       if (safeAluno) query = query.ilike('aluno', `%${safeAluno}%`)

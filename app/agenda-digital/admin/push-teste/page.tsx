@@ -2902,6 +2902,7 @@ export default function ADAdminPushTestPage() {
               <div><b>Título:</b> {viewLogDetail.title}</div>
               <div><b>Mensagem:</b> {viewLogDetail.message}</div>
               <div><b>Tipo de Notificação:</b> <code>{viewLogDetail.type}</code></div>
+              <div><b>Quem Enviou:</b> {viewLogDetail.sender?.nome || 'Sistema Escolar'} {viewLogDetail.sender?.subtitulo ? `(${viewLogDetail.sender.subtitulo})` : ''}</div>
               <div><b>Status:</b> <span style={{ fontWeight: 700, color: viewLogDetail.status === 'sent' ? '#10b981' : '#ef4444' }}>{viewLogDetail.status}</span></div>
               <div><b>Destinatários:</b> {viewLogDetail.target_count || 0} usuário(s)</div>
               <div><b>URL de Destino:</b> <code>{viewLogDetail.target_url}</code></div>

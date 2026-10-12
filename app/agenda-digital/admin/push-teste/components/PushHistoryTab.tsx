@@ -247,6 +247,18 @@ export function PushHistoryTab({ onSwitchToTesterWithPayload }: PushHistoryTabPr
             overflow: hidden !important;
             max-width: 100% !important;
           }
+          .push-history-col-sender {
+            display: flex !important;
+            align-items: center !important;
+            width: 100% !important;
+            padding: 8px 10px !important;
+            background: hsl(var(--bg-surface)) !important;
+            border-radius: 8px !important;
+            border: 1px solid hsl(var(--border-subtle) / 0.6) !important;
+          }
+          .push-history-mobile-sender-label {
+            display: inline-block !important;
+          }
           .push-history-col-dest {
             display: flex !important;
             align-items: center !important;
@@ -291,6 +303,9 @@ export function PushHistoryTab({ onSwitchToTesterWithPayload }: PushHistoryTabPr
         }
         @media (min-width: 769px) {
           .push-history-mobile-meta {
+            display: none !important;
+          }
+          .push-history-mobile-sender-label {
             display: none !important;
           }
         }
@@ -729,7 +744,7 @@ export function PushHistoryTab({ onSwitchToTesterWithPayload }: PushHistoryTabPr
             {/* Header da Lista */}
             <div className="push-history-table-header" style={{
               display: 'grid',
-              gridTemplateColumns: '200px 1fr 140px 160px 120px',
+              gridTemplateColumns: '170px 1fr 170px 150px 140px 110px',
               padding: '12px 20px',
               background: 'hsl(var(--bg-main))',
               borderBottom: '1px solid hsl(var(--border-subtle))',
@@ -741,6 +756,7 @@ export function PushHistoryTab({ onSwitchToTesterWithPayload }: PushHistoryTabPr
             }}>
               <div>Categoria & Tipo</div>
               <div>Conteúdo da Notificação</div>
+              <div>Quem Enviou</div>
               <div>Destinatários</div>
               <div>Status & Entrega</div>
               <div style={{ textAlign: 'right' }}>Ação</div>
@@ -778,7 +794,7 @@ export function PushHistoryTab({ onSwitchToTesterWithPayload }: PushHistoryTabPr
                   className="push-history-row"
                   style={{
                     display: 'grid',
-                    gridTemplateColumns: '200px 1fr 140px 160px 120px',
+                    gridTemplateColumns: '170px 1fr 170px 150px 140px 110px',
                     padding: '14px 20px',
                     borderBottom: '1px solid hsl(var(--border-subtle))',
                     alignItems: 'center',
@@ -871,7 +887,100 @@ export function PushHistoryTab({ onSwitchToTesterWithPayload }: PushHistoryTabPr
                     </div>
                   </div>
 
-                  {/* Coluna 3: Destinatários */}
+                  {/* Coluna 3: Quem Enviou */}
+                  <div className="push-history-col-sender" style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, paddingRight: 8 }}>
+                    <span className="push-history-mobile-sender-label" style={{ fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-muted))' }}>
+                      Enviado por:
+                    </span>
+                    {log.sender?.foto ? (
+                      <img
+                        src={log.sender.foto}
+                        alt={log.sender.nome}
+                        style={{
+                          width: 32,
+                          height: 32,
+                          borderRadius: '50%',
+                          objectFit: 'cover',
+                          flexShrink: 0,
+                          border: '1.5px solid hsl(var(--border-subtle))',
+                          boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
+                        }}
+                        onError={(e) => {
+                          (e.currentTarget as HTMLElement).style.display = 'none';
+                        }}
+                      />
+                    ) : (
+                      <div
+                        style={{
+                          width: 32,
+                          height: 32,
+                          borderRadius: '50%',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: 11,
+                          fontWeight: 800,
+                          flexShrink: 0,
+                          background:
+                            log.sender?.tipo === 'sistema'
+                              ? 'rgba(100, 116, 139, 0.12)'
+                              : log.sender?.tipo === 'portaria'
+                              ? 'rgba(14, 165, 233, 0.12)'
+                              : log.sender?.tipo === 'responsavel'
+                              ? 'rgba(16, 185, 129, 0.12)'
+                              : 'rgba(99, 102, 241, 0.12)',
+                          color:
+                            log.sender?.tipo === 'sistema'
+                              ? '#64748b'
+                              : log.sender?.tipo === 'portaria'
+                              ? '#0284c7'
+                              : log.sender?.tipo === 'responsavel'
+                              ? '#059669'
+                              : '#4f46e5',
+                          border: '1px solid hsl(var(--border-subtle))',
+                        }}
+                      >
+                        {log.sender?.tipo === 'sistema' ? (
+                          <Sparkles size={14} />
+                        ) : log.sender?.tipo === 'portaria' ? (
+                          <Car size={14} />
+                        ) : (
+                          <span>{log.sender?.initials || <User size={14} />}</span>
+                        )}
+                      </div>
+                    )}
+
+                    <div style={{ minWidth: 0, overflow: 'hidden' }}>
+                      <div
+                        title={log.sender?.nome || 'Sistema'}
+                        style={{
+                          fontWeight: 700,
+                          fontSize: 12.5,
+                          color: 'hsl(var(--text-main))',
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                        }}
+                      >
+                        {log.sender?.friendlyName || log.sender?.nome || 'Sistema'}
+                      </div>
+                      <div
+                        title={log.sender?.subtitulo || ''}
+                        style={{
+                          fontSize: 10,
+                          color: 'hsl(var(--text-muted))',
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          marginTop: 1,
+                        }}
+                      >
+                        {log.sender?.subtitulo || 'Disparo Automático'}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Coluna 4: Destinatários */}
                   <div className="push-history-col-dest">
                     <div style={{ fontWeight: 800, fontSize: 13, color: 'hsl(var(--text-main))', display: 'flex', alignItems: 'center', gap: 5 }}>
                       <Users size={13} color="#6366f1" />
