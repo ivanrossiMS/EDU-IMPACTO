@@ -9,8 +9,20 @@ import { performLogout } from '@/lib/auth/logout'
 import { getLogoutBarrier, isUserLoggedOut, clearSessionSecurely, clearLogoutBarrierSync, markExplicitLogin } from '@/lib/auth/secureSession'
 import { Capacitor } from '@capacitor/core'
 import { Preferences } from '@capacitor/preferences'
-import { LogOut, Eye, EyeOff } from 'lucide-react'
 import { hideSplashScreen } from '@/lib/capacitor/splash'
+import { 
+  LogOut, 
+  Eye, 
+  EyeOff, 
+  GraduationCap, 
+  CalendarDays, 
+  Users, 
+  ClipboardCheck, 
+  Laptop, 
+  CreditCard, 
+  HeartHandshake, 
+  Briefcase 
+} from 'lucide-react'
 import { PENDING_PUSH_ROUTE_KEY } from '@/components/providers/GlobalNotificationProvider'
 import {
   isFamilyOrStudent,
@@ -57,10 +69,9 @@ import { BackgroundEffects } from '@/components/ui/LoginBackground'
 import { BemEstarCheckinModal } from '@/components/login/BemEstarCheckinModal'
 import { useIsMobileVersion } from '@/lib/utils/isMobileVersion'
 
-const ModernLoadingSpinner = () => (
-  <div style={{ width: 64, height: 64, borderRadius: 20, background: "rgba(255,255,255,0.1)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-    <div style={{ width: 24, height: 24, border: "3px solid rgba(255,255,255,0.3)", borderTopColor: "#fff", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
-    
+const ModernLoadingSpinner = ({ size = 46 }: { size?: number }) => (
+  <div style={{ width: size, height: size, borderRadius: Math.round(size * 0.3), background: "rgba(255,255,255,0.1)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+    <div style={{ width: Math.round(size * 0.42), height: Math.round(size * 0.42), border: "2.5px solid rgba(255,255,255,0.3)", borderTopColor: "#fff", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
     <style>{`@keyframes spin { 100% { transform: rotate(360deg); } }`}</style>
   </div>
 )
@@ -1459,18 +1470,139 @@ export default function LoginPage() {
   const authUser = pendingAuth || currentUser
   const isStudentUser = authUser?.cargo === 'Aluno' || authUser?.perfil === 'Aluno'
 
+  // ────────────────────────────────────────────────────────────────
+  // STEP: Escolha do Sistema / Módulo (Design Compacto e Responsivo)
+  // ────────────────────────────────────────────────────────────────
+  const systemModules = [
+    {
+      id: 'gestao-escolar',
+      title: 'Gestão Escolar',
+      subtitle: 'Sistema ERP Principal',
+      icon: GraduationCap,
+      gradient: 'linear-gradient(135deg, #60a5fa 0%, #3b82f6 50%, #1d4ed8 100%)',
+      glowColor: 'rgba(59, 130, 246, 0.45)',
+      accentColor: '#3b82f6',
+      visible: !isStudentUser && (!profileData || !profileData.bloqueadoGestaoEscolar),
+      onClick: () => {
+        clearLogoutBarrierSync()
+        markExplicitLogin()
+        setLoadingSystem('gestao-escolar')
+        setTimeout(() => {
+          window.location.href = '/dashboard'
+        }, 100)
+      }
+    },
+    {
+      id: 'agenda-digital',
+      title: 'Agenda Digital',
+      subtitle: 'Comunicação Diária',
+      icon: CalendarDays,
+      gradient: 'linear-gradient(135deg, #c084fc 0%, #9333ea 50%, #7e22ce 100%)',
+      glowColor: 'rgba(168, 85, 247, 0.45)',
+      accentColor: '#a855f7',
+      visible: !profileData || !profileData.bloqueadoAgendaDigital,
+      onClick: () => {
+        clearLogoutBarrierSync()
+        markExplicitLogin()
+        setLoadingSystem('agenda-digital')
+        setTimeout(() => {
+          const dest = getAgendaDigitalDestination({
+            ...currentUser,
+            ...pendingAuth,
+            hasDualRole: hasDualRole || pendingAuth?.hasDualRole || currentUser?.hasDualRole
+          })
+          window.location.href = dest
+        }, 100)
+      }
+    },
+    {
+      id: 'gestao-pessoas',
+      title: 'Gestão de Pessoas',
+      subtitle: 'RH, SST e NR-01',
+      icon: Users,
+      gradient: 'linear-gradient(135deg, #2dd4bf 0%, #0d9488 50%, #0f766e 100%)',
+      glowColor: 'rgba(20, 184, 166, 0.45)',
+      accentColor: '#14b8a6',
+      visible: !isStudentUser && (!profileData || !profileData.bloqueadoGestaoPessoas),
+      onClick: () => {
+        clearLogoutBarrierSync()
+        markExplicitLogin()
+        setLoadingSystem('gestao-pessoas')
+        setTimeout(() => {
+          window.location.href = '/gestao-pessoas'
+        }, 100)
+      }
+    },
+    {
+      id: 'simulados',
+      title: 'Provas/Simulados',
+      subtitle: 'Geração de Provas',
+      icon: ClipboardCheck,
+      gradient: 'linear-gradient(135deg, #fb7185 0%, #e11d48 50%, #be123c 100%)',
+      glowColor: 'rgba(244, 63, 94, 0.45)',
+      accentColor: '#f43f5e',
+      visible: !isStudentUser && (!profileData || !profileData.bloqueadoSimulados),
+      onClick: () => {
+        clearLogoutBarrierSync()
+        markExplicitLogin()
+        setLoadingSystem('simulados')
+        setTimeout(() => {
+          window.location.href = '/simulados'
+        }, 100)
+      }
+    },
+    {
+      id: 'provas-online',
+      title: 'Provas Online',
+      subtitle: 'Avaliações Digitais',
+      icon: Laptop,
+      gradient: 'linear-gradient(135deg, #38bdf8 0%, #0284c7 50%, #0369a1 100%)',
+      glowColor: 'rgba(6, 182, 212, 0.45)',
+      accentColor: '#06b6d4',
+      visible: !profileData || !profileData.bloqueadoProvasOnline,
+      onClick: () => {
+        clearLogoutBarrierSync()
+        markExplicitLogin()
+        setLoadingSystem('provas-online')
+        setTimeout(() => {
+          window.location.href = '/provas-online'
+        }, 100)
+      }
+    },
+    {
+      id: 'credimpacto',
+      title: 'CredImpacto',
+      subtitle: 'Empréstimos e Consignado',
+      icon: CreditCard,
+      gradient: 'linear-gradient(135deg, #34d399 0%, #059669 50%, #047857 100%)',
+      glowColor: 'rgba(16, 185, 129, 0.45)',
+      accentColor: '#10b981',
+      visible: !isStudentUser && (!profileData || !profileData.bloqueadoCredImpacto),
+      onClick: () => {
+        clearLogoutBarrierSync()
+        markExplicitLogin()
+        setLoadingSystem('credimpacto')
+        setTimeout(() => {
+          window.location.href = '/credimpacto'
+        }, 100)
+      }
+    }
+  ]
+
+  const availableModules = systemModules.filter(m => m.visible)
+  const isOddModules = availableModules.length % 2 !== 0
+
   const ChooseSystemContent = (
-    <div className="login-form-wrapper" style={{ width:'100%', maxWidth:680, position:'relative', zIndex:1, animation:'fadeSlideIn 0.4s cubic-bezier(0.4, 0, 0.2, 1) both' }}>
-      <div style={{ marginBottom:36, textAlign:'center' }}>
-        <h2 style={{ fontFamily:"'Outfit',sans-serif", fontSize:32, fontWeight:900, color:'#fff', letterSpacing:'-0.02em', marginBottom:8 }}>Acesso Autorizado</h2>
-        <p style={{ fontSize:15, color:'rgba(255,255,255,0.45)', lineHeight: 1.6 }}>
+    <div className="login-form-wrapper" style={{ width: '100%', maxWidth: 680, position: 'relative', zIndex: 1, animation: 'fadeSlideIn 0.4s cubic-bezier(0.4, 0, 0.2, 1) both' }}>
+      <div className="choose-system-header">
+        <h2 className="choose-system-title">Acesso Autorizado</h2>
+        <p className="choose-system-subtitle">
           {greetingFirstName ? (
             <>
               Bem-vindo,{' '}
               <span
                 style={{
                   fontFamily: "'Outfit', sans-serif",
-                  fontSize: 20,
                   fontWeight: 900,
                   color: '#ffffff',
                   letterSpacing: '-0.02em',
@@ -1488,148 +1620,68 @@ export default function LoginPage() {
         </p>
       </div>
 
-      <div style={{ display:'flex', gap:20, flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center' }}>
+      <div 
+        className="choose-system-grid"
+        style={{
+          maxWidth: availableModules.length === 2 || availableModules.length === 4 ? 460 : 660
+        }}
+      >
         {isProfileLoading ? (
-          <div style={{ padding: 40, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
+          <div style={{ gridColumn: '1 / -1', padding: 32, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
             <Spinner />
-            <span style={{ fontSize: 14, color: 'rgba(255,255,255,0.5)' }}>Carregando permissões...</span>
+            <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)' }}>Carregando permissões...</span>
           </div>
         ) : (
-          <>
-            {!isStudentUser && (!profileData || !profileData.bloqueadoGestaoEscolar) && (
-              <button type="button" 
-                onClick={() => {
-                  clearLogoutBarrierSync();
-                  markExplicitLogin();
-                  setLoadingSystem('gestao-escolar');
-                  setTimeout(() => {
-                    window.location.href = '/dashboard';
-                  }, 100);
+          availableModules.map((mod, idx) => {
+            const isLastOdd = isOddModules && idx === availableModules.length - 1
+            const IconComp = mod.icon
+            return (
+              <button
+                key={mod.id}
+                type="button"
+                onClick={mod.onClick}
+                className={`choose-system-card ${isLastOdd ? 'choose-system-card--odd' : ''}`}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = `${mod.accentColor}18`
+                  e.currentTarget.style.borderColor = `${mod.accentColor}66`
+                  e.currentTarget.style.transform = 'translateY(-3px)'
+                  e.currentTarget.style.boxShadow = `0 12px 28px rgba(0,0,0,0.35), 0 0 24px ${mod.glowColor}`
                 }}
-                style={{ position: 'relative', overflow: 'hidden', flex:'1 1 200px', padding:'32px 24px', borderRadius:24, background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.08)', backdropFilter:'blur(20px)', cursor:'pointer', transition:'all 0.3s', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:16, minWidth: '180px' }}
-                onMouseEnter={e=>{e.currentTarget.style.background='rgba(59,130,246,0.08)'; e.currentTarget.style.borderColor='rgba(59,130,246,0.3)'; e.currentTarget.style.transform='translateY(-4px)'; e.currentTarget.style.boxShadow='0 20px 40px rgba(0,0,0,0.3), 0 0 40px rgba(59,130,246,0.1)'}}
-                onMouseLeave={e=>{e.currentTarget.style.background='rgba(255,255,255,0.03)'; e.currentTarget.style.borderColor='rgba(255,255,255,0.08)'; e.currentTarget.style.transform='translateY(0)'; e.currentTarget.style.boxShadow='none'}}>
-                {loadingSystem === 'gestao-escolar' ? <ModernLoadingSpinner /> : <div style={{ width:64, height:64, borderRadius:20, background:'linear-gradient(135deg, #3b82f6, #2563eb)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:28, boxShadow:'0 10px 24px rgba(59,130,246,0.4)' }}>🏢</div>}
-                <div>
-                  <div style={{ fontSize:18, fontWeight:800, color:'#fff', marginBottom:4 }}>Gestão Escolar</div>
-                  <div style={{ fontSize:12, color:'rgba(255,255,255,0.4)' }}>Sistema ERP Principal</div>
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.035)'
+                  e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.08)'
+                  e.currentTarget.style.transform = 'translateY(0)'
+                  e.currentTarget.style.boxShadow = '0 4px 16px rgba(0, 0, 0, 0.15)'
+                }}
+              >
+                {loadingSystem === mod.id ? (
+                  <ModernLoadingSpinner size={52} />
+                ) : (
+                  <div
+                    className="system-card-icon"
+                    style={{
+                      background: mod.gradient,
+                      boxShadow: `0 8px 24px -4px ${mod.glowColor}, inset 0 1px 1.5px rgba(255, 255, 255, 0.4), inset 0 -2px 4px rgba(0, 0, 0, 0.2)`
+                    }}
+                  >
+                    <IconComp size={26} color="#ffffff" strokeWidth={2.2} />
+                  </div>
+                )}
+                <div style={{ textAlign: 'center', width: '100%', minWidth: 0 }}>
+                  <div className="system-card-title">
+                    {mod.title}
+                  </div>
+                  <div className="system-card-sub">
+                    {mod.subtitle}
+                  </div>
                 </div>
               </button>
-            )}
-
-            {(!profileData || !profileData.bloqueadoAgendaDigital) && (
-              <button type="button" 
-                onClick={() => {
-                  clearLogoutBarrierSync();
-                  markExplicitLogin();
-                  setLoadingSystem('agenda-digital');
-                  setTimeout(() => {
-                    const dest = getAgendaDigitalDestination({
-                      ...currentUser,
-                      ...pendingAuth,
-                      hasDualRole: hasDualRole || pendingAuth?.hasDualRole || currentUser?.hasDualRole
-                    })
-                    window.location.href = dest;
-                  }, 100);
-                }}
-                style={{ position: 'relative', overflow: 'hidden', flex:'1 1 200px', padding:'32px 24px', borderRadius:24, background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.08)', backdropFilter:'blur(20px)', cursor:'pointer', transition:'all 0.3s', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:16, minWidth: '180px' }}
-                onMouseEnter={e=>{e.currentTarget.style.background='rgba(139,92,246,0.08)'; e.currentTarget.style.borderColor='rgba(139,92,246,0.3)'; e.currentTarget.style.transform='translateY(-4px)'; e.currentTarget.style.boxShadow='0 20px 40px rgba(0,0,0,0.3), 0 0 40px rgba(139,92,246,0.1)'}}
-                onMouseLeave={e=>{e.currentTarget.style.background='rgba(255,255,255,0.03)'; e.currentTarget.style.borderColor='rgba(255,255,255,0.08)'; e.currentTarget.style.transform='translateY(0)'; e.currentTarget.style.boxShadow='none'}}>
-                {loadingSystem === 'agenda-digital' ? <ModernLoadingSpinner /> : <div style={{ width:64, height:64, borderRadius:20, background:'linear-gradient(135deg, #8b5cf6, #6d28d9)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:28, boxShadow:'0 10px 24px rgba(139,92,246,0.4)' }}>📱</div>}
-                <div>
-                  <div style={{ fontSize:18, fontWeight:800, color:'#fff', marginBottom:4 }}>Agenda Digital</div>
-                  <div style={{ fontSize:12, color:'rgba(255,255,255,0.4)' }}>Comunicação Diária</div>
-                </div>
-              </button>
-            )}
-
-            {!isStudentUser && (!profileData || !profileData.bloqueadoGestaoPessoas) && (
-              <button type="button" 
-                onClick={() => {
-                  clearLogoutBarrierSync();
-                  markExplicitLogin();
-                  setLoadingSystem('gestao-pessoas');
-                  setTimeout(() => {
-                    window.location.href = '/gestao-pessoas';
-                  }, 100);
-                }}
-                style={{ position: 'relative', overflow: 'hidden', flex:'1 1 200px', padding:'32px 24px', borderRadius:24, background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.08)', backdropFilter:'blur(20px)', cursor:'pointer', transition:'all 0.3s', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:16, minWidth: '180px' }}
-                onMouseEnter={e=>{e.currentTarget.style.background='rgba(16,185,129,0.08)'; e.currentTarget.style.borderColor='rgba(16,185,129,0.3)'; e.currentTarget.style.transform='translateY(-4px)'; e.currentTarget.style.boxShadow='0 20px 40px rgba(0,0,0,0.3), 0 0 40px rgba(16,185,129,0.1)'}}
-                onMouseLeave={e=>{e.currentTarget.style.background='rgba(255,255,255,0.03)'; e.currentTarget.style.borderColor='rgba(255,255,255,0.08)'; e.currentTarget.style.transform='translateY(0)'; e.currentTarget.style.boxShadow='none'}}>
-                {loadingSystem === 'gestao-pessoas' ? <ModernLoadingSpinner /> : <div style={{ width:64, height:64, borderRadius:20, background:'linear-gradient(135deg, #10b981, #059669)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:28, boxShadow:'0 10px 24px rgba(16,185,129,0.4)' }}>👥</div>}
-                <div>
-                  <div style={{ fontSize:18, fontWeight:800, color:'#fff', marginBottom:4 }}>Gestão de Pessoas</div>
-                  <div style={{ fontSize:12, color:'rgba(255,255,255,0.4)' }}>RH, SST e NR-01</div>
-                </div>
-              </button>
-            )}
-
-            {!isStudentUser && (!profileData || !profileData.bloqueadoSimulados) && (
-              <button type="button" 
-                onClick={() => {
-                  clearLogoutBarrierSync();
-                  markExplicitLogin();
-                  setLoadingSystem('simulados');
-                  setTimeout(() => {
-                    window.location.href = '/simulados';
-                  }, 100);
-                }}
-                style={{ position: 'relative', overflow: 'hidden', flex:'1 1 200px', padding:'32px 24px', borderRadius:24, background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.08)', backdropFilter:'blur(20px)', cursor:'pointer', transition:'all 0.3s', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:16, minWidth: '180px' }}
-                onMouseEnter={e=>{e.currentTarget.style.background='rgba(244,63,94,0.08)'; e.currentTarget.style.borderColor='rgba(244,63,94,0.3)'; e.currentTarget.style.transform='translateY(-4px)'; e.currentTarget.style.boxShadow='0 20px 40px rgba(0,0,0,0.3), 0 0 40px rgba(244,63,94,0.1)'}}
-                onMouseLeave={e=>{e.currentTarget.style.background='rgba(255,255,255,0.03)'; e.currentTarget.style.borderColor='rgba(255,255,255,0.08)'; e.currentTarget.style.transform='translateY(0)'; e.currentTarget.style.boxShadow='none'}}>
-                {loadingSystem === 'simulados' ? <ModernLoadingSpinner /> : <div style={{ width:64, height:64, borderRadius:20, background:'linear-gradient(135deg, #f43f5e, #be123c)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:28, boxShadow:'0 10px 24px rgba(244,63,94,0.4)' }}>📝</div>}
-                <div>
-                  <div style={{ fontSize:18, fontWeight:800, color:'#fff', marginBottom:4 }}>Provas/Simulados</div>
-                  <div style={{ fontSize:12, color:'rgba(255,255,255,0.4)' }}>Geração de Provas</div>
-                </div>
-              </button>
-            )}
-
-            {(!profileData || !profileData.bloqueadoProvasOnline) && (
-              <button type="button" 
-                onClick={() => {
-                  clearLogoutBarrierSync();
-                  markExplicitLogin();
-                  setLoadingSystem('provas-online');
-                  setTimeout(() => {
-                    window.location.href = '/provas-online';
-                  }, 100);
-                }}
-                style={{ position: 'relative', overflow: 'hidden', flex:'1 1 200px', padding:'32px 24px', borderRadius:24, background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.08)', backdropFilter:'blur(20px)', cursor:'pointer', transition:'all 0.3s', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:16, minWidth: '180px' }}
-                onMouseEnter={e=>{e.currentTarget.style.background='rgba(6,182,212,0.08)'; e.currentTarget.style.borderColor='rgba(6,182,212,0.3)'; e.currentTarget.style.transform='translateY(-4px)'; e.currentTarget.style.boxShadow='0 20px 40px rgba(0,0,0,0.3), 0 0 40px rgba(6,182,212,0.1)'}}
-                onMouseLeave={e=>{e.currentTarget.style.background='rgba(255,255,255,0.03)'; e.currentTarget.style.borderColor='rgba(255,255,255,0.08)'; e.currentTarget.style.transform='translateY(0)'; e.currentTarget.style.boxShadow='none'}}>
-                {loadingSystem === 'provas-online' ? <ModernLoadingSpinner /> : <div style={{ width:64, height:64, borderRadius:20, background:'linear-gradient(135deg, #06b6d4, #0284c7)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:28, boxShadow:'0 10px 24px rgba(6,182,212,0.4)' }}>💻</div>}
-                <div>
-                  <div style={{ fontSize:18, fontWeight:800, color:'#fff', marginBottom:4 }}>Provas Online</div>
-                  <div style={{ fontSize:12, color:'rgba(255,255,255,0.4)' }}>Avaliações Digitais</div>
-                </div>
-              </button>
-            )}
-
-            {!isStudentUser && (!profileData || !profileData.bloqueadoCredImpacto) && (
-              <button type="button" 
-                onClick={() => {
-                  clearLogoutBarrierSync();
-                  markExplicitLogin();
-                  setLoadingSystem('credimpacto');
-                  setTimeout(() => {
-                    window.location.href = '/credimpacto';
-                  }, 100);
-                }}
-                style={{ position: 'relative', overflow: 'hidden', flex:'1 1 200px', padding:'32px 24px', borderRadius:24, background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.08)', backdropFilter:'blur(20px)', cursor:'pointer', transition:'all 0.3s', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:16, minWidth: '180px' }}
-                onMouseEnter={e=>{e.currentTarget.style.background='rgba(5,150,105,0.08)'; e.currentTarget.style.borderColor='rgba(5,150,105,0.3)'; e.currentTarget.style.transform='translateY(-4px)'; e.currentTarget.style.boxShadow='0 20px 40px rgba(0,0,0,0.3), 0 0 40px rgba(5,150,105,0.1)'}}
-                onMouseLeave={e=>{e.currentTarget.style.background='rgba(255,255,255,0.03)'; e.currentTarget.style.borderColor='rgba(255,255,255,0.08)'; e.currentTarget.style.transform='translateY(0)'; e.currentTarget.style.boxShadow='none'}}>
-                {loadingSystem === 'credimpacto' ? <ModernLoadingSpinner /> : <div style={{ width:64, height:64, borderRadius:20, background:'linear-gradient(135deg, #059669, #047857)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:28, boxShadow:'0 10px 24px rgba(5,150,105,0.4)' }}>🏛️</div>}
-                <div>
-                  <div style={{ fontSize:18, fontWeight:800, color:'#fff', marginBottom:4 }}>CredImpacto</div>
-                  <div style={{ fontSize:12, color:'rgba(255,255,255,0.4)' }}>Empréstimos e Consignado</div>
-                </div>
-              </button>
-            )}
-          </>
+            )
+          })
         )}
       </div>
-      <div style={{ marginTop: 32, display: 'flex', justifyContent: 'center' }}>
+
+      <div className="choose-system-logout-wrapper">
         <button
           type="button"
           onClick={async () => {
@@ -1643,16 +1695,16 @@ export default function LoginPage() {
             position: 'relative',
             display: 'inline-flex',
             alignItems: 'center',
-            gap: 10,
-            padding: '10px 20px',
+            gap: 8,
+            padding: '9px 18px',
             borderRadius: 9999,
             background: 'rgba(255, 255, 255, 0.04)',
             border: '1px solid rgba(255, 255, 255, 0.1)',
             backdropFilter: 'blur(16px)',
             WebkitBackdropFilter: 'blur(16px)',
-            boxShadow: '0 4px 20px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.06)',
+            boxShadow: '0 4px 16px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.06)',
             color: 'rgba(255, 255, 255, 0.75)',
-            fontSize: 13,
+            fontSize: 12.5,
             fontWeight: 600,
             cursor: 'pointer',
             transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
@@ -1679,8 +1731,8 @@ export default function LoginPage() {
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              width: 24,
-              height: 24,
+              width: 22,
+              height: 22,
               borderRadius: '50%',
               background: 'rgba(239, 68, 68, 0.15)',
               border: '1px solid rgba(239, 68, 68, 0.25)',
@@ -1688,7 +1740,7 @@ export default function LoginPage() {
               flexShrink: 0,
             }}
           >
-            <LogOut size={12} strokeWidth={2.5} />
+            <LogOut size={11} strokeWidth={2.5} />
           </span>
           <span>Sair ou entrar com outra conta</span>
         </button>
@@ -1700,30 +1752,32 @@ export default function LoginPage() {
   // STEP: Escolher Contexto da Agenda (Duplo Perfil)
   // ────────────────────────────────────────────────────────────────
   const ChooseAgendaRoleContent = (
-    <div className="login-form-wrapper" style={{ width:'100%', maxWidth:540, position:'relative', zIndex:1, animation:'fadeSlideIn 0.4s cubic-bezier(0.4, 0, 0.2, 1) both' }}>
-      <button type="button" onClick={() => setStep('choose_system')} style={{ display:'inline-flex', alignItems:'center', gap:6, fontSize:13, color:'rgba(255,255,255,0.4)', background:'none', border:'none', cursor:'pointer', marginBottom:24, fontWeight:600 }}>← Voltar</button>
+    <div className="login-form-wrapper" style={{ width:'100%', maxWidth:500, position:'relative', zIndex:1, animation:'fadeSlideIn 0.4s cubic-bezier(0.4, 0, 0.2, 1) both' }}>
+      <button type="button" onClick={() => setStep('choose_system')} style={{ display:'inline-flex', alignItems:'center', gap:6, fontSize:13, color:'rgba(255,255,255,0.4)', background:'none', border:'none', cursor:'pointer', marginBottom:20, fontWeight:600 }}>← Voltar</button>
       
-      <div style={{ marginBottom:36, textAlign:'center' }}>
-        <div style={{ display:'inline-flex', alignItems:'center', gap:8, padding:'5px 14px', borderRadius:100, background:'rgba(16,185,129,0.1)', border:'1px solid rgba(16,185,129,0.25)', marginBottom:16 }}>
+      <div className="choose-system-header">
+        <div style={{ display:'inline-flex', alignItems:'center', gap:8, padding:'4px 12px', borderRadius:100, background:'rgba(16,185,129,0.1)', border:'1px solid rgba(16,185,129,0.25)', marginBottom:12 }}>
           <span style={{ fontSize:10, fontWeight:900, color:'#34d399' }}>MÚLTIPLOS PERFIS DETECTADOS</span>
         </div>
-        <h2 style={{ fontFamily:"'Outfit',sans-serif", fontSize:28, fontWeight:900, color:'#fff', letterSpacing:'-0.02em', marginBottom:8 }}>Acessar a Agenda como:</h2>
+        <h2 className="choose-system-title" style={{ fontSize: 24 }}>Acessar a Agenda como:</h2>
       </div>
 
-      <div style={{ display:'flex', gap:20, flexDirection: 'row' }}>
+      <div style={{ display:'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12, width: '100%', maxWidth: 440, margin: '0 auto' }}>
         <button type="button" 
           onClick={() => {
             clearLogoutBarrierSync();
             markExplicitLogin();
             window.location.href = '/agenda-digital/selecionar-aluno';
           }}
-          style={{ flex:1, padding:'28px 24px', borderRadius:24, background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.08)', backdropFilter:'blur(20px)', cursor:'pointer', transition:'all 0.3s', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:16 }}
-          onMouseEnter={e=>{e.currentTarget.style.background='rgba(16,185,129,0.08)'; e.currentTarget.style.borderColor='rgba(16,185,129,0.3)'; e.currentTarget.style.transform='translateY(-4px)'; e.currentTarget.style.boxShadow='0 20px 40px rgba(0,0,0,0.3), 0 0 40px rgba(16,185,129,0.1)'}}
-          onMouseLeave={e=>{e.currentTarget.style.background='rgba(255,255,255,0.03)'; e.currentTarget.style.borderColor='rgba(255,255,255,0.08)'; e.currentTarget.style.transform='translateY(0)'; e.currentTarget.style.boxShadow='none'}}>
-          <div style={{ width:56, height:56, borderRadius:18, background:'linear-gradient(135deg, #10b981, #059669)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:24, boxShadow:'0 10px 24px rgba(16,185,129,0.4)' }}>👨‍👩‍👧‍👦</div>
-          <div>
-            <div style={{ fontSize:16, fontWeight:800, color:'#fff', marginBottom:4 }}>Família</div>
-            <div style={{ fontSize:11, color:'rgba(255,255,255,0.4)' }}>Perfil de Pais/Responsáveis</div>
+          className="choose-system-card"
+          onMouseEnter={e=>{e.currentTarget.style.background='rgba(16,185,129,0.12)'; e.currentTarget.style.borderColor='rgba(16,185,129,0.45)'; e.currentTarget.style.transform='translateY(-3px)'; e.currentTarget.style.boxShadow='0 12px 28px rgba(0,0,0,0.3), 0 0 24px rgba(16,185,129,0.3)'}}
+          onMouseLeave={e=>{e.currentTarget.style.background='rgba(255,255,255,0.035)'; e.currentTarget.style.borderColor='rgba(255,255,255,0.08)'; e.currentTarget.style.transform='translateY(0)'; e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,0.15)'}}>
+          <div className="system-card-icon" style={{ background: 'linear-gradient(135deg, #34d399 0%, #10b981 50%, #059669 100%)', boxShadow: '0 8px 24px -4px rgba(16,185,129,0.45), inset 0 1px 1.5px rgba(255,255,255,0.4), inset 0 -2px 4px rgba(0,0,0,0.2)' }}>
+            <HeartHandshake size={26} color="#ffffff" strokeWidth={2.2} />
+          </div>
+          <div style={{ textAlign: 'center', width: '100%' }}>
+            <div className="system-card-title">Família</div>
+            <div className="system-card-sub">Pais/Responsáveis</div>
           </div>
         </button>
 
@@ -1738,13 +1792,15 @@ export default function LoginPage() {
                  window.location.href = '/agenda-digital/colaborador/comunicados';
              }
           }}
-          style={{ flex:1, padding:'28px 24px', borderRadius:24, background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.08)', backdropFilter:'blur(20px)', cursor:'pointer', transition:'all 0.3s', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:16 }}
-          onMouseEnter={e=>{e.currentTarget.style.background='rgba(245,158,11,0.08)'; e.currentTarget.style.borderColor='rgba(245,158,11,0.3)'; e.currentTarget.style.transform='translateY(-4px)'; e.currentTarget.style.boxShadow='0 20px 40px rgba(0,0,0,0.3), 0 0 40px rgba(245,158,11,0.1)'}}
-          onMouseLeave={e=>{e.currentTarget.style.background='rgba(255,255,255,0.03)'; e.currentTarget.style.borderColor='rgba(255,255,255,0.08)'; e.currentTarget.style.transform='translateY(0)'; e.currentTarget.style.boxShadow='none'}}>
-          <div style={{ width:56, height:56, borderRadius:18, background:'linear-gradient(135deg, #f59e0b, #d97706)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:24, boxShadow:'0 10px 24px rgba(245,158,11,0.4)' }}>💼</div>
-          <div>
-            <div style={{ fontSize:16, fontWeight:800, color:'#fff', marginBottom:4 }}>Colaborador</div>
-            <div style={{ fontSize:11, color:'rgba(255,255,255,0.4)' }}>Perfil Escolar Interno</div>
+          className="choose-system-card"
+          onMouseEnter={e=>{e.currentTarget.style.background='rgba(245,158,11,0.12)'; e.currentTarget.style.borderColor='rgba(245,158,11,0.45)'; e.currentTarget.style.transform='translateY(-3px)'; e.currentTarget.style.boxShadow='0 12px 28px rgba(0,0,0,0.3), 0 0 24px rgba(245,158,11,0.3)'}}
+          onMouseLeave={e=>{e.currentTarget.style.background='rgba(255,255,255,0.035)'; e.currentTarget.style.borderColor='rgba(255,255,255,0.08)'; e.currentTarget.style.transform='translateY(0)'; e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,0.15)'}}>
+          <div className="system-card-icon" style={{ background: 'linear-gradient(135deg, #fbbf24 0%, #f59e0b 50%, #d97706 100%)', boxShadow: '0 8px 24px -4px rgba(245,158,11,0.45), inset 0 1px 1.5px rgba(255,255,255,0.4), inset 0 -2px 4px rgba(0,0,0,0.2)' }}>
+            <Briefcase size={26} color="#ffffff" strokeWidth={2.2} />
+          </div>
+          <div style={{ textAlign: 'center', width: '100%' }}>
+            <div className="system-card-title">Colaborador</div>
+            <div className="system-card-sub">Perfil Escolar Interno</div>
           </div>
         </button>
       </div>
@@ -1941,6 +1997,164 @@ export default function LoginPage() {
           border-color: rgba(255, 255, 255, 0.15) !important;
           transition: background-color 5000000s ease-in-out 0s !important;
           color-scheme: dark !important;
+        }
+        
+        /* ── Module Selection (Choose System) Styles ── */
+        .choose-system-header {
+          margin-bottom: 20px;
+          text-align: center;
+        }
+        .choose-system-title {
+          font-family: 'Outfit', sans-serif;
+          font-size: 24px;
+          font-weight: 900;
+          color: #ffffff;
+          letter-spacing: -0.02em;
+          margin-bottom: 6px;
+        }
+        .choose-system-subtitle {
+          font-size: 13.5px;
+          color: rgba(255, 255, 255, 0.5);
+          line-height: 1.5;
+        }
+
+        .choose-system-grid {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 12px;
+          width: 100%;
+          margin: 0 auto;
+        }
+
+        .choose-system-card {
+          position: relative;
+          overflow: hidden;
+          padding: 16px 10px;
+          border-radius: 20px;
+          background: rgba(255, 255, 255, 0.035);
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          backdrop-filter: blur(20px);
+          -webkit-backdrop-filter: blur(20px);
+          cursor: pointer;
+          transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justifyContent: center;
+          gap: 10px;
+          text-align: center;
+          box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+          min-width: 0;
+          user-select: none;
+          -webkit-tap-highlight-color: transparent;
+        }
+
+        .choose-system-card:active {
+          transform: scale(0.96) !important;
+        }
+
+        .system-card-icon {
+          width: 52px;
+          height: 52px;
+          border-radius: 16px;
+          border: 1px solid rgba(255, 255, 255, 0.28);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          margin: 0 auto;
+          flex-shrink: 0;
+          line-height: 0;
+          font-size: 0;
+          box-sizing: border-box;
+          position: relative;
+          transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.25s ease;
+        }
+
+        .system-card-icon svg {
+          display: block;
+          flex-shrink: 0;
+          margin: 0;
+          pointer-events: none;
+        }
+
+        .choose-system-card:hover .system-card-icon {
+          transform: scale(1.1) translateY(-2px);
+        }
+
+        .system-card-title {
+          font-size: 14px;
+          font-weight: 800;
+          color: #ffffff;
+          letter-spacing: -0.01em;
+          line-height: 1.25;
+          margin-bottom: 2px;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .system-card-sub {
+          font-size: 11px;
+          color: rgba(255, 255, 255, 0.45);
+          line-height: 1.3;
+          display: -webkit-box;
+          -webkit-line-clamp: 2;
+          -webkit-box-orient: vertical;
+          overflow: hidden;
+          min-height: 28px;
+        }
+
+        .choose-system-logout-wrapper {
+          margin-top: 20px;
+          display: flex;
+          justify-content: center;
+        }
+
+        @media (max-width: 639px) {
+          .choose-system-grid .choose-system-card--odd {
+            grid-column: 1 / -1;
+            justify-self: center;
+            width: calc(50% - 6px);
+          }
+        }
+
+        @media (min-width: 640px) {
+          .choose-system-header {
+            margin-bottom: 30px;
+          }
+          .choose-system-title {
+            font-size: 30px;
+            margin-bottom: 8px;
+          }
+          .choose-system-subtitle {
+            font-size: 15px;
+          }
+          .choose-system-grid {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 16px;
+          }
+          .choose-system-card {
+            flex: 0 1 190px !important;
+            width: 190px !important;
+            padding: 22px 16px !important;
+            gap: 12px !important;
+          }
+          .choose-system-card .system-card-icon {
+            width: 56px !important;
+            height: 56px !important;
+            border-radius: 18px !important;
+          }
+          .choose-system-card .system-card-title {
+            font-size: 15px !important;
+          }
+          .choose-system-card .system-card-sub {
+            font-size: 12px !important;
+          }
+          .choose-system-logout-wrapper {
+            margin-top: 28px;
+          }
         }
         
         /* Mobile Optimizaton for Login */

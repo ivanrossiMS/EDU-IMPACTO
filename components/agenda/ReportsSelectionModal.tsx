@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Search, Check, FileBarChart, Plus, FileText, ClipboardList, BookOpen, GraduationCap, Calendar, Users, MessageSquare, Layout, FileCheck, ArrowRight, ArrowLeft, ChevronDown, Sparkles } from 'lucide-react'
 import { useSupabaseArray } from '@/lib/useSupabaseCollection'
@@ -30,6 +31,11 @@ export function ReportsSelectionModal({
   currentUser: propCurrentUser,
   allowedTurmasIds 
 }: ReportsSelectionModalProps) {
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
   const { currentUser: contextCurrentUser } = useApp()
   const effectiveUser = propCurrentUser || contextCurrentUser
   const { templates: contextTemplates = [] } = useRelatorios()
@@ -703,7 +709,9 @@ export function ReportsSelectionModal({
 
   const isReadyToFill = Boolean(selectedTemplate && filterYear !== '' && filterTurmaIds.length > 0 && targetedStudents.length > 0)
 
-  return (
+  if (!mounted || typeof document === 'undefined') return null
+
+  return createPortal(
     <AnimatePresence>
       {isOpen && (
       <div className="ad-reports-modal-overlay">
@@ -739,8 +747,8 @@ export function ReportsSelectionModal({
           }
           .ad-reports-header-box {
             background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 52%, #4f46e5 100%) !important;
-            padding: 18px 24px !important;
-            padding-top: max(18px, env(safe-area-inset-top)) !important;
+            padding: 24px 24px !important;
+            padding-top: max(24px, env(safe-area-inset-top)) !important;
             display: flex !important;
             align-items: center !important;
             justify-content: center !important;
@@ -756,12 +764,12 @@ export function ReportsSelectionModal({
             width: 100%;
             display: flex;
             align-items: center;
-            justify-content: space-between;
+            justify-content: center;
             position: relative;
             z-index: 1;
           }
           .ad-reports-content-body {
-            padding: 24px 20px !important;
+            padding: 20px 20px !important;
             display: flex !important;
             flex-direction: column !important;
             align-items: center !important;
@@ -775,7 +783,7 @@ export function ReportsSelectionModal({
             width: 100%;
             display: flex;
             flex-direction: column;
-            gap: 20px;
+            gap: 14px;
           }
           .ad-reports-list::-webkit-scrollbar {
             width: 5px;
@@ -806,8 +814,8 @@ export function ReportsSelectionModal({
             background: #94a3b8;
           }
           .ad-reports-footer {
-            padding: 16px 24px !important;
-            padding-bottom: max(16px, env(safe-area-inset-bottom)) !important;
+            padding: 12px 24px !important;
+            padding-bottom: max(12px, env(safe-area-inset-bottom)) !important;
             border-top: 1px solid #e2e8f0 !important;
             background: #ffffff !important;
             display: flex !important;
@@ -823,29 +831,35 @@ export function ReportsSelectionModal({
             width: 100%;
             display: flex;
             justify-content: flex-end;
-            gap: 12px;
+            gap: 10px;
             align-items: center;
           }
           @media (max-width: 480px) {
             .ad-reports-header-box {
-              padding: 14px 16px !important;
-              padding-top: max(14px, env(safe-area-inset-top)) !important;
+              padding: 20px 16px !important;
+              padding-top: max(20px, env(safe-area-inset-top)) !important;
             }
             .ad-reports-content-body {
-              padding: 18px 16px !important;
+              padding: 14px 14px !important;
+            }
+            .ad-reports-body-inner {
+              gap: 12px !important;
             }
             .ad-reports-footer {
-              padding: 12px 16px !important;
-              padding-bottom: max(12px, env(safe-area-inset-bottom)) !important;
+              padding: 10px 16px !important;
+              padding-bottom: max(10px, env(safe-area-inset-bottom)) !important;
             }
             .ad-reports-footer-inner {
               display: flex !important;
-              gap: 10px !important;
+              gap: 8px !important;
             }
             .ad-reports-footer-inner button {
               flex: 1 !important;
               justify-content: center !important;
-              padding: 13px 14px !important;
+              padding: 8px 12px !important;
+              height: 38px !important;
+              font-size: 13px !important;
+              border-radius: 10px !important;
             }
           }
           @keyframes reportsSkeletonShimmer {
@@ -881,43 +895,23 @@ export function ReportsSelectionModal({
             }} />
             
             <div className="ad-reports-header-inner">
-              <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                <div style={{
-                  width: 44,
-                  height: 44,
-                  borderRadius: 14,
-                  background: 'rgba(255, 255, 255, 0.16)',
-                  backdropFilter: 'blur(8px)',
-                  WebkitBackdropFilter: 'blur(8px)',
-                  border: '1px solid rgba(255, 255, 255, 0.28)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: '#ffffff',
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
-                  flexShrink: 0
-                }}>
-                  <FileBarChart size={22} />
-                </div>
-                <div>
-                  <h3 style={{ fontSize: 19, fontWeight: 800, color: '#ffffff', letterSpacing: '-0.02em', margin: 0, lineHeight: 1.25 }}>
-                    Preencher Relatório
-                  </h3>
-                  <p style={{ fontSize: 13, color: 'rgba(255, 255, 255, 0.85)', margin: '4px 0 0 0', fontWeight: 500 }}>
-                    Selecione a turma e o modelo para iniciar
-                  </p>
-                </div>
-              </div>
+              <h3 style={{ fontSize: 20, fontWeight: 800, color: '#ffffff', letterSpacing: '-0.02em', margin: 0, lineHeight: 1.25, textAlign: 'center' }}>
+                Preencher Relatório
+              </h3>
 
               <button 
                 onClick={onClose}
                 aria-label="Fechar modal"
                 style={{ 
-                  background: 'rgba(255, 255, 255, 0.14)',
-                  width: 38,
-                  height: 38,
+                  position: 'absolute',
+                  right: 0,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'rgba(255, 255, 255, 0.16)',
+                  width: 36,
+                  height: 36,
                   borderRadius: '50%',
-                  border: '1px solid rgba(255, 255, 255, 0.25)',
+                  border: '1px solid rgba(255, 255, 255, 0.28)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -928,8 +922,8 @@ export function ReportsSelectionModal({
                   WebkitBackdropFilter: 'blur(4px)',
                   flexShrink: 0
                 }}
-                onMouseEnter={e => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.26)'}
-                onMouseLeave={e => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.14)'}
+                onMouseEnter={e => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.28)'}
+                onMouseLeave={e => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.16)'}
               >
                 <X size={18} />
               </button>
@@ -940,38 +934,38 @@ export function ReportsSelectionModal({
           <div className="ad-reports-content-body">
             <div className="ad-reports-body-inner">
               {/* Seção 1: Filtro de Turma e Ano */}
-              <div style={{ background: '#ffffff', padding: '16px 18px', borderRadius: 18, border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.03)', display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div style={{ background: '#ffffff', padding: '12px 14px', borderRadius: 14, border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.02)', display: 'flex', flexDirection: 'column', gap: 8 }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <span style={{ fontSize: 11, fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <GraduationCap size={15} style={{ color: '#2563eb' }} />
+                  <span style={{ fontSize: 10.5, fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'flex', alignItems: 'center', gap: 5 }}>
+                    <GraduationCap size={13} style={{ color: '#2563eb' }} />
                     Filtro de Turma
                   </span>
                   {filterTurmaIds.length > 0 && targetedStudents.length > 0 && (
-                    <span style={{ fontSize: 11, fontWeight: 700, color: '#059669', background: '#ecfdf5', border: '1px solid #a7f3d0', padding: '2px 8px', borderRadius: 10 }}>
+                    <span style={{ fontSize: 10.5, fontWeight: 700, color: '#059669', background: '#ecfdf5', border: '1px solid #a7f3d0', padding: '2px 7px', borderRadius: 8 }}>
                       {targetedStudents.length} {targetedStudents.length === 1 ? 'aluno' : 'alunos'} ({filterTurmaIds.length} {filterTurmaIds.length === 1 ? 'turma' : 'turmas'})
                     </span>
                   )}
                 </div>
 
                 {isLoadingData ? (
-                  <div style={{ display: 'flex', gap: 10 }}>
-                    <div style={{ width: 110, height: 44, borderRadius: 14, background: '#f1f5f9' }} className="reports-skeleton-shimmer" />
-                    <div style={{ flex: 1, height: 44, borderRadius: 14, background: '#f1f5f9' }} className="reports-skeleton-shimmer" />
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <div style={{ width: 92, height: 36, borderRadius: 10, background: '#f1f5f9' }} className="reports-skeleton-shimmer" />
+                    <div style={{ flex: 1, height: 36, borderRadius: 10, background: '#f1f5f9' }} className="reports-skeleton-shimmer" />
                   </div>
                 ) : (
-                  <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                     {/* Seletor Ano - Custom Flex Button com Dropdown Popover */}
-                    <div style={{ position: 'relative', width: 110, flexShrink: 0 }}>
+                    <div style={{ position: 'relative', width: 92, flexShrink: 0 }}>
                       <button 
                         type="button"
                         onClick={() => setShowYearDropdown(prev => !prev)}
                         style={{ 
                           width: '100%', 
-                          height: 44, 
-                          borderRadius: 14, 
-                          border: filterYear ? '1.5px solid #93c5fd' : '1.5px solid #e2e8f0', 
-                          padding: '0 10px', 
-                          fontSize: 13.5, 
+                          height: 36, 
+                          borderRadius: 10, 
+                          border: filterYear ? '1.5px solid #93c5fd' : '1px solid #e2e8f0', 
+                          padding: '0 8px', 
+                          fontSize: 12.5, 
                           fontWeight: 700, 
                           background: filterYear ? '#eff6ff' : '#ffffff', 
                           color: '#1e293b', 
@@ -979,16 +973,16 @@ export function ReportsSelectionModal({
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'space-between',
-                          gap: 6,
+                          gap: 4,
                           transition: 'all 0.2s',
                           boxShadow: '0 1px 2px rgba(0,0,0,0.02)'
                         }}
                       >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-                          <Calendar size={15} style={{ color: filterYear ? '#2563eb' : '#94a3b8', flexShrink: 0 }} />
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
+                          <Calendar size={13} style={{ color: filterYear ? '#2563eb' : '#94a3b8', flexShrink: 0 }} />
                           <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{filterYear || 'Ano'}</span>
                         </div>
-                        <ChevronDown size={14} style={{ color: '#94a3b8', flexShrink: 0, transform: showYearDropdown ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+                        <ChevronDown size={12} style={{ color: '#94a3b8', flexShrink: 0, transform: showYearDropdown ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
                       </button>
 
                       {/* Year Dropdown Popover */}
@@ -1006,11 +1000,11 @@ export function ReportsSelectionModal({
                               transition={{ duration: 0.15 }}
                               style={{
                                 position: 'absolute',
-                                top: 48,
+                                top: 40,
                                 left: 0,
-                                width: 120,
+                                width: 110,
                                 background: '#ffffff',
-                                borderRadius: 14,
+                                borderRadius: 10,
                                 border: '1px solid #e2e8f0',
                                 boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.05)',
                                 zIndex: 1000000,
@@ -1027,9 +1021,9 @@ export function ReportsSelectionModal({
                                     setShowYearDropdown(false)
                                   }}
                                   style={{
-                                    padding: '8px 12px',
-                                    borderRadius: 10,
-                                    fontSize: 13,
+                                    padding: '6px 10px',
+                                    borderRadius: 7,
+                                    fontSize: 12,
                                     fontWeight: y === filterYear ? 800 : 600,
                                     color: y === filterYear ? '#2563eb' : '#334155',
                                     background: y === filterYear ? '#eff6ff' : 'transparent',
@@ -1047,7 +1041,7 @@ export function ReportsSelectionModal({
                                   }}
                                 >
                                   <span>{y}</span>
-                                  {y === filterYear && <Check size={14} style={{ color: '#2563eb' }} />}
+                                  {y === filterYear && <Check size={13} style={{ color: '#2563eb' }} />}
                                 </div>
                               ))}
                             </motion.div>
@@ -1063,26 +1057,26 @@ export function ReportsSelectionModal({
                         onClick={() => setShowTurmaModal(true)}
                         style={{ 
                           width: '100%', 
-                          height: 44, 
-                          borderRadius: 14, 
-                          border: filterTurmaIds.length > 0 ? '1.5px solid #93c5fd' : '1.5px solid #e2e8f0', 
-                          padding: '0 14px', 
-                          fontSize: 13.5, 
-                          fontWeight: 700, 
+                          height: 36, 
+                          borderRadius: 10, 
+                          border: filterTurmaIds.length > 0 ? '1.5px solid #93c5fd' : '1px solid #e2e8f0', 
+                          padding: '0 10px', 
+                          fontSize: 12.5, 
+                          fontWeight: 600, 
                           background: filterTurmaIds.length > 0 ? '#eff6ff' : '#ffffff', 
                           color: '#1e293b',
                           cursor: 'pointer',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'space-between',
-                          gap: 10,
+                          gap: 8,
                           transition: 'all 0.2s',
                           boxShadow: '0 1px 2px rgba(0,0,0,0.02)',
                           textAlign: 'left'
                         }}
                       >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: 1 }}>
-                          <Users size={16} style={{ color: filterTurmaIds.length > 0 ? '#2563eb' : '#94a3b8', flexShrink: 0 }} />
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, flex: 1 }}>
+                          <Users size={14} style={{ color: filterTurmaIds.length > 0 ? '#2563eb' : '#94a3b8', flexShrink: 0 }} />
                           <span style={{ 
                             whiteSpace: 'nowrap', 
                             overflow: 'hidden', 
@@ -1090,21 +1084,21 @@ export function ReportsSelectionModal({
                             color: selectedTurmaName ? '#1e293b' : '#94a3b8',
                             fontWeight: selectedTurmaName ? 700 : 500
                           }}>
-                            {selectedTurmaName || 'Selecione a(s) Turma(s)'}
+                            {selectedTurmaName || 'Selecionar turma(s)...'}
                           </span>
                         </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
                           <span style={{ 
-                            fontSize: 10.5, 
+                            fontSize: 10, 
                             fontWeight: 700, 
                             color: filterTurmaIds.length > 0 ? '#2563eb' : '#64748b', 
                             background: filterTurmaIds.length > 0 ? '#dbeafe' : '#f1f5f9', 
-                            padding: '2px 7px', 
-                            borderRadius: 6 
+                            padding: '2px 6px', 
+                            borderRadius: 5 
                           }}>
                             {filterTurmaIds.length > 0 ? `Alterar (${filterTurmaIds.length})` : 'Escolher'}
                           </span>
-                          <ChevronDown size={14} style={{ color: '#94a3b8' }} />
+                          <ChevronDown size={12} style={{ color: '#94a3b8' }} />
                         </div>
                       </button>
                     </div>
@@ -1349,13 +1343,14 @@ export function ReportsSelectionModal({
                 type="button"
                 onClick={onClose} 
                 style={{ 
-                  padding: '11px 22px', 
-                  borderRadius: 14, 
+                  padding: '8px 18px', 
+                  borderRadius: 10, 
                   border: '1px solid #e2e8f0', 
                   background: '#ffffff', 
                   color: '#64748b', 
-                  fontSize: 14, 
+                  fontSize: 13, 
                   fontWeight: 700, 
+                  height: 38,
                   cursor: 'pointer',
                   transition: 'all 0.15s'
                 }}
@@ -1376,23 +1371,24 @@ export function ReportsSelectionModal({
                   'Clique para preencher o relatório'
                 }
                 style={{ 
-                  padding: '11px 26px', 
-                  borderRadius: 14, 
+                  padding: '8px 20px', 
+                  borderRadius: 10, 
                   border: 'none', 
                   background: isReadyToFill ? 'linear-gradient(135deg, #2563eb 0%, #4f46e5 100%)' : '#e2e8f0', 
                   color: isReadyToFill ? '#ffffff' : '#94a3b8', 
-                  fontSize: 14, 
+                  fontSize: 13, 
                   fontWeight: 700, 
+                  height: 38,
                   cursor: isReadyToFill ? 'pointer' : 'not-allowed',
-                  boxShadow: isReadyToFill ? '0 4px 14px rgba(37, 99, 235, 0.35)' : 'none',
+                  boxShadow: isReadyToFill ? '0 3px 10px rgba(37, 99, 235, 0.3)' : 'none',
                   display: 'flex', 
                   alignItems: 'center', 
-                  gap: 8,
+                  gap: 6,
                   transition: 'all 0.2s'
                 }}
               >
-                <span>Preencher Relatório{targetedStudents.length > 0 ? ` (${targetedStudents.length})` : ''}</span>
-                <ArrowRight size={16} />
+                <span>Preencher{targetedStudents.length > 0 ? ` (${targetedStudents.length})` : ''}</span>
+                <ArrowRight size={14} />
               </button>
             </div>
           </div>
@@ -1800,6 +1796,7 @@ export function ReportsSelectionModal({
         </AnimatePresence>
       </div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
   )
 }

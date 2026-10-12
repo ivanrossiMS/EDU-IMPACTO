@@ -28,6 +28,10 @@ export interface ChatConversationMeta {
     perfil?: string
     foto?: string | null
   } | null
+  isDraft?: boolean
+  targetUserId?: string
+  targetUserName?: string
+  targetUserPerfil?: string
 }
 
 interface ChatStoreState {

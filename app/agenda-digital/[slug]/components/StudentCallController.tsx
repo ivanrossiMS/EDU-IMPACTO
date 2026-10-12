@@ -1283,8 +1283,13 @@ export const StudentCallController = React.memo(function StudentCallController({
       if (a) {
         const tObj = (turmas || []).find((t: any) => t && (String(t.id) === String(a.turma) || String(t.codigo) === String(a.turma) || String(t.nome) === String(a.turma)))
         let aTurma = tObj?.nome || a.turma_nome || a.turma || 'S/T'
-        if (aTurma && aTurma !== 'S/T' && aTurma.includes('-')) {
-          aTurma = aTurma.split('-')[0].trim()
+        if (aTurma && aTurma !== 'S/T') {
+          if (aTurma.includes('-')) {
+            aTurma = aTurma.split('-')[0].trim()
+          }
+          aTurma = aTurma.replace(/\s*(?:-|–|\/)?\s*integral(?:\/|\s*)intermedi[aá]rio/gi, '')
+            .replace(/\b(integral|intermedi[aá]rio)\b/gi, '')
+            .trim()
         }
         callStudent(a.id, a.nome, aTurma, gId, gName, 'manual', undefined, a.foto || a.imagem1)
       }
@@ -1311,8 +1316,13 @@ export const StudentCallController = React.memo(function StudentCallController({
         
         const tObj = (turmas || []).find((t: any) => t && (String(t.id) === String(a.turma) || String(t.codigo) === String(a.turma) || String(t.nome) === String(a.turma)))
         let aTurma = tObj?.nome || a.turma_nome || a.turma || 'S/T'
-        if (aTurma && aTurma !== 'S/T' && aTurma.includes('-')) {
-          aTurma = aTurma.split('-')[0].trim()
+        if (aTurma && aTurma !== 'S/T') {
+          if (aTurma.includes('-')) {
+            aTurma = aTurma.split('-')[0].trim()
+          }
+          aTurma = aTurma.replace(/\s*(?:-|–|\/)?\s*integral(?:\/|\s*)intermedi[aá]rio/gi, '')
+            .replace(/\b(integral|intermedi[aá]rio)\b/gi, '')
+            .trim()
         }
 
         const newCall = addSpecialAuth(
@@ -1590,10 +1600,16 @@ export const StudentCallController = React.memo(function StudentCallController({
                   {(meusAlunos && meusAlunos.length > 0 ? meusAlunos : (aluno ? [aluno] : [])).map((a: any) => {
                     const tObj = (turmas || []).find((t: any) => t && (String(t.id) === String(a.turma) || String(t.codigo) === String(a.turma) || String(t.nome) === String(a.turma)))
                     let aTurma = tObj?.nome || a.turma_nome || a.turma || 'S/T'
-                    if (aTurma && aTurma !== 'S/T' && aTurma.includes('-')) {
-                      aTurma = aTurma.split('-')[0].trim()
+                    if (aTurma && aTurma !== 'S/T') {
+                      if (aTurma.includes('-')) {
+                        aTurma = aTurma.split('-')[0].trim()
+                      }
+                      aTurma = aTurma.replace(/\s*(?:-|–|\/)?\s*integral(?:\/|\s*)intermedi[aá]rio/gi, '')
+                        .replace(/\b(integral|intermedi[aá]rio)\b/gi, '')
+                        .trim()
                     }
-                    const aTurno = a.turno || tObj?.turno || null
+                    const rawTurno = a.turno || tObj?.turno || null
+                    const aTurno = rawTurno && !/integral|intermedi[aá]rio/i.test(rawTurno) ? rawTurno : null
                     const aMatricula = a.matricula || null
                     const isSelected = selectedAlunos.includes(a.id)
 
@@ -1807,32 +1823,33 @@ export const StudentCallController = React.memo(function StudentCallController({
 
                 {/* Divider between Immediate Call & Special Authorization */}
                 <div style={{ position: 'relative', zIndex: 1, display: 'flex', alignItems: 'center', gap: 10, margin: '10px 0 12px' }}>
-                  <div style={{ flex: 1, height: 1, background: 'linear-gradient(90deg, transparent, rgba(0,0,0,0.07))' }} />
+                  <div style={{ flex: 1, height: 1, background: 'linear-gradient(90deg, transparent, rgba(239, 68, 68, 0.25))' }} />
                   <span style={{
                     fontSize: 10.5,
-                    color: '#64748b',
-                    fontWeight: 700,
+                    color: '#dc2626',
+                    fontWeight: 800,
                     textTransform: 'uppercase',
-                    letterSpacing: '0.07em',
-                    background: '#f1f5f9',
-                    padding: '3px 10px',
+                    letterSpacing: '0.08em',
+                    background: '#fef2f2',
+                    padding: '3px 12px',
                     borderRadius: 999,
-                    border: '1px solid rgba(0,0,0,0.04)'
+                    border: '1.5px solid rgba(239, 68, 68, 0.25)',
+                    boxShadow: '0 1px 3px rgba(239, 68, 68, 0.08)'
                   }}>
                     Ou outra pessoa
                   </span>
-                  <div style={{ flex: 1, height: 1, background: 'linear-gradient(90deg, rgba(0,0,0,0.07), transparent)' }} />
+                  <div style={{ flex: 1, height: 1, background: 'linear-gradient(90deg, rgba(239, 68, 68, 0.25), transparent)' }} />
                 </div>
 
                 {/* Modern Dedicated Card: Special Authorization */}
                 <div style={{
                   position: 'relative',
                   zIndex: isSandwichOpen ? 50 : 1,
-                  background: 'linear-gradient(160deg, #fdfefe 0%, #fffbf2 50%, #fef7e7 100%)',
+                  background: 'linear-gradient(160deg, #ffffff 0%, #fff5f5 50%, #fef2f2 100%)',
                   borderRadius: 16,
                   padding: '12px 13px 11px',
-                  border: '1.5px solid rgba(245,158,11,0.22)',
-                  boxShadow: '0 3px 16px rgba(245,158,11,0.05), 0 1px 2px rgba(0,0,0,0.02)',
+                  border: '1.5px solid rgba(239, 68, 68, 0.28)',
+                  boxShadow: '0 4px 18px rgba(239, 68, 68, 0.07), 0 1px 2px rgba(0,0,0,0.02)',
                 }}>
                   {/* Card Header */}
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
@@ -1841,13 +1858,13 @@ export const StudentCallController = React.memo(function StudentCallController({
                         width: 26,
                         height: 26,
                         borderRadius: 8,
-                        background: 'linear-gradient(135deg, rgba(245,158,11,0.2), rgba(217,119,6,0.12))',
-                        color: '#d97706',
+                        background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.18), rgba(220, 38, 38, 0.1))',
+                        color: '#dc2626',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
                         flexShrink: 0,
-                        border: '1px solid rgba(245,158,11,0.25)',
+                        border: '1px solid rgba(239, 68, 68, 0.28)',
                       }}>
                         <UserCheck size={14} strokeWidth={2.4} />
                       </div>
@@ -1869,9 +1886,9 @@ export const StudentCallController = React.memo(function StudentCallController({
                     <span style={{
                       fontSize: 8.5,
                       fontWeight: 800,
-                      color: '#b45309',
-                      background: 'rgba(245,158,11,0.14)',
-                      border: '1px solid rgba(245,158,11,0.2)',
+                      color: '#b91c1c',
+                      background: 'rgba(239, 68, 68, 0.12)',
+                      border: '1px solid rgba(239, 68, 68, 0.22)',
                       padding: '2px 6px',
                       borderRadius: 999,
                       letterSpacing: '0.04em',
@@ -1913,7 +1930,7 @@ export const StudentCallController = React.memo(function StudentCallController({
                                 color: '#0f172a',
                                 fontFamily: 'Outfit, sans-serif',
                               }}>
-                                <UserCheck size={12} color="#d97706" strokeWidth={2.4} />
+                                <UserCheck size={12} color="#dc2626" strokeWidth={2.4} />
                                 <span>Quem retira?</span>
                                 <span style={{ color: '#ef4444', fontWeight: 900, fontSize: 12, marginLeft: 1 }}>*</span>
                               </div>
@@ -1932,7 +1949,7 @@ export const StudentCallController = React.memo(function StudentCallController({
                                 padding: '0 9px',
                                 borderRadius: 9,
                                 border: specialAuthText.trim()
-                                  ? '1.5px solid rgba(245,158,11,0.55)'
+                                  ? '1.5px solid rgba(239, 68, 68, 0.6)'
                                   : '1.5px solid rgba(0,0,0,0.1)',
                                 background: '#ffffff',
                                 fontSize: 11,
@@ -1942,7 +1959,7 @@ export const StudentCallController = React.memo(function StudentCallController({
                                 boxSizing: 'border-box',
                                 transition: 'all 0.2s ease',
                                 boxShadow: specialAuthText.trim()
-                                  ? '0 0 0 2px rgba(245,158,11,0.1)'
+                                  ? '0 0 0 2px rgba(239, 68, 68, 0.1)'
                                   : '0 1px 2px rgba(0,0,0,0.02)',
                               }}
                             />
@@ -1974,7 +1991,7 @@ export const StudentCallController = React.memo(function StudentCallController({
                                 color: '#0f172a',
                                 fontFamily: 'Outfit, sans-serif',
                               }}>
-                                <Clock size={12} color="#d97706" strokeWidth={2.4} />
+                                <Clock size={12} color="#dc2626" strokeWidth={2.4} />
                                 <span>Horário</span>
                                 <span style={{ color: '#ef4444', fontWeight: 900, fontSize: 12, marginLeft: 1 }}>*</span>
                               </div>
@@ -1992,12 +2009,12 @@ export const StudentCallController = React.memo(function StudentCallController({
                                 background: '#ffffff',
                                 borderRadius: 9,
                                 border: isSandwichOpen
-                                  ? '1.5px solid #d97706'
+                                  ? '1.5px solid #dc2626'
                                   : specialAuthTime
-                                    ? '1.5px solid rgba(245,158,11,0.55)'
+                                    ? '1.5px solid rgba(239, 68, 68, 0.6)'
                                     : '1.5px solid rgba(0, 0, 0, 0.1)',
                                 boxShadow: isSandwichOpen || specialAuthTime
-                                  ? '0 0 0 2px rgba(245, 158, 11, 0.1)'
+                                  ? '0 0 0 2px rgba(239, 68, 68, 0.1)'
                                   : '0 1px 2px rgba(0, 0, 0, 0.02)',
                                 display: 'flex',
                                 alignItems: 'center',
@@ -2009,7 +2026,7 @@ export const StudentCallController = React.memo(function StudentCallController({
                                 userSelect: 'none',
                               }}
                             >
-                              <Clock size={13} color={specialAuthTime ? '#d97706' : '#94a3b8'} strokeWidth={2.4} style={{ flexShrink: 0 }} />
+                              <Clock size={13} color={specialAuthTime ? '#dc2626' : '#94a3b8'} strokeWidth={2.4} style={{ flexShrink: 0 }} />
 
                               <span
                                 style={{
@@ -2059,7 +2076,7 @@ export const StudentCallController = React.memo(function StudentCallController({
                                   display: 'flex',
                                   alignItems: 'center',
                                   justifyContent: 'center',
-                                  color: isSandwichOpen ? '#d97706' : '#64748b',
+                                  color: isSandwichOpen ? '#dc2626' : '#64748b',
                                   flexShrink: 0,
                                   transition: 'all 0.15s ease',
                                 }}
@@ -2086,7 +2103,7 @@ export const StudentCallController = React.memo(function StudentCallController({
                                   right: 0,
                                   background: '#ffffff',
                                   borderRadius: 14,
-                                  border: '1.5px solid rgba(245, 158, 11, 0.45)',
+                                  border: '1.5px solid rgba(239, 68, 68, 0.45)',
                                   boxShadow: '0 -14px 40px rgba(0, 0, 0, 0.26), 0 4px 16px rgba(0, 0, 0, 0.1)',
                                   zIndex: 999999,
                                   maxHeight: 250,
@@ -2121,12 +2138,12 @@ export const StudentCallController = React.memo(function StudentCallController({
                                     borderRadius: 8,
                                     margin: '1px 1px 4px 1px',
                                     background: specialAuthTime === 'Indefinido'
-                                      ? 'rgba(245, 158, 11, 0.18)'
-                                      : 'rgba(245, 158, 11, 0.08)',
+                                      ? 'rgba(239, 68, 68, 0.18)'
+                                      : 'rgba(239, 68, 68, 0.08)',
                                     border: specialAuthTime === 'Indefinido'
-                                      ? '1.5px solid #d97706'
-                                      : '1px dashed rgba(245, 158, 11, 0.4)',
-                                    color: '#b45309',
+                                      ? '1.5px solid #dc2626'
+                                      : '1px dashed rgba(239, 68, 68, 0.4)',
+                                    color: '#b91c1c',
                                     fontSize: 13.5,
                                     fontWeight: 800,
                                     fontFamily: 'Outfit, sans-serif',
@@ -2137,10 +2154,10 @@ export const StudentCallController = React.memo(function StudentCallController({
                                   }}
                                 >
                                   <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                                    <Sparkles size={16} color="#d97706" />
+                                    <Sparkles size={16} color="#dc2626" />
                                     <span>Indefinido</span>
                                   </span>
-                                  {specialAuthTime === 'Indefinido' && <Check size={16} color="#d97706" strokeWidth={3} />}
+                                  {specialAuthTime === 'Indefinido' && <Check size={16} color="#dc2626" strokeWidth={3} />}
                                 </button>
 
                                 <div style={{ height: 1, background: 'rgba(0,0,0,0.08)', margin: '3px 4px' }} />
@@ -2167,9 +2184,9 @@ export const StudentCallController = React.memo(function StudentCallController({
                                         padding: '10px 12px',
                                         minHeight: 40,
                                         borderRadius: 8,
-                                        background: isSel ? 'rgba(245, 158, 11, 0.16)' : 'transparent',
-                                        border: isSel ? '1.5px solid rgba(245, 158, 11, 0.45)' : '1px solid transparent',
-                                        color: isSel ? '#b45309' : '#1e293b',
+                                        background: isSel ? 'rgba(239, 68, 68, 0.15)' : 'transparent',
+                                        border: isSel ? '1.5px solid rgba(239, 68, 68, 0.45)' : '1px solid transparent',
+                                        color: isSel ? '#b91c1c' : '#1e293b',
                                         fontSize: 13.5,
                                         fontWeight: isSel ? 800 : 500,
                                         fontFamily: 'Outfit, sans-serif',
@@ -2179,17 +2196,17 @@ export const StudentCallController = React.memo(function StudentCallController({
                                         touchAction: 'manipulation',
                                       }}
                                       onMouseEnter={e => {
-                                        if (!isSel) e.currentTarget.style.background = '#f8fafc'
+                                        if (!isSel) e.currentTarget.style.background = '#fef2f2'
                                       }}
                                       onMouseLeave={e => {
                                         if (!isSel) e.currentTarget.style.background = 'transparent'
                                       }}
                                     >
                                       <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                                        <Clock size={15} color={isSel ? '#d97706' : '#94a3b8'} />
+                                        <Clock size={15} color={isSel ? '#dc2626' : '#94a3b8'} />
                                         <span>{t}</span>
                                       </span>
-                                      {isSel && <Check size={16} color="#d97706" strokeWidth={3} />}
+                                      {isSel && <Check size={16} color="#dc2626" strokeWidth={3} />}
                                     </button>
                                   )
                                 })}
@@ -2223,8 +2240,8 @@ export const StudentCallController = React.memo(function StudentCallController({
                             <span style={{
                               fontSize: 9,
                               fontWeight: 800,
-                              color: '#b45309',
-                              background: 'rgba(245,158,11,0.12)',
+                              color: '#b91c1c',
+                              background: 'rgba(239, 68, 68, 0.12)',
                               padding: '1px 5px',
                               borderRadius: 999,
                             }}>
@@ -2247,12 +2264,12 @@ export const StudentCallController = React.memo(function StudentCallController({
                             background: specialAuthSent
                               ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)'
                               : !isSpecialAuthValid || specialAuthSending
-                                ? 'rgba(245,158,11,0.12)'
-                                : 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                                ? 'rgba(239, 68, 68, 0.1)'
+                                : 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
                             color: specialAuthSent
                               ? '#fff'
                               : !isSpecialAuthValid || specialAuthSending
-                                ? '#b45309'
+                                ? '#dc2626'
                                 : '#fff',
                             fontSize: 12,
                             fontWeight: 800,
@@ -2264,7 +2281,7 @@ export const StudentCallController = React.memo(function StudentCallController({
                             fontFamily: 'Outfit, sans-serif',
                             transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
                             boxShadow: isSpecialAuthValid && !specialAuthSending && !specialAuthSent
-                              ? '0 4px 14px rgba(245,158,11,0.25)'
+                              ? '0 4px 14px rgba(220, 38, 38, 0.28)'
                               : 'none',
                             opacity: (!isSpecialAuthValid && !specialAuthSent) ? 0.65 : 1,
                           }}

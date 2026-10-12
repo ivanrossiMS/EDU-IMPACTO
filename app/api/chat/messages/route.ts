@@ -256,11 +256,89 @@ export async function POST(request: Request) {
     const isAdmin = checkIsAdmin(perfilUser, cargoUser)
 
     // 1.1 Buscar detalhes da conversa para validação de permissões
-    const { data: convInfo } = await supabase
+    let { data: convInfo } = await supabase
       .from('chat_conversations')
       .select('id, type, grupo_id, turma_id, title')
       .eq('id', conversation_id)
       .maybeSingle()
+
+    // Se a conversa não existir no banco (era um rascunho), criar a conversa agora que a primeira mensagem está sendo enviada
+    if (!convInfo) {
+      const draftData = body.draft_data || {}
+      const convType = draftData.type || 'direct'
+      const convTitle = draftData.title || draftData.targetUserName || (convType === 'group' ? 'Grupo Escolar' : 'Conversa Direta')
+      const convAlunoId = draftData.alunoId || null
+      const convTurmaId = draftData.turmaId || null
+      const convGrupoId = draftData.grupoId || null
+      const targetUserId = draftData.targetUserId
+      const targetUserName = draftData.targetUserName || 'Contato'
+      const targetUserPerfil = draftData.targetUserPerfil || 'Colaborador'
+
+      const msgPreview = (content || (content_type === 'image' ? '📷 Foto' : content_type === 'video' ? '🎥 Vídeo' : content_type === 'file' ? '📄 Arquivo' : 'Mensagem')).substring(0, 100)
+
+      const { data: createdConv, error: errCreateConv } = await supabase
+        .from('chat_conversations')
+        .insert({
+          id: conversation_id,
+          type: convType,
+          title: convTitle,
+          created_by: senderId,
+          aluno_id: convAlunoId,
+          turma_id: convTurmaId,
+          grupo_id: convGrupoId,
+          last_message_text: msgPreview,
+          last_message_at: new Date().toISOString(),
+          last_message_by: senderId,
+          message_count: 0
+        })
+        .select('id, type, grupo_id, turma_id, title')
+        .single()
+
+      if (errCreateConv) {
+        console.error('[POST /api/chat/messages] Erro ao criar conversa no primeiro envio:', errCreateConv)
+        throw errCreateConv
+      }
+
+      convInfo = createdConv
+
+      // Inserir participantes da conversa
+      if (convType === 'group') {
+        await supabase
+          .from('chat_participants')
+          .insert({
+            conversation_id: conversation_id,
+            user_id: senderId,
+            user_name: senderName,
+            user_perfil: senderPerfil,
+            user_role: 'admin'
+          })
+
+        const { syncTurmaParticipants } = await import('@/lib/server/chatGroupMembership')
+        await syncTurmaParticipants(supabase, conversation_id, convGrupoId, convTurmaId)
+      } else {
+        const partsToInsert = [
+          {
+            conversation_id: conversation_id,
+            user_id: senderId,
+            user_name: senderName,
+            user_perfil: senderPerfil,
+            user_role: 'admin'
+          }
+        ]
+        if (targetUserId) {
+          partsToInsert.push({
+            conversation_id: conversation_id,
+            user_id: targetUserId,
+            user_name: targetUserName,
+            user_perfil: targetUserPerfil,
+            user_role: 'member'
+          })
+        }
+        await supabase
+          .from('chat_participants')
+          .insert(partsToInsert)
+      }
+    }
 
     if (convInfo?.type === 'direct') {
       if (!isAdmin) {
@@ -635,15 +713,25 @@ export async function DELETE(request: Request) {
         .limit(1)
         .maybeSingle()
 
-      await supabase
-        .from('chat_conversations')
-        .update({
-          last_message_at: latestRemaining?.created_at || null,
-          last_message_text: latestRemaining ? (latestRemaining.content || '').substring(0, 100) : '',
-          last_message_by: latestRemaining?.sender_id || null,
-          updated_at: nowIso
-        })
-        .eq('id', targetMsg.conversation_id)
+      if (!latestRemaining) {
+        // Se não restou nenhuma mensagem ativa na conversa:
+        // Quando não houver mensagem enviada, não deve guardar a conversa!
+        await Promise.all([
+          supabase.from('chat_participants').delete().eq('conversation_id', targetMsg.conversation_id),
+          supabase.from('chat_read_receipts').delete().eq('conversation_id', targetMsg.conversation_id),
+          supabase.from('chat_conversations').delete().eq('id', targetMsg.conversation_id)
+        ])
+      } else {
+        await supabase
+          .from('chat_conversations')
+          .update({
+            last_message_at: latestRemaining.created_at,
+            last_message_text: (latestRemaining.content || '').substring(0, 100),
+            last_message_by: latestRemaining.sender_id || null,
+            updated_at: nowIso
+          })
+          .eq('id', targetMsg.conversation_id)
+      }
     } catch (e) {
       console.warn('Erro ao atualizar last_message da conversa após exclusão:', e)
     }

@@ -1071,7 +1071,6 @@ class NotificationService {
               localStorage.removeItem(key)
             }
           }
-          window.dispatchEvent(new CustomEvent('edu:reset-push-permission'))
         } catch (_) {}
       }
 

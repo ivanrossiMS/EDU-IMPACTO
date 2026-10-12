@@ -60,6 +60,25 @@ export async function POST(request: Request) {
       if (rows.length > 0) {
         const { error } = await supabase.from('agenda_grupos').upsert(rows)
         if (error) throw new Error(error.message)
+
+        // Sincronizar agenda_equipes com os grupos de Equipe Escolar para consistência total
+        const equipeRows = rows
+          .filter(r => r.dados?.isEquipeEscolar || r.dados?.ano === 'Equipe Escolar')
+          .map(r => ({
+            id: r.id,
+            dados: {
+              nome: r.dados?.nome,
+              cor: r.dados?.cor,
+              icone: r.dados?.icone || 'Users',
+              descricao: r.dados?.descricao || '',
+              membrosIds: r.dados?.colaboradoresIds || [],
+            }
+          }))
+
+        if (equipeRows.length > 0) {
+          const { error: eqError } = await supabase.from('agenda_equipes').upsert(equipeRows)
+          if (eqError) console.error('Error syncing agenda_equipes:', eqError)
+        }
       }
       
       invalidateGruposCache()
@@ -69,6 +88,20 @@ export async function POST(request: Request) {
     const row = buildRow(body)
     const { data, error } = await supabase.from('agenda_grupos').upsert(row).select().single()
     if (error) throw new Error(error.message)
+
+    if (row.dados?.isEquipeEscolar || row.dados?.ano === 'Equipe Escolar') {
+      const { error: eqError } = await supabase.from('agenda_equipes').upsert({
+        id: row.id,
+        dados: {
+          nome: row.dados?.nome,
+          cor: row.dados?.cor,
+          icone: row.dados?.icone || 'Users',
+          descricao: row.dados?.descricao || '',
+          membrosIds: row.dados?.colaboradoresIds || [],
+        }
+      })
+      if (eqError) console.error('Error syncing single agenda_equipes:', eqError)
+    }
 
     invalidateGruposCache()
     return NextResponse.json({ id: data.id, ...(data.dados || {}) }, { status: 201 })

@@ -447,19 +447,12 @@ export default function NovoComunicadoModal({
           }
         }
         
-        @keyframes waveAnimation {
-          0% { background-position: 0% 50%; }
-          50% { background-position: 100% 50%; }
-          100% { background-position: 0% 50%; }
-        }
         .ad-nc-header {
-          padding: 28px 24px 20px;
+          padding: 16px 20px;
           display: flex;
-          align-items: flex-start;
+          align-items: center;
           justify-content: space-between;
-          background: linear-gradient(120deg, #6D5DF6, #4F46E5, #8B5CF6, #3B82F6);
-          background-size: 300% 300%;
-          animation: waveAnimation 8s ease infinite;
+          background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
           border-bottom: 1px solid rgba(255,255,255,0.2);
           flex-shrink: 0;
           z-index: 10;
@@ -469,9 +462,9 @@ export default function NovoComunicadoModal({
         .ad-nc-btn-send {
           background: linear-gradient(135deg, #6D5DF6 0%, #8B5CF6 100%);
           color: white;
-          height: 44px;
-          width: 44px;
-          border-radius: 16px;
+          height: 40px;
+          width: 40px;
+          border-radius: 14px;
           display: flex;
           align-items: center;
           justify-content: center;
@@ -491,40 +484,48 @@ export default function NovoComunicadoModal({
         .ad-nc-body {
           flex: 1;
           overflow-y: auto;
-          padding: 24px 20px 110px 20px;
+          padding: 14px 16px 80px 16px;
           display: flex;
           flex-direction: column;
-          gap: 24px;
+          gap: 12px;
+        }
+        @media (min-width: 1024px) {
+          .ad-nc-body {
+            padding: 18px 24px 86px 24px;
+            gap: 14px;
+          }
         }
         
         .ad-nc-section-title {
           display: flex;
           align-items: center;
-          gap: 12px;
-          font-size: 16px;
+          gap: 8px;
+          font-size: 13.5px;
           font-weight: 700;
           color: #0F172A;
-          margin-bottom: 12px;
+          margin-bottom: 6px;
+          letter-spacing: -0.01em;
         }
         .ad-nc-section-number {
-          width: 24px;
-          height: 24px;
-          border-radius: 12px;
+          width: 20px;
+          height: 20px;
+          border-radius: 10px;
           background: #6D5DF6;
           color: white;
-          font-size: 13px;
+          font-size: 11px;
           font-weight: 800;
           display: flex;
           align-items: center;
           justify-content: center;
+          flex-shrink: 0;
         }
         
         .ad-nc-card {
           background: #FFFFFF;
-          border-radius: 18px;
+          border-radius: 14px;
           border: 1px solid #E2E8F0;
-          padding: 16px;
-          box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+          padding: 10px 14px;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.02);
         }
         
         .ad-nc-btn-dest {
@@ -534,45 +535,51 @@ export default function NovoComunicadoModal({
           justify-content: space-between;
           background: transparent;
           border: none;
-          padding: 8px 4px;
+          padding: 2px 0;
           cursor: pointer;
-          font-size: 15px;
+          font-size: 14px;
           font-weight: 600;
           color: #0F172A;
           transition: opacity 0.2s;
         }
-        .ad-nc-btn-dest:hover { opacity: 0.7; }
+        .ad-nc-btn-dest:hover { opacity: 0.75; }
         
         .ad-nc-chip {
           display: inline-flex;
           align-items: center;
-          gap: 6px;
+          gap: 5px;
           background: #F1F5F9;
           color: #475569;
-          padding: 6px 12px;
+          padding: 4px 10px;
           border-radius: 9999px;
-          font-size: 13px;
+          font-size: 12px;
           font-weight: 600;
-          margin: 4px;
+          margin: 2px 4px 2px 0;
         }
         
         .ad-nc-input {
           width: 100%;
           border: none;
           outline: none;
-          font-size: 16px;
+          font-size: 14px;
           color: #0F172A;
           background: transparent;
+          font-weight: 500;
         }
         .ad-nc-input::placeholder { color: #94A3B8; }
         
         .ad-nc-editor {
-          min-height: 153px;
+          min-height: 165px;
           outline: none;
           font-size: 14px;
           line-height: 1.6;
           color: #0F172A;
-          padding-bottom: 12px;
+          padding-bottom: 8px;
+        }
+        @media (min-width: 1024px) {
+          .ad-nc-editor {
+            min-height: 210px;
+          }
         }
         .ad-nc-editor [align="left"], .ad-nc-editor [style*="text-align: left"] { text-align: left; }
         .ad-nc-editor [align="center"], .ad-nc-editor [style*="text-align: center"] { text-align: center; }
@@ -587,17 +594,17 @@ export default function NovoComunicadoModal({
         
         .ad-nc-toolbar {
           display: flex;
-          gap: 4px;
+          gap: 3px;
           flex-wrap: wrap;
           align-items: center;
-          padding-top: 12px;
-          border-top: 1px solid #E2E8F0;
+          padding-top: 8px;
+          border-top: 1px solid #F1F5F9;
         }
         .ad-nc-tool-btn {
-          min-width: 34px;
-          height: 34px;
-          padding: 0 6px;
-          border-radius: 10px;
+          min-width: 29px;
+          height: 29px;
+          padding: 0 4px;
+          border-radius: 8px;
           display: flex;
           align-items: center;
           justify-content: center;
@@ -619,12 +626,12 @@ export default function NovoComunicadoModal({
         .ad-nc-dropzone {
           border: 2px dashed #E2E8F0;
           border-radius: 12px;
-          padding: 12px 16px;
+          padding: 10px 14px;
           display: flex;
           flex-direction: row;
           align-items: center;
           justify-content: flex-start;
-          gap: 12px;
+          gap: 10px;
           cursor: pointer;
           background: #FAFAFA;
           transition: all 0.2s;
@@ -636,7 +643,7 @@ export default function NovoComunicadoModal({
         .ad-nc-attach-grid {
           display: grid !important;
           grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
-          gap: 8px !important;
+          gap: 6px !important;
           width: 100% !important;
         }
         @media (max-width: 640px) {
@@ -644,22 +651,22 @@ export default function NovoComunicadoModal({
             grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
           }
         }
-        @media (max-width: 420px) {
+        @media (max-width: 340px) {
           .ad-nc-attach-grid {
             grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
           }
         }
         .ad-nc-attach-btn {
           width: 100% !important;
-          height: 42px !important;
-          min-height: 42px !important;
+          height: 35px !important;
+          min-height: 35px !important;
           padding: 0 6px !important;
           display: flex !important;
           flex-direction: row !important;
           align-items: center !important;
           justify-content: center !important;
-          gap: 6px !important;
-          border-radius: 14px !important;
+          gap: 5px !important;
+          border-radius: 10px !important;
           border: 1.5px solid rgba(99, 102, 241, 0.16) !important;
           background: linear-gradient(135deg, rgba(255, 255, 255, 0.96) 0%, rgba(246, 248, 255, 0.88) 100%) !important;
           box-shadow: 0 2px 8px -2px rgba(67, 24, 255, 0.05), inset 0 1px 0 rgba(255, 255, 255, 0.95) !important;
@@ -672,16 +679,16 @@ export default function NovoComunicadoModal({
         .ad-nc-attach-btn:hover {
           background: #ffffff !important;
           border-color: #6366f1 !important;
-          transform: translateY(-1.5px) !important;
-          box-shadow: 0 6px 16px -2px rgba(99, 102, 241, 0.14), inset 0 1px 0 #ffffff !important;
+          transform: translateY(-1px) !important;
+          box-shadow: 0 4px 12px -2px rgba(99, 102, 241, 0.14), inset 0 1px 0 #ffffff !important;
         }
         .ad-nc-attach-btn:active {
-          transform: scale(0.96) !important;
+          transform: scale(0.97) !important;
         }
         .ad-nc-attach-icon-wrap {
-          width: 24px !important;
-          height: 24px !important;
-          border-radius: 8px !important;
+          width: 22px !important;
+          height: 22px !important;
+          border-radius: 6px !important;
           display: flex !important;
           align-items: center !important;
           justify-content: center !important;
@@ -689,7 +696,7 @@ export default function NovoComunicadoModal({
           transition: all 0.2s !important;
         }
         .ad-nc-attach-label {
-          font-size: 13px !important;
+          font-size: 11.5px !important;
           font-weight: 600 !important;
           color: #334155 !important;
           letter-spacing: -0.01em !important;
@@ -699,14 +706,14 @@ export default function NovoComunicadoModal({
         }
         @media (max-width: 380px) {
           .ad-nc-attach-grid {
-            gap: 6px !important;
+            gap: 5px !important;
           }
           .ad-nc-attach-label {
-            font-size: 11.5px !important;
+            font-size: 11px !important;
           }
           .ad-nc-attach-icon-wrap {
-            width: 20px !important;
-            height: 20px !important;
+            width: 19px !important;
+            height: 19px !important;
           }
         }
         
@@ -715,25 +722,25 @@ export default function NovoComunicadoModal({
           bottom: 0;
           left: 0;
           right: 0;
-          height: 80px;
-          background: rgba(255, 255, 255, 0.85);
+          height: 66px;
+          background: rgba(255, 255, 255, 0.88);
           backdrop-filter: blur(12px);
           -webkit-backdrop-filter: blur(12px);
-          border-top: 1px solid rgba(226, 232, 240, 0.6);
+          border-top: 1px solid rgba(226, 232, 240, 0.7);
           display: grid;
           grid-template-columns: 1fr 1fr 1.3fr;
-          gap: 12px;
-          padding: 12px 16px;
+          gap: 10px;
+          padding: 8px 14px;
           z-index: 10;
         }
         
         .ad-nc-footer-btn {
-          border-radius: 16px;
+          border-radius: 12px;
           display: flex;
           align-items: center;
           justify-content: center;
-          gap: 8px;
-          font-size: 14px;
+          gap: 6px;
+          font-size: 13.5px;
           font-weight: 700;
           border: none;
           cursor: pointer;
@@ -775,32 +782,35 @@ export default function NovoComunicadoModal({
         {/* HEADER */}
         <div className="ad-nc-header">
           
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 12, flex: 1, minWidth: 0 }}>
-            <h2 style={{ fontSize: 22, fontWeight: 800, color: '#fff', margin: 0, letterSpacing: -0.5 }}>{initialData ? 'Editar Comunicado' : 'Novo Comunicado'}</h2>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 8, flex: 1, minWidth: 0 }}>
+            <h2 style={{ fontSize: 20, fontWeight: 800, color: '#fff', margin: 0, letterSpacing: -0.4 }}>{initialData ? 'Editar Comunicado' : 'Novo Comunicado'}</h2>
             
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%' }}>
-              <div style={{ border: '2px solid rgba(255,255,255,0.3)', borderRadius: '50%', padding: 2 }}>
-                <UserAvatar userId={currentUser?.id} name={currentUser?.nome || 'Usuário'} size={32} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%' }}>
+              <div style={{ border: '1.5px solid rgba(255,255,255,0.35)', borderRadius: '50%', padding: 1.5 }}>
+                <UserAvatar userId={currentUser?.id} name={currentUser?.nome || 'Usuário'} size={28} />
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', flex: 1, minWidth: 0 }}>
-                <span style={{ fontSize: 15, fontWeight: 700, color: '#fff', lineHeight: 1.1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%' }}>{currentUser?.nome || 'Usuário ERP'}</span>
-                <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.85)', fontWeight: 600, marginTop: 4 }}>{currentUser?.cargo || currentUser?.perfil || 'Administração'}</span>
+                <span style={{ fontSize: 14, fontWeight: 700, color: '#fff', lineHeight: 1.1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%' }}>{currentUser?.nome || 'Usuário ERP'}</span>
+                <span style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.85)', fontWeight: 600, marginTop: 2 }}>{currentUser?.cargo || currentUser?.perfil || 'Administração'}</span>
               </div>
             </div>
           </div>
           
           <button 
             onClick={onClose}
+            aria-label="Fechar"
             style={{ 
-              width: 40, height: 40, borderRadius: 20, border: 'none', 
+              width: 36, height: 36, borderRadius: 18, border: 'none', 
               background: 'rgba(255,255,255,0.2)', color: '#fff', display: 'flex', 
               alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
-              transition: 'all 0.2s', backdropFilter: 'none'
+              transition: 'all 0.2s', backdropFilter: 'none',
+              alignSelf: 'center',
+              flexShrink: 0
             }}
             onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.3)'}
             onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.2)'}
           >
-            <X size={20} />
+            <X size={18} />
           </button>
         </div>
 
@@ -814,17 +824,17 @@ export default function NovoComunicadoModal({
               Destinatários
             </div>
             
-            <div className="ad-nc-card" style={{ padding: '12px 16px', cursor: 'pointer' }} onClick={onClickSelectDest}>
+            <div className="ad-nc-card" style={{ padding: '8px 12px', cursor: 'pointer' }} onClick={onClickSelectDest}>
               <div className="ad-nc-btn-dest">
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <Users size={20} color="#6D5DF6" />
-                  Selecionar destinatários
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <Users size={18} color="#6D5DF6" />
+                  <span style={{ fontSize: 14, fontWeight: 600 }}>Selecionar destinatários</span>
                 </div>
-                <ChevronRight size={20} color="#94A3B8" />
+                <ChevronRight size={18} color="#94A3B8" />
               </div>
               
               {selectedDest.length > 0 && (
-                <div style={{ marginTop: 12, display: 'flex', flexWrap: 'wrap', gap: 8, maxHeight: 140, overflowY: 'auto' }}>
+                <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 6, maxHeight: 120, overflowY: 'auto' }}>
                   {selectedDest.map((d, i) => {
                     const isEquipe = d.type === 'grupo' || d.type === 'funcionario'
                     return (
@@ -840,11 +850,11 @@ export default function NovoComunicadoModal({
                         onClick={e => e.stopPropagation()}
                       >
                         {d.type === 'turma' ? (
-                          <GraduationCap size={13} />
+                          <GraduationCap size={12} />
                         ) : d.type === 'grupo' ? (
-                          <Shield size={13} />
+                          <Shield size={12} />
                         ) : (
-                          <UserAvatar name={d.name} size={16} />
+                          <UserAvatar name={d.name} size={15} />
                         )}
                         <span>{d.name}</span>
                         {onRemoveDest && (
@@ -852,7 +862,7 @@ export default function NovoComunicadoModal({
                             onClick={() => onRemoveDest(d.id)} 
                             style={{ background: 'transparent', border: 0, cursor: 'pointer', display: 'flex', color: isEquipe ? '#8B5CF6' : '#818CF8', padding: 2 }}
                           >
-                            <X size={12} />
+                            <X size={11} />
                           </button>
                         )}
                       </div>
@@ -871,14 +881,14 @@ export default function NovoComunicadoModal({
               Título do comunicado
             </div>
             
-            <div className="ad-nc-card" style={{ display: 'flex', alignItems: 'center' }}>
+            <div className="ad-nc-card" style={{ display: 'flex', alignItems: 'center', padding: '9px 12px' }}>
               <input 
                 className="ad-nc-input" 
                 placeholder="Digite o título" 
                 value={titulo}
                 onChange={e => setTitulo(e.target.value.substring(0, 120))}
               />
-              <div style={{ fontSize: 12, fontWeight: 600, color: '#94A3B8', flexShrink: 0 }}>
+              <div style={{ fontSize: 11.5, fontWeight: 600, color: '#94A3B8', flexShrink: 0 }}>
                 {titulo.length}/120
               </div>
             </div>
@@ -891,7 +901,7 @@ export default function NovoComunicadoModal({
               Mensagem
             </div>
             
-            <div className="ad-nc-card" style={{ padding: '20px' }}>
+            <div className="ad-nc-card" style={{ padding: '12px 14px' }}>
               <div 
                 ref={editorRef}
                 contentEditable
@@ -902,18 +912,18 @@ export default function NovoComunicadoModal({
                 onMouseUp={checkEditorState}
               />
               
-              <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
-                 <div style={{ fontSize: 12, fontWeight: 600, color: '#94A3B8' }}>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', margin: '2px 0 5px 0' }}>
+                 <div style={{ fontSize: 11, fontWeight: 600, color: '#94A3B8' }}>
                    {conteudo.replace(/<[^>]*>/g, '').length}/2000
                  </div>
               </div>
               
               <div className="ad-nc-toolbar">
-                <button type="button" className="ad-nc-tool-btn" onMouseDown={e => { e.preventDefault(); execCmd('bold'); }} title="Negrito"><Bold size={17}/></button>
-                <button type="button" className="ad-nc-tool-btn" onMouseDown={e => { e.preventDefault(); execCmd('italic'); }} title="Itálico"><Italic size={17}/></button>
-                <button type="button" className="ad-nc-tool-btn" onMouseDown={e => { e.preventDefault(); execCmd('underline'); }} title="Sublinhado"><Underline size={17}/></button>
+                <button type="button" className="ad-nc-tool-btn" onMouseDown={e => { e.preventDefault(); execCmd('bold'); }} title="Negrito"><Bold size={15}/></button>
+                <button type="button" className="ad-nc-tool-btn" onMouseDown={e => { e.preventDefault(); execCmd('italic'); }} title="Itálico"><Italic size={15}/></button>
+                <button type="button" className="ad-nc-tool-btn" onMouseDown={e => { e.preventDefault(); execCmd('underline'); }} title="Sublinhado"><Underline size={15}/></button>
 
-                <div style={{ width: 1, height: 20, background: '#E2E8F0', margin: 'auto 3px' }} />
+                <div style={{ width: 1, height: 16, background: '#E2E8F0', margin: 'auto 2px' }} />
 
                 {/* Tamanho da Fonte */}
                 <div style={{ position: 'relative' }}>
@@ -928,35 +938,35 @@ export default function NovoComunicadoModal({
                     title="Tamanho da Fonte"
                     style={{
                       width: 'auto',
-                      padding: '0 8px',
-                      gap: 4,
+                      padding: '0 6px',
+                      gap: 3,
                       display: 'inline-flex',
                       alignItems: 'center',
-                      fontSize: 12,
+                      fontSize: 11,
                       fontWeight: 700,
                       background: showFontSizePicker ? '#EEF2FF' : 'transparent',
                       color: showFontSizePicker ? '#4F46E5' : '#64748B'
                     }}
                   >
-                    <Type size={16} />
-                    <span style={{ fontSize: 11.5 }}>{selectedFontSize}</span>
+                    <Type size={14} />
+                    <span style={{ fontSize: 11 }}>{selectedFontSize}</span>
                   </button>
 
                   {showFontSizePicker && (
                     <div style={{
                       position: 'absolute',
-                      bottom: 45,
+                      bottom: 40,
                       left: 0,
                       background: '#ffffff',
                       border: '1px solid #E2E8F0',
-                      borderRadius: 14,
-                      padding: 6,
+                      borderRadius: 12,
+                      padding: 5,
                       boxShadow: '0 16px 36px -8px rgba(15, 23, 42, 0.18)',
                       display: 'flex',
                       flexDirection: 'column',
                       gap: 2,
                       zIndex: 110,
-                      minWidth: 155
+                      minWidth: 150
                     }}>
                       {[
                         { label: 'Pequeno', size: '12px' },
@@ -978,8 +988,8 @@ export default function NovoComunicadoModal({
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'space-between',
-                            padding: '7px 12px',
-                            borderRadius: 8,
+                            padding: '6px 10px',
+                            borderRadius: 6,
                             border: 'none',
                             background: selectedFontSize === item.size ? '#EEF2FF' : 'transparent',
                             color: selectedFontSize === item.size ? '#4F46E5' : '#1E293B',
@@ -1002,7 +1012,7 @@ export default function NovoComunicadoModal({
                   )}
                 </div>
 
-                <div style={{ width: 1, height: 20, background: '#E2E8F0', margin: 'auto 3px' }} />
+                <div style={{ width: 1, height: 16, background: '#E2E8F0', margin: 'auto 2px' }} />
 
                 {/* Alinhamento: Esquerda, Centralizado, Direita, Justificado */}
                 <button
@@ -1014,7 +1024,7 @@ export default function NovoComunicadoModal({
                   }}
                   title="Alinhar à Esquerda"
                 >
-                  <AlignLeft size={17} />
+                  <AlignLeft size={15} />
                 </button>
                 <button
                   type="button"
@@ -1025,7 +1035,7 @@ export default function NovoComunicadoModal({
                   }}
                   title="Centralizar"
                 >
-                  <AlignCenter size={17} />
+                  <AlignCenter size={15} />
                 </button>
                 <button
                   type="button"
@@ -1036,7 +1046,7 @@ export default function NovoComunicadoModal({
                   }}
                   title="Alinhar à Direita"
                 >
-                  <AlignRight size={17} />
+                  <AlignRight size={15} />
                 </button>
                 <button
                   type="button"
@@ -1047,29 +1057,29 @@ export default function NovoComunicadoModal({
                   }}
                   title="Justificado"
                 >
-                  <AlignJustify size={17} />
+                  <AlignJustify size={15} />
                 </button>
 
-                <div style={{ width: 1, height: 20, background: '#E2E8F0', margin: 'auto 3px' }} />
+                <div style={{ width: 1, height: 16, background: '#E2E8F0', margin: 'auto 2px' }} />
 
-                <button type="button" className="ad-nc-tool-btn" onMouseDown={e => { e.preventDefault(); execCmd('insertUnorderedList'); }} title="Lista"><List size={17}/></button>
+                <button type="button" className="ad-nc-tool-btn" onMouseDown={e => { e.preventDefault(); execCmd('insertUnorderedList'); }} title="Lista"><List size={15}/></button>
                 <button type="button" className="ad-nc-tool-btn" onMouseDown={e => { 
                    e.preventDefault();
                    const url = prompt('Digite o link:'); 
                    if(url) execCmd('createLink', url); 
-                }} title="Inserir Link"><LinkIcon size={17}/></button>
+                }} title="Inserir Link"><LinkIcon size={15}/></button>
 
                 <label className="ad-nc-tool-btn" style={{ position: 'relative', overflow: 'hidden' }} title="Cor do Texto">
-                  <Palette size={17}/>
+                  <Palette size={15}/>
                   <input type="color" onChange={(e) => { execCmd('foreColor', e.target.value); }} style={{ position: 'absolute', opacity: 0, width: '100%', height: '100%', cursor: 'pointer' }} />
                 </label>
 
                 <div style={{ position: 'relative' }}>
-                  <button type="button" className="ad-nc-tool-btn" onMouseDown={e => { e.preventDefault(); setShowEmojiPicker(!showEmojiPicker); setShowFontSizePicker(false); }} title="Emojis"><Smile size={17}/></button>
+                  <button type="button" className="ad-nc-tool-btn" onMouseDown={e => { e.preventDefault(); setShowEmojiPicker(!showEmojiPicker); setShowFontSizePicker(false); }} title="Emojis"><Smile size={15}/></button>
                   {showEmojiPicker && (
-                    <div style={{ position: 'absolute', bottom: 45, left: -50, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, padding: 12, boxShadow: '0 20px 40px -10px rgba(0,0,0,0.15)', display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8, zIndex: 110 }}>
+                    <div style={{ position: 'absolute', bottom: 40, left: -50, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: 10, boxShadow: '0 20px 40px -10px rgba(0,0,0,0.15)', display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 6, zIndex: 110 }}>
                       {EMOJIS.map(emoji => (
-                        <button key={emoji} type="button" onMouseDown={e => { e.preventDefault(); execCmd('insertText', emoji); setShowEmojiPicker(false); }} style={{ background: 'transparent', border: 0, fontSize: 22, cursor: 'pointer', padding: 6, borderRadius: 8, transition: 'transform 0.2s' }} onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.2)'} onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}>
+                        <button key={emoji} type="button" onMouseDown={e => { e.preventDefault(); execCmd('insertText', emoji); setShowEmojiPicker(false); }} style={{ background: 'transparent', border: 0, fontSize: 20, cursor: 'pointer', padding: 5, borderRadius: 6, transition: 'transform 0.2s' }} onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.2)'} onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}>
                           {emoji}
                         </button>
                       ))}
@@ -1082,9 +1092,9 @@ export default function NovoComunicadoModal({
 
           {/* ANEXOS */}
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, color: '#64748B', fontWeight: 600, fontSize: 14 }}>
-              <Paperclip size={16} color="#8B5CF6" />
-              Anexos <span style={{ fontWeight: 400 }}>(opcional)</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6, color: '#64748B', fontWeight: 700, fontSize: 13 }}>
+              <Paperclip size={15} color="#8B5CF6" />
+              Anexos <span style={{ fontWeight: 500, color: '#94A3B8', fontSize: 12 }}>(opcional)</span>
             </div>
             
             <div className="ad-nc-attach-grid">
@@ -1093,7 +1103,7 @@ export default function NovoComunicadoModal({
                 title="Anexar arquivos ou imagens"
               >
                 <div className="ad-nc-attach-icon-wrap" style={{ background: 'rgba(99, 102, 241, 0.08)' }}>
-                  <Paperclip size={15} color="#6366F1" style={{ filter: 'drop-shadow(0 1px 2px rgba(99, 102, 241, 0.2))' }} />
+                  <Paperclip size={14} color="#6366F1" style={{ filter: 'drop-shadow(0 1px 2px rgba(99, 102, 241, 0.2))' }} />
                 </div>
                 <span className="ad-nc-attach-label">Anexar</span>
                 <input type="file" accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx" multiple hidden onChange={handleFileUpload} />
@@ -1106,7 +1116,7 @@ export default function NovoComunicadoModal({
                 title="Anexar relatório"
               >
                 <div className="ad-nc-attach-icon-wrap" style={{ background: 'rgba(14, 165, 233, 0.08)' }}>
-                  <BarChart2 size={15} color="#0284C7" style={{ filter: 'drop-shadow(0 1px 2px rgba(2, 132, 199, 0.2))' }} />
+                  <BarChart2 size={14} color="#0284C7" style={{ filter: 'drop-shadow(0 1px 2px rgba(2, 132, 199, 0.2))' }} />
                 </div>
                 <span className="ad-nc-attach-label">Relatório</span>
               </button>
@@ -1119,16 +1129,16 @@ export default function NovoComunicadoModal({
                 style={enqueteData ? { borderColor: '#F59E0B', background: 'rgba(245, 158, 11, 0.06)', position: 'relative' } : { position: 'relative' }}
               >
                 <div className="ad-nc-attach-icon-wrap" style={{ background: 'rgba(245, 158, 11, 0.1)' }}>
-                  <Vote size={15} color="#D97706" style={{ filter: 'drop-shadow(0 1px 2px rgba(217, 119, 6, 0.25))' }} />
+                  <Vote size={14} color="#D97706" style={{ filter: 'drop-shadow(0 1px 2px rgba(217, 119, 6, 0.25))' }} />
                 </div>
                 <span className="ad-nc-attach-label">Enquete</span>
                 {enqueteData && (
                   <span style={{
                     position: 'absolute',
-                    top: 5,
-                    right: 6,
-                    width: 7,
-                    height: 7,
+                    top: 4,
+                    right: 5,
+                    width: 6,
+                    height: 6,
                     borderRadius: '50%',
                     background: '#10B981',
                     boxShadow: '0 0 6px #10B981'
@@ -1144,16 +1154,16 @@ export default function NovoComunicadoModal({
                 style={autorizacaoData ? { borderColor: '#10B981', background: 'rgba(16, 185, 129, 0.06)', position: 'relative' } : { position: 'relative' }}
               >
                 <div className="ad-nc-attach-icon-wrap" style={{ background: 'rgba(16, 185, 129, 0.1)' }}>
-                  <FileCheck2 size={15} color="#059669" style={{ filter: 'drop-shadow(0 1px 2px rgba(5, 150, 105, 0.25))' }} />
+                  <FileCheck2 size={14} color="#059669" style={{ filter: 'drop-shadow(0 1px 2px rgba(5, 150, 105, 0.25))' }} />
                 </div>
                 <span className="ad-nc-attach-label">Autorização</span>
                 {autorizacaoData && (
                   <span style={{
                     position: 'absolute',
-                    top: 5,
-                    right: 6,
-                    width: 7,
-                    height: 7,
+                    top: 4,
+                    right: 5,
+                    width: 6,
+                    height: 6,
                     borderRadius: '50%',
                     background: '#10B981',
                     boxShadow: '0 0 6px #10B981'
@@ -1174,21 +1184,21 @@ export default function NovoComunicadoModal({
                 style={cobrancasList.length > 0 ? { borderColor: '#10B981', background: 'rgba(16, 185, 129, 0.06)', position: 'relative' } : { position: 'relative' }}
               >
                 <div className="ad-nc-attach-icon-wrap" style={{ background: 'rgba(16, 185, 129, 0.08)' }}>
-                  <CircleDollarSign size={15} color="#10B981" style={{ filter: 'drop-shadow(0 1px 2px rgba(16, 185, 129, 0.2))' }} />
+                  <CircleDollarSign size={14} color="#10B981" style={{ filter: 'drop-shadow(0 1px 2px rgba(16, 185, 129, 0.2))' }} />
                 </div>
                 <span className="ad-nc-attach-label">Cobrança</span>
                 {cobrancasList.length > 0 && (
                   <span style={{
                     position: 'absolute',
-                    top: 4,
-                    right: 6,
-                    minWidth: 16,
-                    height: 16,
-                    padding: '0 4px',
+                    top: 3,
+                    right: 5,
+                    minWidth: 15,
+                    height: 15,
+                    padding: '0 3px',
                     borderRadius: 8,
                     background: '#10B981',
                     color: '#FFF',
-                    fontSize: 10,
+                    fontSize: 9.5,
                     fontWeight: 800,
                     display: 'flex',
                     alignItems: 'center',
@@ -1203,7 +1213,7 @@ export default function NovoComunicadoModal({
 
             {/* PREVIEW ANEXOS */}
             {(anexos.length > 0 || cobrancasList.length > 0 || enqueteData || autorizacaoData) && (
-              <div style={{ marginTop: 16, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))', gap: 12 }}>
+              <div style={{ marginTop: 10, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(95px, 1fr))', gap: 8 }}>
                 {anexos.map((anexo, i) => {
                   let name = '';
                   let url = '';
@@ -1245,40 +1255,40 @@ export default function NovoComunicadoModal({
                       style={{ 
                         background: '#FFF', 
                         border: '1px solid #E2E8F0', 
-                        borderRadius: 16, 
-                        padding: 8, 
+                        borderRadius: 12, 
+                        padding: 6, 
                         position: 'relative', 
                         display: 'flex', 
                         flexDirection: 'column', 
                         alignItems: 'center', 
-                        gap: 8,
+                        gap: 4,
                         cursor: 'pointer',
                         transition: 'all 0.2s ease'
                       }}
                       onMouseEnter={e => { e.currentTarget.style.borderColor = '#6D5DF6'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(109, 93, 246, 0.08)'; }}
                       onMouseLeave={e => { e.currentTarget.style.borderColor = '#E2E8F0'; e.currentTarget.style.boxShadow = 'none'; }}
                     >
-                      <div style={{ width: '100%', aspectRatio: '1/1', borderRadius: 10, background: '#F8FAFC', overflow: 'hidden', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <div style={{ width: '100%', aspectRatio: '1/1', borderRadius: 8, background: '#F8FAFC', overflow: 'hidden', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                         {isImg ? (
                           <Image src={url} alt="Capa" fill style={{ objectFit: 'cover' }} />
                         ) : (
-                          <FileText size={32} color="#94A3B8" />
+                          <FileText size={26} color="#94A3B8" />
                         )}
                         <button 
                           onClick={(e) => { e.preventDefault(); e.stopPropagation(); setAnexos(anexos.filter(a => a !== anexo)); }}
-                          style={{ position: 'absolute', top: -6, right: -6, width: 24, height: 24, background: '#EF4444', color: '#FFF', borderRadius: '50%', border: '2px solid #FFF', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 10, boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}
+                          style={{ position: 'absolute', top: -4, right: -4, width: 20, height: 20, background: '#EF4444', color: '#FFF', borderRadius: '50%', border: '2px solid #FFF', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 10, boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}
                         >
-                          <X size={14} />
+                          <X size={12} />
                         </button>
                       </div>
-                      <div style={{ fontSize: 11, fontWeight: 600, color: '#475569', width: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'center' }} title={name}>{name}</div>
+                      <div style={{ fontSize: 10.5, fontWeight: 600, color: '#475569', width: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'center' }} title={name}>{name}</div>
                       {mimeType !== 'report-payload' && (
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, marginTop: -4 }}>
-                          <div style={{ fontSize: 10, color: '#94A3B8', fontWeight: 500 }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, marginTop: -2 }}>
+                          <div style={{ fontSize: 9.5, color: '#94A3B8', fontWeight: 500 }}>
                             <AttachmentSize url={url} initialSize={size} />
                           </div>
                           {showSavings && (
-                            <span style={{ fontSize: 9, color: '#10B981', fontWeight: 700, background: '#ECFDF5', padding: '1px 4px', borderRadius: 4 }}>
+                            <span style={{ fontSize: 8.5, color: '#10B981', fontWeight: 700, background: '#ECFDF5', padding: '1px 3px', borderRadius: 3 }}>
                               -{savingsPercent}%
                             </span>
                           )}
@@ -1294,11 +1304,11 @@ export default function NovoComunicadoModal({
                     onClick={() => setShowEnqueteModal(true)}
                     style={{
                       position: 'relative',
-                      height: 100,
+                      minHeight: 82,
                       background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.08) 0%, rgba(217, 119, 6, 0.04) 100%)',
                       border: '1.5px solid #F59E0B',
-                      borderRadius: 14,
-                      padding: '10px 12px',
+                      borderRadius: 12,
+                      padding: '8px 10px',
                       display: 'flex',
                       flexDirection: 'column',
                       justifyContent: 'center',
@@ -1309,17 +1319,17 @@ export default function NovoComunicadoModal({
                     title="Clique para editar a enquete"
                   >
                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
-                       <div style={{ fontSize: 10, fontWeight: 800, color: '#D97706', display: 'flex', alignItems: 'center', gap: 4 }}>
-                         <Vote size={12} /> ENQUETE
+                       <div style={{ fontSize: 9.5, fontWeight: 800, color: '#D97706', display: 'flex', alignItems: 'center', gap: 4 }}>
+                         <Vote size={11} /> ENQUETE
                        </div>
-                       <span style={{ fontSize: 9, fontWeight: 700, color: '#D97706', background: 'rgba(245, 158, 11, 0.15)', padding: '1px 5px', borderRadius: 4 }}>
+                       <span style={{ fontSize: 8.5, fontWeight: 700, color: '#D97706', background: 'rgba(245, 158, 11, 0.15)', padding: '1px 4px', borderRadius: 3 }}>
                          {enqueteData.opcoes?.length || 0} opções
                        </span>
                      </div>
-                     <div style={{ fontSize: 12, fontWeight: 700, color: '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                     <div style={{ fontSize: 11.5, fontWeight: 700, color: '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                        {enqueteData.pergunta}
                      </div>
-                     <div style={{ fontSize: 10, fontWeight: 600, color: '#B45309', marginTop: 3 }}>
+                     <div style={{ fontSize: 9.5, fontWeight: 600, color: '#B45309', marginTop: 2 }}>
                        {enqueteData.tipo === 'unica' ? 'Escolha única' : 'Múltipla escolha'} {enqueteData.anonima ? '• Anônima' : ''}
                      </div>
                      <button 
@@ -1329,10 +1339,10 @@ export default function NovoComunicadoModal({
                           setEnqueteData(null); 
                           setAnexos(anexos.filter(a => !String(a).startsWith('Enquete:'))); 
                         }}
-                        style={{ position: 'absolute', top: -6, right: -6, width: 22, height: 22, background: '#EF4444', color: '#FFF', borderRadius: '50%', border: '2px solid #FFF', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 10 }}
+                        style={{ position: 'absolute', top: -5, right: -5, width: 20, height: 20, background: '#EF4444', color: '#FFF', borderRadius: '50%', border: '2px solid #FFF', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 10 }}
                         title="Remover enquete"
                       >
-                        <X size={12} />
+                        <X size={11} />
                       </button>
                   </div>
                 )}
@@ -1343,11 +1353,11 @@ export default function NovoComunicadoModal({
                     onClick={() => setShowAutorizacaoModal(true)}
                     style={{
                       position: 'relative',
-                      height: 100,
+                      minHeight: 82,
                       background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(5, 150, 105, 0.04) 100%)',
                       border: '1.5px solid #10B981',
-                      borderRadius: 14,
-                      padding: '10px 12px',
+                      borderRadius: 12,
+                      padding: '8px 10px',
                       display: 'flex',
                       flexDirection: 'column',
                       justifyContent: 'center',
@@ -1358,18 +1368,18 @@ export default function NovoComunicadoModal({
                     title="Clique para editar a autorização"
                   >
                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
-                       <div style={{ fontSize: 10, fontWeight: 800, color: '#047857', display: 'flex', alignItems: 'center', gap: 4 }}>
-                         <FileCheck2 size={12} /> AUTORIZAÇÃO
+                       <div style={{ fontSize: 9.5, fontWeight: 800, color: '#047857', display: 'flex', alignItems: 'center', gap: 4 }}>
+                         <FileCheck2 size={11} /> AUTORIZAÇÃO
                        </div>
-                       <span style={{ fontSize: 9, fontWeight: 700, color: '#047857', background: 'rgba(16, 185, 129, 0.15)', padding: '1px 5px', borderRadius: 4 }}>
+                       <span style={{ fontSize: 8.5, fontWeight: 700, color: '#047857', background: 'rgba(16, 185, 129, 0.15)', padding: '1px 4px', borderRadius: 3 }}>
                          {autorizacaoData.opcoes?.length || 2} opções
                        </span>
                      </div>
-                     <div style={{ fontSize: 12, fontWeight: 700, color: '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                     <div style={{ fontSize: 11.5, fontWeight: 700, color: '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                        {autorizacaoData.titulo}
                      </div>
-                     <div style={{ fontSize: 10, fontWeight: 600, color: '#059669', marginTop: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                       {autorizacaoData.localEvento ? `📍 ${autorizacaoData.localEvento}` : 'Termo com Assinatura Digital'}
+                     <div style={{ fontSize: 9.5, fontWeight: 600, color: '#059669', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                       {autorizacaoData.localEvento ? `📍 ${autorizacaoData.localEvento}` : 'Termo com Assinatura'}
                      </div>
                      <button 
                         onClick={(e) => { 
@@ -1378,10 +1388,10 @@ export default function NovoComunicadoModal({
                           setAutorizacaoData(null); 
                           setAnexos(anexos.filter(a => !String(a).startsWith('Autorização:'))); 
                         }}
-                        style={{ position: 'absolute', top: -6, right: -6, width: 22, height: 22, background: '#EF4444', color: '#FFF', borderRadius: '50%', border: '2px solid #FFF', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 10 }}
+                        style={{ position: 'absolute', top: -5, right: -5, width: 20, height: 20, background: '#EF4444', color: '#FFF', borderRadius: '50%', border: '2px solid #FFF', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 10 }}
                         title="Remover autorização"
                       >
-                        <X size={12} />
+                        <X size={11} />
                       </button>
                   </div>
                 )}
@@ -1397,14 +1407,14 @@ export default function NovoComunicadoModal({
                     }}
                     style={{ 
                       position: 'relative', 
-                      minHeight: 100, 
+                      minHeight: 82, 
                       background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(5, 150, 105, 0.04) 100%)', 
                       border: '1.5px solid #10B981', 
-                      borderRadius: 14, 
-                      padding: '10px 12px', 
+                      borderRadius: 12, 
+                      padding: '8px 10px', 
                       display: 'flex', 
                       flexDirection: 'column', 
-                      justifyContent: 'center',
+                      justifyContent: 'center', 
                       cursor: 'pointer',
                       transition: 'all 0.2s',
                       boxShadow: '0 2px 8px rgba(16, 185, 129, 0.1)'
@@ -1412,19 +1422,19 @@ export default function NovoComunicadoModal({
                     title="Clique para editar esta cobrança"
                   >
                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
-                       <div style={{ fontSize: 10, fontWeight: 800, color: '#047857', display: 'flex', alignItems: 'center', gap: 4 }}>
-                         <CircleDollarSign size={12} /> COBRANÇA {cobrancasList.length > 1 ? `#${idx + 1}` : ''}
+                       <div style={{ fontSize: 9.5, fontWeight: 800, color: '#047857', display: 'flex', alignItems: 'center', gap: 4 }}>
+                         <CircleDollarSign size={11} /> COBRANÇA {cobrancasList.length > 1 ? `#${idx + 1}` : ''}
                        </div>
                        {cob.vencimento && (
-                         <span style={{ fontSize: 9, fontWeight: 700, color: '#047857', background: 'rgba(16, 185, 129, 0.15)', padding: '1px 5px', borderRadius: 4 }}>
-                           Venc: {cob.vencimento.split('-').reverse().join('/')}
+                         <span style={{ fontSize: 8.5, fontWeight: 700, color: '#047857', background: 'rgba(16, 185, 129, 0.15)', padding: '1px 4px', borderRadius: 3 }}>
+                           {cob.vencimento.split('-').reverse().join('/')}
                          </span>
                        )}
                      </div>
-                     <div style={{ fontSize: 12, fontWeight: 700, color: '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                     <div style={{ fontSize: 11.5, fontWeight: 700, color: '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                        {cob.titulo || 'Cobrança sem título'}
                      </div>
-                     <div style={{ fontSize: 14, fontWeight: 800, color: '#065F46', marginTop: 4 }}>
+                     <div style={{ fontSize: 12.5, fontWeight: 800, color: '#065F46', marginTop: 2 }}>
                        R$ {cob.valor ? Number(cob.valor.replace(',', '.')).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0,00'}
                      </div>
                      <button 
@@ -1433,10 +1443,10 @@ export default function NovoComunicadoModal({
                           e.stopPropagation(); 
                           setCobrancasList(prev => prev.filter(c => c.id !== cob.id)); 
                         }}
-                        style={{ position: 'absolute', top: -6, right: -6, width: 22, height: 22, background: '#EF4444', color: '#FFF', borderRadius: '50%', border: '2px solid #FFF', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 10 }}
+                        style={{ position: 'absolute', top: -5, right: -5, width: 20, height: 20, background: '#EF4444', color: '#FFF', borderRadius: '50%', border: '2px solid #FFF', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 10 }}
                         title="Remover cobrança"
                       >
-                        <X size={12} />
+                        <X size={11} />
                       </button>
                   </div>
                 ))}
@@ -1444,9 +1454,9 @@ export default function NovoComunicadoModal({
             )}
 
             {isUploading && (
-              <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: 12, background: '#F5F3FF', padding: '12px 16px', borderRadius: 16 }}>
-                 <div style={{ width: 20, height: 20, borderRadius: 10, border: '2px solid #C4B5FD', borderTopColor: '#6D5DF6', animation: 'spin 1s linear infinite' }} />
-                 <span style={{ fontSize: 14, fontWeight: 600, color: '#6D5DF6' }}>{uploadingText || 'Enviando arquivo...'} {uploadProgress}%</span>
+              <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 10, background: '#F5F3FF', padding: '10px 14px', borderRadius: 12 }}>
+                 <div style={{ width: 18, height: 18, borderRadius: 9, border: '2px solid #C4B5FD', borderTopColor: '#6D5DF6', animation: 'spin 1s linear infinite' }} />
+                 <span style={{ fontSize: 13, fontWeight: 600, color: '#6D5DF6' }}>{uploadingText || 'Enviando arquivo...'} {uploadProgress}%</span>
               </div>
             )}
           </div>
@@ -1456,17 +1466,17 @@ export default function NovoComunicadoModal({
         <div className="ad-nc-footer">
           <button 
             className="ad-nc-footer-btn ad-nc-btn-secondary" 
-            style={{ flexDirection: 'column', gap: 4, opacity: isSubmitting ? 0.6 : 1 }}
+            style={{ flexDirection: 'column', gap: 2, opacity: isSubmitting ? 0.6 : 1 }}
             disabled={isSubmitting}
             onClick={() => handleAction(true)}
           >
-            <Save size={18} color="#64748B" />
-            <span style={{ color: '#0F172A', fontSize: 12 }}>Rascunho</span>
+            <Save size={16} color="#64748B" />
+            <span style={{ color: '#0F172A', fontSize: 11.5 }}>Rascunho</span>
           </button>
 
           <button 
             className="ad-nc-footer-btn ad-nc-btn-secondary" 
-            style={{ flexDirection: 'column', gap: 4, opacity: isSubmitting ? 0.6 : 1 }}
+            style={{ flexDirection: 'column', gap: 2, opacity: isSubmitting ? 0.6 : 1 }}
             disabled={isSubmitting}
             onClick={() => {
               if (!dataAgendamento) {
@@ -1484,8 +1494,8 @@ export default function NovoComunicadoModal({
               setShowScheduleModal(true);
             }}
           >
-            <Calendar size={18} color="#6D5DF6" />
-            <span style={{ color: '#0F172A', fontSize: 12 }}>{dataAgendamento ? 'Agendado' : 'Agendar'}</span>
+            <Calendar size={16} color="#6D5DF6" />
+            <span style={{ color: '#0F172A', fontSize: 11.5 }}>{dataAgendamento ? 'Agendado' : 'Agendar'}</span>
           </button>
           
           <button 
@@ -1499,11 +1509,11 @@ export default function NovoComunicadoModal({
             onClick={() => handleAction(false)}
           >
             {isUploading || isSubmitting ? (
-              <div style={{ width: 18, height: 18, borderRadius: 9, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', animation: 'spin 1s linear infinite' }} />
+              <div style={{ width: 16, height: 16, borderRadius: 8, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', animation: 'spin 1s linear infinite' }} />
             ) : (
-              <SendIcon size={18} fill="currentColor" />
+              <SendIcon size={16} fill="currentColor" />
             )}
-            <span>{isSubmitting ? 'Enviando...' : 'Enviar'}</span>
+            <span style={{ fontSize: 13.5 }}>{isSubmitting ? 'Enviando...' : 'Enviar'}</span>
           </button>
         </div>
 

@@ -246,33 +246,39 @@ function SelecionarPerfilAdminContent() {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          margin-bottom: 20px;
-          padding: 0 8px;
+          margin-bottom: 16px;
+          padding: 0 6px;
+          gap: 10px;
         }
 
         .portal-section-title {
-          font-size: 15px;
+          font-size: 14px;
           font-weight: 800;
-          letter-spacing: 0.12em;
+          letter-spacing: 0.06em;
           text-transform: uppercase;
           color: #64748b;
           margin: 0;
           display: flex;
           align-items: center;
           gap: 8px;
+          white-space: nowrap;
+          min-width: 0;
+          flex-shrink: 0;
         }
         .dark .portal-section-title {
           color: #94a3b8;
         }
 
         .portal-section-badge {
-          font-size: 12px;
+          font-size: 11.5px;
           font-weight: 700;
           color: #6366f1;
           background: rgba(99, 102, 241, 0.08);
-          padding: 4px 12px;
+          padding: 3px 10px;
           border-radius: 20px;
           border: 1px solid rgba(99, 102, 241, 0.12);
+          white-space: nowrap;
+          flex-shrink: 0;
         }
 
         .cards-column {
@@ -426,9 +432,17 @@ function SelecionarPerfilAdminContent() {
           display: flex;
           align-items: center;
           gap: 6px;
+          white-space: nowrap;
+          min-width: 0;
+          overflow: hidden;
         }
         .dark .card-subtitle {
           color: #94a3b8;
+        }
+
+        .card-subtitle-tag {
+          white-space: nowrap;
+          flex-shrink: 0;
         }
 
         .card-dot-separator {
@@ -437,9 +451,18 @@ function SelecionarPerfilAdminContent() {
           border-radius: 50%;
           background: #cbd5e1;
           display: inline-block;
+          flex-shrink: 0;
         }
         .dark .card-dot-separator {
           background: #475569;
+        }
+
+        .card-subtitle-desc {
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          min-width: 0;
+          flex-shrink: 1;
         }
 
         /* Badges & Indicators */
@@ -506,7 +529,25 @@ function SelecionarPerfilAdminContent() {
             font-size: 13px;
           }
           .portal-sections-grid {
-            gap: 28px;
+            gap: 24px;
+          }
+          .portal-section-header {
+            margin-bottom: 12px;
+            padding: 0 4px;
+            gap: 6px;
+          }
+          .portal-section-title {
+            font-size: 12.5px;
+            letter-spacing: 0.04em;
+            gap: 6px;
+            white-space: nowrap;
+            flex-shrink: 0;
+          }
+          .portal-section-badge {
+            font-size: 10.5px;
+            padding: 2.5px 8px;
+            white-space: nowrap;
+            flex-shrink: 0;
           }
           .portal-modern-card {
             padding: 12px 14px;
@@ -514,27 +555,84 @@ function SelecionarPerfilAdminContent() {
             border-radius: 20px;
           }
           .card-avatar-container {
-            width: 52px;
-            height: 52px;
+            width: 48px;
+            height: 48px;
             border-radius: 14px;
+            flex-shrink: 0;
+          }
+          .card-avatar-container svg {
+            width: 24px;
+            height: 24px;
+          }
+          .card-info {
+            flex: 1;
+            min-width: 0;
           }
           .card-title {
-            font-size: 16px;
+            font-size: 15.5px;
+            margin: 0 0 3px;
           }
           .card-subtitle {
-            font-size: 12px;
+            font-size: 11.5px;
+            gap: 5px;
+            white-space: nowrap;
+            min-width: 0;
+          }
+          .card-subtitle-tag {
+            white-space: nowrap;
+            flex-shrink: 0;
+          }
+          .card-dot-separator {
+            width: 3px;
+            height: 3px;
+            flex-shrink: 0;
+          }
+          .card-subtitle-desc {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            min-width: 0;
+            flex-shrink: 1;
           }
           .card-actions-wrapper {
-            gap: 8px !important;
+            gap: 6px !important;
+            flex-shrink: 0;
           }
           .chevron-circle-btn {
             width: 28px !important;
             height: 28px !important;
             border-radius: 8px !important;
+            flex-shrink: 0;
           }
           .chevron-circle-btn svg {
             width: 14px !important;
             height: 14px !important;
+          }
+        }
+
+        @media (max-width: 375px) {
+          .portal-section-title {
+            font-size: 11px;
+            letter-spacing: 0.02em;
+          }
+          .portal-modern-card {
+            padding: 10px 10px;
+            gap: 10px;
+          }
+          .card-avatar-container {
+            width: 44px;
+            height: 44px;
+          }
+          .card-avatar-container svg {
+            width: 22px;
+            height: 22px;
+          }
+          .card-title {
+            font-size: 14.5px;
+          }
+          .card-subtitle {
+            font-size: 10.5px;
+            gap: 4px;
           }
         }
       `}} />
@@ -587,9 +685,9 @@ function SelecionarPerfilAdminContent() {
                 <div className="card-info">
                   <h3 className="card-title">Gestão Geral da Agenda</h3>
                   <div className="card-subtitle">
-                    <span style={{ color: '#8b5cf6', fontWeight: 800 }}>Acesso Irrestrito</span>
+                    <span className="card-subtitle-tag" style={{ color: '#8b5cf6', fontWeight: 800 }}>Acesso Irrestrito</span>
                     <span className="card-dot-separator" />
-                    <span>Painel de Controle</span>
+                    <span className="card-subtitle-desc">Painel de Controle</span>
                   </div>
                 </div>
 
@@ -628,9 +726,9 @@ function SelecionarPerfilAdminContent() {
               <div className="card-info">
                 <h3 className="card-title">{formatShortName(currentUser?.nome || 'Colaborador')}</h3>
                 <div className="card-subtitle">
-                  <span style={{ color: '#3b82f6', fontWeight: 800 }}>Acesso da Equipe</span>
+                  <span className="card-subtitle-tag" style={{ color: '#3b82f6', fontWeight: 800 }}>Acesso da Equipe</span>
                   <span className="card-dot-separator" />
-                  <span>{currentUser?.cargo || currentUser?.perfil || 'Membro da Equipe'}</span>
+                  <span className="card-subtitle-desc">{currentUser?.cargo || currentUser?.perfil || 'Membro da Equipe'}</span>
                 </div>
               </div>
 

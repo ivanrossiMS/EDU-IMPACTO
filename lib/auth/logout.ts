@@ -83,9 +83,6 @@ async function executeLogout(userId?: string): Promise<void> {
 
       window.localStorage.setItem(LOGOUT_FLAG, '1');
       window.sessionStorage.clear();
-      try {
-        window.dispatchEvent(new CustomEvent('edu:reset-push-permission'));
-      } catch (_) {}
       console.log('[Auth Logout] Chaves de autenticação do usuário removidas com sucesso.');
     } catch (error) {
       console.error('[Auth Logout] Erro ao limpar chaves do storage:', error);

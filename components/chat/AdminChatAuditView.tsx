@@ -846,7 +846,7 @@ export function AdminChatAuditView() {
             <div className={`admin-chat-left-pane ${selectedConv ? 'has-selection-mobile-hide' : ''}`} style={{ background: '#ffffff', borderRadius: 16, border: '1px solid #e2e8f0', boxShadow: '0 4px 16px rgba(0,0,0,0.03)', overflow: 'hidden', height: 750, display: 'flex', flexDirection: 'column' }}>
               <div style={{ padding: '14px 16px', borderBottom: '1px solid #e2e8f0', background: '#f8fafc', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontSize: 13, fontWeight: 800, color: '#334155', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                  Conversas Diretas ({conversations.length})
+                  Conversas ({conversations.length})
                 </span>
                 <span style={{ fontSize: 11, color: '#94a3b8' }}>
                   Clique para inspecionar
@@ -862,8 +862,8 @@ export function AdminChatAuditView() {
                 ) : conversations.length === 0 ? (
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', padding: 24, textAlign: 'center', color: '#94a3b8' }}>
                     <MessageSquare size={36} color="#cbd5e1" style={{ marginBottom: 10 }} />
-                    <span style={{ fontSize: 14, fontWeight: 700, color: '#475569' }}>Nenhuma conversa encontrada</span>
-                    <span style={{ fontSize: 12, marginTop: 4 }}>Altere os filtros de data ou busca para localizar conversas.</span>
+                    <span style={{ fontSize: 14, fontWeight: 700, color: '#475569' }}>Nenhuma conversa com mensagens</span>
+                    <span style={{ fontSize: 12, marginTop: 4 }}>Conversas só são salvas quando há mensagens enviadas.</span>
                   </div>
                 ) : (
                   conversations.map(conv => {

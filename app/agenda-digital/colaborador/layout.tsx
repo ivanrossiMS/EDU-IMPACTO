@@ -118,8 +118,11 @@ export default function AgendaDigitalColaboradorLayout({
         </button>
       </div>
     )}
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 24, height: '100%' }}>
+    <div className="ad-colab-layout-container" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <style dangerouslySetInnerHTML={{__html: `
+        .ad-colab-layout-container {
+          gap: 18px;
+        }
         .ad-main-grid {
           display: grid;
           grid-template-columns: 1fr;
@@ -247,11 +250,14 @@ export default function AgendaDigitalColaboradorLayout({
         }
         
         @media (max-width: 640px) {
+          .ad-colab-layout-container {
+            gap: 10px !important;
+          }
           .ad-premium-card-wrapper {
             margin-top: 0px !important;
           }
           .ad-main-grid {
-            margin-top: 8px !important;
+            margin-top: 0px !important;
           }
           .ad-premium-card {
             padding: 14px 12px 10px 12px !important;
@@ -505,7 +511,7 @@ export default function AgendaDigitalColaboradorLayout({
       </div>
 
       {/* Main Grid containing Page Content */}
-      <div className="ad-main-grid" style={{ marginTop: 24 }}>
+      <div className="ad-main-grid" style={{ marginTop: 0 }}>
         {/* Page Content Area */}
         <div className="ad-content-page-area" style={{ flex: 1, minWidth: 0 }}>
           {children}

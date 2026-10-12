@@ -62,6 +62,7 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
   const [commentInputs, setCommentInputs] = useState<Record<string, string>>({})
   const [currentMediaIndex, setCurrentMediaIndex] = useState<Record<string, number>>({})
   const [visibleCount, setVisibleCount] = useState(5)
+  const [failedMediaUrls, setFailedMediaUrls] = useState<Record<string, boolean>>({})
 
   // Suporte a swipe nos cards da timeline
   const touchStartMapRef = useRef<Record<string, { x: number; y: number }>>({})
@@ -951,10 +952,10 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
                       const activeIndex = currentMediaIndex[m.id] || 0
                       const med = mediaList[activeIndex]
                       
-                      // Pré-carrega a próxima mídia do card
+                      // Pré-carrega a próxima mídia do card (apenas se válida)
                       if (typeof window !== 'undefined' && mediaList.length > 1) {
                         const nextMed = mediaList[(activeIndex + 1) % mediaList.length]
-                        if (nextMed && nextMed.type !== 'video' && nextMed.url) {
+                        if (nextMed && nextMed.type !== 'video' && nextMed.url && !failedMediaUrls[nextMed.url]) {
                           const img = new Image()
                           img.src = nextMed.url
                           if (typeof img.decode === 'function') img.decode().catch(() => {})
@@ -983,6 +984,15 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
                             }}
                           >
                             {(() => {
+                              if (failedMediaUrls[med?.url]) {
+                                return (
+                                  <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#0a0e17', color: '#94a3b8', gap: 8, padding: 16, textAlign: 'center' }}>
+                                    <ImageIcon size={36} style={{ opacity: 0.35, color: '#64748b' }} />
+                                    <span style={{ fontSize: 13, fontWeight: 500, color: '#94a3b8' }}>Foto indisponível</span>
+                                  </div>
+                                );
+                              }
+
                               const isVideo = med.type === 'video' || /\.(mp4|webm|mov|m4v|3gp|mkv|ogv)$/i.test((med.url || '').split('?')[0]);
                               if (isVideo) {
                                 return (
@@ -1048,9 +1058,8 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
                                     style={{ width: '100%', height: '100%', objectFit: 'contain', transition: 'transform 0.5s ease' }} 
                                     onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.06)'}
                                     onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
-                                    onError={(e) => {
-                                      e.currentTarget.onerror = null;
-                                      e.currentTarget.src = 'https://images.unsplash.com/photo-1541339907198-e08756dedf3f?w=600&q=80';
+                                    onError={() => {
+                                      setFailedMediaUrls(prev => ({ ...prev, [med.url]: true }));
                                     }}
                                   />
                                   <div className="expand-overlay" style={{ position: 'absolute', inset: 0, background: 'rgba(15,23,42,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'none' }}>

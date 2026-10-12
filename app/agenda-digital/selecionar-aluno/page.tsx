@@ -229,33 +229,39 @@ const SELECTOR_STYLES = `
           display: flex;
           align-items: center;
           justify-content: space-between;
-          margin-bottom: 20px;
-          padding: 0 8px;
+          margin-bottom: 16px;
+          padding: 0 6px;
+          gap: 10px;
         }
 
         .portal-section-title {
-          font-size: 15px;
+          font-size: 14px;
           font-weight: 800;
-          letter-spacing: 0.12em;
+          letter-spacing: 0.06em;
           text-transform: uppercase;
           color: #64748b;
           margin: 0;
           display: flex;
           align-items: center;
           gap: 8px;
+          white-space: nowrap;
+          min-width: 0;
+          flex-shrink: 0;
         }
         .dark .portal-section-title {
           color: #94a3b8;
         }
 
         .portal-section-badge {
-          font-size: 12px;
+          font-size: 11.5px;
           font-weight: 700;
           color: #6366f1;
           background: rgba(99, 102, 241, 0.08);
-          padding: 4px 12px;
+          padding: 3px 10px;
           border-radius: 20px;
           border: 1px solid rgba(99, 102, 241, 0.12);
+          white-space: nowrap;
+          flex-shrink: 0;
         }
 
         .cards-column {
@@ -604,17 +610,178 @@ const SELECTOR_STYLES = `
         .portal-modern-card:hover .chevron-circle-btn.student-chevron {
           transform: translateX(3px);
           color: #ffffff;
-          background: #8b5cf6;
-          border-color: #8b5cf6;
-          box-shadow: 0 4px 12px rgba(139, 92, 246, 0.35);
+          background: linear-gradient(135deg, #0284c7 0%, #2563eb 100%);
+          border-color: #0284c7;
+          box-shadow: 0 4px 14px rgba(37, 99, 235, 0.4);
         }
 
         .portal-modern-card.collaborator-theme:hover .chevron-circle-btn.colab-chevron {
           transform: translateX(3px);
           color: #ffffff;
-          background: #2563eb;
-          border-color: #2563eb;
-          box-shadow: 0 4px 12px rgba(37, 99, 235, 0.35);
+          background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
+          border-color: #0284c7;
+          box-shadow: 0 4px 14px rgba(2, 132, 199, 0.4);
+        }
+
+        /* ── Ultra Modern Action Loader Micro-Interaction (Azul Royal Elétrico & Ciano Glacial) ── */
+        .chevron-circle-btn.is-loading {
+          position: relative;
+          color: #ffffff !important;
+          cursor: wait !important;
+          border: 1px solid rgba(255, 255, 255, 0.55) !important;
+          transform: translateX(0) !important;
+        }
+
+        .chevron-circle-btn.student-chevron.is-loading {
+          background: linear-gradient(135deg, #0284c7 0%, #2563eb 50%, #1d4ed8 100%) !important;
+          box-shadow: 0 4px 22px rgba(37, 99, 235, 0.65), 0 0 0 3px rgba(14, 165, 233, 0.28) !important;
+          animation: modernOrbPulseStudent 1.8s infinite ease-in-out !important;
+        }
+
+        .chevron-circle-btn.colab-chevron.is-loading {
+          background: linear-gradient(135deg, #0284c7 0%, #0ea5e9 50%, #06b6d4 100%) !important;
+          box-shadow: 0 4px 22px rgba(2, 132, 199, 0.65), 0 0 0 3px rgba(6, 182, 212, 0.28) !important;
+          animation: modernOrbPulseColab 1.8s infinite ease-in-out !important;
+        }
+
+        @keyframes modernOrbPulseStudent {
+          0%, 100% {
+            transform: scale(1);
+            box-shadow: 0 4px 18px rgba(37, 99, 235, 0.55), 0 0 0 2px rgba(14, 165, 233, 0.25);
+          }
+          50% {
+            transform: scale(1.05);
+            box-shadow: 0 6px 28px rgba(37, 99, 235, 0.8), 0 0 0 4.5px rgba(14, 165, 233, 0.42);
+          }
+        }
+
+        @keyframes modernOrbPulseColab {
+          0%, 100% {
+            transform: scale(1);
+            box-shadow: 0 4px 18px rgba(2, 132, 199, 0.55), 0 0 0 2px rgba(6, 182, 212, 0.25);
+          }
+          50% {
+            transform: scale(1.05);
+            box-shadow: 0 6px 28px rgba(2, 132, 199, 0.8), 0 0 0 4.5px rgba(6, 182, 212, 0.42);
+          }
+        }
+
+        .modern-card-loader {
+          position: relative;
+          width: 24px;
+          height: 24px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+        }
+
+        .modern-spinner-svg {
+          width: 24px !important;
+          height: 24px !important;
+          display: block;
+        }
+
+        .modern-spinner-outer-arc {
+          transform-origin: 13px 13px;
+          animation: modernOrbitCW 0.85s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+        }
+
+        .modern-spinner-inner-arc {
+          transform-origin: 13px 13px;
+          animation: modernOrbitCCW 0.7s linear infinite;
+        }
+
+        @keyframes modernOrbitCW {
+          0% {
+            transform: rotate(0deg);
+          }
+          100% {
+            transform: rotate(360deg);
+          }
+        }
+
+        @keyframes modernOrbitCCW {
+          0% {
+            transform: rotate(360deg);
+          }
+          100% {
+            transform: rotate(0deg);
+          }
+        }
+
+        .modern-spinner-jewel {
+          position: absolute;
+          width: 3.5px;
+          height: 3.5px;
+          border-radius: 50%;
+          background: #ffffff;
+          box-shadow: 0 0 6px 1px #ffffff, 0 0 12px rgba(56, 189, 248, 0.95);
+          animation: modernJewelPulse 1.3s ease-in-out infinite alternate;
+          pointer-events: none;
+        }
+
+        @keyframes modernJewelPulse {
+          0% {
+            transform: scale(0.8);
+            opacity: 0.7;
+          }
+          100% {
+            transform: scale(1.35);
+            opacity: 1;
+            box-shadow: 0 0 8px 2px #ffffff;
+          }
+        }
+
+        /* ── Feedback de Loading no Card Completo (Azul Royal & Ciano) ── */
+        .portal-modern-card.is-card-loading {
+          border-color: rgba(14, 165, 233, 0.6) !important;
+          border-left-color: #0284c7 !important;
+          background: linear-gradient(135deg, rgba(255, 255, 255, 0.99) 0%, rgba(240, 249, 255, 0.96) 100%) !important;
+          box-shadow: 0 12px 32px -4px rgba(2, 132, 199, 0.25), 0 0 0 1.5px rgba(14, 165, 233, 0.28) !important;
+          pointer-events: none;
+        }
+        .dark .portal-modern-card.is-card-loading {
+          border-color: rgba(56, 189, 248, 0.6) !important;
+          border-left-color: #38bdf8 !important;
+          background: linear-gradient(135deg, rgba(15, 23, 42, 0.95) 0%, rgba(12, 28, 48, 0.9) 100%) !important;
+          box-shadow: 0 14px 34px rgba(2, 132, 199, 0.35), 0 0 0 1.5px rgba(56, 189, 248, 0.3) !important;
+        }
+
+        .portal-modern-card.collaborator-theme.is-card-loading {
+          border-color: rgba(2, 132, 199, 0.6) !important;
+          border-left-color: #0284c7 !important;
+          background: linear-gradient(135deg, rgba(255, 255, 255, 0.99) 0%, rgba(240, 249, 255, 0.96) 100%) !important;
+          box-shadow: 0 12px 32px -4px rgba(2, 132, 199, 0.25), 0 0 0 1.5px rgba(6, 182, 212, 0.28) !important;
+        }
+        .dark .portal-modern-card.collaborator-theme.is-card-loading {
+          border-color: rgba(6, 182, 212, 0.6) !important;
+          border-left-color: #06b6d4 !important;
+          background: linear-gradient(135deg, rgba(15, 23, 42, 0.95) 0%, rgba(12, 28, 48, 0.9) 100%) !important;
+          box-shadow: 0 14px 34px rgba(2, 132, 199, 0.35), 0 0 0 1.5px rgba(6, 182, 212, 0.3) !important;
+        }
+
+        .portal-modern-card.is-card-loading::after {
+          content: '';
+          position: absolute;
+          inset: 0;
+          background: linear-gradient(90deg, transparent 0%, rgba(14, 165, 233, 0.15) 50%, transparent 100%);
+          background-size: 200% 100%;
+          animation: cardLoadingSheen 1.4s infinite linear;
+          pointer-events: none;
+          border-radius: 20px;
+        }
+        .portal-modern-card.collaborator-theme.is-card-loading::after {
+          background: linear-gradient(90deg, transparent 0%, rgba(6, 182, 212, 0.15) 50%, transparent 100%);
+        }
+
+        @keyframes cardLoadingSheen {
+          0% {
+            background-position: -200% 0;
+          }
+          100% {
+            background-position: 200% 0;
+          }
         }
 
         /* Empty state styling */
@@ -841,9 +1008,27 @@ const SELECTOR_STYLES = `
             font-size: 13px;
           }
           .portal-sections-grid {
-            gap: 28px;
+            gap: 24px;
             width: 100%;
             box-sizing: border-box;
+          }
+          .portal-section-header {
+            margin-bottom: 12px;
+            padding: 0 4px;
+            gap: 6px;
+          }
+          .portal-section-title {
+            font-size: 12.5px;
+            letter-spacing: 0.04em;
+            gap: 6px;
+            white-space: nowrap;
+            flex-shrink: 0;
+          }
+          .portal-section-badge {
+            font-size: 10.5px;
+            padding: 2.5px 8px;
+            white-space: nowrap;
+            flex-shrink: 0;
           }
           .portal-modern-card {
             padding: 14px 15px;
@@ -883,8 +1068,62 @@ const SELECTOR_STYLES = `
             width: 16px !important;
             height: 16px !important;
           }
+          .chevron-circle-btn .modern-spinner-svg {
+            width: 22px !important;
+            height: 22px !important;
+          }
         }
 `;
+
+const ModernCardSpinner = memo(({ variant = 'student' }: { variant?: 'student' | 'colab' }) => {
+  const isColab = variant === 'colab'
+  const gradId = isColab ? 'colabSpinnerGrad' : 'studentSpinnerGrad'
+
+  return (
+    <div className={`modern-card-loader ${variant}`}>
+      <svg className="modern-spinner-svg" viewBox="0 0 26 26" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id={gradId} x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#ffffff" stopOpacity="1" />
+            <stop offset="45%" stopColor={isColab ? '#67e8f9' : '#38bdf8'} stopOpacity="0.95" />
+            <stop offset="100%" stopColor={isColab ? '#0284c7' : '#2563eb'} stopOpacity="0.15" />
+          </linearGradient>
+        </defs>
+
+        {/* Órbita Externa Guia */}
+        <circle cx="13" cy="13" r="10" stroke="rgba(255, 255, 255, 0.2)" strokeWidth="2" />
+
+        {/* Órbita Giroscópica Externa */}
+        <circle
+          cx="13"
+          cy="13"
+          r="10"
+          stroke={`url(#${gradId})`}
+          strokeWidth="2.4"
+          strokeLinecap="round"
+          strokeDasharray="36 26"
+          className="modern-spinner-outer-arc"
+        />
+
+        {/* Órbita Giroscópica Interna (Contra-rotação) */}
+        <circle
+          cx="13"
+          cy="13"
+          r="5.5"
+          stroke="rgba(255, 255, 255, 0.75)"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+          strokeDasharray="14 20"
+          className="modern-spinner-inner-arc"
+        />
+      </svg>
+
+      {/* Cristal / Ponto Central de Luz */}
+      <span className="modern-spinner-jewel" />
+    </div>
+  )
+})
+ModernCardSpinner.displayName = 'ModernCardSpinner'
 
 const StudentCard = memo(({ student, loadingCardId, redirectTarget, getForwardParams, setLoadingCardId }: any) => {
   const pendingAlerts = student.pendenciasAtrasadas || 0;
@@ -978,9 +1217,9 @@ const StudentCard = memo(({ student, loadingCardId, redirectTarget, getForwardPa
               </div>
             )}
 
-            <div className="chevron-circle-btn student-chevron">
+            <div className={`chevron-circle-btn student-chevron ${loadingCardId === student.id ? 'is-loading' : ''}`}>
               {loadingCardId === student.id ? (
-                <Loader2 size={18} strokeWidth={2.5} className="animate-spin" style={{ color: '#7c3aed' }} />
+                <ModernCardSpinner variant="student" />
               ) : (
                 <ChevronRight size={18} strokeWidth={2.5} />
               )}
@@ -1000,7 +1239,11 @@ const StudentCard = memo(({ student, loadingCardId, redirectTarget, getForwardPa
   }
 
   return (
-    <Link href={`/agenda-digital/${student.id}/${redirectTarget}${getForwardParams()}`} onClick={() => setLoadingCardId(student.id)} className="portal-modern-card">
+    <Link
+      href={`/agenda-digital/${student.id}/${redirectTarget}${getForwardParams()}`}
+      onClick={() => setLoadingCardId(student.id)}
+      className={`portal-modern-card ${loadingCardId === student.id ? 'is-card-loading' : ''}`}
+    >
       {content}
     </Link>
   )
@@ -1419,7 +1662,7 @@ function SelecionarAlunoContent() {
               <Link 
                 href={`/agenda-digital/colaborador/${redirectTarget}${getForwardParams()}`} 
                 onClick={() => setLoadingCardId('colaborador')}
-                className="portal-modern-card collaborator-theme"
+                className={`portal-modern-card collaborator-theme ${loadingCardId === 'colaborador' ? 'is-card-loading' : ''}`}
               >
                 <div className="card-avatar-container collaborator-avatar">
                   <div className="card-avatar-inner">
@@ -1445,9 +1688,9 @@ function SelecionarAlunoContent() {
                 </div>
 
                 <div className="card-actions-wrapper">
-                  <div className="chevron-circle-btn colab-chevron">
+                  <div className={`chevron-circle-btn colab-chevron ${loadingCardId === 'colaborador' ? 'is-loading' : ''}`}>
                     {loadingCardId === 'colaborador' ? (
-                      <Loader2 size={18} strokeWidth={2.5} className="animate-spin" style={{ color: '#2563eb' }} />
+                      <ModernCardSpinner variant="colab" />
                     ) : (
                       <ChevronRight size={18} strokeWidth={2.5} />
                     )}

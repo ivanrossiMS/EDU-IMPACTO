@@ -253,6 +253,16 @@ export async function GET(request: Request) {
 
     // Filtrar conversas: apenas conversas com mensagens válidas devem aparecer em "Conversas"
     // Se o usuário apenas iniciou a conversa mas nenhuma mensagem foi enviada, NÃO deve aparecer em conversas
+    // e limpamos conversas vazias do banco para não guardar conversas sem mensagens
+    const emptyConvIds = (convRows || []).filter(conv => !conv.last_message_text || conv.last_message_text.trim() === '').map(c => c.id)
+    if (emptyConvIds.length > 0) {
+      Promise.all([
+        supabase.from('chat_participants').delete().in('conversation_id', emptyConvIds),
+        supabase.from('chat_read_receipts').delete().in('conversation_id', emptyConvIds),
+        supabase.from('chat_conversations').delete().in('id', emptyConvIds)
+      ]).catch(() => {})
+    }
+
     const filteredConvRows = (convRows || []).filter(conv => {
       const hasMessage = !!(conv.last_message_text && conv.last_message_text.trim() !== '')
       if (!hasMessage) {
@@ -576,56 +586,46 @@ export async function POST(request: Request) {
       const { data: existingGroupConv } = await existingQuery.maybeSingle()
 
       if (existingGroupConv) {
-        // Garantir que o usuário atual esteja em chat_participants
-        await supabase
-          .from('chat_participants')
-          .upsert({
-            conversation_id: existingGroupConv.id,
-            user_id: currentUserId,
-            user_name: currentUserName,
-            user_perfil: currentUserPerfil,
-            user_role: 'member'
-          }, { onConflict: 'conversation_id,user_id' })
+        if (existingGroupConv.last_message_text && existingGroupConv.last_message_text.trim() !== '') {
+          // Garantir que o usuário atual esteja em chat_participants
+          await supabase
+            .from('chat_participants')
+            .upsert({
+              conversation_id: existingGroupConv.id,
+              user_id: currentUserId,
+              user_name: currentUserName,
+              user_perfil: currentUserPerfil,
+              user_role: 'member'
+            }, { onConflict: 'conversation_id,user_id' })
 
-        // Sincronizar todos os alunos, responsáveis e professores da turma em segundo plano
-        syncTurmaParticipants(supabase, existingGroupConv.id, grupoId, turmaId)
+          // Sincronizar todos os alunos, responsáveis e professores da turma em segundo plano
+          syncTurmaParticipants(supabase, existingGroupConv.id, grupoId, turmaId)
 
-        return NextResponse.json({ conversation: { ...existingGroupConv, ano_letivo: body.ano_letivo || '2026' }, isNew: false })
+          return NextResponse.json({ conversation: { ...existingGroupConv, ano_letivo: body.ano_letivo || '2026' }, isNew: false, isDraft: false })
+        } else {
+          // Conversa vazia sem mensagens: remover do banco para não guardar conversa vazia
+          await supabase.from('chat_participants').delete().eq('conversation_id', existingGroupConv.id)
+          await supabase.from('chat_conversations').delete().eq('id', existingGroupConv.id)
+        }
       }
 
-      // Criar nova conversa de grupo
-      const { data: newGroupConv, error: errCreateGroup } = await supabase
-        .from('chat_conversations')
-        .insert({
-          type: 'group',
-          title: title || 'Grupo Escolar',
-          grupo_id: grupoId || null,
-          turma_id: turmaId || null,
-          created_by: currentUserId,
-          last_message_text: null,
-          last_message_at: null,
-          last_message_by: null
-        })
-        .select()
-        .single()
+      // NÃO salvar conversa vazia no banco. Retornar conversa em rascunho (draft).
+      // Ela só será criada e guardada no banco quando a primeira mensagem for enviada.
+      const draftGroupConv = {
+        id: crypto.randomUUID(),
+        type: 'group',
+        title: title || 'Grupo Escolar',
+        grupo_id: grupoId || null,
+        turma_id: turmaId || null,
+        created_by: currentUserId,
+        last_message_text: null,
+        last_message_at: null,
+        last_message_by: null,
+        ano_letivo: body.ano_letivo || '2026',
+        isDraft: true
+      }
 
-      if (errCreateGroup) throw errCreateGroup
-
-      // Adicionar usuário atual como participante admin
-      await supabase
-        .from('chat_participants')
-        .insert({
-          conversation_id: newGroupConv.id,
-          user_id: currentUserId,
-          user_name: currentUserName,
-          user_perfil: currentUserPerfil,
-          user_role: 'admin'
-        })
-
-      // Sincronizar todos os membros da turma (colaboradores, alunos e responsáveis)
-      await syncTurmaParticipants(supabase, newGroupConv.id, grupoId, turmaId)
-
-      return NextResponse.json({ conversation: { ...newGroupConv, ano_letivo: body.ano_letivo || '2026' }, isNew: true }, { status: 201 })
+      return NextResponse.json({ conversation: draftGroupConv, isNew: true, isDraft: true })
     }
 
     // =========================================================================
@@ -665,7 +665,13 @@ export async function POST(request: Request) {
         const { data: existingDirectConv } = await existingConvQuery.maybeSingle()
 
         if (existingDirectConv) {
-          return NextResponse.json({ conversation: { ...existingDirectConv, ano_letivo: body.ano_letivo || '2026' }, isNew: false })
+          if (existingDirectConv.last_message_text && existingDirectConv.last_message_text.trim() !== '') {
+            return NextResponse.json({ conversation: { ...existingDirectConv, ano_letivo: body.ano_letivo || '2026' }, isNew: false, isDraft: false })
+          } else {
+            // Conversa vazia sem mensagens: remover do banco para não guardar conversa vazia
+            await supabase.from('chat_participants').delete().eq('conversation_id', existingDirectConv.id)
+            await supabase.from('chat_conversations').delete().eq('id', existingDirectConv.id)
+          }
         }
       }
     }
@@ -704,47 +710,29 @@ export async function POST(request: Request) {
       }
     }
 
-    // Criar nova conversa direta
+    // NÃO salvar conversa direta vazia no banco. Retornar conversa em rascunho (draft).
+    // Ela só será criada e guardada no banco quando a primeira mensagem for enviada.
     const convTitle = resolvedTargetName || title || 'Conversa Direta'
 
-    const { data: newConv, error: errNewConv } = await supabase
-      .from('chat_conversations')
-      .insert({
-        type: 'direct',
-        title: convTitle,
-        created_by: currentUserId,
-        aluno_id: alunoId || null,
-        turma_id: turmaId || null,
-        last_message_text: null,
-        last_message_at: null,
-        last_message_by: null
-      })
-      .select()
-      .single()
+    const draftDirectConv = {
+      id: crypto.randomUUID(),
+      type: 'direct',
+      title: convTitle,
+      created_by: currentUserId,
+      aluno_id: alunoId || null,
+      turma_id: turmaId || null,
+      grupo_id: null,
+      last_message_text: null,
+      last_message_at: null,
+      last_message_by: null,
+      ano_letivo: body.ano_letivo || '2026',
+      isDraft: true,
+      targetUserId,
+      targetUserName: resolvedTargetName || 'Contato',
+      targetUserPerfil: resolvedTargetPerfil || 'Colaborador'
+    }
 
-    if (errNewConv) throw errNewConv
-
-    // Inserir os dois participantes
-    await supabase
-      .from('chat_participants')
-      .insert([
-        {
-          conversation_id: newConv.id,
-          user_id: currentUserId,
-          user_name: currentUserName,
-          user_perfil: currentUserPerfil,
-          user_role: 'admin'
-        },
-        {
-          conversation_id: newConv.id,
-          user_id: targetUserId,
-          user_name: resolvedTargetName || 'Contato',
-          user_perfil: resolvedTargetPerfil || 'Colaborador',
-          user_role: 'member'
-        }
-      ])
-
-    return NextResponse.json({ conversation: { ...newConv, ano_letivo: body.ano_letivo || '2026' }, isNew: true }, { status: 201 })
+    return NextResponse.json({ conversation: draftDirectConv, isNew: true, isDraft: true })
 
   } catch (err: any) {
     console.error('Erro ao criar/obter conversa:', err)

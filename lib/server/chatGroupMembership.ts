@@ -158,3 +158,88 @@ export async function syncAndResolveGroupMemberships(
 
   return { isEquipeEscolar, activeGroupIds, activeTurmaIds, groupStatusByConvId }
 }
+
+export async function syncTurmaParticipants(
+  supabase: any,
+  convId: string,
+  grupoId?: string | null,
+  turmaId?: string | null
+) {
+  try {
+    let grp: any = null
+    if (grupoId) {
+      const { data } = await supabase.from('agenda_grupos').select('id, dados').eq('id', grupoId).maybeSingle()
+      grp = data
+    } else if (turmaId) {
+      const cleanTId = String(turmaId).replace(/^sync-/, '')
+      const { data } = await supabase
+        .from('agenda_grupos')
+        .select('id, dados')
+        .or(`dados->>syncId.eq."${turmaId}",dados->>turma_id.eq."${turmaId}",dados->>syncId.eq."${cleanTId}",dados->>turma_id.eq."${cleanTId}"`)
+        .maybeSingle()
+      grp = data
+    }
+
+    if (!grp) return
+
+    const colabIds: string[] = Array.isArray(grp.dados?.colaboradoresIds) ? grp.dados.colaboradoresIds.map(String) : []
+    const alunoIds: string[] = Array.isArray(grp.dados?.alunosIds) ? grp.dados.alunosIds.map(String) : []
+
+    const participantsToUpsert: any[] = []
+
+    // 1. Colaboradores da turma -> role: 'admin' (podem enviar mensagens)
+    colabIds.forEach(cId => {
+      participantsToUpsert.push({
+        conversation_id: convId,
+        user_id: cId,
+        user_name: 'Educador(a)',
+        user_perfil: 'Colaborador',
+        user_role: 'admin'
+      })
+    })
+
+    // 2. Alunos da turma -> role: 'observer' (leitura permitida pela constraint do banco)
+    alunoIds.forEach(aId => {
+      participantsToUpsert.push({
+        conversation_id: convId,
+        user_id: aId,
+        user_name: 'Aluno',
+        user_perfil: 'Aluno',
+        user_role: 'observer'
+      })
+    })
+
+    // 3. Responsáveis dos alunos -> role: 'observer'
+    if (alunoIds.length > 0) {
+      // Filtrar apenas identificadores válidos para evitar erro 22P02 caso aluno_id na tabela seja UUID
+      const validAlunoUuids = alunoIds.filter(id => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(id).trim()))
+      const searchAlunoIds = validAlunoUuids.length > 0 ? validAlunoUuids : alunoIds
+
+      const { data: links } = await supabase
+        .from('aluno_responsavel')
+        .select('responsavel_id')
+        .in('aluno_id', searchAlunoIds)
+
+      if (links) {
+        const uniqueRespIds = Array.from(new Set(links.map((l: any) => String(l.responsavel_id))))
+        uniqueRespIds.forEach(rId => {
+          participantsToUpsert.push({
+            conversation_id: convId,
+            user_id: rId,
+            user_name: 'Família',
+            user_perfil: 'Responsável',
+            user_role: 'observer'
+          })
+        })
+      }
+    }
+
+    if (participantsToUpsert.length > 0) {
+      await supabase
+        .from('chat_participants')
+        .upsert(participantsToUpsert, { onConflict: 'conversation_id,user_id', ignoreDuplicates: true })
+    }
+  } catch (err) {
+    console.warn('Erro ao sincronizar participantes da turma:', err)
+  }
+}

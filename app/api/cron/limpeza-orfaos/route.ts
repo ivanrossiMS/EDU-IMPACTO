@@ -78,6 +78,7 @@ export async function GET(request: Request) {
 
   const url = new URL(request.url)
   const force = url.searchParams.get('force') === 'true'
+  const dryRun = url.searchParams.get('dryRun') === 'true' || url.searchParams.get('dry_run') === 'true'
   const infoOnly = url.searchParams.get('info') === 'true'
 
   if (infoOnly) {
@@ -88,6 +89,7 @@ export async function GET(request: Request) {
   try {
     const result = await runOrphanCleanup({
       force,
+      dryRun,
       triggeredBy: force ? 'admin' : 'cron',
     })
 
@@ -114,6 +116,7 @@ export async function POST(request: Request) {
 
   const url = new URL(request.url)
   const force = body?.force === true || url.searchParams.get('force') === 'true'
+  const dryRun = body?.dryRun === true || body?.dry_run === true || url.searchParams.get('dryRun') === 'true' || url.searchParams.get('dry_run') === 'true'
 
   // Atualizar configurações caso enviado no payload
   if (body?.config && typeof body.config === 'object') {
@@ -124,6 +127,7 @@ export async function POST(request: Request) {
   try {
     const result = await runOrphanCleanup({
       force,
+      dryRun,
       triggeredBy: force ? 'admin' : 'cron',
     })
 

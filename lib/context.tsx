@@ -135,6 +135,18 @@ interface AppState {
   // Global loading path state
   loadingPath: string | null
   setLoadingPath: (path: string | null) => void
+  // Module transition loading state
+  moduleTransition: ModuleTransitionState | null
+  startModuleTransition: (transition: ModuleTransitionState) => void
+  finishModuleTransition: () => void
+}
+
+export interface ModuleTransitionState {
+  targetHref: string
+  title: string
+  subtitle?: string
+  statusText?: string
+  id?: string
 }
 
 const AppContext = createContext<AppState>({
@@ -157,6 +169,9 @@ const AppContext = createContext<AppState>({
   hydrated: false,
   loadingPath: null,
   setLoadingPath: () => {},
+  moduleTransition: null,
+  startModuleTransition: () => {},
+  finishModuleTransition: () => {},
 })
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
@@ -171,6 +186,27 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [currentUser, setCurrentUserState] = useState<CurrentUser | null>(null)
   const [hydrated, setHydrated] = useState(false)
   const [loadingPath, setLoadingPathState] = useState<string | null>(null)
+  const [moduleTransition, setModuleTransitionState] = useState<ModuleTransitionState | null>(null)
+
+  const startModuleTransition = useCallback((transition: ModuleTransitionState) => {
+    setModuleTransitionState(transition)
+    setLoadingPathState(transition.targetHref)
+    if (typeof window !== 'undefined') {
+      try {
+        window.dispatchEvent(new CustomEvent('edu:module-transition-start', { detail: transition }))
+      } catch (_) {}
+    }
+  }, [])
+
+  const finishModuleTransition = useCallback(() => {
+    setModuleTransitionState(null)
+    setLoadingPathState(null)
+    if (typeof window !== 'undefined') {
+      try {
+        window.dispatchEvent(new CustomEvent('edu:module-transition-finish'))
+      } catch (_) {}
+    }
+  }, [])
 
   // Hydrate from localStorage after mount with guaranteed timeout safety
   useEffect(() => {
@@ -491,6 +527,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       hydrated,
       loadingPath,
       setLoadingPath: setLoadingPathState,
+      moduleTransition,
+      startModuleTransition,
+      finishModuleTransition,
     }}>
       {children}
     </AppContext.Provider>

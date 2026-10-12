@@ -14,13 +14,14 @@ import {
   Bell, Search, Plus, Filter, Pin, FileText, CheckCircle2, XCircle, 
   Send as SendIcon, Clock, Paperclip, MoreHorizontal, X,
   Bold, Italic, Link as LinkIcon, List, Underline, BadgeDollarSign, Smile, FileBarChart,
-  ClipboardList, BookOpen, GraduationCap, Calendar, Users, User, MessageSquare, Layout, FileCheck, Menu, Loader2, Activity, Trash, RotateCw
+  ClipboardList, BookOpen, GraduationCap, Calendar, Users, User, MessageSquare, Layout, FileCheck, Menu, Loader2, Activity, Trash, RotateCw, ChevronDown
 } from 'lucide-react'
 import { DestinatariosModal } from '../../components/agenda/DestinatariosModal'
 import NovoComunicadoModal from '../../components/agenda/NovoComunicadoModal'
 import { AgendaLuxuryLoader } from '@/components/agenda/AgendaLuxuryLoader'
 import { ComunicadoReportModal } from '@/components/agenda/ComunicadoReportModal'
 import { ReportsSelectionModal } from '@/components/agenda/ReportsSelectionModal'
+import { ReportFillerModal } from '@/components/agenda/ReportFillerModal'
 import { isAlunoCursandoTurma } from '@/lib/studentTurmaUtils'
 import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
@@ -256,6 +257,27 @@ export default function ADAdminComunicados() {
   
   const [showFormsModal, setShowFormsModal] = useState(false)
   const [showRelsModal, setShowRelsModal] = useState(false)
+  const [openedReportTaskStr, setOpenedReportTaskStr] = useState<string | null>(null)
+  const [showNovoMenu, setShowNovoMenu] = useState(false)
+  const novoMenuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!showNovoMenu) return
+    const handleClickOutside = (e: MouseEvent | TouchEvent) => {
+      if (novoMenuRef.current && !novoMenuRef.current.contains(e.target as Node)) {
+        setShowNovoMenu(false)
+      }
+    }
+    const timer = setTimeout(() => {
+      document.addEventListener('mousedown', handleClickOutside)
+      document.addEventListener('touchstart', handleClickOutside)
+    }, 10)
+    return () => {
+      clearTimeout(timer)
+      document.removeEventListener('mousedown', handleClickOutside)
+      document.removeEventListener('touchstart', handleClickOutside)
+    }
+  }, [showNovoMenu])
 
   const [showComposer, setShowComposer] = useState(false)
   const [viewingCom, setViewingCom] = useState<ADComunicado | null>(null)
@@ -1054,7 +1076,7 @@ export default function ADAdminComunicados() {
         }
       `}} />
 
-      <div className="ad-comunicados-header" style={{ marginBottom: 20 }}>
+      <div className="ad-comunicados-header" style={{ marginBottom: 20, position: 'relative', zIndex: showNovoMenu ? 9999 : 50 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 16 }}>
           <div>
             <h2 style={{ fontSize: 24, fontWeight: 800, fontFamily: 'Outfit, sans-serif', color: '#0f172a', margin: '0 0 4px 0', letterSpacing: '-0.02em' }}>
@@ -1066,7 +1088,7 @@ export default function ADAdminComunicados() {
           </div>
 
           {/* Action Buttons group: Relatório Mensal, Engajamento, Refresh */}
-          <div className="ad-comunicados-actions-row" style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <div className="ad-comunicados-actions-row" style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', position: 'relative', zIndex: showNovoMenu ? 10000 : 2 }}>
             <button
               onClick={() => setShowMonthlyReport(true)}
               style={{
@@ -1158,37 +1180,151 @@ export default function ADAdminComunicados() {
               <RotateCw size={15} strokeWidth={2.2} className={isRefreshing ? 'ad-spin-icon' : ''} />
             </button>
 
-            <button
-              onClick={handleNovo}
-              type="button"
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 6,
-                height: 38,
-                padding: '0 16px',
-                borderRadius: 12,
-                fontSize: 13,
-                fontWeight: 700,
-                background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
-                color: '#ffffff',
-                border: 'none',
-                boxShadow: '0 4px 12px rgba(79, 70, 229, 0.3)',
-                cursor: 'pointer',
-                transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)'
-              }}
-              onMouseEnter={e => {
-                e.currentTarget.style.transform = 'translateY(-1px)';
-                e.currentTarget.style.boxShadow = '0 6px 16px rgba(79, 70, 229, 0.4)';
-              }}
-              onMouseLeave={e => {
-                e.currentTarget.style.transform = 'translateY(0)';
-                e.currentTarget.style.boxShadow = '0 4px 12px rgba(79, 70, 229, 0.3)';
-              }}
-            >
-              <Plus size={15} strokeWidth={2.5} />
-              <span>Novo</span>
-            </button>
+            <div ref={novoMenuRef} style={{ position: 'relative', zIndex: showNovoMenu ? 10001 : 2 }}>
+              <button
+                onClick={() => setShowNovoMenu(prev => !prev)}
+                type="button"
+                aria-expanded={showNovoMenu}
+                aria-haspopup="true"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  height: 38,
+                  padding: '0 16px',
+                  borderRadius: 12,
+                  fontSize: 13,
+                  fontWeight: 700,
+                  background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
+                  color: '#ffffff',
+                  border: 'none',
+                  boxShadow: '0 4px 12px rgba(79, 70, 229, 0.3)',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)'
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.transform = 'translateY(-1px)';
+                  e.currentTarget.style.boxShadow = '0 6px 16px rgba(79, 70, 229, 0.4)';
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(79, 70, 229, 0.3)';
+                }}
+              >
+                <Plus size={15} strokeWidth={2.5} style={{ transform: showNovoMenu ? 'rotate(45deg)' : 'none', transition: 'transform 0.2s ease' }} />
+                <span>Novo</span>
+                <ChevronDown size={13} strokeWidth={2.5} style={{ transform: showNovoMenu ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s ease', marginLeft: -1 }} />
+              </button>
+
+              <AnimatePresence>
+                {showNovoMenu && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -6, scale: 0.95 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -6, scale: 0.95 }}
+                    transition={{ duration: 0.15, ease: 'easeOut' }}
+                    style={{
+                      position: 'absolute',
+                      top: 'calc(100% + 8px)',
+                      right: 0,
+                      width: 184,
+                      background: '#FFFFFF',
+                      borderRadius: 14,
+                      padding: 5,
+                      boxShadow: '0 20px 45px -10px rgba(15, 23, 42, 0.28), 0 0 0 1px rgba(226, 232, 240, 0.95)',
+                      zIndex: 10002,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 2
+                    }}
+                  >
+                    {/* OPÇÃO 1: NOVO COMUNICADO */}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setShowNovoMenu(false);
+                        handleNovo();
+                      }}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 10,
+                        padding: '8px 10px',
+                        borderRadius: 10,
+                        border: 'none',
+                        background: 'transparent',
+                        cursor: 'pointer',
+                        textAlign: 'left',
+                        width: '100%',
+                        transition: 'background 0.15s ease'
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.background = '#F8FAFC'}
+                      onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                    >
+                      <div style={{
+                        width: 28,
+                        height: 28,
+                        borderRadius: 8,
+                        background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.12) 0%, rgba(139, 92, 246, 0.14) 100%)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: '#6366F1',
+                        flexShrink: 0
+                      }}>
+                        <SendIcon size={14} />
+                      </div>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: '#0F172A', whiteSpace: 'nowrap' }}>Novo Comunicado</span>
+                    </button>
+
+                    <div style={{ height: 1, background: '#F1F5F9', margin: '1px 6px' }} />
+
+                    {/* OPÇÃO 2: NOVO RELATÓRIO */}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setShowNovoMenu(false);
+                        setShowRelsModal(true);
+                      }}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 10,
+                        padding: '8px 10px',
+                        borderRadius: 10,
+                        border: 'none',
+                        background: 'transparent',
+                        cursor: 'pointer',
+                        textAlign: 'left',
+                        width: '100%',
+                        transition: 'background 0.15s ease'
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.background = '#F8FAFC'}
+                      onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                    >
+                      <div style={{
+                        width: 28,
+                        height: 28,
+                        borderRadius: 8,
+                        background: 'linear-gradient(135deg, rgba(14, 165, 233, 0.12) 0%, rgba(2, 132, 199, 0.14) 100%)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: '#0284C7',
+                        flexShrink: 0
+                      }}>
+                        <FileBarChart size={14} />
+                      </div>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: '#0F172A', whiteSpace: 'nowrap' }}>Novo Relatório</span>
+                    </button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
           </div>
         </div>
 
@@ -1975,11 +2111,21 @@ export default function ADAdminComunicados() {
         onClose={() => setShowRelsModal(false)} 
         selectedDest={selectedDest} 
         currentUser={currentUser}
-        onAdd={(text, payload) => alert('Adicione o relatório anexando o PDF gerado ou insira o link.')} 
+        onAdd={(text, payload) => alert('Atenção: Adicione o relatório anexando o PDF gerado ou insira o link no corpo do comunicado.')} 
         onFillDirectly={(payload) => {
-          alert('Ação disponível apenas no painel do colaborador.');
+          setOpenedReportTaskStr(`ReportTask|payload:${JSON.stringify(payload)}`);
           setShowRelsModal(false);
         }}
+      />
+
+      <ReportFillerModal
+        isOpen={!!openedReportTaskStr}
+        anexoStr={openedReportTaskStr}
+        onClose={() => setOpenedReportTaskStr(null)}
+        onBack={() => { setOpenedReportTaskStr(null); setShowRelsModal(true); }}
+        currentUser={currentUser}
+        alunos={alunos}
+        turmas={turmas}
       />
 
       <AnimatePresence>

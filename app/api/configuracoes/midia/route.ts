@@ -347,26 +347,42 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true, config: updated })
     }
 
-    // Limpeza de arquivos órfãos sob demanda
-    if (action === 'clean-orphans' || action === 'trigger-auto-clean') {
+    // Limpeza ou simulação de arquivos órfãos sob demanda
+    if (action === 'clean-orphans' || action === 'trigger-auto-clean' || action === 'dry-run-orphans') {
       invalidateRefsCache()
+      const isDryRun = action === 'dry-run-orphans' || Boolean(body.dryRun)
+      const isForce = Boolean(body.force)
+
       const result = await runOrphanCleanup({
-        force: true,
+        force: isForce,
+        dryRun: isDryRun,
         triggeredBy: 'admin',
-        minAgeHours: 0
+        minAgeHours: isForce ? 0 : (body.minAgeHours ?? 72)
       })
 
       if (!result.ok) {
-        return NextResponse.json({ error: result.error || 'Falha ao limpar órfãos.' }, { status: 500 })
+        if (result.abortedByCircuitBreaker) {
+          return NextResponse.json({
+            ok: false,
+            abortedByCircuitBreaker: true,
+            error: result.reason || 'Limpeza bloqueada pela trava de segurança.',
+          }, { status: 409 })
+        }
+        return NextResponse.json({ error: result.error || result.reason || 'Falha ao processar órfãos.' }, { status: 500 })
       }
 
       return NextResponse.json({
         ok: true,
+        dryRun: result.dryRun,
         deletedCount: result.deletedCount,
         sizeReclaimed: result.sizeReclaimed,
-        message: result.deletedCount > 0
-          ? `Limpeza concluída com sucesso! ${result.deletedCount} arquivos órfãos (${result.formattedSizeReclaimed}) foram removidos.`
-          : 'Nenhum arquivo órfão encontrado para limpar.'
+        formattedSizeReclaimed: result.formattedSizeReclaimed,
+        candidateFiles: result.candidateFiles,
+        message: result.dryRun
+          ? `Simulação concluída: ${result.deletedCount} arquivos candidatos (${result.formattedSizeReclaimed || '0 B'}) identificados.`
+          : (result.deletedCount > 0
+            ? `Limpeza concluída com sucesso! ${result.deletedCount} arquivos órfãos (${result.formattedSizeReclaimed}) foram removidos.`
+            : 'Nenhum arquivo órfão encontrado para limpar.')
       })
     }
 

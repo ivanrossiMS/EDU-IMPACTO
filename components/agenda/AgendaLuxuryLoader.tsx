@@ -107,7 +107,7 @@ export function AgendaLuxuryLoader({
       className={`${styles.overlay} ${visible ? styles.visible : ''} ${isExiting ? styles.exiting : ''} ${className || ''}`}
       style={style}
       role="status"
-      aria-label="Carregando Agenda Digital"
+      aria-label={subtitle ? `Carregando ${subtitle}` : "Carregando..."}
     >
 
       {/* ── 2. Palco Central ── */}

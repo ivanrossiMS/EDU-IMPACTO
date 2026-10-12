@@ -32,6 +32,8 @@ import {
   Lock,
 } from 'lucide-react'
 import { usePushNotifications } from '@/hooks/usePushNotifications'
+import { useApp } from '@/lib/context'
+import { usePathname } from 'next/navigation'
 import { Capacitor } from '@capacitor/core'
 import { toast } from 'sonner'
 
@@ -41,6 +43,8 @@ const DISMISSED_BANNER_KEY = 'edu_push_dismissed_v2'
 const DISMISSED_SESSION_KEY = 'edu_push_dismissed_session'
 
 export function PushPermissionBanner() {
+  const pathname = usePathname()
+  const { currentUser, loadingPath } = useApp()
   const {
     isAuthorized,
     isDenied,
@@ -55,8 +59,9 @@ export function PushPermissionBanner() {
   const [userDismissed, setUserDismissed] = useState(true)
   const [isActivating, setIsActivating] = useState(false)
   const [showWebGuide, setShowWebGuide] = useState(false)
+  const [isLoggingOut, setIsLoggingOut] = useState(false)
 
-  // Inicialização de estado de dispensa
+  // Inicialização de estado de dispensa e listeners de logout/reset
   useEffect(() => {
     if (typeof window === 'undefined') return
     const dismissedSession = sessionStorage.getItem(DISMISSED_SESSION_KEY) === 'true'
@@ -64,6 +69,10 @@ export function PushPermissionBanner() {
     setUserDismissed(dismissedSession || dismissedLocal)
 
     const handleReset = () => {
+      // NUNCA reseta para exibir o banner se o app estiver em logout ou sem usuário logado
+      if (isLoggingOut || loadingPath === 'logout' || !currentUser?.id) {
+        return
+      }
       setUserDismissed(false)
       setShowWebGuide(false)
       try {
@@ -71,13 +80,32 @@ export function PushPermissionBanner() {
         sessionStorage.removeItem(DISMISSED_SESSION_KEY)
       } catch {}
     }
+
+    const handleLogoutStart = () => {
+      setIsLoggingOut(true)
+      setUserDismissed(true)
+      setBannerState('hidden')
+    }
+
     window.addEventListener('edu:reset-push-permission', handleReset)
-    return () => window.removeEventListener('edu:reset-push-permission', handleReset)
-  }, [])
+    window.addEventListener('edu:logout-start', handleLogoutStart)
+    return () => {
+      window.removeEventListener('edu:reset-push-permission', handleReset)
+      window.removeEventListener('edu:logout-start', handleLogoutStart)
+    }
+  }, [isLoggingOut, loadingPath, currentUser?.id])
+
+  // Reação imediata à transição de logout
+  useEffect(() => {
+    if (loadingPath === 'logout') {
+      setIsLoggingOut(true)
+      setBannerState('hidden')
+    }
+  }, [loadingPath])
 
   // Revalidação em foco/visibilidade (detecta quando o usuário volta dos Ajustes ou das configurações do site)
   useEffect(() => {
-    if (typeof window === 'undefined') return
+    if (typeof window === 'undefined' || isLoggingOut || loadingPath === 'logout') return
     const handleRecheck = () => {
       refresh().catch(() => {})
     }
@@ -91,11 +119,29 @@ export function PushPermissionBanner() {
       window.removeEventListener('focus', handleRecheck)
       document.removeEventListener('visibilitychange', handleRecheck)
     }
-  }, [refresh])
+  }, [refresh, isLoggingOut, loadingPath])
 
   // Avaliação de exibição do banner
   useEffect(() => {
-    if (userDismissed || isLoading) {
+    // REGRA DE NEGÓCIO E SEGURANÇA:
+    // O aviso de notificação DEVE aparecer EXCLUSIVAMENTE na ENTRADA do módulo Agenda Digital
+    // para um usuário devidamente autenticado. NUNCA durante o logout, encerramento de sessão,
+    // nem na tela de saída.
+    if (
+      isLoggingOut ||
+      loadingPath === 'logout' ||
+      !currentUser?.id ||
+      userDismissed ||
+      isLoading
+    ) {
+      setBannerState('hidden')
+      return
+    }
+
+    const isAgendaRoute = Boolean(
+      pathname && (pathname === '/agenda-digital' || pathname.startsWith('/agenda-digital/'))
+    )
+    if (!isAgendaRoute) {
       setBannerState('hidden')
       return
     }
@@ -146,7 +192,7 @@ export function PushPermissionBanner() {
     }
 
     setBannerState('hidden')
-  }, [userDismissed, isLoading, isAuthorized, isDenied, isNotDetermined])
+  }, [userDismissed, isLoading, isAuthorized, isDenied, isNotDetermined, isLoggingOut, loadingPath, currentUser?.id, pathname])
 
   const handleActivate = async () => {
     setIsActivating(true)
@@ -184,7 +230,9 @@ export function PushPermissionBanner() {
     }
   }
 
-  if (bannerState === 'hidden') return null
+  if (bannerState === 'hidden' || isLoggingOut || loadingPath === 'logout' || !currentUser?.id) {
+    return null
+  }
 
   const isNative = Capacitor.isNativePlatform()
 

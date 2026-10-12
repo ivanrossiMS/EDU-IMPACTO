@@ -472,6 +472,12 @@ export function ChatConversationModal() {
       const convId = activeConversation.id
       const cached = getCachedMessages(convId)
 
+      if (activeConversation.isDraft) {
+        setMessages([])
+        setLoadingMessages(false)
+        return
+      }
+
       if (cached && cached.messages && cached.messages.length > 0) {
         // INSTANTÂNEO (0ms): renderiza mensagens imediatamente sem tela de loading!
         setMessages(cached.messages)
@@ -631,7 +637,18 @@ export function ChatConversationModal() {
           sender_name: currentUser?.nome || 'Você',
           sender_perfil: currentUser?.perfil || currentUser?.cargo || 'Usuário',
           context: activeConversation.context || (isFamilyOrStudent ? 'familia' : 'colaborador'),
-          isFamilyInitiated: activeConversation.context === 'familia'
+          isFamilyInitiated: activeConversation.context === 'familia',
+          draft_data: activeConversation.isDraft ? {
+            type: activeConversation.type,
+            title: activeConversation.title,
+            targetUserId: activeConversation.targetUserId,
+            targetUserName: activeConversation.targetUserName,
+            targetUserPerfil: activeConversation.targetUserPerfil,
+            grupoId: activeConversation.grupo_id,
+            turmaId: activeConversation.turma_id,
+            alunoId: activeConversation.aluno_id,
+            ano_letivo: activeConversation.ano_letivo
+          } : undefined
         })
       })
 
@@ -640,6 +657,10 @@ export function ChatConversationModal() {
         const saved = data.message
         if (saved) {
           updateCachedMessage(activeConversation.id, saved)
+        }
+        if (activeConversation.isDraft) {
+          useChatStore.getState().updateActiveConversation({ isDraft: false })
+          window.dispatchEvent(new CustomEvent('chat:conversation-updated'))
         }
         setMessages(prev => {
           const alreadyHasRealtime = prev.some(m => m.id === saved.id)

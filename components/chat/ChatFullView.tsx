@@ -721,6 +721,11 @@ export function ChatFullView({ alunoId }: { alunoId?: string }) {
     isNearBottomRef.current = true
     isFirstLoadRef.current = true
     setSelectedConv(conv)
+    if (conv.isDraft) {
+      setMessages([])
+      setLoadingMessages(false)
+      return
+    }
     loadMessages(conv.id)
     // Zera imediatamente no estado local para feedback visual instantâneo
     setConversations(prev => prev.map(c => c.id === conv.id ? { ...c, unreadCount: 0 } : c))
@@ -882,7 +887,18 @@ export function ChatFullView({ alunoId }: { alunoId?: string }) {
           sender_name: currentUser?.nome || 'Você',
           sender_perfil: currentUser?.perfil || currentUser?.cargo || 'Usuário',
           context: isColaboradorView ? 'colaborador' : 'familia',
-          isFamilyInitiated: !isColaboradorView
+          isFamilyInitiated: !isColaboradorView,
+          draft_data: (selectedConv as any).isDraft ? {
+            type: selectedConv.type,
+            title: selectedConv.title,
+            targetUserId: (selectedConv as any).targetUserId,
+            targetUserName: (selectedConv as any).targetUserName,
+            targetUserPerfil: (selectedConv as any).targetUserPerfil,
+            grupoId: selectedConv.grupo_id,
+            turmaId: selectedConv.turma_id,
+            alunoId: selectedConv.aluno_id,
+            ano_letivo: selectedConv.ano_letivo
+          } : undefined
         })
       })
 
@@ -891,6 +907,10 @@ export function ChatFullView({ alunoId }: { alunoId?: string }) {
         const saved = data.message
         if (saved) {
           updateCachedMessage(selectedConv.id, saved)
+        }
+        if ((selectedConv as any).isDraft) {
+          setSelectedConv((prev: any) => prev ? { ...prev, isDraft: false } : null)
+          window.dispatchEvent(new CustomEvent('chat:conversation-updated'))
         }
         setMessages(prev => {
           const alreadyHasRealtime = prev.some(m => m.id === saved.id)
@@ -1178,12 +1198,16 @@ export function ChatFullView({ alunoId }: { alunoId?: string }) {
           title: item.title || conv.title || 'Chat',
           subtitle: item.subtitle || (conv.type === 'group' ? 'Canal Escolar' : 'online'),
           isGroup: conv.type === 'group',
-          turma_id: conv.turma_id,
-          grupo_id: conv.grupo_id,
+          turma_id: conv.turma_id || item.turmaId || null,
+          grupo_id: conv.grupo_id || item.grupoId || null,
           aluno_id: conv.aluno_id || item.alunoId || null,
           aluno_nome: item.alunoNome || null,
           aluno_turma: item.turmaNome || null,
-          ano_letivo: conv.ano_letivo || item.ano_letivo || '2026'
+          ano_letivo: conv.ano_letivo || item.ano_letivo || '2026',
+          isDraft: Boolean(conv.isDraft),
+          targetUserId: item.targetUserId,
+          targetUserName: item.targetUserName,
+          targetUserPerfil: item.targetUserPerfil
         }
         handleSelectConv(convMeta)
         setActiveTab('conversas')

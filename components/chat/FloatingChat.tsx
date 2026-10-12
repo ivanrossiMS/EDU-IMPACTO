@@ -754,13 +754,17 @@ export function FloatingChat() {
           title: item.title || conv.title || 'Chat',
           subtitle: item.subtitle || (conv.type === 'group' ? 'Canal Escolar' : 'online'),
           isGroup: conv.type === 'group',
-          turma_id: conv.turma_id,
-          grupo_id: conv.grupo_id,
+          turma_id: conv.turma_id || item.turmaId || null,
+          grupo_id: conv.grupo_id || item.grupoId || null,
           aluno_id: conv.aluno_id || item.alunoId || null,
           aluno_nome: item.alunoNome || null,
           aluno_turma: item.turmaNome || null,
           ano_letivo: conv.ano_letivo || item.ano_letivo || '2026',
-          context: chatViewMode
+          context: chatViewMode,
+          isDraft: Boolean(conv.isDraft),
+          targetUserId: item.targetUserId,
+          targetUserName: item.targetUserName,
+          targetUserPerfil: item.targetUserPerfil
         })
       } else {
         const errJson = await res.json().catch(() => ({}))

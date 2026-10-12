@@ -144,6 +144,26 @@ function ColaboradorComunicadosContent() {
   const [showFormsModal, setShowFormsModal] = useState(false)
   const [showRelsModal, setShowRelsModal] = useState(false)
   const [openedReportTaskStr, setOpenedReportTaskStr] = useState<string | null>(null)
+  const [showNovoMenu, setShowNovoMenu] = useState(false)
+  const novoMenuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!showNovoMenu) return
+    const handleClickOutside = (e: MouseEvent | TouchEvent) => {
+      if (novoMenuRef.current && !novoMenuRef.current.contains(e.target as Node)) {
+        setShowNovoMenu(false)
+      }
+    }
+    const timer = setTimeout(() => {
+      document.addEventListener('mousedown', handleClickOutside)
+      document.addEventListener('touchstart', handleClickOutside)
+    }, 10)
+    return () => {
+      clearTimeout(timer)
+      document.removeEventListener('mousedown', handleClickOutside)
+      document.removeEventListener('touchstart', handleClickOutside)
+    }
+  }, [showNovoMenu])
 
 
   const espelharColabId = searchParams?.get('espelhar_colaborador')
@@ -1281,7 +1301,7 @@ function ColaboradorComunicadosContent() {
 
   return (
     <>
-      <div className="ad-mobile-only" style={{ marginBottom: 14, width: '100%' }}>
+      <div className="ad-mobile-only" style={{ marginBottom: 10, width: '100%' }}>
         <div className="ad-com-search" style={{ position: 'relative', display: 'flex', alignItems: 'center', width: '100%' }}>
           <div style={{
             position: 'absolute',
@@ -1441,6 +1461,7 @@ function ColaboradorComunicadosContent() {
           margin-bottom: 24px !important;
           gap: 16px !important;
           position: relative !important;
+          z-index: 50 !important;
           box-sizing: border-box !important;
           transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
         }
@@ -1590,7 +1611,7 @@ function ColaboradorComunicadosContent() {
         }
         @media (max-width: 768px) {
           .ad-comunicados-wrapper {
-            padding: 16px 8px !important;
+            padding: 0 !important;
             margin: 0 !important;
             border-radius: 16px !important;
             width: 100% !important;
@@ -1606,6 +1627,8 @@ function ColaboradorComunicadosContent() {
             border-radius: 18px !important;
             padding: 10px 14px !important;
             gap: 10px !important;
+            position: relative !important;
+            z-index: 50 !important;
           }
           .ad-page-header > div:first-child {
             order: 1 !important;
@@ -1717,9 +1740,9 @@ function ColaboradorComunicadosContent() {
 
 
 
-      <div style={{ position: 'relative', zIndex: 1 }}>
+      <div style={{ position: 'relative', zIndex: showNovoMenu ? 9999 : 1 }}>
 
-        <div className="ad-page-header">
+        <div className="ad-page-header" style={{ position: 'relative', zIndex: showNovoMenu ? 9999 : 50 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <div className="ad-com-header-icon-box">
               <Bell size={20} strokeWidth={2.2} />
@@ -1729,7 +1752,7 @@ function ColaboradorComunicadosContent() {
             </div>
           </div>
           
-          <div className="ad-com-actions" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div className="ad-com-actions" style={{ display: 'flex', alignItems: 'center', gap: 10, position: 'relative', zIndex: showNovoMenu ? 10000 : 2 }}>
             <div className="ad-com-search ad-desktop-only" style={{ position: 'relative', display: 'flex', alignItems: 'center', width: 230 }}>
               <div style={{
                 position: 'absolute',
@@ -1788,10 +1811,128 @@ function ColaboradorComunicadosContent() {
               <RotateCw size={13} strokeWidth={2.3} className={isRefreshing ? 'ad-spin-icon' : ''} />
             </button>
             {!isMirroring && (
-              <button className="ad-com-btn-novo" onClick={handleNovo} type="button">
-                <Plus size={14} strokeWidth={2.5} />
-                <span>Novo</span>
-              </button>
+              <div ref={novoMenuRef} style={{ position: 'relative', zIndex: showNovoMenu ? 10001 : 2 }}>
+                <button 
+                  className="ad-com-btn-novo" 
+                  onClick={() => setShowNovoMenu(prev => !prev)} 
+                  type="button"
+                  aria-expanded={showNovoMenu}
+                  aria-haspopup="true"
+                >
+                  <Plus size={14} strokeWidth={2.5} style={{ transform: showNovoMenu ? 'rotate(45deg)' : 'none', transition: 'transform 0.2s ease' }} />
+                  <span>Novo</span>
+                  <ChevronDown size={12} strokeWidth={2.5} style={{ transform: showNovoMenu ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s ease', marginLeft: -2 }} />
+                </button>
+
+                <AnimatePresence>
+                  {showNovoMenu && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -6, scale: 0.95 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: -6, scale: 0.95 }}
+                      transition={{ duration: 0.15, ease: 'easeOut' }}
+                      style={{
+                        position: 'absolute',
+                        top: 'calc(100% + 8px)',
+                        right: 0,
+                        width: 184,
+                        background: '#FFFFFF',
+                        borderRadius: 14,
+                        padding: 5,
+                        boxShadow: '0 20px 45px -10px rgba(15, 23, 42, 0.28), 0 0 0 1px rgba(226, 232, 240, 0.95)',
+                        zIndex: 10002,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 2
+                      }}
+                    >
+                      {/* OPÇÃO 1: NOVO COMUNICADO */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setShowNovoMenu(false);
+                          handleNovo();
+                        }}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 10,
+                          padding: '8px 10px',
+                          borderRadius: 10,
+                          border: 'none',
+                          background: 'transparent',
+                          cursor: 'pointer',
+                          textAlign: 'left',
+                          width: '100%',
+                          transition: 'background 0.15s ease'
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.background = '#F8FAFC'}
+                        onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                      >
+                        <div style={{
+                          width: 28,
+                          height: 28,
+                          borderRadius: 8,
+                          background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.12) 0%, rgba(139, 92, 246, 0.14) 100%)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: '#6366F1',
+                          flexShrink: 0
+                        }}>
+                          <Send size={14} />
+                        </div>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: '#0F172A', whiteSpace: 'nowrap' }}>Novo Comunicado</span>
+                      </button>
+
+                      <div style={{ height: 1, background: '#F1F5F9', margin: '1px 6px' }} />
+
+                      {/* OPÇÃO 2: NOVO RELATÓRIO */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setShowNovoMenu(false);
+                          setShowRelsModal(true);
+                        }}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 10,
+                          padding: '8px 10px',
+                          borderRadius: 10,
+                          border: 'none',
+                          background: 'transparent',
+                          cursor: 'pointer',
+                          textAlign: 'left',
+                          width: '100%',
+                          transition: 'background 0.15s ease'
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.background = '#F8FAFC'}
+                        onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                      >
+                        <div style={{
+                          width: 28,
+                          height: 28,
+                          borderRadius: 8,
+                          background: 'linear-gradient(135deg, rgba(14, 165, 233, 0.12) 0%, rgba(2, 132, 199, 0.14) 100%)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: '#0284C7',
+                          flexShrink: 0
+                        }}>
+                          <FileBarChart size={14} />
+                        </div>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: '#0F172A', whiteSpace: 'nowrap' }}>Novo Relatório</span>
+                      </button>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
             )}
           </div>
         </div>

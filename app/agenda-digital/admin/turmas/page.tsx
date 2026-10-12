@@ -268,13 +268,24 @@ export default function ADAdminTurmas() {
   // ── Resolver colaboradores efetivos de um grupo ───────────────────────────────
   const resolveColaboradoresGrupo = (grupo: GrupoDigital): string[] => {
     const diretos = grupo.colaboradoresIds || []
-    const equipeVinculada = (equipes || []).find(e => 
-      e.id === grupo.id || 
-      (grupo.equipesIds || []).includes(e.id) ||
-      (e.nome && grupo.nome && e.nome.trim().toLowerCase() === grupo.nome.trim().toLowerCase())
-    )
-    const deEquipe = equipeVinculada?.membrosIds || []
-    const todosRaw = [...diretos, ...deEquipe]
+
+    // Apenas equipes explicitamente vinculadas via equipesIds (se houver)
+    const deEquipes: string[] = []
+    if (grupo.equipesIds && Array.isArray(grupo.equipesIds) && grupo.equipesIds.length > 0) {
+      grupo.equipesIds.forEach(eqId => {
+        const eqG = (grupos || []).find(g => g.id === eqId)
+        if (eqG && eqG.colaboradoresIds) {
+          deEquipes.push(...eqG.colaboradoresIds)
+        } else {
+          const eqOld = (equipes || []).find(e => e.id === eqId)
+          if (eqOld && eqOld.membrosIds) {
+            deEquipes.push(...eqOld.membrosIds)
+          }
+        }
+      })
+    }
+
+    const todosRaw = [...diretos, ...deEquipes]
 
     // Mapear para o ID canônico de apenasColaboradores para evitar duplicidades se tiver id e auth_id
     const resolvedIds = todosRaw.map(rawId => {

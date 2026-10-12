@@ -20,7 +20,7 @@ export interface StorageAutoCleanConfig {
   min_age_hours: number
   last_run: string | null
   next_run: string | null
-  last_status: 'success' | 'error' | 'skipped' | null
+  last_status: 'success' | 'error' | 'skipped' | 'blocked' | 'paused' | null
   last_deleted_count: number
   last_size_reclaimed: number
   last_error: string | null
@@ -29,7 +29,7 @@ export interface StorageAutoCleanConfig {
 export const DEFAULT_STORAGE_AUTO_CLEAN_CONFIG: StorageAutoCleanConfig = {
   enabled: true,
   interval_days: 30,
-  min_age_hours: 24, // Protege uploads temporários recentes (últimas 24h)
+  min_age_hours: 72, // Janela ampliada: protege uploads recentes e de finais de semana (mínimo 72h)
   last_run: null,
   next_run: null,
   last_status: null,
@@ -190,21 +190,21 @@ export async function updateStorageAutoCleanConfig(
 export async function fetchAllDbReferences(supabase: any): Promise<DbRef[]> {
   const refs: DbRef[] = []
 
-  // Helper com paginação automática de 1000 em 1000 registros
+  // Helper com paginação automática de registros e tamanho de lote configurável
   const safeQueryPaged = async (
     table: string,
     select: string,
-    mapFn: (row: any) => void
+    mapFn: (row: any) => void,
+    chunkSize = 1000
   ) => {
     let from = 0
-    const CHUNK_SIZE = 1000
 
     while (true) {
       try {
         const { data, error } = await supabase
           .from(table)
           .select(select)
-          .range(from, from + CHUNK_SIZE - 1)
+          .range(from, from + chunkSize - 1)
 
         if (error) {
           // Se a tabela ou coluna não existir, registra aviso limpo e interrompe
@@ -218,8 +218,8 @@ export async function fetchAllDbReferences(supabase: any): Promise<DbRef[]> {
           mapFn(row)
         }
 
-        if (data.length < CHUNK_SIZE) break
-        from += CHUNK_SIZE
+        if (data.length < chunkSize) break
+        from += chunkSize
       } catch (err: any) {
         console.warn(`[orphanStorageCleaner] Erro inesperado ao consultar ${table}:`, err.message)
         break
@@ -227,29 +227,31 @@ export async function fetchAllDbReferences(supabase: any): Promise<DbRef[]> {
     }
   }
 
-  await Promise.all([
+  // Executamos as consultas de forma sequencial controlada para não sobrecarregar o pool de conexões
+  // do PostgreSQL (evitando erros de timeout 57014 e saturação de memória).
+  const tasks = [
     // 1. Gestão de Pessoas / Documentos Trabalhistas
-    safeQueryPaged('gp_documentos', 'id, nome, tipo, url', (row) => {
+    () => safeQueryPaged('gp_documentos', 'id, nome, tipo, url', (row) => {
       if (row.url) refs.push({ url: row.url, table: 'gp_documentos', id: row.id, label: `Documento: ${row.nome || 'Doc'} (${row.tipo || 'Geral'})` })
     }),
 
     // 2. Provas Adaptadas (AEE / Inclusão)
-    safeQueryPaged('arquivos_adaptadas', 'id, titulo, file_url', (row) => {
+    () => safeQueryPaged('arquivos_adaptadas', 'id, titulo, file_url', (row) => {
       if (row.file_url) refs.push({ url: row.file_url, table: 'arquivos_adaptadas', id: row.id, label: `Prova Adaptada: ${row.titulo || 'Sem título'}` })
     }),
 
     // 3. Alternativas de Provas
-    safeQueryPaged('provas_alternativas', 'id, imagem_url', (row) => {
+    () => safeQueryPaged('provas_alternativas', 'id, imagem_url', (row) => {
       if (row.imagem_url) refs.push({ url: row.imagem_url, table: 'provas_alternativas', id: row.id, label: 'Alternativa de Prova' })
     }),
 
     // 4. Alternativas de Simulados
-    safeQueryPaged('simulados_alternativas', 'id, imagem_url', (row) => {
+    () => safeQueryPaged('simulados_alternativas', 'id, imagem_url', (row) => {
       if (row.imagem_url) refs.push({ url: row.imagem_url, table: 'simulados_alternativas', id: row.id, label: 'Alternativa de Simulado' })
     }),
 
     // 5. Questões de Provas (Imagens incorporadas ao enunciado)
-    safeQueryPaged('provas_questoes', 'id, enunciado', (row) => {
+    () => safeQueryPaged('provas_questoes', 'id, enunciado', (row) => {
       if (row.enunciado) {
         const found = extractUrlsFromText(row.enunciado)
         for (const u of found) {
@@ -259,7 +261,7 @@ export async function fetchAllDbReferences(supabase: any): Promise<DbRef[]> {
     }),
 
     // 6. Questões de Simulados (Imagens incorporadas ao enunciado)
-    safeQueryPaged('simulados_questoes', 'id, enunciado', (row) => {
+    () => safeQueryPaged('simulados_questoes', 'id, enunciado', (row) => {
       if (row.enunciado) {
         const found = extractUrlsFromText(row.enunciado)
         for (const u of found) {
@@ -269,7 +271,7 @@ export async function fetchAllDbReferences(supabase: any): Promise<DbRef[]> {
     }),
 
     // 7. Alunos (Fotos de Perfil e Anexos em dados)
-    safeQueryPaged('alunos', 'id, nome, foto, foto_url, dados', (row) => {
+    () => safeQueryPaged('alunos', 'id, nome, foto, foto_url, dados', (row) => {
       const url = row.foto_url || row.foto || row.dados?.fotoUrl || row.dados?.avatarUrl || row.dados?.foto
       if (url && typeof url === 'string') {
         refs.push({ url, table: 'alunos', id: row.id, label: `Foto do Aluno: ${row.nome || row.id}` })
@@ -277,7 +279,7 @@ export async function fetchAllDbReferences(supabase: any): Promise<DbRef[]> {
     }),
 
     // 8. Usuários do Sistema (Colaboradores, Professores, Direção)
-    safeQueryPaged('system_users', 'id, nome, dados', (row) => {
+    () => safeQueryPaged('system_users', 'id, nome, dados', (row) => {
       const url = row.dados?.fotoUrl || row.dados?.avatarUrl || row.dados?.foto || row.dados?.avatar
       if (url && typeof url === 'string') {
         refs.push({ url, table: 'system_users', id: row.id, label: `Foto do Colaborador: ${row.nome || row.id}` })
@@ -285,7 +287,7 @@ export async function fetchAllDbReferences(supabase: any): Promise<DbRef[]> {
     }),
 
     // 9. Responsáveis Legais e Financeiros
-    safeQueryPaged('responsaveis', 'id, nome, dados', (row) => {
+    () => safeQueryPaged('responsaveis', 'id, nome, dados', (row) => {
       const url = row.dados?.fotoUrl || row.dados?.avatarUrl || row.dados?.foto || row.dados?.avatar
       if (url && typeof url === 'string') {
         refs.push({ url, table: 'responsaveis', id: row.id, label: `Foto do Responsável: ${row.nome || row.id}` })
@@ -293,45 +295,55 @@ export async function fetchAllDbReferences(supabase: any): Promise<DbRef[]> {
     }),
 
     // 10. Comunicados e Mensagens da Agenda Digital (Anexos, imagens de capa, áudios e avatar do autor)
-    safeQueryPaged('comunicados', 'id, titulo, texto, dados', (row) => {
-      // Anexos estruturados
-      const anexos = row.dados?.anexos
-      if (Array.isArray(anexos)) {
-        for (const item of anexos) {
-          if (typeof item === 'string') {
-            const parts = item.split('|')
-            const candidate = parts.length > 1 ? parts[1] : parts[0]
-            if (candidate && (candidate.startsWith('http') || candidate.includes('/storage/'))) {
-              refs.push({ url: candidate, table: 'comunicados', id: row.id, label: `Anexo de Comunicado: ${row.titulo || 'Comunicado'}` })
+    // Usamos projeção de campos JSONB (anexos, imagem, audioUrl, autorFoto) e chunk de 500 para evitar
+    // transferir centenas de MB de leituras/ciências e prevenir statement timeouts (57014).
+    () => safeQueryPaged(
+      'comunicados',
+      'id, titulo, texto, anexos:dados->anexos, imagem:dados->imagem, audioUrl:dados->audioUrl, autorFoto:dados->autorFoto',
+      (row) => {
+        // Anexos estruturados
+        const anexos = row.anexos || row.dados?.anexos
+        if (Array.isArray(anexos)) {
+          for (const item of anexos) {
+            if (typeof item === 'string') {
+              const parts = item.split('|')
+              const candidate = parts.length > 1 ? parts[1] : parts[0]
+              if (candidate && (candidate.startsWith('http') || candidate.includes('/storage/'))) {
+                refs.push({ url: candidate, table: 'comunicados', id: row.id, label: `Anexo de Comunicado: ${row.titulo || 'Comunicado'}` })
+              }
+            } else if (item && typeof item === 'object' && item.url) {
+              refs.push({ url: item.url, table: 'comunicados', id: row.id, label: `Anexo de Comunicado: ${row.titulo || 'Comunicado'}` })
             }
-          } else if (item && typeof item === 'object' && item.url) {
-            refs.push({ url: item.url, table: 'comunicados', id: row.id, label: `Anexo de Comunicado: ${row.titulo || 'Comunicado'}` })
           }
         }
-      }
 
-      // Imagem e Áudio diretos
-      if (row.dados?.imagem && typeof row.dados.imagem === 'string') {
-        refs.push({ url: row.dados.imagem, table: 'comunicados', id: row.id, label: `Imagem de Comunicado: ${row.titulo || 'Comunicado'}` })
-      }
-      if (row.dados?.audioUrl && typeof row.dados.audioUrl === 'string') {
-        refs.push({ url: row.dados.audioUrl, table: 'comunicados', id: row.id, label: `Áudio de Comunicado: ${row.titulo || 'Comunicado'}` })
-      }
-      if (row.dados?.autorFoto && typeof row.dados.autorFoto === 'string') {
-        refs.push({ url: row.dados.autorFoto, table: 'comunicados', id: row.id, label: `Foto de Autor: ${row.titulo || 'Comunicado'}` })
-      }
-
-      // Imagens inseridas no corpo HTML do texto
-      if (row.texto && typeof row.texto === 'string') {
-        const inlineUrls = extractUrlsFromText(row.texto)
-        for (const u of inlineUrls) {
-          refs.push({ url: u, table: 'comunicados', id: row.id, label: `Mídia no Texto: ${row.titulo || 'Comunicado'}` })
+        // Imagem e Áudio diretos
+        const imagem = row.imagem || row.dados?.imagem
+        if (imagem && typeof imagem === 'string') {
+          refs.push({ url: imagem, table: 'comunicados', id: row.id, label: `Imagem de Comunicado: ${row.titulo || 'Comunicado'}` })
         }
-      }
-    }),
+        const audioUrl = row.audioUrl || row.dados?.audioUrl
+        if (audioUrl && typeof audioUrl === 'string') {
+          refs.push({ url: audioUrl, table: 'comunicados', id: row.id, label: `Áudio de Comunicado: ${row.titulo || 'Comunicado'}` })
+        }
+        const autorFoto = row.autorFoto || row.dados?.autorFoto
+        if (autorFoto && typeof autorFoto === 'string') {
+          refs.push({ url: autorFoto, table: 'comunicados', id: row.id, label: `Foto de Autor: ${row.titulo || 'Comunicado'}` })
+        }
+
+        // Imagens inseridas no corpo HTML do texto
+        if (row.texto && typeof row.texto === 'string') {
+          const inlineUrls = extractUrlsFromText(row.texto)
+          for (const u of inlineUrls) {
+            refs.push({ url: u, table: 'comunicados', id: row.id, label: `Mídia no Texto: ${row.titulo || 'Comunicado'}` })
+          }
+        }
+      },
+      500
+    ),
 
     // 11. Respostas de Comunicados com anexos
-    safeQueryPaged('comunicados_respostas', 'id, comunicado_id, anexos, conteudo', (row) => {
+    () => safeQueryPaged('comunicados_respostas', 'id, comunicado_id, anexos, conteudo', (row) => {
       if (Array.isArray(row.anexos)) {
         for (const item of row.anexos) {
           const url = typeof item === 'string' ? (item.split('|')[1] || item) : item?.url
@@ -349,7 +361,7 @@ export async function fetchAllDbReferences(supabase: any): Promise<DbRef[]> {
     }),
 
     // 12. DRE Uploads
-    safeQueryPaged('dre_uploads', 'id, nome_arquivo, dados_dre', (row) => {
+    () => safeQueryPaged('dre_uploads', 'id, nome_arquivo, dados_dre', (row) => {
       const url = row.dados_dre?.arquivo_url || row.dados_dre?.url
       if (url && typeof url === 'string') {
         refs.push({ url, table: 'dre_uploads', id: row.id, label: `DRE: ${row.nome_arquivo || 'Upload'}` })
@@ -357,14 +369,14 @@ export async function fetchAllDbReferences(supabase: any): Promise<DbRef[]> {
     }),
 
     // 13. Anexos de Chat
-    safeQueryPaged('chat_attachments', 'id, file_name, file_url', (row) => {
+    () => safeQueryPaged('chat_attachments', 'id, file_name, file_url', (row) => {
       if (row.file_url) {
         refs.push({ url: row.file_url, table: 'chat_attachments', id: row.id, label: `Anexo de Chat: ${row.file_name || 'Arquivo'}` })
       }
     }),
 
     // 14. Momentos da Agenda Digital (Fotos das atividades)
-    safeQueryPaged('momentos', 'id, titulo, dados', (row) => {
+    () => safeQueryPaged('momentos', 'id, titulo, dados', (row) => {
       const list = row.dados?.media || row.dados?.midias || []
       if (Array.isArray(list)) {
         list.forEach((item: any) => {
@@ -376,8 +388,8 @@ export async function fetchAllDbReferences(supabase: any): Promise<DbRef[]> {
       }
     }),
 
-    // 14. Configurações Globais (Contratos Digitais, Banners, Logo da Escola)
-    (async () => {
+    // 15. Configurações Globais (Contratos Digitais, Banners, Logo da Escola)
+    async () => {
       try {
         const { data: cfgs } = await supabase
           .from('configuracoes')
@@ -440,8 +452,36 @@ export async function fetchAllDbReferences(supabase: any): Promise<DbRef[]> {
       } catch (cfgErr: any) {
         console.warn('[orphanStorageCleaner] Aviso ao consultar configurações:', cfgErr.message)
       }
-    })(),
-  ])
+    },
+
+    // 16. Ocorrências disciplinares/pedagógicas (anexos em dados e comprovantes)
+    () => safeQueryPaged('ocorrencias', 'id, aluno_id, dados', (row) => {
+      const anexoUrl = row.dados?.anexoUrl || row.dados?.anexo_url || row.dados?.url
+      if (anexoUrl && typeof anexoUrl === 'string') {
+        refs.push({ url: anexoUrl, table: 'ocorrencias', id: row.id, label: `Anexo de Ocorrência: ${row.id}` })
+      }
+      if (Array.isArray(row.dados?.anexos)) {
+        for (const a of row.dados.anexos) {
+          const u = typeof a === 'string' ? a : a?.url
+          if (u && typeof u === 'string') {
+            refs.push({ url: u, table: 'ocorrencias', id: row.id, label: `Anexo de Ocorrência: ${row.id}` })
+          }
+        }
+      }
+    }),
+
+    // 17. Boletins escolares
+    () => safeQueryPaged('boletins', 'id, aluno_id, dados', (row) => {
+      const url = row.dados?.arquivo_url || row.dados?.pdf_url || row.dados?.url
+      if (url && typeof url === 'string') {
+        refs.push({ url, table: 'boletins', id: row.id, label: `Boletim: ${row.id}` })
+      }
+    }),
+  ]
+
+  for (const task of tasks) {
+    await task()
+  }
 
   return refs
 }
@@ -509,6 +549,8 @@ export interface CleanupResult {
   ok: boolean
   executed: boolean
   skipped?: boolean
+  dryRun?: boolean
+  abortedByCircuitBreaker?: boolean
   reason?: string
   deletedCount: number
   sizeReclaimed: number
@@ -516,21 +558,24 @@ export interface CleanupResult {
   lastRun?: string | null
   nextRun?: string | null
   error?: string
+  candidateFiles?: { bucket: string; path: string; size: number }[]
 }
 
 /**
  * Executa a rotina de exclusão segura de arquivos órfãos.
  *
- * @param options.force - Se verdadeiro, ignora a contagem de 30 dias e a flag de ativação.
+ * @param options.force - Se verdadeiro, ignora a contagem de 30 dias, flag de ativação e trava de circuit breaker.
+ * @param options.dryRun - Se verdadeiro, simula a execução listando os candidatos sem apagar fisicamente nenhum arquivo.
  * @param options.triggeredBy - Identificador de quem disparou ('cron' | 'admin' | 'manual').
- * @param options.minAgeHours - Tempo mínimo de existência do arquivo antes de ser considerado para exclusão (padrão 24h).
+ * @param options.minAgeHours - Tempo mínimo de existência do arquivo antes de ser considerado para exclusão (padrão 72h).
  */
 export async function runOrphanCleanup(options: {
   force?: boolean
+  dryRun?: boolean
   triggeredBy?: 'cron' | 'admin' | 'manual'
   minAgeHours?: number
 } = {}): Promise<CleanupResult> {
-  const { force = false, triggeredBy = 'cron' } = options
+  const { force = false, dryRun = false, triggeredBy = 'cron' } = options
   const config = await getStorageAutoCleanConfig()
   const supabase = getAdminClient()
 
@@ -657,6 +702,67 @@ export async function runOrphanCleanup(options: {
 
         orphanFiles.push(file)
         totalSizeReclaimed += file.size
+      }
+    }
+
+    // 8.1 Modo Dry-Run (Simulação sem exclusão física)
+    if (dryRun) {
+      console.log(`[orphanStorageCleaner] Dry-Run concluído: ${orphanFiles.length} arquivos seriam deletados (${formatBytes(totalSizeReclaimed)}).`)
+      return {
+        ok: true,
+        executed: false,
+        skipped: false,
+        dryRun: true,
+        deletedCount: orphanFiles.length,
+        sizeReclaimed: totalSizeReclaimed,
+        formattedSizeReclaimed: formatBytes(totalSizeReclaimed),
+        lastRun: config.last_run,
+        nextRun: config.next_run,
+        candidateFiles: orphanFiles.slice(0, 100).map(f => ({ bucket: f.bucket, path: f.path, size: f.size })),
+      }
+    }
+
+    // 8.2 Trava de Segurança Crítica (Circuit Breaker)
+    // Se a rotina detectar que mais de 50 arquivos ou mais de 10% do bucket seriam apagados de uma só vez,
+    // interrompe imediatamente sem apagar nada e exige confirmação manual (force=true).
+    const MAX_SAFE_DELETE_COUNT = 50
+    const MAX_SAFE_PERCENTAGE = 0.10 // 10%
+    const isHighVolume = orphanFiles.length > MAX_SAFE_DELETE_COUNT
+    const isHighPercentage = rawFiles.length > 0 && (orphanFiles.length / rawFiles.length) > MAX_SAFE_PERCENTAGE
+
+    if (!force && (isHighVolume || isHighPercentage)) {
+      const alertMsg = `[CIRCUIT BREAKER] Limpeza automática suspensa por segurança: tentativa de remover ${orphanFiles.length} arquivos (${((orphanFiles.length / Math.max(rawFiles.length, 1)) * 100).toFixed(1)}% do armazenamento). Requer verificação prévia no painel com force=true.`
+      console.warn(alertMsg)
+
+      await updateStorageAutoCleanConfig({
+        last_status: 'blocked',
+        last_error: alertMsg,
+      })
+
+      await recordAuditLog({
+        modulo: 'configuracoes',
+        acao: 'limpeza_automatica_orfaos_bloqueada',
+        descricao: alertMsg,
+        status: 'aviso',
+        origem: triggeredBy === 'cron' ? 'sistema' : 'web',
+        detalhesDepois: {
+          candidateCount: orphanFiles.length,
+          totalStorageFiles: rawFiles.length,
+          sizeReclaimedBytes: totalSizeReclaimed,
+          sizeReclaimedFormatted: formatBytes(totalSizeReclaimed),
+        },
+      })
+
+      return {
+        ok: false,
+        executed: false,
+        skipped: true,
+        abortedByCircuitBreaker: true,
+        reason: alertMsg,
+        deletedCount: 0,
+        sizeReclaimed: 0,
+        lastRun: config.last_run,
+        nextRun: config.next_run,
       }
     }
 

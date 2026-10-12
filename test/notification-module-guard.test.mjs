@@ -11,11 +11,24 @@ function shouldShowNotificationPermissionModal({
   isDenied,
   isLoading,
   dismissed,
+  isLoggingOut = false,
+  loadingPath = null,
+  currentUser = { id: 'user-123' },
 }) {
   const isAgendaDigitalModule = Boolean(
     pathname && (pathname === '/agenda-digital' || pathname.startsWith('/agenda-digital/'))
   )
-  return Boolean(isDenied && !isLoading && !dismissed && isAgendaDigitalModule)
+  const isLoggingOutActive = isLoggingOut || loadingPath === 'logout'
+  const isUserAuthenticated = Boolean(currentUser?.id)
+
+  return Boolean(
+    !isLoggingOutActive &&
+    isUserAuthenticated &&
+    isDenied &&
+    !isLoading &&
+    !dismissed &&
+    isAgendaDigitalModule
+  )
 }
 
 test('NotificationPermissionModal - Módulo Gestão Escolar (NUNCA deve aparecer)', () => {
@@ -177,6 +190,59 @@ test('NotificationPermissionModal - Módulo Agenda Digital (DEVE aparecer quando
       shouldShowAuthorized,
       false,
       `Aviso autorizado NÃO deve aparecer na Agenda Digital: ${route}`
+    )
+  }
+})
+
+test('NotificationPermissionModal - Durante Logout e Sem Usuário Autenticado (NUNCA deve aparecer)', () => {
+  const agendaDigitalRoutes = [
+    '/agenda-digital',
+    '/agenda-digital/selecionar-aluno',
+    '/agenda-digital/aluno-123/notas',
+    '/agenda-digital/aluno-123/comunicados',
+  ]
+
+  for (const route of agendaDigitalRoutes) {
+    // Cenário 1: Durante logout com isLoggingOut = true -> NUNCA APARECE
+    const showLoggingOut = shouldShowNotificationPermissionModal({
+      pathname: route,
+      isDenied: true,
+      isLoading: false,
+      dismissed: false,
+      isLoggingOut: true,
+    })
+    assert.equal(
+      showLoggingOut,
+      false,
+      `Aviso de notificação NÃO deve aparecer durante logout (isLoggingOut): ${route}`
+    )
+
+    // Cenário 2: Durante logout com loadingPath = 'logout' -> NUNCA APARECE
+    const showLoadingLogout = shouldShowNotificationPermissionModal({
+      pathname: route,
+      isDenied: true,
+      isLoading: false,
+      dismissed: false,
+      loadingPath: 'logout',
+    })
+    assert.equal(
+      showLoadingLogout,
+      false,
+      `Aviso de notificação NÃO deve aparecer com loadingPath logout: ${route}`
+    )
+
+    // Cenário 3: Sem usuário autenticado (currentUser = null) -> NUNCA APARECE
+    const showNoUser = shouldShowNotificationPermissionModal({
+      pathname: route,
+      isDenied: true,
+      isLoading: false,
+      dismissed: false,
+      currentUser: null,
+    })
+    assert.equal(
+      showNoUser,
+      false,
+      `Aviso de notificação NÃO deve aparecer sem usuário autenticado: ${route}`
     )
   }
 })

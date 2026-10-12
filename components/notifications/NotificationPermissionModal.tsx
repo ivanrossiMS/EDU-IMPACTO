@@ -16,6 +16,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { BellRing, Settings2, X } from 'lucide-react'
 import { usePathname } from 'next/navigation'
 import { usePushNotifications } from '@/hooks/usePushNotifications'
+import { useApp } from '@/lib/context'
 import { Capacitor } from '@capacitor/core'
 import { toast } from 'sonner'
 
@@ -23,8 +24,10 @@ const DISMISS_SESSION_KEY = 'edu_push_blocked_dismissed_session'
 
 export function NotificationPermissionModal() {
   const pathname = usePathname()
+  const { currentUser, loadingPath } = useApp()
   const { isDenied, isAuthorized, isLoading, openSettings } = usePushNotifications()
   const [dismissed, setDismissed] = useState(true)
+  const [isLoggingOut, setIsLoggingOut] = useState(false)
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -32,12 +35,30 @@ export function NotificationPermissionModal() {
     setDismissed(isDismissedThisSession)
 
     const handleReset = () => {
+      if (isLoggingOut || loadingPath === 'logout' || !currentUser?.id) return
       setDismissed(false)
       try { sessionStorage.removeItem(DISMISS_SESSION_KEY) } catch {}
     }
+
+    const handleLogoutStart = () => {
+      setIsLoggingOut(true)
+      setDismissed(true)
+    }
+
     window.addEventListener('edu:reset-push-permission', handleReset)
-    return () => window.removeEventListener('edu:reset-push-permission', handleReset)
-  }, [])
+    window.addEventListener('edu:logout-start', handleLogoutStart)
+    return () => {
+      window.removeEventListener('edu:reset-push-permission', handleReset)
+      window.removeEventListener('edu:logout-start', handleLogoutStart)
+    }
+  }, [isLoggingOut, loadingPath, currentUser?.id])
+
+  useEffect(() => {
+    if (loadingPath === 'logout') {
+      setIsLoggingOut(true)
+      setDismissed(true)
+    }
+  }, [loadingPath])
 
   // Se o usuário já autorizou, garante que fique fechado
   useEffect(() => {
@@ -61,15 +82,22 @@ export function NotificationPermissionModal() {
     await openSettings()
   }
 
-  // REGRA DE NEGÓCIO:
-  // Este aviso de notificação DEVE aparecer EXCLUSIVAMENTE dentro do módulo Agenda Digital.
-  // NÃO deve aparecer na Gestão Escolar (/dashboard, /alunos, /turmas, etc.),
-  // nem na Gestão de Pessoas (/gestao-pessoas), nem em Provas/Simulados (/simulados),
-  // nem em telas de login ou páginas públicas.
+  // REGRA DE NEGÓCIO E SEGURANÇA:
+  // Este aviso de notificação DEVE aparecer EXCLUSIVAMENTE dentro do módulo Agenda Digital
+  // na ENTRADA e para usuário autenticado. NUNCA durante o logout, nem em telas públicas ou outros módulos.
   const isAgendaDigitalModule = Boolean(
     pathname && (pathname === '/agenda-digital' || pathname.startsWith('/agenda-digital/'))
   )
-  const shouldShow = isDenied && !isLoading && !dismissed && isAgendaDigitalModule
+  const isLoggingOutActive = isLoggingOut || loadingPath === 'logout'
+  const isUserAuthenticated = Boolean(currentUser?.id)
+
+  const shouldShow =
+    !isLoggingOutActive &&
+    isUserAuthenticated &&
+    isDenied &&
+    !isLoading &&
+    !dismissed &&
+    isAgendaDigitalModule
 
   return (
     <AnimatePresence>

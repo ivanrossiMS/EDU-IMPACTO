@@ -16,7 +16,8 @@ import {
   Lock,
   CheckCircle2,
   ExternalLink,
-  Layers
+  Layers,
+  Loader2
 } from 'lucide-react'
 import { useApp } from '@/lib/context'
 import { useData } from '@/lib/dataContext'
@@ -43,7 +44,7 @@ interface ModuloItem {
 export function TrocarModuloModal({ isOpen, onClose }: TrocarModuloModalProps) {
   const router = useRouter()
   const pathname = usePathname()
-  const { currentUserPerfil, currentUser } = useApp()
+  const { currentUserPerfil, currentUser, startModuleTransition } = useApp()
   const { perfis } = useData()
   const [navigatingId, setNavigatingId] = useState<string | null>(null)
 
@@ -198,6 +199,22 @@ export function TrocarModuloModal({ isOpen, onClose }: TrocarModuloModalProps) {
     return false
   }
 
+  // Pre-carrega em background as rotas dos módulos quando o modal é aberto
+  useEffect(() => {
+    if (isOpen) {
+      modulos.forEach(m => {
+        if (!isModuleBlocked(m) && !isModuleActive(m)) {
+          try {
+            router.prefetch(m.href)
+          } catch (_) {}
+        }
+      })
+      try {
+        router.prefetch('/login?step=choose_system')
+      } catch (_) {}
+    }
+  }, [isOpen, router])
+
   const handleSelectModule = (item: ModuloItem) => {
     if (isModuleBlocked(item)) return
 
@@ -207,6 +224,16 @@ export function TrocarModuloModal({ isOpen, onClose }: TrocarModuloModalProps) {
     }
 
     setNavigatingId(item.id)
+
+    // Ativa imediatamente a animação de carregamento luxuosa que permanece até entrar na página
+    startModuleTransition({
+      targetHref: item.href,
+      title: item.title,
+      subtitle: item.tag || item.title.toUpperCase(),
+      statusText: `Acessando ${item.title}...`,
+      id: item.id
+    })
+
     onClose()
     router.push(item.href)
   }
@@ -637,6 +664,11 @@ export function TrocarModuloModal({ isOpen, onClose }: TrocarModuloModalProps) {
                           </>
                         ) : isBlocked ? (
                           <span>Sem Permissão</span>
+                        ) : navigatingId === item.id ? (
+                          <>
+                            <Loader2 size={13} className="animate-spin" />
+                            <span>Acessando...</span>
+                          </>
                         ) : (
                           <>
                             <span>Acessar Módulo</span>
@@ -646,7 +678,10 @@ export function TrocarModuloModal({ isOpen, onClose }: TrocarModuloModalProps) {
                       </span>
 
                       {navigatingId === item.id && (
-                        <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.6)' }}>Carregando...</span>
+                        <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.7)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                          <Loader2 size={10} className="animate-spin" />
+                          <span>Carregando...</span>
+                        </span>
                       )}
                     </div>
                   </motion.div>
@@ -679,6 +714,13 @@ export function TrocarModuloModal({ isOpen, onClose }: TrocarModuloModalProps) {
               <button
                 type="button"
                 onClick={() => {
+                  startModuleTransition({
+                    targetHref: '/login',
+                    title: 'Seleção de Módulos',
+                    subtitle: 'ECOSSISTEMA IMPACTO EDU',
+                    statusText: 'Acessando tela de seleção completa...',
+                    id: 'choose_system'
+                  })
                   onClose()
                   router.push('/login?step=choose_system')
                 }}

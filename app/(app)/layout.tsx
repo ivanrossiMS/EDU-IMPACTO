@@ -19,13 +19,17 @@ import { restoreSessionSecurely, refreshSessionCentralized, isNetworkOrTransient
 import { hideSplashScreen } from '@/lib/capacitor/splash'
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
-  const { sidebarCollapsed, toggleSidebar, setCurrentUser, currentUser } = useApp()
+  const { sidebarCollapsed, toggleSidebar, setCurrentUser, currentUser, setLoadingPath } = useApp()
   const router = useRouter()
   const pathname = usePathname()
   const isMobile = useIsMobile()
 
   // 5 estados de auth explícitos: 'restoring' | 'authorized' | 'offline_authorized' | 'unauthorized' | 'blocked'
   const [authState, setAuthState] = useState<'restoring' | 'authorized' | 'offline_authorized' | 'unauthorized' | 'blocked'>('restoring')
+
+  useEffect(() => {
+    setLoadingPath(null)
+  }, [pathname, setLoadingPath])
 
   // EFFECT 1: Check Auth On Mount ONLY — SECURE & RESILIENT VERSION
   useEffect(() => {

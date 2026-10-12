@@ -227,7 +227,7 @@ function playForegroundChime() {
 export function GlobalNotificationProvider() {
   const router = useRouter()
   const pathname = usePathname()
-  const { currentUser, hydrated } = useApp()
+  const { currentUser, hydrated, loadingPath } = useApp()
   const currentUserRef = useRef(currentUser)
   const hydratedRef = useRef(hydrated)
   const wasLoggedInRef = useRef(false)
@@ -248,8 +248,27 @@ export function GlobalNotificationProvider() {
     }, 280)
   }, [])
 
+  // Desativa qualquer banner de notificação imediatamente ao iniciar logout
+  useEffect(() => {
+    const handleLogoutStart = () => {
+      if (dismissTimerRef.current) {
+        clearTimeout(dismissTimerRef.current)
+      }
+      setActiveBanner(null)
+      setIsDismissing(false)
+    }
+
+    if (loadingPath === 'logout') {
+      handleLogoutStart()
+    }
+
+    window.addEventListener('edu:logout-start', handleLogoutStart)
+    return () => window.removeEventListener('edu:logout-start', handleLogoutStart)
+  }, [loadingPath])
+
   const showForegroundPushBanner = useCallback((banner: ForegroundPushBanner) => {
     if (!banner || !banner.title) return
+    if (loadingPath === 'logout') return
     const bannerId = banner.id || `${Date.now()}-${Math.random().toString(36).substring(2, 7)}`
     if (bannerId && bannerId === lastProcessedIdRef.current) return
     lastProcessedIdRef.current = bannerId
@@ -271,7 +290,7 @@ export function GlobalNotificationProvider() {
     dismissTimerRef.current = setTimeout(() => {
       dismissBanner()
     }, 6500)
-  }, [dismissBanner])
+  }, [dismissBanner, loadingPath])
 
   const onTouchStart = (e: React.TouchEvent) => {
     touchStartYRef.current = e.touches[0].clientY

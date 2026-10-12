@@ -22,10 +22,10 @@ import { useIsFetching } from '@tanstack/react-query'
 
 
 export default function AgendaDigitalLayout({ children }: { children: React.ReactNode }) {
-  const { currentUser, hydrated, loadingPath } = useApp()
+  const { currentUser, hydrated, loadingPath, moduleTransition } = useApp()
   const isFamily = currentUser?.perfil === 'Família' || currentUser?.cargo === 'Aluno' || currentUser?.cargo === 'Responsável'
 
-  if (!hydrated && loadingPath !== 'logout') {
+  if (!hydrated && loadingPath !== 'logout' && !moduleTransition) {
     return <AgendaLuxuryLoader isLoading={true} statusText="Iniciando Agenda Digital..." />
   }
 
@@ -64,7 +64,7 @@ export default function AgendaDigitalLayout({ children }: { children: React.Reac
 function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
   const { bannerUrl, adLoading, isLoaded, pageLoading, pageLoadingLabel } = useAgendaDigital()
   const isFetchingQueries = useIsFetching({ queryKey: ['agenda'] })
-  const { currentUser, hydrated, loadingPath, setLoadingPath } = useApp()
+  const { currentUser, hydrated, loadingPath, setLoadingPath, moduleTransition } = useApp()
   const { perfis, perfisLoading } = useData()
   const router = useRouter()
   const pathname = usePathname()
@@ -496,7 +496,7 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
         
         <FloatingChat />
         <AgendaRealtimeProvider />
-        <AgendaLuxuryLoader isLoading={isMasterLoading} statusText={currentStatusText} />
+        <AgendaLuxuryLoader isLoading={isMasterLoading && !moduleTransition} statusText={currentStatusText} />
       </div>
     </>
   )
