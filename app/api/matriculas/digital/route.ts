@@ -17,7 +17,6 @@ import {
 } from '@/lib/contracts/cryptoSignature'
 import {
   detectDocumentFormat,
-  convertDocumentBufferToPdf,
 } from '@/lib/converters/documentToPdfServer'
 import { v4 as uuidv4 } from 'uuid'
 import { getWhatsAppShareUrl, formatarMensagemWhatsApp } from '@/lib/whatsapp'
@@ -129,20 +128,19 @@ export async function POST(request: Request) {
         if (itemBytes.length < 10) continue
 
         const itemFormat = detectDocumentFormat(itemBytes)
+        if (itemFormat !== 'pdf') {
+          return NextResponse.json(
+            { error: `O arquivo "${itemDoc.nome || 'documento'}" não é um PDF válido. O sistema aceita exclusivamente arquivos em formato PDF (.pdf).` },
+            { status: 400 }
+          )
+        }
+
         const itemNomeOriginal = itemDoc.nome || itemDoc.arquivo_nome || `documento_${idx + 1}`
         let itemPdfBytes = itemBytes
         let itemCleanBase64 = rawItemClean
         let itemTotalPaginas = Number(itemDoc.totalPaginas) || 1
 
-        if (itemFormat === 'docx' || itemFormat === 'doc') {
-          const convResult = await convertDocumentBufferToPdf(itemBytes, itemNomeOriginal, {
-            title: itemDoc.titulo || itemDoc.titulo_documento,
-            schoolName: repInfo.razaoSocial,
-          })
-          itemPdfBytes = Buffer.from(convResult.pdfBytes)
-          itemCleanBase64 = convResult.cleanBase64
-          itemTotalPaginas = convResult.totalPages
-        } else if (!itemDoc.totalPaginas) {
+        if (!itemDoc.totalPaginas) {
           try {
             const { PDFDocument } = await import('pdf-lib')
             const loaded = await PDFDocument.load(itemBytes, { ignoreEncryption: true })
@@ -283,7 +281,7 @@ export async function POST(request: Request) {
     const rawPayload = body.pdf_base64 || body.arquivo_base64
     if (!rawPayload) {
       return NextResponse.json(
-        { error: 'Por favor, selecione ou faça o upload de um arquivo PDF ou Word (.docx/.doc) para assinatura.' },
+        { error: 'Por favor, selecione ou faça o upload de um arquivo PDF para assinatura.' },
         { status: 400 }
       )
     }
@@ -300,21 +298,19 @@ export async function POST(request: Request) {
 
     // Identifica o formato real dos bytes
     const inputFormat = detectDocumentFormat(inputBytes)
+    if (inputFormat !== 'pdf') {
+      return NextResponse.json(
+        { error: 'O arquivo de importação deve ser exclusivamente em formato PDF (.pdf).' },
+        { status: 400 }
+      )
+    }
+
     const arquivoNomeOriginal = body.arquivo_nome || 'documento'
     let pdfBytes = inputBytes
     let cleanBase64 = rawClean
     let totalPaginas = Number(body.total_paginas) || 1
 
-    // Se o arquivo enviado for Word (.docx ou .doc), converte automaticamente para PDF fiel com timbrado e imagens
-    if (inputFormat === 'docx' || inputFormat === 'doc') {
-      const convResult = await convertDocumentBufferToPdf(inputBytes, arquivoNomeOriginal, {
-        title: body.titulo_documento,
-        schoolName: repInfo.razaoSocial,
-      })
-      pdfBytes = Buffer.from(convResult.pdfBytes)
-      cleanBase64 = convResult.cleanBase64
-      totalPaginas = convResult.totalPages
-    } else if (!body.total_paginas) {
+    if (!body.total_paginas) {
       try {
         const { PDFDocument } = await import('pdf-lib')
         const loaded = await PDFDocument.load(inputBytes, { ignoreEncryption: true })

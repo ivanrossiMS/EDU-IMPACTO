@@ -103,6 +103,56 @@ export default function AmpliacaoPeriodoTab({
   nomeResponsavel = '',
   whatsappCelular = ''
 }: AmpliacaoPeriodoTabProps) {
+  // Se não for o Ano Letivo 2027, exibe estado vazio (sem dados cadastrados)
+  if (String(anoLetivo) !== '2027') {
+    return (
+      <div style={{
+        background: '#ffffff',
+        borderRadius: 20,
+        border: '1px solid #e2e8f0',
+        boxShadow: '0 4px 20px -2px rgba(0,0,0,0.04)',
+        overflow: 'hidden'
+      }}>
+        <div style={{
+          background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #1e3a8a 100%)',
+          padding: '22px 28px',
+          borderBottom: '1px solid #1e293b'
+        }}>
+          <span style={{ fontSize: 11, fontWeight: 800, color: '#93c5fd', textTransform: 'uppercase' }}>Colégio Impacto • {anoLetivo}</span>
+          <h2 style={{ fontSize: 20, fontWeight: 900, color: '#ffffff', margin: '2px 0 0' }}>Ampliação de Período (Contraturno)</h2>
+          <p style={{ fontSize: 12, color: '#94a3b8', margin: 0 }}>Valores mensais para ampliação do meio período em 2 ou 3 dias na semana.</p>
+        </div>
+        <div style={{
+          padding: '60px 24px',
+          textAlign: 'center',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 12
+        }}>
+          <div style={{
+            width: 56,
+            height: 56,
+            borderRadius: 16,
+            background: '#f1f5f9',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}>
+            <Clock size={28} color="#94a3b8" />
+          </div>
+          <h3 style={{ fontSize: 17, fontWeight: 800, color: '#1e293b', margin: 0 }}>
+            Nenhum valor de ampliação de período cadastrado para o Ano Letivo {anoLetivo}
+          </h3>
+          <p style={{ fontSize: 13, color: '#64748b', margin: 0, maxWidth: 460 }}>
+            Os valores e planos de turnos estendidos (2x e 3x por semana) disponíveis no sistema são exclusivos do <strong>Ano Letivo 2027</strong>.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
   // Frequência selecionada: 2x (padrão), 3x, ou ambos
   const [frequenciaAtiva, setFrequenciaAtiva] = useState<'2x' | '3x' | 'ambos'>('2x')
   

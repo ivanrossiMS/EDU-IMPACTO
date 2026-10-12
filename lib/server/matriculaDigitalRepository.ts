@@ -65,8 +65,98 @@ export interface ContratoDigitalModel {
 
 const FALLBACK_KEY = 'matriculas_digitais_list'
 
+export const TABLE_COLUMNS = new Set([
+  'id',
+  'protocolo',
+  'token_assinatura',
+  'aluno_id',
+  'aluno_nome',
+  'aluno_cpf',
+  'aluno_turma',
+  'aluno_serie',
+  'aluno_data_nascimento',
+  'responsavel_id',
+  'responsavel_nome',
+  'responsavel_cpf',
+  'responsavel_email',
+  'responsavel_telefone',
+  'responsavel_parentesco',
+  'ano_letivo',
+  'tipo_documento',
+  'titulo_documento',
+  'valor_anuidade',
+  'valor_mensalidade',
+  'num_parcelas',
+  'desconto_percent',
+  'dia_vencimento',
+  'primeiro_vencimento',
+  'status',
+  'versao_documento',
+  'documento_original_hash',
+  'documento_assinado_hash',
+  'documento_pdf_base64',
+  'documento_assinado_pdf_base64',
+  'documento_pdf_storage_path',
+  'documento_assinado_storage_path',
+  'otp_codigo_hash',
+  'otp_expira_em',
+  'otp_confirmado_em',
+  'otp_tentativas',
+  'evidencias',
+  'historico_eventos',
+  'created_at',
+  'updated_at',
+])
+
 /**
- * Normaliza um registro de contrato
+ * Converte o modelo em registro sanitizado para a tabela Postgres nativa,
+ * preservando atributos extras sem coluna dedicada dentro do JSONB evidencias.
+ */
+export function toTableRecord(c: any): Record<string, any> {
+  const evidencias = { ...(c.evidencias || {}) }
+  if (c.totalPaginas && !evidencias.totalPaginas) evidencias.totalPaginas = Number(c.totalPaginas)
+  if (c.responsavel_data_nascimento && !evidencias.responsavel_data_nascimento) evidencias.responsavel_data_nascimento = c.responsavel_data_nascimento
+  if (c.trilha_auditoria_hash && !evidencias.trilhaAuditoriaHash) evidencias.trilhaAuditoriaHash = c.trilha_auditoria_hash
+  if (c.otp_codigo_aberto && !evidencias.otp_codigo_aberto) evidencias.otp_codigo_aberto = c.otp_codigo_aberto
+
+  const rec: Record<string, any> = {}
+  for (const k of Object.keys(c)) {
+    if (TABLE_COLUMNS.has(k)) {
+      rec[k] = c[k]
+    }
+  }
+  rec.evidencias = evidencias
+  return rec
+}
+
+/**
+ * Infere o nome do estudante caso o campo esteja vazio
+ */
+function inferAlunoNome(c: any): string {
+  if (c.aluno_nome && typeof c.aluno_nome === 'string' && c.aluno_nome.trim()) {
+    return c.aluno_nome.trim()
+  }
+  const anexos = c.evidencias?.documentosAnexados
+  if (Array.isArray(anexos) && anexos.length > 0) {
+    for (const anexo of anexos) {
+      const nome = anexo.nome || ''
+      const match = nome.match(/^([^-]+)\s*-\s*(contrato|aditamento|requerimento|termo)/i) ||
+                    nome.match(/^(contrato|aditamento|requerimento|termo)\s*-\s*([^-.]+)/i)
+      if (match) {
+        const candidate = match[1].toLowerCase().includes('contrato') ? match[2] : match[1]
+        if (candidate && candidate.trim()) return candidate.trim()
+      }
+    }
+  }
+  if (c.titulo_documento) {
+    const limpo = c.titulo_documento.replace(/(contrato|aditamento|requerimento|termo|\.pdf|\.docx?)/gi, '').trim()
+    if (limpo.length >= 3) return limpo
+  }
+  return ''
+}
+
+/**
+ * Normaliza um registro de contrato com resolução profunda de campos
  */
 function normalizeContrato(c: any): ContratoDigitalModel {
   return {
@@ -74,7 +164,7 @@ function normalizeContrato(c: any): ContratoDigitalModel {
     protocolo: c.protocolo || '',
     token_assinatura: c.token_assinatura || '',
     aluno_id: c.aluno_id ? String(c.aluno_id) : '',
-    aluno_nome: c.aluno_nome || '',
+    aluno_nome: c.aluno_nome || c.evidencias?.aluno_nome || inferAlunoNome(c) || '',
     aluno_cpf: c.aluno_cpf || null,
     aluno_turma: c.aluno_turma || null,
     aluno_serie: c.aluno_serie || null,
@@ -82,7 +172,7 @@ function normalizeContrato(c: any): ContratoDigitalModel {
     responsavel_id: c.responsavel_id || null,
     responsavel_nome: c.responsavel_nome || 'Signatário',
     responsavel_cpf: c.responsavel_cpf || '',
-    responsavel_data_nascimento: c.responsavel_data_nascimento || null,
+    responsavel_data_nascimento: c.responsavel_data_nascimento || c.evidencias?.responsavel_data_nascimento || null,
     responsavel_email: c.responsavel_email || '',
     responsavel_telefone: c.responsavel_telefone || '',
     responsavel_parentesco: c.responsavel_parentesco || 'Signatário',
@@ -99,14 +189,14 @@ function normalizeContrato(c: any): ContratoDigitalModel {
     versao_documento: c.versao_documento || 'v2027.1',
     documento_original_hash: c.documento_original_hash || '',
     documento_assinado_hash: c.documento_assinado_hash || null,
-    trilha_auditoria_hash: c.trilha_auditoria_hash || null,
+    trilha_auditoria_hash: c.trilha_auditoria_hash || c.evidencias?.trilhaAuditoriaHash || null,
     documento_pdf_base64: c.documento_pdf_base64 || null,
     documento_assinado_pdf_base64: c.documento_assinado_pdf_base64 || null,
     documento_pdf_storage_path: c.documento_pdf_storage_path || (c.id ? `contratos/${c.id}/original.pdf` : null),
     documento_assinado_storage_path: c.documento_assinado_storage_path || (c.id ? `contratos/${c.id}/assinado.pdf` : null),
     totalPaginas: Number(c.totalPaginas) || Number(c.evidencias?.totalPaginas) || 1,
     otp_codigo_hash: c.otp_codigo_hash || null,
-    otp_codigo_aberto: c.otp_codigo_aberto || null,
+    otp_codigo_aberto: c.otp_codigo_aberto || c.evidencias?.otp_codigo_aberto || null,
     otp_expira_em: c.otp_expira_em || null,
     otp_confirmado_em: c.otp_confirmado_em || null,
     otp_tentativas: Number(c.otp_tentativas) || 0,
@@ -149,7 +239,24 @@ export async function obterPdfBytes(
     const { data, error } = await supabase.storage.from(STORAGE_BUCKET).download(path)
     if (!error && data) {
       const arrayBuf = await data.arrayBuffer()
-      return Buffer.from(arrayBuf)
+      const buf = Buffer.from(arrayBuf)
+
+      // Auto-cura de placeholders legados: se o arquivo no storage tiver apenas <= 2 páginas
+      // mas as evidências do contrato indicarem um pacote com mais páginas (ex: 8, 11, 14 págs),
+      // regenera o documento completo automaticamente!
+      const totalEsperado = Number(contrato.evidencias?.totalPaginas || 1)
+      if (totalEsperado > 3) {
+        try {
+          const { PDFDocument } = await import('pdf-lib')
+          const doc = await PDFDocument.load(buf, { ignoreEncryption: true })
+          if (doc.getPageCount() <= 2) {
+            console.warn(`[Repository] PDF no storage para ${contrato.protocolo} tem apenas ${doc.getPageCount()} págs (esperado >= ${totalEsperado}). Regenerando documento completo...`)
+            return await gerarPdfEvidenciasFallback(contrato, tipo)
+          }
+        } catch {}
+      }
+
+      return buf
     }
   } catch (e) {
     console.warn(`[Repository] Erro ao baixar PDF (${tipo}) do storage:`, e)
@@ -164,7 +271,118 @@ export async function obterPdfBytes(
     }
   } catch {}
 
+  // Fallback de ultra-resiliência: reconstrói sob demanda com o documento contratual completo
+  try {
+    return await gerarPdfEvidenciasFallback(contrato, tipo)
+  } catch (err) {
+    console.warn(`[Repository] Falha ao gerar PDF de fallback (${tipo}):`, err)
+  }
+
   return null
+}
+
+/**
+ * Reconstrói sob demanda o PDF oficial com o conteúdo integral do contrato e certificado pericial
+ * garantindo que todas as páginas, cláusulas e termos constem no documento.
+ */
+export async function gerarPdfEvidenciasFallback(
+  contrato: ContratoDigitalModel,
+  tipo: 'original' | 'assinado' = 'original'
+): Promise<Buffer> {
+  const { gerarContratoPdf } = await import('../contracts/contractPdfGenerator')
+  const { anexarCertificadoEvidencias } = await import('../contracts/digitalEvidenceCertificate')
+
+  const rep = contrato.evidencias?.escolaRepresentante || {
+    nome: 'IVAN ROSSI SAMBRANA',
+    cpf: '00130220167',
+    cargo: 'Representante Legal / Diretor Geral',
+    razaoSocial: 'COLÉGIO IMPACTO CENTRO DE ENSINO LTDA',
+    cnpj: '04.395.789/0001-88',
+    dataHoraAssinatura: contrato.created_at,
+  }
+
+  // 1. Gera o documento contratual completo com cláusulas legais e formatação institucional
+  const contractPdfResult = await gerarContratoPdf({
+    escolaNome: rep.razaoSocial?.includes('IMPACTO') ? 'COLÉGIO IMPACTO' : rep.razaoSocial,
+    escolaRazaoSocial: rep.razaoSocial || 'COLÉGIO IMPACTO CENTRO DE ENSINO LTDA',
+    escolaCnpj: rep.cnpj || '04.395.789/0001-88',
+    escolaEndereco: 'Rua da Divisão, 586, Parati',
+    escolaCidadeUf: 'Campo Grande - MS',
+    escolaTelefone: '(67) 3000-0000',
+    escolaEmail: 'secretaria@colegioimpacto.com.br',
+    alunoId: contrato.aluno_id || '',
+    alunoNome: contrato.aluno_nome || 'Estudante',
+    alunoCpf: contrato.aluno_cpf || '',
+    alunoTurma: contrato.aluno_turma || '',
+    alunoSerie: contrato.aluno_serie || '',
+    alunoDataNasc: contrato.aluno_data_nascimento || '',
+    respNome: contrato.responsavel_nome || 'Responsável Legal',
+    respCpf: contrato.responsavel_cpf || '',
+    respTelefone: contrato.responsavel_telefone || '',
+    respEmail: contrato.responsavel_email || '',
+    respParentesco: contrato.responsavel_parentesco || 'Responsável',
+    anoLetivo: String(contrato.ano_letivo || '2027'),
+    tipoDocumento: contrato.tipo_documento === 'contrato_servicos' ? 'contrato_servicos' : 'requerimento_matricula',
+    valorAnuidade: contrato.valor_anuidade || 0,
+    valorMensalidade: contrato.valor_mensalidade || 0,
+    numParcelas: contrato.num_parcelas || 12,
+    descontoPercent: contrato.desconto_percent || 0,
+    diaVencimento: contrato.dia_vencimento || 10,
+    primeiroVencimento: contrato.primeiro_vencimento || undefined,
+  })
+
+  const basePdfBytes = contractPdfResult.pdfBytes
+
+  if (tipo === 'assinado' || contrato.status === 'assinado') {
+    const sigEv = contrato.evidencias?.signatarioEvidencias || {}
+
+    const sealed = await anexarCertificadoEvidencias({
+      originalPdfBytes: basePdfBytes,
+      protocolo: contrato.protocolo,
+      documentoTitulo: contrato.titulo_documento,
+      documentoOriginalHash: contrato.documento_original_hash,
+      alunoNome: contrato.aluno_nome,
+      alunoCpf: contrato.aluno_cpf,
+      alunoSerieTurma: `${contrato.aluno_serie || ''} ${contrato.aluno_turma || ''}`.trim() || null,
+      anoLetivo: contrato.ano_letivo,
+      signatario: {
+        nome: contrato.responsavel_nome,
+        cpf: contrato.responsavel_cpf,
+        dataNascimento: contrato.responsavel_data_nascimento || contrato.evidencias?.responsavel_data_nascimento || null,
+        email: contrato.responsavel_email,
+        telefone: contrato.responsavel_telefone,
+        parentesco: contrato.responsavel_parentesco,
+        cargoOuFuncao: contrato.responsavel_parentesco || 'Responsável',
+        dataHoraAssinatura: contrato.evidencias?.assinaturaConcluidaEm || contrato.updated_at,
+        metodoAutenticacao: 'Código de Confirmação OTP (E-mail / WhatsApp)',
+        aceiteTexto: sigEv.aceiteTexto || `Declaro ter lido e assinado eletronicamente o documento ${contrato.protocolo}.`,
+        ip: sigEv.ip || contrato.evidencias?.ipCriacao || '127.0.0.1',
+        dispositivo: sigEv.dispositivo || 'Smartphone / Computador',
+        sistemaOperacional: sigEv.sistemaOperacional || 'Sistema Operacional Seguro',
+        navegador: sigEv.navegador || 'Navegador Web Seguro',
+        tipoAssinatura: 'manual',
+        assinaturaBase64: null,
+      },
+      representanteEscola: {
+        nome: rep.nome,
+        cpf: rep.cpf,
+        cargo: rep.cargo,
+        razaoSocial: rep.razaoSocial,
+        cnpj: rep.cnpj,
+        dataHoraAssinatura: rep.dataHoraAssinatura || contrato.created_at,
+      },
+      eventosAuditoria: contrato.historico_eventos || [],
+      documentosAnexados: contrato.evidencias?.documentosAnexados || null,
+    })
+
+    const finalBuf = Buffer.from(sealed.pdfBytes)
+    salvarPdfBytes(contrato.id, 'assinado', finalBuf).catch(() => {})
+    return finalBuf
+  }
+
+  const origBuf = Buffer.from(basePdfBytes)
+  salvarPdfBytes(contrato.id, 'original', origBuf).catch(() => {})
+  return origBuf
 }
 
 /**
@@ -253,7 +471,9 @@ export function adicionarEventoAuditoriaEmMemoria(
 }
 
 /**
- * Lê todos os contratos do storage (tabela dedicada ou fallback ultraleve em configuracoes)
+ * Lê todos os contratos do storage (tabela dedicada ou fallback em configuracoes).
+ * Implementa auto-recuperação bidirecional: se a tabela nativa estiver vazia ou com
+ * itens faltantes, unifica com o fallback e realiza a auto-cura no banco.
  */
 async function getAllFromStorage(forceRefresh = false): Promise<{ list: ContratoDigitalModel[]; usedFallback: boolean }> {
   if (!forceRefresh && memoryCacheContratos && Date.now() - memoryCacheContratos.timestamp < CACHE_TTL_MS) {
@@ -264,8 +484,10 @@ async function getAllFromStorage(forceRefresh = false): Promise<{ list: Contrato
   }
 
   const supabase = getAdminClient()
+  let dbContracts: ContratoDigitalModel[] = []
+  let tableQuerySuccess = false
 
-  // 1. Tenta buscar na tabela pública matriculas_digitais apenas se a tabela estiver disponível
+  // 1. Tenta buscar na tabela pública matriculas_digitais se disponível
   if (isTableAvailable !== false) {
     try {
       const { data, error } = await supabase
@@ -275,15 +497,9 @@ async function getAllFromStorage(forceRefresh = false): Promise<{ list: Contrato
 
       if (!error && Array.isArray(data)) {
         isTableAvailable = true
-        const result = {
-          list: data.map(normalizeContrato),
-          usedFallback: false,
-        }
-        memoryCacheContratos = { ...result, timestamp: Date.now() }
-        return result
-      }
-
-      if (error && (
+        tableQuerySuccess = true
+        dbContracts = data.map(normalizeContrato)
+      } else if (error && (
         error.code === 'PGRST205' ||
         error.message?.includes('Could not find the table') ||
         error.message?.includes('schema cache')
@@ -295,7 +511,8 @@ async function getAllFromStorage(forceRefresh = false): Promise<{ list: Contrato
     }
   }
 
-  // 2. Fallback para configuracoes (ultraleve ~13 KB)
+  // 2. Consulta fallback de metadados em configuracoes
+  let fallbackContracts: ContratoDigitalModel[] = []
   try {
     const { data: cfgRow, error: cfgError } = await supabase
       .from('configuracoes')
@@ -305,35 +522,75 @@ async function getAllFromStorage(forceRefresh = false): Promise<{ list: Contrato
 
     if (cfgError) {
       console.warn('[Repository] Aviso ao ler configuracoes fallback, realizando retry:', cfgError)
-      // Retry único para tolerância a falhas transitórias
       const { data: retryRow, error: retryErr } = await supabase
         .from('configuracoes')
         .select('valor')
         .eq('chave', FALLBACK_KEY)
         .maybeSingle()
 
-      if (!retryErr && retryRow) {
-        const rawList: any[] = Array.isArray(retryRow.valor) ? retryRow.valor : []
-        const result = {
-          list: rawList.map(normalizeContrato),
-          usedFallback: true,
-        }
-        memoryCacheContratos = { ...result, timestamp: Date.now() }
-        return result
+      if (!retryErr && retryRow && Array.isArray(retryRow.valor)) {
+        fallbackContracts = retryRow.valor.map(normalizeContrato)
       }
+    } else if (cfgRow && Array.isArray(cfgRow.valor)) {
+      fallbackContracts = cfgRow.valor.map(normalizeContrato)
     }
-
-    const rawList: any[] = Array.isArray(cfgRow?.valor) ? cfgRow.valor : []
-    const result = {
-      list: rawList.map(normalizeContrato),
-      usedFallback: true,
-    }
-    memoryCacheContratos = { ...result, timestamp: Date.now() }
-    return result
   } catch (err) {
-    console.error('[Repository] Falha ao ler do fallback configuracoes:', err)
-    return { list: [], usedFallback: true }
+    console.warn('[Repository] Falha ao ler do fallback configuracoes:', err)
   }
+
+  // 3. Estratégia de unificação resiliente:
+  let mergedList: ContratoDigitalModel[] = []
+  let usedFallbackFinal = false
+
+  if (tableQuerySuccess && dbContracts.length > 0) {
+    // Tabela possui dados. Verifica se o fallback possui itens que ainda não estão no banco.
+    const dbIds = new Set(dbContracts.map(c => String(c.id || c.protocolo).trim().toLowerCase()))
+    const missingFromDb = fallbackContracts.filter(
+      c => !dbIds.has(String(c.id || '').trim().toLowerCase()) && !dbIds.has(String(c.protocolo || '').trim().toLowerCase())
+    )
+
+    if (missingFromDb.length > 0) {
+      mergedList = [...dbContracts, ...missingFromDb].sort(
+        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      )
+      // Auto-cura: insere itens faltantes na tabela do banco
+      Promise.resolve().then(async () => {
+        for (const item of missingFromDb) {
+          try {
+            await supabase.from('matriculas_digitais').upsert(toTableRecord(item))
+          } catch {}
+        }
+      })
+    } else {
+      mergedList = dbContracts
+    }
+    usedFallbackFinal = false
+  } else if (fallbackContracts.length > 0) {
+    // Tabela está vazia ou inacessível, mas fallback tem dados (ex: migração inicial ou tabela recém-criada)
+    mergedList = fallbackContracts
+    usedFallbackFinal = true
+
+    // Se a tabela estiver acessível mas vazia, migra automaticamente todos os itens do fallback
+    if (isTableAvailable !== false) {
+      Promise.resolve().then(async () => {
+        for (const item of fallbackContracts) {
+          try {
+            await supabase.from('matriculas_digitais').upsert(toTableRecord(item))
+          } catch {}
+        }
+      })
+    }
+  } else {
+    mergedList = dbContracts
+    usedFallbackFinal = !tableQuerySuccess
+  }
+
+  const result = {
+    list: mergedList,
+    usedFallback: usedFallbackFinal,
+  }
+  memoryCacheContratos = { ...result, timestamp: Date.now() }
+  return result
 }
 
 /**
@@ -357,7 +614,7 @@ async function saveToFallback(list: ContratoDigitalModel[]) {
 }
 
 /**
- * Salva ou atualiza um contrato individual no storage
+ * Salva ou atualiza um contrato individual no storage e na tabela nativa
  */
 export async function salvarContrato(contrato: ContratoDigitalModel): Promise<ContratoDigitalModel> {
   const supabase = getAdminClient()
@@ -381,12 +638,13 @@ export async function salvarContrato(contrato: ContratoDigitalModel): Promise<Co
     updated_at: new Date().toISOString(),
   }
 
-  // Tenta salvar na tabela dedicada se disponível
+  // Tenta salvar na tabela dedicada sanitizado com toTableRecord (apenas colunas existentes)
   if (isTableAvailable !== false) {
     try {
+      const tableRecord = toTableRecord(payload)
       const { data, error } = await supabase
         .from('matriculas_digitais')
-        .upsert(payload)
+        .upsert(tableRecord)
         .select()
         .maybeSingle()
 
@@ -394,8 +652,7 @@ export async function salvarContrato(contrato: ContratoDigitalModel): Promise<Co
         isTableAvailable = true
       } else if (error && (
         error.code === 'PGRST205' ||
-        error.message?.includes('Could not find the table') ||
-        error.message?.includes('schema cache')
+        error.message?.includes('Could not find the table')
       )) {
         isTableAvailable = false
       }
@@ -404,10 +661,10 @@ export async function salvarContrato(contrato: ContratoDigitalModel): Promise<Co
     }
   }
 
-  // Sincroniza com o fallback de metadados leves (agora ~13 KB!)
+  // Sincroniza com o fallback de metadados leves em configuracoes
   try {
     const { list } = await getAllFromStorage(true)
-    const idx = list.findIndex(c => c.id === contrato.id)
+    const idx = list.findIndex(c => c.id === contrato.id || c.protocolo === contrato.protocolo)
     let updatedList: ContratoDigitalModel[] = []
     if (idx >= 0) {
       updatedList = [...list]

@@ -699,9 +699,21 @@ export default function MatriculaDigitalPage() {
     }
   }
 
+  const isInitialBuscaMount = useRef(true)
   useEffect(() => {
     carregarContratos()
   }, [statusFiltro, anoFiltro])
+
+  useEffect(() => {
+    if (isInitialBuscaMount.current) {
+      isInitialBuscaMount.current = false
+      return
+    }
+    const timer = setTimeout(() => {
+      carregarContratos()
+    }, 350)
+    return () => clearTimeout(timer)
+  }, [busca])
 
   useEffect(() => {
     carregarConfiguracoes()
@@ -1090,32 +1102,26 @@ export default function MatriculaDigitalPage() {
     }))
   }
 
-  // Processa múltiplos arquivos selecionados ou arrastados (PDF, DOCX ou DOC)
+  // Processa múltiplos arquivos selecionados ou arrastados (Exclusivamente PDF)
   const processarArquivosSelecionados = async (files: File[]) => {
     if (!files || files.length === 0) return
 
     const arquivosValidos: File[] = []
     for (const f of files) {
       const ext = f.name.split('.').pop()?.toLowerCase() || ''
-      const formatoValido =
-        ext === 'pdf' ||
-        ext === 'docx' ||
-        ext === 'doc' ||
-        f.type === 'application/pdf' ||
-        f.type === 'application/msword' ||
-        f.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+      const formatoValido = ext === 'pdf' || f.type === 'application/pdf'
 
       if (formatoValido) {
         arquivosValidos.push(f)
       } else {
-        toast.error(`Formato do arquivo "${f.name}" não suportado. Envie arquivos PDF ou Word (.docx / .doc).`)
+        toast.error(`Formato do arquivo "${f.name}" não suportado. O arquivo de importação deve ser exclusivamente PDF (.pdf).`)
       }
     }
 
     if (arquivosValidos.length === 0) return
 
     setConvertendoDocumento(true)
-    setStatusConversao(`Iniciando processamento de ${arquivosValidos.length} documento(s)...`)
+    setStatusConversao(`Iniciando processamento de ${arquivosValidos.length} documento(s) PDF...`)
 
     try {
       const novosItens = await processarArquivosEmLote(arquivosValidos, {
@@ -1244,12 +1250,12 @@ export default function MatriculaDigitalPage() {
     e.preventDefault()
 
     if (convertendoDocumento) {
-      toast.error('Aguarde a conclusão da conversão dos documentos para PDF antes de emitir.')
+      toast.error('Aguarde a conclusão do processamento dos documentos PDF antes de emitir.')
       return
     }
 
     if (documentosUpload.length === 0) {
-      toast.error('Por favor, selecione ou faça upload de pelo menos um arquivo PDF ou Word (.docx/.doc) para assinatura.')
+      toast.error('Por favor, selecione ou faça upload de pelo menos um arquivo PDF para assinatura.')
       return
     }
     if (!formNovo.signatario_nome.trim()) {
@@ -4615,12 +4621,12 @@ export default function MatriculaDigitalPage() {
                       type="file"
                       multiple
                       disabled={convertendoDocumento}
-                      accept=".pdf,.docx,.doc,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                      accept=".pdf,application/pdf"
                       style={{ display: 'none' }}
                       onChange={handleFileUpload}
                     />
 
-                    {/* Feedback visual durante processamento/conversão de arquivos */}
+                    {/* Feedback visual durante processamento de arquivos PDF */}
                     {convertendoDocumento && (
                       <div
                         style={{
@@ -4636,7 +4642,7 @@ export default function MatriculaDigitalPage() {
                       >
                         <Loader2 size={20} className="animate-spin" />
                         <div style={{ fontSize: 12.5, fontWeight: 700 }}>
-                          {statusConversao || 'Processando e convertendo arquivos...'}
+                          {statusConversao || 'Processando arquivos PDF...'}
                         </div>
                       </div>
                     )}
@@ -4673,7 +4679,7 @@ export default function MatriculaDigitalPage() {
                           <div style={{ minWidth: 0 }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                               <span style={{ fontWeight: 800, fontSize: 14, color: 'hsl(var(--text-primary))', letterSpacing: '-0.01em' }}>
-                                Selecionar Documento(s) (PDF ou Word)
+                                Selecionar Documento(s) (PDF)
                               </span>
                               <span
                                 style={{
@@ -4693,7 +4699,7 @@ export default function MatriculaDigitalPage() {
                               </span>
                             </div>
                             <div style={{ fontSize: 11.5, color: 'hsl(var(--text-secondary))', marginTop: 3 }}>
-                              Arraste um ou mais PDFs/Word (.docx) aqui, ou clique para escolher do computador
+                              Arraste um ou mais arquivos PDF aqui, ou clique para escolher do computador
                             </div>
                           </div>
                         </div>
@@ -4720,7 +4726,7 @@ export default function MatriculaDigitalPage() {
                           onMouseLeave={(e) => (e.currentTarget.style.filter = 'none')}
                         >
                           <Upload size={14} />
-                          <span>{convertendoDocumento ? 'Convertendo...' : 'Escolher Arquivo(s)'}</span>
+                          <span>{convertendoDocumento ? 'Processando...' : 'Escolher Arquivo(s)'}</span>
                         </label>
                       </div>
                     ) : (
@@ -6330,9 +6336,7 @@ export default function MatriculaDigitalPage() {
                     <div style={{ fontSize: 11, color: '#94a3b8' }}>
                       {previaEhPacoteUnificado
                         ? `Consolidação sequencial de ${documentosUpload.length} documentos • Total de ${totalPaginasGeral} páginas • ${pdfUploadTamanho}`
-                        : formatoOriginalUpload === 'docx' || formatoOriginalUpload === 'doc'
-                        ? `Documento Word (.${formatoOriginalUpload.toUpperCase()}) convertido para PDF de alta fidelidade • ${pdfUploadTamanho}`
-                        : `Pré-visualização do PDF original pronto para assinatura eletrônica • ${pdfUploadTamanho}`}
+                        : `Pré-visualização do documento PDF pronto para assinatura eletrônica • ${pdfUploadTamanho}`}
                     </div>
                   </div>
                 </div>

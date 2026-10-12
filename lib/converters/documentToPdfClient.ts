@@ -112,15 +112,13 @@ export async function processarDocumentoParaPdf(
   options?: { titulo?: string; onProgress?: (msg: string) => void }
 ): Promise<ClientConversionResult> {
   const ext = file.name.split('.').pop()?.toLowerCase() || ''
-  const formatoOriginal: 'pdf' | 'docx' | 'doc' =
-    ext === 'docx' ? 'docx' : ext === 'doc' ? 'doc' : 'pdf'
+  const isPdf = ext === 'pdf' || file.type === 'application/pdf'
 
-  // Se for DOCX ou DOC, envia para a API server-side para renderização com timbrado e imagens
-  if (formatoOriginal === 'docx' || formatoOriginal === 'doc') {
-    return converterViaApi(file, formatoOriginal, options)
+  if (!isPdf) {
+    throw new Error(`O arquivo de importação deve ser exclusivamente PDF (.pdf). O arquivo "${file.name}" não é suportado.`)
   }
 
-  // Se for PDF nativo, carrega e valida páginas
+  // Valida e carrega o arquivo PDF nativo
   options?.onProgress?.('Validando arquivo PDF...')
 
   const arrayBuffer = await file.arrayBuffer()

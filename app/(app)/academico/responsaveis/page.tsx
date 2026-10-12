@@ -4,7 +4,8 @@ import React, { useState, useMemo, useEffect } from 'react'
 import { 
   Plus, Search, Trash2, Edit2, Phone, Mail, Users, Filter, Download, 
   Tag, CreditCard, X, Save, Loader2, ChevronLeft, ChevronRight,
-  MapPin, Briefcase, Check, ChevronDown, ChevronUp, AlertTriangle, CheckCircle2, Copy
+  MapPin, Briefcase, Check, ChevronDown, ChevronUp, AlertTriangle, CheckCircle2, Copy,
+  UserCheck, UserX, Sparkles
 } from 'lucide-react'
 import { TableSkeleton } from '@/components/skeletons/TableSkeleton'
 import { UpdatingIndicator } from '@/components/skeletons/States'
@@ -151,135 +152,6 @@ export default function ResponsaveisPage() {
     }
   }
 
-  const [loadingCep, setLoadingCep] = useState<Record<string, boolean>>({})
-  const [cepFeedback, setCepFeedback] = useState<Record<string, { type: 'success' | 'error', message: string } | null>>({})
-  const [expandedComercial, setExpandedComercial] = useState<Record<number, boolean>>({})
-
-  const toggleComercial = (index: number) => {
-    setExpandedComercial(prev => ({
-      ...prev,
-      [index]: !prev[index]
-    }))
-  }
-
-  const buscarCepResidencial = async (rawCep: string, index: number) => {
-    const digits = rawCep.replace(/\D/g, '')
-    if (digits.length !== 8) return
-
-    const key = `${index}_res`
-    setLoadingCep(prev => ({ ...prev, [key]: true }))
-    setCepFeedback(prev => ({ ...prev, [key]: null }))
-    try {
-      const res = await fetch(`https://viacep.com.br/ws/${digits}/json/`)
-      if (!res.ok) throw new Error('Falha na requisição')
-      const data = await res.json()
-      if (data.erro) {
-        setCepFeedback(prev => ({ ...prev, [key]: { type: 'error', message: 'CEP não encontrado' } }))
-      } else {
-        setFormResponsaveis(prev => {
-          const newArr = [...prev]
-          if (newArr[index]) {
-            newArr[index] = {
-              ...newArr[index],
-              endereco: data.logradouro || newArr[index].endereco || '',
-              bairro: data.bairro || newArr[index].bairro || '',
-              cidade: data.localidade || newArr[index].cidade || '',
-              uf: data.uf || newArr[index].uf || '',
-              complemento: data.complemento && !newArr[index].complemento ? data.complemento : newArr[index].complemento
-            }
-          }
-          return newArr
-        })
-        setCepFeedback(prev => ({ ...prev, [key]: { type: 'success', message: `${data.localidade} - ${data.uf}` } }))
-      }
-    } catch {
-      setCepFeedback(prev => ({ ...prev, [key]: { type: 'error', message: 'Erro ao consultar CEP' } }))
-    } finally {
-      setLoadingCep(prev => ({ ...prev, [key]: false }))
-    }
-  }
-
-  const handleCepResidencialChange = (val: string, index: number) => {
-    const formatted = formatCepMask(val)
-    handleInputChange('cep', formatted, index)
-    const digits = formatted.replace(/\D/g, '')
-    const key = `${index}_res`
-    if (digits.length === 8) {
-      buscarCepResidencial(digits, index)
-    } else {
-      setCepFeedback(prev => ({ ...prev, [key]: null }))
-    }
-  }
-
-  const buscarCepComercial = async (rawCep: string, index: number) => {
-    const digits = rawCep.replace(/\D/g, '')
-    if (digits.length !== 8) return
-
-    const key = `${index}_com`
-    setLoadingCep(prev => ({ ...prev, [key]: true }))
-    setCepFeedback(prev => ({ ...prev, [key]: null }))
-    try {
-      const res = await fetch(`https://viacep.com.br/ws/${digits}/json/`)
-      if (!res.ok) throw new Error('Falha na requisição')
-      const data = await res.json()
-      if (data.erro) {
-        setCepFeedback(prev => ({ ...prev, [key]: { type: 'error', message: 'CEP não encontrado' } }))
-      } else {
-        setFormResponsaveis(prev => {
-          const newArr = [...prev]
-          if (newArr[index]) {
-            newArr[index] = {
-              ...newArr[index],
-              comercialEndereco: data.logradouro || newArr[index].comercialEndereco || '',
-              comercialBairro: data.bairro || newArr[index].comercialBairro || '',
-              comercialCidade: data.localidade || newArr[index].comercialCidade || '',
-              comercialUf: data.uf || newArr[index].comercialUf || '',
-              comercialComplemento: data.complemento && !newArr[index].comercialComplemento ? data.complemento : newArr[index].comercialComplemento
-            }
-          }
-          return newArr
-        })
-        setCepFeedback(prev => ({ ...prev, [key]: { type: 'success', message: `${data.localidade} - ${data.uf}` } }))
-      }
-    } catch {
-      setCepFeedback(prev => ({ ...prev, [key]: { type: 'error', message: 'Erro ao consultar CEP' } }))
-    } finally {
-      setLoadingCep(prev => ({ ...prev, [key]: false }))
-    }
-  }
-
-  const handleCepComercialChange = (val: string, index: number) => {
-    const formatted = formatCepMask(val)
-    handleInputChange('comercialCep', formatted, index)
-    const digits = formatted.replace(/\D/g, '')
-    const key = `${index}_com`
-    if (digits.length === 8) {
-      buscarCepComercial(digits, index)
-    } else {
-      setCepFeedback(prev => ({ ...prev, [key]: null }))
-    }
-  }
-
-  const handleCopiarEnderecoResidencialParaComercial = (index: number) => {
-    setFormResponsaveis(prev => {
-      const newArr = [...prev]
-      const resp = newArr[index]
-      if (!resp) return prev
-      newArr[index] = {
-        ...resp,
-        comercialCep: resp.cep || '',
-        comercialEndereco: resp.endereco || '',
-        comercialNumero: resp.numero || '',
-        comercialComplemento: resp.complemento || '',
-        comercialBairro: resp.bairro || '',
-        comercialCidade: resp.cidade || '',
-        comercialUf: resp.uf || ''
-      }
-      return newArr
-    })
-    setExpandedComercial(prev => ({ ...prev, [index]: true }))
-  }
-
   // Query para buscar responsáveis (Cache via React Query)
   const { data: apiResponse, isLoading: loadingList, isFetching } = useApiQuery<{ data: any[], total: number }>(
     ['responsaveis', String(paginaAtual), String(itensPorPagina), search],
@@ -340,28 +212,20 @@ export default function ResponsaveisPage() {
 
   const handleNovoResponsavel = () => {
     setEditingResponsavel(null)
-    setFormResponsaveis([createEmptyResponsavel()])
+    const newResp = createEmptyResponsavel()
+    newResp.id = Math.floor(1000000 + Math.random() * 9000000).toString()
+    setFormResponsaveis([newResp])
     setValidationErrors([])
-    setExpandedComercial({ 0: false })
+    setBuscaAluno('')
+    setResultadosAlunos([])
     setIsModalOpen(true)
   }
 
   const handleEdit = (resp: any) => {
     setEditingResponsavel(resp)
     const d = resp.dados || {}
-    const hasComercial = Boolean(
-      resp.comercialEmpresa || d.comercialEmpresa ||
-      resp.comercialTelefone || d.comercialTelefone ||
-      resp.comercialCep || d.comercialCep ||
-      resp.comercialEndereco || d.comercialEndereco ||
-      resp.comercialNumero || d.comercialNumero ||
-      resp.comercialComplemento || d.comercialComplemento ||
-      resp.comercialBairro || d.comercialBairro ||
-      resp.comercialCidade || d.comercialCidade ||
-      resp.comercialUf || d.comercialUf
-    )
     setFormResponsaveis([{
-      id: resp.id || '',
+      id: resp.id || resp.codigo || '',
       nome: resp.nome || '',
       dataNasc: resp.dataNasc || resp.data_nasc || d.dataNasc || '',
       email: resp.email || '',
@@ -400,8 +264,9 @@ export default function ResponsaveisPage() {
       comercialUf: resp.comercialUf || d.comercialUf || '',
       alunosVinculados: resp.alunosVinculados || []
     }])
-    setExpandedComercial({ 0: hasComercial })
     setValidationErrors([])
+    setBuscaAluno('')
+    setResultadosAlunos([])
     setIsModalOpen(true)
   }
 
@@ -433,11 +298,20 @@ export default function ResponsaveisPage() {
   }
 
   const handleSave = async () => {
-    // Validação de campos obrigatórios: Nome Completo e E-mail (se Financeiro)
+    // Validação de campos obrigatórios: ID, Nome, Parentesco, Tipo e E-mail (se Financeiro)
     const errors: { field: string; message: string }[] = []
     formResponsaveis.forEach((resp, idx) => {
+      if (!resp.id || !String(resp.id).trim()) {
+        errors.push({ field: `resp_${idx}_id`, message: 'ID/Código é obrigatório' })
+      }
       if (!resp.nome || !resp.nome.trim()) {
         errors.push({ field: `resp_${idx}_nome`, message: 'Nome Completo é obrigatório' })
+      }
+      if (!resp.parentesco || !resp.parentesco.trim()) {
+        errors.push({ field: `resp_${idx}_parentesco`, message: 'Parentesco é obrigatório' })
+      }
+      if (!resp.isFinanceiro && !resp.isPedagogico && !resp.isOutro && resp.parentesco !== 'outro') {
+        errors.push({ field: `resp_${idx}_tipo`, message: 'Selecione ao menos um tipo de responsável' })
       }
       // O e-mail NÃO deve ser obrigatório para o tipo "outro" nem "pedagógico", apenas para "financeiro"
       if (resp.isFinanceiro && (!resp.email || !resp.email.trim())) {
@@ -456,7 +330,7 @@ export default function ResponsaveisPage() {
       const resp = formResponsaveis[0] // Assume apenas um item
       const payload = {
         ...resp,
-        alunos_vinculados: resp.alunosVinculados.map((aluno: any) => ({
+        alunos_vinculados: (resp.alunosVinculados || []).map((aluno: any) => ({
           aluno_id: typeof aluno === 'object' ? aluno.id : aluno,
           parentesco: resp.parentesco,
           resp_pedagogico: resp.isPedagogico,
@@ -671,7 +545,7 @@ export default function ResponsaveisPage() {
                       background: resp.proibido ? '#fee2e2' : '#dcfce7',
                       color: resp.proibido ? '#991b1b' : '#166534'
                     }}>
-                      {resp.proibido ? 'Proibido' : 'Liberado'}
+                      {resp.proibido ? 'Retirada Proibida' : 'Retirada Liberada'}
                     </span>
                   </td>
                   <td style={{ padding: '14px 16px', textAlign: 'center' }}>
@@ -869,311 +743,362 @@ export default function ResponsaveisPage() {
         </div>
       )}
 
-      {/* Modal Idêntico ao de Alunos Passo Responsável com Cabeçalho Gradiente */}
+      {/* Modal Idêntico ao de Alunos Passo Responsável com Design Compacto de Luxo */}
       {isModalOpen && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-          <div style={{ background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)', borderRadius: 16, width: 'min(980px, 96vw)', maxHeight: '90vh', overflowY: 'auto', padding: 24, boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)' }}>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }}>
+          <div 
+            className="glass-card ultra-modal modal-enter-active" 
+            style={{ 
+              width: '100%', 
+              maxWidth: 840, 
+              maxHeight: '92vh', 
+              display: 'flex', 
+              flexDirection: 'column', 
+              overflow: 'hidden',
+              background: '#ffffff',
+              borderRadius: 14,
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.15), 0 10px 10px -5px rgba(0, 0, 0, 0.05)'
+            }}
+          >
             
-            {/* Header do Modal com Gradiente Escuro Ultra Moderno */}
-            <div style={{ background: 'linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%)', margin: '-24px -24px 20px -24px', padding: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#fff' }}>
-              <div>
-                <h2 style={{ fontSize: 20, fontWeight: 900, color: '#fff', margin: 0 }}>{editingResponsavel ? 'Editar Responsável' : 'Novo Responsável'}</h2>
-                <p style={{ fontSize: 14, color: '#94a3b8', marginTop: 4 }}>Preencha os dados completos do responsável abaixo</p>
+            {/* Header do Modal com Gradiente Luxo */}
+            <div style={{ padding: '14px 20px', background: 'linear-gradient(135deg, #2563eb 0%, #7c3aed 100%)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ width: 34, height: 34, borderRadius: 8, background: 'rgba(255, 255, 255, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Users size={17} color="#fff" />
+                </div>
+                <div>
+                  <h2 style={{ fontSize: 16, fontWeight: 800, color: '#fff', margin: 0, fontFamily: 'Outfit, sans-serif' }}>
+                    {editingResponsavel ? 'Editar Responsável' : 'Cadastrar Novo Responsável'}
+                  </h2>
+                  <p style={{ fontSize: 11, color: 'rgba(255, 255, 255, 0.85)', margin: 0 }}>
+                    {editingResponsavel ? 'Atualize as informações cadastrais do responsável' : 'Preencha os dados essenciais para adicionar ao sistema'}
+                  </p>
+                </div>
               </div>
-              <button onClick={() => setIsModalOpen(false)} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: '50%', width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#fff' }}>
-                <X size={20} />
+              <button onClick={() => setIsModalOpen(false)} style={{ width: 30, height: 30, borderRadius: '50%', border: 'none', background: 'rgba(255, 255, 255, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#fff' }}>
+                <X size={15} />
               </button>
             </div>
 
             {/* Conteúdo do Modal */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-              {formResponsaveis.map((resp, index) => {
-                const isExpandedComercial = !!expandedComercial[index]
-                const hasComercialData = Boolean(
-                  resp.comercialEmpresa ||
-                  resp.comercialTelefone ||
-                  resp.comercialCep ||
-                  resp.comercialEndereco ||
-                  resp.comercialNumero ||
-                  resp.comercialComplemento ||
-                  resp.comercialBairro ||
-                  resp.comercialCidade ||
-                  resp.comercialUf
-                )
-
-                return (
-                  <div key={index} style={{ border: '1px solid #e2e8f0', padding: 18, borderRadius: 12, background: 'rgba(255,255,255,0.7)', boxShadow: '0 2px 8px rgba(0,0,0,0.03)' }}>
-                    {/* Header do Card com Badges */}
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-                      <h3 style={{ fontSize: 14, fontWeight: 800, color: '#1e293b', margin: 0 }}>
-                        {formResponsaveis.length > 1 ? `Dados do Responsável #${index + 1}` : 'Dados do Responsável'}
-                      </h3>
-                      <div style={{ display: 'flex', gap: 8 }}>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const val = !resp.isFinanceiro;
-                            handleInputChange('isFinanceiro', val, index);
-                            if (!val) {
-                              setValidationErrors(prev => prev.filter(err => err.field !== `resp_${index}_email`));
-                            }
-                          }}
-                          style={{
-                            padding: '5px 14px',
-                            borderRadius: '20px',
-                            fontSize: 11.5,
-                            fontWeight: 700,
-                            border: '1px solid',
-                            borderColor: resp.isFinanceiro ? '#10b981' : '#e2e8f0',
-                            background: resp.isFinanceiro ? '#10b981' : '#fff',
-                            color: resp.isFinanceiro ? '#fff' : '#64748b',
-                            cursor: 'pointer',
-                            transition: 'all 0.2s',
-                            boxShadow: resp.isFinanceiro ? '0 2px 6px rgba(16, 185, 129, 0.3)' : 'none'
-                          }}
-                        >
-                          Financeiro
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            handleInputChange('isPedagogico', !resp.isPedagogico, index);
-                            if (!resp.isFinanceiro) {
-                              setValidationErrors(prev => prev.filter(err => err.field !== `resp_${index}_email`));
-                            }
-                          }}
-                          style={{
-                            padding: '5px 14px',
-                            borderRadius: '20px',
-                            fontSize: 11.5,
-                            fontWeight: 700,
-                            border: '1px solid',
-                            borderColor: resp.isPedagogico ? '#8b5cf6' : '#e2e8f0',
-                            background: resp.isPedagogico ? '#8b5cf6' : '#fff',
-                            color: resp.isPedagogico ? '#fff' : '#64748b',
-                            cursor: 'pointer',
-                            transition: 'all 0.2s',
-                            boxShadow: resp.isPedagogico ? '0 2px 6px rgba(139, 92, 246, 0.3)' : 'none'
-                          }}
-                        >
-                          Pedagógico
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            handleInputChange('isOutro', !resp.isOutro, index);
-                            if (!resp.isFinanceiro) {
-                              setValidationErrors(prev => prev.filter(err => err.field !== `resp_${index}_email`));
-                            }
-                          }}
-                          style={{
-                            padding: '5px 14px',
-                            borderRadius: '20px',
-                            fontSize: 11.5,
-                            fontWeight: 700,
-                            border: '1px solid',
-                            borderColor: resp.isOutro ? '#f59e0b' : '#e2e8f0',
-                            background: resp.isOutro ? '#f59e0b' : '#fff',
-                            color: resp.isOutro ? '#fff' : '#64748b',
-                            cursor: 'pointer',
-                            transition: 'all 0.2s',
-                            boxShadow: resp.isOutro ? '0 2px 6px rgba(245, 158, 11, 0.3)' : 'none'
-                          }}
-                        >
-                          Outro
-                        </button>
+            <div style={{ padding: '14px 20px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {formResponsaveis.map((resp, index) => (
+                <div 
+                  key={index} 
+                  style={{ 
+                    border: hasError(`resp_${index}_tipo`) || hasError(`resp_${index}_id`) || hasError(`resp_${index}_nome`) || hasError(`resp_${index}_parentesco`) || hasError(`resp_${index}_email`)
+                      ? '1.5px solid #ef4444' 
+                      : '1px solid #e2e8f0', 
+                    padding: '12px 14px', 
+                    borderRadius: 10, 
+                    background: '#ffffff', 
+                    boxShadow: '0 1px 4px rgba(15, 23, 42, 0.03)',
+                    transition: 'all 0.15s ease',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 10
+                  }}
+                >
+                  {/* Cabeçalho do Card: Identificação + Seleção de Tipos */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: 8, borderBottom: '1px solid #f1f5f9', flexWrap: 'wrap', gap: 8 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div style={{ width: 24, height: 24, borderRadius: 6, background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 11, fontWeight: 800 }}>
+                        <Users size={12} />
+                      </div>
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <h3 style={{ fontSize: 13, fontWeight: 800, color: '#1e293b', margin: 0 }}>
+                            {formResponsaveis.length > 1 ? `Responsável #${index + 1}` : 'Dados do Responsável'}
+                          </h3>
+                        </div>
+                        <p style={{ fontSize: 10.5, color: '#64748b', margin: '1px 0 0 0' }}>
+                          {resp.nome?.trim() ? resp.nome : 'Preencha os dados do responsável'}
+                        </p>
                       </div>
                     </div>
-                    
-                    {/* SUB-SECTION 1: DADOS PESSOAIS E DOCUMENTOS */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                      {/* Linha 1: ID, Nome Completo *, Parentesco */}
-                      <div style={{ display: 'grid', gridTemplateColumns: '110px 1fr 220px', gap: 12 }}>
-                        <div>
-                          <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 5 }}>ID</label>
+
+                    <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                      {/* Chip Financeiro */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const val = !resp.isFinanceiro;
+                          handleInputChange('isFinanceiro', val, index);
+                          if (val || resp.isPedagogico || resp.isOutro) {
+                            setValidationErrors(prev => prev.filter(err => err.field !== `resp_${index}_tipo`));
+                          }
+                          if (!val) {
+                            setValidationErrors(prev => prev.filter(err => err.field !== `resp_${index}_email`));
+                          }
+                        }}
+                        style={{
+                          padding: '3px 10px',
+                          borderRadius: '14px',
+                          fontSize: 10.5,
+                          fontWeight: 700,
+                          border: '1px solid',
+                          borderColor: resp.isFinanceiro ? '#10b981' : hasError(`resp_${index}_tipo`) ? '#ef4444' : '#e2e8f0',
+                          background: resp.isFinanceiro ? '#ecfdf5' : '#f8fafc',
+                          color: resp.isFinanceiro ? '#059669' : '#64748b',
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 4
+                        }}
+                      >
+                        {resp.isFinanceiro && <Check size={11} />} Financeiro
+                      </button>
+
+                      {/* Chip Pedagógico */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const val = !resp.isPedagogico;
+                          handleInputChange('isPedagogico', val, index);
+                          if (val || resp.isFinanceiro || resp.isOutro) {
+                            setValidationErrors(prev => prev.filter(err => err.field !== `resp_${index}_tipo`));
+                          }
+                          if (!resp.isFinanceiro) {
+                            setValidationErrors(prev => prev.filter(err => err.field !== `resp_${index}_email`));
+                          }
+                        }}
+                        style={{
+                          padding: '3px 10px',
+                          borderRadius: '14px',
+                          fontSize: 10.5,
+                          fontWeight: 700,
+                          border: '1px solid',
+                          borderColor: resp.isPedagogico ? '#6366f1' : hasError(`resp_${index}_tipo`) ? '#ef4444' : '#e2e8f0',
+                          background: resp.isPedagogico ? '#eef2ff' : '#f8fafc',
+                          color: resp.isPedagogico ? '#4f46e5' : '#64748b',
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 4
+                        }}
+                      >
+                        {resp.isPedagogico && <Check size={11} />} Pedagógico
+                      </button>
+
+                      {/* Chip Outro */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const val = !resp.isOutro;
+                          handleInputChange('isOutro', val, index);
+                          if (val || resp.isFinanceiro || resp.isPedagogico) {
+                            setValidationErrors(prev => prev.filter(err => err.field !== `resp_${index}_tipo`));
+                          }
+                          if (!resp.isFinanceiro) {
+                            setValidationErrors(prev => prev.filter(err => err.field !== `resp_${index}_email`));
+                          }
+                        }}
+                        style={{
+                          padding: '3px 10px',
+                          borderRadius: '14px',
+                          fontSize: 10.5,
+                          fontWeight: 700,
+                          border: '1px solid',
+                          borderColor: resp.isOutro ? '#f59e0b' : hasError(`resp_${index}_tipo`) ? '#ef4444' : '#e2e8f0',
+                          background: resp.isOutro ? '#fffbeb' : '#f8fafc',
+                          color: resp.isOutro ? '#d97706' : '#64748b',
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 4
+                        }}
+                      >
+                        {resp.isOutro && <Check size={11} />} Outro
+                      </button>
+
+                      {formResponsaveis.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFormResponsaveis(prev => prev.filter((_, i) => i !== index));
+                          }}
+                          style={{
+                            width: 26,
+                            height: 26,
+                            borderRadius: '6px',
+                            border: '1px solid #fee2e2',
+                            background: '#fef2f2',
+                            color: '#ef4444',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            marginLeft: 2
+                          }}
+                          title="Remover este responsável"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Alerta se nenhum tipo selecionado */}
+                  {!resp.isFinanceiro && !resp.isPedagogico && !resp.isOutro && resp.parentesco !== 'outro' && (
+                    <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 6, padding: '6px 10px' }}>
+                      <span style={{ fontSize: '10.5px', fontWeight: 700, color: '#dc2626', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                        <AlertTriangle size={12} /> Selecione o tipo deste responsável: Financeiro, Pedagógico ou Outro *
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Campos do Responsável */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {/* Linha 1: ID, Nome Completo *, Parentesco */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '150px 1fr 160px', gap: 10 }}>
+                      <div>
+                        <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.03em', marginBottom: 4, whiteSpace: 'nowrap' }}>
+                          ID / Código <span style={{ color: '#ef4444' }}>*</span>
+                        </label>
+                        <div style={{ display: 'flex', gap: 5 }}>
                           <input 
                             className="form-input" 
-                            style={{ height: 40, padding: '0 12px', fontSize: 13, borderRadius: 8, boxSizing: 'border-box' }}
-                            placeholder="Ex: RESP001" 
-                            value={resp.id} 
-                            onChange={e => handleInputChange('id', e.target.value, index)} 
-                          />
-                        </div>
-                        <div>
-                          <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 5 }}>Nome Completo *</label>
-                          <input 
-                            className="form-input" 
-                            style={{ ...getMandatoryFieldStyle(resp.nome, `resp_${index}_nome`), height: 40, padding: '0 12px', fontSize: 13, borderRadius: 8, boxSizing: 'border-box' }}
-                            placeholder="Nome do responsável" 
-                            value={resp.nome} 
+                            style={{ 
+                              flex: 1, 
+                              height: 32, 
+                              padding: '0 8px', 
+                              fontSize: 12, 
+                              borderRadius: 6, 
+                              fontWeight: 700, 
+                              background: '#fff',
+                              ...getMandatoryFieldStyle(resp.id, `resp_${index}_id`)
+                            }}
+                            placeholder="Ex: 7892255" 
+                            value={resp.id || ''} 
                             onChange={e => {
-                              handleInputChange('nome', e.target.value, index)
-                              if (hasError(`resp_${index}_nome`)) {
-                                setValidationErrors(prev => prev.filter(err => err.field !== `resp_${index}_nome`))
+                              handleInputChange('id', e.target.value, index);
+                              if (hasError(`resp_${index}_id`)) {
+                                setValidationErrors(prev => prev.filter(err => err.field !== `resp_${index}_id`));
                               }
                             }} 
                           />
-                        </div>
-                        <div>
-                          <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 5 }}>Parentesco</label>
-                          <select 
-                            className="form-input" 
-                            style={{ height: 40, padding: '0 12px', fontSize: 13, borderRadius: 8, boxSizing: 'border-box' }}
-                            value={resp.parentesco} 
-                            onChange={e => handleInputChange('parentesco', e.target.value, index)}
-                          >
-                            <option value="">Selecione…</option>
-                            <option value="pai">Pai</option>
-                            <option value="mae">Mãe</option>
-                            <option value="responsavel_legal">Responsável Legal</option>
-                            <option value="padrasto">Padrasto</option>
-                            <option value="madrasta">Madrasta</option>
-                            <option value="avo">Avô / Avó</option>
-                            <option value="tio">Tio / Tia</option>
-                            <option value="irmao">Irmão / Irmã</option>
-                            <option value="outro">Outro</option>
-                          </select>
-                        </div>
-                      </div>
-
-                      {/* Linha 2: CPF, RG, Órgão Emissor / UF, Data de Nascimento */}
-                      <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr 1.1fr', gap: 12 }}>
-                        <div>
-                          <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 5 }}>CPF</label>
-                          <input 
-                            className="form-input" 
-                            style={{ height: 40, padding: '0 12px', fontSize: 13, borderRadius: 8, boxSizing: 'border-box' }}
-                            placeholder="000.000.000-00" 
-                            value={resp.cpf || ''} 
-                            onChange={e => handleInputChange('cpf', formatCpfMask(e.target.value), index)} 
-                          />
-                        </div>
-                        <div>
-                          <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 5 }}>RG</label>
-                          <input 
-                            className="form-input" 
-                            style={{ height: 40, padding: '0 12px', fontSize: 13, borderRadius: 8, boxSizing: 'border-box' }}
-                            placeholder="Número do RG" 
-                            value={resp.rg || ''} 
-                            onChange={e => handleInputChange('rg', e.target.value, index)} 
-                          />
-                        </div>
-                        <div>
-                          <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 5 }}>Órgão Emissor / UF</label>
-                          <input 
-                            className="form-input" 
-                            style={{ height: 40, padding: '0 12px', fontSize: 13, borderRadius: 8, boxSizing: 'border-box' }}
-                            placeholder="Ex: SSP/SP" 
-                            value={resp.rgOrgaoEmissor || ''} 
-                            onChange={e => handleInputChange('rgOrgaoEmissor', e.target.value, index)} 
-                          />
-                        </div>
-                        <div>
-                          <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 5 }}>Data de Nascimento</label>
-                          <input 
-                            type="date" 
-                            className="form-input" 
-                            style={{ height: 40, padding: '0 12px', fontSize: 13, borderRadius: 8, boxSizing: 'border-box' }}
-                            value={resp.dataNasc || ''} 
-                            onChange={e => handleInputChange('dataNasc', e.target.value, index)} 
-                          />
-                        </div>
-                      </div>
-
-                      {/* Linha 3: Sexo, Estado Civil, Profissão, Naturalidade com UF, Nacionalidade */}
-                      <div style={{ display: 'grid', gridTemplateColumns: '130px 160px 1.2fr 1.5fr 130px', gap: 12 }}>
-                        <div>
-                          <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 5 }}>Sexo</label>
-                          <select 
-                            className="form-input" 
-                            style={{ height: 40, padding: '0 10px', fontSize: 13, borderRadius: 8, boxSizing: 'border-box' }}
-                            value={resp.sexo || ''} 
-                            onChange={e => handleInputChange('sexo', e.target.value, index)}
-                          >
-                            <option value="">Selecione...</option>
-                            <option value="Masculino">Masculino</option>
-                            <option value="Feminino">Feminino</option>
-                            <option value="Outro">Outro</option>
-                          </select>
-                        </div>
-                        <div>
-                          <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 5 }}>Estado Civil</label>
-                          <select 
-                            className="form-input" 
-                            style={{ height: 40, padding: '0 10px', fontSize: 13, borderRadius: 8, boxSizing: 'border-box' }}
-                            value={resp.estadoCivil || ''} 
-                            onChange={e => handleInputChange('estadoCivil', e.target.value, index)}
-                          >
-                            <option value="">Selecione...</option>
-                            <option value="Solteiro(a)">Solteiro(a)</option>
-                            <option value="Casado(a)">Casado(a)</option>
-                            <option value="Divorciado(a)">Divorciado(a)</option>
-                            <option value="Viúvo(a)">Viúvo(a)</option>
-                            <option value="União Estável">União Estável</option>
-                            <option value="Separado(a)">Separado(a)</option>
-                          </select>
-                        </div>
-                        <div>
-                          <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 5 }}>Profissão</label>
-                          <input 
-                            className="form-input" 
-                            style={{ height: 40, padding: '0 12px', fontSize: 13, borderRadius: 8, boxSizing: 'border-box' }}
-                            placeholder="Ex: Engenheiro(a)..." 
-                            value={resp.profissao || ''} 
-                            onChange={e => handleInputChange('profissao', e.target.value, index)} 
-                          />
-                        </div>
-                        <div>
-                          <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 5 }}>Naturalidade (Cidade / UF)</label>
-                          <div style={{ display: 'flex', gap: 6 }}>
-                            <input 
-                              className="form-input" 
-                              style={{ height: 40, padding: '0 12px', fontSize: 13, borderRadius: 8, flex: 1, boxSizing: 'border-box' }}
-                              placeholder="Cidade natal" 
-                              value={resp.naturalidade || ''} 
-                              onChange={e => handleInputChange('naturalidade', e.target.value, index)} 
-                            />
-                            <select 
-                              className="form-input" 
-                              style={{ width: 80, height: 40, padding: '0 6px', fontSize: 13, borderRadius: 8, boxSizing: 'border-box' }}
-                              value={resp.naturalidadeUf || ''} 
-                              onChange={e => handleInputChange('naturalidadeUf', e.target.value, index)}
+                          {!editingResponsavel && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const rand = Math.floor(1000000 + Math.random() * 9000000).toString();
+                                handleInputChange('id', rand, index);
+                              }}
+                              style={{
+                                height: 32,
+                                padding: '0 8px',
+                                borderRadius: 6,
+                                background: '#eff6ff',
+                                color: '#2563eb',
+                                border: '1px solid #bfdbfe',
+                                fontSize: 11,
+                                fontWeight: 700,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 3,
+                                cursor: 'pointer',
+                                whiteSpace: 'nowrap',
+                                transition: 'all 0.15s ease'
+                              }}
+                              title="Gerar ID automático"
                             >
-                              <option value="">UF...</option>
-                              {ESTADOS_BRASIL.map(uf => (
-                                <option key={uf} value={uf}>{uf}</option>
-                              ))}
-                            </select>
-                          </div>
-                        </div>
-                        <div>
-                          <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 5 }}>Nacionalidade</label>
-                          <input 
-                            className="form-input" 
-                            style={{ height: 40, padding: '0 12px', fontSize: 13, borderRadius: 8, boxSizing: 'border-box' }}
-                            placeholder="Ex: Brasileira" 
-                            value={resp.nacionalidade || 'Brasileira'} 
-                            onChange={e => handleInputChange('nacionalidade', e.target.value, index)} 
-                          />
+                              <Sparkles size={11} /> Auto
+                            </button>
+                          )}
                         </div>
                       </div>
 
-                      {/* Linha 4: Contato & Acesso */}
-                      <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.6fr 1.2fr', gap: 12 }}>
-                        <div>
-                          <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 5 }}>Telefone / WhatsApp</label>
+                      <div>
+                        <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.03em', marginBottom: 4, whiteSpace: 'nowrap' }}>
+                          Nome Completo <span style={{ color: '#ef4444' }}>*</span>
+                        </label>
+                        <input 
+                          className="form-input" 
+                          style={{ 
+                            ...getMandatoryFieldStyle(resp.nome, `resp_${index}_nome`), 
+                            height: 32, 
+                            padding: '0 10px', 
+                            fontSize: 12.5, 
+                            borderRadius: 6, 
+                            fontWeight: 600, 
+                            background: '#fff' 
+                          }}
+                          placeholder="Nome completo do responsável" 
+                          value={resp.nome || ''} 
+                          onChange={e => {
+                            handleInputChange('nome', e.target.value, index);
+                            if (hasError(`resp_${index}_nome`)) {
+                              setValidationErrors(prev => prev.filter(err => err.field !== `resp_${index}_nome`));
+                            }
+                          }} 
+                        />
+                      </div>
+
+                      <div>
+                        <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.03em', marginBottom: 4, whiteSpace: 'nowrap' }}>
+                          Parentesco / Vínculo <span style={{ color: '#ef4444' }}>*</span>
+                        </label>
+                        <select 
+                          className="form-input" 
+                          style={{ 
+                            ...getMandatoryFieldStyle(resp.parentesco, `resp_${index}_parentesco`), 
+                            height: 32, 
+                            padding: '0 8px', 
+                            fontSize: 12, 
+                            borderRadius: 6, 
+                            fontWeight: 600, 
+                            background: '#fff' 
+                          }}
+                          value={resp.parentesco || ''} 
+                          onChange={e => {
+                            handleInputChange('parentesco', e.target.value, index);
+                            if (hasError(`resp_${index}_parentesco`)) {
+                              setValidationErrors(prev => prev.filter(err => err.field !== `resp_${index}_parentesco`));
+                            }
+                          }}
+                        >
+                          <option value="">Selecione…</option>
+                          <option value="pai">Pai</option>
+                          <option value="mae">Mãe</option>
+                          <option value="responsavel_legal">Responsável Legal</option>
+                          <option value="padrasto">Padrasto</option>
+                          <option value="madrasta">Madrasta</option>
+                          <option value="avo">Avô / Avó</option>
+                          <option value="tio">Tio / Tia</option>
+                          <option value="irmao">Irmão / Irmã</option>
+                          <option value="outro">Outro</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Linha 2: WhatsApp, E-mail, Cartão RFID */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.3fr 1fr', gap: 10 }}>
+                      <div>
+                        <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.03em', marginBottom: 4, whiteSpace: 'nowrap' }}>
+                          WhatsApp / Celular
+                        </label>
+                        <div style={{ position: 'relative' }}>
+                          <Phone size={13} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
                           <input 
                             className="form-input" 
-                            style={{ height: 40, padding: '0 12px', fontSize: 13, borderRadius: 8, boxSizing: 'border-box' }}
-                            placeholder="(00)00000-0000" 
+                            style={{ width: '100%', height: 32, paddingLeft: 28, paddingRight: 8, fontSize: 12, borderRadius: 6, background: '#fff' }}
+                            placeholder="(00) 00000-0000" 
                             value={resp.telefone || ''} 
                             onChange={e => handleInputChange('telefone', formatPhone(e.target.value), index)} 
                           />
                         </div>
-                        <div>
-                          <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 5 }}>
-                            E-mail {resp.isFinanceiro ? '*' : ''}
-                          </label>
+                      </div>
+
+                      <div>
+                        <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.03em', marginBottom: 4, whiteSpace: 'nowrap' }}>
+                          E-mail {resp.isFinanceiro ? <span style={{ color: '#ef4444' }}>*</span> : ''}
+                        </label>
+                        <div style={{ position: 'relative' }}>
+                          <Mail size={13} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
                           <input 
                             type="email" 
                             className="form-input" 
@@ -1186,599 +1111,386 @@ export default function ResponsaveisPage() {
                                       borderWidth: '2px',
                                       borderStyle: 'solid',
                                       boxShadow: '0 0 0 2px rgba(239, 68, 68, 0.25)',
-                                      background: '#fff5f5'
+                                      background: '#fff5f5',
+                                      transition: 'all 0.2s ease-in-out'
                                     }
                                   : {}), 
-                              height: 40, 
-                              padding: '0 12px', 
-                              fontSize: 13, 
-                              borderRadius: 8,
-                              boxSizing: 'border-box'
+                              width: '100%',
+                              height: 32, 
+                              paddingLeft: 28, 
+                              paddingRight: 8, 
+                              fontSize: 12, 
+                              borderRadius: 6, 
+                              background: '#fff' 
                             }}
                             placeholder="email@exemplo.com" 
                             value={resp.email || ''} 
                             onChange={e => {
-                              handleInputChange('email', e.target.value, index)
+                              handleInputChange('email', e.target.value, index);
                               if (hasError(`resp_${index}_email`)) {
-                                setValidationErrors(prev => prev.filter(err => err.field !== `resp_${index}_email`))
+                                setValidationErrors(prev => prev.filter(err => err.field !== `resp_${index}_email`));
                               }
                             }} 
                           />
                         </div>
-                        <div>
-                          <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 5 }}>Cartão RFID</label>
-                          <div style={{ position: 'relative' }}>
-                            <CreditCard size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
-                            <input 
-                              className="form-input" 
-                              style={{ height: 40, paddingLeft: 36, paddingRight: 12, fontSize: 13, borderRadius: 8, boxSizing: 'border-box' }} 
-                              placeholder="Aproxime o cartão…" 
-                              value={resp.rfid || ''} 
-                              onChange={e => handleInputChange('rfid', e.target.value, index)} 
-                            />
-                          </div>
+                      </div>
+
+                      <div>
+                        <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.03em', marginBottom: 4, whiteSpace: 'nowrap' }}>
+                          Cartão RFID
+                        </label>
+                        <div style={{ position: 'relative' }}>
+                          <CreditCard size={13} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                          <input 
+                            className="form-input" 
+                            style={{ width: '100%', height: 32, paddingLeft: 28, paddingRight: 8, fontSize: 12, borderRadius: 6, background: '#fff' }} 
+                            placeholder="Aproxime o cartão…" 
+                            value={resp.rfid || ''} 
+                            onChange={e => handleInputChange('rfid', e.target.value, index)} 
+                          />
                         </div>
                       </div>
                     </div>
 
-                    {/* SUB-SECTION 2: ENDEREÇO RESIDENCIAL COM VIACEP */}
-                    <div style={{ background: 'rgba(248, 250, 252, 0.8)', border: '1px solid #e2e8f0', borderRadius: 10, padding: '14px 16px', marginTop: 16 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <MapPin size={14} color="#2563eb" />
-                          <span style={{ fontSize: 12, fontWeight: 800, color: '#1e293b', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
-                            Endereço Residencial
+                    {/* Linha 3: Vincular Alunos (Pesquise por nome) */}
+                    <div style={{ 
+                      background: '#f8fafc', 
+                      border: '1px solid #e2e8f0', 
+                      borderRadius: 8, 
+                      padding: '8px 10px', 
+                      display: 'flex', 
+                      flexDirection: 'column', 
+                      gap: 6 
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <label style={{ fontSize: 10, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.03em', display: 'flex', alignItems: 'center', gap: 5 }}>
+                          <Tag size={11} color="#2563eb" /> Vincular Alunos (Pesquise por nome)
+                        </label>
+                        {resp.alunosVinculados?.length > 0 && (
+                          <span style={{ fontSize: 9.5, fontWeight: 800, color: '#2563eb', background: '#eff6ff', border: '1px solid #dbeafe', padding: '1px 6px', borderRadius: 4 }}>
+                            {resp.alunosVinculados.length} {resp.alunosVinculados.length === 1 ? 'aluno vinculado' : 'alunos vinculados'}
                           </span>
-                          {loadingCep[`${index}_res`] && (
-                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#2563eb', fontWeight: 600 }}>
-                              <Loader2 size={12} className="animate-spin" /> Buscando CEP...
-                            </span>
-                          )}
-                          {cepFeedback[`${index}_res`]?.type === 'success' && (
-                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#059669', fontWeight: 700 }}>
-                              <CheckCircle2 size={13} /> {cepFeedback[`${index}_res`]?.message}
-                            </span>
-                          )}
-                          {cepFeedback[`${index}_res`]?.type === 'error' && (
-                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#dc2626', fontWeight: 700 }}>
-                              <AlertTriangle size={13} /> {cepFeedback[`${index}_res`]?.message}
-                            </span>
-                          )}
-                        </div>
+                        )}
                       </div>
 
-                      <div style={{ display: 'grid', gridTemplateColumns: '140px 1fr 100px 160px', gap: 12, marginBottom: 12 }}>
-                        <div>
-                          <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 5 }}>CEP</label>
-                          <input
-                            className="form-input"
-                            style={{ height: 40, padding: '0 12px', fontSize: 13, borderRadius: 8, boxSizing: 'border-box' }}
-                            placeholder="00000-000"
-                            value={resp.cep || ''}
-                            onChange={e => handleCepResidencialChange(e.target.value, index)}
-                          />
-                        </div>
-                        <div>
-                          <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 5 }}>Endereço / Logradouro</label>
-                          <input
-                            className="form-input"
-                            style={{ height: 40, padding: '0 12px', fontSize: 13, borderRadius: 8, boxSizing: 'border-box' }}
-                            placeholder="Rua, Avenida, Travessa..."
-                            value={resp.endereco || ''}
-                            onChange={e => handleInputChange('endereco', e.target.value, index)}
-                          />
-                        </div>
-                        <div>
-                          <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 5 }}>Número</label>
-                          <input
-                            className="form-input"
-                            style={{ height: 40, padding: '0 12px', fontSize: 13, borderRadius: 8, boxSizing: 'border-box' }}
-                            placeholder="Nº"
-                            value={resp.numero || ''}
-                            onChange={e => handleInputChange('numero', e.target.value, index)}
-                          />
-                        </div>
-                        <div>
-                          <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 5 }}>Complemento</label>
-                          <input
-                            className="form-input"
-                            style={{ height: 40, padding: '0 12px', fontSize: 13, borderRadius: 8, boxSizing: 'border-box' }}
-                            placeholder="Apto, Bloco..."
-                            value={resp.complemento || ''}
-                            onChange={e => handleInputChange('complemento', e.target.value, index)}
-                          />
-                        </div>
-                      </div>
-
-                      <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.5fr 90px', gap: 12 }}>
-                        <div>
-                          <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 5 }}>Bairro</label>
-                          <input
-                            className="form-input"
-                            style={{ height: 40, padding: '0 12px', fontSize: 13, borderRadius: 8, boxSizing: 'border-box' }}
-                            placeholder="Bairro"
-                            value={resp.bairro || ''}
-                            onChange={e => handleInputChange('bairro', e.target.value, index)}
-                          />
-                        </div>
-                        <div>
-                          <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 5 }}>Cidade</label>
-                          <input
-                            className="form-input"
-                            style={{ height: 40, padding: '0 12px', fontSize: 13, borderRadius: 8, boxSizing: 'border-box' }}
-                            placeholder="Cidade"
-                            value={resp.cidade || ''}
-                            onChange={e => handleInputChange('cidade', e.target.value, index)}
-                          />
-                        </div>
-                        <div>
-                          <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 5 }}>UF</label>
-                          <select
-                            className="form-input"
-                            style={{ height: 40, padding: '0 8px', fontSize: 13, borderRadius: 8, boxSizing: 'border-box' }}
-                            value={resp.uf || ''}
-                            onChange={e => handleInputChange('uf', e.target.value, index)}
-                          >
-                            <option value="">UF...</option>
-                            {ESTADOS_BRASIL.map(uf => (
-                              <option key={uf} value={uf}>{uf}</option>
-                            ))}
-                          </select>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* SUB-SECTION 3: ENDEREÇO COMERCIAL (RECOLHIDO POR PADRÃO COM ACCORDION) */}
-                    <div
-                      style={{
-                        background: isExpandedComercial 
-                          ? 'rgba(248, 250, 252, 0.9)' 
-                          : hasComercialData 
-                            ? 'rgba(245, 243, 255, 0.5)' 
-                            : 'rgba(248, 250, 252, 0.6)',
-                        border: isExpandedComercial 
-                          ? '1px solid #cbd5e1' 
-                          : hasComercialData 
-                            ? '1px solid #ddd6fe' 
-                            : '1px dashed #cbd5e1',
-                        borderRadius: 10,
-                        marginTop: 14,
-                        overflow: 'hidden',
-                        transition: 'all 0.2s ease'
-                      }}
-                    >
-                      {/* Accordion Header */}
-                      <div
-                        onClick={() => toggleComercial(index)}
-                        role="button"
-                        tabIndex={0}
-                        onKeyDown={e => {
-                          if (e.key === 'Enter' || e.key === ' ') {
-                            e.preventDefault()
-                            toggleComercial(index)
-                          }
-                        }}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          padding: '12px 16px',
-                          cursor: 'pointer',
-                          userSelect: 'none',
-                          background: isExpandedComercial ? 'rgba(241, 245, 249, 0.7)' : 'transparent',
-                          borderBottom: isExpandedComercial ? '1px solid #e2e8f0' : 'none',
-                          transition: 'background 0.15s ease'
-                        }}
-                      >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                          <div
-                            style={{
-                              width: 28,
-                              height: 28,
-                              borderRadius: 6,
-                              background: isExpandedComercial ? 'rgba(124, 58, 237, 0.12)' : 'rgba(124, 58, 237, 0.08)',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center'
-                            }}
-                          >
-                            <Briefcase size={14} color="#7c3aed" />
-                          </div>
-                          <span style={{ fontSize: 12, fontWeight: 800, color: '#1e293b', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
-                            Endereço Comercial / Trabalho
-                          </span>
-                          <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600 }}>
-                            (Opcional)
-                          </span>
-
-                          {hasComercialData && !isExpandedComercial && (
-                            <span
-                              style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: 4,
-                                fontSize: 11,
-                                fontWeight: 700,
-                                color: '#059669',
-                                background: 'rgba(5, 150, 105, 0.09)',
-                                border: '1px solid rgba(5, 150, 105, 0.25)',
-                                padding: '2px 8px',
-                                borderRadius: 999
-                              }}
-                            >
-                              <Check size={11} /> Preenchido {resp.comercialEmpresa ? `• ${resp.comercialEmpresa}` : ''}
-                            </span>
-                          )}
-
-                          {isExpandedComercial && (
-                            <>
-                              {loadingCep[`${index}_com`] && (
-                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#7c3aed', fontWeight: 600 }}>
-                                  <Loader2 size={12} className="animate-spin" /> Buscando CEP...
-                                </span>
-                              )}
-                              {cepFeedback[`${index}_com`]?.type === 'success' && (
-                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#059669', fontWeight: 700 }}>
-                                  <CheckCircle2 size={13} /> {cepFeedback[`${index}_com`]?.message}
-                                </span>
-                              )}
-                              {cepFeedback[`${index}_com`]?.type === 'error' && (
-                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#dc2626', fontWeight: 700 }}>
-                                  <AlertTriangle size={13} /> {cepFeedback[`${index}_com`]?.message}
-                                </span>
-                              )}
-                            </>
-                          )}
-                        </div>
-
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          {isExpandedComercial && (
-                            <button
-                              type="button"
-                              onClick={e => {
-                                e.stopPropagation()
-                                handleCopiarEnderecoResidencialParaComercial(index)
-                              }}
-                              style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: 5,
-                                fontSize: 11.5,
-                                fontWeight: 700,
-                                color: '#4f46e5',
-                                background: 'rgba(79, 70, 229, 0.08)',
-                                border: '1px solid rgba(79, 70, 229, 0.25)',
-                                borderRadius: 6,
-                                padding: '5px 12px',
-                                cursor: 'pointer',
-                                transition: 'all 0.15s ease'
-                              }}
-                              title="Preenche o endereço comercial com os dados do residencial"
-                            >
-                              <Copy size={12} /> Copiar do Residencial
-                            </button>
-                          )}
-
-                          <div
-                            style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: 5,
-                              fontSize: 11.5,
-                              fontWeight: 700,
-                              color: isExpandedComercial ? '#64748b' : '#7c3aed',
-                              background: isExpandedComercial ? '#f1f5f9' : 'rgba(124, 58, 237, 0.08)',
-                              border: isExpandedComercial ? '1px solid #e2e8f0' : '1px solid rgba(124, 58, 237, 0.25)',
-                              borderRadius: 6,
-                              padding: '5px 12px'
-                            }}
-                          >
-                            {isExpandedComercial ? (
-                              <>Recolher <ChevronUp size={13} /></>
-                            ) : (
-                              <>{hasComercialData ? 'Visualizar / Editar' : 'Preencher Endereço Comercial'} <ChevronDown size={13} /></>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Accordion Content (Expandido) */}
-                      {isExpandedComercial && (
-                        <div style={{ padding: '14px 16px' }}>
-                          <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1.2fr 140px', gap: 12, marginBottom: 12 }}>
-                            <div>
-                              <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 5 }}>Empresa / Local de Trabalho</label>
-                              <input
-                                className="form-input"
-                                style={{ height: 40, padding: '0 12px', fontSize: 13, borderRadius: 8, boxSizing: 'border-box' }}
-                                placeholder="Ex: Empresa XYZ / Autônomo"
-                                value={resp.comercialEmpresa || ''}
-                                onChange={e => handleInputChange('comercialEmpresa', e.target.value, index)}
-                              />
-                            </div>
-                            <div>
-                              <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 5 }}>Telefone Comercial</label>
-                              <input
-                                className="form-input"
-                                style={{ height: 40, padding: '0 12px', fontSize: 13, borderRadius: 8, boxSizing: 'border-box' }}
-                                placeholder="(00) 0000-0000"
-                                value={resp.comercialTelefone || ''}
-                                onChange={e => handleInputChange('comercialTelefone', formatPhone(e.target.value), index)}
-                              />
-                            </div>
-                            <div>
-                              <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 5 }}>CEP Comercial</label>
-                              <input
-                                className="form-input"
-                                style={{ height: 40, padding: '0 12px', fontSize: 13, borderRadius: 8, boxSizing: 'border-box' }}
-                                placeholder="00000-000"
-                                value={resp.comercialCep || ''}
-                                onChange={e => handleCepComercialChange(e.target.value, index)}
-                              />
-                            </div>
-                          </div>
-
-                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 100px 160px', gap: 12, marginBottom: 12 }}>
-                            <div>
-                              <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 5 }}>Endereço Comercial / Logradouro</label>
-                              <input
-                                className="form-input"
-                                style={{ height: 40, padding: '0 12px', fontSize: 13, borderRadius: 8, boxSizing: 'border-box' }}
-                                placeholder="Rua, Avenida, Bloco empresarial..."
-                                value={resp.comercialEndereco || ''}
-                                onChange={e => handleInputChange('comercialEndereco', e.target.value, index)}
-                              />
-                            </div>
-                            <div>
-                              <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 5 }}>Número</label>
-                              <input
-                                className="form-input"
-                                style={{ height: 40, padding: '0 12px', fontSize: 13, borderRadius: 8, boxSizing: 'border-box' }}
-                                placeholder="Nº"
-                                value={resp.comercialNumero || ''}
-                                onChange={e => handleInputChange('comercialNumero', e.target.value, index)}
-                              />
-                            </div>
-                            <div>
-                              <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 5 }}>Complemento / Sala</label>
-                              <input
-                                className="form-input"
-                                style={{ height: 40, padding: '0 12px', fontSize: 13, borderRadius: 8, boxSizing: 'border-box' }}
-                                placeholder="Sala, Andar, Galpão..."
-                                value={resp.comercialComplemento || ''}
-                                onChange={e => handleInputChange('comercialComplemento', e.target.value, index)}
-                              />
-                            </div>
-                          </div>
-
-                          <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.5fr 90px', gap: 12 }}>
-                            <div>
-                              <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 5 }}>Bairro</label>
-                              <input
-                                className="form-input"
-                                style={{ height: 40, padding: '0 12px', fontSize: 13, borderRadius: 8, boxSizing: 'border-box' }}
-                                placeholder="Bairro"
-                                value={resp.comercialBairro || ''}
-                                onChange={e => handleInputChange('comercialBairro', e.target.value, index)}
-                              />
-                            </div>
-                            <div>
-                              <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 5 }}>Cidade</label>
-                              <input
-                                className="form-input"
-                                style={{ height: 40, padding: '0 12px', fontSize: 13, borderRadius: 8, boxSizing: 'border-box' }}
-                                placeholder="Cidade"
-                                value={resp.comercialCidade || ''}
-                                onChange={e => handleInputChange('comercialCidade', e.target.value, index)}
-                              />
-                            </div>
-                            <div>
-                              <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 5 }}>UF</label>
-                              <select
-                                className="form-input"
-                                style={{ height: 40, padding: '0 8px', fontSize: 13, borderRadius: 8, boxSizing: 'border-box' }}
-                                value={resp.comercialUf || ''}
-                                onChange={e => handleInputChange('comercialUf', e.target.value, index)}
-                              >
-                                <option value="">UF...</option>
-                                {ESTADOS_BRASIL.map(uf => (
-                                  <option key={uf} value={uf}>{uf}</option>
-                                ))}
-                              </select>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                  {/* Dias de Acesso */}
-                  <div style={{ marginTop: 16 }}>
-                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 8 }}>Dias Permitidos para Retirada (RFID)</label>
-                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                      {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab'].map(dia => {
-                        const isSelected = resp.diasAcesso?.includes(dia);
-                        const showAsSelected = isSelected && !resp.proibido;
-                        return (
+                      <div style={{ position: 'relative' }}>
+                        <Search size={13} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                        <input
+                          className="form-input"
+                          style={{ height: 32, paddingLeft: 28, paddingRight: buscaAluno ? 28 : 8, fontSize: 12, borderRadius: 6, background: '#fff' }}
+                          placeholder="Digite ao menos 3 letras para pesquisar o aluno..."
+                          value={buscaAluno}
+                          onChange={e => setBuscaAluno(e.target.value)}
+                          onKeyDown={e => {
+                            if (e.key === 'Escape') {
+                              setBuscaAluno('')
+                              setResultadosAlunos([])
+                            }
+                          }}
+                        />
+                        {buscaAluno && (
                           <button
-                            key={dia}
                             type="button"
                             onClick={() => {
-                              if (resp.proibido) return;
-                              const currentDias = resp.diasAcesso || [];
-                              const newDias = isSelected
-                                ? currentDias.filter((d: string) => d !== dia)
-                                : [...currentDias, dia];
-                              handleInputChange('diasAcesso', newDias, index);
+                              setBuscaAluno('')
+                              setResultadosAlunos([])
                             }}
                             style={{
-                              width: 40,
-                              height: 40,
+                              position: 'absolute',
+                              right: 6,
+                              top: '50%',
+                              transform: 'translateY(-50%)',
+                              background: '#f1f5f9',
+                              border: 'none',
                               borderRadius: '50%',
-                              border: '1px solid',
-                              borderColor: showAsSelected ? '#10b981' : '#ef4444',
-                              background: showAsSelected ? '#10b981' : '#fff',
-                              color: showAsSelected ? '#fff' : '#ef4444',
-                              fontWeight: 700,
-                              fontSize: 12,
+                              width: 20,
+                              height: 20,
                               display: 'flex',
                               alignItems: 'center',
                               justifyContent: 'center',
-                              cursor: resp.proibido ? 'not-allowed' : 'pointer',
-                              transition: 'all 0.2s',
-                              boxShadow: showAsSelected ? '0 4px 12px rgba(16, 185, 129, 0.3)' : 'none',
-                              opacity: resp.proibido ? 0.7 : 1
+                              cursor: 'pointer',
+                              color: '#64748b',
+                              transition: 'all 0.15s ease'
                             }}
+                            title="Fechar busca de aluno"
                           >
-                            {dia.substring(0, 1)}
+                            <X size={11} />
                           </button>
-                        );
-                      })}
-                      <button
-                        type="button"
-                        onClick={() => handleInputChange('proibido', !resp.proibido, index)}
-                        style={{
-                          height: 40,
-                          padding: '0 16px',
-                          borderRadius: '20px',
-                          fontSize: 13,
-                          fontWeight: 700,
-                          border: '1px solid',
-                          borderColor: resp.proibido ? '#ef4444' : '#10b981',
-                          background: resp.proibido ? '#ef4444' : '#10b981',
-                          color: '#fff',
-                          cursor: 'pointer',
-                          transition: 'all 0.2s',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          marginLeft: 'auto'
-                        }}
-                      >
-                        {resp.proibido ? 'Proibido' : 'Liberado'}
-                      </button>
-                    </div>
-                  </div>
+                        )}
 
-                  {/* Vínculo com Alunos */}
-                  <div style={{ marginTop: 16 }}>
-                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 8 }}>Vincular Alunos (Pesquise por nome)</label>
-                    <div style={{ position: 'relative' }}>
-                      <Search size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
-                      <input
-                        className="form-input"
-                        style={{ paddingLeft: 36 }}
-                        placeholder="Digite o nome do aluno..."
-                        value={buscaAluno}
-                        onChange={e => setBuscaAluno(e.target.value)}
-                      />
-                      {buscaAluno.length >= 3 && (
-                        <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', zIndex: 10, maxHeight: '200px', overflowY: 'auto' }}>
-                          {resultadosAlunos.length === 0 ? (
-                            <div style={{ padding: '12px', color: '#64748b', fontSize: 12, textAlign: 'center' }}>Nenhum aluno encontrado</div>
-                          ) : (
-                            resultadosAlunos.map((a: any) => (
-                              <div
-                                key={a.id}
-                                style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid #f1f5f9' }}
+                        {buscaAluno.length >= 3 && (
+                          <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #cbd5e1', borderRadius: 8, boxShadow: '0 8px 20px rgba(0,0,0,0.12)', zIndex: 50, maxHeight: 220, overflowY: 'auto', marginTop: 4 }}>
+                            {/* Barra Fixa de Cabeçalho com Botão Fechar */}
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', position: 'sticky', top: 0, zIndex: 2 }}>
+                              <span style={{ fontSize: 10.5, fontWeight: 700, color: '#475569' }}>
+                                {resultadosAlunos.length} {resultadosAlunos.length === 1 ? 'aluno encontrado' : 'alunos encontrados'}
+                              </span>
+                              <button
+                                type="button"
                                 onClick={() => {
-                                  const current = resp.alunosVinculados || [];
-                                  const currentIds = current.map((item: any) => typeof item === 'object' ? item.id : item);
-                                  if (!currentIds.includes(a.id)) {
-                                    handleInputChange('alunosVinculados', [...current, a], index);
-                                  }
-                                  setBuscaAluno('');
+                                  setBuscaAluno('')
+                                  setResultadosAlunos([])
                                 }}
-                                onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
-                                onMouseLeave={e => e.currentTarget.style.background = '#fff'}
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: 3,
+                                  fontSize: 10,
+                                  fontWeight: 700,
+                                  color: '#dc2626',
+                                  background: '#fee2e2',
+                                  border: '1px solid #fecaca',
+                                  borderRadius: 5,
+                                  padding: '2px 8px',
+                                  cursor: 'pointer',
+                                  transition: 'all 0.15s ease'
+                                }}
+                                title="Fechar resultados da busca"
                               >
-                                <div style={{ fontSize: 13, fontWeight: 700, color: '#1e293b' }}>{a.nome}</div>
-                                <div style={{ fontSize: 11, color: '#64748b' }}>Código: {a.codigo || a.id}</div>
+                                <X size={11} /> Fechar
+                              </button>
+                            </div>
+
+                            {resultadosAlunos.length === 0 ? (
+                              <div style={{ padding: '12px', color: '#64748b', fontSize: 11.5, textAlign: 'center' }}>
+                                Nenhum aluno encontrado com o nome digitado.
                               </div>
-                            ))
-                          )}
+                            ) : (
+                              resultadosAlunos.map((a: any) => (
+                                <div
+                                  key={a.id}
+                                  style={{ padding: '7px 12px', cursor: 'pointer', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between', transition: 'background 0.15s' }}
+                                  onClick={() => {
+                                    const current = resp.alunosVinculados || [];
+                                    const currentIds = current.map((item: any) => typeof item === 'object' ? item.id : item);
+                                    if (!currentIds.includes(a.id)) {
+                                      handleInputChange('alunosVinculados', [...current, a], index);
+                                    }
+                                    setBuscaAluno('');
+                                    setResultadosAlunos([]);
+                                  }}
+                                  onMouseEnter={e => e.currentTarget.style.background = '#eff6ff'}
+                                  onMouseLeave={e => e.currentTarget.style.background = '#fff'}
+                                >
+                                  <div style={{ fontSize: 12, fontWeight: 700, color: '#1e293b' }}>{a.nome}</div>
+                                  <div style={{ fontSize: 10.5, color: '#64748b' }}>Matrícula: {a.codigo || a.id}</div>
+                                </div>
+                              ))
+                            )}
+
+                            {/* Rodapé da lista com opção de cancelar vínculo */}
+                            {resultadosAlunos.length > 0 && (
+                              <div style={{ padding: '5px 10px', background: '#f8fafc', borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'flex-end', position: 'sticky', bottom: 0 }}>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setBuscaAluno('')
+                                    setResultadosAlunos([])
+                                  }}
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: 3,
+                                    fontSize: 10,
+                                    fontWeight: 600,
+                                    color: '#64748b',
+                                    background: 'transparent',
+                                    border: 'none',
+                                    cursor: 'pointer',
+                                    padding: '2px 4px'
+                                  }}
+                                >
+                                  Não vincular nenhum aluno (Fechar)
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Badges de Alunos Vinculados */}
+                      {resp.alunosVinculados && resp.alunosVinculados.length > 0 && (
+                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 2 }}>
+                          {resp.alunosVinculados.map((aluno: any) => {
+                            const id = typeof aluno === 'object' ? aluno.id : aluno;
+                            const nome = typeof aluno === 'object' ? aluno.nome : `Aluno #${id}`;
+                            const codigo = typeof aluno === 'object' ? (aluno.codigo || id) : id;
+                            return (
+                              <span key={id} style={{ padding: '3px 8px', background: '#ede9fe', color: '#6d28d9', border: '1px solid #ddd6fe', borderRadius: 6, fontSize: 11, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                                <span>{nome} ({codigo})</span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const current = resp.alunosVinculados || [];
+                                    handleInputChange('alunosVinculados', current.filter((item: any) => (typeof item === 'object' ? item.id : item) !== id), index);
+                                  }}
+                                  style={{ background: 'none', border: 'none', color: '#6d28d9', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center' }}
+                                  title="Desvincular aluno"
+                                >
+                                  <X size={12} />
+                                </button>
+                              </span>
+                            );
+                          })}
                         </div>
                       )}
                     </div>
-                    
-                    {/* Alunos Vinculados (Apenas ID) */}
-                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
-                      {resp.alunosVinculados?.map((aluno: any) => {
-                        const id = typeof aluno === 'object' ? aluno.id : aluno;
-                        return (
-                          <span key={id} style={{ padding: '4px 10px', background: '#ede9fe', color: '#7c3aed', borderRadius: '6px', fontSize: 12, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                            {typeof aluno === 'object' ? `${aluno.nome} (${aluno.codigo || id})` : `ID: ${id}`}
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const current = resp.alunosVinculados || [];
-                                handleInputChange('alunosVinculados', current.filter((item: any) => (typeof item === 'object' ? item.id : item) !== id), index);
-                              }}
-                              style={{ background: 'none', border: 'none', color: '#7c3aed', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center' }}
-                            >
-                              <X size={12} />
-                            </button>
-                          </span>
-                        );
-                      })}
+
+                    {/* Seção Inferior: Dias Permitidos & Retirada Liberada/Proibida */}
+                    <div style={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      justifyContent: 'space-between', 
+                      flexWrap: 'wrap', 
+                      gap: 10, 
+                      padding: '8px 12px', 
+                      background: '#f8fafc', 
+                      border: '1px solid #e2e8f0', 
+                      borderRadius: 8 
+                    }}>
+                      <div>
+                        <label style={{ display: 'block', fontSize: 10, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.03em', marginBottom: 4 }}>
+                          Dias Permitidos para Retirada (RFID)
+                        </label>
+                        <div style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
+                          {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab'].map(dia => {
+                            const isSelected = resp.diasAcesso?.includes(dia);
+                            const showAsSelected = isSelected && !resp.proibido;
+                            return (
+                              <button
+                                key={dia}
+                                type="button"
+                                onClick={() => {
+                                  if (resp.proibido) return;
+                                  const currentDias = resp.diasAcesso || [];
+                                  const newDias = isSelected
+                                    ? currentDias.filter((d: string) => d !== dia)
+                                    : [...currentDias, dia];
+                                  handleInputChange('diasAcesso', newDias, index);
+                                }}
+                                style={{
+                                  width: 28,
+                                  height: 28,
+                                  borderRadius: '6px',
+                                  border: '1px solid',
+                                  borderColor: showAsSelected ? '#10b981' : '#e2e8f0',
+                                  background: showAsSelected ? '#10b981' : '#fff',
+                                  color: showAsSelected ? '#fff' : '#64748b',
+                                  fontWeight: 700,
+                                  fontSize: 10.5,
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  cursor: resp.proibido ? 'not-allowed' : 'pointer',
+                                  transition: 'all 0.15s ease',
+                                  boxShadow: showAsSelected ? '0 1px 4px rgba(16, 185, 129, 0.2)' : 'none',
+                                  opacity: resp.proibido ? 0.6 : 1
+                                }}
+                              >
+                                {dia.substring(0, 1)}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <button
+                          type="button"
+                          onClick={() => handleInputChange('proibido', !resp.proibido, index)}
+                          style={{
+                            height: 30,
+                            padding: '0 12px',
+                            borderRadius: '16px',
+                            fontSize: 11,
+                            fontWeight: 700,
+                            border: '1px solid',
+                            borderColor: resp.proibido ? '#ef4444' : '#10b981',
+                            background: resp.proibido ? '#ef4444' : '#10b981',
+                            color: '#fff',
+                            cursor: 'pointer',
+                            transition: 'all 0.15s ease',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 5,
+                            boxShadow: resp.proibido 
+                              ? '0 1px 4px rgba(239, 68, 68, 0.25)' 
+                              : '0 1px 4px rgba(16, 185, 129, 0.25)'
+                          }}
+                        >
+                          {resp.proibido ? (
+                            <>
+                              <UserX size={13} /> Retirada Proibida
+                            </>
+                          ) : (
+                            <>
+                              <UserCheck size={13} /> Retirada Liberada
+                            </>
+                          )}
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
-              )
-            })}
+              ))}
 
               {!editingResponsavel && (
                 <button 
-                  onClick={() => setFormResponsaveis([...formResponsaveis, createEmptyResponsavel()])} 
+                  type="button"
+                  onClick={() => {
+                    const newResp = createEmptyResponsavel();
+                    newResp.id = Math.floor(1000000 + Math.random() * 9000000).toString();
+                    setFormResponsaveis(prev => [...prev, newResp]);
+                  }} 
                   style={{ 
                     width: '100%', 
-                    padding: '16px', 
-                    borderRadius: '12px', 
-                    border: '2px dashed #3b82f6', 
-                    background: 'rgba(59, 130, 246, 0.05)',
-                    color: '#3b82f6',
-                    fontSize: 14,
+                    padding: '8px', 
+                    borderRadius: '8px', 
+                    border: '1px dashed #3b82f6', 
+                    background: 'rgba(59, 130, 246, 0.04)',
+                    color: '#2563eb',
+                    fontSize: 12,
                     fontWeight: 700,
                     cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    gap: 8,
-                    transition: 'all 0.2s'
+                    gap: 6,
+                    transition: 'all 0.15s ease'
                   }}
-                  onMouseEnter={e => e.currentTarget.style.background = 'rgba(59, 130, 246, 0.1)'}
-                  onMouseLeave={e => e.currentTarget.style.background = 'rgba(59, 130, 246, 0.05)'}
+                  onMouseEnter={e => e.currentTarget.style.background = 'rgba(59, 130, 246, 0.08)'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'rgba(59, 130, 246, 0.04)'}
                 >
-                  <Plus size={16} /> Adicionar Outro Responsável
+                  <Plus size={14} /> Adicionar Outro Responsável
                 </button>
               )}
             </div>
 
             {/* Footer do Modal */}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 24, borderTop: '1px solid #e2e8f0', paddingTop: 16 }}>
-              <button onClick={() => setIsModalOpen(false)} style={{ background: '#f1f5f9', border: 'none', color: '#475569', padding: '10px 20px', borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
+            <div style={{ padding: '10px 20px', borderTop: '1px solid #e2e8f0', background: '#fafbfc', display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <button onClick={() => setIsModalOpen(false)} className="neo-btn neo-btn-secondary" style={{ height: 34, padding: '0 16px', fontSize: 12, borderRadius: 8 }}>
                 Cancelar
               </button>
               <button
                 onClick={handleSave}
                 disabled={loading}
+                className="neo-btn neo-btn-primary"
                 style={{
-                  background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
-                  color: '#fff',
-                  border: 'none',
-                  padding: '10px 24px',
+                  height: 34,
+                  padding: '0 18px',
+                  fontSize: 12,
                   borderRadius: 8,
-                  fontSize: 14,
-                  fontWeight: 700,
-                  cursor: 'pointer',
+                  background: loading ? 'linear-gradient(135deg, #059669 0%, #047857 100%)' : 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                  color: '#fff',
+                  cursor: loading ? 'not-allowed' : 'pointer',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: 8,
-                  opacity: loading ? 0.7 : 1,
-                  boxShadow: '0 4px 12px rgba(37, 99, 235, 0.3)'
+                  gap: 6,
+                  boxShadow: '0 2px 8px rgba(16, 185, 129, 0.25)'
                 }}
               >
-                {loading ? <Loader2 size={14} style={{ animation: 'spin .8s linear infinite' }} /> : <Save size={14} />}
-                {editingResponsavel ? 'Salvar Alterações' : 'Criar Responsável'}
+                {loading ? <Loader2 size={14} style={{ animation: 'spin .8s linear infinite' }} /> : <Check size={14} />}
+                {editingResponsavel ? 'Salvar Alterações' : 'Finalizar Cadastro'}
               </button>
             </div>
           </div>

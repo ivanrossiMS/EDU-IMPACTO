@@ -720,7 +720,43 @@ function PropostaBadge({
 export default function ValoresPage() {
   const [activeTab, setActiveTab] = useState<'simulador' | 'tabela-matriculas' | 'matriz-mensalidades' | 'ampliacao-periodo' | 'servicos'>('simulador')
   const [anoLetivo, setAnoLetivo] = useState<string>('2027')
-  const [seriesList] = useState<SeriePricing[]>(DEFAULT_SERIES_2027)
+
+  // Anos Letivos criados no sistema (Supabase) via useConfigDb
+  const { data: dbCalendario = [] } = useConfigDb<any>('cfgCalendarioLetivo')
+  const anosDisponiveis = useMemo(() => {
+    if (!dbCalendario || dbCalendario.length === 0) {
+      return ['2027', '2026'] // Fallback seguro caso banco esteja carregando
+    }
+    const anosSet = new Set<string>()
+    for (const c of dbCalendario) {
+      const a = String(c?.ano || '').trim()
+      if (a) anosSet.add(a)
+    }
+    if (anosSet.size === 0) return ['2027']
+    // Ordenação decrescente: o ano mais recente primeiro (ex: 2027, 2026)
+    return Array.from(anosSet).sort((a, b) => Number(b) - Number(a))
+  }, [dbCalendario])
+
+  // Garante que o ano selecionado existe entre os anos criados no sistema
+  useEffect(() => {
+    if (anosDisponiveis.length > 0 && !anosDisponiveis.includes(anoLetivo)) {
+      if (anosDisponiveis.includes('2027')) {
+        setAnoLetivo('2027')
+      } else {
+        setAnoLetivo(anosDisponiveis[0])
+      }
+    }
+  }, [anosDisponiveis, anoLetivo])
+
+  // Dados exclusivos do Ano Letivo 2027 (os outros anos letivos devem aparecer sem dados)
+  const seriesList = useMemo<SeriePricing[]>(() => {
+    if (String(anoLetivo) === '2027') {
+      return DEFAULT_SERIES_2027
+    }
+    return []
+  }, [anoLetivo])
+
+  const hasData = seriesList.length > 0
 
   // Sincronização e Persistência no Banco de Dados (Supabase) via useConfigDb
   const { data: dbTemplates = [], setData: setDbTemplates, loading: loadingTemplates } = useConfigDb<ValoresWhatsAppTemplate>('cfgWhatsAppValores', DEFAULT_VALORES_TEMPLATES)
@@ -1095,6 +1131,7 @@ export default function ValoresPage() {
   }
 
   const selectedSeries = useMemo(() => {
+    if (seriesList.length === 0) return []
     const list = seriesList.filter(s =>
       selectedSerieIds.includes(s.id) ||
       (selectedSerieIds.includes('em-2') && s.id === 'em-1-2') ||
@@ -1103,11 +1140,22 @@ export default function ValoresPage() {
       (selectedSerieIds.includes('villa-baby-n2') && s.id === 'villa-baby-n1')
     )
     const sorted = [...list].sort((a, b) => getSerieOrderPriority(a.id) - getSerieOrderPriority(b.id))
-    return sorted.length > 0 ? sorted : [seriesList[0]]
+    return sorted.length > 0 ? sorted : (seriesList.length > 0 ? [seriesList[0]] : [])
   }, [seriesList, selectedSerieIds])
 
-  const currentSerie = selectedSeries[0]
+  const currentSerie = selectedSeries[0] || null
   const isMultiSerie = selectedSeries.length > 1
+
+  useEffect(() => {
+    if (seriesList.length > 0) {
+      setSelectedSerieIds(prev => {
+        const valid = prev.filter(id => seriesList.some(s => s.id === id))
+        return valid.length > 0 ? valid : [seriesList[0].id]
+      })
+    } else {
+      setSelectedSerieIds([])
+    }
+  }, [seriesList])
 
   useEffect(() => {
     if (!incluirMaterial) {
@@ -2092,7 +2140,7 @@ export default function ValoresPage() {
             {/* Ações do Topo */}
             <div className="valores-header-actions" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
               <div style={{ display: 'flex', alignItems: 'center', background: '#ffffff', padding: '4px', borderRadius: 12, border: '1px solid #cbd5e1', gap: 4, boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
-                {['2027', '2026', '2028'].map(ano => {
+                {anosDisponiveis.map(ano => {
                   const isCur = anoLetivo === ano
                   return (
                     <button
@@ -2138,7 +2186,7 @@ export default function ValoresPage() {
           <div className="valores-tabs-container no-print" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', padding: '14px 28px', background: '#ffffff' }}>
             {[
               { id: 'simulador', label: 'Simulador & WhatsApp', icon: <Sparkles size={16} /> },
-              { id: 'tabela-matriculas', label: 'Tabela de Matrículas (Antecipação 2027)', icon: <FileSpreadsheet size={16} /> },
+              { id: 'tabela-matriculas', label: `Tabela de Matrículas (Antecipação ${anoLetivo})`, icon: <FileSpreadsheet size={16} /> },
               { id: 'matriz-mensalidades', label: 'Grade de Mensalidades (5% a 15%)', icon: <Percent size={16} /> },
               { id: 'ampliacao-periodo', label: 'Ampliação de Período (2x e 3x)', icon: <Clock size={16} /> },
               { id: 'servicos', label: 'Serviços & Convênios', icon: <Layers size={16} /> },
@@ -2466,8 +2514,62 @@ export default function ValoresPage() {
                 </div>
 
                 <div style={{ padding: 22, display: 'flex', flexDirection: 'column' }}>
-                  {/* Dica de seleção múltipla */}
-                  <div style={{
+                  {!hasData ? (
+                    <div style={{
+                      padding: '36px 20px',
+                      textAlign: 'center',
+                      background: '#f8fafc',
+                      borderRadius: 14,
+                      border: '1.5px dashed #cbd5e1',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 12
+                    }}>
+                      <div style={{
+                        width: 48,
+                        height: 48,
+                        borderRadius: 14,
+                        background: '#e2e8f0',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                      }}>
+                        <Calendar size={24} color="#64748b" />
+                      </div>
+                      <div>
+                        <h4 style={{ fontSize: 15, fontWeight: 800, color: '#1e293b', margin: '0 0 4px' }}>
+                          Nenhuma tabela de valores cadastrada para {anoLetivo}
+                        </h4>
+                        <p style={{ fontSize: 13, color: '#64748b', margin: 0, maxWidth: 440 }}>
+                          Os valores e regras comerciais atualmente configurados no sistema são exclusivos do <strong>Ano Letivo 2027</strong>.
+                        </p>
+                      </div>
+                      {anosDisponiveis.includes('2027') && (
+                        <button
+                          onClick={() => setAnoLetivo('2027')}
+                          style={{
+                            marginTop: 6,
+                            padding: '8px 18px',
+                            borderRadius: 10,
+                            background: '#2563eb',
+                            color: '#ffffff',
+                            fontWeight: 700,
+                            fontSize: 12,
+                            border: 'none',
+                            cursor: 'pointer',
+                            boxShadow: '0 2px 6px rgba(37, 99, 235, 0.25)'
+                          }}
+                        >
+                          Ir para Ano Letivo 2027
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    <>
+                      {/* Dica de seleção múltipla */}
+                      <div style={{
                     fontSize: 11,
                     color: '#475569',
                     marginBottom: 10,
@@ -2650,11 +2752,15 @@ export default function ValoresPage() {
                       </div>
                     </div>
                   </div>
+                    </>
+                  )}
                 </div>
               </div>
 
-              {/* Card 3: Campanha de Matrícula Antecipada com Opção "Todas" */}
-              <div style={{
+              {hasData && (
+                <>
+                  {/* Card 3: Campanha de Matrícula Antecipada com Opção "Todas" */}
+                  <div style={{
                 background: '#ffffff',
                 borderRadius: 20,
                 border: '1px solid #e2e8f0',
@@ -3292,6 +3398,8 @@ export default function ValoresPage() {
                   </div>
                 </div>
               </div>
+                </>
+              )}
 
             </div>
 
@@ -3309,9 +3417,9 @@ export default function ValoresPage() {
 
                   {/* 1. Salvar Proposta em PDF Oficial (1 página no tamanho exato) */}
                   <button
-                    onClick={handleSavePDF}
-                    disabled={isGeneratingPdf}
-                    title="Salvar proposta comercial em PDF oficial (escolher local e nome)"
+                    onClick={hasData ? handleSavePDF : () => showToast(`Nenhum valor cadastrado para o Ano Letivo ${anoLetivo}`)}
+                    disabled={isGeneratingPdf || !hasData}
+                    title={hasData ? "Salvar proposta comercial em PDF oficial (escolher local e nome)" : `Nenhum valor cadastrado para ${anoLetivo}`}
                     style={{
                       display: 'flex', alignItems: 'center', gap: 6,
                       background: pdfSavedSuccess
@@ -3323,7 +3431,8 @@ export default function ValoresPage() {
                       padding: '7px 14px',
                       fontSize: 12,
                       fontWeight: 800,
-                      cursor: isGeneratingPdf ? 'not-allowed' : 'pointer',
+                      opacity: hasData ? 1 : 0.45,
+                      cursor: !hasData ? 'not-allowed' : isGeneratingPdf ? 'not-allowed' : 'pointer',
                       boxShadow: pdfSavedSuccess
                         ? '0 2px 8px rgba(5,150,105,0.3)'
                         : '0 2px 8px rgba(37,99,235,0.3)',
@@ -3342,9 +3451,9 @@ export default function ValoresPage() {
 
                   {/* 2. Baixar Imagem Oficial em Ultra-HD (PNG) */}
                   <button
-                    onClick={handleDownloadImage}
-                    disabled={isDownloadingImage}
-                    title="Baixar imagem da proposta em altíssima resolução (PNG Ultra-HD)"
+                    onClick={hasData ? handleDownloadImage : () => showToast(`Nenhum valor cadastrado para o Ano Letivo ${anoLetivo}`)}
+                    disabled={isDownloadingImage || !hasData}
+                    title={hasData ? "Baixar imagem da proposta em altíssima resolução (PNG Ultra-HD)" : `Nenhum valor cadastrado para ${anoLetivo}`}
                     style={{
                       display: 'flex', alignItems: 'center', gap: 6,
                       background: imageDownloadedSuccess
@@ -3356,7 +3465,8 @@ export default function ValoresPage() {
                       padding: '7px 14px',
                       fontSize: 12,
                       fontWeight: 800,
-                      cursor: isDownloadingImage ? 'not-allowed' : 'pointer',
+                      opacity: hasData ? 1 : 0.45,
+                      cursor: !hasData ? 'not-allowed' : isDownloadingImage ? 'not-allowed' : 'pointer',
                       boxShadow: imageDownloadedSuccess
                         ? '0 2px 8px rgba(5,150,105,0.3)'
                         : '0 2px 8px rgba(2,132,199,0.3)',
@@ -3375,9 +3485,9 @@ export default function ValoresPage() {
 
                   {/* 3. Copiar Imagem da Proposta (Colar onde quiser: Ctrl+V / Cmd+V) */}
                   <button
-                    onClick={handleCopyProposal}
-                    disabled={isCopyingProposal}
-                    title="Copiar proposta para a área de transferência (colar no WhatsApp, Word, etc.)"
+                    onClick={hasData ? handleCopyProposal : () => showToast(`Nenhum valor cadastrado para o Ano Letivo ${anoLetivo}`)}
+                    disabled={isCopyingProposal || !hasData}
+                    title={hasData ? "Copiar proposta para a área de transferência (colar no WhatsApp, Word, etc.)" : `Nenhum valor cadastrado para ${anoLetivo}`}
                     style={{
                       display: 'flex', alignItems: 'center', gap: 6,
                       background: proposalCopiedSuccess
@@ -3389,7 +3499,8 @@ export default function ValoresPage() {
                       padding: '7px 14px',
                       fontSize: 12,
                       fontWeight: 800,
-                      cursor: isCopyingProposal ? 'not-allowed' : 'pointer',
+                      opacity: hasData ? 1 : 0.45,
+                      cursor: !hasData ? 'not-allowed' : isCopyingProposal ? 'not-allowed' : 'pointer',
                       boxShadow: proposalCopiedSuccess
                         ? '0 2px 8px rgba(5,150,105,0.3)'
                         : '0 2px 8px rgba(99,102,241,0.3)',
@@ -3408,14 +3519,17 @@ export default function ValoresPage() {
 
                   {/* 4. Imprimir Proposta (Folha A4 Limpa) */}
                   <button
-                    onClick={handlePrint}
-                    title="Imprimir proposta oficial em folha A4"
+                    onClick={hasData ? handlePrint : () => showToast(`Nenhum valor cadastrado para o Ano Letivo ${anoLetivo}`)}
+                    disabled={!hasData}
+                    title={hasData ? "Imprimir proposta oficial em folha A4" : `Nenhum valor cadastrado para ${anoLetivo}`}
                     style={{
                       display: 'flex', alignItems: 'center', gap: 5,
                       background: '#ffffff', color: '#334155',
                       border: '1px solid #cbd5e1', borderRadius: 10,
                       padding: '7px 12px', fontSize: 11.5, fontWeight: 700,
-                      cursor: 'pointer', boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
+                      opacity: hasData ? 1 : 0.45,
+                      cursor: !hasData ? 'not-allowed' : 'pointer',
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
                     }}
                   >
                     <Printer size={14} />
@@ -3487,7 +3601,11 @@ export default function ValoresPage() {
                       </span>
 
                       <h3 style={{ fontSize: 23, fontWeight: 900, color: '#ffffff', margin: '3px 0 0 0', lineHeight: 1.2 }}>
-                        {selectedSeries.length === 1 ? currentSerie.nome : `${selectedSeries.length} Opções de Turno`}
+                        {!hasData
+                          ? `Sem Valores para ${anoLetivo}`
+                          : selectedSeries.length === 1
+                          ? currentSerie?.nome
+                          : `${selectedSeries.length} Opções de Turno`}
                       </h3>
 
                       {/* Nome do Aluno quando houver */}
@@ -3565,14 +3683,64 @@ export default function ValoresPage() {
                       padding="4px 12px"
                       borderRadius={8}
                     >
-                      Proposta Oficial
+                      {hasData ? 'Proposta Oficial' : 'Sem Dados'}
                     </PropostaBadge>
                   </div>
                 </div>
 
 
                 <div style={{ padding: '22px 26px', display: 'flex', flexDirection: 'column', gap: 16 }}>
-                  {/* Métricas Principais (Sem somar mensalidades) */}
+                  {!hasData ? (
+                    <div style={{
+                      padding: '48px 24px',
+                      textAlign: 'center',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 12
+                    }}>
+                      <div style={{
+                        width: 56,
+                        height: 56,
+                        borderRadius: 16,
+                        background: '#f1f5f9',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                      }}>
+                        <Calendar size={28} color="#94a3b8" />
+                      </div>
+                      <h4 style={{ fontSize: 17, fontWeight: 900, color: '#1e293b', margin: 0 }}>
+                        Nenhum valor cadastrado para {anoLetivo}
+                      </h4>
+                      <p style={{ fontSize: 13, color: '#64748b', margin: 0, maxWidth: 360, lineHeight: 1.5 }}>
+                        Os valores e simulações comerciais estão ativos para o <strong>Ano Letivo 2027</strong>.
+                        Selecione 2027 para visualizar a proposta completa e gerar orçamentos.
+                      </p>
+                      {anosDisponiveis.includes('2027') && (
+                        <button
+                          onClick={() => setAnoLetivo('2027')}
+                          style={{
+                            marginTop: 8,
+                            padding: '9px 20px',
+                            borderRadius: 10,
+                            background: '#2563eb',
+                            color: '#ffffff',
+                            fontSize: 12,
+                            fontWeight: 800,
+                            border: 'none',
+                            cursor: 'pointer',
+                            boxShadow: '0 4px 12px rgba(37, 99, 235, 0.25)'
+                          }}
+                        >
+                          Ir para Ano Letivo 2027
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    <>
+                      {/* Métricas Principais (Sem somar mensalidades) */}
                   {selectedSeries.length === 1 ? (
                     <div className="print-avoid-break" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                       <div style={{ padding: '16px 20px', borderRadius: 16, background: '#eff6ff', border: '1.5px solid #bfdbfe', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', boxShadow: '0 2px 8px rgba(37, 99, 235, 0.04)' }}>
@@ -4327,6 +4495,8 @@ export default function ValoresPage() {
                       </div>
                     </div>
                   )}
+                    </>
+                  )}
                 </div>
               </div>
 
@@ -4376,8 +4546,26 @@ export default function ValoresPage() {
                 </div>
 
                 <div style={{ padding: 24, display: 'flex', flexDirection: 'column' }}>
-                  {/* Seletor de Modelos */}
-                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
+                  {!hasData ? (
+                    <div style={{
+                      padding: '36px 20px',
+                      textAlign: 'center',
+                      background: '#f8fafc',
+                      borderRadius: 12,
+                      border: '1px dashed #cbd5e1',
+                      color: '#64748b',
+                      fontSize: 13
+                    }}>
+                      <MessageSquare size={28} color="#94a3b8" style={{ margin: '0 auto 8px', display: 'block' }} />
+                      <strong style={{ color: '#1e293b', display: 'block', marginBottom: 4 }}>
+                        Propostas WhatsApp indisponíveis para {anoLetivo}
+                      </strong>
+                      Não há valores ou mensalidades cadastrados para este ano letivo. Alterne para o <strong>Ano Letivo 2027</strong> para simular e enviar propostas.
+                    </div>
+                  ) : (
+                    <>
+                      {/* Seletor de Modelos */}
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
                     {templates.map(tpl => {
                       const isSel = selectedTemplateId === tpl.id
                       return (
@@ -4477,7 +4665,8 @@ export default function ValoresPage() {
                       <span>{telefone.replace(/\D/g, '') ? 'Conversar com Responsável' : 'Abrir WhatsApp'}</span>
                     </button>
                   </div>
-
+                    </>
+                  )}
                 </div>
               </div>
 
@@ -4552,60 +4741,107 @@ export default function ValoresPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredSeries.map((serie, idx) => {
-                      const base = serie.mensalidadeBase
-                      const outAVista = base * 0.80
-                      const out5xTotal = base * 0.85
-                      const out5xParc = out5xTotal / 5
-
-                      const novAVista = base * 0.85
-                      const nov5xTotal = base * 0.90
-                      const nov5xParc = nov5xTotal / 5
-
-                      const dezAVista = base * 0.90
-                      const dez5xTotal = base * 0.95
-                      const dez5xParc = dez5xTotal / 5
-
-                      return (
-                        <tr key={serie.id} style={{ borderBottom: '1px solid #f1f5f9', background: idx % 2 === 0 ? '#ffffff' : '#fafafa' }}>
-                          <td style={{ padding: '12px 16px' }}>
-                            <span style={{ fontWeight: 800, color: '#0f172a', display: 'block' }}>{serie.nome}</span>
-                            {serie.detalhe && <span style={{ fontSize: 10, color: '#64748b' }}>{serie.detalhe}</span>}
-                          </td>
-                          <td style={{ padding: '12px', textAlign: 'right', color: '#64748b', fontWeight: 600 }}>{fmt(serie.anuidadeBase)}</td>
-                          <td style={{ padding: '12px', textAlign: 'right', fontWeight: 900, color: '#2563eb', background: 'rgba(239, 246, 255, 0.4)' }}>
-                            {fmt(serie.mensalidadeBase)}
-                          </td>
-                          <td style={{ padding: '12px', textAlign: 'center', borderLeft: '1px solid #f1f5f9', background: 'rgba(236, 253, 245, 0.4)' }}>
-                            <span style={{ fontWeight: 900, color: '#047857', display: 'block' }}>{fmt(outAVista)}</span>
-                            <span style={{ fontSize: 10, color: '#64748b' }}>5x de <strong>{fmt(out5xParc)}</strong></span>
-                          </td>
-                          <td style={{ padding: '12px', textAlign: 'center', borderLeft: '1px solid #f1f5f9', background: 'rgba(239, 246, 255, 0.4)' }}>
-                            <span style={{ fontWeight: 900, color: '#1d4ed8', display: 'block' }}>{fmt(novAVista)}</span>
-                            <span style={{ fontSize: 10, color: '#64748b' }}>5x de <strong>{fmt(nov5xParc)}</strong></span>
-                          </td>
-                          <td style={{ padding: '12px', textAlign: 'center', borderLeft: '1px solid #f1f5f9', background: 'rgba(255, 251, 235, 0.4)' }}>
-                            <span style={{ fontWeight: 900, color: '#b45309', display: 'block' }}>{fmt(dezAVista)}</span>
-                            <span style={{ fontSize: 10, color: '#64748b' }}>5x de <strong>{fmt(dez5xParc)}</strong></span>
-                          </td>
-                          <td style={{ padding: '12px', textAlign: 'center' }}>
+                    {filteredSeries.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} style={{ textAlign: 'center', padding: '56px 20px', color: '#64748b' }}>
+                          <div style={{
+                            width: 52,
+                            height: 52,
+                            borderRadius: 14,
+                            background: '#f1f5f9',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            marginBottom: 12
+                          }}>
+                            <FileSpreadsheet size={28} color="#94a3b8" />
+                          </div>
+                          <div style={{ fontSize: 16, fontWeight: 800, color: '#1e293b' }}>
+                            {seriesList.length === 0
+                              ? `Nenhum valor de matrícula cadastrado para o Ano Letivo ${anoLetivo}`
+                              : `Nenhuma série encontrada para a busca "${searchQuery}"`}
+                          </div>
+                          {seriesList.length === 0 && (
+                            <div style={{ fontSize: 13, color: '#64748b', marginTop: 4, maxWidth: 460, margin: '6px auto 16px' }}>
+                              Os dados e descontos de antecipação disponíveis no sistema são exclusivos do <strong>Ano Letivo 2027</strong>.
+                            </div>
+                          )}
+                          {seriesList.length === 0 && anosDisponiveis.includes('2027') && (
                             <button
-                              onClick={() => {
-                                setSelectedSerieIds([serie.id])
-                                setActiveTab('simulador')
-                              }}
+                              onClick={() => setAnoLetivo('2027')}
                               style={{
-                                padding: '5px 12px', borderRadius: 8, fontSize: 11, fontWeight: 800,
-                                border: '1px solid #bfdbfe', background: '#eff6ff', color: '#1d4ed8',
-                                cursor: 'pointer'
+                                padding: '8px 18px',
+                                borderRadius: 10,
+                                background: '#2563eb',
+                                color: '#ffffff',
+                                fontWeight: 700,
+                                fontSize: 12,
+                                border: 'none',
+                                cursor: 'pointer',
+                                boxShadow: '0 2px 6px rgba(37, 99, 235, 0.25)'
                               }}
                             >
-                              Simular
+                              Acessar Tabela 2027
                             </button>
-                          </td>
-                        </tr>
-                      )
-                    })}
+                          )}
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredSeries.map((serie, idx) => {
+                        const base = serie.mensalidadeBase
+                        const outAVista = base * 0.80
+                        const out5xTotal = base * 0.85
+                        const out5xParc = out5xTotal / 5
+
+                        const novAVista = base * 0.85
+                        const nov5xTotal = base * 0.90
+                        const nov5xParc = nov5xTotal / 5
+
+                        const dezAVista = base * 0.90
+                        const dez5xTotal = base * 0.95
+                        const dez5xParc = dez5xTotal / 5
+
+                        return (
+                          <tr key={serie.id} style={{ borderBottom: '1px solid #f1f5f9', background: idx % 2 === 0 ? '#ffffff' : '#fafafa' }}>
+                            <td style={{ padding: '12px 16px' }}>
+                              <span style={{ fontWeight: 800, color: '#0f172a', display: 'block' }}>{serie.nome}</span>
+                              {serie.detalhe && <span style={{ fontSize: 10, color: '#64748b' }}>{serie.detalhe}</span>}
+                            </td>
+                            <td style={{ padding: '12px', textAlign: 'right', color: '#64748b', fontWeight: 600 }}>{fmt(serie.anuidadeBase)}</td>
+                            <td style={{ padding: '12px', textAlign: 'right', fontWeight: 900, color: '#2563eb', background: 'rgba(239, 246, 255, 0.4)' }}>
+                              {fmt(serie.mensalidadeBase)}
+                            </td>
+                            <td style={{ padding: '12px', textAlign: 'center', borderLeft: '1px solid #f1f5f9', background: 'rgba(236, 253, 245, 0.4)' }}>
+                              <span style={{ fontWeight: 900, color: '#047857', display: 'block' }}>{fmt(outAVista)}</span>
+                              <span style={{ fontSize: 10, color: '#64748b' }}>5x de <strong>{fmt(out5xParc)}</strong></span>
+                            </td>
+                            <td style={{ padding: '12px', textAlign: 'center', borderLeft: '1px solid #f1f5f9', background: 'rgba(239, 246, 255, 0.4)' }}>
+                              <span style={{ fontWeight: 900, color: '#1d4ed8', display: 'block' }}>{fmt(novAVista)}</span>
+                              <span style={{ fontSize: 10, color: '#64748b' }}>5x de <strong>{fmt(nov5xParc)}</strong></span>
+                            </td>
+                            <td style={{ padding: '12px', textAlign: 'center', borderLeft: '1px solid #f1f5f9', background: 'rgba(255, 251, 235, 0.4)' }}>
+                              <span style={{ fontWeight: 900, color: '#b45309', display: 'block' }}>{fmt(dezAVista)}</span>
+                              <span style={{ fontSize: 10, color: '#64748b' }}>5x de <strong>{fmt(dez5xParc)}</strong></span>
+                            </td>
+                            <td style={{ padding: '12px', textAlign: 'center' }}>
+                              <button
+                                onClick={() => {
+                                  setSelectedSerieIds([serie.id])
+                                  setActiveTab('simulador')
+                                }}
+                                style={{
+                                  padding: '5px 12px', borderRadius: 8, fontSize: 11, fontWeight: 800,
+                                  border: '1px solid #bfdbfe', background: '#eff6ff', color: '#1d4ed8',
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                Simular
+                              </button>
+                            </td>
+                          </tr>
+                        )
+                      })
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -4694,51 +4930,98 @@ export default function ValoresPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredSeries.map((serie, idx) => {
-                      const base = serie.mensalidadeBase
-                      return (
-                        <tr key={serie.id} style={{ borderBottom: '1px solid #f1f5f9', background: idx % 2 === 0 ? '#ffffff' : '#fafafa' }}>
-                          <td style={{ padding: '12px 16px' }}>
-                            <span style={{ fontWeight: 800, color: '#0f172a', display: 'block' }}>{serie.nome}</span>
-                            {serie.detalhe && <span style={{ fontSize: 10, color: '#64748b' }}>{serie.detalhe}</span>}
-                          </td>
-                          <td style={{ padding: '12px', textAlign: 'right', fontWeight: 900, color: '#0f172a', background: 'rgba(241, 245, 249, 0.6)', borderRight: '1px solid #f1f5f9' }}>
-                            {fmt(base)}
-                          </td>
-                          {[5, 8, 10, 11, 13, 15].map(pct => {
-                            const val = base * (1 - (pct / 100))
-                            const isConv = pct === 11
-                            return (
-                              <td
-                                key={pct}
-                                style={{
-                                  padding: '12px', textAlign: 'right', fontWeight: 800,
-                                  color: isConv ? '#be123c' : '#334155',
-                                  background: isConv ? 'rgba(255, 241, 242, 0.5)' : 'transparent'
-                                }}
-                              >
-                                {fmt(val)}
-                              </td>
-                            )
-                          })}
-                          <td style={{ padding: '12px', textAlign: 'center' }}>
+                    {filteredSeries.length === 0 ? (
+                      <tr>
+                        <td colSpan={9} style={{ textAlign: 'center', padding: '56px 20px', color: '#64748b' }}>
+                          <div style={{
+                            width: 52,
+                            height: 52,
+                            borderRadius: 14,
+                            background: '#f1f5f9',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            marginBottom: 12
+                          }}>
+                            <Percent size={28} color="#94a3b8" />
+                          </div>
+                          <div style={{ fontSize: 16, fontWeight: 800, color: '#1e293b' }}>
+                            {seriesList.length === 0
+                              ? `Nenhuma grade de mensalidades cadastrada para o Ano Letivo ${anoLetivo}`
+                              : `Nenhuma série encontrada para a busca "${searchQuery}"`}
+                          </div>
+                          {seriesList.length === 0 && (
+                            <div style={{ fontSize: 13, color: '#64748b', marginTop: 4, maxWidth: 460, margin: '6px auto 16px' }}>
+                              As mensalidades oficiais e faixas de desconto cadastradas são exclusivas do <strong>Ano Letivo 2027</strong>.
+                            </div>
+                          )}
+                          {seriesList.length === 0 && anosDisponiveis.includes('2027') && (
                             <button
-                              onClick={() => {
-                                setSelectedSerieIds([serie.id])
-                                setActiveTab('simulador')
-                              }}
+                              onClick={() => setAnoLetivo('2027')}
                               style={{
-                                padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 800,
-                                border: '1px solid #fde68a', background: '#fef3c7', color: '#b45309',
-                                cursor: 'pointer'
+                                padding: '8px 18px',
+                                borderRadius: 10,
+                                background: '#2563eb',
+                                color: '#ffffff',
+                                fontWeight: 700,
+                                fontSize: 12,
+                                border: 'none',
+                                cursor: 'pointer',
+                                boxShadow: '0 2px 6px rgba(37, 99, 235, 0.25)'
                               }}
                             >
-                              Calcular
+                              Acessar Grade 2027
                             </button>
-                          </td>
-                        </tr>
-                      )
-                    })}
+                          )}
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredSeries.map((serie, idx) => {
+                        const base = serie.mensalidadeBase
+                        return (
+                          <tr key={serie.id} style={{ borderBottom: '1px solid #f1f5f9', background: idx % 2 === 0 ? '#ffffff' : '#fafafa' }}>
+                            <td style={{ padding: '12px 16px' }}>
+                              <span style={{ fontWeight: 800, color: '#0f172a', display: 'block' }}>{serie.nome}</span>
+                              {serie.detalhe && <span style={{ fontSize: 10, color: '#64748b' }}>{serie.detalhe}</span>}
+                            </td>
+                            <td style={{ padding: '12px', textAlign: 'right', fontWeight: 900, color: '#0f172a', background: 'rgba(241, 245, 249, 0.6)', borderRight: '1px solid #f1f5f9' }}>
+                              {fmt(base)}
+                            </td>
+                            {[5, 8, 10, 11, 13, 15].map(pct => {
+                              const val = base * (1 - (pct / 100))
+                              const isConv = pct === 11
+                              return (
+                                <td
+                                  key={pct}
+                                  style={{
+                                    padding: '12px', textAlign: 'right', fontWeight: 800,
+                                    color: isConv ? '#be123c' : '#334155',
+                                    background: isConv ? 'rgba(255, 241, 242, 0.5)' : 'transparent'
+                                  }}
+                                >
+                                  {fmt(val)}
+                                </td>
+                              )
+                            })}
+                            <td style={{ padding: '12px', textAlign: 'center' }}>
+                              <button
+                                onClick={() => {
+                                  setSelectedSerieIds([serie.id])
+                                  setActiveTab('simulador')
+                                }}
+                                style={{
+                                  padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 800,
+                                  border: '1px solid #fde68a', background: '#fef3c7', color: '#b45309',
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                Calcular
+                              </button>
+                            </td>
+                          </tr>
+                        )
+                      })
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -4763,7 +5046,72 @@ export default function ValoresPage() {
 
         {/* ─── ABA 5: SERVIÇOS & CONVÊNIOS COM GRADIENTES SUAVES ─── */}
         {activeTab === 'servicos' && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 20 }}>
+          !hasData ? (
+            <div style={{
+              background: '#ffffff',
+              borderRadius: 20,
+              border: '1px solid #e2e8f0',
+              boxShadow: '0 4px 20px -2px rgba(0,0,0,0.04)',
+              overflow: 'hidden'
+            }}>
+              <div style={{
+                background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #1e3a8a 100%)',
+                padding: '22px 28px',
+                borderBottom: '1px solid #1e293b'
+              }}>
+                <span style={{ fontSize: 11, fontWeight: 800, color: '#93c5fd', textTransform: 'uppercase' }}>Colégio Impacto • {anoLetivo}</span>
+                <h2 style={{ fontSize: 20, fontWeight: 900, color: '#ffffff', margin: '2px 0 0' }}>Serviços Adicionais & Convênios</h2>
+                <p style={{ fontSize: 12, color: '#94a3b8', margin: 0 }}>Diárias, progressão parcial (DP), materiais didáticos e convênios.</p>
+              </div>
+              <div style={{
+                padding: '60px 24px',
+                textAlign: 'center',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 12
+              }}>
+                <div style={{
+                  width: 56,
+                  height: 56,
+                  borderRadius: 16,
+                  background: '#f1f5f9',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}>
+                  <Layers size={28} color="#94a3b8" />
+                </div>
+                <h3 style={{ fontSize: 17, fontWeight: 800, color: '#1e293b', margin: 0 }}>
+                  Nenhum serviço ou valor adicional cadastrado para o Ano Letivo {anoLetivo}
+                </h3>
+                <p style={{ fontSize: 13, color: '#64748b', margin: 0, maxWidth: 460 }}>
+                  A tabela oficial de serviços adicionais, taxas de materiais e diárias é referente ao <strong>Ano Letivo 2027</strong>.
+                </p>
+                {anosDisponiveis.includes('2027') && (
+                  <button
+                    onClick={() => setAnoLetivo('2027')}
+                    style={{
+                      marginTop: 6,
+                      padding: '8px 18px',
+                      borderRadius: 10,
+                      background: '#2563eb',
+                      color: '#ffffff',
+                      fontWeight: 700,
+                      fontSize: 12,
+                      border: 'none',
+                      cursor: 'pointer',
+                      boxShadow: '0 2px 6px rgba(37, 99, 235, 0.25)'
+                    }}
+                  >
+                    Ver Serviços de 2027
+                  </button>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 20 }}>
             
             {/* Card 1: Diárias */}
             <div style={{ background: '#ffffff', borderRadius: 20, border: '1px solid #e2e8f0', boxShadow: '0 4px 20px -2px rgba(0,0,0,0.04)', overflow: 'hidden' }}>
@@ -4901,8 +5249,8 @@ export default function ValoresPage() {
                 </div>
               </div>
             </div>
-
-          </div>
+            </div>
+          )
         )}
 
       </div>

@@ -3297,11 +3297,11 @@ function ChamadasContent() {
   }, [activeCalls, filter, callSearch, confirmedStudentIds])
 
   const FILTERS = [
-    { key: 'all'          as FilterType, label: 'Todos',        color: '#818cf8', count: mounted ? allCalls.length    : 0 },
-    { key: 'waiting'      as FilterType, label: 'Aguardando',   color: '#f59e0b', count: mounted ? waiting.length     : 0 },
-    { key: 'confirmed'    as FilterType, label: 'Confirmados',  color: '#10b981', count: mounted ? confirmed.length   : 0 },
-    { key: 'saiu_sozinho' as FilterType, label: 'Saiu Sozinho', color: '#06b6d4', count: mounted ? saiuSozinho.length : 0 },
-    { key: 'cancelled'    as FilterType, label: 'Cancelados',   color: '#94a3b8', count: mounted ? cancelled.length   : 0 },
+    { key: 'all'          as FilterType, label: 'Todos',        color: '#6366f1', gradient: 'linear-gradient(135deg, #4f46e5 0%, #6366f1 100%)', glow: '0 4px 14px rgba(79, 70, 229, 0.35)', count: mounted ? allCalls.length    : 0 },
+    { key: 'waiting'      as FilterType, label: 'Aguardando',   color: '#f59e0b', gradient: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)', glow: '0 4px 14px rgba(245, 158, 11, 0.35)', count: mounted ? waiting.length     : 0 },
+    { key: 'confirmed'    as FilterType, label: 'Confirmados',  color: '#10b981', gradient: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', glow: '0 4px 14px rgba(16, 185, 129, 0.35)', count: mounted ? confirmed.length   : 0 },
+    { key: 'saiu_sozinho' as FilterType, label: 'Saiu Sozinho', color: '#06b6d4', gradient: 'linear-gradient(135deg, #06b6d4 0%, #0891b2 100%)', glow: '0 4px 14px rgba(6, 182, 212, 0.35)', count: mounted ? saiuSozinho.length : 0 },
+    { key: 'cancelled'    as FilterType, label: 'Cancelados',   color: '#64748b', gradient: 'linear-gradient(135deg, #64748b 0%, #475569 100%)', glow: '0 4px 14px rgba(100, 116, 139, 0.35)', count: mounted ? cancelled.length   : 0 },
   ]
 
   if (isLoadingCalls) {
@@ -3521,20 +3521,34 @@ function ChamadasContent() {
         <SpecialExitSticker showToast={showToast} />
       </div>
 
-      {/* ── HISTÓRICO TOOLBAR CARD (FILTROS, BUSCA E ZERAR NA MESMA LINHA) ── */}
+      {/* ── CARD ULTRA MODERNO DO HISTÓRICO COM GRADIENTE E CORES COMBINADAS ── */}
       <div style={{
-        background: 'hsl(var(--bg-elevated))',
-        border: '1px solid hsl(var(--border-subtle))',
-        borderRadius: 18,
-        padding: '10px 16px',
+        position: 'relative',
+        backgroundColor: 'hsl(var(--bg-elevated))',
+        backgroundImage: 'linear-gradient(135deg, rgba(99, 102, 241, 0.08) 0%, rgba(59, 130, 246, 0.05) 45%, rgba(168, 85, 247, 0.08) 100%)',
+        border: '1px solid rgba(99, 102, 241, 0.25)',
+        borderRadius: 20,
+        padding: '12px 18px',
         marginBottom: 20,
-        boxShadow: '0 4px 20px -2px rgba(0, 0, 0, 0.05), 0 1px 3px rgba(0, 0, 0, 0.02)',
+        boxShadow: '0 8px 32px -4px rgba(99, 102, 241, 0.12), 0 2px 6px -1px rgba(0, 0, 0, 0.03)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
         gap: 12,
         flexWrap: 'wrap',
+        overflow: 'hidden',
       }}>
+        {/* Subtle top edge gradient shimmer */}
+        <div style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          height: 2,
+          background: 'linear-gradient(90deg, #3b82f6 0%, #8b5cf6 50%, #06b6d4 100%)',
+          opacity: 0.85,
+        }} />
+
         {/* Left: Histórico Label + Tabs */}
         <div style={{
           display: 'flex',
@@ -3543,27 +3557,55 @@ function ChamadasContent() {
           flexWrap: 'wrap',
           flex: isMobile ? '1 1 100%' : '0 1 auto',
         }}>
+          {/* Brand/Section Badge with Gradient Icon */}
           <div style={{
             display: 'flex',
             alignItems: 'center',
-            gap: 6,
-            paddingRight: 8,
-            borderRight: '1px solid hsl(var(--border-subtle))',
-            marginRight: 2,
+            gap: 8,
+            paddingRight: 12,
+            borderRight: '1px solid rgba(99, 102, 241, 0.2)',
+            marginRight: 4,
             userSelect: 'none',
           }}>
-            <History size={15} style={{ color: 'hsl(var(--text-muted))' }} />
-            <span style={{
-              fontSize: 11,
-              fontWeight: 800,
-              letterSpacing: '0.06em',
-              color: 'hsl(var(--text-muted))',
-              textTransform: 'uppercase',
+            <div style={{
+              width: 32,
+              height: 32,
+              borderRadius: 9,
+              background: 'linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#fff',
+              boxShadow: '0 3px 10px rgba(99, 102, 241, 0.35)',
+              flexShrink: 0,
             }}>
-              Histórico
-            </span>
+              <History size={15} strokeWidth={2.4} />
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <span style={{
+                fontSize: 11,
+                fontWeight: 900,
+                letterSpacing: '0.08em',
+                background: 'linear-gradient(135deg, #2563eb 0%, #7c3aed 100%)',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+                textTransform: 'uppercase',
+                lineHeight: 1.1,
+              }}>
+                Histórico
+              </span>
+              <span style={{
+                fontSize: 9,
+                fontWeight: 700,
+                color: 'hsl(var(--text-muted))',
+                letterSpacing: '0.04em',
+              }}>
+                CHAMADAS
+              </span>
+            </div>
           </div>
 
+          {/* Filter Pills with Gradient on Active */}
           {FILTERS.map(f => {
             const isActive = filter === f.key
             return (
@@ -3576,28 +3618,29 @@ function ChamadasContent() {
                   setFilter(f.key)
                 }}
                 style={{
-                  height: 34,
-                  padding: '0 12px',
+                  height: 36,
+                  padding: '0 13px',
                   borderRadius: 100,
                   fontSize: isMobile ? 11 : 12,
                   fontWeight: isActive ? 700 : 600,
-                  border: `1px solid ${isActive ? f.color : 'hsl(var(--border-subtle))'}`,
-                  background: isActive ? `${f.color}15` : 'hsl(var(--bg-surface))',
-                  color: isActive ? f.color : 'hsl(var(--text-secondary))',
+                  border: isActive ? '1px solid transparent' : '1px solid hsl(var(--border-subtle))',
+                  background: isActive ? f.gradient : 'hsl(var(--bg-surface))',
+                  color: isActive ? '#ffffff' : 'hsl(var(--text-secondary))',
                   cursor: 'pointer',
-                  transition: 'all 0.15s ease',
+                  transition: 'all 0.18s cubic-bezier(0.4, 0, 0.2, 1)',
                   display: 'flex',
                   alignItems: 'center',
                   gap: 6,
-                  boxShadow: isActive ? `0 2px 8px ${f.color}25` : 'none',
+                  boxShadow: isActive ? f.glow : 'none',
                   whiteSpace: 'nowrap',
                 }}
                 onMouseEnter={e => {
                   if (!isActive) {
                     const el = e.currentTarget
                     el.style.background = 'hsl(var(--bg-hover))'
-                    el.style.borderColor = 'hsl(var(--border-default))'
-                    el.style.color = 'hsl(var(--text-primary))'
+                    el.style.borderColor = `${f.color}70`
+                    el.style.color = f.color
+                    el.style.boxShadow = `0 2px 8px ${f.color}18`
                   }
                 }}
                 onMouseLeave={e => {
@@ -3606,20 +3649,22 @@ function ChamadasContent() {
                     el.style.background = 'hsl(var(--bg-surface))'
                     el.style.borderColor = 'hsl(var(--border-subtle))'
                     el.style.color = 'hsl(var(--text-secondary))'
+                    el.style.boxShadow = 'none'
                   }
                 }}
               >
                 {f.label}
                 <span style={{
-                  background: isActive ? f.color : 'hsl(var(--bg-overlay))',
-                  color: isActive ? '#fff' : 'hsl(var(--text-muted))',
+                  background: isActive ? 'rgba(255, 255, 255, 0.28)' : 'hsl(var(--bg-overlay))',
+                  color: isActive ? '#ffffff' : 'hsl(var(--text-muted))',
                   borderRadius: 100,
                   fontSize: 10,
-                  padding: '1px 6px',
+                  padding: '1px 7px',
                   fontWeight: 800,
                   minWidth: 16,
                   textAlign: 'center',
-                  transition: 'all 0.15s ease',
+                  boxShadow: isActive ? 'inset 0 1px 1px rgba(255, 255, 255, 0.3)' : 'none',
+                  transition: 'all 0.18s ease',
                 }}>
                   {f.count}
                 </span>
@@ -3637,7 +3682,7 @@ function ChamadasContent() {
           marginLeft: isMobile ? 0 : 'auto',
           justifyContent: isMobile ? 'space-between' : 'flex-end',
         }}>
-          {/* Search Input */}
+          {/* Search Input with Gradient Accent */}
           <div style={{
             position: 'relative',
             width: isMobile ? '100%' : 240,
@@ -3650,7 +3695,7 @@ function ChamadasContent() {
                 left: 11,
                 top: '50%',
                 transform: 'translateY(-50%)',
-                color: 'hsl(var(--text-muted))',
+                color: '#6366f1',
                 pointerEvents: 'none',
               }}
             />
@@ -3660,11 +3705,11 @@ function ChamadasContent() {
               placeholder="Filtrar histórico..."
               style={{
                 width: '100%',
-                height: 34,
+                height: 36,
                 padding: '0 28px 0 32px',
-                borderRadius: 10,
+                borderRadius: 12,
                 fontSize: 12,
-                border: '1px solid hsl(var(--border-subtle))',
+                border: '1px solid rgba(99, 102, 241, 0.25)',
                 background: 'hsl(var(--bg-surface))',
                 color: 'hsl(var(--text-primary))',
                 outline: 'none',
@@ -3672,11 +3717,11 @@ function ChamadasContent() {
                 transition: 'all 0.2s ease',
               }}
               onFocus={e => {
-                e.currentTarget.style.borderColor = 'hsl(var(--brand-primary, 217 91% 60%))'
-                e.currentTarget.style.boxShadow = '0 0 0 2px rgba(59, 130, 246, 0.15)'
+                e.currentTarget.style.borderColor = '#6366f1'
+                e.currentTarget.style.boxShadow = '0 0 0 3px rgba(99, 102, 241, 0.18)'
               }}
               onBlur={e => {
-                e.currentTarget.style.borderColor = 'hsl(var(--border-subtle))'
+                e.currentTarget.style.borderColor = 'rgba(99, 102, 241, 0.25)'
                 e.currentTarget.style.boxShadow = 'none'
               }}
             />
@@ -3704,7 +3749,7 @@ function ChamadasContent() {
             )}
           </div>
 
-          {/* Zerar Chamadas */}
+          {/* Zerar Chamadas with Gradient Danger Theme */}
           {isAdmin && (
             <button
               type="button"
@@ -3714,33 +3759,36 @@ function ChamadasContent() {
                 setConfirmClearAll(true)
               }}
               style={{
-                height: 34,
-                padding: '0 14px',
-                borderRadius: 10,
+                height: 36,
+                padding: '0 16px',
+                borderRadius: 12,
                 fontSize: 12,
                 fontWeight: 700,
-                border: '1px solid rgba(239, 68, 68, 0.25)',
-                background: 'rgba(239, 68, 68, 0.08)',
+                border: '1px solid rgba(239, 68, 68, 0.3)',
+                background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, rgba(220, 38, 38, 0.05) 100%)',
                 color: '#ef4444',
                 cursor: 'pointer',
-                transition: 'all 0.15s ease',
+                transition: 'all 0.18s cubic-bezier(0.4, 0, 0.2, 1)',
                 display: 'flex',
                 alignItems: 'center',
                 gap: 6,
                 whiteSpace: 'nowrap',
                 flexShrink: 0,
+                boxShadow: '0 2px 6px rgba(239, 68, 68, 0.08)',
               }}
               onMouseEnter={e => {
                 const el = e.currentTarget as HTMLButtonElement
-                el.style.background = '#ef4444'
+                el.style.background = 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)'
                 el.style.color = '#fff'
-                el.style.boxShadow = '0 2px 8px rgba(239, 68, 68, 0.25)'
+                el.style.borderColor = 'transparent'
+                el.style.boxShadow = '0 4px 14px rgba(239, 68, 68, 0.35)'
               }}
               onMouseLeave={e => {
                 const el = e.currentTarget as HTMLButtonElement
-                el.style.background = 'rgba(239, 68, 68, 0.08)'
+                el.style.background = 'linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, rgba(220, 38, 38, 0.05) 100%)'
                 el.style.color = '#ef4444'
-                el.style.boxShadow = 'none'
+                el.style.borderColor = 'rgba(239, 68, 68, 0.3)'
+                el.style.boxShadow = '0 2px 6px rgba(239, 68, 68, 0.08)'
               }}
             >
               <Trash2 size={13} />
