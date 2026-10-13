@@ -4,7 +4,8 @@ import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   X, Check, ChevronLeft, ChevronRight, Sparkles, PenTool,
-  Move, Trash2, FileText, AlertCircle, RefreshCw, ZoomIn, ZoomOut
+  Move, Trash2, FileText, AlertCircle, RefreshCw, ZoomIn, ZoomOut,
+  Maximize2, Minus, Plus
 } from 'lucide-react'
 import {
   formatAbbreviatedSignerName,
@@ -19,6 +20,7 @@ export interface SignatarioPosicionavel {
   cpf?: string
   tipo: 'escola' | 'responsavel'
   cor: string
+  estiloCaligrafico?: string | null
   assinaturaBase64?: string | null
 }
 
@@ -33,6 +35,7 @@ export interface PosicaoAssinatura {
   yPercent: number // 0 a 100% da altura a partir do topo
   larguraPt?: number
   alturaPt?: number
+  estiloCaligrafico?: string | null
   assinaturaBase64?: string | null
 }
 
@@ -57,6 +60,9 @@ export function gerarPosicionamentoPadrao(
       pagina: totalPags,
       xPercent: 32,
       yPercent: 82,
+      larguraPt: 160,
+      alturaPt: 44,
+      estiloCaligrafico: sig.estiloCaligrafico || 'classica',
       assinaturaBase64: sig.assinaturaBase64 || undefined,
     }
   } else if (count === 2) {
@@ -70,6 +76,9 @@ export function gerarPosicionamentoPadrao(
         pagina: totalPags,
         xPercent: idx === 0 ? 8 : 54,
         yPercent: 82,
+        larguraPt: 160,
+        alturaPt: 44,
+        estiloCaligrafico: sig.estiloCaligrafico || 'classica',
         assinaturaBase64: sig.assinaturaBase64 || undefined,
       }
     })
@@ -87,6 +96,9 @@ export function gerarPosicionamentoPadrao(
         pagina: totalPags,
         xPercent: col === 0 ? 8 : 54,
         yPercent: 72 + linha * 12,
+        larguraPt: 160,
+        alturaPt: 44,
+        estiloCaligrafico: sig.estiloCaligrafico || 'classica',
         assinaturaBase64: sig.assinaturaBase64 || undefined,
       }
     })
@@ -133,6 +145,18 @@ export function PosicionadorAssinaturasModal({
   // Estado para arrastar (drag and drop) das caixinhas de assinatura
   const [arrastandoId, setArrastandoId] = useState<string | null>(null)
   const dragStartRef = useRef<{ startX: number; startY: number; origXPercent: number; origYPercent: number } | null>(null)
+
+  // Escala atual do PDF (pixels por ponto)
+  const [currentScale, setCurrentScale] = useState<number>(1.0)
+
+  // Estado para redimensionamento das caixinhas
+  const [redimensionandoId, setRedimensionandoId] = useState<string | null>(null)
+  const resizeStartRef = useRef<{
+    startX: number
+    startY: number
+    origLarguraPt: number
+    origAlturaPt: number
+  } | null>(null)
 
   // Sincroniza posições iniciais ao abrir
   useEffect(() => {
@@ -229,6 +253,7 @@ export function PosicionadorAssinaturasModal({
       const maxDisplayWidth = Math.min(window.innerWidth - 80, 800)
       const baseScale = maxDisplayWidth / unscaledViewport.width
       const effectiveScale = baseScale * (zoom / 100)
+      setCurrentScale(effectiveScale)
 
       const viewport = page.getViewport({ scale: effectiveScale })
       const dpr = typeof window !== 'undefined' ? Math.min(window.devicePixelRatio || 1, 2) : 1
@@ -290,6 +315,9 @@ export function PosicionadorAssinaturasModal({
         pagina: paginaAtual,
         xPercent,
         yPercent,
+        estiloCaligrafico: signatarioAlvo.estiloCaligrafico || 'classica',
+        larguraPt: 160,
+        alturaPt: 44,
         assinaturaBase64: signatarioAlvo.assinaturaBase64 || undefined,
       },
     }))
@@ -345,6 +373,95 @@ export function PosicionadorAssinaturasModal({
 
     window.addEventListener('mousemove', handleMouseMove)
     window.addEventListener('mouseup', handleMouseUp)
+  }
+
+  // Redimensionamento interativo da caixinha (arrasto do canto inferior direito)
+  const handleMouseDownResize = (e: React.MouseEvent, sigId: string) => {
+    e.stopPropagation()
+    e.preventDefault()
+    const item = posicoes[sigId]
+    if (!item) return
+
+    const origLargura = item.larguraPt || 160
+    const origAltura = item.alturaPt || 44
+    setRedimensionandoId(sigId)
+    resizeStartRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      origLarguraPt: origLargura,
+      origAlturaPt: origAltura,
+    }
+
+    const scale = currentScale || 1.0
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      if (!resizeStartRef.current) return
+      const deltaX = moveEvent.clientX - resizeStartRef.current.startX
+      const deltaY = moveEvent.clientY - resizeStartRef.current.startY
+
+      const deltaWidthPt = deltaX / scale
+      const deltaHeightPt = deltaY / scale
+
+      const newLarguraPt = Math.max(90, Math.min(320, Math.round(resizeStartRef.current.origLarguraPt + deltaWidthPt)))
+      const newAlturaPt = Math.max(26, Math.min(80, Math.round(resizeStartRef.current.origAlturaPt + deltaHeightPt)))
+
+      setPosicoes(prev => ({
+        ...prev,
+        [sigId]: {
+          ...prev[sigId],
+          larguraPt: newLarguraPt,
+          alturaPt: newAlturaPt,
+        },
+      }))
+    }
+
+    const handleMouseUp = () => {
+      setTimeout(() => setRedimensionandoId(null), 50)
+      resizeStartRef.current = null
+      window.removeEventListener('mousemove', handleMouseMove)
+      window.removeEventListener('mouseup', handleMouseUp)
+    }
+
+    window.addEventListener('mousemove', handleMouseMove)
+    window.addEventListener('mouseup', handleMouseUp)
+  }
+
+  // Ajuste rápido de tamanho (+ / -)
+  const handleAjustarTamanho = (sigId: string, deltaPt: number, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation()
+    setPosicoes(prev => {
+      const item = prev[sigId]
+      if (!item) return prev
+      const curL = item.larguraPt || 160
+      const curA = item.alturaPt || 44
+      const ratio = curA / curL
+      const newL = Math.max(90, Math.min(320, Math.round(curL + deltaPt)))
+      const newA = Math.max(26, Math.min(80, Math.round(curA + deltaPt * ratio)))
+      return {
+        ...prev,
+        [sigId]: {
+          ...item,
+          larguraPt: newL,
+          alturaPt: newA,
+        },
+      }
+    })
+  }
+
+  // Aplica preset de tamanho para a assinatura ativa ou todas
+  const handleAplicarPresetTamanho = (largura: number, altura: number) => {
+    setPosicoes(prev => {
+      const copy = { ...prev }
+      const alvoId = signatarioAtivoId && copy[signatarioAtivoId] ? signatarioAtivoId : null
+      if (alvoId) {
+        copy[alvoId] = { ...copy[alvoId], larguraPt: largura, alturaPt: altura }
+      } else {
+        Object.keys(copy).forEach(k => {
+          copy[k] = { ...copy[k], larguraPt: largura, alturaPt: altura }
+        })
+      }
+      return copy
+    })
   }
 
   // Remove a posição de um signatário
@@ -656,6 +773,39 @@ export function PosicionadorAssinaturasModal({
                 <ZoomIn size={13} />
               </button>
             </div>
+
+            {/* Presets rápidos de tamanho da assinatura */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 3, background: 'rgba(255, 255, 255, 0.05)', padding: '3px 8px', borderRadius: 8 }}>
+              <span style={{ fontSize: 10, color: '#94a3b8', fontWeight: 600, marginRight: 2 }}>Tam:</span>
+              {[
+                { label: 'P', l: 120, a: 34, title: 'Tamanho Pequeno (120x34 pt)' },
+                { label: 'M', l: 160, a: 44, title: 'Tamanho Médio / Padrão (160x44 pt)' },
+                { label: 'G', l: 200, a: 54, title: 'Tamanho Grande (200x54 pt)' },
+                { label: 'GG', l: 250, a: 66, title: 'Tamanho Extra Grande (250x66 pt)' },
+              ].map(preset => (
+                <button
+                  key={preset.label}
+                  type="button"
+                  onClick={() => handleAplicarPresetTamanho(preset.l, preset.a)}
+                  title={preset.title}
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.08)',
+                    border: '1px solid rgba(255, 255, 255, 0.12)',
+                    color: '#e2e8f0',
+                    fontSize: 10,
+                    fontWeight: 700,
+                    padding: '2px 6px',
+                    borderRadius: 4,
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease',
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(56, 189, 248, 0.25)')}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)')}
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
@@ -713,74 +863,131 @@ export function PosicionadorAssinaturasModal({
                     const sigInfo = signatarios.find(s => s.id === pos.signatarioId)
                     const cor = sigInfo?.cor || '#2563eb'
                     const isAtivo = signatarioAtivoId === pos.signatarioId
+                    const larguraPt = pos.larguraPt || 160
+                    const alturaPt = pos.alturaPt || 44
+                    const boxWidthPx = Math.max(90, Math.round(larguraPt * currentScale))
+                    const boxHeightPx = Math.max(28, Math.round(alturaPt * currentScale))
+                    const baseFontSize = Math.max(13, Math.min(32, Math.round(boxHeightPx * 0.38)))
+                    const subFontSize = Math.max(7, Math.min(10, Math.round(boxHeightPx * 0.16)))
 
                     return (
                       <div
                         key={pos.signatarioId}
                         onMouseDown={(e) => handleMouseDownItem(e, pos.signatarioId)}
-                        title={`${pos.nome} (${pos.cargo || 'Signatário'})`}
+                        title={`${pos.nome} (${pos.cargo || 'Signatário'}) - Arraste para mover ou use o canto para redimensionar`}
                         style={{
                           position: 'absolute',
                           left: `${pos.xPercent}%`,
                           top: `${pos.yPercent}%`,
-                          width: 185,
+                          width: boxWidthPx,
+                          minHeight: boxHeightPx,
                           padding: '5px 8px',
                           borderRadius: 8,
-                          background: 'rgba(255, 255, 255, 0.55)',
+                          background: 'rgba(255, 255, 255, 0.75)',
                           backdropFilter: 'blur(4px)',
                           WebkitBackdropFilter: 'blur(4px)',
                           border: `1.5px dashed ${cor}`,
                           boxShadow: isAtivo ? `0 0 0 3px ${cor}44, 0 6px 16px rgba(0,0,0,0.12)` : '0 2px 8px rgba(0,0,0,0.08)',
-                          cursor: 'grab',
+                          cursor: redimensionandoId === pos.signatarioId ? 'se-resize' : 'grab',
                           display: 'flex',
                           flexDirection: 'column',
+                          justifyContent: 'space-between',
                           gap: 2,
-                          transition: arrastandoId === pos.signatarioId ? 'none' : 'box-shadow 0.15s ease',
+                          transition: arrastandoId === pos.signatarioId || redimensionandoId === pos.signatarioId ? 'none' : 'box-shadow 0.15s ease',
                           zIndex: isAtivo ? 50 : 20,
                         }}
                       >
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4 }}>
                           <span
                             style={{
-                              fontSize: 8.5,
+                              fontSize: 8,
                               fontWeight: 800,
                               color: cor,
                               background: 'rgba(255, 255, 255, 0.90)',
                               border: `1px solid ${cor}33`,
-                              padding: '1.5px 5px',
+                              padding: '1px 4px',
                               borderRadius: 4,
                               display: 'inline-flex',
                               alignItems: 'center',
-                              gap: 3,
+                              gap: 2,
                               boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                              whiteSpace: 'nowrap',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              maxWidth: '50%',
                             }}
                           >
-                            <Move size={8} /> {pos.tipo === 'escola' ? 'Assinatura Instituição' : 'Assinatura Responsável'}
+                            <Move size={7} /> {pos.tipo === 'escola' ? 'Instituição' : 'Responsável'}
                           </span>
-                          <button
-                            type="button"
-                            onClick={(e) => handleRemoverPosicao(pos.signatarioId, e)}
-                            style={{
-                              background: 'rgba(255, 255, 255, 0.85)',
-                              border: 'none',
-                              color: '#64748b',
-                              cursor: 'pointer',
-                              padding: '2px',
-                              borderRadius: 4,
-                              display: 'flex',
-                              alignItems: 'center',
-                            }}
-                            title="Remover assinatura desta página"
-                          >
-                            <X size={12} />
-                          </button>
+
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                            {/* Steppers de redimensionamento rápido */}
+                            <button
+                              type="button"
+                              onClick={(e) => handleAjustarTamanho(pos.signatarioId, -15, e)}
+                              style={{
+                                background: 'rgba(255, 255, 255, 0.9)',
+                                border: '1px solid #cbd5e1',
+                                color: '#475569',
+                                cursor: 'pointer',
+                                padding: '1px 3px',
+                                borderRadius: 3,
+                                display: 'flex',
+                                alignItems: 'center',
+                                fontSize: 9,
+                              }}
+                              title="Diminuir tamanho (-15pt)"
+                            >
+                              <Minus size={8} />
+                            </button>
+                            <span style={{ fontSize: 8, color: '#64748b', fontWeight: 700 }}>
+                              {Math.round(larguraPt)}pt
+                            </span>
+                            <button
+                              type="button"
+                              onClick={(e) => handleAjustarTamanho(pos.signatarioId, 15, e)}
+                              style={{
+                                background: 'rgba(255, 255, 255, 0.9)',
+                                border: '1px solid #cbd5e1',
+                                color: '#475569',
+                                cursor: 'pointer',
+                                padding: '1px 3px',
+                                borderRadius: 3,
+                                display: 'flex',
+                                alignItems: 'center',
+                                fontSize: 9,
+                              }}
+                              title="Aumentar tamanho (+15pt)"
+                            >
+                              <Plus size={8} />
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={(e) => handleRemoverPosicao(pos.signatarioId, e)}
+                              style={{
+                                background: 'rgba(255, 255, 255, 0.85)',
+                                border: 'none',
+                                color: '#64748b',
+                                cursor: 'pointer',
+                                padding: '2px',
+                                borderRadius: 4,
+                                display: 'flex',
+                                alignItems: 'center',
+                                marginLeft: 2,
+                              }}
+                              title="Remover assinatura desta página"
+                            >
+                              <X size={11} />
+                            </button>
+                          </div>
                         </div>
 
                         {/* Apenas a Assinatura (sem nome por extenso e sem cargo/função) */}
                         <div
                           style={{
                             fontFamily: "'Dancing Script', 'Caveat', 'Brush Script MT', cursive, sans-serif",
-                            fontSize: 20,
+                            fontSize: baseFontSize,
                             fontWeight: 700,
                             color: '#0e2454',
                             lineHeight: 1.15,
@@ -797,15 +1004,42 @@ export function PosicionadorAssinaturasModal({
                         </div>
                         <div
                           style={{
-                            fontSize: 9,
+                            fontSize: subFontSize,
                             color: '#64748b',
                             fontWeight: 500,
-                            marginTop: 2,
+                            marginTop: 1,
                             paddingLeft: 2,
                             whiteSpace: 'nowrap',
                           }}
                         >
                           Assinado eletronicamente {new Date().toLocaleDateString('pt-BR')}
+                        </div>
+
+                        {/* Alça interativa de redimensionamento (arrastar para aumentar/diminuir) */}
+                        <div
+                          onMouseDown={(e) => handleMouseDownResize(e, pos.signatarioId)}
+                          title="Clique e arraste para redimensionar livremente"
+                          style={{
+                            position: 'absolute',
+                            right: -1,
+                            bottom: -1,
+                            width: 14,
+                            height: 14,
+                            cursor: 'se-resize',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            background: cor,
+                            color: '#ffffff',
+                            borderTopLeftRadius: 4,
+                            borderBottomRightRadius: 6,
+                            opacity: 0.9,
+                            zIndex: 10,
+                          }}
+                        >
+                          <svg width="8" height="8" viewBox="0 0 8 8" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M7 1L1 7M7 4L4 7M7 7H7.01" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+                          </svg>
                         </div>
                       </div>
                     )

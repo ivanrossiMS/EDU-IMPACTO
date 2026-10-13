@@ -40,7 +40,7 @@ function AgendaDigitalIndexContent() {
         (typeof window !== 'undefined' ? (window as any).__EDU_PENDING_PUSH_ROUTE__ : null) ||
         (typeof window !== 'undefined' ? localStorage.getItem(PENDING_PUSH_ROUTE_KEY) : null);
 
-      if (!pendingRoute) {
+      if (!pendingRoute && typeof window !== 'undefined' && (window as any).Capacitor?.isNativePlatform?.()) {
         try {
           const { Preferences } = await import('@capacitor/preferences');
           const { value } = await Preferences.get({ key: PENDING_PUSH_ROUTE_KEY });
@@ -86,12 +86,24 @@ function AgendaDigitalIndexContent() {
       return false;
     };
 
-    // Failsafe de resolução: se em 2.8s nenhuma rota foi resolvida, direciona para selecionar-aluno sem travar a tela
+    const perfil = currentUserPerfil || currentUser.perfil || ''
+    const cargo = currentUser.cargo || ''
+    const isAdmin = ADMIN_ROLES.includes(perfil) || ADMIN_ROLES.includes(cargo)
+    const isStaff = !['Família', 'Responsável', 'Aluno'].includes(perfil) && !['Responsável', 'Aluno'].includes(cargo)
+    const hasDualRole = isStaff && Boolean(currentUser.hasDualRole || currentUser.responsavel_id)
+    const redirect = searchParams.get('redirect') || 'comunicados'
+    const paramStr = searchParams.toString() ? `?${searchParams.toString()}` : ''
+
+    // Failsafe de resolução: se em 4.5s nenhuma rota foi resolvida, direciona respeitando o perfil
     const failsafeTimer = setTimeout(() => {
-      console.warn('[AgendaDigitalIndex] Failsafe acionado por lentidão de rede: navegando para selecionar-aluno...');
-      const paramStr = searchParams.toString() ? `?${searchParams.toString()}` : ''
-      router.replace(`/agenda-digital/selecionar-aluno${paramStr}`);
-    }, 2800);
+      if (isAdmin) {
+        router.replace('/agenda-digital/selecionar-perfil-admin');
+      } else if (isStaff && !hasDualRole) {
+        router.replace(`/agenda-digital/colaborador/${redirect}${paramStr}`);
+      } else {
+        router.replace(`/agenda-digital/selecionar-aluno${paramStr}`);
+      }
+    }, 4500);
 
     checkPendingPush().then((handled) => {
       if (handled) {

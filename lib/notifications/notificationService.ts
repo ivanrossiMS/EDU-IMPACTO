@@ -1126,6 +1126,7 @@ class NotificationService {
    * Log estruturado de diagnóstico para produção (Sanitizado: sem credenciais/chaves privadas).
    */
   private printDiagnosticLog(): void {
+    if (typeof window === 'undefined' || !(window as any).__PUSH_DEBUG__) return
     console.log('[Push Debug]', {
       platform: this.state.platform,
       isNative: this.state.isNative,

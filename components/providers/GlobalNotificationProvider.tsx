@@ -759,15 +759,29 @@ export function GlobalNotificationProvider() {
     })
 
     // 3b. Listener Supabase Realtime multi-dispositivos (rede de computadores e smartphones)
-    const realtimeChannel = supabase.channel('saida_calls_shared_room_global_listener')
-      .on('broadcast', { event: 'SPECIAL_AUTH_NOTIFY' }, (ev: any) => {
-        handleSpecialAuthPayload(ev.payload?.data || ev.payload)
-      })
-      .subscribe()
+    let realtimeChannel: any = null
+    const subTimer = setTimeout(() => {
+      realtimeChannel = supabase.channel('saida_calls_shared_room_global_listener')
+        .on('broadcast', { event: 'SPECIAL_AUTH_NOTIFY' }, (ev: any) => {
+          handleSpecialAuthPayload(ev.payload?.data || ev.payload)
+        })
+        .subscribe()
+    }, 150)
 
     return () => {
+      clearTimeout(subTimer)
       unsubLocal()
-      supabase.removeChannel(realtimeChannel)
+      if (realtimeChannel) {
+        try {
+          const wasJoined = realtimeChannel.state === 'joined'
+          if (typeof realtimeChannel.teardown === 'function') {
+            realtimeChannel.teardown()
+          }
+          if (wasJoined) {
+            supabase.removeChannel(realtimeChannel).catch(() => {})
+          }
+        } catch (_) {}
+      }
     }
   }, [onRealtime, showForegroundPushBanner])
 

@@ -57,7 +57,7 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
   const queryClient = useQueryClient()
   const params = useParams<{ slug: string }>()
   const pathname = usePathname()
-  const { currentUser, currentUserPerfil } = useApp()
+  const { currentUser, currentUserPerfil, hydrated } = useApp()
   const osInitialized = useRef(false)
 
   const isFamily =
@@ -377,7 +377,7 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
 
   // ── Supabase Realtime (In-App Toasts & Live Sync) ─────────────────────────
   useEffect(() => {
-    if (!currentUser?.id) return
+    if (!hydrated || !currentUser?.id) return
 
     const identifier = String(currentUser.id)
     console.log('🎧 [Realtime] Iniciando escuta de eventos para usuário:', identifier)
@@ -603,7 +603,27 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
     let isMounted = true
     const activeBindings: Array<{ table: string; filter: any; handler: (payload: any) => void }> = []
     let mainChannel: any = null
+    let initTimer: any = null
     let retryTimer: any = null
+    let retryCount = 0
+
+    const destroyChannelCleanly = (ch: any) => {
+      if (!ch) return
+      try {
+        const wasJoined = ch.state === 'joined'
+        // Sempre encerra timers internos de rejoin do Phoenix antes de remover
+        if (typeof ch.teardown === 'function') {
+          ch.teardown()
+        }
+        const rt = (supabase as any)?.realtime
+        if (rt && Array.isArray(rt.channels)) {
+          rt.channels = rt.channels.filter((item: any) => item !== ch && item?.topic !== ch?.topic)
+        }
+        if (wasJoined) {
+          supabase.removeChannel(ch).catch(() => {})
+        }
+      } catch (_) {}
+    }
 
     const subscribeMainChannel = () => {
       if (!isMounted) return
@@ -616,8 +636,17 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
       if (mainChannel) {
         const oldChannel = mainChannel
         mainChannel = null
-        try { supabase.removeChannel(oldChannel) } catch (_) {}
+        destroyChannelCleanly(oldChannel)
       }
+
+      // Remove quaisquer canais órfãos de HMR anteriores com o mesmo prefixo
+      try {
+        for (const existing of supabase.getChannels()) {
+          if (existing?.topic?.startsWith('realtime:agenda-rt-main-')) {
+            destroyChannelCleanly(existing)
+          }
+        }
+      } catch (_) {}
 
       const cName = `agenda-rt-main-${identifier}-${Date.now()}`
       const c = supabase.channel(cName)
@@ -633,18 +662,29 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
         if (mainChannel !== c) return
 
         if (status === 'SUBSCRIBED') {
+          retryCount = 0
           console.log(`✅ [Realtime] Conectado ao canal consolidado da agenda (${activeBindings.length} tabelas)`)
           if (retryTimer) {
             clearTimeout(retryTimer)
             retryTimer = null
           }
         } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-          console.warn(`⚠️ [Realtime] Canal consolidado da agenda em estado ${status}. Agendando reconexão...`)
+          // Se a aba estiver em segundo plano, aguarda voltar ao primeiro plano para reconectar sem loop
+          if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+            return
+          }
+          retryCount += 1
+          // O Phoenix Channel já possui rejoinTimer nativo; só recria o canal após backoff maior
+          // se o rejoin nativo não tiver restabelecido o estado 'joined'.
+          const backoffMs = Math.min(8000 * Math.pow(1.5, retryCount - 1), 30000)
           if (isMounted && !retryTimer) {
             retryTimer = setTimeout(() => {
               retryTimer = null
-              if (isMounted) subscribeMainChannel()
-            }, 3000)
+              if (!isMounted || mainChannel !== c) return
+              if (c.state !== 'joined' && c.state !== 'joining') {
+                subscribeMainChannel()
+              }
+            }, backoffMs)
           }
         }
       })
@@ -658,12 +698,15 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
     const handleAppResume = () => {
       if (!isMounted) return
       const now = Date.now()
-      if (!mainChannel || mainChannel.state !== 'joined') {
-        subscribeMainChannel()
-      }
       if (now - lastResumeSyncAt < 5000) return
       lastResumeSyncAt = now
-      console.log('🔄 [Realtime] App em primeiro plano. Verificando canal consolidado e sincronizando dados...')
+
+      const isHealthyOrConnecting =
+        mainChannel && (mainChannel.state === 'joined' || mainChannel.state === 'joining')
+      if (!isHealthyOrConnecting) {
+        retryCount = 0
+        subscribeMainChannel()
+      }
       queryClient.invalidateQueries({ queryKey: ['agenda'], refetchType: 'active' })
     }
 
@@ -1129,11 +1172,19 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
       queryClient.invalidateQueries({ queryKey: ['agenda', 'saida'] })
     })
 
-    // Inicia subscrição no canal único consolidado com todas as tabelas registradas
-    subscribeMainChannel()
+    // Inicia subscrição com pequeno debounce (180ms) para evitar abertura/fechamento
+    // imediato durante dupla montagem do React StrictMode ou redirecionamentos rápidos
+    initTimer = setTimeout(() => {
+      initTimer = null
+      if (isMounted) subscribeMainChannel()
+    }, 180)
 
     return () => {
       isMounted = false
+      if (initTimer) {
+        clearTimeout(initTimer)
+        initTimer = null
+      }
       if (retryTimer) {
         clearTimeout(retryTimer)
         retryTimer = null
@@ -1141,7 +1192,7 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
       if (mainChannel) {
         const ch = mainChannel
         mainChannel = null
-        try { supabase.removeChannel(ch) } catch (_) {}
+        destroyChannelCleanly(ch)
       }
       if (typeof window !== 'undefined') {
         document.removeEventListener('visibilitychange', handleVisibilityChange)
@@ -1151,9 +1202,8 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
       if (capListenerHandle && typeof capListenerHandle.remove === 'function') {
         capListenerHandle.remove()
       }
-      console.log(`🔌 [Realtime] Canal consolidado da agenda desconectado.`)
     }
-  }, [currentUser?.id])
+  }, [currentUser?.id, hydrated])
 
   return (
     <>

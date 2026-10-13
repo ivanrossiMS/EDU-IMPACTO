@@ -64,10 +64,9 @@ export interface RepresentanteConfigItem {
 
 function garantirSignatarios(rep?: RepresentanteConfigItem | null): SignatarioEscolaItem[] {
   if (!rep) return []
-  const estilosPadrao = ['classica', 'formal']
   if (Array.isArray(rep.signatarios) && rep.signatarios.length > 0) {
-    return rep.signatarios.map((s, idx) => {
-      const estilo = s.estiloCaligrafico || estilosPadrao[idx % estilosPadrao.length]
+    return rep.signatarios.map((s) => {
+      const estilo = s.estiloCaligrafico || 'classica'
       const sigB64 = s.assinaturaBase64 || (typeof document !== 'undefined' && s.nome ? gerarAssinaturaCaligraficaCanvas(s.nome, estilo) : null)
       return {
         ...s,
@@ -656,6 +655,7 @@ export default function MatriculaDigitalPage() {
         cpf: s.cpf,
         tipo: 'escola',
         cor: coresDisponiveis[idx % coresDisponiveis.length],
+        estiloCaligrafico: s.estiloCaligrafico || 'classica',
         assinaturaBase64: s.assinaturaBase64 || undefined,
       })
     })

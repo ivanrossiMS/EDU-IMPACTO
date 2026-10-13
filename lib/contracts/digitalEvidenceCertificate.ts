@@ -430,8 +430,8 @@ export async function anexarCertificadoEvidencias(
         const targetPage = pdfDoc.getPage(pageIndex)
         const { width: pWidth, height: pHeight } = targetPage.getSize()
 
-        const boxWidth = Math.max(120, Math.min(260, pos.larguraPt || 160))
-        const boxHeight = Math.max(34, Math.min(64, pos.alturaPt || 44))
+        const boxWidth = Math.max(90, Math.min(320, pos.larguraPt || 160))
+        const boxHeight = Math.max(26, Math.min(80, pos.alturaPt || 44))
 
         const x = Math.max(8, Math.min(pWidth - boxWidth - 8, (pos.xPercent / 100) * pWidth))
         const topY = pHeight - ((pos.yPercent / 100) * pHeight)
@@ -451,13 +451,13 @@ export async function anexarCertificadoEvidencias(
           const img = await embedImageSafe(pdfDoc, sigImgBase64)
           if (img) {
             const maxW = boxWidth - 8
-            const maxH = Math.min(boxHeight - 16, 26)
+            const maxH = Math.max(18, boxHeight - 16)
             const scale = Math.min(maxW / img.width, maxH / img.height)
             const rW = Math.round(img.width * scale)
             const rH = Math.round(img.height * scale)
             targetPage.drawImage(img, {
               x: x + 4,
-              y: y + 12 + Math.round((maxH - rH) / 2),
+              y: y + Math.max(10, Math.round(boxHeight * 0.28)) + Math.round((maxH - rH) / 2),
               width: rW,
               height: rH,
             })
@@ -466,25 +466,35 @@ export async function anexarCertificadoEvidencias(
         }
 
         if (!desenhouImagem) {
+          let estiloPos = pos.estiloCaligrafico
+          if (!estiloPos && !isResponsavel) {
+            const matchingRep = params.representanteEscola?.representantes?.find(r =>
+              (r.id && r.id === pos.signatarioId) ||
+              sanitizeSignerName(r.nome).toLowerCase() === sanitizeSignerName(pos.nome).toLowerCase()
+            )
+            estiloPos = matchingRep?.estiloCaligrafico || params.representanteEscola?.estiloCaligrafico || 'classica'
+          }
           const isFormal = isResponsavel
             ? (params.signatario?.estiloCaligrafico === 'formal' || params.signatario?.estiloCaligrafico === 'rubrica')
-            : (pos.estiloCaligrafico === 'formal' || pos.estiloCaligrafico === 'rubrica')
+            : (estiloPos === 'formal' || estiloPos === 'rubrica')
           const fonteParaUsar = isFormal ? fonteRubricaFormal : fonteAssinatura
 
           const rawNome = isResponsavel
             ? sanitizeSignerName(params.signatario.nome || pos.nome)
             : sanitizeSignerName(pos.nome)
 
-          const textoAssinatura = formatSignatureDisplayName(rawNome, boxWidth > 200 ? 34 : 26)
+          const textoAssinatura = formatSignatureDisplayName(rawNome, boxWidth > 200 ? 34 : 28)
 
-          let sigSz = 15.5
-          while (fonteParaUsar.widthOfTextAtSize(textoAssinatura, sigSz) > (boxWidth - 8) && sigSz > 10.5) {
+          const maxFontePorAltura = Math.min(26, Math.max(10, boxHeight * 0.38))
+          let sigSz = maxFontePorAltura
+          while (fonteParaUsar.widthOfTextAtSize(textoAssinatura, sigSz) > (boxWidth - 8) && sigSz > 8.5) {
             sigSz -= 0.5
           }
 
+          const sigY = y + Math.max(10, Math.round(boxHeight * 0.32))
           targetPage.drawText(sanitizeWinAnsi(textoAssinatura), {
             x: x + 4,
-            y: y + 14,
+            y: sigY,
             size: sigSz,
             font: fonteParaUsar,
             color: rgb(0.08, 0.20, 0.48),
@@ -498,10 +508,13 @@ export async function anexarCertificadoEvidencias(
         const dataFormatada = formatDataAssinaturaSimples(dataAssinaturaIso)
         const legendaAssinado = sanitizeWinAnsi(`Assinado eletronicamente ${dataFormatada}`)
 
+        const subSz = Math.max(4.2, Math.min(6.8, boxHeight * 0.13))
+        const subY = y + Math.max(2, Math.round(boxHeight * 0.08))
+
         targetPage.drawText(legendaAssinado, {
           x: x + 4,
-          y: y + 3,
-          size: 5.6,
+          y: subY,
+          size: subSz,
           font: fontRegular,
           color: rgb(0.35, 0.40, 0.48),
         })
@@ -622,7 +635,7 @@ export async function anexarCertificadoEvidencias(
   currentY -= 12
 
   certPage.drawText(
-    sanitizeWinAnsi('DOSSIÊ PERICIAL DE EVIDÊNCIAS & CONFORMIDADE ELETRÔNICA'),
+    sanitizeWinAnsi('RELATÓRIO DE EVIDÊNCIAS DA ASSINATURA ELETRÔNICA'),
     {
       x: headerTextX,
       y: currentY,
@@ -954,7 +967,7 @@ export async function anexarCertificadoEvidencias(
     const isFormal = params.signatario?.estiloCaligrafico === 'formal' || params.signatario?.estiloCaligrafico === 'rubrica'
     const fonteParaUsar = isFormal ? fonteRubricaFormal : fonteAssinatura
     const nomeLimpo = sanitizeSignerName(params.signatario?.nome || 'Signatário')
-    const textoChancela = formatSignatureDisplayName(nomeLimpo, 26)
+    const textoChancela = formatSignatureDisplayName(nomeLimpo, 28)
 
     let chancelaSz = 16.5
     while (fonteParaUsar.widthOfTextAtSize(textoChancela, chancelaSz) > (colRightWidth - 16) && chancelaSz > 10.5) {
@@ -1025,9 +1038,9 @@ export async function anexarCertificadoEvidencias(
   }
   leftY -= 1
 
-  // Data e Hora Oficial da Assinatura (com quebra de linha protegida)
-  const dataHoraOficial = `Data e Hora Oficial da Assinatura: ${formatDatePtBr(params.signatario.dataHoraAssinatura)}`
-  const dataHoraLines = wrapText(dataHoraOficial, colLeftWidth, fontRegular, 6.8)
+  // Data e hora registradas pelo sistema (com quebra de linha protegida)
+  const dataHoraRegistrada = `Data e hora registradas pelo sistema: ${formatDatePtBr(params.signatario.dataHoraAssinatura)}`
+  const dataHoraLines = wrapText(dataHoraRegistrada, colLeftWidth, fontRegular, 6.8)
   for (const line of dataHoraLines) {
     certPage.drawText(line, { x: colLeftX, y: leftY, size: 6.8, font: fontRegular, color: colorDark })
     leftY -= 9.5
@@ -1253,12 +1266,17 @@ export async function anexarCertificadoEvidencias(
     }
 
     if (!desenhouSig) {
-      const isFormal = rep.estiloCaligrafico === 'formal' || rep.estiloCaligrafico === 'rubrica'
+      const matchingPos = params.posicoesAssinaturas?.find(p =>
+        (rep.id && p.signatarioId === rep.id) ||
+        sanitizeSignerName(p.nome).toLowerCase() === sanitizeSignerName(rep.nome).toLowerCase()
+      )
+      const estiloFinal = matchingPos?.estiloCaligrafico || rep.estiloCaligrafico || 'classica'
+      const isFormal = estiloFinal === 'formal' || estiloFinal === 'rubrica'
       const fonteParaUsar = isFormal ? fonteRubricaFormal : fonteAssinatura
       const nomeLimpo = sanitizeSignerName(rep.nome)
-      const nomeSig = formatSignatureDisplayName(nomeLimpo, 26)
+      const nomeSig = formatSignatureDisplayName(nomeLimpo, 28)
       let sigSz = 15.5
-      while (fonteParaUsar.widthOfTextAtSize(nomeSig, sigSz) > (colRightWidth - 16) && sigSz > 10.5) {
+      while (fonteParaUsar.widthOfTextAtSize(nomeSig, sigSz) > (colRightWidth - 16) && sigSz > 9.0) {
         sigSz -= 0.5
       }
       const wCurto = fonteParaUsar.widthOfTextAtSize(nomeSig, sigSz)
@@ -1418,7 +1436,7 @@ export async function anexarCertificadoEvidencias(
 
       if (gridCols === 2) {
         // Layout Executivo Dividido (Esquerda: Dados / Direita: Assinatura e Chancela)
-        const dividerX = cardX + 150
+        const dividerX = cardX + 138
         certPage.drawLine({
           start: { x: dividerX, y: cardY + 3 },
           end: { x: dividerX, y: cardY + cardHeight - bannerH - 3 },
@@ -1428,7 +1446,7 @@ export async function anexarCertificadoEvidencias(
 
         // Sub-seção Esquerda: Nome Civil
         const rawNome = (rep.nome || 'Representante Legal').toUpperCase().trim()
-        const maxNomeW = 140
+        const maxNomeW = 126
         const nomeLines = wrapText(rawNome, maxNomeW, fontBold, 6.2)
 
         if (nomeLines.length === 1) {
@@ -1475,13 +1493,13 @@ export async function anexarCertificadoEvidencias(
         })
 
         // Sub-seção Direita: Assinatura Caligráfica e Selo de Chancela
-        const rightSecW = cardWidth - 150
+        const rightSecW = cardWidth - 138
         let desenhouSig = false
         const sigB64 = rep.estiloCaligrafico === 'custom' ? rep.assinaturaBase64 : null
         if (sigB64) {
           const img = await embedImageSafe(pdfDoc, sigB64)
           if (img) {
-            const maxW = 84
+            const maxW = rightSecW - 14
             const maxH = 22
             const scale = Math.min(maxW / img.width, maxH / img.height)
             const rW = Math.round(img.width * scale)
@@ -1497,13 +1515,18 @@ export async function anexarCertificadoEvidencias(
         }
 
         if (!desenhouSig) {
-          const isFormal = rep.estiloCaligrafico === 'formal' || rep.estiloCaligrafico === 'rubrica'
+          const matchingPos = params.posicoesAssinaturas?.find(p =>
+            (rep.id && p.signatarioId === rep.id) ||
+            sanitizeSignerName(p.nome).toLowerCase() === sanitizeSignerName(rep.nome).toLowerCase()
+          )
+          const estiloFinal = matchingPos?.estiloCaligrafico || rep.estiloCaligrafico || 'classica'
+          const isFormal = estiloFinal === 'formal' || estiloFinal === 'rubrica'
           const fonteParaUsar = isFormal ? fonteRubricaFormal : fonteAssinatura
           const rawNome = sanitizeSignerName(rep.nome)
-          const nomeSig = formatSignatureDisplayName(rawNome, 22)
+          const nomeSig = formatSignatureDisplayName(rawNome, 28)
 
           let sigSz = 13.5
-          while (fonteParaUsar.widthOfTextAtSize(nomeSig, sigSz) > (rightSecW - 10) && sigSz > 9.5) {
+          while (fonteParaUsar.widthOfTextAtSize(nomeSig, sigSz) > (rightSecW - 8) && sigSz > 8.0) {
             sigSz -= 0.5
           }
           const wSig = fonteParaUsar.widthOfTextAtSize(nomeSig, sigSz)
@@ -1548,13 +1571,18 @@ export async function anexarCertificadoEvidencias(
         }
 
         if (!desenhouSig) {
-          const isFormal = rep.estiloCaligrafico === 'formal' || rep.estiloCaligrafico === 'rubrica'
+          const matchingPos = params.posicoesAssinaturas?.find(p =>
+            (rep.id && p.signatarioId === rep.id) ||
+            sanitizeSignerName(p.nome).toLowerCase() === sanitizeSignerName(rep.nome).toLowerCase()
+          )
+          const estiloFinal = matchingPos?.estiloCaligrafico || rep.estiloCaligrafico || 'classica'
+          const isFormal = estiloFinal === 'formal' || estiloFinal === 'rubrica'
           const fonteParaUsar = isFormal ? fonteRubricaFormal : fonteAssinatura
           const rawNome = sanitizeSignerName(rep.nome)
-          const nomeSig = formatSignatureDisplayName(rawNome, 18)
+          const nomeSig = formatSignatureDisplayName(rawNome, 28)
 
           let sigSz = 12.5
-          while (fonteParaUsar.widthOfTextAtSize(nomeSig, sigSz) > (cardWidth - 12) && sigSz > 9.0) {
+          while (fonteParaUsar.widthOfTextAtSize(nomeSig, sigSz) > (cardWidth - 12) && sigSz > 8.0) {
             sigSz -= 0.5
           }
           const wSig = fonteParaUsar.widthOfTextAtSize(nomeSig, sigSz)

@@ -200,7 +200,11 @@ if (isBrowser) {
         autoRefreshToken: true,
         persistSession: true,
         detectSessionInUrl: true,
-      }
+      },
+      realtime: {
+        heartbeatIntervalMs: 30000,
+        timeout: 20000,
+      },
     })
 
     // Listener automático para salvar sessão no Keychain/Keystore e atualizar cookies
@@ -223,6 +227,18 @@ if (isBrowser) {
     })
 
     ;(window as any)._supabaseClient = newClient
+  } else {
+    // Se uma instância anterior do HMR tinha Web Worker de heartbeat ativo, encerra-o
+    // para evitar colisão de duplo heartbeat com o timer nativo do Phoenix Socket.
+    try {
+      const rt = (window as any)._supabaseClient?.realtime
+      if (rt) {
+        rt.worker = false
+        if (typeof rt._terminateWorker === 'function') {
+          rt._terminateWorker()
+        }
+      }
+    } catch {}
   }
   client = (window as any)._supabaseClient
 } else {

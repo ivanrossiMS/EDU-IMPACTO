@@ -1095,20 +1095,6 @@ export function SigningPortalClient({ contrato }: { contrato: ContratoProps }) {
                   </div>
                 </div>
               )}
-
-              {/* Chancela Institucional */}
-              <div className="flex flex-col gap-1.5 pt-1">
-                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                  Chancela Institucional
-                </span>
-                <div className="border border-dashed border-slate-200 rounded-lg p-2 bg-white flex items-center justify-center h-20 overflow-hidden shadow-2xs">
-                  <img
-                    src={contrato.representanteEscola?.assinaturaUrl || '/assinatura-representante.png'}
-                    alt="Chancela Institucional"
-                    className="max-h-16 max-w-full object-contain"
-                  />
-                </div>
-              </div>
             </div>
 
             {/* Ação Principal */}

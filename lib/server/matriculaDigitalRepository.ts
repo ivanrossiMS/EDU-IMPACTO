@@ -463,14 +463,15 @@ export function adicionarEventoAuditoriaEmMemoria(
   contrato: ContratoDigitalModel,
   evento: string,
   descricao: string,
-  ip: string
+  ip: string,
+  customTimestamp?: string
 ): EventoAuditoriaItem {
   const historico = contrato.historico_eventos || []
   const ultimoEvento = historico[historico.length - 1]
   const prevHash = ultimoEvento?.hash || contrato.documento_original_hash || 'GENESIS_HASH'
 
   const eventId = `ev-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`
-  const timestamp = new Date().toISOString()
+  const timestamp = customTimestamp || new Date().toISOString()
   const eventHash = calculateEventHash(prevHash, eventId, timestamp, evento, ip)
 
   const novoEvento: EventoAuditoriaItem = {

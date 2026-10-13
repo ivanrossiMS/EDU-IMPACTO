@@ -207,12 +207,13 @@ export async function POST(request: Request) {
 
     const tipoAssinatura = body.tipoAssinatura || (assinaturaBase64 ? 'manual' : 'nome_automatico')
 
-    // Registra evento de assinatura na trilha em memória (elimina roundtrips repetidos)
+    // Registra evento de assinatura na trilha em memória com o timestamp canônico da assinatura
     adicionarEventoAuditoriaEmMemoria(
       contrato,
       'ASSINATURA_SIGNATARIO',
       `Assinatura eletrônica (${tipoAssinatura === 'nome_automatico' ? 'representação gráfica gerada' : 'manuscrita'}) manifestada por ${contrato.responsavel_nome}`,
-      clientIp
+      clientIp,
+      dataHoraAssinatura
     )
 
     // 4. Anexa a página do Certificado de Evidências com QR Code ao PDF e aplica Assinatura PKCS#7
