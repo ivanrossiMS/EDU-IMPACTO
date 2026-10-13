@@ -32,12 +32,12 @@ export default async function ValidarCodigoPage({ params }: Props) {
   const { codigo } = await params
   const decoded = decodeURIComponent(codigo || '').trim()
 
-  let contrato = await buscarContratoPorProtocolo(decoded, { includePdf: true })
+  let contrato = await buscarContratoPorProtocolo(decoded)
   if (!contrato) {
-    contrato = await buscarContratoPorToken(decoded, { includePdf: true })
+    contrato = await buscarContratoPorToken(decoded)
   }
   if (!contrato) {
-    contrato = await buscarContratoPorHash(decoded, { includePdf: true })
+    contrato = await buscarContratoPorHash(decoded)
   }
 
   let initialDossier = null
@@ -120,6 +120,40 @@ export default async function ValidarCodigoPage({ params }: Props) {
       cfgLogo = logoRow?.valor || null
     } catch {}
 
+    const rawRep = contrato.evidencias?.escolaRepresentante
+    const escolaRepresentante = rawRep
+      ? {
+          nome: rawRep.nome || 'IVAN ROSSI SAMBRANA',
+          cargo: rawRep.cargo || 'Representante Legal / Diretor Geral',
+          razaoSocial: rawRep.razaoSocial || 'COLÉGIO IMPACTO CENTRO DE ENSINO LTDA',
+          cnpj: rawRep.cnpj || '04.395.789/0001-88',
+          representantes: Array.isArray(rawRep.representantes)
+            ? rawRep.representantes.map((r: any) => ({
+                id: r.id,
+                nome: r.nome,
+                cargo: r.cargo,
+                cpf: r.cpf,
+              }))
+            : undefined,
+        }
+      : {
+          nome: 'IVAN ROSSI SAMBRANA',
+          cargo: 'Representante Legal / Diretor Geral',
+          razaoSocial: 'COLÉGIO IMPACTO CENTRO DE ENSINO LTDA',
+          cnpj: '04.395.789/0001-88',
+        }
+
+    const rawSigEv = contrato.evidencias?.signatarioEvidencias
+    const metadadosTecnicos = rawSigEv
+      ? {
+          ip: rawSigEv.ip || 'Protegido',
+          dispositivo: rawSigEv.dispositivo || 'Dispositivo Verificado',
+          sistemaOperacional: rawSigEv.sistemaOperacional || 'SO Seguro',
+          navegador: rawSigEv.navegador || 'Navegador Web',
+          dataHoraAssinatura: rawSigEv.dataHoraAssinatura || contrato.evidencias?.assinaturaConcluidaEm || contrato.updated_at,
+        }
+      : null
+
     initialDossier = {
       valido: isAssinado && !isCancelado,
       status: contrato.status,
@@ -145,12 +179,8 @@ export default async function ValidarCodigoPage({ params }: Props) {
       documentoAssinadoHash: contrato.documento_assinado_hash || 'Pendente de finalização',
       trilhaAuditoriaHash: trilhaHash,
       logoUrl: contrato.evidencias?.logoUrl || cfgLogo || '/logo-impacto-clean.png',
-      escolaRepresentante: contrato.evidencias?.escolaRepresentante || {
-        nome: 'IVAN ROSSI SAMBRANA',
-        cargo: 'Representante Legal / Diretor Geral',
-        razaoSocial: 'COLÉGIO IMPACTO CENTRO DE ENSINO LTDA',
-        cnpj: '04.395.789/0001-88',
-      },
+      escolaRepresentante,
+      metadadosTecnicos,
       trilhaAuditoria: (contrato.historico_eventos || []).map(ev => {
         let desc = ev.descricao || ''
         if (ev.evento === 'OTP_CONFIRMADO') {
@@ -167,8 +197,8 @@ export default async function ValidarCodigoPage({ params }: Props) {
           hash: ev.hash || '',
         }
       }),
-      downloadDisponivel: Boolean(contrato.documento_assinado_pdf_base64 || contrato.documento_pdf_base64),
-      pdfBase64: isAssinado ? contrato.documento_assinado_pdf_base64 : contrato.documento_pdf_base64,
+      downloadDisponivel: !isCancelado,
+      pdfBase64: null,
     }
   }
 

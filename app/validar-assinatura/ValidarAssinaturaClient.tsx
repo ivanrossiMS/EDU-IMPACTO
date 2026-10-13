@@ -166,12 +166,29 @@ export function ValidarAssinaturaClient({
     }
   }
 
-  const downloadPdf = (base64Data: string, filename: string) => {
-    const linkSource = `data:application/pdf;base64,${base64Data}`
+  const downloadPdf = (
+    base64Data: string | null | undefined,
+    filename: string,
+    protocolo?: string,
+    status?: string
+  ) => {
     const downloadLink = document.createElement('a')
-    downloadLink.href = linkSource
+    if (base64Data && base64Data.length > 100) {
+      downloadLink.href = base64Data.startsWith('data:')
+        ? base64Data
+        : `data:application/pdf;base64,${base64Data}`
+    } else {
+      const versao = status === 'assinado' ? 'assinado' : 'original'
+      downloadLink.href = `/api/matriculas/digital/pdf/${encodeURIComponent(protocolo || dossier?.protocolo || '')}?v=${versao}&download=1`
+    }
     downloadLink.download = filename
+    document.body.appendChild(downloadLink)
     downloadLink.click()
+    setTimeout(() => {
+      try {
+        document.body.removeChild(downloadLink)
+      } catch {}
+    }, 200)
   }
 
   const formatDate = (iso?: string | null) => {
@@ -594,12 +611,14 @@ export function ValidarAssinaturaClient({
                 </div>
               </div>
 
-              {dossier.downloadDisponivel && dossier.pdfBase64 && (
+              {dossier.downloadDisponivel && (
                 <button
                   onClick={() =>
                     downloadPdf(
-                      dossier.pdfBase64!,
-                      `Documento_Oficial_${dossier.protocolo}.pdf`
+                      dossier.pdfBase64,
+                      `Documento_Oficial_${dossier.protocolo}.pdf`,
+                      dossier.protocolo,
+                      dossier.status
                     )
                   }
                   className="w-full sm:w-auto bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white font-bold text-xs sm:text-sm py-2.5 px-4 sm:py-3 sm:px-5.5 rounded-xl shadow-xs flex items-center justify-center gap-2 cursor-pointer transition shrink-0"
