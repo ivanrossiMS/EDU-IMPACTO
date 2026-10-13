@@ -44,3 +44,8 @@ export async function getMeusAlunosDedup(options?: { forceRefresh?: boolean }): 
 
   return inFlightPromise
 }
+
+export function clearMeusAlunosCache(): void {
+  memoryCache = null
+  inFlightPromise = null
+}

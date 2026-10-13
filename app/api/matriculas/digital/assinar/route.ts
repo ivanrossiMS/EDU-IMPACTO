@@ -14,6 +14,7 @@ import {
 import {
   anexarCertificadoEvidencias,
 } from '@/lib/contracts/digitalEvidenceCertificate'
+import { validarCPF, sanitizeSignerName } from '@/lib/contracts/sealUtils'
 import { enviarCopiaContratoAssinadoEmail } from '@/lib/server/emailService'
 import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 
@@ -57,6 +58,53 @@ export async function POST(request: Request) {
 
     // Validação de segurança: o código OTP deve ter sido validado previamente
     if (!contrato.otp_confirmado_em) {
+      // 1. Tenta auto-recuperar do fallback em configuracoes caso tenha havido dessincronização transitória
+      try {
+        const supabase = getAdminClient()
+        const { data: cfgRow } = await supabase
+          .from('configuracoes')
+          .select('valor')
+          .eq('chave', 'matriculas_digitais_list')
+          .maybeSingle()
+
+        if (Array.isArray(cfgRow?.valor)) {
+          const fbItem = cfgRow.valor.find((c: any) => c && c.token_assinatura === token)
+          if (fbItem?.otp_confirmado_em) {
+            contrato.otp_confirmado_em = fbItem.otp_confirmado_em
+            contrato.otp_codigo_aberto = null
+            await salvarContrato(contrato)
+          }
+        }
+      } catch (errFallback) {
+        console.warn('[API Assinar] Aviso ao consultar fallback de OTP:', errFallback)
+      }
+
+      // 2. Se o cliente enviou o código informado no passo anterior, confere o hash criptográfico
+      if (!contrato.otp_confirmado_em && body.otp_codigo) {
+        const cleanCodigo = String(body.otp_codigo).trim()
+        const { calculateSha256 } = await import('@/lib/contracts/cryptoSignature')
+        const codigoHash = calculateSha256(cleanCodigo)
+        const isValido =
+          codigoHash === contrato.otp_codigo_hash ||
+          (contrato.otp_codigo_aberto ? cleanCodigo === contrato.otp_codigo_aberto : false)
+
+        if (isValido) {
+          const nowIso = new Date().toISOString()
+          contrato.otp_confirmado_em = nowIso
+          contrato.otp_codigo_aberto = null
+          const clientIp = extractClientIp(request.headers)
+          adicionarEventoAuditoriaEmMemoria(
+            contrato,
+            'OTP_CONFIRMADO',
+            'Código de uso único validado no ato da assinatura.',
+            clientIp
+          )
+          await salvarContrato(contrato)
+        }
+      }
+    }
+
+    if (!contrato.otp_confirmado_em) {
       return NextResponse.json(
         { error: 'É necessário confirmar o código de segurança enviado para o seu e-mail antes de assinar.' },
         { status: 403 }
@@ -94,30 +142,65 @@ export async function POST(request: Request) {
     // 3. Monta dados para o Certificado Oficial de Evidências
     const supabase = getAdminClient()
     let cfgRep: any = null
+    let cfgRepsList: any = null
     let cfgLogo: string | null = null
     try {
       const { data: cfgRows } = await supabase
         .from('configuracoes')
         .select('chave, valor')
-        .in('chave', ['cfgEscolaRepresentante', 'cfgEscolaLogo'])
+        .in('chave', ['cfgEscolaRepresentante', 'cfgEscolaRepresentantes', 'cfgEscolaLogo'])
       const map = new Map((cfgRows || []).map(r => [r.chave, r.valor]))
       cfgRep = map.get('cfgEscolaRepresentante')
+      cfgRepsList = map.get('cfgEscolaRepresentantes')
       cfgLogo = map.get('cfgEscolaLogo')
     } catch {}
 
-    const repEscola = contrato.evidencias?.escolaRepresentante || cfgRep || {
-      nome: 'IVAN ROSSI SAMBRANA',
-      cpf: '00130220167',
-      cargo: 'Diretor Geral / Representante Legal',
-      razaoSocial: 'COLÉGIO IMPACTO CENTRO DE ENSINO LTDA',
-      cnpj: '04.395.789/0001-88',
-      dataHoraAssinatura: contrato.created_at,
-      assinaturaBase64: null,
+    const repEscola = { ...(contrato.evidencias?.escolaRepresentante || cfgRep || {}) }
+    if (!repEscola.nome) repEscola.nome = 'IVAN ROSSI SAMBRANA'
+    if (!repEscola.cpf) repEscola.cpf = '00130220167'
+    if (!repEscola.cargo) repEscola.cargo = 'Diretor Geral / Representante Legal'
+    if (!repEscola.razaoSocial) repEscola.razaoSocial = 'COLÉGIO IMPACTO CENTRO DE ENSINO LTDA'
+    if (!repEscola.cnpj) repEscola.cnpj = '04.395.789/0001-88'
+    if (!repEscola.dataHoraAssinatura) repEscola.dataHoraAssinatura = contrato.created_at
+
+    // Enriquecimento resiliente de assinaturas dos representantes a partir das configurações salvas
+    if (Array.isArray(repEscola.representantes) && repEscola.representantes.length > 0) {
+      const allKnownSigs: any[] = []
+      if (Array.isArray(cfgRepsList)) {
+        cfgRepsList.forEach((cr: any) => {
+          if (Array.isArray(cr.signatarios)) allKnownSigs.push(...cr.signatarios)
+        })
+      }
+      if (Array.isArray(cfgRep?.signatarios)) {
+        allKnownSigs.push(...cfgRep.signatarios)
+      }
+
+      repEscola.representantes = repEscola.representantes.map((rep: any) => {
+        if (rep.assinaturaBase64) return rep
+        const match = allKnownSigs.find(s =>
+          (s.cpf && rep.cpf && s.cpf.replace(/\D/g, '') === rep.cpf.replace(/\D/g, '')) ||
+          (s.nome && rep.nome && s.nome.trim().toUpperCase() === rep.nome.trim().toUpperCase())
+        )
+        if (match?.assinaturaBase64) {
+          return { ...rep, assinaturaBase64: match.assinaturaBase64 }
+        }
+        return rep
+      })
     }
 
     // Atualiza dados cadastrais do signatário se preenchidos ou confirmados no ato da assinatura
-    if (body.signatario_nome) contrato.responsavel_nome = String(body.signatario_nome).trim()
-    if (body.signatario_cpf) contrato.responsavel_cpf = String(body.signatario_cpf).trim()
+    if (body.signatario_nome) {
+      contrato.responsavel_nome = sanitizeSignerName(String(body.signatario_nome))
+    } else if (contrato.responsavel_nome) {
+      contrato.responsavel_nome = sanitizeSignerName(contrato.responsavel_nome)
+    }
+    if (body.signatario_cpf) {
+      const cleanSignatarioCpf = String(body.signatario_cpf).replace(/\D/g, '')
+      if (!validarCPF(cleanSignatarioCpf)) {
+        return NextResponse.json({ error: 'O CPF do signatário é inválido. Não é possível concluir a assinatura jurídica.' }, { status: 400 })
+      }
+      contrato.responsavel_cpf = String(body.signatario_cpf).trim()
+    }
     if (body.signatario_telefone) contrato.responsavel_telefone = String(body.signatario_telefone).trim()
     if (body.signatario_email) contrato.responsavel_email = String(body.signatario_email).trim()
     if (body.signatario_data_nascimento) contrato.responsavel_data_nascimento = String(body.signatario_data_nascimento).trim()
@@ -158,6 +241,7 @@ export async function POST(request: Request) {
         sistemaOperacional: finalOs,
         navegador: finalBrowser,
         tipoAssinatura,
+        estiloCaligrafico: body.estiloCaligrafico || 'classica',
         assinaturaBase64,
         usuarioAutenticadoApp: Boolean(body.usuarioAutenticadoApp),
       },
@@ -169,10 +253,14 @@ export async function POST(request: Request) {
         cnpj: repEscola.cnpj,
         dataHoraAssinatura: repEscola.dataHoraAssinatura || contrato.created_at,
         assinaturaBase64: repEscola.assinaturaBase64 || null,
+        representantes: repEscola.representantes || undefined,
       },
       eventosAuditoria: contrato.historico_eventos,
       validationUrl,
       documentosAnexados: contrato.evidencias?.documentosAnexados || null,
+      arquivoOriginalNome: contrato.evidencias?.arquivoOriginalNome || null,
+      posicoesAssinaturas: contrato.evidencias?.posicoesAssinaturas || null,
+      suprimirRubricaRodape: Boolean(contrato.evidencias?.suprimirRubricaRodape || (contrato.evidencias?.posicoesAssinaturas && contrato.evidencias.posicoesAssinaturas.length > 0)),
     })
 
     // Salva o PDF assinado no Storage isolado
@@ -214,56 +302,60 @@ export async function POST(request: Request) {
     // Único salvamento atômico ultraleve
     await salvarContrato(contrato)
 
-    // 6. Envio oficial da cópia do contrato assinado (devidamente aguardado)
-    let emailEnvioResultado: { success: boolean; simulated?: boolean; messageId?: string; error?: string } | null = null
-    try {
-      emailEnvioResultado = await enviarCopiaContratoAssinadoEmail({
-        destinatario: contrato.responsavel_email,
-        nomeDestinatario: contrato.responsavel_nome,
-        alunoNome: contrato.aluno_nome || 'Estudante',
-        protocolo: contrato.protocolo,
-        documentoFinalHash: sealedResult.documentoFinalHash,
-        validationUrl,
-        pdfBuffer: Buffer.from(sealedResult.pdfBytes),
-        nomeArquivo: `Contrato_${(contrato.aluno_nome || 'Documento').replace(/\s+/g, '_')}_${contrato.protocolo}.pdf`,
-      })
-    } catch (err: any) {
-      console.warn('[API Assinar] Exceção no envio de cópia por e-mail:', err)
-      emailEnvioResultado = { success: false, error: err.message }
+    // 6. Envio oficial da cópia do contrato assinado (despacho assíncrono em background sem bloquear o signatário)
+    const emailPayload = {
+      destinatario: contrato.responsavel_email,
+      nomeDestinatario: contrato.responsavel_nome,
+      alunoNome: contrato.aluno_nome || 'Estudante',
+      protocolo: contrato.protocolo,
+      documentoFinalHash: sealedResult.documentoFinalHash,
+      validationUrl,
+      pdfBuffer: Buffer.from(sealedResult.pdfBytes),
+      nomeArquivo: `Contrato_${(contrato.aluno_nome || 'Documento').replace(/\s+/g, '_')}_${contrato.protocolo}.pdf`,
     }
 
-    // Registra o evento de entrega de e-mail na trilha de auditoria
-    if (emailEnvioResultado?.success) {
-      adicionarEventoAuditoriaEmMemoria(
-        contrato,
-        'ENVIO_COPIA_EMAIL',
-        `Via oficial do contrato assinado (PDF) enviada para ${contrato.responsavel_email}${emailEnvioResultado.messageId ? ` (ID: ${emailEnvioResultado.messageId})` : ''}`,
-        clientIp
-      )
-      contrato.evidencias = {
-        ...contrato.evidencias,
-        emailCopiaEnviado: true,
-        emailCopiaEnviadoEm: new Date().toISOString(),
-        emailCopiaMessageId: emailEnvioResultado.messageId || null,
-        emailCopiaDestinatario: contrato.responsavel_email,
+    // Executa o envio por e-mail em background sem prender o modal do usuário
+    void (async () => {
+      try {
+        const emailEnvioResultado = await enviarCopiaContratoAssinadoEmail(emailPayload)
+        const contratoAtual = (await buscarContratoPorToken(token)) || contrato
+        if (emailEnvioResultado?.success) {
+          adicionarEventoAuditoriaEmMemoria(
+            contratoAtual,
+            'ENVIO_COPIA_EMAIL',
+            `Via oficial do contrato assinado (PDF) enviada para ${contrato.responsavel_email}${emailEnvioResultado.messageId ? ` (ID: ${emailEnvioResultado.messageId})` : ''}`,
+            clientIp
+          )
+          contratoAtual.evidencias = {
+            ...contratoAtual.evidencias,
+            emailCopiaEnviado: true,
+            emailCopiaEnviadoEm: new Date().toISOString(),
+            emailCopiaMessageId: emailEnvioResultado.messageId || null,
+            emailCopiaDestinatario: contrato.responsavel_email,
+          }
+        } else {
+          adicionarEventoAuditoriaEmMemoria(
+            contratoAtual,
+            'FALHA_ENVIO_COPIA_EMAIL',
+            `Tentativa de envio da cópia do contrato para ${contrato.responsavel_email} falhou: ${emailEnvioResultado?.error || 'Instabilidade temporária'}`,
+            clientIp
+          )
+          contratoAtual.evidencias = {
+            ...contratoAtual.evidencias,
+            emailCopiaEnviado: false,
+            emailCopiaErro: emailEnvioResultado?.error || 'Instabilidade temporária',
+            emailCopiaDestinatario: contrato.responsavel_email,
+          }
+        }
+        await salvarContrato(contratoAtual)
+      } catch (errBg: any) {
+        console.warn('[API Assinar Background Email] Erro no envio assíncrono:', errBg)
       }
-    } else {
-      adicionarEventoAuditoriaEmMemoria(
-        contrato,
-        'FALHA_ENVIO_COPIA_EMAIL',
-        `Tentativa de envio da cópia do contrato para ${contrato.responsavel_email} falhou: ${emailEnvioResultado?.error || 'Instabilidade temporária'}`,
-        clientIp
-      )
-      contrato.evidencias = {
-        ...contrato.evidencias,
-        emailCopiaEnviado: false,
-        emailCopiaErro: emailEnvioResultado?.error || 'Instabilidade temporária',
-        emailCopiaDestinatario: contrato.responsavel_email,
-      }
-    }
+    })()
 
-    // Atualiza o contrato com o evento da trilha de envio de e-mail
-    await salvarContrato(contrato)
+    // Otimização: para documentos volumosos (> 2.5 MB), evita serializar megabytes desnecessários
+    // no JSON já que o cliente faz o download nativo via endpoint HTTP de streaming
+    const isPdfGrande = sealedResult.pdfBytes.length > 2.5 * 1024 * 1024
 
     return NextResponse.json({
       success: true,
@@ -273,10 +365,10 @@ export async function POST(request: Request) {
       documentoFinalHash: sealedResult.documentoFinalHash,
       trilhaAuditoriaHash: sealedResult.trilhaAuditoriaHash,
       validationUrl,
-      signedPdfBase64: sealedResult.base64Pdf,
-      emailEnviado: emailEnvioResultado?.success ?? false,
+      signedPdfBase64: isPdfGrande ? null : sealedResult.base64Pdf,
+      signedPdfUrl: `/api/matriculas/digital/pdf/${contrato.token_assinatura}?v=assinado&download=1`,
+      emailEnviado: true,
       emailDestinatario: contrato.responsavel_email,
-      emailErro: emailEnvioResultado?.success ? undefined : emailEnvioResultado?.error,
     })
   } catch (err: any) {
     console.error('[API Assinar] Erro grave:', err)

@@ -12,6 +12,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
+import { getAdminClient } from './supabaseAdminSingleton'
 
 /** Client autenticado — respeita Row Level Security. Suporta Bearer Token (mobile) ou cookies (web). */
 export async function createProtectedClient(bearerToken?: string) {
@@ -84,16 +85,7 @@ export async function createProtectedClient(bearerToken?: string) {
  * NUNCA use em rotas onde o payload vem do usuário final.
  */
 export function createAdminClient() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-      }
-    }
-  )
+  return getAdminClient()
 }
 
 /**

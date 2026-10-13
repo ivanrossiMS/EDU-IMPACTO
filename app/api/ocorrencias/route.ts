@@ -91,13 +91,17 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const { user, errorResponse } = await requireAuth()
-  if (errorResponse) return errorResponse
+  const { resolveUserRole } = await import('@/lib/server/authGuard')
+  const { user, isStaff, errorResponse } = await resolveUserRole(request)
+  if (errorResponse || !user) return errorResponse!
 
   const supabase = await createProtectedClient();
   try {
     const body = await request.json()
     if (Array.isArray(body)) {
+      if (!isStaff) {
+        return NextResponse.json({ error: 'Acesso negado para lançamento em lote de ocorrências.' }, { status: 403 })
+      }
       if (body.length === 0) return NextResponse.json({ ok: true, count: 0 })
       const rows = body.map(o => buildRow(o))
       const { error } = await supabase.from('ocorrencias').upsert(rows)
@@ -131,8 +135,31 @@ export async function POST(request: Request) {
 
       return NextResponse.json({ ok: true, count: rows.length })
     }
-    const row = buildRow(body)
     const isCienciaAction = Boolean(body.ciencia_responsavel || body.dados?.ciencia_responsavel) && Boolean(body.id)
+    if (!isStaff && !isCienciaAction) {
+      return NextResponse.json({ error: 'Acesso negado. Apenas colaboradores podem criar ou editar ocorrências.' }, { status: 403 })
+    }
+
+    let row = buildRow(body)
+    if (!isStaff && isCienciaAction) {
+      // Família/Responsável só pode registrar ciência em ocorrência já existente, sem adulterar texto/tipo/status
+      const { data: existingOc } = await supabase.from('ocorrencias').select('*').eq('id', body.id).maybeSingle()
+      if (!existingOc) {
+        return NextResponse.json({ error: 'Ocorrência não encontrada.' }, { status: 404 })
+      }
+      const existingDados = typeof existingOc.dados === 'object' && existingOc.dados ? existingOc.dados : {}
+      const incomingDados = typeof body.dados === 'object' && body.dados ? body.dados : {}
+      row = {
+        ...existingOc,
+        dados: {
+          ...existingDados,
+          ciencia_responsavel: body.ciencia_responsavel ?? incomingDados.ciencia_responsavel ?? true,
+          data_ciencia: body.data_ciencia ?? incomingDados.data_ciencia ?? new Date().toISOString(),
+          responsavel_ciencia: body.responsavel_ciencia ?? incomingDados.responsavel_ciencia ?? existingDados.responsavel_ciencia,
+        },
+      }
+    }
+
     const { data, error } = await supabase.from('ocorrencias').upsert(row).select().single()
     if (error) return NextResponse.json({ error: error.message }, { status: 400 })
 
@@ -182,7 +209,8 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  const { user, errorResponse } = await requireAuth()
+  const { requireStaff } = await import('@/lib/server/authGuard')
+  const { errorResponse } = await requireStaff(request)
   if (errorResponse) return errorResponse
 
   const supabase = await createProtectedClient();

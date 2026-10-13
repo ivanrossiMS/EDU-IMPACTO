@@ -855,3 +855,5 @@ export async function downloadMediaFile(url: string, defaultName: string = 'mome
     document.body.removeChild(a)
   }
 }
+
+export { validarCPF, formatarCPF } from '@/lib/contracts/sealUtils'

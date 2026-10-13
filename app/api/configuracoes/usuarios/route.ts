@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/server/authGuard'
+import { requireAuth, requireStaff } from '@/lib/server/authGuard'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { getAdminClient, findAuthUserByEmail } from '@/lib/server/supabaseAdminSingleton'
@@ -17,16 +17,12 @@ export async function GET(req: Request) {
       if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
         return NextResponse.json({ error: 'Faltam as variáveis de ambiente do Supabase.' }, { status: 500 })
       }
-      const supabaseAdmin = createSupabaseClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL,
-        process.env.SUPABASE_SERVICE_ROLE_KEY
-      )
+      const supabaseAdmin = getAdminClient()
       const { data } = await supabaseAdmin.from('system_users').select('id').eq('email', 'direcao@colegioimpacto.net').maybeSingle()
       return NextResponse.json({ masterExists: !!data })
     }
 
-    // FIX A: requireAuth() já valida o JWT — não chamar getUser() novamente
-    const { user, errorResponse } = await requireAuth()
+    const { errorResponse } = await requireStaff(req)
     if (errorResponse) return errorResponse
 
     const supabase = await createProtectedClient()
@@ -331,6 +327,11 @@ export async function POST(req: Request) {
       .select('id')
       .eq('email', 'direcao@colegioimpacto.net')
       .maybeSingle();
+
+    if (masterCheck || (count && count > 0 && !isMasterSetup)) {
+      const { errorResponse: staffErr } = await requireStaff(req)
+      if (staffErr) return staffErr
+    }
 
     let supabaseClientToUse;
     let authUserIdToLink: string | null = null;

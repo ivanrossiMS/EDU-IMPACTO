@@ -1,6 +1,14 @@
 /* Google Fonts are loaded non-blocking via <link> tags in app/layout.tsx */
 @import "tailwindcss";
 
+@font-face {
+  font-family: 'Dancing Script';
+  src: url('/fonts/DancingScript-Bold.ttf') format('truetype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
 @custom-variant dark (&:where([data-theme=dark]:not([data-theme=light], [data-theme=light] *), [data-theme=dark] *:not([data-theme=light], [data-theme=light] *), .dark:not([data-theme=light], [data-theme=light] *), .dark *:not([data-theme=light], [data-theme=light] *)));
 
 

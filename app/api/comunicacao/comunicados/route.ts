@@ -1,10 +1,14 @@
 import { NextResponse } from 'next/server'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 import { getLoggedUserAccessStartDate } from '@/lib/server/visibility'
+import { resolveUserRole, requireStaff } from '@/lib/server/authGuard'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: Request) {
+  const { isFamilyOrStudent, errorResponse } = await resolveUserRole(request)
+  if (errorResponse) return errorResponse
+
   const supabase = await createProtectedClient();
   const { searchParams } = new URL(request.url)
   const q = searchParams.get('q')
@@ -22,40 +26,6 @@ export async function GET(request: Request) {
   const { data, error } = await query
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  const { data: { user } } = await supabase.auth.getUser();
-  let isFamilyOrStudent = false;
-  if (user) {
-    const perfil = user.user_metadata?.perfil || '';
-    const cargo = user.user_metadata?.cargo || '';
-    if (
-      perfil === 'Família' || 
-      perfil === 'Responsável' || 
-      cargo === 'Responsável' || 
-      cargo === 'Aluno' || 
-      perfil === 'Aluno'
-    ) {
-      isFamilyOrStudent = true;
-    } else {
-      const { data: dbUser } = await supabase
-        .from('system_users')
-        .select('perfil, cargo')
-        .eq('id', user.id)
-        .maybeSingle();
-      
-      const dbPerfil = dbUser?.perfil || '';
-      const dbCargo = dbUser?.cargo || '';
-      if (
-        dbPerfil === 'Família' || 
-        dbPerfil === 'Responsável' || 
-        dbCargo === 'Responsável' || 
-        dbCargo === 'Aluno' || 
-        dbPerfil === 'Aluno'
-      ) {
-        isFamilyOrStudent = true;
-      }
-    }
-  }
-
   const mapped = (data || []).map(r => ({ ...r, ...(r.dados || {}) }));
   const filtered = isFamilyOrStudent
     ? mapped
@@ -65,6 +35,9 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const { errorResponse } = await requireStaff(request)
+  if (errorResponse) return errorResponse
+
   const supabase = await createProtectedClient();
   try {
     const body = await request.json()
@@ -90,6 +63,9 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  const { errorResponse } = await requireStaff(request)
+  if (errorResponse) return errorResponse
+
   const supabase = await createProtectedClient();
   const { searchParams } = new URL(request.url)
   const id = searchParams.get('id')

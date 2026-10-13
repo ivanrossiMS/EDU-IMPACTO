@@ -111,6 +111,21 @@ export function removeCachedMessage(comunicadoId: string, msgId: string): void {
   setGlobalCachedMessages(key, updated);
 }
 
+export function clearComunicadosRespostasCache(): void {
+  messagesCache.clear();
+  inFlightRequests.clear();
+  if (typeof window !== 'undefined') {
+    try {
+      for (let i = window.sessionStorage.length - 1; i >= 0; i--) {
+        const k = window.sessionStorage.key(i);
+        if (k && k.startsWith('edu_com_msg_')) {
+          window.sessionStorage.removeItem(k);
+        }
+      }
+    } catch (_) {}
+  }
+}
+
 export async function prefetchComunicadoMessages(
   comunicado: any,
   isAdmin: boolean = false,
@@ -119,6 +134,7 @@ export async function prefetchComunicadoMessages(
 ): Promise<ChatMessage[]> {
   if (!comunicado || !comunicado.id) return [];
   const key = normalizeKey(comunicado.id);
+  const requestScopeKey = `${key}::${isAdmin ? 'admin' : (currentUserSlug || 'user')}::${espelharColabId || ''}`;
   
   // If already in cache and not empty, return cached
   const cached = getGlobalCachedMessages(key);
@@ -126,9 +142,9 @@ export async function prefetchComunicadoMessages(
     return cached;
   }
 
-  // Deduplicate in-flight requests
-  if (inFlightRequests.has(key)) {
-    return inFlightRequests.get(key)!;
+  // Deduplicate in-flight requests scoped by user/admin context
+  if (inFlightRequests.has(requestScopeKey)) {
+    return inFlightRequests.get(requestScopeKey)!;
   }
 
   const isGroupedReport = key.startsWith('AD-COM-REL-COLAB') || key.startsWith('AD-COM-REL-TURMA') || (key.startsWith('AD-COM-REL-') && !key.startsWith('AD-COM-REL-STU-'));
@@ -170,10 +186,10 @@ export async function prefetchComunicadoMessages(
       console.warn('Prefetch error:', e);
       return [];
     } finally {
-      inFlightRequests.delete(key);
+      inFlightRequests.delete(requestScopeKey);
     }
   })();
 
-  inFlightRequests.set(key, promise);
+  inFlightRequests.set(requestScopeKey, promise);
   return promise;
 }

@@ -49,7 +49,8 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const { user, errorResponse } = await requireAuth(request)
+  const { requireStaff } = await import('@/lib/server/authGuard')
+  const { errorResponse } = await requireStaff(request)
   if (errorResponse) return errorResponse
 
   try {

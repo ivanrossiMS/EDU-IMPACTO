@@ -137,18 +137,22 @@ export function CapacitorResumeGuard() {
     document.addEventListener('visibilitychange', handleVisibilityChange)
 
     // 4. Listener nativo do Capacitor App Resume (iOS / Android)
+    let isMounted = true
     let removeAppListener: (() => void) | null = null
 
     if (Capacitor.isNativePlatform()) {
       // Configuração inicial da barra de status no ambiente nativo (iOS / Android)
       import('@capacitor/status-bar').then(({ StatusBar, Style }) => {
+        if (!isMounted) return
         StatusBar.setOverlaysWebView({ overlay: true }).catch(() => {})
         StatusBar.setStyle({ style: Style.Dark }).catch(() => {})
         StatusBar.setBackgroundColor({ color: '#0A0F24' }).catch(() => {})
       }).catch(() => {})
 
       import('@capacitor/app').then(({ App }) => {
+        if (!isMounted) return
         App.addListener('resume', async () => {
+          if (!isMounted) return
           // Re-aplica a configuração da StatusBar ao retomar o app
           import('@capacitor/status-bar').then(({ StatusBar, Style }) => {
             StatusBar.setOverlaysWebView({ overlay: true }).catch(() => {})
@@ -173,12 +177,17 @@ export function CapacitorResumeGuard() {
           }
           checkAndFreshenSession('retorno nativo (app resume)')
         }).then((handle) => {
+          if (!isMounted) {
+            try { handle.remove() } catch {}
+            return
+          }
           removeAppListener = () => handle.remove()
         }).catch(() => {})
       }).catch(() => {})
     }
 
     return () => {
+      isMounted = false
       window.removeEventListener('online', handleOnline)
       document.removeEventListener('visibilitychange', handleVisibilityChange)
       if (removeAppListener) removeAppListener()

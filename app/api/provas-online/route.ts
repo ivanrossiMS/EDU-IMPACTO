@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/server/authGuard'
+import { requireAuth, requireStaff } from '@/lib/server/authGuard'
 import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
+import { checkResponsavelRelationship } from '@/lib/server/notificationHelper'
 import { dbGetProvas, dbSaveProva, dbGetTentativasByProvaId, dbGetTentativasStatsByProvaIds } from '@/lib/provas-online/db'
 import { sanitizeExamForParticipant, shouldPublishResults } from '@/lib/provas-online/engine'
 import { ProvaOnline } from '@/types/provas-online'
@@ -66,12 +67,30 @@ export async function GET(request: Request) {
     dbResp = data
   }
 
-  const perfil = dbUser?.perfil || user.user_metadata?.perfil || (dbResp ? 'Família' : (dbAluno ? 'Aluno' : 'Professor'))
-  const cargo = dbUser?.cargo || user.user_metadata?.cargo || (dbAluno ? 'Aluno' : (dbResp ? 'Responsável' : ''))
+  const perfil = dbUser?.perfil || (dbResp ? 'Família' : (dbAluno ? 'Aluno' : ''))
+  const cargo = dbUser?.cargo || (dbAluno ? 'Aluno' : (dbResp ? 'Responsável' : ''))
   const isStudent = cargo === 'Aluno' || perfil === 'Aluno' || Boolean(dbAluno && !dbUser) || Boolean(requestedAlunoId && dbAluno)
   const isResponsible = (cargo === 'Responsável' || perfil === 'Família' || perfil === 'Responsável') && !requestedAlunoId && !isStudent
-  const isTeacher = perfil === 'Professor' || cargo === 'PROFESSORA' || cargo === 'Professor'
-  const isAdminOrCoord = ['Diretor Geral', 'Direção', 'Administrador', 'Coordenador', 'Coordenadora'].includes(perfil)
+  const isTeacher = Boolean(dbUser) && (perfil === 'Professor' || cargo === 'PROFESSORA' || cargo === 'Professor')
+  const isAdminOrCoord = Boolean(dbUser) && ['Diretor Geral', 'Direção', 'Administrador', 'Administrador Master', 'Master', 'Coordenador', 'Coordenadora', 'Secretaria'].includes(perfil)
+
+  if (!dbUser && dbAluno) {
+    const ownAlunoId = user.user_metadata?.aluno_id
+    const isOwnStudent =
+      (ownAlunoId && (String(dbAluno.id) === String(ownAlunoId) || String(dbAluno.matricula) === String(ownAlunoId))) ||
+      (user.email && dbAluno.email && String(dbAluno.email).trim().toLowerCase() === String(user.email).trim().toLowerCase())
+    if (!isOwnStudent) {
+      const checkId = dbResp?.id || user.user_metadata?.responsavel_id || user.id
+      const hasAccess = await checkResponsavelRelationship(checkId, String(dbAluno.id), user.email)
+      if (!hasAccess) {
+        return NextResponse.json({ error: 'Acesso negado às provas deste aluno.' }, { status: 403 })
+      }
+    }
+  }
+
+  if (!dbUser && !isStudent && !isResponsible) {
+    return NextResponse.json([])
+  }
 
   // 2. Fetch all exams
   let allProvas = await dbGetProvas()
@@ -319,22 +338,14 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const { user, errorResponse } = await requireAuth(request)
+  const { user, dbUser, errorResponse } = await requireStaff(request)
   if (errorResponse) return errorResponse
 
   try {
     const body = await request.json()
-    const adminClient = getAdminClient()
 
-    // Resolve author name and id
-    const { data: dbUser } = await adminClient
-      .from('system_users')
-      .select('id, nome, perfil, cargo')
-      .or(`id.eq.${user.id},auth_id.eq.${user.id},email.eq.${user.email}`)
-      .maybeSingle()
-
-    const perfil = dbUser?.perfil || user.user_metadata?.perfil || 'Professor'
-    const isAllowed = ['Diretor Geral', 'Direção', 'Administrador', 'Coordenador', 'Coordenadora', 'Professor'].includes(perfil) ||
+    const perfil = dbUser?.perfil || 'Professor'
+    const isAllowed = ['Master', 'Administrador Master', 'Diretor Geral', 'Direção', 'Administrador', 'Coordenador', 'Coordenadora', 'Professor'].includes(perfil) ||
       ['PROFESSORA', 'Professor'].includes(dbUser?.cargo || '')
 
     if (!isAllowed) {

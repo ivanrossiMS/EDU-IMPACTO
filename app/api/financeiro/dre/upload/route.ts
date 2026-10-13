@@ -104,6 +104,10 @@ export const maxDuration = 120
 
 export async function POST(request: Request) {
   try {
+    const { requireStaff } = await import('@/lib/server/authGuard')
+    const { errorResponse } = await requireStaff(request)
+    if (errorResponse) return errorResponse
+
     if (!process.env.GEMINI_API_KEY) {
       return NextResponse.json({ error: 'GEMINI_API_KEY não está configurada no servidor.' }, { status: 500 })
     }

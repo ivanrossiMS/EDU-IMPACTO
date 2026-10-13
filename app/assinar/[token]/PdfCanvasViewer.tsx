@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useEffect, useRef, useState, useCallback } from 'react'
-import { RefreshCw } from 'lucide-react'
+import { RefreshCw, AlertCircle, ExternalLink, RotateCcw } from 'lucide-react'
 
 interface PdfCanvasViewerProps {
   pdfUrl: string
@@ -13,6 +13,8 @@ interface PdfCanvasViewerProps {
   onPageChange?: (newPage: number) => void
   onTotalPagesLoaded?: (total: number) => void
   onTap?: () => void
+  onPdfDocLoaded?: (doc: any) => void
+  containerBackground?: string
   className?: string
   style?: React.CSSProperties
   footerAction?: React.ReactNode
@@ -27,6 +29,8 @@ export function PdfCanvasViewer({
   onZoomChange,
   onPageChange,
   onTotalPagesLoaded,
+  onPdfDocLoaded,
+  containerBackground,
   onTap,
   className = '',
   style = {},
@@ -35,6 +39,7 @@ export function PdfCanvasViewer({
   const containerRef = useRef<HTMLDivElement | null>(null)
   const contentWrapperRef = useRef<HTMLDivElement | null>(null)
   const canvasRefs = useRef<{ [key: number]: HTMLCanvasElement | null }>({})
+  const singleCanvasRef = useRef<HTMLCanvasElement | null>(null)
   const pageContainersRef = useRef<{ [key: number]: HTMLDivElement | null }>({})
   const renderTasksRef = useRef<{ [key: number]: any }>({})
 
@@ -43,12 +48,15 @@ export function PdfCanvasViewer({
   const [pdfDoc, setPdfDoc] = useState<any>(null)
   const [totalPages, setTotalPages] = useState<number>(1)
   const [containerWidth, setContainerWidth] = useState<number>(0)
+  const [reloadKey, setReloadKey] = useState(0)
 
   const activePageRef = useRef<number>(pageNumber)
   const isMouseDownRef = useRef(false)
   const mouseStartRef = useRef({ x: 0, y: 0, scrollLeft: 0, scrollTop: 0 })
+  const isTouchPanningRef = useRef(false)
+  const touchStartRef = useRef({ x: 0, y: 0, scrollLeft: 0, scrollTop: 0 })
 
-  // 1. Carrega o documento PDF com PDF.js no cliente
+  // 1. Carrega o documento PDF com PDF.js usando dados binários via fetch para máxima estabilidade
   useEffect(() => {
     let isCancelled = false
 
@@ -58,13 +66,25 @@ export function PdfCanvasViewer({
         setLoading(true)
         setError(null)
 
-        const pdfjs = await import('pdfjs-dist')
-        pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs'
+        const origin = window.location.origin
+
+        // Baixa o binário primeiro via fetch padrão da janela (mais confiável com cookies e CSP)
+        const res = await fetch(pdfUrl, { cache: 'no-store' })
+        if (!res.ok) {
+          throw new Error(`Não foi possível carregar o PDF (HTTP ${res.status})`)
+        }
+        const buffer = await res.arrayBuffer()
+        const data = new Uint8Array(buffer)
+
+        // @ts-ignore
+        const pdfjs: any = await import('pdfjs-dist/build/pdf.min.mjs')
+        pdfjs.GlobalWorkerOptions.workerSrc = `${origin}/pdf.worker.min.mjs`
 
         const loadingTask = pdfjs.getDocument({
-          url: pdfUrl,
-          cMapUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@5.4.296/cmaps/',
+          data,
+          cMapUrl: `${origin}/cmaps/`,
           cMapPacked: true,
+          standardFontDataUrl: `${origin}/standard_fonts/`,
         })
 
         const doc = await loadingTask.promise
@@ -73,9 +93,9 @@ export function PdfCanvasViewer({
         setPdfDoc(doc)
         const count = doc.numPages || 1
         setTotalPages(count)
-        if (onTotalPagesLoaded) {
-          onTotalPagesLoaded(count)
-        }
+        onTotalPagesLoaded?.(count)
+        onPdfDocLoaded?.(doc)
+        setLoading(false)
       } catch (err: any) {
         console.warn('[PdfCanvasViewer] Erro ao carregar PDF via Canvas:', err)
         if (!isCancelled) {
@@ -90,7 +110,7 @@ export function PdfCanvasViewer({
     return () => {
       isCancelled = true
     }
-  }, [pdfUrl, onTotalPagesLoaded])
+  }, [pdfUrl, reloadKey, onTotalPagesLoaded, onPdfDocLoaded])
 
   // 2. Medir largura disponível no container
   const updateDimensions = useCallback(() => {
@@ -109,7 +129,15 @@ export function PdfCanvasViewer({
     return () => window.removeEventListener('resize', handleResize)
   }, [updateDimensions])
 
-  // 3. Renderização nítida de páginas no Canvas
+  // Calcula displayWidth considerando mobile, desktop e percentual de zoom
+  const availableWidth = containerWidth || containerRef.current?.clientWidth || 380
+  const isMobile = availableWidth < 600
+  const baseWidth = isMobile ? availableWidth - 16 : Math.min(availableWidth - 32, 840)
+  const scaleMultiplier = Math.max(0.4, (zoomPercent || 100) / 100)
+  const displayWidth = Math.max(200, Math.round(baseWidth * scaleMultiplier))
+  const isOverflowingX = displayWidth > availableWidth
+
+  // 3. Renderização nítida de páginas no Canvas com transição suave sem tela branca
   const renderPages = useCallback(async () => {
     if (!pdfDoc || !containerRef.current) return
 
@@ -126,17 +154,10 @@ export function PdfCanvasViewer({
         ? Array.from({ length: totalPages }, (_, i) => i + 1)
         : [pageNumber]
 
-      const availableWidth = containerWidth || containerRef.current.clientWidth || 380
-      // Em visualização mobile, cobre 100% da lateral; em desktop, aplica margens e limita a 840px
-      const isMobile = availableWidth < 600
-      const baseWidth = isMobile ? availableWidth : Math.min(availableWidth - 32, 840)
-      const scaleMultiplier = zoomPercent / 100
-      const displayWidth = Math.round(baseWidth * scaleMultiplier)
-
       const dpr = typeof window !== 'undefined' ? Math.min(window.devicePixelRatio || 1, 2.5) : 1
 
       for (const pNum of pagesToRender) {
-        const canvas = canvasRefs.current[pNum]
+        const canvas = renderAllPages ? canvasRefs.current[pNum] : singleCanvasRef.current
         if (!canvas) continue
 
         const page = await pdfDoc.getPage(pNum)
@@ -144,31 +165,37 @@ export function PdfCanvasViewer({
         const pageRatio = unscaledViewport.height / unscaledViewport.width
         const displayHeight = Math.round(displayWidth * pageRatio)
 
-        // Dimensões reais do canvas na tela (estilo)
+        // 1º Passo: Ajusta estilo CSS imediatamente para feedback instantâneo de zoom sem flicker
         canvas.style.width = `${displayWidth}px`
         canvas.style.height = `${displayHeight}px`
 
-        // Resolução interna em pixels (Retina)
-        canvas.width = Math.round(displayWidth * dpr)
-        canvas.height = Math.round(displayHeight * dpr)
+        const targetInternalWidth = Math.round(displayWidth * dpr)
+        const targetInternalHeight = Math.round(displayHeight * dpr)
 
-        const ctx = canvas.getContext('2d')
-        if (!ctx) continue
+        // 2º Passo: Renderiza em offscreen canvas para não deixar o canvas visível em branco
+        const offscreen = document.createElement('canvas')
+        offscreen.width = targetInternalWidth
+        offscreen.height = targetInternalHeight
+        const offCtx = offscreen.getContext('2d')
+        if (!offCtx) continue
 
         const effectiveScale = (displayWidth / unscaledViewport.width) * dpr
         const viewport = page.getViewport({ scale: effectiveScale })
 
-        const renderContext = {
-          canvasContext: ctx,
+        const task = page.render({
+          canvasContext: offCtx,
           viewport,
-        }
-
-        const task = page.render(renderContext)
+        })
         renderTasksRef.current[pNum] = task
 
         await task.promise
 
-        // Libera visualização imediata assim que a primeira página estiver pronta
+        // 3º Passo: Transfere o bitmap nítido para o canvas principal
+        canvas.width = targetInternalWidth
+        canvas.height = targetInternalHeight
+        const ctx = canvas.getContext('2d')
+        ctx?.drawImage(offscreen, 0, 0)
+
         if (pNum === pagesToRender[0]) {
           setLoading(false)
         }
@@ -177,11 +204,11 @@ export function PdfCanvasViewer({
       setLoading(false)
     } catch (err: any) {
       if (err?.name !== 'RenderingCancelledException') {
-        console.warn('[PdfCanvasViewer] Erro na renderização:', err)
+        console.warn('[PdfCanvasViewer] Erro na renderização do canvas:', err)
         setLoading(false)
       }
     }
-  }, [pdfDoc, renderAllPages, totalPages, pageNumber, containerWidth, zoomPercent])
+  }, [pdfDoc, renderAllPages, totalPages, pageNumber, displayWidth])
 
   useEffect(() => {
     renderPages()
@@ -222,12 +249,13 @@ export function PdfCanvasViewer({
     }
   }, [renderAllPages, totalPages, onPageChange])
 
-  // 6. Gestos Táteis: Pinça (Pinch-to-zoom) a 60fps, Toque Duplo e Arrasto Fluido
+  // 6. Gestos Táteis: Pinça (Pinch-to-zoom), Toque Duplo e Panning 1-Dedo Fluido no Mobile
   useEffect(() => {
     const container = containerRef.current
     if (!container || !enableGestures) return
 
     let pinchStartDist = 0
+    let pinchCenter = { x: 0, y: 0 }
     let initialZoom = zoomPercent
     let currentScaleRatio = 1
     let lastTapTime = 0
@@ -235,28 +263,45 @@ export function PdfCanvasViewer({
 
     const onTouchStart = (e: TouchEvent) => {
       if (e.touches.length === 2) {
+        // Pinça com 2 dedos: bloqueia scroll nativo temporariamente
         e.preventDefault()
-        const dx = e.touches[0].clientX - e.touches[1].clientX
-        const dy = e.touches[0].clientY - e.touches[1].clientY
+        const t1 = e.touches[0]
+        const t2 = e.touches[1]
+        const dx = t1.clientX - t2.clientX
+        const dy = t1.clientY - t2.clientY
         pinchStartDist = Math.hypot(dx, dy)
+        pinchCenter = {
+          x: (t1.clientX + t2.clientX) / 2,
+          y: (t1.clientY + t2.clientY) / 2,
+        }
         initialZoom = zoomPercent
         currentScaleRatio = 1
+        isTouchPanningRef.current = false
       } else if (e.touches.length === 1) {
-        const now = Date.now()
         const touch = e.touches[0]
+        const now = Date.now()
         const timeDiff = now - lastTapTime
         const dist = Math.hypot(touch.clientX - lastTapPos.x, touch.clientY - lastTapPos.y)
 
         if (timeDiff < 320 && dist < 30) {
-          // Toque duplo detectado: alterna entre 100% (ajuste à tela) e 180% (leitura detalhada)
+          // Toque duplo: alterna entre 100% (ajustar) e 170% (detalhe)
           e.preventDefault()
-          const nextZoom = zoomPercent > 125 ? 100 : 180
+          const nextZoom = zoomPercent > 125 ? 100 : 170
           onZoomChange?.(nextZoom)
           lastTapTime = 0
           return
         }
         lastTapTime = now
         lastTapPos = { x: touch.clientX, y: touch.clientY }
+
+        // Inicia rastreamento de arrasto tátil com 1 dedo
+        isTouchPanningRef.current = true
+        touchStartRef.current = {
+          x: touch.clientX,
+          y: touch.clientY,
+          scrollLeft: container.scrollLeft,
+          scrollTop: container.scrollTop,
+        }
       }
     }
 
@@ -268,11 +313,22 @@ export function PdfCanvasViewer({
         const currentDist = Math.hypot(dx, dy)
         currentScaleRatio = currentDist / pinchStartDist
 
-        // Feedback visual instantâneo a 60fps usando CSS transform
+        // Feedback visual a 60fps usando CSS transform instantâneo
         if (contentWrapperRef.current) {
           contentWrapperRef.current.style.transform = `scale(${currentScaleRatio})`
-          contentWrapperRef.current.style.transformOrigin = 'center top'
+          contentWrapperRef.current.style.transformOrigin = `${pinchCenter.x}px ${pinchCenter.y}px`
           contentWrapperRef.current.style.transition = 'none'
+        }
+      } else if (e.touches.length === 1 && isTouchPanningRef.current && isOverflowingX) {
+        // Se a página está ampliada além da tela, permite pan horizontal e vertical fluido com 1 dedo
+        const touch = e.touches[0]
+        const dx = touch.clientX - touchStartRef.current.x
+        const dy = touch.clientY - touchStartRef.current.y
+
+        // Se o usuário está arrastando horizontalmente com documento ampliado, intercepta para pan contínuo
+        if (Math.abs(dx) > 6 || Math.abs(dy) > 6) {
+          container.scrollLeft = touchStartRef.current.scrollLeft - dx
+          container.scrollTop = touchStartRef.current.scrollTop - dy
         }
       }
     }
@@ -286,25 +342,31 @@ export function PdfCanvasViewer({
 
         if (Math.abs(currentScaleRatio - 1) > 0.04) {
           const computed = Math.round(initialZoom * currentScaleRatio)
-          const clamped = Math.min(260, Math.max(80, computed))
+          const clamped = Math.min(260, Math.max(60, computed))
           onZoomChange?.(clamped)
         }
 
         pinchStartDist = 0
         currentScaleRatio = 1
       }
+
+      if (e.touches.length === 0) {
+        isTouchPanningRef.current = false
+      }
     }
 
     container.addEventListener('touchstart', onTouchStart, { passive: false })
     container.addEventListener('touchmove', onTouchMove, { passive: false })
     container.addEventListener('touchend', onTouchEnd, { passive: false })
+    container.addEventListener('touchcancel', onTouchEnd, { passive: false })
 
     return () => {
       container.removeEventListener('touchstart', onTouchStart)
       container.removeEventListener('touchmove', onTouchMove)
       container.removeEventListener('touchend', onTouchEnd)
+      container.removeEventListener('touchcancel', onTouchEnd)
     }
-  }, [enableGestures, zoomPercent, onZoomChange])
+  }, [enableGestures, zoomPercent, isOverflowingX, onZoomChange])
 
   // 7. Arrasto com o Mouse (Desktop Pan)
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -341,33 +403,123 @@ export function PdfCanvasViewer({
     }
   }
 
-  // Fallback caso PDF.js falhe em carregar o arquivo binário
+  // Fallback seguro caso ocorra erro ao carregar o arquivo binário
   if (error) {
     return (
       <div
         ref={containerRef}
-        onClick={onTap}
         style={{
           width: '100%',
           height: '100%',
-          minHeight: 520,
-          background: '#ffffff',
+          minHeight: 460,
+          background: renderAllPages ? '#090d16' : '#ffffff',
           position: 'relative',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: 24,
+          boxSizing: 'border-box',
           ...style,
         }}
         className={className}
       >
-        <iframe
-          src={`${pdfUrl}&page=${pageNumber}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`}
+        <div
           style={{
+            maxWidth: 440,
             width: '100%',
-            height: '100%',
-            minHeight: 520,
-            border: 'none',
-            display: 'block',
+            background: renderAllPages ? 'rgba(15, 23, 42, 0.9)' : '#f8fafc',
+            border: renderAllPages ? '1px solid rgba(56, 189, 248, 0.2)' : '1px solid #e2e8f0',
+            borderRadius: 16,
+            padding: '24px 20px',
+            textAlign: 'center',
+            boxShadow: '0 10px 25px rgba(0,0,0,0.2)',
           }}
-          title="Documento Oficial"
-        />
+        >
+          <div
+            style={{
+              width: 48,
+              height: 48,
+              borderRadius: '50%',
+              background: 'rgba(239, 68, 68, 0.12)',
+              color: '#ef4444',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto 14px',
+            }}
+          >
+            <AlertCircle size={26} />
+          </div>
+          <h4
+            style={{
+              fontSize: 15,
+              fontWeight: 700,
+              color: renderAllPages ? '#ffffff' : '#0f172a',
+              margin: '0 0 6px',
+            }}
+          >
+            Não foi possível exibir o documento
+          </h4>
+          <p
+            style={{
+              fontSize: 12.5,
+              color: renderAllPages ? '#94a3b8' : '#64748b',
+              margin: '0 0 18px',
+              lineHeight: 1.5,
+            }}
+          >
+            {error}
+          </p>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <button
+              type="button"
+              onClick={() => {
+                setError(null)
+                setReloadKey(k => k + 1)
+              }}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
+                background: '#2563eb',
+                color: '#ffffff',
+                border: 'none',
+                borderRadius: 10,
+                padding: '10px 16px',
+                fontSize: 13,
+                fontWeight: 700,
+                cursor: 'pointer',
+              }}
+            >
+              <RotateCcw size={15} /> Tentar Carregar Novamente
+            </button>
+
+            <a
+              href={pdfUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
+                background: renderAllPages ? 'rgba(255, 255, 255, 0.08)' : '#ffffff',
+                border: renderAllPages ? '1px solid rgba(255, 255, 255, 0.15)' : '1px solid #cbd5e1',
+                color: renderAllPages ? '#e2e8f0' : '#1e293b',
+                borderRadius: 10,
+                padding: '10px 16px',
+                fontSize: 13,
+                fontWeight: 600,
+                textDecoration: 'none',
+              }}
+            >
+              <ExternalLink size={15} /> Abrir PDF em Nova Aba
+            </a>
+          </div>
+        </div>
       </div>
     )
   }
@@ -389,27 +541,28 @@ export function PdfCanvasViewer({
         width: '100%',
         height: '100%',
         position: 'relative',
-        background: renderAllPages ? '#090d16' : '#ffffff',
-        overflow: enableGestures ? 'auto' : 'hidden',
+        background: renderAllPages ? '#090d16' : (containerBackground || 'transparent'),
+        overflow: 'auto',
         WebkitOverflowScrolling: 'touch',
         overscrollBehavior: 'contain',
         display: 'flex',
         flexDirection: 'column',
-        alignItems: 'center',
+        alignItems: isOverflowingX ? 'flex-start' : 'center',
         justifyContent: 'flex-start',
         cursor: onTap ? 'pointer' : enableGestures ? 'grab' : 'default',
         touchAction: enableGestures ? 'pan-x pan-y' : 'manipulation',
+        boxSizing: 'border-box',
         ...style,
       }}
       className={className}
     >
-      {/* Loading Skeleton */}
-      {loading && (
+      {/* Loading Skeleton inicial */}
+      {loading && !pdfDoc && (
         <div
           style={{
             position: 'absolute',
             inset: 0,
-            background: renderAllPages ? 'rgba(9, 13, 22, 0.85)' : '#ffffff',
+            background: renderAllPages ? 'rgba(9, 13, 22, 0.9)' : 'rgba(248, 250, 252, 0.94)',
             backdropFilter: renderAllPages ? 'blur(8px)' : 'none',
             display: 'flex',
             flexDirection: 'column',
@@ -419,38 +572,40 @@ export function PdfCanvasViewer({
             zIndex: 10,
           }}
         >
-          <RefreshCw size={28} className="animate-spin text-sky-500" />
+          <RefreshCw size={28} className="animate-spin text-blue-600" />
           <span
             style={{
               fontSize: 13,
-              color: renderAllPages ? '#94a3b8' : '#475569',
+              color: renderAllPages ? '#94a3b8' : '#64748b',
               fontWeight: 600,
             }}
           >
-            Renderizando {renderAllPages ? `${totalPages} páginas` : `página ${pageNumber}`}...
+            Carregando documento...
           </span>
         </div>
       )}
 
-      {/* Content Wrapper com suporte a CSS transform durante pinça */}
+      {/* Content Wrapper com suporte a CSS transform durante pinça e pan horizontal irrestrito */}
       <div
         ref={contentWrapperRef}
         style={{
-          width: '100%',
+          minWidth: '100%',
+          width: 'max-content',
+          margin: isOverflowingX ? '0' : '0 auto',
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
           padding: renderAllPages
-            ? containerWidth < 600
-              ? '10px 0 32px 0'
-              : '20px 16px 32px 16px'
+            ? isMobile
+              ? '14px 10px 44px 10px'
+              : '20px 16px 44px 16px'
             : '0',
           boxSizing: 'border-box',
         }}
       >
         {pagesArray.map((pNum) => (
           <div
-            key={pNum}
+            key={renderAllPages ? pNum : 'single-view'}
             id={`pdf-page-${pNum}`}
             ref={(el) => {
               pageContainersRef.current[pNum] = el
@@ -460,7 +615,8 @@ export function PdfCanvasViewer({
               flexDirection: 'column',
               alignItems: 'center',
               marginBottom: renderAllPages ? 20 : 0,
-              width: '100%',
+              width: 'fit-content',
+              minWidth: '100%',
             }}
           >
             {/* Marcador elegante entre páginas na rolagem contínua */}
@@ -476,7 +632,7 @@ export function PdfCanvasViewer({
                 <span
                   style={{
                     background: 'rgba(255, 255, 255, 0.08)',
-                    border: '1px solid rgba(255, 255, 255, 0.12)',
+                    border: '1px solid rgba(255, 255, 255, 0.14)',
                     borderRadius: 20,
                     padding: '3px 12px',
                     fontSize: 11,
@@ -484,6 +640,7 @@ export function PdfCanvasViewer({
                     color: '#94a3b8',
                     letterSpacing: '0.03em',
                     boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+                    userSelect: 'none',
                   }}
                 >
                   Página {pNum} de {totalPages}
@@ -495,17 +652,23 @@ export function PdfCanvasViewer({
             <div
               style={{
                 background: '#ffffff',
-                borderRadius: renderAllPages && containerWidth >= 600 ? 10 : 0,
+                borderRadius: renderAllPages && (containerWidth || 0) >= 600 ? 10 : 4,
                 boxShadow: renderAllPages
                   ? '0 12px 40px rgba(0, 0, 0, 0.65), 0 2px 6px rgba(0, 0, 0, 0.4)'
-                  : 'none',
+                  : '0 4px 20px -2px rgba(0, 0, 0, 0.08), 0 2px 6px -1px rgba(0, 0, 0, 0.04)',
+                border: renderAllPages ? 'none' : '1px solid rgba(226, 232, 240, 0.8)',
                 overflow: 'hidden',
                 display: 'inline-block',
+                width: 'fit-content',
               }}
             >
               <canvas
                 ref={(el) => {
-                  canvasRefs.current[pNum] = el
+                  if (renderAllPages) {
+                    canvasRefs.current[pNum] = el
+                  } else {
+                    singleCanvasRef.current = el
+                  }
                 }}
                 style={{
                   display: 'block',

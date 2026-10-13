@@ -29,8 +29,8 @@ const flushSystemLogs = async () => {
     });
   } catch (err) {
     console.error('Failed to flush logs', err);
-    // Put them back on failure
-    systemLogQueue = [...logsToSend, ...systemLogQueue];
+    // Put them back on failure (bounded to 200 items to prevent unbounded memory growth)
+    systemLogQueue = [...logsToSend, ...systemLogQueue].slice(-200);
   } finally {
     isFlushingLogs = false;
   }
@@ -1623,18 +1623,13 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const wipeAll = useCallback(() => {
     invalidateAllCache()
     invalidateConfigCache()
-    
-    // Only keeping the ones that actually exist in the current DataContext implementation
-    setTurmas([]); setLeads([])
-
-    setComunicados([]); setTarefas([]); setMantenedores([])
-    setEventosAgenda([]); setOcorrencias([]); setTransferencias([]); setFrequencias([]); setLancamentosNota([])
-    setCfgDisciplinas(DISCIPLINAS_DEFAULT); setCfgNiveisEnsino(NIVEIS_DEFAULT); setCfgSeries([]); setCfgTiposOcorrencia(TIPOS_OCORRENCIA_DEFAULT); setCfgEsquemasAvaliacao([]); setCfgGruposAvaliacao([]); setCfgArredondamentos([]); setCfgTurnos(TURNOS_DEFAULT); setCfgSituacaoAluno(SITUACOES_DEFAULT); setCfgGruposAlunos(GRUPOS_ALUNOS_DEFAULT);
-    setCfgMetodosPagamento([]); setCfgCartoes([]); setCfgEventos([]); setCfgGruposDesconto([])
-    setCfgPadroesPagamento([]); setCfgPlanoContas([]); setCfgTiposDocumento([]); setCfgConvenios([])
-
+    setLeads([])
+    setTarefas([])
+    setTransferencias([])
     setNotasFiscais([])
-    setAdvertencias([]); setAdiantamentos([]);    }, [])
+    setAdvertencias([])
+    setAdiantamentos([])
+  }, [setLeads, setTarefas, setTransferencias, setNotasFiscais, setAdvertencias, setAdiantamentos])
 
   // Memoize tracked setters to keep stable references
   const trackedSetters = useMemo(() => ({

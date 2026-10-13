@@ -1698,12 +1698,39 @@ export function FloatingChat() {
                           <>
                             {/* Alunos organizados e separados por cada filho vinculado ao responsável */}
                             {contactsData.alunos.map((aluno: any) => {
-                              const alunoTurmas = (aluno.turmaGrupos && aluno.turmaGrupos.length > 0)
+                              const rawTurmas = (aluno.turmaGrupos && aluno.turmaGrupos.length > 0)
                                 ? aluno.turmaGrupos
                                 : (aluno.turmaGrupo ? [aluno.turmaGrupo] : [])
+
+                              // Garante apenas turmas do último ano letivo vinculado ao aluno
+                              const latestAnoNum = rawTurmas.reduce((max: number, tg: any) => {
+                                const match = String(tg.ano_letivo || tg.ano || '').match(/\b(20\d{2})\b/)
+                                const y = match ? parseInt(match[1], 10) : 0
+                                return y > max ? y : max
+                              }, 0)
+
+                              const alunoTurmas = latestAnoNum > 0
+                                ? rawTurmas.filter((tg: any) => {
+                                    const match = String(tg.ano_letivo || tg.ano || '').match(/\b(20\d{2})\b/)
+                                    const y = match ? parseInt(match[1], 10) : 0
+                                    return !y || y === latestAnoNum
+                                  })
+                                : rawTurmas
+
+                              const activeTurmaNames = new Set(alunoTurmas.map((t: any) => (t.nome || '').trim().toLowerCase()))
+                              const rawColabs = (aluno.colaboradores || []).filter((c: any) => {
+                                if (c.turmas && c.turmas.length > 0 && activeTurmaNames.size > 0) {
+                                  return c.turmas.some((tName: string) => activeTurmaNames.has(tName.trim().toLowerCase()))
+                                }
+                                if (c.turmaNome && activeTurmaNames.size > 0) {
+                                  return activeTurmaNames.has(c.turmaNome.trim().toLowerCase())
+                                }
+                                return true
+                              })
+
                               const matchesStudent = !q || aluno.nome.toLowerCase().includes(q)
                               const matchingTurma = alunoTurmas.some((tg: any) => !q || (tg.nome || '').toLowerCase().includes(q))
-                              const matchingColabs = (aluno.colaboradores || []).filter((c: any) =>
+                              const matchingColabs = rawColabs.filter((c: any) =>
                                 !q ||
                                 c.nome.toLowerCase().includes(q) ||
                                 (c.cargo || '').toLowerCase().includes(q) ||

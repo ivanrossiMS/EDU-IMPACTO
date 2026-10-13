@@ -291,7 +291,11 @@ export async function dbDeleteProva(id: string): Promise<boolean> {
   const sb = getAdminClient()
 
   try {
-    await sb.from('tentativas_prova_online').delete().eq('prova_id', id)
+    await sb.from('provas_online_tentativas').delete().eq('prova_id', id)
+  } catch {}
+
+  try {
+    await sb.from('provas_online_ocorrencias').delete().eq('prova_id', id)
   } catch {}
 
   try {
@@ -376,11 +380,8 @@ export async function dbSaveQuestoes(provaId: string, questoes: QuestaoProva[]):
     ordem: idx
   }))
 
-  // 1. Try dedicated table
+  // 1. Try dedicated table (upsert first, then delete stale question IDs to avoid data loss on error)
   try {
-    // Delete existing and insert new
-    await sb.from('provas_online_questoes').delete().eq('prova_id', provaId)
-
     const rows = ordered.map(q => ({
       id: q.id,
       prova_id: provaId,
@@ -406,8 +407,26 @@ export async function dbSaveQuestoes(provaId: string, questoes: QuestaoProva[]):
       dados: q
     }))
 
-    const { error } = await sb.from('provas_online_questoes').insert(rows)
-    if (!error) return true
+    if (rows.length > 0) {
+      const { error } = await sb.from('provas_online_questoes').upsert(rows)
+      if (!error) {
+        const keepIds = rows.map(r => r.id)
+        const { data: existingRows } = await sb
+          .from('provas_online_questoes')
+          .select('id')
+          .eq('prova_id', provaId)
+        const staleIds = (existingRows || [])
+          .map((r: any) => r.id)
+          .filter((id: string) => !keepIds.includes(id))
+        if (staleIds.length > 0) {
+          await sb.from('provas_online_questoes').delete().in('id', staleIds)
+        }
+        return true
+      }
+    } else {
+      const { error } = await sb.from('provas_online_questoes').delete().eq('prova_id', provaId)
+      if (!error) return true
+    }
   } catch (err: any) {
     if (!isTableMissingError(err)) console.error('[dbSaveQuestoes dedicated error]', err)
   }
@@ -621,12 +640,14 @@ export async function dbGetTentativasStatsByProvaIds(
       // Count proctoring infractions
       const allTentativaIds = Object.keys(tentativaMapToProva)
       if (allTentativaIds.length > 0) {
+        let dedicatedOcSuccess = false
         try {
-          const { data: ocRows } = await sb
+          const { data: ocRows, error: ocError } = await sb
             .from('provas_online_ocorrencias')
             .select('tentativa_id, tipo, descricao')
             .in('tentativa_id', allTentativaIds)
-          if (Array.isArray(ocRows) && ocRows.length > 0) {
+          if (!ocError && Array.isArray(ocRows)) {
+            dedicatedOcSuccess = true
             for (const oc of ocRows) {
               if (isInfraction(oc.tipo, oc.descricao)) {
                 const pId = tentativaMapToProva[oc.tentativa_id]
@@ -638,23 +659,25 @@ export async function dbGetTentativasStatsByProvaIds(
           }
         } catch {}
 
-        try {
-          const { data: recData } = await sb
-            .from('relatorios_records')
-            .select('dados')
-            .like('id', 'provas_online_ocorrencias:%')
-          if (Array.isArray(recData)) {
-            for (const r of recData) {
-              const d = r.dados
-              if (d && allTentativaIds.includes(d.tentativaId) && isInfraction(d.tipo, d.descricao)) {
-                const pId = tentativaMapToProva[d.tentativaId]
-                if (pId && result[pId]) {
-                  result[pId].ocorrenciasCount++
+        if (!dedicatedOcSuccess) {
+          try {
+            const { data: recData } = await sb
+              .from('relatorios_records')
+              .select('dados')
+              .like('id', 'provas_online_ocorrencias:%')
+            if (Array.isArray(recData)) {
+              for (const r of recData) {
+                const d = r.dados
+                if (d && allTentativaIds.includes(d.tentativaId) && isInfraction(d.tipo, d.descricao)) {
+                  const pId = tentativaMapToProva[d.tentativaId]
+                  if (pId && result[pId]) {
+                    result[pId].ocorrenciasCount++
+                  }
                 }
               }
             }
-          }
-        } catch {}
+          } catch {}
+        }
       }
 
       return result

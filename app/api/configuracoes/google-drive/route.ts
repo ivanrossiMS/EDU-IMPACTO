@@ -86,14 +86,37 @@ async function uploadChunked(
   }
 }
 
+function isAllowedGoogleWebhookUrl(rawUrl: string): boolean {
+  if (!rawUrl) return false
+  try {
+    const parsed = new URL(rawUrl)
+    if (parsed.protocol !== 'https:') return false
+    const host = parsed.hostname.toLowerCase()
+    return (
+      host === 'script.google.com' ||
+      host === 'script.googleusercontent.com' ||
+      host.endsWith('.googleapis.com')
+    )
+  } catch {
+    return false
+  }
+}
+
 export async function POST(req: Request) {
   try {
+    const { requireStaff } = await import('@/lib/server/authGuard')
+    const { errorResponse } = await requireStaff(req)
+    if (errorResponse) return errorResponse
+
     const contentType = req.headers.get('content-type') || ''
 
     // ─── MODO 1: Upload de arquivo binário via headers + body bruto ───
     const xAction = req.headers.get('x-action') || ''
     if (xAction === 'upload') {
       const webhookUrl  = (req.headers.get('x-webhook-url')  || '').trim()
+      if (webhookUrl && !isAllowedGoogleWebhookUrl(webhookUrl)) {
+        return NextResponse.json({ success: false, error: 'URL de Webhook inválida. Deve pertencer ao domínio script.google.com.' }, { status: 400 })
+      }
       const accessToken = (req.headers.get('x-access-token') || '').trim()
       const fileName    = req.headers.get('x-file-name')    || `backup_impacto_edu_${Date.now()}.zip`
       const folderPath  = req.headers.get('x-folder-path')  || 'EDU-IMPACTO-Backups'
@@ -212,6 +235,9 @@ export async function POST(req: Request) {
 
     const { action, accessToken, webhookUrl, folderPath, fileName, fileContentBase64, fileTextContent, mimeType } = body
     const cleanWebhookUrl  = webhookUrl   ? String(webhookUrl).trim()  : ''
+    if (cleanWebhookUrl && !isAllowedGoogleWebhookUrl(cleanWebhookUrl)) {
+      return NextResponse.json({ success: false, error: 'URL de Webhook inválida. Deve pertencer ao domínio script.google.com.' }, { status: 400 })
+    }
     const cleanAccessToken = accessToken  ? String(accessToken).trim() : ''
     const rawFolder = folderPath || 'EDU-IMPACTO-Backups'
     const cleanFolderName = rawFolder.replace(/^\/|\/$/g, '').replace(/[\/\\]/g, '-') || 'EDU-IMPACTO-Backups'

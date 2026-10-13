@@ -12,7 +12,7 @@
  */
 
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 import { sendAgendaPushNotification } from '@/lib/server/agendaNotifications'
 import { getOrFetchYearCache } from '@/lib/isaacCache'
 import { formatFriendlyStudentName } from '@/lib/studentNameHelper'
@@ -22,14 +22,7 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 60 // até 60 segundos para processar lote
 
 function getSupabaseAdmin() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      auth: { persistSession: false, autoRefreshToken: false },
-      global: { fetch: (url: any, options: any) => fetch(url, { ...options, cache: 'no-store' }) }
-    }
-  )
+  return getAdminClient()
 }
 
 /**
@@ -60,31 +53,41 @@ async function verifyCallerAuth(request: Request): Promise<{ authorized: boolean
     return { authorized: true }
   }
 
+  if (!process.env.CRON_SECRET && request.headers.get('x-vercel-cron') === '1') {
+    return { authorized: true }
+  }
+
   // 2. Chamadas em ambiente de desenvolvimento local
   const host = request.headers.get('host') || ''
-  if (host.includes('localhost') || host.includes('127.0.0.1')) {
+  if (process.env.NODE_ENV === 'development' && (host.includes('localhost') || host.includes('127.0.0.1'))) {
     return { authorized: true }
   }
 
   // 3. Usuários administrativos autenticados no ERP / Agenda Digital
-  const { user, errorResponse } = await requireAuth()
+  const { user, errorResponse } = await requireAuth(request)
   if (!errorResponse && user) {
     const supabase = getSupabaseAdmin()
+    const conds: string[] = []
+    if (user.id) conds.push(`id.eq.${user.id}`, `auth_id.eq.${user.id}`)
+    if (user.email) conds.push(`email.ilike.${user.email.trim()}`)
     const { data: dbUser } = await supabase
       .from('system_users')
-      .select('perfil, cargo')
-      .eq('id', user.id)
+      .select('perfil, cargo, status')
+      .or(conds.join(','))
+      .limit(1)
       .maybeSingle()
 
-    const ALLOWED_ROLES = [
-      'Direção', 'Diretor Geral', 'Administrador', 'Administrador Master',
-      'Admin', 'Financeiro', 'Secretaria'
-    ]
-    const perfil = dbUser?.perfil || (user.user_metadata?.perfil as string) || ''
-    const cargo = dbUser?.cargo || (user.user_metadata?.cargo as string) || ''
+    if (dbUser && String(dbUser.status || 'ativo').toLowerCase() !== 'inativo') {
+      const ALLOWED_ROLES = [
+        'Master', 'Direção', 'Diretor Geral', 'Administrador', 'Administrador Master',
+        'Admin', 'Financeiro', 'Secretaria'
+      ]
+      const perfil = dbUser.perfil || ''
+      const cargo = dbUser.cargo || ''
 
-    if (ALLOWED_ROLES.includes(perfil) || ALLOWED_ROLES.includes(cargo)) {
-      return { authorized: true }
+      if (ALLOWED_ROLES.includes(perfil) || ALLOWED_ROLES.includes(cargo)) {
+        return { authorized: true }
+      }
     }
   }
 

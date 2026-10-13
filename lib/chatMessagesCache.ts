@@ -213,3 +213,14 @@ export function prefetchBatchConversations(convIds: string[]) {
     setTimeout(runPrefetch, 250)
   }
 }
+
+export function clearChatMessagesCache() {
+  memoryCache.clear()
+  inFlightRequests.clear()
+  isHydrated = false
+  if (typeof window !== 'undefined') {
+    try {
+      sessionStorage.removeItem(SESSION_CACHE_KEY)
+    } catch (_) {}
+  }
+}

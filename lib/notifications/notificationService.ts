@@ -42,6 +42,7 @@ class NotificationService {
   private syncUserDebounceTimer: any = null
   private lastSyncedPayloadHash = ''
   private registeredAliases: Set<string> = new Set()
+  private registeredDynamicTags: Set<string> = new Set()
 
   /** Histórico de auditoria em memória para diagnóstico preciso */
   private auditLogs: DiagnosticLogEntry[] = []
@@ -579,6 +580,19 @@ class NotificationService {
   ): Promise<void> {
     if (!user?.id) return
 
+    // Preserva e mescla extraData imediatamente (antes do debounce) para que chamadas concorrentes
+    // de diferentes providers (ex: GlobalNotificationProvider sem extraData e SelectedStudentProvider com meusAlunos)
+    // nunca apaguem os vínculos de alunos ou turmas do mesmo usuário.
+    if (this.cachedUser?.id && String(this.cachedUser.id) !== String(user.id)) {
+      this.cachedExtraData = extraData ? { ...extraData } : null
+    } else if (extraData) {
+      this.cachedExtraData = {
+        ...(this.cachedExtraData || {}),
+        ...Object.fromEntries(Object.entries(extraData).filter(([, v]) => v !== undefined)),
+      }
+    }
+    this.cachedUser = { ...(this.cachedUser?.id === user.id ? this.cachedUser : {}), ...user }
+
     return new Promise<void>((resolve) => {
       if (this.syncUserDebounceTimer) {
         clearTimeout(this.syncUserDebounceTimer)
@@ -592,7 +606,9 @@ class NotificationService {
           }
 
           const clearAtSnapshot = this.lastClearAt
-          this.syncUserPromise = this._doSyncUser(user, extraData, clearAtSnapshot)
+          const mergedUser = this.cachedUser || user
+          const mergedExtra = this.cachedExtraData || extraData
+          this.syncUserPromise = this._doSyncUser(mergedUser, mergedExtra, clearAtSnapshot)
           await this.syncUserPromise
         } catch (_) {
         } finally {
@@ -632,8 +648,18 @@ class NotificationService {
       return
     }
 
+    const effectiveExtra =
+      this.cachedUser?.id && String(this.cachedUser.id) === String(user.id)
+        ? {
+            ...(this.cachedExtraData || {}),
+            ...(extraData
+              ? Object.fromEntries(Object.entries(extraData).filter(([, v]) => v !== undefined))
+              : {}),
+          }
+        : extraData
+
     this.cachedUser = user
-    this.cachedExtraData = extraData
+    this.cachedExtraData = effectiveExtra
 
     const userId = String(user.id)
     const isNative = Capacitor.isNativePlatform()
@@ -652,16 +678,22 @@ class NotificationService {
         acesso: isMaster ? 'institucional' : (user.perfil || 'padrao'),
       }
       if (user.aluno_id) tags['aluno_id'] = String(user.aluno_id)
-      if (extraData?.alunoId) tags['aluno_id'] = String(extraData.alunoId)
-      if (extraData?.turmaNome) tags['turma'] = String(extraData.turmaNome)
-      if (extraData?.alunoObj?.id) tags['aluno_db_id'] = String(extraData.alunoObj.id)
+      if (effectiveExtra?.alunoId) tags['aluno_id'] = String(effectiveExtra.alunoId)
+      if (effectiveExtra?.turmaNome) tags['turma'] = String(effectiveExtra.turmaNome)
+      if (effectiveExtra?.alunoObj?.id) tags['aluno_db_id'] = String(effectiveExtra.alunoObj.id)
       if (user.responsavel_id) tags['responsavel_id'] = String(user.responsavel_id)
-      if (extraData?.hasDualAccess) tags['has_dual_role'] = 'true'
+      if (effectiveExtra?.hasDualAccess) tags['has_dual_role'] = 'true'
 
-      if (Array.isArray(extraData?.meusAlunos)) {
-        extraData.meusAlunos.forEach(s => {
-          if (s?.id) tags[`aluno_${s.id}`] = 'true'
-          if (s?.turmaNome || s?.turma) tags[`turma_${s.id}`] = String(s.turmaNome || s.turma)
+      if (Array.isArray(effectiveExtra?.meusAlunos)) {
+        effectiveExtra.meusAlunos.forEach((s: any) => {
+          if (s?.id) {
+            tags[`aluno_${s.id}`] = 'true'
+            this.registeredDynamicTags.add(`aluno_${s.id}`)
+          }
+          if (s?.turmaNome || s?.turma) {
+            tags[`turma_${s.id}`] = String(s.turmaNome || s.turma)
+            this.registeredDynamicTags.add(`turma_${s.id}`)
+          }
         })
       }
 
@@ -674,11 +706,11 @@ class NotificationService {
       if (user.aluno_id) {
         aliasesToRegister.push({ label: 'aluno_id', id: String(user.aluno_id) })
       }
-      if (extraData?.alunoId && String(extraData.alunoId) !== String(user.aluno_id)) {
-        aliasesToRegister.push({ label: 'aluno_id', id: String(extraData.alunoId) })
+      if (effectiveExtra?.alunoId && String(effectiveExtra.alunoId) !== String(user.aluno_id)) {
+        aliasesToRegister.push({ label: 'aluno_id', id: String(effectiveExtra.alunoId) })
       }
-      if (Array.isArray(extraData?.meusAlunos)) {
-        extraData.meusAlunos.forEach(s => {
+      if (Array.isArray(effectiveExtra?.meusAlunos)) {
+        effectiveExtra.meusAlunos.forEach((s: any) => {
           if (s?.id) {
             aliasesToRegister.push({ label: 'aluno_id', id: String(s.id) })
             const cleanId = String(s.id).replace(/^(a_|_ALU)/, '')
@@ -688,7 +720,7 @@ class NotificationService {
           }
         })
       }
-      const staffIds = extraData?.extraStaffIds || []
+      const staffIds = effectiveExtra?.extraStaffIds || []
       const colabId =
         user.colaborador_id ||
         user.system_user_id ||
@@ -707,8 +739,15 @@ class NotificationService {
         aliasesToRegister.push({ label: 'email', id: String(user.email).toLowerCase().trim() })
       }
 
-      // Identifica se o usuário é colaborador puro sem alunos vinculados
-      const isPureStaff = !user.aluno_id && !extraData?.alunoId && (!Array.isArray(extraData?.meusAlunos) || extraData.meusAlunos.length === 0)
+      // Identifica se o usuário é colaborador puro sem alunos/responsáveis vinculados
+      const isFamilyOrStudentRole =
+        Boolean(rId) ||
+        Boolean(user.aluno_id) ||
+        Boolean(effectiveExtra?.alunoId) ||
+        (Array.isArray(effectiveExtra?.meusAlunos) && effectiveExtra.meusAlunos.length > 0) ||
+        ['família', 'familia', 'responsável', 'responsavel', 'aluno'].includes(perfilLower) ||
+        ['responsável', 'responsavel', 'aluno'].includes(cargoLower)
+      const isPureStaff = !isFamilyOrStudentRole && !effectiveExtra?.hasDualAccess
 
       // Evita chamadas redundantes se os dados forem idênticos ao último sync bem-sucedido
       const payloadHash = JSON.stringify({ userId, tags, aliasesToRegister })
@@ -1012,12 +1051,16 @@ class NotificationService {
 
     const isNative = Capacitor.isNativePlatform()
 
+    const dynamicTags = Array.from(this.registeredDynamicTags)
+    this.registeredDynamicTags.clear()
+
     const tagsToRemove = [
       'aluno_id', 'responsavel_id', 'turma', 'aluno_db_id',
       'colaborador_id', 'system_user_id', 'cargo', 'perfil',
-      'isMasterAdmin', 'acesso', 'has_dual_role'
+      'isMasterAdmin', 'acesso', 'has_dual_role',
+      ...dynamicTags,
     ]
-    const aliasesToRemove = ['responsavel_id', 'aluno_id', 'colaborador_id', 'system_user_id', 'codigo']
+    const aliasesToRemove = ['responsavel_id', 'aluno_id', 'colaborador_id', 'system_user_id', 'codigo', 'email']
 
     try {
       if (isNative) {

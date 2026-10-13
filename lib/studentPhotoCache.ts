@@ -117,3 +117,8 @@ export async function fetchSingleStudentPhoto(id: string | number | undefined | 
   return batchResult[cleanId] ?? null;
 }
 
+export function clearStudentPhotoCache(): void {
+  photoCache.clear();
+  inFlightRequests.clear();
+}
+

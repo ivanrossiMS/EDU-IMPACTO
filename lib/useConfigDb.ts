@@ -10,6 +10,7 @@ interface ConfigCacheState {
   timestamp: number
   promise: Promise<Record<string, any[]>> | null
   resolved: boolean
+  hadError: boolean
 }
 
 const CONFIG_TTL_MS = 60_000  // 1 minute — configs are stable within a session
@@ -18,10 +19,11 @@ let configCache: ConfigCacheState = {
   timestamp: 0,
   promise: null,
   resolved: false,
+  hadError: false,
 }
 
 function isConfigCacheFresh(): boolean {
-  return configCache.resolved && (Date.now() - configCache.timestamp < CONFIG_TTL_MS)
+  return configCache.resolved && !configCache.hadError && (Date.now() - configCache.timestamp < CONFIG_TTL_MS)
 }
 
 // All known config chaves — updated centrally so we batch them
@@ -56,7 +58,12 @@ function fetchAllConfigs(): Promise<Record<string, any[]>> {
   // Fire single bulk request
   const chavesList = ALL_CONFIG_CHAVES.join(',')
   configCache.promise = apiFetch(`/api/configuracoes?chaves=${encodeURIComponent(chavesList)}`)
-    .then(r => r.ok ? r.json() : Promise.resolve({}))
+    .then(async r => {
+      if (!r.ok) {
+        throw new Error(`HTTP ${r.status}`)
+      }
+      return r.json()
+    })
     .then((result: Record<string, any>) => {
       configCache.data = {}
       for (const key of ALL_CONFIG_CHAVES) {
@@ -79,10 +86,13 @@ function fetchAllConfigs(): Promise<Record<string, any[]>> {
       }
       configCache.timestamp = Date.now()
       configCache.resolved = true
+      configCache.hadError = false
       configCache.promise = null
       return configCache.data
     })
     .catch(() => {
+      configCache.hadError = true
+      configCache.resolved = false
       configCache.promise = null
       return configCache.data  // return whatever we have (possibly empty)
     })
@@ -95,7 +105,7 @@ export function invalidateConfigCache(chave?: string): void {
   if (chave) {
     delete configCache.data[chave]
   } else {
-    configCache = { data: {}, timestamp: 0, promise: null, resolved: false }
+    configCache = { data: {}, timestamp: 0, promise: null, resolved: false, hadError: false }
   }
 }
 
@@ -148,15 +158,16 @@ export function useConfigDb<T>(chave: string, defaultValue: T[] = []) {
       if (val && Array.isArray(val) && val.length > 0) {
         setDataState(val as T[])
       } else if (defaultValue.length > 0) {
-        // Empty in DB → seed with default and persist
         setDataState(defaultValue)
-        apiFetch('/api/configuracoes', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ chave, valor: defaultValue }),
-        }).catch(() => {})
-        // Store default in cache too
-        configCache.data[chave] = defaultValue as any[]
+        // Somente faz auto-seed no banco se a leitura de /api/configuracoes teve sucesso real
+        if (configCache.resolved && !configCache.hadError) {
+          apiFetch('/api/configuracoes', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ chave, valor: defaultValue }),
+          }).catch(() => {})
+          configCache.data[chave] = defaultValue as any[]
+        }
       }
       setLoading(false)
     }).catch(() => {

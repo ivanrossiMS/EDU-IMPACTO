@@ -1,31 +1,181 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/server/authGuard'
-import { createClient } from '@supabase/supabase-js'
+import { resolveUserRole } from '@/lib/server/authGuard'
+import { checkResponsavelRelationship } from '@/lib/server/notificationHelper'
+import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 
-const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
+interface PortariaLookupIndex {
+  studentByIdMap: Record<string, any>
+  studentByCleanCodeMap: Record<string, any>
+  studentByNumericMap: Record<number, any>
+  turmaMap: Record<string, string>
+  expiresAt: number
+}
+
+let cachedPortariaIndex: PortariaLookupIndex | null = null
+let inFlightPortariaIndex: Promise<PortariaLookupIndex> | null = null
+const PORTARIA_INDEX_TTL_MS = 60_000
+
+async function getPortariaLookupIndex(): Promise<PortariaLookupIndex> {
+  if (cachedPortariaIndex && cachedPortariaIndex.expiresAt > Date.now()) {
+    return cachedPortariaIndex
+  }
+  if (inFlightPortariaIndex) {
+    return inFlightPortariaIndex
+  }
+
+  inFlightPortariaIndex = (async () => {
+    const supabase = getAdminClient()
+    const fetchAllPages = async (table: string, selectFields: string) => {
+      let allData: any[] = []
+      let from = 0
+      const step = 1000
+      while (true) {
+        const { data, error } = await supabase
+          .from(table)
+          .select(selectFields)
+          .range(from, from + step - 1)
+        if (error) {
+          console.error(`[FetchAllPages Error in ${table}]`, error)
+          break
+        }
+        if (!data || data.length === 0) break
+        allData = allData.concat(data)
+        if (data.length < step) break
+        from += step
+      }
+      return allData
+    }
+
+    const [studentsData, responsaveisData, linksData, turmasData] = await Promise.all([
+      fetchAllPages('alunos', 'id, nome, matricula, foto, turma, turno, status, dados'),
+      fetchAllPages('responsaveis', 'id, nome, codigo, rfid, dados'),
+      fetchAllPages('aluno_responsavel', 'aluno_id, responsavel_id, parentesco'),
+      supabase.from('turmas').select('id, nome').then(r => r.data || []),
+    ])
+
+    const studentByIdMap: Record<string, any> = {}
+    const studentByCleanCodeMap: Record<string, any> = {}
+    const studentByNumericMap: Record<number, any> = {}
+    const turmaMap: Record<string, string> = {}
+
+    const registerStudent = (s: any, rawVal: any) => {
+      if (!rawVal) return
+      const str = String(rawVal).trim()
+      if (!str) return
+
+      studentByCleanCodeMap[str] = s
+      studentByCleanCodeMap[str.toLowerCase()] = s
+
+      const cleanZero = str.replace(/^0+/, '')
+      if (cleanZero) studentByCleanCodeMap[cleanZero] = s
+
+      const num = parseInt(str.replace(/\D/g, ''), 10)
+      if (!isNaN(num) && num > 0) {
+        studentByNumericMap[num] = s
+        studentByCleanCodeMap[String(num)] = s
+      }
+    }
+
+    studentsData.forEach((s: any) => {
+      studentByIdMap[String(s.id).trim()] = s
+      registerStudent(s, s.id)
+      registerStudent(s, s.matricula)
+      if (s.dados) {
+        registerStudent(s, s.dados.codigo)
+        registerStudent(s, s.dados.matricula)
+        registerStudent(s, s.dados.codigoAluno)
+        registerStudent(s, s.dados.id)
+      }
+    })
+
+    if (responsaveisData.length > 0 && linksData.length > 0) {
+      const respToAlunoMap: Record<string, any> = {}
+      linksData.forEach((l: any) => {
+        const st = studentByIdMap[String(l.aluno_id).trim()]
+        if (st) {
+          respToAlunoMap[String(l.responsavel_id).trim()] = st
+        }
+      })
+
+      responsaveisData.forEach((r: any) => {
+        const linkedStudent = respToAlunoMap[String(r.id).trim()]
+        if (linkedStudent) {
+          registerStudent(linkedStudent, r.id)
+          registerStudent(linkedStudent, r.codigo)
+          registerStudent(linkedStudent, r.rfid)
+          if (r.dados) {
+            registerStudent(linkedStudent, r.dados.codigo)
+            registerStudent(linkedStudent, r.dados.id)
+          }
+        }
+      })
+    }
+
+    turmasData.forEach((t: any) => {
+      if (t?.id) turmaMap[String(t.id)] = t.nome
+    })
+
+    const built: PortariaLookupIndex = {
+      studentByIdMap,
+      studentByCleanCodeMap,
+      studentByNumericMap,
+      turmaMap,
+      expiresAt: Date.now() + PORTARIA_INDEX_TTL_MS,
+    }
+    cachedPortariaIndex = built
+    return built
+  })().finally(() => {
+    inFlightPortariaIndex = null
+  })
+
+  return inFlightPortariaIndex
+}
 
 export async function GET(req: NextRequest) {
-  const { user, errorResponse } = await requireAuth()
+  const { user, isStaff, errorResponse } = await resolveUserRole(req)
   if (errorResponse) return errorResponse
+
+  const supabase = getAdminClient()
 
   try {
     const url = new URL(req.url)
-    const limit = parseInt(url.searchParams.get('limit') || '200')
+    const limit = Math.min(parseInt(url.searchParams.get('limit') || '200'), 1000)
     const aluno_id = url.searchParams.get('aluno_id')
     const dispositivo_id = url.searchParams.get('dispositivo_id')
     const status = url.searchParams.get('status')
     const tipo = url.searchParams.get('tipo')
     const data_inicio = url.searchParams.get('data_inicio')
     const data_fim = url.searchParams.get('data_fim')
-
+    const matricula = url.searchParams.get('matricula')
     const event_id = url.searchParams.get('id')
+
+    if (!isStaff) {
+      const searchTarget = (aluno_id || matricula || user?.user_metadata?.aluno_id || '').trim()
+      if (!searchTarget && !event_id) {
+        return NextResponse.json({ error: 'Parâmetro aluno_id é obrigatório para consulta familiar.' }, { status: 400 })
+      }
+      if (searchTarget) {
+        const checkId = user?.user_metadata?.responsavel_id || user?.user_metadata?.aluno_id || user?.id
+        const hasAccess = await checkResponsavelRelationship(checkId, searchTarget, user?.email)
+        if (!hasAccess) {
+          return NextResponse.json({ error: 'Acesso negado aos registros de portaria deste aluno.' }, { status: 403 })
+        }
+      }
+    }
 
     if (event_id) {
       const { data, error } = await supabase
         .from('portaria_eventos')
-        .select('id, foto_captura')
+        .select('id, aluno_id, foto_captura')
         .eq('id', event_id)
       if (error) throw error
+      if (!isStaff && data && data.length > 0 && data[0].aluno_id) {
+        const checkId = user?.user_metadata?.responsavel_id || user?.user_metadata?.aluno_id || user?.id
+        const hasAccess = await checkResponsavelRelationship(checkId, String(data[0].aluno_id), user?.email)
+        if (!hasAccess) {
+          return NextResponse.json({ error: 'Acesso negado à captura deste evento.' }, { status: 403 })
+        }
+      }
       return NextResponse.json({ data })
     }
 
@@ -42,55 +192,51 @@ export async function GET(req: NextRequest) {
       dataFimVal = todayStr + (dataFimVal.startsWith('T') ? dataFimVal : 'T' + dataFimVal)
     }
 
-    const matricula = url.searchParams.get('matricula')
-
     let query = supabase
       .from('portaria_eventos')
       .select('id, data_hora, user_id_equipamento, aluno_id, aluno_nome, dispositivo_id, dispositivo_nome, tipo, status, confianca, payload_raw')
       .order('data_hora', { ascending: false })
       .limit(limit)
 
-    if (aluno_id || matricula) {
-      const searchTarget = (aluno_id || matricula || '').trim()
+    const effectiveSearchTarget = (aluno_id || matricula || (!isStaff ? user?.user_metadata?.aluno_id : '') || '').trim()
+    if (effectiveSearchTarget) {
+      const searchTarget = effectiveSearchTarget
+      const isUuid = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(searchTarget)
+      let alunoObj: { id: string; matricula: string } | null = null
 
-      if (searchTarget) {
-        const isUuid = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(searchTarget)
-        let alunoObj: { id: string; matricula: string } | null = null
+      if (isUuid) {
+        const { data } = await supabase
+          .from('alunos')
+          .select('id, matricula')
+          .eq('id', searchTarget)
+          .maybeSingle()
+        alunoObj = data
+      } else {
+        const { data } = await supabase
+          .from('alunos')
+          .select('id, matricula')
+          .eq('matricula', searchTarget)
+          .maybeSingle()
+        alunoObj = data
+      }
 
-        if (isUuid) {
-          const { data } = await supabase
-            .from('alunos')
-            .select('id, matricula')
-            .eq('id', searchTarget)
-            .maybeSingle()
-          alunoObj = data
+      const targets = new Set<string>()
+      targets.add(searchTarget)
+      if (alunoObj?.id) targets.add(String(alunoObj.id))
+      if (alunoObj?.matricula) targets.add(String(alunoObj.matricula))
+
+      const orConditions: string[] = []
+      targets.forEach(t => {
+        if (/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(t)) {
+          orConditions.push(`aluno_id.eq.${t}`)
         } else {
-          const { data } = await supabase
-            .from('alunos')
-            .select('id, matricula')
-            .eq('matricula', searchTarget)
-            .maybeSingle()
-          alunoObj = data
+          orConditions.push(`user_id_equipamento.eq.${t}`)
+          orConditions.push(`aluno_id.eq.${t}`)
         }
+      })
 
-        const targets = new Set<string>()
-        targets.add(searchTarget)
-        if (alunoObj?.id) targets.add(String(alunoObj.id))
-        if (alunoObj?.matricula) targets.add(String(alunoObj.matricula))
-
-        const orConditions: string[] = []
-        targets.forEach(t => {
-          if (/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(t)) {
-            orConditions.push(`aluno_id.eq.${t}`)
-          } else {
-            orConditions.push(`user_id_equipamento.eq.${t}`)
-            orConditions.push(`aluno_id.eq.${t}`)
-          }
-        })
-
-        if (orConditions.length > 0) {
-          query = query.or(orConditions.join(','))
-        }
+      if (orConditions.length > 0) {
+        query = query.or(orConditions.join(','))
       }
     }
 
@@ -105,108 +251,14 @@ export async function GET(req: NextRequest) {
 
     let mergedData = data || []
     if (data && data.length > 0) {
-      // Helper para buscar 100% dos registros burlando o limite max_rows (1000) do PostgREST
-      const fetchAllPages = async (table: string, selectFields: string) => {
-        let allData: any[] = []
-        let from = 0
-        const step = 1000
-        while (true) {
-          const { data, error } = await supabase
-            .from(table)
-            .select(selectFields)
-            .range(from, from + step - 1)
-          if (error) {
-            console.error(`[FetchAllPages Error in ${table}]`, error)
-            break
-          }
-          if (!data || data.length === 0) break
-          allData = allData.concat(data)
-          if (data.length < step) break
-          from += step
-        }
-        return allData
-      }
+      const {
+        studentByIdMap,
+        studentByCleanCodeMap,
+        studentByNumericMap,
+        turmaMap,
+      } = await getPortariaLookupIndex()
 
-      // Buscar todos os alunos, responsáveis e vínculos sem limite de 1000
-      const [studentsData, responsaveisData, linksData] = await Promise.all([
-        fetchAllPages('alunos', 'id, nome, matricula, foto, turma, turno, status, dados'),
-        fetchAllPages('responsaveis', 'id, nome, codigo, rfid, dados'),
-        fetchAllPages('aluno_responsavel', 'aluno_id, responsavel_id, parentesco'),
-      ])
-
-      if (studentsData.length > 0) {
-        const studentByIdMap: Record<string, any> = {}
-        const studentByCleanCodeMap: Record<string, any> = {}
-        const studentByNumericMap: Record<number, any> = {}
-
-        const registerStudent = (s: any, rawVal: any) => {
-          if (!rawVal) return
-          const str = String(rawVal).trim()
-          if (!str) return
-          
-          studentByCleanCodeMap[str] = s
-          studentByCleanCodeMap[str.toLowerCase()] = s
-          
-          const cleanZero = str.replace(/^0+/, '')
-          if (cleanZero) studentByCleanCodeMap[cleanZero] = s
-          
-          const num = parseInt(str.replace(/\D/g, ''), 10)
-          if (!isNaN(num) && num > 0) {
-            studentByNumericMap[num] = s
-            studentByCleanCodeMap[String(num)] = s
-          }
-        }
-
-        studentsData.forEach((s: any) => {
-          studentByIdMap[String(s.id).trim()] = s
-          registerStudent(s, s.id)
-          registerStudent(s, s.matricula)
-          if (s.dados) {
-            registerStudent(s, s.dados.codigo)
-            registerStudent(s, s.dados.matricula)
-            registerStudent(s, s.dados.codigoAluno)
-            registerStudent(s, s.dados.id)
-          }
-        })
-
-        // Indexar também responsáveis associando-os ao aluno correspondente
-        if (responsaveisData.length > 0 && linksData.length > 0) {
-          const respToAlunoMap: Record<string, any> = {}
-          linksData.forEach((l: any) => {
-            const st = studentByIdMap[String(l.aluno_id).trim()]
-            if (st) {
-              respToAlunoMap[String(l.responsavel_id).trim()] = st
-            }
-          })
-
-          responsaveisData.forEach((r: any) => {
-            const linkedStudent = respToAlunoMap[String(r.id).trim()]
-            if (linkedStudent) {
-              registerStudent(linkedStudent, r.id)
-              registerStudent(linkedStudent, r.codigo)
-              registerStudent(linkedStudent, r.rfid)
-              if (r.dados) {
-                registerStudent(linkedStudent, r.dados.codigo)
-                registerStudent(linkedStudent, r.dados.id)
-              }
-            }
-          })
-        }
-
-        // Buscar nomes das turmas
-        const uniqueTurmaIds = Array.from(new Set(studentsData.map((s: any) => s.turma).filter(Boolean)))
-        let turmaMap: Record<string, string> = {}
-        if (uniqueTurmaIds.length > 0) {
-          const { data: turmasData } = await supabase
-            .from('turmas')
-            .select('id, nome')
-            .in('id', uniqueTurmaIds)
-          
-          turmasData?.forEach((t: any) => {
-            turmaMap[String(t.id)] = t.nome
-          })
-        }
-
+      if (Object.keys(studentByIdMap).length > 0) {
         const dbUpdatesToRun: any[] = []
 
         const extractRealUserId = (e: any): string => {

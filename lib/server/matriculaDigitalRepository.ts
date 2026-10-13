@@ -207,8 +207,20 @@ function normalizeContrato(c: any): ContratoDigitalModel {
   }
 }
 
-// Cache em memória da disponibilidade da tabela matriculas_digitais para eliminar roundtrips com 404
+// Cache em memória e controle de resiliência da tabela matriculas_digitais
 let isTableAvailable: boolean | null = null
+let lastTableCheckTime = 0
+const TABLE_CHECK_COOLDOWN_MS = 10000 // Apenas 10s de cooldown em caso de falha de conexão ou schema
+
+export function canTryTable(): boolean {
+  if (isTableAvailable === true || isTableAvailable === null) return true
+  if (Date.now() - lastTableCheckTime > TABLE_CHECK_COOLDOWN_MS) {
+    isTableAvailable = null // Reseta para tentar novamente
+    return true
+  }
+  return false
+}
+
 let memoryCacheContratos: { list: ContratoDigitalModel[]; usedFallback: boolean; timestamp: number } | null = null
 const CACHE_TTL_MS = 2500 // 2.5 segundos para agilizar bursts de leituras concorrentes
 
@@ -370,9 +382,13 @@ export async function gerarPdfEvidenciasFallback(
         razaoSocial: rep.razaoSocial,
         cnpj: rep.cnpj,
         dataHoraAssinatura: rep.dataHoraAssinatura || contrato.created_at,
+        representantes: rep.representantes || undefined,
       },
       eventosAuditoria: contrato.historico_eventos || [],
       documentosAnexados: contrato.evidencias?.documentosAnexados || null,
+      arquivoOriginalNome: contrato.evidencias?.arquivoOriginalNome || null,
+      posicoesAssinaturas: contrato.evidencias?.posicoesAssinaturas || null,
+      suprimirRubricaRodape: Boolean(contrato.evidencias?.suprimirRubricaRodape || (contrato.evidencias?.posicoesAssinaturas && contrato.evidencias.posicoesAssinaturas.length > 0)),
     })
 
     const finalBuf = Buffer.from(sealed.pdfBytes)
@@ -488,7 +504,7 @@ async function getAllFromStorage(forceRefresh = false): Promise<{ list: Contrato
   let tableQuerySuccess = false
 
   // 1. Tenta buscar na tabela pública matriculas_digitais se disponível
-  if (isTableAvailable !== false) {
+  if (canTryTable()) {
     try {
       const { data, error } = await supabase
         .from('matriculas_digitais')
@@ -505,9 +521,11 @@ async function getAllFromStorage(forceRefresh = false): Promise<{ list: Contrato
         error.message?.includes('schema cache')
       )) {
         isTableAvailable = false
+        lastTableCheckTime = Date.now()
       }
     } catch {
       isTableAvailable = false
+      lastTableCheckTime = Date.now()
     }
   }
 
@@ -538,31 +556,81 @@ async function getAllFromStorage(forceRefresh = false): Promise<{ list: Contrato
     console.warn('[Repository] Falha ao ler do fallback configuracoes:', err)
   }
 
-  // 3. Estratégia de unificação resiliente:
+  // 3. Estratégia de unificação resiliente com reconciliação profunda campo a campo:
   let mergedList: ContratoDigitalModel[] = []
   let usedFallbackFinal = false
 
   if (tableQuerySuccess && dbContracts.length > 0) {
-    // Tabela possui dados. Verifica se o fallback possui itens que ainda não estão no banco.
+    const fallbackMap = new Map<string, ContratoDigitalModel>()
+    for (const fc of fallbackContracts) {
+      if (fc.id) fallbackMap.set(String(fc.id).toLowerCase(), fc)
+      if (fc.protocolo) fallbackMap.set(String(fc.protocolo).toLowerCase(), fc)
+    }
+
+    const contractsToHeal: ContratoDigitalModel[] = []
+
+    const reconciledDb = dbContracts.map(dbItem => {
+      const keyId = String(dbItem.id || '').toLowerCase()
+      const keyProto = String(dbItem.protocolo || '').toLowerCase()
+      const fbItem = fallbackMap.get(keyId) || fallbackMap.get(keyProto)
+
+      if (!fbItem) return dbItem
+
+      let needsHeal = false
+      const merged = { ...dbItem }
+
+      // Se o fallback tiver otp_confirmado_em e o banco não tiver, prioriza a validação!
+      if (!merged.otp_confirmado_em && fbItem.otp_confirmado_em) {
+        merged.otp_confirmado_em = fbItem.otp_confirmado_em
+        needsHeal = true
+      }
+
+      // Se o fallback tiver status assinado e o banco não, prioriza assinatura!
+      if (merged.status !== 'assinado' && fbItem.status === 'assinado') {
+        merged.status = fbItem.status
+        merged.documento_assinado_hash = fbItem.documento_assinado_hash || merged.documento_assinado_hash
+        needsHeal = true
+      }
+
+      // Se o fallback tiver histórico de auditoria mais longo, reconcilia!
+      if (Array.isArray(fbItem.historico_eventos) && fbItem.historico_eventos.length > (merged.historico_eventos?.length || 0)) {
+        merged.historico_eventos = fbItem.historico_eventos
+        needsHeal = true
+      }
+
+      const dbTime = new Date(dbItem.updated_at || dbItem.created_at || 0).getTime()
+      const fbTime = new Date(fbItem.updated_at || fbItem.created_at || 0).getTime()
+      if (fbTime > dbTime + 1000) {
+        Object.assign(merged, fbItem)
+        needsHeal = true
+      }
+
+      if (needsHeal) {
+        contractsToHeal.push(merged)
+      }
+      return merged
+    })
+
     const dbIds = new Set(dbContracts.map(c => String(c.id || c.protocolo).trim().toLowerCase()))
     const missingFromDb = fallbackContracts.filter(
       c => !dbIds.has(String(c.id || '').trim().toLowerCase()) && !dbIds.has(String(c.protocolo || '').trim().toLowerCase())
     )
 
-    if (missingFromDb.length > 0) {
-      mergedList = [...dbContracts, ...missingFromDb].sort(
+    if (missingFromDb.length > 0 || contractsToHeal.length > 0) {
+      mergedList = [...reconciledDb, ...missingFromDb].sort(
         (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
       )
-      // Auto-cura: insere itens faltantes na tabela do banco
+      // Auto-cura atômica: insere ou atualiza itens faltantes/desatualizados no banco
       Promise.resolve().then(async () => {
-        for (const item of missingFromDb) {
+        const toSave = [...missingFromDb, ...contractsToHeal]
+        for (const item of toSave) {
           try {
-            await supabase.from('matriculas_digitais').upsert(toTableRecord(item))
+            await supabase.from('matriculas_digitais').upsert(toTableRecord(item), { onConflict: 'id' })
           } catch {}
         }
       })
     } else {
-      mergedList = dbContracts
+      mergedList = reconciledDb
     }
     usedFallbackFinal = false
   } else if (fallbackContracts.length > 0) {
@@ -571,11 +639,11 @@ async function getAllFromStorage(forceRefresh = false): Promise<{ list: Contrato
     usedFallbackFinal = true
 
     // Se a tabela estiver acessível mas vazia, migra automaticamente todos os itens do fallback
-    if (isTableAvailable !== false) {
+    if (canTryTable()) {
       Promise.resolve().then(async () => {
         for (const item of fallbackContracts) {
           try {
-            await supabase.from('matriculas_digitais').upsert(toTableRecord(item))
+            await supabase.from('matriculas_digitais').upsert(toTableRecord(item), { onConflict: 'id' })
           } catch {}
         }
       })
@@ -639,38 +707,57 @@ export async function salvarContrato(contrato: ContratoDigitalModel): Promise<Co
   }
 
   // Tenta salvar na tabela dedicada sanitizado com toTableRecord (apenas colunas existentes)
-  if (isTableAvailable !== false) {
+  if (canTryTable()) {
     try {
       const tableRecord = toTableRecord(payload)
       const { data, error } = await supabase
         .from('matriculas_digitais')
-        .upsert(tableRecord)
+        .upsert(tableRecord, { onConflict: 'id' })
         .select()
         .maybeSingle()
 
       if (!error && data) {
         isTableAvailable = true
-      } else if (error && (
-        error.code === 'PGRST205' ||
-        error.message?.includes('Could not find the table')
-      )) {
-        isTableAvailable = false
+      } else if (error) {
+        console.warn('[Repository] Erro no upsert de matriculas_digitais:', error.message)
+        // Se falhou o upsert (por ex. conflito de chave única ou lock), tenta update direto por ID
+        if (payload.id) {
+          const { error: updErr } = await supabase
+            .from('matriculas_digitais')
+            .update(tableRecord)
+            .eq('id', payload.id)
+          if (updErr) {
+            console.warn('[Repository] Falha também no update direto:', updErr.message)
+          }
+        }
+        if (error.code === 'PGRST205' || error.message?.includes('Could not find the table')) {
+          isTableAvailable = false
+          lastTableCheckTime = Date.now()
+        }
       }
-    } catch {
+    } catch (err: any) {
+      console.warn('[Repository] Exceção ao salvar em matriculas_digitais:', err?.message)
       isTableAvailable = false
+      lastTableCheckTime = Date.now()
     }
   }
 
   // Sincroniza com o fallback de metadados leves em configuracoes
   try {
-    const { list } = await getAllFromStorage(true)
-    const idx = list.findIndex(c => c.id === contrato.id || c.protocolo === contrato.protocolo)
-    let updatedList: ContratoDigitalModel[] = []
+    const { data: cfgRow } = await supabase
+      .from('configuracoes')
+      .select('valor')
+      .eq('chave', FALLBACK_KEY)
+      .maybeSingle()
+
+    const rawList: any[] = Array.isArray(cfgRow?.valor) ? cfgRow.valor : []
+    const idx = rawList.findIndex((c: any) => c && (c.id === contrato.id || c.protocolo === contrato.protocolo))
+    let updatedList: any[] = []
     if (idx >= 0) {
-      updatedList = [...list]
+      updatedList = [...rawList]
       updatedList[idx] = payload
     } else {
-      updatedList = [payload, ...list]
+      updatedList = [payload, ...rawList]
     }
     await saveToFallback(updatedList)
   } catch (err) {
@@ -778,21 +865,126 @@ export async function listarContratos(filtros?: {
 }
 
 /**
+ * Reconcilia um contrato entre a tabela do banco e o fallback de configuracoes
+ */
+function reconciliarContratos(
+  contrato: ContratoDigitalModel | null,
+  fallbackContrato: ContratoDigitalModel | null
+): ContratoDigitalModel | null {
+  if (!contrato && !fallbackContrato) return null
+  if (!contrato) {
+    if (canTryTable() && fallbackContrato) {
+      const supabase = getAdminClient()
+      Promise.resolve().then(async () => {
+        try {
+          await supabase.from('matriculas_digitais').upsert(toTableRecord(fallbackContrato), { onConflict: 'id' })
+        } catch {}
+      })
+    }
+    return fallbackContrato
+  }
+  if (!fallbackContrato) return contrato
+
+  let needsSync = false
+  const merged = { ...contrato }
+
+  // Se o fallback tem otp_confirmado_em e o banco não, adota a confirmação!
+  if (!merged.otp_confirmado_em && fallbackContrato.otp_confirmado_em) {
+    merged.otp_confirmado_em = fallbackContrato.otp_confirmado_em
+    needsSync = true
+  }
+
+  // Se o fallback está assinado e o banco não, adota status assinado!
+  if (merged.status !== 'assinado' && fallbackContrato.status === 'assinado') {
+    merged.status = fallbackContrato.status
+    merged.documento_assinado_hash = fallbackContrato.documento_assinado_hash || merged.documento_assinado_hash
+    needsSync = true
+  }
+
+  // Se o histórico de auditoria no fallback tem mais eventos, adota!
+  if (Array.isArray(fallbackContrato.historico_eventos) && fallbackContrato.historico_eventos.length > (merged.historico_eventos?.length || 0)) {
+    merged.historico_eventos = fallbackContrato.historico_eventos
+    needsSync = true
+  }
+
+  const dbTime = new Date(contrato.updated_at || contrato.created_at || 0).getTime()
+  const fbTime = new Date(fallbackContrato.updated_at || fallbackContrato.created_at || 0).getTime()
+  if (fbTime > dbTime + 1000) {
+    Object.assign(merged, fallbackContrato)
+    needsSync = true
+  }
+
+  if (needsSync && canTryTable()) {
+    const supabase = getAdminClient()
+    Promise.resolve().then(async () => {
+      try {
+        await supabase.from('matriculas_digitais').upsert(toTableRecord(merged), { onConflict: 'id' })
+      } catch {}
+    })
+  }
+
+  return merged
+}
+
+/**
  * Busca contrato por ID ou Protocolo
  */
 export async function buscarContratoPorId(
   id: string,
   options?: { includePdf?: boolean }
 ): Promise<ContratoDigitalModel | null> {
-  const { list } = await getAllFromStorage()
   const clean = String(id || '').trim().toUpperCase()
-  const contrato = (
-    list.find(
-      c =>
-        String(c.id || '').trim().toUpperCase() === clean ||
-        String(c.protocolo || '').trim().toUpperCase() === clean
-    ) || null
-  )
+  if (!clean) return null
+  const supabase = getAdminClient()
+
+  let dbContrato: ContratoDigitalModel | null = null
+  let fbContrato: ContratoDigitalModel | null = null
+
+  if (canTryTable()) {
+    try {
+      const { data, error } = await supabase
+        .from('matriculas_digitais')
+        .select('*')
+        .or(`id.eq.${id},protocolo.ilike.${clean}`)
+        .maybeSingle()
+
+      if (!error && data) {
+        dbContrato = normalizeContrato(data)
+      }
+    } catch {}
+  }
+
+  try {
+    const { data: cfgRow } = await supabase
+      .from('configuracoes')
+      .select('valor')
+      .eq('chave', FALLBACK_KEY)
+      .maybeSingle()
+
+    if (Array.isArray(cfgRow?.valor)) {
+      const found = cfgRow.valor.find(
+        (c: any) =>
+          c &&
+          (String(c.id || '').toUpperCase() === clean || String(c.protocolo || '').toUpperCase() === clean)
+      )
+      if (found) {
+        fbContrato = normalizeContrato(found)
+      }
+    }
+  } catch {}
+
+  let contrato = reconciliarContratos(dbContrato, fbContrato)
+
+  if (!contrato) {
+    const { list } = await getAllFromStorage(true)
+    contrato = (
+      list.find(
+        c =>
+          String(c.id || '').trim().toUpperCase() === clean ||
+          String(c.protocolo || '').trim().toUpperCase() === clean
+      ) || null
+    )
+  }
 
   if (contrato && options?.includePdf) {
     contrato.documento_pdf_base64 = await obterPdfBase64(contrato, 'original')
@@ -811,8 +1003,50 @@ export async function buscarContratoPorToken(
   token: string,
   options?: { includePdf?: boolean }
 ): Promise<ContratoDigitalModel | null> {
-  const { list } = await getAllFromStorage()
-  const contrato = list.find(c => c.token_assinatura === token) || null
+  if (!token) return null
+  const supabase = getAdminClient()
+
+  let dbContrato: ContratoDigitalModel | null = null
+  let fbContrato: ContratoDigitalModel | null = null
+
+  // 1. Busca direta na tabela matriculas_digitais (O(1) indexada)
+  if (canTryTable()) {
+    try {
+      const { data, error } = await supabase
+        .from('matriculas_digitais')
+        .select('*')
+        .eq('token_assinatura', token)
+        .maybeSingle()
+
+      if (!error && data) {
+        dbContrato = normalizeContrato(data)
+      }
+    } catch {}
+  }
+
+  // 2. Busca direta no fallback
+  try {
+    const { data: cfgRow } = await supabase
+      .from('configuracoes')
+      .select('valor')
+      .eq('chave', FALLBACK_KEY)
+      .maybeSingle()
+
+    if (Array.isArray(cfgRow?.valor)) {
+      const found = cfgRow.valor.find((c: any) => c && c.token_assinatura === token)
+      if (found) {
+        fbContrato = normalizeContrato(found)
+      }
+    }
+  } catch {}
+
+  let contrato = reconciliarContratos(dbContrato, fbContrato)
+
+  // 3. Fallback de contingência caso os passos anteriores não encontrem
+  if (!contrato) {
+    const { list } = await getAllFromStorage(true)
+    contrato = list.find(c => c.token_assinatura === token) || null
+  }
 
   if (contrato && options?.includePdf) {
     contrato.documento_pdf_base64 = await obterPdfBase64(contrato, 'original')
@@ -831,9 +1065,48 @@ export async function buscarContratoPorProtocolo(
   protocolo: string,
   options?: { includePdf?: boolean }
 ): Promise<ContratoDigitalModel | null> {
-  const { list } = await getAllFromStorage()
-  const clean = protocolo.trim().toUpperCase()
-  const contrato = list.find(c => c.protocolo.toUpperCase() === clean) || null
+  const clean = String(protocolo || '').trim().toUpperCase()
+  if (!clean) return null
+  const supabase = getAdminClient()
+
+  let dbContrato: ContratoDigitalModel | null = null
+  let fbContrato: ContratoDigitalModel | null = null
+
+  if (canTryTable()) {
+    try {
+      const { data, error } = await supabase
+        .from('matriculas_digitais')
+        .select('*')
+        .ilike('protocolo', clean)
+        .maybeSingle()
+
+      if (!error && data) {
+        dbContrato = normalizeContrato(data)
+      }
+    } catch {}
+  }
+
+  try {
+    const { data: cfgRow } = await supabase
+      .from('configuracoes')
+      .select('valor')
+      .eq('chave', FALLBACK_KEY)
+      .maybeSingle()
+
+    if (Array.isArray(cfgRow?.valor)) {
+      const found = cfgRow.valor.find((c: any) => c && String(c.protocolo || '').toUpperCase() === clean)
+      if (found) {
+        fbContrato = normalizeContrato(found)
+      }
+    }
+  } catch {}
+
+  let contrato = reconciliarContratos(dbContrato, fbContrato)
+
+  if (!contrato) {
+    const { list } = await getAllFromStorage(true)
+    contrato = list.find(c => c.protocolo.toUpperCase() === clean) || null
+  }
 
   if (contrato && options?.includePdf) {
     contrato.documento_pdf_base64 = await obterPdfBase64(contrato, 'original')

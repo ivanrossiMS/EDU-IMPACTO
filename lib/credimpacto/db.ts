@@ -213,17 +213,23 @@ export async function dbGetEmprestimos(filtros?: {
   const loansMap = new Map<string, CredImpactoEmprestimo>()
 
   // 1. Tenta buscar na tabela dedicada
+  let dedicatedSucceeded = false
   if (isCredImpactoDedicatedAvailable !== false) {
     try {
-      const query = sb
+      let query = sb
         .from('credimpacto_emprestimos')
         .select('*')
         .order('created_at', { ascending: false })
+
+      if (filtros?.status && filtros.status !== 'todos') {
+        query = query.eq('status', filtros.status)
+      }
 
       const { data: emprestimos, error } = await query
 
       if (!error && Array.isArray(emprestimos)) {
         isCredImpactoDedicatedAvailable = true
+        dedicatedSucceeded = true
         const empIds = emprestimos.map((e) => e.id)
         let parcelasMap: Record<string, CredImpactoParcela[]> = {}
 
@@ -279,30 +285,32 @@ export async function dbGetEmprestimos(filtros?: {
     }
   }
 
-  // 2. Busca e mescla do fallback relatorios_records para resiliência máxima
-  try {
-    const { data: fallbackRows, error: fbError } = await sb
-      .from('relatorios_records')
-      .select('*')
-      .like('id', 'credimpacto:emp:%')
-      .order('created_at', { ascending: false })
+  // 2. Busca do fallback relatorios_records caso a tabela dedicada não esteja disponível ou tenha falhado
+  if (!dedicatedSucceeded) {
+    try {
+      const { data: fallbackRows, error: fbError } = await sb
+        .from('relatorios_records')
+        .select('*')
+        .like('id', 'credimpacto:emp:%')
+        .order('created_at', { ascending: false })
 
-    if (!fbError && Array.isArray(fallbackRows)) {
-      for (const row of fallbackRows) {
-        const id = row.id.replace('credimpacto:emp:', '')
-        const existing = loansMap.get(id)
-        if (!existing || (!existing.parcelas?.length && row.dados?.parcelas?.length)) {
-          loansMap.set(id, {
-            ...row.dados,
-            id,
-            createdAt: row.created_at || row.dados?.createdAt,
-            updatedAt: row.dados?.updatedAt || row.created_at
-          })
+      if (!fbError && Array.isArray(fallbackRows)) {
+        for (const row of fallbackRows) {
+          const id = row.id.replace('credimpacto:emp:', '')
+          const existing = loansMap.get(id)
+          if (!existing || (!existing.parcelas?.length && row.dados?.parcelas?.length)) {
+            loansMap.set(id, {
+              ...row.dados,
+              id,
+              createdAt: row.created_at || row.dados?.createdAt,
+              updatedAt: row.dados?.updatedAt || row.created_at
+            })
+          }
         }
       }
+    } catch (err: any) {
+      console.error('[dbGetEmprestimos fallback error]', err)
     }
-  } catch (err: any) {
-    console.error('[dbGetEmprestimos fallback error]', err)
   }
 
   let list = Array.from(loansMap.values())

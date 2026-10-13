@@ -54,12 +54,41 @@ async function convertHeicToJpeg(heicBuffer: Buffer): Promise<Buffer> {
   }
 }
 
+function isAllowedMediaPreviewUrl(rawUrl: string): boolean {
+  try {
+    const parsed = new URL(rawUrl)
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return false
+    const host = parsed.hostname.toLowerCase()
+    let supabaseHost = ''
+    try {
+      if (process.env.NEXT_PUBLIC_SUPABASE_URL) {
+        supabaseHost = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).hostname.toLowerCase()
+      }
+    } catch {}
+
+    if (supabaseHost && host === supabaseHost) return true
+    if (host.endsWith('.supabase.co') || host.endsWith('.supabase.in')) return true
+    return false
+  } catch {
+    return false
+  }
+}
+
+const SAFE_MEDIA_HEADERS = {
+  'X-Content-Type-Options': 'nosniff',
+  'Content-Security-Policy': "default-src 'none'; img-src 'self' data:; media-src 'self'; style-src 'unsafe-inline'",
+}
+
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const url = searchParams.get('url')
 
   if (!url) {
     return NextResponse.json({ error: 'URL do arquivo não informada' }, { status: 400 })
+  }
+
+  if (!isAllowedMediaPreviewUrl(url)) {
+    return NextResponse.json({ error: 'Domínio de mídia não autorizado para preview' }, { status: 403 })
   }
 
   try {
@@ -74,6 +103,7 @@ export async function GET(req: NextRequest) {
       const fileBuffer = fs.readFileSync(cachedFilePath)
       return new Response(new Uint8Array(fileBuffer), {
         headers: {
+          ...SAFE_MEDIA_HEADERS,
           'Content-Type': 'image/jpeg',
           'Content-Length': String(fileBuffer.length),
           'Cache-Control': 'public, max-age=31536000, immutable',
@@ -107,6 +137,7 @@ export async function GET(req: NextRequest) {
 
       return new Response(new Uint8Array(jpegBuffer), {
         headers: {
+          ...SAFE_MEDIA_HEADERS,
           'Content-Type': 'image/jpeg',
           'Content-Length': String(jpegBuffer.length),
           'Cache-Control': 'public, max-age=31536000, immutable',
@@ -115,13 +146,23 @@ export async function GET(req: NextRequest) {
       })
     }
 
-    // Se não for HEIC, repassa com o content-type original
-    const contentType = fetchRes.headers.get('content-type') || 'application/octet-stream'
+    // Se não for HEIC, repassa apenas tipos seguros de mídia (bloqueia HTML/SVG/JS inline)
+    const rawContentType = (fetchRes.headers.get('content-type') || 'application/octet-stream').toLowerCase()
+    const isSafeInline =
+      (rawContentType.startsWith('image/') && !rawContentType.includes('svg')) ||
+      rawContentType.startsWith('video/') ||
+      rawContentType.startsWith('audio/') ||
+      rawContentType === 'application/pdf'
+
+    const contentType = isSafeInline ? rawContentType : 'application/octet-stream'
+    const disposition = isSafeInline ? 'inline' : 'attachment'
+
     return new Response(new Uint8Array(inputBuffer), {
       headers: {
+        ...SAFE_MEDIA_HEADERS,
         'Content-Type': contentType,
         'Cache-Control': 'public, max-age=31536000, immutable',
-        'Content-Disposition': 'inline'
+        'Content-Disposition': disposition
       }
     })
   } catch (err: any) {

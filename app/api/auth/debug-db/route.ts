@@ -1,17 +1,13 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { requireProfile } from '@/lib/server/authGuard'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: Request) {
   try {
-    const urlObj = new URL(request.url)
-    const secret = urlObj.searchParams.get('secret')
-
-    // Secure authentication for the debug endpoint
-    if (secret !== 'debug123') {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const { errorResponse } = await requireProfile(['Master', 'Diretor Geral', 'Administrador', 'Administrador Master'], request)
+    if (errorResponse) return errorResponse
 
     const envUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
     const envServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY

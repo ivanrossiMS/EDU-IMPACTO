@@ -28,41 +28,47 @@ async function verifyCallerAuth(request: Request): Promise<{ authorized: boolean
     return { authorized: true }
   }
 
-  // 2. Header oficial do Vercel Cron
-  if (request.headers.get('x-vercel-cron') === '1' || request.headers.get('user-agent')?.includes('vercel-cron')) {
+  // 2. Header oficial do Vercel Cron (quando CRON_SECRET não estiver configurado)
+  if (!process.env.CRON_SECRET && request.headers.get('x-vercel-cron') === '1') {
     return { authorized: true }
   }
 
-  // 3. Chamadas internas em localhost
+  // 3. Chamadas internas em localhost (apenas em ambiente de desenvolvimento)
   const host = request.headers.get('host') || ''
-  if (host.includes('localhost') || host.includes('127.0.0.1')) {
+  if (process.env.NODE_ENV === 'development' && (host.includes('localhost') || host.includes('127.0.0.1'))) {
     return { authorized: true }
   }
 
-  // 3. Usuário autenticado com perfil administrativo
+  // 4. Usuário autenticado com perfil administrativo em system_users
   try {
-    const { user, errorResponse } = await requireAuth()
+    const { user, errorResponse } = await requireAuth(request)
     if (!errorResponse && user) {
       const supabase = getAdminClient()
+      const conds: string[] = []
+      if (user.id) conds.push(`id.eq.${user.id}`, `auth_id.eq.${user.id}`)
+      if (user.email) conds.push(`email.ilike.${user.email.trim()}`)
       const { data: dbUser } = await supabase
         .from('system_users')
-        .select('perfil, cargo')
-        .eq('id', user.id)
+        .select('perfil, cargo, status')
+        .or(conds.join(','))
+        .limit(1)
         .maybeSingle()
 
-      const ALLOWED_ROLES = [
-        'Direção',
-        'Diretor Geral',
-        'Administrador',
-        'Administrador Master',
-        'Admin',
-        'Master',
-      ]
-      const perfil = dbUser?.perfil || (user.user_metadata?.perfil as string) || ''
-      const cargo = dbUser?.cargo || (user.user_metadata?.cargo as string) || ''
+      if (dbUser && String(dbUser.status || 'ativo').toLowerCase() !== 'inativo') {
+        const ALLOWED_ROLES = [
+          'Direção',
+          'Diretor Geral',
+          'Administrador',
+          'Administrador Master',
+          'Admin',
+          'Master',
+        ]
+        const perfil = dbUser.perfil || ''
+        const cargo = dbUser.cargo || ''
 
-      if (ALLOWED_ROLES.some((r) => perfil.includes(r) || cargo.includes(r))) {
-        return { authorized: true }
+        if (ALLOWED_ROLES.some((r) => perfil.includes(r) || cargo.includes(r))) {
+          return { authorized: true }
+        }
       }
     }
   } catch {}

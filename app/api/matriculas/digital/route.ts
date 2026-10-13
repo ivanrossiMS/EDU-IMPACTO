@@ -18,6 +18,7 @@ import {
 import {
   detectDocumentFormat,
 } from '@/lib/converters/documentToPdfServer'
+import { EventoAuditoriaItem } from '@/lib/contracts/digitalEvidenceCertificate'
 import { v4 as uuidv4 } from 'uuid'
 import { getWhatsAppShareUrl, formatarMensagemWhatsApp } from '@/lib/whatsapp'
 
@@ -77,17 +78,57 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'O e-mail do signatário é obrigatório para validação.' }, { status: 400 })
     }
 
+    if (!body.escola_representante_id && !body.escola_cnpj && !body.escola_razao_social) {
+      return NextResponse.json({ error: 'A instituição emissora é obrigatória (Passo 1).' }, { status: 400 })
+    }
+
     const appUrl = getAppBaseUrl(request)
     const anoLetivo = String(body.ano_letivo || new Date().getFullYear())
     const dataCriacao = new Date().toISOString()
+
+    const escolaRepresentantes: Array<{
+      id?: string
+      nome: string
+      cpf: string
+      cargo: string
+      email?: string
+      telefone?: string
+      assinaturaBase64?: string | null
+    }> = Array.isArray(body.escola_representantes) && body.escola_representantes.length > 0
+      ? body.escola_representantes.map((rep: any) => ({
+          ...rep,
+          assinaturaBase64: rep.assinaturaBase64 || undefined,
+        }))
+      : (body.escola_signatario_id || body.escola_representante_nome
+          ? [
+              {
+                id: body.escola_signatario_id || body.escola_representante_id || undefined,
+                nome: body.escola_representante_nome || 'IVAN ROSSI SAMBRANA',
+                cpf: body.escola_representante_cpf || '00130220167',
+                cargo: body.escola_representante_cargo || 'Representante Legal / Diretor Geral',
+                email: body.escola_representante_email || undefined,
+                telefone: body.escola_representante_telefone || undefined,
+                assinaturaBase64: body.escola_representante_assinatura || undefined,
+              },
+            ]
+          : [])
+
+    if (escolaRepresentantes.length === 0) {
+      return NextResponse.json({ error: 'É obrigatório selecionar ao menos um representante da instituição para emissão do documento (Passo 2).' }, { status: 400 })
+    }
+
+    const repPrincipal = escolaRepresentantes[0]
     const repInfo = {
       id: body.escola_representante_id || undefined,
-      nome: body.escola_representante_nome || 'IVAN ROSSI SAMBRANA',
-      cpf: body.escola_representante_cpf || '00130220167',
-      cargo: body.escola_representante_cargo || 'Representante Legal / Diretor Geral',
+      signatarioId: body.escola_signatario_id || repPrincipal?.id || undefined,
+      nome: repPrincipal?.nome || body.escola_representante_nome || 'IVAN ROSSI SAMBRANA',
+      cpf: repPrincipal?.cpf || body.escola_representante_cpf || '00130220167',
+      cargo: repPrincipal?.cargo || body.escola_representante_cargo || 'Representante Legal / Diretor Geral',
       razaoSocial: body.escola_razao_social || 'COLÉGIO IMPACTO CENTRO DE ENSINO LTDA',
       cnpj: body.escola_cnpj || '04.395.789/0001-88',
       dataHoraAssinatura: dataCriacao,
+      assinaturaBase64: repPrincipal?.assinaturaBase64 || undefined,
+      representantes: escolaRepresentantes,
     }
 
     // Consulta o template personalizado de WhatsApp configurado para a escola
@@ -157,53 +198,7 @@ export async function POST(request: Request) {
         const itemOriginalHash = calculateSha256(itemPdfBytes)
         const itemEventoHash = calculateSha256(`GENESIS|${itemId}|${dataCriacao}|CRIACAO|${clientIp}`)
 
-        const contratoItem: ContratoDigitalModel = {
-          id: itemId,
-          protocolo: itemProtocolo,
-          token_assinatura: itemToken,
-          aluno_id: body.aluno_id ? String(body.aluno_id) : '',
-          aluno_nome: body.aluno_nome ? String(body.aluno_nome) : '',
-          aluno_cpf: body.aluno_cpf || null,
-          aluno_turma: body.aluno_turma || null,
-          aluno_serie: body.aluno_serie || null,
-          aluno_data_nascimento: body.aluno_data_nascimento || null,
-          responsavel_id: body.responsavel_id || null,
-          responsavel_nome: signatarioNome,
-          responsavel_cpf: signatarioCpf,
-          responsavel_data_nascimento: signatarioDataNasc || null,
-          responsavel_email: signatarioEmail,
-          responsavel_telefone: signatarioTelefone,
-          responsavel_parentesco: signatarioCargo,
-          ano_letivo: anoLetivo,
-          tipo_documento: 'documento_upload',
-          titulo_documento: itemTitulo,
-          valor_anuidade: 0,
-          valor_mensalidade: 0,
-          num_parcelas: 0,
-          desconto_percent: 0,
-          dia_vencimento: 0,
-          primeiro_vencimento: null,
-          status: 'pendente',
-          versao_documento: 'v1.0',
-          documento_original_hash: itemOriginalHash,
-          documento_pdf_base64: itemCleanBase64,
-          otp_tentativas: 0,
-          evidencias: {
-            criadoPor: user?.email || 'Administração Escolar',
-            ipCriacao: clientIp,
-            assinadoPelaEscola: true,
-            arquivoOriginalNome: itemNomeOriginal,
-            formatoOriginal: itemFormat,
-            tamanhoBytes: itemPdfBytes.length,
-            totalPaginas: itemTotalPaginas,
-            isUploadProprio: true,
-            emissaoEmLote: true,
-            loteIndice: idx + 1,
-            loteTotal: body.documentos.length,
-            autorizacoesExigidas: body.autorizacoes_exigidas || [],
-            escolaRepresentante: repInfo,
-          },
-          historico_eventos: [
+          const itemHistoricoEventos: EventoAuditoriaItem[] = [
             {
               id: `ev-init-${Date.now()}-${idx}`,
               timestamp: dataCriacao,
@@ -212,18 +207,74 @@ export async function POST(request: Request) {
               ip: clientIp,
               hash: itemEventoHash,
             },
-            {
-              id: `ev-sch-${Date.now()}-${idx}`,
+          ]
+
+          let lastItemHash = itemEventoHash
+          escolaRepresentantes.forEach((rep, repIdx) => {
+            const sigHash = calculateSha256(`${lastItemHash}|ASSINATURA_ESCOLA|${rep.cpf || ''}|${dataCriacao}|${clientIp}`)
+            lastItemHash = sigHash
+            itemHistoricoEventos.push({
+              id: `ev-sch-${Date.now()}-${idx}-${repIdx}`,
               timestamp: dataCriacao,
               evento: 'ASSINATURA_ESCOLA',
-              descricao: `Chancela institucional emitida por ${repInfo.nome} (${repInfo.cargo})`,
+              descricao: `Chancela institucional emitida por ${rep.nome} (${rep.cargo})`,
               ip: clientIp,
-              hash: calculateSha256(`${itemEventoHash}|ASSINATURA_ESCOLA|${dataCriacao}|${clientIp}`),
+              hash: sigHash,
+            })
+          })
+
+          const contratoItem: ContratoDigitalModel = {
+            id: itemId,
+            protocolo: itemProtocolo,
+            token_assinatura: itemToken,
+            aluno_id: body.aluno_id ? String(body.aluno_id) : '',
+            aluno_nome: body.aluno_nome ? String(body.aluno_nome) : '',
+            aluno_cpf: body.aluno_cpf || null,
+            aluno_turma: body.aluno_turma || null,
+            aluno_serie: body.aluno_serie || null,
+            aluno_data_nascimento: body.aluno_data_nascimento || null,
+            responsavel_id: body.responsavel_id || null,
+            responsavel_nome: signatarioNome,
+            responsavel_cpf: signatarioCpf,
+            responsavel_data_nascimento: signatarioDataNasc || null,
+            responsavel_email: signatarioEmail,
+            responsavel_telefone: signatarioTelefone,
+            responsavel_parentesco: signatarioCargo,
+            ano_letivo: anoLetivo,
+            tipo_documento: 'documento_upload',
+            titulo_documento: itemTitulo,
+            valor_anuidade: 0,
+            valor_mensalidade: 0,
+            num_parcelas: 0,
+            desconto_percent: 0,
+            dia_vencimento: 0,
+            primeiro_vencimento: null,
+            status: 'pendente',
+            versao_documento: 'v1.0',
+            documento_original_hash: itemOriginalHash,
+            documento_pdf_base64: itemCleanBase64,
+            otp_tentativas: 0,
+            evidencias: {
+              criadoPor: user?.email || 'Administração Escolar',
+              ipCriacao: clientIp,
+              assinadoPelaEscola: true,
+              arquivoOriginalNome: itemNomeOriginal,
+              formatoOriginal: itemFormat,
+              tamanhoBytes: itemPdfBytes.length,
+              totalPaginas: itemTotalPaginas,
+              isUploadProprio: true,
+              emissaoEmLote: true,
+              loteIndice: idx + 1,
+              loteTotal: body.documentos.length,
+              autorizacoesExigidas: body.autorizacoes_exigidas || [],
+              escolaRepresentante: repInfo,
+              posicoesAssinaturas: body.posicoes_assinaturas || undefined,
+              suprimirRubricaRodape: true,
             },
-          ],
-          created_at: dataCriacao,
-          updated_at: dataCriacao,
-        }
+            historico_eventos: itemHistoricoEventos,
+            created_at: dataCriacao,
+            updated_at: dataCriacao,
+          }
 
         const salvo = await salvarContrato(contratoItem)
         contratosSalvos.push(salvo)
@@ -340,6 +391,31 @@ export async function POST(request: Request) {
       ? `Pacote unificado contendo ${totalArquivos} documentos emitido no sistema por ${user?.email || 'Administração Escolar'}`
       : `Documento emitido no sistema por ${user?.email || 'Administração Escolar'}`
 
+    const unificadoHistoricoEventos: EventoAuditoriaItem[] = [
+      {
+        id: `ev-init-${Date.now()}`,
+        timestamp: dataCriacao,
+        evento: 'CRIACAO',
+        descricao: descricaoCriacao,
+        ip: clientIp,
+        hash: eventoCriacaoHash,
+      },
+    ]
+
+    let lastUnificadoHash = eventoCriacaoHash
+    escolaRepresentantes.forEach((rep, repIdx) => {
+      const sigHash = calculateSha256(`${lastUnificadoHash}|ASSINATURA_ESCOLA|${rep.cpf || ''}|${dataCriacao}|${clientIp}`)
+      lastUnificadoHash = sigHash
+      unificadoHistoricoEventos.push({
+        id: `ev-sch-${Date.now()}-${repIdx}`,
+        timestamp: dataCriacao,
+        evento: 'ASSINATURA_ESCOLA',
+        descricao: `Chancela institucional emitida por ${rep.nome} (${rep.cargo})`,
+        ip: clientIp,
+        hash: sigHash,
+      })
+    })
+
     const novoContrato: ContratoDigitalModel = {
       id,
       protocolo,
@@ -385,25 +461,10 @@ export async function POST(request: Request) {
         modoEnvio: totalArquivos > 1 ? 'unificado' : 'individual',
         autorizacoesExigidas: body.autorizacoes_exigidas || [],
         escolaRepresentante: repInfo,
+        posicoesAssinaturas: body.posicoes_assinaturas || undefined,
+        suprimirRubricaRodape: true,
       },
-      historico_eventos: [
-        {
-          id: `ev-init-${Date.now()}`,
-          timestamp: dataCriacao,
-          evento: 'CRIACAO',
-          descricao: descricaoCriacao,
-          ip: clientIp,
-          hash: eventoCriacaoHash,
-        },
-        {
-          id: `ev-sch-${Date.now()}`,
-          timestamp: dataCriacao,
-          evento: 'ASSINATURA_ESCOLA',
-          descricao: `Chancela institucional emitida por ${repInfo.nome} (${repInfo.cargo})`,
-          ip: clientIp,
-          hash: calculateSha256(`${eventoCriacaoHash}|ASSINATURA_ESCOLA|${dataCriacao}|${clientIp}`),
-        },
-      ],
+      historico_eventos: unificadoHistoricoEventos,
       created_at: dataCriacao,
       updated_at: dataCriacao,
     }

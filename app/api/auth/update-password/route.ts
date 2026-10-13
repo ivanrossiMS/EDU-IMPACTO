@@ -77,7 +77,7 @@ export async function POST(request: Request) {
       const emailForAuth = isValidEmail(targetEmail) ? targetEmail : virtualEmail
 
       if (targetUser) {
-        if (targetUser.last_sign_in_at) {
+        if (targetUser.last_sign_in_at || (existingByRealEmail && targetEmail && targetEmail !== alunoRealEmail)) {
           return NextResponse.json({ error: "Sua senha já foi configurada. Use o Login normal ou 'Esqueci minha senha' para receber um link por e-mail." }, { status: 409 })
         }
         
@@ -108,6 +108,12 @@ export async function POST(request: Request) {
           email: emailForAuth,
           password: newPass,
           email_confirm: true,
+          app_metadata: {
+            role_type: 'aluno',
+            perfil: 'Família',
+            cargo: 'Aluno',
+            aluno_id: aluno.id,
+          },
           user_metadata: {
             nome: aluno.nome,
             cargo: 'Aluno',
@@ -119,8 +125,8 @@ export async function POST(request: Request) {
         if (createErr) throw createErr
       }
 
-      // Also set email on alunos record if registeredEmail provided and different
-      if (registeredEmail && registeredEmail.trim() !== alunoRealEmail) {
+      // Also set email on alunos record if registeredEmail provided and not previously set
+      if (registeredEmail && (!alunoRealEmail || registeredEmail.trim().toLowerCase() === alunoRealEmail)) {
         await supabaseAdmin
           .from('alunos')
           .update({ email: registeredEmail.trim().toLowerCase() })
@@ -144,25 +150,39 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'Responsável não encontrado.' }, { status: 404 })
       }
 
-      // Use registered email from form, fallback to stored email
-      const targetEmail = (registeredEmail || resp.email || '').trim().toLowerCase()
+      const storedRespEmail = (resp.email || '').trim().toLowerCase()
+      // Use registered email from form only if no stored email exists, or if it matches stored email
+      const targetEmail = (storedRespEmail || registeredEmail || '').trim().toLowerCase()
       if (!targetEmail || !targetEmail.includes('@')) {
         return NextResponse.json({ error: 'E-mail válido é obrigatório para criar acesso do responsável.' }, { status: 400 })
       }
 
-      const existing = await findAuthUserByEmail(targetEmail)
+      // Se o responsável já possui e-mail cadastrado e tentaram enviar outro diferente sem autenticação,
+      // verifica primeiro o e-mail cadastrado no banco para impedir sequestro de conta
+      const existingByStored = storedRespEmail ? await findAuthUserByEmail(storedRespEmail) : null
+      const existingByTarget = (registeredEmail && registeredEmail.trim().toLowerCase() !== storedRespEmail)
+        ? await findAuthUserByEmail(registeredEmail.trim().toLowerCase())
+        : null
+      const existing = existingByStored || existingByTarget
 
       if (existing) {
-        if (existing.last_sign_in_at) {
+        if (existing.last_sign_in_at || (existingByStored && registeredEmail && registeredEmail.trim().toLowerCase() !== storedRespEmail)) {
           return NextResponse.json({ error: "Sua senha já foi configurada. Use o Login normal ou 'Esqueci minha senha' para receber um link por e-mail." }, { status: 409 })
         }
         const { error: upErr } = await supabaseAdmin.auth.admin.updateUserById(existing.id, { password: newPass })
         if (upErr && !isSamePasswordError(upErr)) throw upErr
       } else {
+        const finalEmailToCreate = storedRespEmail || (registeredEmail || '').trim().toLowerCase()
         const { error: createErr } = await supabaseAdmin.auth.admin.createUser({
-          email: targetEmail,
+          email: finalEmailToCreate,
           password: newPass,
           email_confirm: true,
+          app_metadata: {
+            role_type: 'responsavel',
+            perfil: 'Família',
+            cargo: 'Responsável',
+            responsavel_id: resp.id,
+          },
           user_metadata: {
             nome: resp.nome,
             cargo: 'Responsável',
@@ -173,8 +193,8 @@ export async function POST(request: Request) {
         if (createErr) throw createErr
       }
 
-      // Save registered email back to responsaveis if different
-      if (targetEmail !== (resp.email || '').trim().toLowerCase()) {
+      // Save registered email back to responsaveis ONLY if it was previously empty
+      if (!storedRespEmail && targetEmail) {
         await supabaseAdmin
           .from('responsaveis')
           .update({ email: targetEmail })

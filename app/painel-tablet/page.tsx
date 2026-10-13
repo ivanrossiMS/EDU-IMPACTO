@@ -771,7 +771,9 @@ function PainelTabletContent() {
     if (realtimeStatus !== 'online') {
       refreshCalls() // Dispara imediatamente
       const iv = setInterval(() => {
-        refreshCalls()
+        if (typeof document === 'undefined' || document.visibilityState === 'visible') {
+          refreshCalls()
+        }
       }, 30000)
       return () => clearInterval(iv)
     }

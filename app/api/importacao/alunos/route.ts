@@ -44,6 +44,10 @@ function cleanDigits(v: any): string {
 
 export async function POST(request: Request) {
   try {
+    const { requireStaff } = await import('@/lib/server/authGuard')
+    const { errorResponse } = await requireStaff(request)
+    if (errorResponse) return errorResponse
+
     const supabase = await createProtectedClient()
     const body = await request.json()
     const {

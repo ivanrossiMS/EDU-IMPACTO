@@ -398,7 +398,7 @@ function MonitorContent() {
   useEffect(() => {
     refreshCalls()
     const iv = setInterval(() => {
-      if (realtimeStatus !== 'online') {
+      if (realtimeStatus !== 'online' && (typeof document === 'undefined' || document.visibilityState === 'visible')) {
         refreshCalls()
       }
     }, 15000)
@@ -541,7 +541,16 @@ function playSchoolChime() {
       osc.stop(now + i * 0.15 + 0.55)
     })
 
-    return new Promise(resolve => setTimeout(resolve, 600))
+    return new Promise<void>(resolve =>
+      setTimeout(() => {
+        try {
+          if (ctx.state !== 'closed') {
+            void ctx.close().catch(() => {})
+          }
+        } catch {}
+        resolve()
+      }, 650)
+    )
   } catch (e) {
     return Promise.resolve()
   }

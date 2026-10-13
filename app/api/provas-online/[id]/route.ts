@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/server/authGuard'
+import { requireAuth, requireStaff } from '@/lib/server/authGuard'
 import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 import { dbGetProvaById, dbSaveProva, dbDeleteProva, dbGetTentativasByProvaId, dbGetTentativaById } from '@/lib/provas-online/db'
 import { sanitizeExamForParticipant, shouldPublishResults } from '@/lib/provas-online/engine'
@@ -30,21 +30,22 @@ export async function GET(
   const adminClient = getAdminClient()
   const { data: dbUser } = await adminClient
     .from('system_users')
-    .select('id, perfil, cargo, nome')
+    .select('id, perfil, cargo, nome, status')
     .or(`id.eq.${user.id},auth_id.eq.${user.id},email.eq.${user.email}`)
     .maybeSingle()
 
+  const isStaff = Boolean(dbUser && String(dbUser.status || 'ativo').toLowerCase() !== 'inativo')
   const cargo = dbUser?.cargo || user.user_metadata?.cargo || ''
   const perfil = dbUser?.perfil || user.user_metadata?.perfil || ''
-  const isStudent = cargo === 'Aluno' || perfil === 'Aluno' || Boolean(user.user_metadata?.aluno_id)
-  const isResponsible = cargo === 'Responsável' || perfil === 'Família' || perfil === 'Responsável'
+  const isStudent = !isStaff || cargo === 'Aluno' || perfil === 'Aluno' || Boolean(user.user_metadata?.aluno_id)
+  const isResponsible = !isStaff || cargo === 'Responsável' || perfil === 'Família' || perfil === 'Responsável'
 
   const { searchParams } = new URL(request.url)
   const requestedAlunoId = searchParams.get('aluno_id') || searchParams.get('slug')
 
   const tentativas = await dbGetTentativasByProvaId(prova.id)
 
-  if (isStudent || isResponsible) {
+  if (!isStaff || isStudent || isResponsible) {
     const alunoId = requestedAlunoId || user.user_metadata?.aluno_id || user.id
     const matricula = user.user_metadata?.matricula || ''
     const myTentativa = initialTentativaFromId || tentativas.find(t => 
@@ -70,7 +71,7 @@ export async function PUT(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { user, errorResponse } = await requireAuth(request)
+  const { errorResponse } = await requireStaff(request)
   if (errorResponse) return errorResponse
 
   const { id } = await params
@@ -110,7 +111,7 @@ export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { user, errorResponse } = await requireAuth(request)
+  const { errorResponse } = await requireStaff(request)
   if (errorResponse) return errorResponse
 
   const { id } = await params

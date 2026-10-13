@@ -1,9 +1,13 @@
 import { NextResponse } from 'next/server'
 import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
+import { requireStaff } from '@/lib/server/authGuard'
 
 export const dynamic = 'force-dynamic'
 
 export async function POST(request: Request) {
+  const { errorResponse } = await requireStaff(request)
+  if (errorResponse) return errorResponse
+
   try {
     const { type, id } = await request.json()
 

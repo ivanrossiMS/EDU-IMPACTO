@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/server/authGuard'
+import { requireProfile } from '@/lib/server/authGuard'
 import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 
 export const dynamic = 'force-dynamic'
@@ -40,7 +40,7 @@ function resolveTableName(endpointOrSheet: string): string {
 
 export async function POST(req: Request) {
   try {
-    const { user, errorResponse } = await requireAuth()
+    const { errorResponse } = await requireProfile(['Master', 'Diretor Geral', 'Administrador', 'Administrador Master'], req)
     if (errorResponse) return errorResponse
 
     const body = await req.json()

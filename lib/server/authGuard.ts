@@ -89,39 +89,174 @@ export async function requireAuth(req?: Request) {
   return { user, errorResponse: null }
 }
 
-/**
- * Utilitário para verificar permissão específica por perfil.
- */
-export async function requireProfile(allowedProfiles: string[]) {
-  const { user, errorResponse } = await requireAuth()
-  if (errorResponse) return { user: null, errorResponse }
+interface SystemUserCacheEntry {
+  dbUser: { id: string; nome?: string; perfil: string; cargo: string; status: string } | null
+  expiresAt: number
+}
 
-  // Buscando o perfil atualizado do system_users para evitar falsificação no user_metadata
-  const supabaseAdmin = require('./supabaseAdminSingleton').getAdminClient()
-  const queryId = user.user_metadata?.uid_legacy || user.id
-  
-  const { data: dbUser } = await supabaseAdmin
-    .from('system_users')
-    .select('perfil, status')
-    .or(`id.eq."${queryId}",auth_id.eq."${user.id}",email.eq."${user.email || ''}"`)
-    .maybeSingle()
+const SYSTEM_USER_CACHE_TTL_MS = 15_000
+const systemUserCache = new Map<string, SystemUserCacheEntry>()
 
-  const perfil = dbUser?.perfil || user.user_metadata?.perfil
-  // Se o usuário não está no system_users (ex: Aluno/Família), assumimos ativo se ele logou com sucesso,
-  // ou confiamos no status da tabela caso exista.
-  const status = dbUser ? dbUser.status : (user.user_metadata?.status || 'ativo')
+export function clearAuthGuardCache(userId?: string) {
+  if (userId) {
+    systemUserCache.delete(userId)
+  } else {
+    systemUserCache.clear()
+  }
+}
 
-  if (status !== 'ativo') {
-    return {
-      user,
-      errorResponse: NextResponse.json(
-        { error: 'Usuário inativo.' },
-        { status: 403 }
-      )
+async function fetchAuthoritativeSystemUser(user: any) {
+  const cacheKey = String(user?.id || '')
+  const now = Date.now()
+  if (cacheKey) {
+    const cached = systemUserCache.get(cacheKey)
+    if (cached && cached.expiresAt > now) {
+      return cached.dbUser
     }
   }
 
-  if (!allowedProfiles.includes(perfil)) {
+  const supabaseAdmin = require('./supabaseAdminSingleton').getAdminClient()
+  const queryId = user.user_metadata?.uid_legacy || user.id
+  const safeEmail = (user.email || '').trim().replace(/"/g, '')
+
+  const orParts = [`id.eq."${queryId}"`, `auth_id.eq."${user.id}"`]
+  if (safeEmail) {
+    orParts.push(`email.ilike."${safeEmail}"`)
+  }
+
+  const { data: dbUser } = await supabaseAdmin
+    .from('system_users')
+    .select('id, nome, perfil, cargo, status')
+    .or(orParts.join(','))
+    .limit(1)
+    .maybeSingle()
+
+  const normalized = dbUser
+    ? {
+        id: String(dbUser.id),
+        nome: dbUser.nome ? String(dbUser.nome) : undefined,
+        perfil: String(dbUser.perfil || ''),
+        cargo: String(dbUser.cargo || ''),
+        status: String(dbUser.status || 'ativo'),
+      }
+    : null
+
+  if (cacheKey) {
+    if (systemUserCache.size > 500) {
+      systemUserCache.clear()
+    }
+    systemUserCache.set(cacheKey, { dbUser: normalized, expiresAt: now + SYSTEM_USER_CACHE_TTL_MS })
+  }
+
+  return normalized
+}
+
+/**
+ * Resolve de forma autoritativa (via tabela system_users) se o usuário autenticado
+ * é um colaborador/administrador ativo (isStaff) ou se é Família/Aluno.
+ * NUNCA confia em user.user_metadata para conceder privilégios de colaborador.
+ */
+export async function resolveUserRole(req?: Request) {
+  const { user, errorResponse } = await requireAuth(req)
+  if (errorResponse || !user) {
+    return {
+      user: null,
+      dbUser: null,
+      isStaff: false,
+      isFamilyOrStudent: false,
+      perfil: '',
+      cargo: '',
+      errorResponse,
+    }
+  }
+
+  const dbUser = await fetchAuthoritativeSystemUser(user)
+  if (dbUser) {
+    if (dbUser.status.toLowerCase() === 'inativo') {
+      return {
+        user,
+        dbUser,
+        isStaff: false,
+        isFamilyOrStudent: false,
+        perfil: dbUser.perfil,
+        cargo: dbUser.cargo,
+        errorResponse: NextResponse.json({ error: 'Usuário inativo.' }, { status: 403 }),
+      }
+    }
+    return {
+      user,
+      dbUser,
+      isStaff: true,
+      isFamilyOrStudent: false,
+      perfil: dbUser.perfil,
+      cargo: dbUser.cargo,
+      errorResponse: null,
+    }
+  }
+
+  const metaCargo = String(user.user_metadata?.cargo || '')
+  const fallbackCargo = metaCargo === 'Aluno' ? 'Aluno' : 'Responsável'
+  return {
+    user,
+    dbUser: null,
+    isStaff: false,
+    isFamilyOrStudent: true,
+    perfil: 'Família',
+    cargo: fallbackCargo,
+    errorResponse: null,
+  }
+}
+
+/**
+ * Exige que o usuário autenticado seja um colaborador/administrador ativo em system_users.
+ * Bloqueia contas de Família/Responsável e Aluno mesmo se user_metadata for adulterado.
+ */
+export async function requireStaff(req?: Request) {
+  const resolved = await resolveUserRole(req)
+  if (resolved.errorResponse) {
+    return { user: null, dbUser: null, perfil: '', cargo: '', errorResponse: resolved.errorResponse }
+  }
+  if (!resolved.isStaff || !resolved.dbUser) {
+    return {
+      user: resolved.user,
+      dbUser: null,
+      perfil: resolved.perfil,
+      cargo: resolved.cargo,
+      errorResponse: NextResponse.json(
+        { error: 'Acesso negado. Operação restrita a colaboradores e administradores.' },
+        { status: 403 }
+      ),
+    }
+  }
+  return {
+    user: resolved.user,
+    dbUser: resolved.dbUser,
+    perfil: resolved.perfil,
+    cargo: resolved.cargo,
+    errorResponse: null,
+  }
+}
+
+/**
+ * Utilitário para verificar permissão específica por perfil.
+ * Nunca confia em user.user_metadata para perfis administrativos.
+ */
+export async function requireProfile(allowedProfiles: string[], req?: Request) {
+  const resolved = await resolveUserRole(req)
+  if (resolved.errorResponse) return { user: null, errorResponse: resolved.errorResponse }
+
+  const { user, dbUser, isStaff, perfil, cargo } = resolved
+
+  // Apenas se allowedProfiles incluir explicitamente 'Família', 'Responsável' ou 'Aluno'
+  // um usuário fora de system_users poderá passar.
+  const normalizedAllowed = allowedProfiles.map(p => p.trim().toLowerCase())
+  const effectivePerfil = isStaff && dbUser ? dbUser.perfil : perfil
+  const effectiveCargo = isStaff && dbUser ? dbUser.cargo : cargo
+
+  const matchesPerfil = normalizedAllowed.includes(effectivePerfil.trim().toLowerCase())
+  const matchesCargo = Boolean(effectiveCargo && normalizedAllowed.includes(effectiveCargo.trim().toLowerCase()))
+
+  if (!matchesPerfil && !matchesCargo) {
     return {
       user,
       errorResponse: NextResponse.json(
@@ -131,5 +266,6 @@ export async function requireProfile(allowedProfiles: string[]) {
     }
   }
 
-  return { user, perfil, errorResponse: null }
+  return { user, perfil: effectivePerfil, cargo: effectiveCargo, errorResponse: null }
 }
+

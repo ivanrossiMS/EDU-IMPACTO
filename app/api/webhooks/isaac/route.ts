@@ -80,32 +80,38 @@ export async function POST(request: Request) {
 
     console.log(`[Isaac Webhook] Parcela ${installmentId}: Status=${status} | Aluno=${studentName} (${studentExternalId})`)
 
-    // Atualiza o cache do Isaac em tempo real
+    // Atualiza o cache do Isaac em tempo real somente quando os dados foram confirmados pela API do Isaac
     if (installmentData && installmentData.id) {
       updateInstallmentInCache(installmentData)
     } else {
-      invalidateIsaacYearCache()
+      return NextResponse.json({
+        success: false,
+        message: 'Não foi possível confirmar a parcela na API do Isaac',
+      }, { status: 202 })
     }
 
     // 3. Registrar o evento em system_logs para auditoria da secretaria/financeiro
     try {
+      const logDetails = {
+        evento: eventType,
+        installmentId,
+        status,
+        descricao,
+        aluno: studentName,
+        alunoId: studentExternalId,
+        responsavel: guardianName,
+        valorPago: paidValue ? formatIsaacAmount(paidValue) : undefined,
+        pagoEm: installmentData?.paid_date || new Date().toISOString(),
+      }
       await supabase.from('system_logs').insert({
+        id: crypto.randomUUID(),
         data_hora: new Date().toISOString(),
         usuario_nome: 'Sistema (Isaac Webhook)',
         perfil: 'Sistema',
         modulo: 'Financeiro',
         acao: status === 'PAID' ? 'Baixa de Pagamento Isaac' : 'Atualização de Fatura Isaac',
-        detalhes: JSON.stringify({
-          evento: eventType,
-          installmentId,
-          status,
-          descricao,
-          aluno: studentName,
-          alunoId: studentExternalId,
-          responsavel: guardianName,
-          valorPago: paidValue ? formatIsaacAmount(paidValue) : undefined,
-          pagoEm: installmentData?.paid_date || new Date().toISOString(),
-        }),
+        descricao: `${descricao} — ${studentName} (${status})`,
+        detalhes_depois: JSON.stringify(logDetails),
       })
     } catch (logErr: any) {
       console.warn('[Isaac Webhook] Falha ao registrar log no Supabase:', logErr.message)

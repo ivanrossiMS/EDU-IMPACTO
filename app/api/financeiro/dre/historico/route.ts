@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
+import { requireStaff } from '@/lib/server/authGuard'
 import fs from 'fs/promises'
 import path from 'path'
 import crypto from 'crypto'
@@ -24,6 +25,9 @@ async function writeLocalStore(items: any[]) {
 }
 
 export async function GET(request: Request) {
+  const { errorResponse } = await requireStaff(request)
+  if (errorResponse) return errorResponse
+
   try {
     const supabase = await createClient()
     const { searchParams } = new URL(request.url)
@@ -84,6 +88,9 @@ export async function GET(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  const { errorResponse } = await requireStaff(request)
+  if (errorResponse) return errorResponse
+
   try {
     const supabase = await createClient()
     const { searchParams } = new URL(request.url)
@@ -112,6 +119,9 @@ export async function DELETE(request: Request) {
 
 // Renomear arquivo no Supabase e no arquivo local
 export async function PUT(request: Request) {
+  const { errorResponse } = await requireStaff(request)
+  if (errorResponse) return errorResponse
+
   try {
     const supabase = await createClient()
     const { id, novoNome } = await request.json()
@@ -138,6 +148,9 @@ export async function PUT(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const { errorResponse } = await requireStaff(request)
+  if (errorResponse) return errorResponse
+
   try {
     const supabase = await createClient()
     const body = await request.json()

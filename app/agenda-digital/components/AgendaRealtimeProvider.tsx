@@ -654,13 +654,17 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
       activeBindings.push({ table, filter, handler })
     }
 
+    let lastResumeSyncAt = 0
     const handleAppResume = () => {
       if (!isMounted) return
-      console.log('🔄 [Realtime] App em primeiro plano. Verificando canal consolidado e sincronizando dados...')
+      const now = Date.now()
       if (!mainChannel || mainChannel.state !== 'joined') {
         subscribeMainChannel()
       }
-      queryClient.invalidateQueries({ queryKey: ['agenda'], refetchType: 'all' })
+      if (now - lastResumeSyncAt < 5000) return
+      lastResumeSyncAt = now
+      console.log('🔄 [Realtime] App em primeiro plano. Verificando canal consolidado e sincronizando dados...')
+      queryClient.invalidateQueries({ queryKey: ['agenda'], refetchType: 'active' })
     }
 
     const handleVisibilityChange = () => {
@@ -677,11 +681,18 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
 
     let capListenerHandle: any = null
     import('@capacitor/app').then(({ App: CapApp }) => {
+      if (!isMounted) return
       CapApp.addListener('appStateChange', (state: any) => {
         if (state?.isActive) {
           handleAppResume()
         }
-      }).then(handle => { capListenerHandle = handle }).catch(() => {})
+      }).then(handle => {
+        if (!isMounted) {
+          try { handle.remove() } catch (_) {}
+          return
+        }
+        capListenerHandle = handle
+      }).catch(() => {})
     }).catch(() => {})
 
     // ── COMUNICADOS ──────────────────────────────────────────────────────
@@ -719,7 +730,7 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
       const hasAnyTarget = alvoTurmas.length > 0 || alvoTurmasIds.length > 0 || alvoGrupos.length > 0 || alvoAlunos.length > 0 || alvoFuncs.length > 0 || destino === 'todos' || destino === 'interno' || destino === 'funcionarios'
 
       if (eventType === 'DELETE' || match.isTarget || hasAnyTarget || !isFamilyRef.current) {
-        // Inserção otimista em 0ms no cache do React Query
+        // Atualização otimista em 0ms no cache do React Query (evita refetch HTTP em cascata a cada leitura/ciência)
         if (eventType === 'INSERT') {
           queryClient.setQueriesData({ queryKey: ['agenda', 'comunicados'] }, (oldData: any) => {
             if (!oldData || !oldData.pages) return oldData
@@ -730,6 +741,7 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
               pages: [[normalizedItem, ...firstPage], ...oldData.pages.slice(1)]
             }
           })
+          queryClient.invalidateQueries({ queryKey: ['agenda', 'comunicados'], refetchType: 'active' })
         } else if (eventType === 'UPDATE') {
           queryClient.setQueriesData({ queryKey: ['agenda', 'comunicados'] }, (oldData: any) => {
             if (!oldData || !oldData.pages) return oldData
@@ -750,7 +762,6 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
         }
 
         window.dispatchEvent(new CustomEvent(`ad:comunicados-${eventType.toLowerCase()}`, { detail: { ...payload, item: normalizedItem } }))
-        queryClient.invalidateQueries({ queryKey: ['agenda', 'comunicados'], refetchType: 'all' })
       }
 
       if (eventType === 'INSERT' && (merged.status === 'enviado' || merged.dados?.status === 'enviado')) {
@@ -793,13 +804,35 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
 
     // ── RESPOSTAS / CONVERSAS DE COMUNICADOS ─────────────────────────────
     createBinding('comunicados_respostas', { event: '*', schema: 'public', table: 'comunicados_respostas' }, payload => {
+      const msgRow = payload.eventType === 'DELETE' ? payload.old : payload.new
+      if (isFamilyRef.current && !isColaboradorAccessRef.current && !isMasterAdminRef.current && msgRow) {
+        const myCandidateIds = new Set<string>(
+          [
+            currentUserRef.current?.id,
+            currentUserRef.current?.responsavel_id,
+            currentUserRef.current?.aluno_id,
+            alunoIdRef.current,
+            ...meusAlunosRef.current.map((s: any) => s?.id),
+            ...meusAlunosRef.current.map((s: any) => s?.matricula),
+          ]
+            .filter(Boolean)
+            .map(v => String(v).trim())
+        )
+        const remId = String(msgRow.remetente_id || '').trim()
+        const destId = String(msgRow.destinatario_id || '').trim()
+        const isRelatedToFamily =
+          myCandidateIds.has(remId) ||
+          (destId ? myCandidateIds.has(destId) : Boolean(msgRow.is_admin))
+        if (!isRelatedToFamily) return
+      }
+
       console.log('⚡ [Realtime] Nova resposta/conversa em comunicado:', payload.eventType, payload.new?.comunicado_id);
       if (payload.eventType === 'INSERT' && payload.new?.comunicado_id) {
         addOrUpdateCachedMessage(payload.new.comunicado_id, payload.new as any);
       } else if (payload.eventType === 'DELETE' && payload.old?.comunicado_id && payload.old?.id) {
         removeCachedMessage(payload.old.comunicado_id, payload.old.id);
       }
-      queryClient.invalidateQueries({ queryKey: ['agenda', 'comunicados'], refetchType: 'all' });
+      queryClient.invalidateQueries({ queryKey: ['agenda', 'comunicados'], refetchType: 'active' });
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('agenda-digital:unread-updated'));
         window.dispatchEvent(new CustomEvent('agenda-digital:conversas-updated', { detail: payload }));
@@ -1017,6 +1050,11 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
       const currentIsMasterAdmin = isMasterAdminRef.current
 
       const matchingStudent = currentMeusAlunos.find(s => String(s.id) === rowAlunoId) || (currentAlunoId === rowAlunoId ? currentAlunoObj : null)
+
+      // Se for perfil família puro e o registro de frequência for de outro aluno, ignora antes de invalidar queries
+      if (!currentIsColaboradorAccess && !currentIsMasterAdmin && currentIsFamily && !matchingStudent) {
+        return
+      }
 
       // Invalidação silenciosa para manter tabelas e gráficos sincronizados em background
       window.dispatchEvent(new CustomEvent(`ad:frequencias-${eventType.toLowerCase()}`, { detail: payload }))

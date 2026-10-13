@@ -1,10 +1,5 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 
 /**
  * GET /api/portaria/cron-push
@@ -25,12 +20,16 @@ const supabase = createClient(
  *   c) Emitir alertas no log para o time de operações
  */
 export async function GET(req: Request) {
+  const supabase = getAdminClient()
   // Verificar se é uma chamada autorizada do Vercel Cron
   const authHeader = req.headers.get('authorization')
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}` && process.env.CRON_SECRET) {
-    // Permitir chamadas locais de teste sem secret
+  const isCronSecretValid = Boolean(process.env.CRON_SECRET && authHeader === `Bearer ${process.env.CRON_SECRET}`)
+  const isVercelCronWithoutSecret = !process.env.CRON_SECRET && req.headers.get('x-vercel-cron') === '1'
+  if (!isCronSecretValid && !isVercelCronWithoutSecret) {
+    // Permitir chamadas locais de teste apenas em ambiente de desenvolvimento
     const host = req.headers.get('host') || ''
-    if (!host.includes('localhost') && !host.includes('127.0.0.1')) {
+    const isLocalDev = process.env.NODE_ENV === 'development' && (host.includes('localhost') || host.includes('127.0.0.1'))
+    if (!isLocalDev) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
   }

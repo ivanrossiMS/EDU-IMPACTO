@@ -51,15 +51,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {/* Escudo global contra ChunkLoadError e unhandled rejections */}
         <GlobalCrashShield />
         <GlobalButtonEffects />
-        <Suspense fallback={null}>
-          <GlobalNavigationLoader />
-        </Suspense>
         <CapacitorResumeGuard />
         <ReactQueryProvider>
           <AppProvider>
             <GlobalLogoutOverlay />
             <Suspense fallback={null}>
               <GlobalModuleTransitionOverlay />
+            </Suspense>
+            <Suspense fallback={null}>
+              <GlobalNavigationLoader />
             </Suspense>
             <GlobalNotificationProvider />
             <KeyboardProvider>

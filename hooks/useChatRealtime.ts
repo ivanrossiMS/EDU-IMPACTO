@@ -67,8 +67,13 @@ export function useChatRealtime(alunoId?: string) {
       }
     }, 60_000)
 
+    let unreadSyncTimer: ReturnType<typeof setTimeout> | null = null
     const handleUnreadSync = () => {
-      fetchUnread()
+      if (unreadSyncTimer) clearTimeout(unreadSyncTimer)
+      unreadSyncTimer = setTimeout(() => {
+        unreadSyncTimer = null
+        fetchUnread()
+      }, 150)
     }
 
     window.addEventListener('chat:unread-changed', handleUnreadSync)
@@ -76,6 +81,7 @@ export function useChatRealtime(alunoId?: string) {
 
     return () => {
       clearInterval(interval)
+      if (unreadSyncTimer) clearTimeout(unreadSyncTimer)
       document.removeEventListener('visibilitychange', handleVisibility)
       window.removeEventListener('chat:unread-changed', handleUnreadSync)
       window.removeEventListener('chat:conversation-updated', handleUnreadSync)

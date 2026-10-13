@@ -13,6 +13,14 @@ const CACHE_TTL = 300_000; // 5 minutos
 // Chaves que são puramente visuais/públicas e não necessitam de bloqueio por autenticação
 const PUBLIC_KEYS = ['ad_banner', 'ad_config', 'cfgTurnos', 'cfgTiposOcorrencia'];
 
+// Chaves sensíveis exclusivas da equipe administrativa (nunca expostas a família/aluno)
+const SENSITIVE_STAFF_ONLY_CONFIG_KEYS = new Set([
+  'zapsign_api_token',
+  'matriculas_digitais_config',
+  'matriculas_digitais_list',
+  'matriculas_contratos_list',
+]);
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
   const chave = searchParams.get('chave')
@@ -20,16 +28,25 @@ export async function GET(request: Request) {
 
   // Verifica se as chaves solicitadas são todas públicas
   let isPublicRequest = false;
+  let touchesSensitiveKey = false;
   if (chaves) {
     const keys = chaves.split(',').map(k => k.trim()).filter(Boolean);
-    isPublicRequest = keys.every(k => PUBLIC_KEYS.includes(k));
+    isPublicRequest = keys.length > 0 && keys.every(k => PUBLIC_KEYS.includes(k));
+    touchesSensitiveKey = keys.some(k => SENSITIVE_STAFF_ONLY_CONFIG_KEYS.has(k));
   } else if (chave) {
     isPublicRequest = PUBLIC_KEYS.includes(chave);
+    touchesSensitiveKey = SENSITIVE_STAFF_ONLY_CONFIG_KEYS.has(chave);
   }
 
   // Se não for uma requisição apenas de chaves públicas, exige autenticação
   if (!isPublicRequest) {
-    const { user, errorResponse } = await requireAuth(request)
+    const { errorResponse } = await requireAuth(request)
+    if (errorResponse) return errorResponse
+  }
+
+  if (touchesSensitiveKey) {
+    const { requireStaff } = await import('@/lib/server/authGuard')
+    const { errorResponse } = await requireStaff(request)
     if (errorResponse) return errorResponse
   }
 
@@ -94,14 +111,20 @@ export async function GET(request: Request) {
 
 
   // ── All configs ─────────────────────────────────────────────────
+  const { resolveUserRole } = await import('@/lib/server/authGuard')
+  const { isStaff } = await resolveUserRole(request)
   const { data, error } = await supabase.from('configuracoes').select('*')
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(data || [])
+  const filteredData = isStaff
+    ? (data || [])
+    : (data || []).filter((item: any) => !SENSITIVE_STAFF_ONLY_CONFIG_KEYS.has(String(item.chave || '')))
+  return NextResponse.json(filteredData, { headers: cacheHeaders })
 }
 
 // POST /api/configuracoes  { chave: 'cfgDisciplinas', valor: [...] }
 export async function POST(request: Request) {
-  const { user, errorResponse } = await requireAuth(request)
+  const { requireStaff } = await import('@/lib/server/authGuard')
+  const { errorResponse } = await requireStaff(request)
   if (errorResponse) return errorResponse
 
   const supabase = getAdminClient();

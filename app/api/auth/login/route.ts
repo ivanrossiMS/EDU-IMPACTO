@@ -458,12 +458,23 @@ export async function POST(request: NextRequest) {
 
     if (user) {
       const currentMeta = user.user_metadata || {}
-      let hasChanges = false
+      const currentAppMeta = user.app_metadata || {}
+      const expectedRoleType = dbSystemUser ? 'staff' : (userType === 'aluno' ? 'aluno' : 'responsavel')
+      let hasChanges = currentAppMeta.role_type !== expectedRoleType
       for (const key of Object.keys(userMetadataUpdate)) {
         if (currentMeta[key] !== userMetadataUpdate[key]) hasChanges = true
       }
       if (hasChanges) {
         supabaseAdmin.auth.admin.updateUserById(user.id, {
+          app_metadata: {
+            ...currentAppMeta,
+            role_type: expectedRoleType,
+            perfil,
+            cargo,
+            ...(dbSystemUser?.id ? { system_user_id: dbSystemUser.id } : {}),
+            ...(responsavel_id ? { responsavel_id } : {}),
+            ...(aluno_id ? { aluno_id } : {}),
+          },
           user_metadata: userMetadataUpdate
         }).catch((e: any) => console.warn('[login] metadata update failed:', e.message))
       }

@@ -14,7 +14,8 @@
  */
 
 import { NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/server/authGuard'
+import { resolveUserRole } from '@/lib/server/authGuard'
+import { checkResponsavelRelationship } from '@/lib/server/notificationHelper'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 import { isaacRequest, formatIsaacAmount, getEffectiveAmount, IsaacInstallment } from '@/lib/isaac'
 import { getOrFetchYearCache } from '@/lib/isaacCache'
@@ -171,7 +172,7 @@ function isInstallmentForStudent(
 }
 
 export async function GET(request: Request) {
-  const { user, errorResponse } = await requireAuth()
+  const { user, isStaff, errorResponse } = await resolveUserRole(request)
   if (errorResponse) return errorResponse
 
   const supabase = await createProtectedClient()
@@ -203,6 +204,14 @@ export async function GET(request: Request) {
     dbAluno = al
   }
 
+  if (!isStaff && dbAluno) {
+    const checkId = user?.user_metadata?.responsavel_id || user?.user_metadata?.aluno_id || user?.id
+    const hasAccess = await checkResponsavelRelationship(checkId, String(dbAluno.id), user?.email)
+    if (!hasAccess) {
+      return NextResponse.json({ error: 'Acesso negado para consultar declaração deste aluno.' }, { status: 403 })
+    }
+  }
+
   // ── 2. Localizar Responsáveis Disponíveis e Titular ────────────────────────
   let dbResponsavel: any = null
   let responsaveisDisponiveis: any[] = []
@@ -224,6 +233,16 @@ export async function GET(request: Request) {
       .or(`cpf.eq.${cleanCpf},cpf.eq.${responsavelCpfParam}`)
       .maybeSingle()
     if (resp) dbResponsavel = resp
+  }
+
+  if (!isStaff && dbResponsavel && !dbAluno) {
+    const ownRespId = user?.user_metadata?.responsavel_id
+    const isSameResp =
+      (ownRespId && String(dbResponsavel.id) === String(ownRespId)) ||
+      (user?.email && dbResponsavel.email && String(dbResponsavel.email).trim().toLowerCase() === String(user.email).trim().toLowerCase())
+    if (!isSameResp) {
+      return NextResponse.json({ error: 'Acesso negado para consultar dados deste responsável.' }, { status: 403 })
+    }
   }
 
   // Se temos um Aluno identificado, buscar todos os seus responsáveis vinculados

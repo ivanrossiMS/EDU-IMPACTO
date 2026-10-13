@@ -42,8 +42,8 @@ export async function GET(request: Request) {
 
   try {
     // ── 0. Blindagem de Segurança (IDOR / Controle de Acesso) ─────────────────
-    const userRole = user?.user_metadata?.perfil || user?.user_metadata?.cargo || ''
     const ADMIN_FIN_ROLES = [
+      'Master',
       'Direção',
       'Diretor Geral',
       'Administrador',
@@ -53,15 +53,23 @@ export async function GET(request: Request) {
       'Secretaria',
     ]
 
-    let isAuthorizedStaff = ADMIN_FIN_ROLES.includes(userRole)
-    if (!isAuthorizedStaff && user?.id) {
+    let isAuthorizedStaff = false
+    if (user?.id || user?.email) {
+      const conds: string[] = []
+      if (user?.id) conds.push(`id.eq.${user.id}`, `auth_id.eq.${user.id}`)
+      if (user?.email) conds.push(`email.ilike.${user.email.trim()}`)
       const { data: dbUser } = await supabase
         .from('system_users')
-        .select('perfil, cargo')
-        .eq('id', user.id)
+        .select('perfil, cargo, status')
+        .or(conds.join(','))
+        .limit(1)
         .maybeSingle()
 
-      if (dbUser && (ADMIN_FIN_ROLES.includes(dbUser.perfil) || ADMIN_FIN_ROLES.includes(dbUser.cargo))) {
+      if (
+        dbUser &&
+        String(dbUser.status || 'ativo').toLowerCase() !== 'inativo' &&
+        (ADMIN_FIN_ROLES.includes(dbUser.perfil) || ADMIN_FIN_ROLES.includes(dbUser.cargo))
+      ) {
         isAuthorizedStaff = true
       }
     }

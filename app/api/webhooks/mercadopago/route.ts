@@ -29,12 +29,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: true, message: 'Ignored non-payment event' })
     }
 
-    if (!paymentId) {
-      return NextResponse.json({ success: true, message: 'No payment ID found' })
+    if (!paymentId || !/^[0-9a-zA-Z_-]+$/.test(String(paymentId))) {
+      return NextResponse.json({ success: true, message: 'No valid payment ID found' })
     }
 
     // 1. Consultar a API do Mercado Pago para ver o status real desse pagamento
-    const mpResponse = await fetch(`https://api.mercadopago.com/v1/payments/${paymentId}`, {
+    const mpResponse = await fetch(`https://api.mercadopago.com/v1/payments/${encodeURIComponent(String(paymentId))}`, {
       headers: {
         'Authorization': `Bearer ${process.env.MERCADOPAGO_ACCESS_TOKEN}`
       }
@@ -59,15 +59,21 @@ export async function POST(request: Request) {
       novoStatus = 'OVERDUE' // Ou algum status de erro/cancelado
     }
 
-    // 2. Atualizar no banco de dados
-    const { error: errUpdate } = await supabase
+    // 2. Atualizar no banco de dados (sem rebaixar cobrança já quitada como RECEIVED)
+    let updateQuery = supabase
       .from('agenda_cobrancas_destinatarios')
       .update({ 
         status: novoStatus,
         // Também salvamos o ID do pagamento final (já que a geração salvou o ID da "Preference")
-        asaas_payment_id: paymentId 
+        asaas_payment_id: String(paymentId)
       })
       .eq('id', externalReference)
+
+    if (novoStatus !== 'RECEIVED') {
+      updateQuery = updateQuery.neq('status', 'RECEIVED')
+    }
+
+    const { error: errUpdate } = await updateQuery
 
     if (errUpdate) {
       console.error('Erro ao atualizar Supabase pelo Webhook:', errUpdate)

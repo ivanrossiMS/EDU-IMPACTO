@@ -51,7 +51,8 @@ const ZodBaixaResponsavel = z.object({
  * O DRE e o Caixa recebem uma linha por parcela, permitindo rastreabilidade granular.
  */
 export async function POST(request: NextRequest) {
-  const { user, errorResponse } = await requireAuth()
+  const { requireStaff } = await import('@/lib/server/authGuard')
+  const { errorResponse } = await requireStaff(request)
   if (errorResponse) return errorResponse
 
   try {

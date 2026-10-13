@@ -25,9 +25,6 @@ const PUBLIC_PATHS = [
   '/api/auth/me',
   '/api/auth/verify-first-access',
   '/api/auth/update-password',
-  '/api/auth/reset-access',
-  '/api/auth/debug-db',
-  '/api/test',
   '/api/push/sync-subscription', // Sincronização direta de push OneSignal (App Móvel / WebView)
   '/monitor-tv',        // painel TV da portaria
   '/painel-tablet',     // tablet da portaria
@@ -49,9 +46,12 @@ const PUBLIC_PATHS = [
   '/api/matriculas/digital/assinar', // Assinatura pública selada com certificado
   '/api/matriculas/digital/reenviar-email', // Reenvio público com token ou protocolo
   '/api/matriculas/digital/pdf', // Visualização do PDF no portal de assinatura
+  '/api/matriculas/zapsign/webhook', // Webhook externo do ZapSign
   '/_next',             // assets Next.js
   '/favicon.ico',
   '/pdf.worker',
+  '/cmaps',
+  '/standard_fonts',
   '/api/chat/media/preview',
   '/manifest.webmanifest',
   '/manifest.json',
@@ -134,12 +134,20 @@ export async function middleware(request: NextRequest) {
 
             const perfil = data.user.user_metadata?.perfil || ''
             const cargo = data.user.user_metadata?.cargo || ''
+            const appRoleType = data.user.app_metadata?.role_type || ''
+            const hasOnlyFamilyIds = Boolean(data.user.user_metadata?.aluno_id || data.user.user_metadata?.responsavel_id) &&
+              !data.user.user_metadata?.system_user_id &&
+              !data.user.user_metadata?.colaborador_id &&
+              !data.user.user_metadata?.hasDualRole
             const isFamilyOrStudent = (
+              appRoleType === 'aluno' ||
+              appRoleType === 'responsavel' ||
               perfil === 'Família' ||
               perfil === 'Responsável' ||
               perfil === 'Aluno' ||
               cargo === 'Responsável' ||
-              cargo === 'Aluno'
+              cargo === 'Aluno' ||
+              hasOnlyFamilyIds
             )
 
             if (isFamilyOrStudent) {
@@ -160,8 +168,8 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next()
   }
 
-  // Permite checagem inicial de master/setup sem autenticação
-  if (pathname === '/api/configuracoes/usuarios' && request.nextUrl.searchParams.get('checkMaster') === 'true') {
+  // Permite checagem inicial de master/setup sem autenticação (apenas leitura GET)
+  if (request.method === 'GET' && pathname === '/api/configuracoes/usuarios' && request.nextUrl.searchParams.get('checkMaster') === 'true') {
     return NextResponse.next()
   }
 
@@ -339,16 +347,40 @@ export async function middleware(request: NextRequest) {
   // ── Usuário autenticado: verificar se não é família/aluno tentando acessar rotas do ERP ──
   const perfil = user.user_metadata?.perfil || ''
   const cargo = user.user_metadata?.cargo || ''
+  const appRoleType = user.app_metadata?.role_type || ''
+  const hasOnlyFamilyIds = Boolean(user.user_metadata?.aluno_id || user.user_metadata?.responsavel_id) &&
+    !user.user_metadata?.system_user_id &&
+    !user.user_metadata?.colaborador_id &&
+    !user.user_metadata?.hasDualRole
   const isFamilyOrStudent = (
+    appRoleType === 'aluno' ||
+    appRoleType === 'responsavel' ||
     perfil === 'Família' ||
     perfil === 'Responsável' ||
     perfil === 'Aluno' ||
     cargo === 'Responsável' ||
-    cargo === 'Aluno'
+    cargo === 'Aluno' ||
+    hasOnlyFamilyIds
   )
 
   // Família/Aluno só pode acessar /agenda-digital e suas APIs
   if (isFamilyOrStudent) {
+    const blockedForFamily = [
+      '/api/auth/reset-access',
+      '/api/auth/migrate',
+      '/api/auth/debug-db',
+      '/api/configuracoes/usuarios',
+      '/api/configuracoes/importar-backup',
+      '/api/configuracoes/google-drive',
+      '/api/configuracoes/logs',
+      '/api/configuracoes/midia',
+      '/api/provas-online/importar',
+    ]
+
+    const isExplicitlyBlocked = blockedForFamily.some(
+      p => pathname === p || pathname.startsWith(p + '/') || pathname.startsWith(p + '?')
+    )
+
     const allowedForFamily = [
       '/agenda-digital',
       '/assinar',
@@ -362,7 +394,6 @@ export async function middleware(request: NextRequest) {
       '/api/chat',
       '/api/aluno-responsavel',
       '/api/auth',
-      '/api/financeiro/baixar-por-responsavel',
       '/api/financeiro/titulos',
       '/api/cobrancas',
       '/api/upload-midia',
@@ -383,7 +414,7 @@ export async function middleware(request: NextRequest) {
       '/favicon.ico'
     ]
 
-    const isAllowed = allowedForFamily.some(
+    const isAllowed = !isExplicitlyBlocked && allowedForFamily.some(
       p => pathname === p || pathname.startsWith(p + '/') || pathname.startsWith(p + '?')
     )
 
@@ -416,6 +447,6 @@ export const config = {
      * - favicon.ico
      * - Arquivos com extensão (ex: .png, .svg, .jpg)
      */
-    '/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest|manifest.json|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|woff|woff2|ttf|webmanifest)$).*)',
+    '/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest|manifest.json|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|mjs|woff|woff2|ttf|bcmap|pfb|webmanifest)$).*)',
   ],
 }

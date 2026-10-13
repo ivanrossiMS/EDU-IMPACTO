@@ -6,6 +6,7 @@ import {
   registrarEventoAuditoria,
 } from '@/lib/server/matriculaDigitalRepository'
 import { generateOtpCode, calculateSha256, calculateEventHash, extractClientIp } from '@/lib/contracts/cryptoSignature'
+import { validarCPF } from '@/lib/contracts/sealUtils'
 import { enviarCodigoOtpEmail } from '@/lib/server/emailService'
 
 export const dynamic = 'force-dynamic'
@@ -50,6 +51,18 @@ export async function POST(request: Request) {
     // 1. Resolução do destinatário informado no formulário
     const emailEfetivo = (body.email_destinatario || contrato.responsavel_email || '').trim()
     const nomeEfetivo = (body.nome_destinatario || contrato.responsavel_nome || '').trim()
+
+    // Validação estrita do CPF do signatário se enviado
+    const rawCpf = body.cpf_destinatario || body.signatario_cpf
+    if (rawCpf) {
+      const cleanCpf = String(rawCpf).replace(/\D/g, '')
+      if (cleanCpf.length > 0) {
+        if (!validarCPF(cleanCpf)) {
+          return NextResponse.json({ error: 'O CPF informado é inválido. Verifique os números digitados.' }, { status: 400 })
+        }
+        contrato.responsavel_cpf = cleanCpf
+      }
+    }
 
     // 2. Gera código numérico de 6 dígitos
     const otpCode = generateOtpCode()

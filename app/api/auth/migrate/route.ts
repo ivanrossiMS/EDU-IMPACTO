@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { requireProfile } from '@/lib/server/authGuard'
 
 export const dynamic = 'force-dynamic'
 
@@ -8,6 +9,9 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
 
 export async function POST(request: Request) {
+  const { errorResponse } = await requireProfile(['Master', 'Diretor Geral', 'Administrador', 'Administrador Master'], request)
+  if (errorResponse) return errorResponse
+
   if (!supabaseServiceKey) {
     return NextResponse.json({ error: 'Falta SUPABASE_SERVICE_ROLE_KEY no env' }, { status: 500 })
   }

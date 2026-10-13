@@ -142,7 +142,7 @@ let cachedPoolKey = ''
  * Cria ou recupera o transporte nodemailer com pooling de conexão e timeouts otimizados
  */
 export function createTransporter(cfg: SmtpConfig, options: { pool?: boolean } = { pool: false }) {
-  const port = Number(cfg.port) || 587
+  const port = Number(cfg.port) || 465
   const isSecure = port === 465 ? true : Boolean(cfg.secure)
   const usePool = options.pool ?? false
   const poolKey = `${cfg.host}:${port}:${isSecure}:${cfg.user}:${cfg.pass}`
@@ -152,6 +152,7 @@ export function createTransporter(cfg: SmtpConfig, options: { pool?: boolean } =
   }
 
   const transporter = nodemailer.createTransport({
+    name: 'colegioimpacto.net',
     pool: usePool,
     maxConnections: usePool ? 3 : undefined,
     maxMessages: usePool ? 100 : undefined,
@@ -165,9 +166,9 @@ export function createTransporter(cfg: SmtpConfig, options: { pool?: boolean } =
     tls: {
       rejectUnauthorized: false,
     },
-    connectionTimeout: 10000,
-    greetingTimeout: 10000,
-    socketTimeout: 15000,
+    connectionTimeout: 12000,
+    greetingTimeout: 12000,
+    socketTimeout: 45000,
   })
 
   if (usePool) {
@@ -196,7 +197,7 @@ export function resetTransporterPool() {
 export async function sendMailWithResilience(
   cfg: SmtpConfig,
   mailOptions: SendMailOptions,
-  maxRetries = 4,
+  maxRetries = 2,
   options?: { useFreshConnection?: boolean }
 ): Promise<SentMessageInfo> {
   // 1. Extração e normalização de todos os destinatários informados (to, cc, bcc)
@@ -281,11 +282,13 @@ export async function sendMailWithResilience(
   }
 
   let lastError: any = null
-  const useFresh = options?.useFreshConnection ?? false
+  // Por padrão em ambiente transacional (Locaweb), utilizamos conexões limpas e dedicadas
+  // para eliminar o risco de sockets ociosos suspensos silenciosamente pelo proxy da Locaweb
+  const useFresh = options?.useFreshConnection ?? true
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      // Para envios com anexos volumosos ou após falhas, utiliza conexão dedicada e limpa
+      // Para envios transacionais, utiliza conexão dedicada e limpa
       const transporter = createTransporter(cfg, { pool: useFresh ? false : attempt === 1 })
       const info = await transporter.sendMail(mailOptions)
       return info
@@ -293,13 +296,18 @@ export async function sendMailWithResilience(
       lastError = err
       const msg = err.message || ''
       const isTransient =
+        (err.responseCode && err.responseCode >= 400 && err.responseCode < 500 && err.responseCode !== 450) ||
         err.responseCode === 451 ||
+        err.responseCode === 452 ||
         err.code === 'EMESSAGE' ||
         err.code === 'ECONNRESET' ||
         err.code === 'ETIMEDOUT' ||
         err.code === 'ESOCKET' ||
         msg.includes('451') ||
+        msg.includes('452') ||
         msg.includes('queue') ||
+        msg.includes('slow down') ||
+        msg.includes('too many') ||
         msg.includes('timeout') ||
         msg.includes('closed')
 
@@ -309,18 +317,21 @@ export async function sendMailWithResilience(
       resetTransporterPool()
 
       if (attempt < maxRetries && isTransient) {
-        // Backoff rápido com jitter (ex: 450ms, 900ms)
-        const delay = 450 * attempt + Math.floor(Math.random() * 200)
+        // Se for alerta de taxa de envio da Locaweb (452 slow down), aguarda intervalo maior para respiro do servidor
+        const isRateLimited = err.responseCode === 452 || msg.includes('slow down') || msg.includes('too many')
+        const delay = isRateLimited
+          ? 2000 * attempt + Math.floor(Math.random() * 500)
+          : 600 * attempt + Math.floor(Math.random() * 300)
         await new Promise(r => setTimeout(r, delay))
       } else if (!isTransient) {
-        // Se for erro de autenticação definitiva (535), aborta imediatamente
+        // Se for erro de autenticação definitiva (535) ou caixa inexistente (550), aborta imediatamente
         break
       }
     }
   }
 
   // Fallback bidirecional de porta caso todas as tentativas tenham falhado
-  const portAtual = Number(cfg.port) || 587
+  const portAtual = Number(cfg.port) || 465
   const portaContingencia = portAtual === 465 ? 587 : 465
   const secureContingencia = portaContingencia === 465
 
@@ -390,7 +401,7 @@ export async function enviarCodigoOtpEmail(params: {
               <table role="presentation" border="0" cellpadding="0" cellspacing="0" align="center" style="margin: 0 auto 12px auto;">
                 <tr>
                   <td align="center" bgcolor="#ffffff" style="background-color: #ffffff; width: 56px; height: 56px; border-radius: 50%; padding: 4px; text-align: center; vertical-align: middle; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);">
-                    <img src="cid:logo_impacto" alt="Colégio Impacto" width="48" height="48" style="display: block; margin: 0 auto; width: 48px; height: 48px; border: 0; outline: none; text-decoration: none;" />
+                    <img src="https://impacto-edu.net/logo-impacto-clean.png" alt="Colégio Impacto" width="48" height="48" style="display: block; margin: 0 auto; width: 48px; height: 48px; border: 0; outline: none; text-decoration: none;" />
                   </td>
                 </tr>
               </table>
@@ -472,30 +483,26 @@ export async function enviarCodigoOtpEmail(params: {
 
     // Sub-identificador único para que o Gmail nunca agrupe o e-mail em conversas antigas
     const antiThreadToken = params.protocolo ? params.protocolo.slice(-5) : Date.now().toString().slice(-4)
+    const cleanProtocol = (params.protocolo || 'req').replace(/[^a-zA-Z0-9-]/g, '')
+    const msgId = `<otp-${cleanProtocol}-${Date.now()}-${Math.random().toString(36).substring(2, 7)}@colegioimpacto.net>`
 
-    const info = await sendMailWithResilience(cfg, {
-      from: `"${cfg.fromName}" <${cfg.fromEmail}>`,
-      to: params.destinatario,
-      subject: `Código de Confirmação: ${params.codigoOtp} • Matrícula Digital Colégio Impacto [${antiThreadToken}]`,
-      text: plainText,
-      html: htmlContent,
-      attachments: [
-        {
-          filename: 'logo-impacto.png',
-          content: IMPACTO_LOGO_BUFFER,
-          cid: 'logo_impacto',
-          contentType: 'image/png',
+    const info = await sendMailWithResilience(
+      cfg,
+      {
+        messageId: msgId,
+        from: `"${cfg.fromName}" <${cfg.fromEmail}>`,
+        to: params.destinatario,
+        subject: `Código de Confirmação: ${params.codigoOtp} • Matrícula Digital Colégio Impacto [${antiThreadToken}]`,
+        text: plainText,
+        html: htmlContent,
+        headers: {
+          Importance: 'high',
+          'X-Entity-Ref-ID': `otp-${cleanProtocol}-${Date.now()}`,
         },
-      ],
-      headers: {
-        'X-Priority': '1 (Highest)',
-        'Priority': 'urgent',
-        'Importance': 'high',
-        'X-MSMail-Priority': 'High',
-        'Auto-Submitted': 'auto-generated',
-        'X-Entity-Ref-ID': `otp-${params.protocolo}-${Date.now()}`,
       },
-    })
+      3,
+      { useFreshConnection: true }
+    )
 
     return {
       success: true,
@@ -567,7 +574,7 @@ export async function enviarCopiaContratoAssinadoEmail(params: {
               <table role="presentation" border="0" cellpadding="0" cellspacing="0" align="center" style="margin: 0 auto 12px auto;">
                 <tr>
                   <td align="center" bgcolor="#ffffff" style="background-color: #ffffff; width: 56px; height: 56px; border-radius: 50%; padding: 4px; text-align: center; vertical-align: middle; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);">
-                    <img src="cid:logo_impacto" alt="Colégio Impacto" width="48" height="48" style="display: block; margin: 0 auto; width: 48px; height: 48px; border: 0; outline: none; text-decoration: none;" />
+                    <img src="https://impacto-edu.net/logo-impacto-clean.png" alt="Colégio Impacto" width="48" height="48" style="display: block; margin: 0 auto; width: 48px; height: 48px; border: 0; outline: none; text-decoration: none;" />
                   </td>
                 </tr>
               </table>
@@ -659,9 +666,13 @@ export async function enviarCopiaContratoAssinadoEmail(params: {
     // Token anti-thread para garantir entrega desvinculada de histórico
     const antiThreadToken = params.protocolo ? params.protocolo.slice(-5) : Date.now().toString().slice(-4)
 
+    const cleanProtocol = (params.protocolo || 'req').replace(/[^a-zA-Z0-9-]/g, '')
+    const msgId = `<doc-${cleanProtocol}-${Date.now()}-${Math.random().toString(36).substring(2, 7)}@colegioimpacto.net>`
+
     const info = await sendMailWithResilience(
       cfg,
       {
+        messageId: msgId,
         from: `"${cfg.fromName}" <${cfg.fromEmail}>`,
         to: params.destinatario,
         subject: `Contrato Assinado e Certificado: ${params.alunoNome} • Colégio Impacto [${antiThreadToken}]`,
@@ -669,20 +680,13 @@ export async function enviarCopiaContratoAssinadoEmail(params: {
         html: htmlContent,
         attachments: [
           {
-            filename: 'logo-impacto.png',
-            content: IMPACTO_LOGO_BUFFER,
-            cid: 'logo_impacto',
-            contentType: 'image/png',
-          },
-          {
             filename: nomeArquivo,
             content: params.pdfBuffer,
             contentType: 'application/pdf',
           },
         ],
         headers: {
-          'Auto-Submitted': 'auto-generated',
-          'X-Entity-Ref-ID': `doc-${params.protocolo}-${Date.now()}`,
+          'X-Entity-Ref-ID': `doc-${cleanProtocol}-${Date.now()}`,
         },
       },
       4,
@@ -1106,7 +1110,7 @@ export async function enviarEmailTeste(
               <table role="presentation" border="0" cellpadding="0" cellspacing="0" align="center" style="margin: 0 auto 12px auto;">
                 <tr>
                   <td align="center" bgcolor="#ffffff" style="background-color: #ffffff; width: 56px; height: 56px; border-radius: 50%; padding: 4px; text-align: center; vertical-align: middle; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);">
-                    <img src="cid:logo_impacto" alt="Colégio Impacto" width="48" height="48" style="display: block; margin: 0 auto; width: 48px; height: 48px; border: 0; outline: none; text-decoration: none;" />
+                    <img src="https://impacto-edu.net/logo-impacto-clean.png" alt="Colégio Impacto" width="48" height="48" style="display: block; margin: 0 auto; width: 48px; height: 48px; border: 0; outline: none; text-decoration: none;" />
                   </td>
                 </tr>
               </table>
@@ -1176,26 +1180,22 @@ export async function enviarEmailTeste(
   const tSend = Date.now()
 
   try {
-    const info = await sendMailWithResilience(cfg, {
-      from: `"${cfg.fromName || 'Colégio Impacto - Matrícula Digital'}" <${cfg.fromEmail || cfg.user}>`,
-      to: destLimpo,
-      subject: `[Teste SMTP] Homologação de E-mail Concluída (${protocoloTeste})`,
-      text: `Teste SMTP Homologado com sucesso para ${destLimpo}. Protocolo: ${protocoloTeste}.`,
-      html: htmlContent,
-      attachments: [
-        {
-          filename: 'logo-impacto.png',
-          content: IMPACTO_LOGO_BUFFER,
-          cid: 'logo_impacto',
-          contentType: 'image/png',
+    const info = await sendMailWithResilience(
+      cfg,
+      {
+        messageId: `<test-${protocoloTeste}-${Date.now()}@colegioimpacto.net>`,
+        from: `"${cfg.fromName || 'Colégio Impacto - Matrícula Digital'}" <${cfg.fromEmail || cfg.user}>`,
+        to: destLimpo,
+        subject: `[Teste SMTP] Homologação de E-mail Concluída (${protocoloTeste})`,
+        text: `Teste SMTP Homologado com sucesso para ${destLimpo}. Protocolo: ${protocoloTeste}.`,
+        html: htmlContent,
+        headers: {
+          Importance: 'high',
         },
-      ],
-      headers: {
-        'X-Priority': '1 (Highest)',
-        'Priority': 'urgent',
-        'Importance': 'high',
       },
-    })
+      3,
+      { useFreshConnection: true }
+    )
 
     emit(3, {
       status: 'success',

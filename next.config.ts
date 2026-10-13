@@ -86,25 +86,12 @@ const nextConfig: NextConfig = {
 
   // ── Security Headers ────────────────────────────────────────────
   async headers() {
-    const headersConfig = [
+    return [
       {
         source: '/(.*)',
         headers: securityHeaders,
       },
     ];
-    
-    // Cache static assets aggressively ONLY in production.
-    // In development, this breaks Next.js Fast Refresh and causes massive lag.
-    if (process.env.NODE_ENV === 'production') {
-      headersConfig.push({
-        source: '/_next/static/(.*)',
-        headers: [
-          { key: 'Cache-Control', value: 'public, max-age=31536000, immutable' },
-        ],
-      });
-    }
-
-    return headersConfig;
   },
 
   // ── Rewrites para Catracas iDFace (Modo iDCloud Personalizado) ───
@@ -117,6 +104,15 @@ const nextConfig: NextConfig = {
       { source: '/get_actions.fcgi', destination: '/api/portaria/webhook' },
       { source: '/set_result.fcgi', destination: '/api/portaria/webhook' },
     ];
+  },
+
+  // ── Webpack Custom Aliases ─────────────────────────────────────
+  webpack(config) {
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      'pdfjs-dist$': 'pdfjs-dist/build/pdf.min.mjs',
+    };
+    return config;
   },
 };
 

@@ -1,12 +1,13 @@
 import { NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/server/authGuard'
+import { resolveUserRole, requireStaff } from '@/lib/server/authGuard'
 import { supabaseServer as supabase } from '@/lib/supabaseServer'
 import { invalidateAlunosCache } from '@/lib/server/turmasGruposCache'
+import { checkResponsavelRelationship } from '@/lib/server/notificationHelper'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
-  const { user, errorResponse } = await requireAuth()
+  const { user, isStaff, errorResponse } = await resolveUserRole(request)
   if (errorResponse) return errorResponse
 
   try {
@@ -25,6 +26,14 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
 
     if (!student) {
       return NextResponse.json({ error: 'Aluno não encontrado' }, { status: 404 })
+    }
+
+    if (!isStaff && user) {
+      const checkId = user.user_metadata?.responsavel_id || user.user_metadata?.aluno_id || user.id
+      const isRelated = await checkResponsavelRelationship(String(checkId), String(student.id), user.email)
+      if (!isRelated) {
+        return NextResponse.json({ error: 'Acesso negado aos dados deste aluno.' }, { status: 403 })
+      }
     }
 
     // Build all possible refs for this student to match aluno_responsavel
@@ -163,6 +172,9 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
 }
 
 export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
+  const { errorResponse } = await requireStaff(request)
+  if (errorResponse) return errorResponse
+
   try {
     const { id } = await context.params
     const body = await request.json()

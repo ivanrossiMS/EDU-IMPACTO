@@ -12,11 +12,17 @@ import {
   Fingerprint, ChevronRight, Settings, Upload, FileText, CheckSquare,
   Loader2, BadgeCheck, Image as ImageIcon, Activity, Send, Ban, Sparkles,
   MoreHorizontal, School, GraduationCap, ChevronDown, ArrowUp, ArrowDown,
-  Layers, Files, FilePlus2
+  Layers, Files, FilePlus2, Move
 } from 'lucide-react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { SmtpDiagnosticModal } from '@/components/matriculas/SmtpDiagnosticModal'
 import { DigitalPagination, LimitePorPagina } from '@/components/matriculas/DigitalPagination'
+import {
+  PosicionadorAssinaturasModal,
+  PosicaoAssinatura,
+  SignatarioPosicionavel,
+  gerarPosicionamentoPadrao,
+} from '@/components/matriculas/PosicionadorAssinaturasModal'
 import { getWhatsAppShareUrl, DEFAULT_WHATSAPP_DIGITAL_TEMPLATE, formatarMensagemWhatsApp } from '@/lib/whatsapp'
 import {
   processarDocumentoParaPdf,
@@ -25,6 +31,19 @@ import {
   DocumentoUploadItem,
   formatBytes,
 } from '@/lib/converters/documentToPdfClient'
+import { validarCPF, ESTILOS_CHANCELA, gerarAssinaturaCaligraficaCanvas, sanitizeSignerName } from '@/lib/contracts/sealUtils'
+
+export interface SignatarioEscolaItem {
+  id: string
+  nome: string
+  cpf: string
+  cargo: string
+  email?: string
+  telefone?: string
+  padrao?: boolean
+  assinaturaBase64?: string | null
+  estiloCaligrafico?: string
+}
 
 export interface RepresentanteConfigItem {
   id: string
@@ -39,6 +58,38 @@ export interface RepresentanteConfigItem {
   cidadeUf?: string
   segmento?: string
   padrao?: boolean
+  assinaturaBase64?: string | null
+  signatarios?: SignatarioEscolaItem[]
+}
+
+function garantirSignatarios(rep?: RepresentanteConfigItem | null): SignatarioEscolaItem[] {
+  if (!rep) return []
+  const estilosPadrao = ['classica', 'formal']
+  if (Array.isArray(rep.signatarios) && rep.signatarios.length > 0) {
+    return rep.signatarios.map((s, idx) => {
+      const estilo = s.estiloCaligrafico || estilosPadrao[idx % estilosPadrao.length]
+      const sigB64 = s.assinaturaBase64 || (typeof document !== 'undefined' && s.nome ? gerarAssinaturaCaligraficaCanvas(s.nome, estilo) : null)
+      return {
+        ...s,
+        estiloCaligrafico: estilo,
+        assinaturaBase64: sigB64,
+      }
+    })
+  }
+  const defaultSig = rep.assinaturaBase64 || (typeof document !== 'undefined' ? gerarAssinaturaCaligraficaCanvas(rep.nome || 'IVAN ROSSI SAMBRANA', 'classica') : null)
+  return [
+    {
+      id: `${rep.id || 'rep'}_sig_1`,
+      nome: rep.nome || 'IVAN ROSSI SAMBRANA',
+      cpf: rep.cpf || '00130220167',
+      cargo: rep.cargo || 'Representante Legal / Diretor Geral',
+      email: rep.email || '',
+      telefone: rep.telefone || '',
+      padrao: true,
+      estiloCaligrafico: 'classica',
+      assinaturaBase64: defaultSig,
+    },
+  ]
 }
 
 interface ContratoItem {
@@ -428,6 +479,17 @@ export default function MatriculaDigitalPage() {
       cidadeUf: 'Campo Grande - MS',
       segmento: 'Ed. Infantil e Ens. Fund',
       padrao: true,
+      signatarios: [
+        {
+          id: 'sig_ivan_infantil',
+          nome: 'IVAN ROSSI SAMBRANA',
+          cpf: '00130220167',
+          cargo: 'Representante Legal / Diretor Geral',
+          email: 'direcao@colegioimpacto.net',
+          telefone: '(67) 99280-6464',
+          padrao: true,
+        },
+      ],
     },
     {
       id: 'rep_ensino_medio',
@@ -442,6 +504,17 @@ export default function MatriculaDigitalPage() {
       cidadeUf: 'Campo Grande - MS',
       segmento: 'Ens. Médio',
       padrao: false,
+      signatarios: [
+        {
+          id: 'sig_ivan_medio',
+          nome: 'IVAN ROSSI SAMBRANA',
+          cpf: '00130220167',
+          cargo: 'Representante Legal / Diretor Geral',
+          email: 'direcao@colegioimpacto.net',
+          telefone: '(67) 99280-6464',
+          padrao: true,
+        },
+      ],
     },
   ]
 
@@ -449,7 +522,9 @@ export default function MatriculaDigitalPage() {
     aluno_id: '',
     aluno_nome: '',
     titulo_documento: '',
-    escola_representante_id: 'rep_infantil_fundamental',
+    escola_representante_id: '',
+    escola_signatario_id: '',
+    escola_signatarios_ids: [] as string[],
     signatario_nome: '',
     signatario_cpf: '',
     signatario_data_nascimento: '',
@@ -521,6 +596,102 @@ export default function MatriculaDigitalPage() {
   const handleAbrirDiagnostico = (modo: 'test_connection' | 'send_test_email' = 'test_connection') => {
     setModoDiagnostico(modo)
     setModalDiagnosticoAberto(true)
+  }
+
+  // Estados do Posicionador Visual de Assinaturas
+  const [posicoesAssinaturas, setPosicoesAssinaturas] = useState<Record<string, PosicaoAssinatura>>({})
+  const [modalPosicionadorAberto, setModalPosicionadorAberto] = useState<boolean>(false)
+
+  // Total de páginas do documento ativo na emissão (seja 1 arquivo ou pacote unificado)
+  const totalPaginasDocumentoAtual = useMemo(() => {
+    if (previaEhPacoteUnificado && pdfUnificadoPreview?.totalPaginas) {
+      return pdfUnificadoPreview.totalPaginas
+    }
+    if (docPreviaAtivo?.totalPaginas) {
+      return docPreviaAtivo.totalPaginas
+    }
+    if (documentoPrincipal?.totalPaginas) {
+      return documentoPrincipal.totalPaginas
+    }
+    if (documentosUpload.length > 0) {
+      return documentosUpload.reduce((acc, d) => acc + (d.totalPaginas || 1), 0)
+    }
+    return 1
+  }, [previaEhPacoteUnificado, pdfUnificadoPreview, docPreviaAtivo, documentoPrincipal, documentosUpload])
+
+  // Signatários prontos para posicionamento visual no documento (Escola + Responsável)
+  const signatariosPosicionaveis = useMemo<SignatarioPosicionavel[]>(() => {
+    const list: SignatarioPosicionavel[] = []
+    const coresDisponiveis = ['#2563eb', '#7c3aed', '#0891b2', '#d97706', '#dc2626', '#4f46e5']
+
+    const listaRepresentantes = Array.isArray(configData.representantes) && configData.representantes.length > 0
+      ? configData.representantes
+      : DEFAULT_REPRESENTANTES_INICIAIS
+
+    const repAtivo = formNovo.escola_representante_id
+      ? listaRepresentantes.find(r => r.id === formNovo.escola_representante_id) || null
+      : null
+
+    const signatariosDoRep = repAtivo ? garantirSignatarios(repAtivo) : []
+    const idsSelecionados = Array.isArray(formNovo.escola_signatarios_ids)
+      ? formNovo.escola_signatarios_ids
+      : (formNovo.escola_signatario_id ? [formNovo.escola_signatario_id] : [])
+
+    const signatariosEscolhidos = signatariosDoRep.filter(s => idsSelecionados.includes(s.id))
+
+    if (signatariosEscolhidos.length === 0 && repAtivo) {
+      signatariosEscolhidos.push({
+        id: repAtivo.id,
+        nome: repAtivo.nome,
+        cargo: repAtivo.cargo,
+        cpf: repAtivo.cpf,
+      })
+    }
+
+    signatariosEscolhidos.forEach((s, idx) => {
+      list.push({
+        id: s.id,
+        nome: s.nome,
+        cargo: s.cargo,
+        cpf: s.cpf,
+        tipo: 'escola',
+        cor: coresDisponiveis[idx % coresDisponiveis.length],
+        assinaturaBase64: s.assinaturaBase64 || undefined,
+      })
+    })
+
+    if (formNovo.signatario_nome && formNovo.signatario_nome.trim()) {
+      list.push({
+        id: 'sig_responsavel_aluno',
+        nome: formNovo.signatario_nome.trim(),
+        cargo: formNovo.signatario_cargo || 'Responsável',
+        cpf: formNovo.signatario_cpf || undefined,
+        tipo: 'responsavel',
+        cor: '#10b981',
+      })
+    }
+
+    return list
+  }, [
+    configData.representantes,
+    DEFAULT_REPRESENTANTES_INICIAIS,
+    formNovo.escola_representante_id,
+    formNovo.escola_signatarios_ids,
+    formNovo.escola_signatario_id,
+    formNovo.signatario_nome,
+    formNovo.signatario_cargo,
+    formNovo.signatario_cpf,
+  ])
+
+  // Ação rápida: auto-posicionar signatários no rodapé da última página
+  const handleAutoPosicionarRodape = () => {
+    if (signatariosPosicionaveis.length === 0) {
+      toast.error('Selecione primeiro a instituição e os signatários que assinarão o documento.')
+      return
+    }
+    const novasPosicoes = gerarPosicionamentoPadrao(signatariosPosicionaveis, totalPaginasDocumentoAtual)
+    setPosicoesAssinaturas(novasPosicoes)
+    toast.success(`Assinaturas posicionadas no rodapé da página ${totalPaginasDocumentoAtual}!`)
   }
 
   // Estados do Verificador de Arquivo Local
@@ -675,7 +846,16 @@ export default function MatriculaDigitalPage() {
             } else if (seg === 'Ensino Médio') {
               seg = 'Ens. Médio'
             }
-            return { ...r, segmento: seg }
+            const signatarios = garantirSignatarios(r)
+            const sigPadrao = signatarios.find(s => s.padrao) || signatarios[0]
+            return {
+              ...r,
+              segmento: seg,
+              signatarios,
+              nome: sigPadrao?.nome || r.nome,
+              cpf: sigPadrao?.cpf || r.cpf,
+              cargo: sigPadrao?.cargo || r.cargo,
+            }
           })
           return {
             representante: data.representante || reps[0] || prev.representante,
@@ -1039,16 +1219,7 @@ export default function MatriculaDigitalPage() {
     setResponsaveisDisponiveis([])
     setResponsavelSelecionadoId(null)
 
-    // Auto-seleciona o CNPJ/Representante compatível com o segmento do aluno
-    const turmaStr = `${aluno.serie || ''} ${nomeTurmaCalculado || aluno.turma || ''} ${aluno.nivel || ''}`.toUpperCase()
-    const isMedio = turmaStr.includes('EM') || turmaStr.includes('MÉDIO') || turmaStr.includes('MEDIO')
-    const repSugerido = isMedio
-      ? configData.representantes.find(r => r.cnpj === '04.397.021/0001-43' || r.segmento?.toLowerCase().includes('médio'))
-      : configData.representantes.find(r => r.cnpj === '04.395.789/0001-88' || r.padrao)
-
-    if (repSugerido) {
-      setFormNovo(prev => ({ ...prev, escola_representante_id: repSugerido.id }))
-    }
+    // Conforme regra de negócio, a instituição e os representantes não vêm pré-selecionados (seleção manual obrigatória)
 
     // 1. Extração preliminar imediata a partir dos dados locais do aluno
     const listaInicial: ResponsavelOption[] = extrairResponsaveisDoAluno(aluno)
@@ -1266,13 +1437,62 @@ export default function MatriculaDigitalPage() {
       toast.error('Informe o e-mail do signatário para validação OTP.')
       return
     }
+    if (formNovo.signatario_cpf && formNovo.signatario_cpf.trim()) {
+      const cleanSignatarioCpf = formNovo.signatario_cpf.replace(/\D/g, '')
+      if (cleanSignatarioCpf.length !== 11 || !validarCPF(cleanSignatarioCpf)) {
+        toast.error('O CPF do signatário é inválido. Verifique os dígitos informados.')
+        return
+      }
+    }
+
+    if (!formNovo.escola_representante_id) {
+      toast.error('Por favor, selecione a Instituição Emissora (Passo 1).')
+      return
+    }
+
+    const idsSelecionados = Array.isArray(formNovo.escola_signatarios_ids)
+      ? formNovo.escola_signatarios_ids
+      : (formNovo.escola_signatario_id ? [formNovo.escola_signatario_id] : [])
+
+    if (idsSelecionados.length === 0) {
+      toast.error('Por favor, selecione ao menos um representante da instituição para assinar o documento (Passo 2).')
+      return
+    }
 
     setSalvandoContrato(true)
     try {
-      const repEscolhido = configData.representantes.find(r => r.id === formNovo.escola_representante_id) || configData.representantes[0]
+      const listaTodosReps = Array.isArray(configData.representantes) && configData.representantes.length > 0
+        ? configData.representantes
+        : DEFAULT_REPRESENTANTES_INICIAIS
+      const repEscolhido = listaTodosReps.find(r => r.id === formNovo.escola_representante_id)
+      if (!repEscolhido) {
+        toast.error('Instituição emissora não encontrada. Selecione a instituição no Passo 1.')
+        setSalvandoContrato(false)
+        return
+      }
+      const signatarios = garantirSignatarios(repEscolhido)
+      const signatariosEscolhidos = signatarios.filter(s => idsSelecionados.includes(s.id))
+      if (signatariosEscolhidos.length === 0) {
+        toast.error('Por favor, selecione ao menos um representante da instituição para assinar o documento (Passo 2).')
+        setSalvandoContrato(false)
+        return
+      }
+      const sigsFinais = signatariosEscolhidos
+      const sigPrincipal = sigsFinais[0]
+
+      // Prepara as posições visuais das assinaturas (ou auto-posiciona no rodapé caso não definidas manualmente)
+      const totalPaginasFinalDoc = modoEnvioMultiplo === 'separados'
+        ? (documentosUpload[0]?.totalPaginas || 1)
+        : totalPaginasDocumentoAtual
+
+      let posicoesArray = Object.values(posicoesAssinaturas)
+      if (posicoesArray.length === 0 && signatariosPosicionaveis.length > 0) {
+        const autoPos = gerarPosicionamentoPadrao(signatariosPosicionaveis, totalPaginasFinalDoc)
+        posicoesArray = Object.values(autoPos)
+      }
 
       const payloadBase: any = {
-        signatario_nome: formNovo.signatario_nome,
+        signatario_nome: sanitizeSignerName(formNovo.signatario_nome),
         signatario_email: formNovo.signatario_email,
         signatario_cpf: formNovo.signatario_cpf,
         signatario_telefone: formNovo.signatario_telefone,
@@ -1282,11 +1502,25 @@ export default function MatriculaDigitalPage() {
         aluno_nome: formNovo.aluno_nome || undefined,
         ano_letivo: formNovo.ano_letivo || ultimoAnoCadastrado,
         escola_representante_id: repEscolhido?.id,
-        escola_representante_nome: repEscolhido?.nome,
-        escola_representante_cpf: repEscolhido?.cpf,
-        escola_representante_cargo: repEscolhido?.cargo,
+        escola_signatario_id: sigPrincipal?.id,
+        escola_signatarios_ids: sigsFinais.map(s => s.id),
+        escola_representantes: sigsFinais.map(s => ({
+          id: s.id,
+          nome: s.nome,
+          cpf: s.cpf,
+          cargo: s.cargo,
+          email: s.email,
+          telefone: s.telefone,
+          assinaturaBase64: s.assinaturaBase64 || undefined,
+        })),
+        escola_representante_nome: sigPrincipal?.nome || repEscolhido?.nome,
+        escola_representante_cpf: sigPrincipal?.cpf || repEscolhido?.cpf,
+        escola_representante_cargo: sigPrincipal?.cargo || repEscolhido?.cargo,
+        escola_representante_assinatura: sigPrincipal?.assinaturaBase64 || undefined,
         escola_razao_social: repEscolhido?.razaoSocial,
         escola_cnpj: repEscolhido?.cnpj,
+        posicoes_assinaturas: posicoesArray.length > 0 ? posicoesArray : undefined,
+        suprimir_rubrica_rodape: true,
       }
 
       let payloadFinal: any = { ...payloadBase }
@@ -1622,12 +1856,69 @@ export default function MatriculaDigitalPage() {
   // Salvar Configurações
   const handleSalvarConfig = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    // Validação dos Representantes e CNPJs
+    for (const [rIdx, rep] of configData.representantes.entries()) {
+      const rotuloCnpj = rep.segmento || rep.razaoSocial || `CNPJ #${rIdx + 1}`
+      if (!rep.razaoSocial?.trim()) {
+        toast.error(`Informe a Razão Social da instituição (${rotuloCnpj}).`)
+        return
+      }
+      if (!rep.cnpj?.trim()) {
+        toast.error(`Informe o CNPJ da instituição (${rotuloCnpj}).`)
+        return
+      }
+      const signatarios = garantirSignatarios(rep)
+      if (signatarios.length === 0) {
+        toast.error(`Cadastre ao menos 1 representante para ${rotuloCnpj}.`)
+        return
+      }
+      for (const [sIdx, sig] of signatarios.entries()) {
+        if (!sig.nome?.trim()) {
+          toast.error(`Informe o nome do representante #${sIdx + 1} em ${rotuloCnpj}.`)
+          return
+        }
+        if (!sig.cpf?.trim()) {
+          toast.error(`Informe o CPF do representante ${sig.nome || `#${sIdx + 1}`} em ${rotuloCnpj}.`)
+          return
+        }
+        const cleanCpf = sig.cpf.replace(/\D/g, '')
+        if (cleanCpf.length !== 11 || !validarCPF(cleanCpf)) {
+          toast.error(`O CPF informado para o representante ${sig.nome} (${sig.cpf}) é inválido.`)
+          return
+        }
+        if (!sig.cargo?.trim()) {
+          toast.error(`Informe o cargo institucional do representante ${sig.nome} em ${rotuloCnpj}.`)
+          return
+        }
+      }
+    }
+
     setSalvandoConfig(true)
     try {
+      // Normaliza representantes e signatários antes de despachar
+      const repsNormalizados = configData.representantes.map(rep => {
+        const signatarios = garantirSignatarios(rep)
+        const sigPadrao = signatarios.find(s => s.padrao) || signatarios[0]
+        return {
+          ...rep,
+          signatarios,
+          nome: sigPadrao.nome,
+          cpf: sigPadrao.cpf,
+          cargo: sigPadrao.cargo,
+        }
+      })
+
+      const payload = {
+        ...configData,
+        representantes: repsNormalizados,
+        representante: repsNormalizados[0],
+      }
+
       const res = await fetch('/api/matriculas/digital/configuracoes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(configData),
+        body: JSON.stringify(payload),
       })
       if (res.ok) {
         toast.success('Configurações salvas com sucesso!')
@@ -2761,7 +3052,9 @@ export default function MatriculaDigitalPage() {
                 aluno_id: '',
                 aluno_nome: '',
                 titulo_documento: '',
-                escola_representante_id: configData.representantes[0]?.id || 'rep_infantil_fundamental',
+                escola_representante_id: '',
+                escola_signatario_id: '',
+                escola_signatarios_ids: [],
                 signatario_nome: '',
                 signatario_cpf: '',
                 signatario_data_nascimento: '',
@@ -2772,6 +3065,8 @@ export default function MatriculaDigitalPage() {
               })
               setContratoCriadoSucesso(null)
               setCopiadoModalLink(false)
+              setPosicoesAssinaturas({})
+              setModalPosicionadorAberto(false)
               setModalNovoAberto(true)
             }}
             className="btn-novo-doc"
@@ -4118,24 +4413,24 @@ export default function MatriculaDigitalPage() {
               className="digital-modal-content digital-modal-novo-pro"
               style={{
                 background: 'hsl(var(--bg-surface))',
-                border: '1px solid rgba(59, 130, 246, 0.28)',
-                borderRadius: 24,
-                maxWidth: 820,
+                border: '1px solid hsl(var(--border-subtle))',
+                borderRadius: 20,
+                maxWidth: 780,
                 width: '100%',
                 maxHeight: 'calc(94vh - 20px)',
                 display: 'flex',
                 flexDirection: 'column',
                 overflow: 'hidden',
-                boxShadow: '0 32px 80px -12px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.15)',
+                boxShadow: '0 24px 60px -12px rgba(0, 0, 0, 0.45)',
                 position: 'relative',
               }}
             >
-              {/* Barra superior de gradiente ultra moderno */}
+              {/* Barra superior de acento elegante */}
               <div
                 style={{
                   height: 3,
                   width: '100%',
-                  background: 'linear-gradient(90deg, #2563eb 0%, #4f46e5 35%, #06b6d4 70%, #10b981 100%)',
+                  background: 'linear-gradient(90deg, #2563eb 0%, #3b82f6 50%, #10b981 100%)',
                   flexShrink: 0,
                 }}
               />
@@ -4144,49 +4439,48 @@ export default function MatriculaDigitalPage() {
               <div
                 className="digital-modal-header"
                 style={{
-                  padding: '16px 24px',
+                  padding: '16px 22px',
                   borderBottom: '1px solid hsl(var(--border-subtle))',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
                   gap: 16,
-                  background: 'linear-gradient(180deg, rgba(37, 99, 235, 0.04) 0%, transparent 100%)',
+                  background: 'hsl(var(--bg-surface))',
                   flexShrink: 0,
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 14, minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
                   <div
                     style={{
-                      width: 42,
-                      height: 42,
-                      borderRadius: 12,
-                      background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
+                      width: 38,
+                      height: 38,
+                      borderRadius: 10,
+                      background: 'rgba(37, 99, 235, 0.1)',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      color: '#ffffff',
-                      boxShadow: '0 8px 18px -4px rgba(37, 99, 235, 0.45)',
+                      color: '#2563eb',
                       flexShrink: 0,
                     }}
                   >
-                    <FileCheck2 size={22} />
+                    <FileCheck2 size={20} />
                   </div>
                   <div style={{ minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                      <h2 style={{ fontSize: 17, fontWeight: 800, margin: 0, color: 'hsl(var(--text-primary))', letterSpacing: '-0.01em' }}>
+                      <h2 style={{ fontSize: 16, fontWeight: 700, margin: 0, color: 'hsl(var(--text-primary))', letterSpacing: '-0.01em' }}>
                         Emissão de Documento Digital
                       </h2>
                       <span
                         style={{
                           fontSize: 10,
-                          fontWeight: 800,
-                          letterSpacing: '0.05em',
+                          fontWeight: 700,
+                          letterSpacing: '0.04em',
                           textTransform: 'uppercase',
-                          padding: '2px 8px',
+                          padding: '2px 7px',
                           borderRadius: 999,
-                          background: 'rgba(37, 99, 235, 0.12)',
-                          color: '#3b82f6',
-                          border: '1px solid rgba(59, 130, 246, 0.28)',
+                          background: 'rgba(37, 99, 235, 0.08)',
+                          color: '#2563eb',
+                          border: '1px solid rgba(37, 99, 235, 0.2)',
                           display: 'inline-flex',
                           alignItems: 'center',
                           gap: 4,
@@ -4195,8 +4489,8 @@ export default function MatriculaDigitalPage() {
                         <Lock size={10} /> LEI 14.063 / OTP
                       </span>
                     </div>
-                    <p style={{ fontSize: 12, color: 'hsl(var(--text-secondary))', margin: '3px 0 0', lineHeight: 1.35 }}>
-                      Envie contratos, termos e declarações com assinatura eletrônica e validação jurídica.
+                    <p style={{ fontSize: 12, color: 'hsl(var(--text-secondary))', margin: '2px 0 0', lineHeight: 1.35 }}>
+                      Envie contratos e termos com assinatura eletrônica e validação jurídica.
                     </p>
                   </div>
                 </div>
@@ -4212,18 +4506,18 @@ export default function MatriculaDigitalPage() {
                     border: '1px solid hsl(var(--border-subtle))',
                     color: 'hsl(var(--text-secondary))',
                     cursor: 'pointer',
-                    padding: 8,
-                    borderRadius: 10,
+                    padding: 7,
+                    borderRadius: 8,
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    transition: 'all 0.2s ease',
+                    transition: 'all 0.15s ease',
                     flexShrink: 0,
                   }}
                   onMouseEnter={e => {
-                    e.currentTarget.style.background = 'rgba(239, 68, 68, 0.12)'
+                    e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)'
                     e.currentTarget.style.color = '#ef4444'
-                    e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.3)'
+                    e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.25)'
                   }}
                   onMouseLeave={e => {
                     e.currentTarget.style.background = 'hsl(var(--bg-elevated))'
@@ -4232,7 +4526,7 @@ export default function MatriculaDigitalPage() {
                   }}
                   title="Fechar modal"
                 >
-                  <X size={18} />
+                  <X size={17} />
                 </button>
               </div>
 
@@ -4367,6 +4661,41 @@ export default function MatriculaDigitalPage() {
                                 {isCopiado ? <Check size={14} /> : <Copy size={13} />}
                                 <span>{isCopiado ? 'Copiado!' : 'Copiar'}</span>
                               </button>
+                              <a
+                                href={effectiveItemSignUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                style={{
+                                  background: 'rgba(56, 189, 248, 0.12)',
+                                  border: '1px solid rgba(56, 189, 248, 0.35)',
+                                  color: '#0284c7',
+                                  borderRadius: 8,
+                                  padding: '0 12px',
+                                  height: 38,
+                                  cursor: 'pointer',
+                                  fontWeight: 700,
+                                  fontSize: 12,
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: 5,
+                                  textDecoration: 'none',
+                                  whiteSpace: 'nowrap',
+                                  flexShrink: 0,
+                                  transition: 'all 0.15s ease',
+                                }}
+                                onMouseEnter={e => {
+                                  e.currentTarget.style.background = 'rgba(56, 189, 248, 0.20)'
+                                  e.currentTarget.style.borderColor = 'rgba(56, 189, 248, 0.55)'
+                                }}
+                                onMouseLeave={e => {
+                                  e.currentTarget.style.background = 'rgba(56, 189, 248, 0.12)'
+                                  e.currentTarget.style.borderColor = 'rgba(56, 189, 248, 0.35)'
+                                }}
+                                title={`Abrir página de assinatura de "${item.titulo}"`}
+                              >
+                                <ExternalLink size={13} />
+                                <span>Abrir link</span>
+                              </a>
                             </div>
                           </div>
                         )
@@ -4455,6 +4784,41 @@ export default function MatriculaDigitalPage() {
                                   </>
                                 )}
                               </button>
+                              <a
+                                href={effectiveSignUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                style={{
+                                  background: 'rgba(56, 189, 248, 0.12)',
+                                  border: '1px solid rgba(56, 189, 248, 0.35)',
+                                  color: '#0284c7',
+                                  borderRadius: 10,
+                                  padding: '0 16px',
+                                  height: 44,
+                                  cursor: 'pointer',
+                                  fontWeight: 700,
+                                  fontSize: 13,
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  gap: 6,
+                                  textDecoration: 'none',
+                                  whiteSpace: 'nowrap',
+                                  transition: 'all 0.15s ease',
+                                }}
+                                onMouseEnter={e => {
+                                  e.currentTarget.style.background = 'rgba(56, 189, 248, 0.20)'
+                                  e.currentTarget.style.borderColor = 'rgba(56, 189, 248, 0.55)'
+                                }}
+                                onMouseLeave={e => {
+                                  e.currentTarget.style.background = 'rgba(56, 189, 248, 0.12)'
+                                  e.currentTarget.style.borderColor = 'rgba(56, 189, 248, 0.35)'
+                                }}
+                                title="Abrir página oficial de assinatura em nova aba"
+                              >
+                                <ExternalLink size={15} />
+                                <span>Abrir link</span>
+                              </a>
                             </div>
 
                             <AnimatePresence>
@@ -4568,867 +4932,528 @@ export default function MatriculaDigitalPage() {
                     style={{
                       flex: 1,
                       overflowY: 'auto',
-                      padding: '20px 24px',
+                      padding: '18px 22px',
                       display: 'flex',
                       flexDirection: 'column',
-                      gap: 16,
+                      gap: 14,
                       minHeight: 0,
                     }}
                   >
-                  {/* ── 1. Upload de Múltiplos Arquivos PDF ou Word (Pacote Unificado ou Documentos Separados) ── */}
-                  <div
-                    onDragOver={(e) => {
-                      e.preventDefault()
-                      setArrastandoArquivo(true)
-                    }}
-                    onDragLeave={(e) => {
-                      e.preventDefault()
-                      setArrastandoArquivo(false)
-                    }}
-                    onDrop={(e) => {
-                      e.preventDefault()
-                      setArrastandoArquivo(false)
-                      const files = Array.from(e.dataTransfer.files || [])
-                      if (files.length > 0) processarArquivosSelecionados(files)
-                    }}
-                    style={{
-                      background: arrastandoArquivo
-                        ? 'rgba(37, 99, 235, 0.12)'
-                        : documentosUpload.length > 0
-                        ? 'linear-gradient(135deg, rgba(37, 99, 235, 0.04) 0%, rgba(99, 102, 241, 0.04) 100%)'
-                        : 'linear-gradient(135deg, rgba(37, 99, 235, 0.03) 0%, rgba(99, 102, 241, 0.02) 100%)',
-                      border: arrastandoArquivo
-                        ? '2px dashed #2563eb'
-                        : documentosUpload.length > 0
-                        ? '1.5px solid rgba(59, 130, 246, 0.3)'
-                        : convertendoDocumento
-                        ? '2px dashed #60a5fa'
-                        : '1.5px dashed rgba(59, 130, 246, 0.35)',
-                      borderRadius: 16,
-                      padding: documentosUpload.length > 0 ? '14px 16px' : '18px 20px',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: 12,
-                      transition: 'all 0.2s ease',
-                      position: 'relative',
-                      boxShadow: arrastandoArquivo ? '0 0 24px rgba(37, 99, 235, 0.25)' : 'none',
-                      flexShrink: 0,
-                    }}
-                  >
-                    {/* Input file invisível com suporte a seleção de múltiplos arquivos */}
-                    <input
-                      id="input-multiplos-documentos-upload"
-                      type="file"
-                      multiple
-                      disabled={convertendoDocumento}
-                      accept=".pdf,application/pdf"
-                      style={{ display: 'none' }}
-                      onChange={handleFileUpload}
-                    />
-
-                    {/* Feedback visual durante processamento de arquivos PDF */}
-                    {convertendoDocumento && (
-                      <div
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 12,
-                          background: 'rgba(37, 99, 235, 0.12)',
-                          border: '1px solid rgba(37, 99, 235, 0.3)',
-                          borderRadius: 10,
-                          padding: '10px 14px',
-                          color: '#2563eb',
-                        }}
-                      >
-                        <Loader2 size={20} className="animate-spin" />
-                        <div style={{ fontSize: 12.5, fontWeight: 700 }}>
-                          {statusConversao || 'Processando arquivos PDF...'}
-                        </div>
-                      </div>
-                    )}
-
-                    {documentosUpload.length === 0 ? (
-                      /* Estado 0: Nenhum arquivo selecionado */
-                      <div
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          width: '100%',
-                          gap: 14,
-                          flexWrap: 'wrap',
-                        }}
-                      >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 14, minWidth: 0 }}>
-                          <div
-                            style={{
-                              width: 48,
-                              height: 48,
-                              borderRadius: 14,
-                              background: 'linear-gradient(135deg, rgba(37, 99, 235, 0.18) 0%, rgba(99, 102, 241, 0.12) 100%)',
-                              color: '#2563eb',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              flexShrink: 0,
-                              border: '1px solid rgba(59, 130, 246, 0.25)',
-                            }}
-                          >
-                            <Files size={24} />
-                          </div>
-                          <div style={{ minWidth: 0 }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                              <span style={{ fontWeight: 800, fontSize: 14, color: 'hsl(var(--text-primary))', letterSpacing: '-0.01em' }}>
-                                Selecionar Documento(s) (PDF)
-                              </span>
-                              <span
-                                style={{
-                                  fontSize: 10,
-                                  fontWeight: 800,
-                                  padding: '2px 8px',
-                                  borderRadius: 999,
-                                  background: 'linear-gradient(135deg, rgba(37, 99, 235, 0.15) 0%, rgba(99, 102, 241, 0.15) 100%)',
-                                  color: '#2563eb',
-                                  border: '1px solid rgba(37, 99, 235, 0.3)',
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: 4,
-                                }}
-                              >
-                                <Sparkles size={11} /> Múltiplos Arquivos Permitidos
-                              </span>
-                            </div>
-                            <div style={{ fontSize: 11.5, color: 'hsl(var(--text-secondary))', marginTop: 3 }}>
-                              Arraste um ou mais arquivos PDF aqui, ou clique para escolher do computador
-                            </div>
-                          </div>
-                        </div>
-
-                        <label
-                          htmlFor="input-multiplos-documentos-upload"
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: 7,
-                            background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
-                            color: '#ffffff',
-                            padding: '9px 18px',
-                            borderRadius: 10,
-                            fontSize: 12.5,
-                            fontWeight: 700,
-                            cursor: convertendoDocumento ? 'not-allowed' : 'pointer',
-                            boxShadow: '0 4px 14px rgba(37, 99, 235, 0.35)',
-                            whiteSpace: 'nowrap',
-                            flexShrink: 0,
-                            transition: 'all 0.18s ease',
-                          }}
-                          onMouseEnter={(e) => (e.currentTarget.style.filter = 'brightness(1.08)')}
-                          onMouseLeave={(e) => (e.currentTarget.style.filter = 'none')}
-                        >
-                          <Upload size={14} />
-                          <span>{convertendoDocumento ? 'Processando...' : 'Escolher Arquivo(s)'}</span>
-                        </label>
-                      </div>
-                    ) : (
-                      /* Estado 1+: Arquivos selecionados */
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 12, width: '100%' }}>
-                        {/* Barra de cabeçalho do upload com métricas e ações */}
-                        <div
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
-                            flexWrap: 'wrap',
-                            gap: 10,
-                            paddingBottom: 8,
-                            borderBottom: '1px solid hsl(var(--border-subtle))',
-                          }}
-                        >
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                            <span
-                              style={{
-                                fontSize: 12.5,
-                                fontWeight: 800,
-                                color: 'hsl(var(--text-primary))',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: 6,
-                              }}
-                            >
-                              <Files size={16} color="#2563eb" />
-                              {documentosUpload.length} {documentosUpload.length === 1 ? 'documento selecionado' : 'documentos selecionados'}
-                            </span>
-                            <span
-                              style={{
-                                fontSize: 11,
-                                fontWeight: 700,
-                                padding: '2px 8px',
-                                borderRadius: 999,
-                                background: 'rgba(37, 99, 235, 0.1)',
-                                color: '#2563eb',
-                                border: '1px solid rgba(37, 99, 235, 0.2)',
-                              }}
-                            >
-                              Total: {totalTamanhoFormatadoGeral} • {totalPaginasGeral} {totalPaginasGeral === 1 ? 'pág' : 'págs'}
-                            </span>
-                          </div>
-
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <label
-                              htmlFor="input-multiplos-documentos-upload"
-                              style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: 5,
-                                background: 'rgba(37, 99, 235, 0.1)',
-                                border: '1px solid rgba(37, 99, 235, 0.3)',
-                                color: '#2563eb',
-                                padding: '6px 12px',
-                                borderRadius: 8,
-                                fontSize: 11.5,
-                                fontWeight: 700,
-                                cursor: 'pointer',
-                                transition: 'all 0.15s ease',
-                              }}
-                              title="Adicionar mais arquivos à lista"
-                            >
-                              <FilePlus2 size={13} /> + Adicionar Mais
-                            </label>
-
-                            <button
-                              type="button"
-                              onClick={handleLimparTodosDocumentos}
-                              style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: 4,
-                                background: 'rgba(239, 68, 68, 0.08)',
-                                border: '1px solid rgba(239, 68, 68, 0.25)',
-                                color: '#ef4444',
-                                padding: '6px 10px',
-                                borderRadius: 8,
-                                fontSize: 11.5,
-                                fontWeight: 700,
-                                cursor: 'pointer',
-                                transition: 'all 0.15s ease',
-                              }}
-                              title="Remover todos os arquivos da lista"
-                            >
-                              <Trash2 size={13} /> Limpar
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Seletor de Modo de Envio (quando há 2 ou mais documentos) */}
-                        {documentosUpload.length > 1 && (
-                          <div
-                            style={{
-                              background: 'hsl(var(--bg-elevated))',
-                              border: '1.5px solid rgba(59, 130, 246, 0.25)',
-                              borderRadius: 12,
-                              padding: 12,
-                              display: 'flex',
-                              flexDirection: 'column',
-                              gap: 10,
-                            }}
-                          >
-                            <div
-                              style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'space-between',
-                                flexWrap: 'wrap',
-                                gap: 8,
-                              }}
-                            >
-                              <div style={{ fontSize: 11.5, fontWeight: 800, color: 'hsl(var(--text-primary))', display: 'flex', alignItems: 'center', gap: 5 }}>
-                                <Layers size={14} color="#2563eb" /> Formato de Envio dos {documentosUpload.length} Documentos:
-                              </div>
-                              <button
-                                type="button"
-                                onClick={handleAbrirPreviaPacoteUnificado}
-                                disabled={gerandoPreviaPacote}
-                                style={{
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: 5,
-                                  background: 'linear-gradient(135deg, rgba(56, 189, 248, 0.15) 0%, rgba(37, 99, 235, 0.15) 100%)',
-                                  border: '1px solid rgba(56, 189, 248, 0.35)',
-                                  color: '#0284c7',
-                                  padding: '5px 11px',
-                                  borderRadius: 8,
-                                  fontSize: 11,
-                                  fontWeight: 700,
-                                  cursor: gerandoPreviaPacote ? 'not-allowed' : 'pointer',
-                                }}
-                                title="Visualizar prévia de todos os documentos consolidados em um só arquivo PDF"
-                              >
-                                {gerandoPreviaPacote ? <Loader2 size={12} className="animate-spin" /> : <Eye size={12} />}
-                                Prévia do Pacote ({totalPaginasGeral} págs)
-                              </button>
-                            </div>
-
-                            <div
-                              style={{
-                                display: 'grid',
-                                gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
-                                gap: 8,
-                              }}
-                            >
-                              {/* Opção 1: Pacote Unificado */}
-                              <div
-                                onClick={() => setModoEnvioMultiplo('unificado')}
-                                style={{
-                                  cursor: 'pointer',
-                                  padding: '10px 12px',
-                                  borderRadius: 10,
-                                  border: modoEnvioMultiplo === 'unificado'
-                                    ? '2px solid #2563eb'
-                                    : '1px solid hsl(var(--border-subtle))',
-                                  background: modoEnvioMultiplo === 'unificado'
-                                    ? 'rgba(37, 99, 235, 0.08)'
-                                    : 'hsl(var(--bg-surface))',
-                                  display: 'flex',
-                                  flexDirection: 'column',
-                                  gap: 4,
-                                  transition: 'all 0.15s ease',
-                                }}
-                              >
-                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 800, fontSize: 12, color: modoEnvioMultiplo === 'unificado' ? '#2563eb' : 'hsl(var(--text-primary))' }}>
-                                    <Layers size={14} /> Pacote Unificado
-                                  </div>
-                                  <span
-                                    style={{
-                                      fontSize: 9.5,
-                                      fontWeight: 800,
-                                      background: modoEnvioMultiplo === 'unificado' ? '#2563eb' : 'rgba(100,116,139,0.2)',
-                                      color: modoEnvioMultiplo === 'unificado' ? '#ffffff' : 'hsl(var(--text-secondary))',
-                                      padding: '1px 6px',
-                                      borderRadius: 4,
-                                    }}
-                                  >
-                                    Recomendado
-                                  </span>
-                                </div>
-                                <div style={{ fontSize: 10.5, color: 'hsl(var(--text-secondary))', lineHeight: 1.35 }}>
-                                  Mescla todos os documentos em 1 único arquivo sequencial. O responsável assina 1 única vez via link e código OTP.
-                                </div>
-                              </div>
-
-                              {/* Opção 2: Documentos Separados */}
-                              <div
-                                onClick={() => setModoEnvioMultiplo('separados')}
-                                style={{
-                                  cursor: 'pointer',
-                                  padding: '10px 12px',
-                                  borderRadius: 10,
-                                  border: modoEnvioMultiplo === 'separados'
-                                    ? '2px solid #2563eb'
-                                    : '1px solid hsl(var(--border-subtle))',
-                                  background: modoEnvioMultiplo === 'separados'
-                                    ? 'rgba(37, 99, 235, 0.08)'
-                                    : 'hsl(var(--bg-surface))',
-                                  display: 'flex',
-                                  flexDirection: 'column',
-                                  gap: 4,
-                                  transition: 'all 0.15s ease',
-                                }}
-                              >
-                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 800, fontSize: 12, color: modoEnvioMultiplo === 'separados' ? '#2563eb' : 'hsl(var(--text-primary))' }}>
-                                    <Files size={14} /> Documentos Separados
-                                  </div>
-                                  <span
-                                    style={{
-                                      fontSize: 9.5,
-                                      fontWeight: 800,
-                                      background: modoEnvioMultiplo === 'separados' ? '#2563eb' : 'rgba(100,116,139,0.2)',
-                                      color: modoEnvioMultiplo === 'separados' ? '#ffffff' : 'hsl(var(--text-secondary))',
-                                      padding: '1px 6px',
-                                      borderRadius: 4,
-                                    }}
-                                  >
-                                    Lote
-                                  </span>
-                                </div>
-                                <div style={{ fontSize: 10.5, color: 'hsl(var(--text-secondary))', lineHeight: 1.35 }}>
-                                  Gera {documentosUpload.length} contratos independentes com links de assinatura e protocolos separados.
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Lista de Documentos Selecionados */}
-                        <div
-                          style={{
-                            display: 'flex',
-                            flexDirection: 'column',
-                            gap: 6,
-                            maxHeight: 280,
-                            overflowY: 'auto',
-                            paddingRight: 4,
-                          }}
-                        >
-                          {documentosUpload.map((doc, idx) => {
-                            const isDocx = doc.formatoOriginal === 'docx' || doc.formatoOriginal === 'doc'
-                            return (
-                              <div
-                                key={doc.id}
-                                style={{
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'space-between',
-                                  padding: '8px 12px',
-                                  borderRadius: 10,
-                                  background: 'hsl(var(--bg-surface))',
-                                  border: '1px solid hsl(var(--border-subtle))',
-                                  gap: 10,
-                                  transition: 'all 0.15s ease',
-                                }}
-                              >
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-                                  {/* Posição e botões de reordenar */}
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                                    <span
-                                      style={{
-                                        fontSize: 10.5,
-                                        fontWeight: 800,
-                                        color: '#2563eb',
-                                        background: 'rgba(37, 99, 235, 0.1)',
-                                        padding: '2px 6px',
-                                        borderRadius: 5,
-                                        minWidth: 24,
-                                        textAlign: 'center',
-                                      }}
-                                    >
-                                      #{idx + 1}
-                                    </span>
-                                    {documentosUpload.length > 1 && (
-                                      <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                                        <button
-                                          type="button"
-                                          disabled={idx === 0}
-                                          onClick={() => handleMoverDocumento(idx, 'cima')}
-                                          style={{
-                                            background: 'none',
-                                            border: 'none',
-                                            padding: 0,
-                                            cursor: idx === 0 ? 'not-allowed' : 'pointer',
-                                            opacity: idx === 0 ? 0.25 : 0.8,
-                                            lineHeight: 1,
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            justifyContent: 'center',
-                                          }}
-                                          title="Mover para cima"
-                                        >
-                                          <ArrowUp size={12} />
-                                        </button>
-                                        <button
-                                          type="button"
-                                          disabled={idx === documentosUpload.length - 1}
-                                          onClick={() => handleMoverDocumento(idx, 'baixo')}
-                                          style={{
-                                            background: 'none',
-                                            border: 'none',
-                                            padding: 0,
-                                            cursor: idx === documentosUpload.length - 1 ? 'not-allowed' : 'pointer',
-                                            opacity: idx === documentosUpload.length - 1 ? 0.25 : 0.8,
-                                            lineHeight: 1,
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            justifyContent: 'center',
-                                          }}
-                                          title="Mover para baixo"
-                                        >
-                                          <ArrowDown size={12} />
-                                        </button>
-                                      </div>
-                                    )}
-                                  </div>
-
-                                  {/* Ícone do tipo */}
-                                  <div
-                                    style={{
-                                      width: 32,
-                                      height: 32,
-                                      borderRadius: 8,
-                                      background: isDocx
-                                        ? 'rgba(37, 99, 235, 0.15)'
-                                        : 'rgba(16, 185, 129, 0.15)',
-                                      color: isDocx ? '#2563eb' : '#059669',
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      justifyContent: 'center',
-                                      flexShrink: 0,
-                                    }}
-                                  >
-                                    <FileText size={16} />
-                                  </div>
-
-                                  {/* Nome e Metadados */}
-                                  <div style={{ minWidth: 0 }}>
-                                    <div
-                                      title={doc.nome}
-                                      style={{
-                                        fontWeight: 700,
-                                        fontSize: 12.5,
-                                        color: 'hsl(var(--text-primary))',
-                                        maxWidth: 300,
-                                        overflow: 'hidden',
-                                        textOverflow: 'ellipsis',
-                                        whiteSpace: 'nowrap',
-                                      }}
-                                    >
-                                      {doc.nome}
-                                    </div>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2, flexWrap: 'wrap' }}>
-                                      <span
-                                        style={{
-                                          fontSize: 9.5,
-                                          fontWeight: 800,
-                                          padding: '1px 5px',
-                                          borderRadius: 4,
-                                          background: isDocx ? 'rgba(37, 99, 235, 0.15)' : 'rgba(16, 185, 129, 0.15)',
-                                          color: isDocx ? '#2563eb' : '#059669',
-                                        }}
-                                      >
-                                        {doc.formatoOriginal.toUpperCase()}
-                                      </span>
-                                      <span style={{ fontSize: 10.5, color: 'hsl(var(--text-secondary))' }}>
-                                        {doc.tamanhoFormatado} • {doc.totalPaginas} {doc.totalPaginas === 1 ? 'pág' : 'págs'}
-                                      </span>
-                                      <span
-                                        style={{
-                                          fontSize: 9.5,
-                                          color: '#10b981',
-                                          fontWeight: 600,
-                                          display: 'inline-flex',
-                                          alignItems: 'center',
-                                          gap: 3,
-                                        }}
-                                        title={`Hash SHA-256: ${doc.hashSha256}`}
-                                      >
-                                        <CheckCircle2 size={10} /> SHA-256
-                                      </span>
-                                    </div>
-                                  </div>
-                                </div>
-
-                                {/* Ações do arquivo */}
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleAbrirPreviaIndividual(doc)}
-                                    style={{
-                                      display: 'inline-flex',
-                                      alignItems: 'center',
-                                      gap: 4,
-                                      background: 'rgba(56, 189, 248, 0.12)',
-                                      border: '1px solid rgba(56, 189, 248, 0.3)',
-                                      color: '#0284c7',
-                                      padding: '5px 9px',
-                                      borderRadius: 6,
-                                      fontSize: 11,
-                                      fontWeight: 700,
-                                      cursor: 'pointer',
-                                    }}
-                                    title="Visualizar documento"
-                                  >
-                                    <Eye size={12} /> Prévia
-                                  </button>
-
-                                  <a
-                                    href={doc.pdfBase64}
-                                    download={doc.nomeArquivoPdf || `${doc.nome.replace(/\.(docx?|pdf)$/i, '')}.pdf`}
-                                    style={{
-                                      display: 'inline-flex',
-                                      alignItems: 'center',
-                                      gap: 4,
-                                      background: 'rgba(37, 99, 235, 0.08)',
-                                      border: '1px solid rgba(37, 99, 235, 0.2)',
-                                      color: '#2563eb',
-                                      padding: '5px 9px',
-                                      borderRadius: 6,
-                                      fontSize: 11,
-                                      fontWeight: 700,
-                                      textDecoration: 'none',
-                                      cursor: 'pointer',
-                                    }}
-                                    title="Baixar em PDF"
-                                  >
-                                    <Download size={12} />
-                                  </a>
-
-                                  <button
-                                    type="button"
-                                    onClick={() => handleRemoverDocumento(doc.id)}
-                                    style={{
-                                      display: 'inline-flex',
-                                      alignItems: 'center',
-                                      background: 'rgba(239, 68, 68, 0.08)',
-                                      border: '1px solid rgba(239, 68, 68, 0.25)',
-                                      color: '#ef4444',
-                                      padding: '5px 7px',
-                                      borderRadius: 6,
-                                      cursor: 'pointer',
-                                    }}
-                                    title="Remover documento da seleção"
-                                  >
-                                    <Trash2 size={12} />
-                                  </button>
-                                </div>
-                              </div>
-                            )
-                          })}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* ── 2. CARD DE REPRESENTANTE LEGAL / CNPJ EMISSOR (DESTAQUE VISUAL ULTRA MODERNO) ── */}
+                  {/* ── PASSO 1. INSTITUIÇÃO EMISSORA E REPRESENTANTES SIGNATÁRIOS ── */}
                   {(() => {
                     const listaRepresentantes =
                       Array.isArray(configData.representantes) && configData.representantes.length > 0
                         ? configData.representantes
                         : DEFAULT_REPRESENTANTES_INICIAIS
 
-                    const repAtivo =
-                      listaRepresentantes.find(r => r.id === formNovo.escola_representante_id) ||
-                      listaRepresentantes[0] ||
-                      {
-                        id: 'rep_infantil_fundamental',
-                        razaoSocial: 'COLÉGIO IMPACTO CENTRO DE ENSINO LTDA',
-                        cnpj: '04.395.789/0001-88',
-                        nome: 'IVAN ROSSI SAMBRANA',
-                        cargo: 'Representante Legal / Diretor Geral',
-                        segmento: 'Ed. Infantil e Ens. Fund',
-                      }
+                    const temInstituicaoSelecionada = Boolean(formNovo.escola_representante_id)
+                    const repAtivo = temInstituicaoSelecionada
+                      ? listaRepresentantes.find(r => r.id === formNovo.escola_representante_id) || null
+                      : null
 
-                    const rawSegmento = repAtivo.segmento || 'Ed. Infantil e Ens. Fund'
-                    const segmentoBadgeTexto = rawSegmento === 'Educação Infantil e Ensino Fundamental' || rawSegmento.toLowerCase().includes('educação infantil')
-                      ? 'Ed. Infantil e Ens. Fund'
-                      : rawSegmento === 'Ensino Médio'
-                        ? 'Ens. Médio'
-                        : rawSegmento
-                    const isInfantil =
-                      segmentoBadgeTexto.toLowerCase().includes('infantil') ||
-                      segmentoBadgeTexto.toLowerCase().includes('fundamental') ||
-                      segmentoBadgeTexto.toLowerCase().includes('fund')
+                    const signatariosDoRep = repAtivo ? garantirSignatarios(repAtivo) : []
+                    const idsSelecionados = Array.isArray(formNovo.escola_signatarios_ids)
+                      ? formNovo.escola_signatarios_ids
+                      : (formNovo.escola_signatario_id ? [formNovo.escola_signatario_id] : [])
+
+                    const signatariosEscolhidos = signatariosDoRep.filter(s => idsSelecionados.includes(s.id))
+                    const temSignatariosSelecionados = signatariosEscolhidos.length > 0
+                    const tudoPronto = temInstituicaoSelecionada && temSignatariosSelecionados
 
                     return (
                       <div
                         style={{
-                          background: 'linear-gradient(135deg, rgba(37, 99, 235, 0.07) 0%, rgba(99, 102, 241, 0.05) 50%, rgba(6, 182, 212, 0.05) 100%)',
-                          border: '1.5px solid rgba(59, 130, 246, 0.35)',
-                          borderRadius: 16,
-                          padding: '16px 18px',
-                          position: 'relative',
-                          boxShadow: '0 8px 24px -6px rgba(37, 99, 235, 0.15)',
+                          background: tudoPronto ? 'rgba(16, 185, 129, 0.02)' : 'rgba(245, 158, 11, 0.025)',
+                          border: tudoPronto ? '1.5px solid rgba(16, 185, 129, 0.45)' : '1.5px dashed rgba(245, 158, 11, 0.65)',
+                          borderRadius: 14,
+                          padding: '14px 16px',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: 12,
                           flexShrink: 0,
-                          minHeight: 'fit-content',
-                          width: '100%',
+                          transition: 'all 0.2s ease',
                         }}
                       >
-                        {/* Topo do Card: Título e Badge Proeminente */}
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        {/* Topo do Bloco: Título e Status Global (Amarelo -> Verde) */}
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                             <div
                               style={{
-                                width: 34,
-                                height: 34,
-                                borderRadius: 10,
-                                background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
+                                width: 32,
+                                height: 32,
+                                borderRadius: 8,
+                                background: tudoPronto ? 'rgba(16, 185, 129, 0.12)' : 'rgba(245, 158, 11, 0.12)',
+                                color: tudoPronto ? '#10b981' : '#f59e0b',
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'center',
-                                color: '#ffffff',
-                                boxShadow: '0 4px 12px rgba(37, 99, 235, 0.4)',
                                 flexShrink: 0,
+                                transition: 'all 0.2s ease',
                               }}
                             >
-                              <Building2 size={18} />
+                              <Building2 size={17} />
                             </div>
                             <div>
-                              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 800, color: '#2563eb', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                                Representante Legal / CNPJ Emissor do Documento *
+                              <label style={{ fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-secondary))', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                                Instituição Emissora e Representantes *
                               </label>
-                              <div style={{ fontSize: 11, color: 'hsl(var(--text-secondary))', marginTop: 1 }}>
-                                Signatário Institucional Oficial da Instituição
+                              <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', marginTop: 1 }}>
+                                Selecione a pessoa jurídica emissora e os representantes que assinarão (Obrigatório)
                               </div>
                             </div>
                           </div>
 
-                          {/* BADGE PROEMINENTE EM DESTAQUE */}
                           <div
                             style={{
-                              display: 'inline-flex',
+                              fontSize: 11.5,
+                              color: tudoPronto ? '#065f46' : '#b45309',
+                              display: 'flex',
                               alignItems: 'center',
                               gap: 6,
-                              background: 'linear-gradient(135deg, #2563eb 0%, #4f46e5 100%)',
-                              color: '#ffffff',
-                              padding: '5px 14px',
-                              borderRadius: 999,
-                              fontSize: 11.5,
-                              fontWeight: 800,
-                              letterSpacing: '0.02em',
-                              boxShadow: '0 4px 14px rgba(37, 99, 235, 0.35)',
-                              border: '1px solid rgba(255, 255, 255, 0.3)',
+                              background: tudoPronto ? 'rgba(16, 185, 129, 0.12)' : 'rgba(245, 158, 11, 0.12)',
+                              border: tudoPronto ? '1px solid rgba(16, 185, 129, 0.35)' : '1px solid rgba(245, 158, 11, 0.35)',
+                              padding: '4px 10px',
+                              borderRadius: 8,
+                              maxWidth: '100%',
+                              flexWrap: 'wrap',
+                              transition: 'all 0.2s ease',
                             }}
                           >
-                            {isInfantil ? <School size={14} /> : <GraduationCap size={14} />}
-                            <span>{segmentoBadgeTexto}</span>
+                            {tudoPronto ? (
+                              <>
+                                <Check size={13} color="#10b981" strokeWidth={2.5} style={{ flexShrink: 0 }} />
+                                {signatariosEscolhidos.length === 1 ? (
+                                  <>
+                                    <span style={{ color: '#047857' }}>Signatário Confirmado:</span>
+                                    <strong style={{ color: '#065f46', fontWeight: 700 }}>{signatariosEscolhidos[0]?.nome}</strong>
+                                    <span style={{ color: '#059669', fontSize: 10.5 }}>({signatariosEscolhidos[0]?.cargo})</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <span style={{ color: '#047857' }}>Signatários Confirmados:</span>
+                                    <strong style={{ color: '#065f46', fontWeight: 700 }}>{signatariosEscolhidos.length} representantes</strong>
+                                    <span style={{ color: '#059669', fontSize: 10.5 }}>
+                                      ({signatariosEscolhidos.map(s => s.nome.split(' ')[0]).join(', ')})
+                                    </span>
+                                  </>
+                                )}
+                              </>
+                            ) : !temInstituicaoSelecionada ? (
+                              <>
+                                <AlertCircle size={13} color="#f59e0b" style={{ flexShrink: 0 }} />
+                                <span style={{ fontWeight: 600 }}>1º Passo Obrigatório: Escolha a Instituição abaixo</span>
+                              </>
+                            ) : (
+                              <>
+                                <AlertCircle size={13} color="#f59e0b" style={{ flexShrink: 0 }} />
+                                <span style={{ fontWeight: 600 }}>2º Passo Obrigatório: Escolha quem vai assinar</span>
+                              </>
+                            )}
                           </div>
                         </div>
 
-                        {/* Seletor Visual Rápido em Botões / Tabs de Segmento */}
-                        {listaRepresentantes.length > 1 && (
-                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 8, marginBottom: 12 }}>
+                        {/* Cards de Seleção dos CNPJs Cadastrados (Passo 1) */}
+                        <div>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6, flexWrap: 'wrap', gap: 6 }}>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10.5, fontWeight: 700, color: 'hsl(var(--text-muted))', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                              1. Escolha a Instituição Emissora *
+                            </label>
+                            {temInstituicaoSelecionada ? (
+                              <span
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: 4,
+                                  fontSize: 10,
+                                  fontWeight: 700,
+                                  color: '#059669',
+                                  background: 'rgba(16, 185, 129, 0.15)',
+                                  border: '1px solid rgba(16, 185, 129, 0.3)',
+                                  padding: '2px 8px',
+                                  borderRadius: 999,
+                                }}
+                              >
+                                <Check size={11} strokeWidth={2.5} /> Instituição Selecionada
+                              </span>
+                            ) : (
+                              <span
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: 4,
+                                  fontSize: 10,
+                                  fontWeight: 700,
+                                  color: '#b45309',
+                                  background: 'rgba(245, 158, 11, 0.15)',
+                                  border: '1px solid rgba(245, 158, 11, 0.35)',
+                                  padding: '2px 8px',
+                                  borderRadius: 999,
+                                }}
+                              >
+                                <AlertCircle size={11} /> Seleção Obrigatória (Pendente)
+                              </span>
+                            )}
+                          </div>
+
+                          <div
+                            style={{
+                              display: 'grid',
+                              gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
+                              gap: 8,
+                            }}
+                          >
                             {listaRepresentantes.map(r => {
-                              const isSelected = formNovo.escola_representante_id === r.id || (!formNovo.escola_representante_id && r.id === repAtivo.id)
+                              const isSelected = formNovo.escola_representante_id === r.id
                               const segTexto = r.segmento === 'Educação Infantil e Ensino Fundamental' || (r.segmento && r.segmento.toLowerCase().includes('educação infantil'))
-                                ? 'Ed. Infantil e Ens. Fund'
+                                ? 'Ed. Infantil e Ens. Fundamental'
                                 : r.segmento === 'Ensino Médio'
-                                  ? 'Ens. Médio'
+                                  ? 'Ensino Médio'
                                   : (r.segmento || r.razaoSocial)
                               const isInfantilTab = (segTexto || '').toLowerCase().includes('infantil') || (segTexto || '').toLowerCase().includes('fundamental') || (segTexto || '').toLowerCase().includes('fund')
+
+                              // Amarelo quando não selecionado (se nenhuma instituicao foi escolhida); Verde quando selecionado
+                              let cardBorder = '1px solid hsl(var(--border-subtle))'
+                              let cardBg = 'hsl(var(--bg-surface))'
+                              let iconColor = 'hsl(var(--text-secondary))'
+                              let titleColor = 'hsl(var(--text-primary))'
+                              let cnpjColor = 'hsl(var(--text-secondary))'
+
+                              if (isSelected) {
+                                cardBorder = '2px solid #10b981'
+                                cardBg = 'rgba(16, 185, 129, 0.08)'
+                                iconColor = '#10b981'
+                                titleColor = '#065f46'
+                                cnpjColor = '#059669'
+                              } else if (!temInstituicaoSelecionada) {
+                                cardBorder = '1.5px dashed #f59e0b'
+                                cardBg = 'rgba(245, 158, 11, 0.04)'
+                                iconColor = '#f59e0b'
+                                titleColor = '#b45309'
+                                cnpjColor = '#b45309'
+                              }
+
                               return (
-                                <button
+                                <div
                                   key={r.id}
-                                  type="button"
-                                  onClick={() => setFormNovo(prev => ({ ...prev, escola_representante_id: r.id }))}
+                                  onClick={() => {
+                                    setFormNovo(prev => ({
+                                      ...prev,
+                                      escola_representante_id: r.id,
+                                      escola_signatario_id: '',
+                                      escola_signatarios_ids: [], // Começa sem representantes selecionados, em amarelo!
+                                    }))
+                                  }}
                                   style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'space-between',
-                                    gap: 8,
-                                    padding: '9px 14px',
-                                    borderRadius: 10,
-                                    background: isSelected
-                                      ? 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)'
-                                      : 'hsl(var(--bg-surface))',
-                                    border: isSelected
-                                      ? '1.5px solid #2563eb'
-                                      : '1px solid hsl(var(--border-subtle))',
-                                    color: isSelected ? '#ffffff' : 'hsl(var(--text-secondary))',
-                                    fontSize: 12,
-                                    fontWeight: isSelected ? 800 : 600,
                                     cursor: 'pointer',
-                                    transition: 'all 0.18s ease',
-                                    boxShadow: isSelected ? '0 4px 14px rgba(37, 99, 235, 0.35)' : 'none',
-                                    textAlign: 'left',
+                                    padding: '10px 14px',
+                                    borderRadius: 10,
+                                    border: cardBorder,
+                                    background: cardBg,
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    gap: 5,
+                                    transition: 'all 0.15s ease',
                                   }}
                                 >
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-                                    {isInfantilTab ? <School size={14} style={{ flexShrink: 0 }} /> : <GraduationCap size={14} style={{ flexShrink: 0 }} />}
-                                    <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                      {segTexto}
+                                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontWeight: 700, fontSize: 12.5, color: titleColor }}>
+                                      {isInfantilTab ? (
+                                        <School size={15} color={iconColor} />
+                                      ) : (
+                                        <GraduationCap size={15} color={iconColor} />
+                                      )}
+                                      <span>{segTexto}</span>
+                                    </div>
+                                    {isSelected ? (
+                                      <span
+                                        style={{
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          gap: 3,
+                                          fontSize: 10,
+                                          fontWeight: 700,
+                                          color: '#059669',
+                                          background: 'rgba(16, 185, 129, 0.18)',
+                                          padding: '2px 7px',
+                                          borderRadius: 999,
+                                        }}
+                                      >
+                                        <Check size={11} strokeWidth={2.5} /> Selecionada
+                                      </span>
+                                    ) : !temInstituicaoSelecionada ? (
+                                      <span
+                                        style={{
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          gap: 3,
+                                          fontSize: 9.5,
+                                          fontWeight: 700,
+                                          color: '#b45309',
+                                          background: 'rgba(245, 158, 11, 0.15)',
+                                          border: '1px solid rgba(245, 158, 11, 0.3)',
+                                          padding: '2px 6px',
+                                          borderRadius: 6,
+                                        }}
+                                      >
+                                        ⚠️ Clique p/ Selecionar
+                                      </span>
+                                    ) : (
+                                      <span
+                                        style={{
+                                          fontSize: 9.5,
+                                          color: 'hsl(var(--text-muted))',
+                                          padding: '1px 5px',
+                                          borderRadius: 4,
+                                          border: '1px solid hsl(var(--border-subtle))',
+                                        }}
+                                      >
+                                        Trocar
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, fontSize: 11, color: 'hsl(var(--text-secondary))' }}>
+                                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 170 }} title={r.razaoSocial}>
+                                      {r.razaoSocial}
+                                    </span>
+                                    <span style={{ fontFamily: 'monospace', fontWeight: 600, color: cnpjColor, flexShrink: 0 }}>
+                                      CNPJ: {r.cnpj}
                                     </span>
                                   </div>
-                                  {isSelected && <Check size={14} style={{ strokeWidth: 2.5, flexShrink: 0 }} />}
-                                </button>
+                                </div>
                               )
                             })}
                           </div>
-                        )}
+                        </div>
 
-                        {/* Caixa de Detalhes do Representante Selecionado */}
-                        <div
-                          style={{
-                            background: 'hsl(var(--bg-surface))',
-                            border: '1px solid rgba(59, 130, 246, 0.25)',
-                            borderRadius: 12,
-                            padding: '12px 16px',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            gap: 8,
-                            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.04)',
-                          }}
-                        >
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-                            <div style={{ fontSize: 13, fontWeight: 800, color: 'hsl(var(--text-primary))', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                              <span>{repAtivo.razaoSocial}</span>
-                              <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 999, background: 'rgba(16, 185, 129, 0.15)', color: '#059669', border: '1px solid rgba(16, 185, 129, 0.3)' }}>
-                                SIGNATÁRIO OFICIAL
-                              </span>
-                            </div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                              <span style={{ fontSize: 11, fontFamily: 'monospace', fontWeight: 700, padding: '3px 8px', borderRadius: 6, background: 'rgba(37, 99, 235, 0.12)', color: '#2563eb', border: '1px solid rgba(37, 99, 235, 0.25)' }}>
-                                CNPJ: {repAtivo.cnpj}
-                              </span>
-                            </div>
-                          </div>
-
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 11.5, color: 'hsl(var(--text-secondary))', flexWrap: 'wrap' }}>
-                            <span>
-                              Signatário Legal: <strong style={{ color: 'hsl(var(--text-primary))' }}>{repAtivo.nome}</strong> ({repAtivo.cargo})
-                            </span>
-                            {repAtivo.telefone && (
-                              <>
-                                <span>•</span>
-                                <span>📱 {repAtivo.telefone}</span>
-                              </>
-                            )}
-                            {repAtivo.email && (
-                              <>
-                                <span>•</span>
-                                <span>✉️ {repAtivo.email}</span>
-                              </>
-                            )}
-                            {repAtivo.cidadeUf && (
-                              <>
-                                <span>•</span>
-                                <span>📍 {repAtivo.cidadeUf}</span>
-                              </>
-                            )}
-                          </div>
-
-                          {/* Seletor Dropdown para Fácil Alternância de Múltiplos CNPJs */}
-                          <div style={{ marginTop: 2, paddingTop: 8, borderTop: '1px solid hsl(var(--border-subtle))', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
-                            <span style={{ fontSize: 11, color: 'hsl(var(--text-secondary))', fontWeight: 500 }}>
-                              Alterar signatário institucional:
-                            </span>
-                            <select
-                              required
-                              value={formNovo.escola_representante_id || repAtivo.id}
-                              onChange={e => setFormNovo(prev => ({ ...prev, escola_representante_id: e.target.value }))}
-                              className="digital-modal-input"
+                        {/* Subseção de Seleção dos Representantes Signatários (Passo 2) */}
+                        <div style={{ borderTop: '1px solid hsl(var(--border-subtle))', paddingTop: 10 }}>
+                          {!temInstituicaoSelecionada ? (
+                            <div
                               style={{
-                                height: 32,
-                                background: 'hsl(var(--bg-elevated))',
-                                border: '1px solid hsl(var(--border-subtle))',
-                                borderRadius: 8,
-                                padding: '0 10px',
-                                color: 'hsl(var(--text-primary))',
-                                fontSize: 11.5,
-                                fontWeight: 600,
-                                outline: 'none',
-                                cursor: 'pointer',
+                                padding: '12px 14px',
+                                borderRadius: 10,
+                                border: '1.5px dashed #f59e0b',
+                                background: 'rgba(245, 158, 11, 0.05)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 10,
+                                color: '#b45309',
+                                fontSize: 12,
                               }}
                             >
-                              {listaRepresentantes.map(r => {
-                                const segNome = r.segmento === 'Educação Infantil e Ensino Fundamental' || (r.segmento && r.segmento.toLowerCase().includes('educação infantil'))
-                                  ? 'Ed. Infantil e Ens. Fund'
-                                  : r.segmento === 'Ensino Médio'
-                                    ? 'Ens. Médio'
-                                    : r.segmento
-                                return (
-                                  <option key={r.id} value={r.id}>
-                                    {segNome ? `[${segNome}] ` : ''}{r.razaoSocial} • CNPJ: {r.cnpj} ({r.nome})
-                                  </option>
-                                )
-                              })}
-                            </select>
-                          </div>
+                              <AlertCircle size={18} color="#f59e0b" style={{ flexShrink: 0 }} />
+                              <div>
+                                <strong style={{ display: 'block', fontSize: 12, marginBottom: 2 }}>
+                                  2. Selecione Quais Representantes Vão Assinar * (Aguardando Passo 1)
+                                </strong>
+                                <span style={{ fontSize: 11.5, opacity: 0.9 }}>
+                                  Por favor, escolha a <strong>Instituição Emissora (Passo 1)</strong> acima para carregar a lista de representantes autorizados a assinar.
+                                </span>
+                              </div>
+                            </div>
+                          ) : (
+                            <>
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, flexWrap: 'wrap', gap: 6 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                                  <label style={{ fontSize: 10.5, fontWeight: 700, color: 'hsl(var(--text-secondary))', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: 5 }}>
+                                    <PenTool size={12} color={temSignatariosSelecionados ? '#10b981' : '#f59e0b'} />
+                                    2. Selecione Quais Representantes Vão Assinar *
+                                  </label>
+                                  <span
+                                    style={{
+                                      fontSize: 10,
+                                      fontWeight: 700,
+                                      color: temSignatariosSelecionados ? '#059669' : '#b45309',
+                                      background: temSignatariosSelecionados ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+                                      border: temSignatariosSelecionados ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid rgba(245, 158, 11, 0.35)',
+                                      padding: '2px 8px',
+                                      borderRadius: 999,
+                                    }}
+                                  >
+                                    {temSignatariosSelecionados
+                                      ? (signatariosEscolhidos.length > 1
+                                          ? `✓ ${signatariosEscolhidos.length} assinaturas selecionadas (Verde)`
+                                          : `✓ 1 assinatura selecionada (${signatariosEscolhidos[0]?.nome.split(' ')[0]})`)
+                                      : '⚠️ Seleção Obrigatória: Nenhum selecionado (Amarelo)'}
+                                  </span>
+                                </div>
+
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                                  {signatariosDoRep.length > 1 && (
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          const todosIds = signatariosDoRep.map(s => s.id)
+                                          setFormNovo(prev => ({
+                                            ...prev,
+                                            escola_signatarios_ids: todosIds,
+                                            escola_signatario_id: todosIds[0] || '',
+                                          }))
+                                        }}
+                                        style={{
+                                          background: 'rgba(16, 185, 129, 0.1)',
+                                          border: '1px solid rgba(16, 185, 129, 0.3)',
+                                          color: '#059669',
+                                          fontSize: 10,
+                                          fontWeight: 600,
+                                          cursor: 'pointer',
+                                          borderRadius: 6,
+                                          padding: '2px 7px',
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          gap: 3,
+                                        }}
+                                      >
+                                        <Check size={10} strokeWidth={2.5} /> Selecionar Todos ({signatariosDoRep.length})
+                                      </button>
+                                      {temSignatariosSelecionados && (
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setFormNovo(prev => ({
+                                              ...prev,
+                                              escola_signatarios_ids: [],
+                                              escola_signatario_id: '',
+                                            }))
+                                          }}
+                                          style={{
+                                            background: 'rgba(245, 158, 11, 0.08)',
+                                            border: '1px solid rgba(245, 158, 11, 0.3)',
+                                            color: '#b45309',
+                                            fontSize: 10,
+                                            fontWeight: 500,
+                                            cursor: 'pointer',
+                                            borderRadius: 6,
+                                            padding: '2px 7px',
+                                          }}
+                                        >
+                                          Limpar Seleção
+                                        </button>
+                                      )}
+                                    </div>
+                                  )}
+
+                                  <button
+                                    type="button"
+                                    onClick={() => setModalConfigAberto(true)}
+                                    style={{
+                                      background: 'transparent',
+                                      border: 'none',
+                                      color: '#0284c7',
+                                      fontSize: 10.5,
+                                      fontWeight: 600,
+                                      cursor: 'pointer',
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: 4,
+                                      textDecoration: 'underline',
+                                      padding: 0,
+                                    }}
+                                    title="Adicionar ou editar representantes em Configurações"
+                                  >
+                                    <Settings size={11} /> Gerenciar Representantes
+                                  </button>
+                                </div>
+                              </div>
+
+                              {/* Grid de Representantes Signatários (Amarelo se não selecionado, Verde se selecionado) */}
+                              <div
+                                style={{
+                                  display: 'grid',
+                                  gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+                                  gap: 8,
+                                }}
+                              >
+                                {signatariosDoRep.map(sig => {
+                                  const isSigSelected = idsSelecionados.includes(sig.id)
+                                  return (
+                                    <div
+                                      key={sig.id}
+                                      onClick={() => {
+                                        const novos = isSigSelected
+                                          ? idsSelecionados.filter(id => id !== sig.id)
+                                          : [...idsSelecionados, sig.id]
+                                        setFormNovo(prev => ({
+                                          ...prev,
+                                          escola_signatarios_ids: novos,
+                                          escola_signatario_id: novos[0] || '',
+                                        }))
+                                      }}
+                                      style={{
+                                        cursor: 'pointer',
+                                        padding: '9px 12px',
+                                        borderRadius: 10,
+                                        border: isSigSelected
+                                          ? '2px solid #10b981'
+                                          : '1.5px dashed #f59e0b',
+                                        background: isSigSelected
+                                          ? 'rgba(16, 185, 129, 0.08)'
+                                          : 'rgba(245, 158, 11, 0.04)',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'space-between',
+                                        gap: 8,
+                                        transition: 'all 0.15s ease',
+                                      }}
+                                    >
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                                        {/* Checkbox multi-select: Amarelo se pendente, Verde se selecionado */}
+                                        <div
+                                          style={{
+                                            width: 16,
+                                            height: 16,
+                                            borderRadius: 4,
+                                            border: isSigSelected ? '2px solid #10b981' : '1.5px solid #f59e0b',
+                                            background: isSigSelected ? '#10b981' : 'rgba(245, 158, 11, 0.08)',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            flexShrink: 0,
+                                            transition: 'all 0.15s ease',
+                                          }}
+                                        >
+                                          {isSigSelected && <Check size={11} strokeWidth={3} color="#ffffff" />}
+                                        </div>
+                                        <div style={{ minWidth: 0 }}>
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                                            <span style={{ fontSize: 12, fontWeight: 700, color: isSigSelected ? '#065f46' : '#92400e', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                              {sig.nome}
+                                            </span>
+                                            {sig.padrao && (
+                                              <span style={{ fontSize: 9.5, fontWeight: 700, color: isSigSelected ? '#059669' : '#b45309', background: isSigSelected ? 'rgba(16, 185, 129, 0.12)' : 'rgba(245, 158, 11, 0.12)', padding: '1px 5px', borderRadius: 4 }}>
+                                                Padrão
+                                              </span>
+                                            )}
+                                          </div>
+                                          <div style={{ fontSize: 10.5, color: isSigSelected ? '#047857' : '#b45309', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                            {sig.cargo} • CPF: {formatarCpf(sig.cpf)}
+                                          </div>
+                                        </div>
+                                      </div>
+                                      {isSigSelected ? (
+                                        <span style={{ fontSize: 9.5, fontWeight: 700, color: '#059669', flexShrink: 0, background: 'rgba(16, 185, 129, 0.18)', border: '1px solid rgba(16, 185, 129, 0.35)', padding: '2px 7px', borderRadius: 999 }}>
+                                          ✓ Assina
+                                        </span>
+                                      ) : (
+                                        <span style={{ fontSize: 9.5, fontWeight: 600, color: '#b45309', flexShrink: 0, background: 'rgba(245, 158, 11, 0.15)', border: '1px solid rgba(245, 158, 11, 0.3)', padding: '2px 6px', borderRadius: 6 }}>
+                                          ⚠️ Clique p/ Selecionar
+                                        </span>
+                                      )}
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            </>
+                          )}
                         </div>
                       </div>
                     )
                   })()}
 
                   {/* ── 3. Título do Documento e Seleção de Ano Letivo ── */}
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 14, flexShrink: 0 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 12, flexShrink: 0 }}>
                     <div>
                       <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-secondary))', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                         <FileText size={13} color="#2563eb" /> Título do Documento *
@@ -5442,11 +5467,11 @@ export default function MatriculaDigitalPage() {
                         className="digital-modal-input"
                         style={{
                           width: '100%',
-                          height: 42,
+                          height: 40,
                           background: 'hsl(var(--bg-surface))',
                           border: '1px solid hsl(var(--border-subtle))',
-                          borderRadius: 10,
-                          padding: '0 14px',
+                          borderRadius: 8,
+                          padding: '0 12px',
                           color: 'hsl(var(--text-primary))',
                           fontSize: 13,
                           outline: 'none',
@@ -5455,8 +5480,8 @@ export default function MatriculaDigitalPage() {
                     </div>
 
                     <div>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 700, color: '#2563eb', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                        <Calendar size={13} /> Ano Letivo *
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-secondary))', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                        <Calendar size={13} color="#2563eb" /> Ano Letivo *
                       </label>
                       <select
                         required
@@ -5465,11 +5490,11 @@ export default function MatriculaDigitalPage() {
                         className="digital-modal-input"
                         style={{
                           width: '100%',
-                          height: 42,
+                          height: 40,
                           background: 'hsl(var(--bg-surface))',
                           border: '1px solid hsl(var(--border-subtle))',
-                          borderRadius: 10,
-                          padding: '0 14px',
+                          borderRadius: 8,
+                          padding: '0 12px',
                           color: 'hsl(var(--text-primary))',
                           fontSize: 13,
                           fontWeight: 600,
@@ -5490,28 +5515,33 @@ export default function MatriculaDigitalPage() {
                   <div
                     ref={searchContainerRef}
                     style={{
-                      background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.05) 0%, rgba(37, 99, 235, 0.03) 100%)',
-                      borderRadius: 16,
-                      padding: 16,
-                      border: '1px solid rgba(99, 102, 241, 0.25)',
+                      background: 'hsl(var(--bg-elevated))',
+                      borderRadius: 14,
+                      padding: '12px 16px',
+                      border: '1px solid hsl(var(--border-subtle))',
                       position: 'relative',
                       flexShrink: 0,
                     }}
                   >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                      <label style={{ fontSize: 11, fontWeight: 800, color: '#4f46e5', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <Users size={14} /> Atalho Inteligente: Buscar Aluno para Puxar Responsáveis (Opcional)
-                      </label>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexWrap: 'wrap', gap: 8 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <label style={{ fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-secondary))', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <Users size={14} color="#2563eb" /> Vincular Estudante (Opcional)
+                        </label>
+                        <span style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>
+                          • Puxa os dados do responsável cadastrado
+                        </span>
+                      </div>
                       {alunoSelecionado && (
                         <button
                           type="button"
                           onClick={handleLimparAluno}
                           style={{
-                            background: 'rgba(239, 68, 68, 0.1)',
+                            background: 'rgba(239, 68, 68, 0.08)',
                             border: '1px solid rgba(239, 68, 68, 0.25)',
                             color: '#ef4444',
-                            borderRadius: 8,
-                            padding: '4px 10px',
+                            borderRadius: 6,
+                            padding: '3px 9px',
                             fontSize: 11,
                             cursor: 'pointer',
                             fontWeight: 600,
@@ -5534,13 +5564,13 @@ export default function MatriculaDigitalPage() {
                             alignItems: 'center',
                             background: 'hsl(var(--bg-surface))',
                             border: dropdownAlunosAberto ? '1.5px solid #3b82f6' : '1px solid hsl(var(--border-subtle))',
-                            borderRadius: 10,
-                            padding: '0 14px',
-                            transition: 'all 0.2s ease',
-                            boxShadow: dropdownAlunosAberto ? '0 0 0 3px rgba(59, 130, 246, 0.15)' : 'none',
+                            borderRadius: 8,
+                            padding: '0 12px',
+                            transition: 'all 0.15s ease',
+                            boxShadow: dropdownAlunosAberto ? '0 0 0 3px rgba(59, 130, 246, 0.12)' : 'none',
                           }}
                         >
-                          <Search size={16} color="hsl(var(--text-secondary))" style={{ marginRight: 10, flexShrink: 0 }} />
+                          <Search size={15} color="hsl(var(--text-secondary))" style={{ marginRight: 8, flexShrink: 0 }} />
                           <input
                             type="text"
                             value={buscaAlunoInput}
@@ -5551,16 +5581,16 @@ export default function MatriculaDigitalPage() {
                             placeholder="Digite o nome, CPF ou matrícula do estudante..."
                             style={{
                               width: '100%',
-                              height: 42,
+                              height: 38,
                               background: 'transparent',
                               border: 'none',
                               color: 'hsl(var(--text-primary))',
-                              fontSize: 13,
+                              fontSize: 12.5,
                               outline: 'none',
                             }}
                           />
                           {buscandoAlunos && (
-                            <Loader2 size={16} className="animate-spin" color="#3b82f6" style={{ flexShrink: 0, marginLeft: 8 }} />
+                            <Loader2 size={15} className="animate-spin" color="#3b82f6" style={{ flexShrink: 0, marginLeft: 8 }} />
                           )}
                           {buscaAlunoInput && !buscandoAlunos && (
                             <button
@@ -5582,7 +5612,7 @@ export default function MatriculaDigitalPage() {
                               }}
                               title="Limpar busca"
                             >
-                              <X size={14} />
+                              <X size={13} />
                             </button>
                           )}
                         </div>
@@ -5599,11 +5629,11 @@ export default function MatriculaDigitalPage() {
                               zIndex: 50,
                               background: 'hsl(var(--bg-elevated))',
                               border: '1px solid hsl(var(--border-subtle))',
-                              borderRadius: 12,
-                              marginTop: 6,
-                              maxHeight: 280,
+                              borderRadius: 10,
+                              marginTop: 4,
+                              maxHeight: 260,
                               overflowY: 'auto',
-                              boxShadow: '0 16px 40px rgba(0,0,0,0.3)',
+                              boxShadow: '0 12px 32px rgba(0,0,0,0.25)',
                             }}
                           >
                             {alunosSugeridos.length > 0 ? (
@@ -6053,29 +6083,32 @@ export default function MatriculaDigitalPage() {
                     )}
                   </div>
 
-                  {/* ── 5. Dados do Signatário (100% Editáveis com Visual Sofisticado) ── */}
+                  {/* ── 5. Dados do Signatário da Assinatura ── */}
                   <div
                     style={{
-                      background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.04) 0%, rgba(37, 99, 235, 0.03) 100%)',
-                      padding: '18px 20px',
-                      borderRadius: 16,
-                      border: '1px solid rgba(16, 185, 129, 0.25)',
+                      background: 'hsl(var(--bg-elevated))',
+                      padding: '14px 16px',
+                      borderRadius: 14,
+                      border: '1px solid hsl(var(--border-subtle))',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 12,
                       flexShrink: 0,
                     }}
                   >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: 8 }}>
-                      <div style={{ fontSize: 12, fontWeight: 800, color: '#059669', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <User size={15} /> Dados do Signatário da Assinatura (Totalmente Editável)
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-secondary))', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <User size={14} color="#2563eb" /> Dados do Signatário da Assinatura
                       </div>
-                      <span style={{ fontSize: 11, color: 'hsl(var(--text-secondary))' }}>
-                        Pessoa física que receberá e assinará o documento com código OTP
+                      <span style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>
+                        Pessoa física que receberá o link e assinará via código OTP
                       </span>
                     </div>
 
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 10 }}>
                       <div>
-                        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-secondary))', marginBottom: 5 }}>
-                          NOME COMPLETO DO SIGNATÁRIO *
+                        <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'hsl(var(--text-secondary))', marginBottom: 4 }}>
+                          Nome Completo do Signatário *
                         </label>
                         <input
                           type="text"
@@ -6084,13 +6117,13 @@ export default function MatriculaDigitalPage() {
                           onChange={e => setFormNovo({ ...formNovo, signatario_nome: e.target.value })}
                           placeholder="Nome da pessoa que irá assinar"
                           className="digital-modal-input"
-                          style={{ width: '100%', height: 40, background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 8, padding: '0 12px', color: 'hsl(var(--text-primary))', fontSize: 13, outline: 'none' }}
+                          style={{ width: '100%', height: 38, background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 8, padding: '0 11px', color: 'hsl(var(--text-primary))', fontSize: 12.5, outline: 'none' }}
                         />
                       </div>
 
                       <div>
-                        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-secondary))', marginBottom: 5 }}>
-                          E-MAIL (RECEBE CÓDIGO OTP E CÓPIA) *
+                        <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'hsl(var(--text-secondary))', marginBottom: 4 }}>
+                          E-mail (Recebe Código OTP) *
                         </label>
                         <input
                           type="email"
@@ -6099,13 +6132,13 @@ export default function MatriculaDigitalPage() {
                           onChange={e => setFormNovo({ ...formNovo, signatario_email: e.target.value })}
                           placeholder="email@exemplo.com"
                           className="digital-modal-input"
-                          style={{ width: '100%', height: 40, background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 8, padding: '0 12px', color: 'hsl(var(--text-primary))', fontSize: 13, outline: 'none' }}
+                          style={{ width: '100%', height: 38, background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 8, padding: '0 11px', color: 'hsl(var(--text-primary))', fontSize: 12.5, outline: 'none' }}
                         />
                       </div>
 
                       <div>
-                        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-secondary))', marginBottom: 5 }}>
-                          WHATSAPP / CELULAR
+                        <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'hsl(var(--text-secondary))', marginBottom: 4 }}>
+                          WhatsApp / Celular
                         </label>
                         <input
                           type="text"
@@ -6113,27 +6146,56 @@ export default function MatriculaDigitalPage() {
                           onChange={e => setFormNovo({ ...formNovo, signatario_telefone: formatarTelefone(e.target.value) })}
                           placeholder="(67) 99999-9999"
                           className="digital-modal-input"
-                          style={{ width: '100%', height: 40, background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 8, padding: '0 12px', color: 'hsl(var(--text-primary))', fontSize: 13, outline: 'none' }}
+                          style={{ width: '100%', height: 38, background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 8, padding: '0 11px', color: 'hsl(var(--text-primary))', fontSize: 12.5, outline: 'none' }}
                         />
                       </div>
 
                       <div>
-                        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-secondary))', marginBottom: 5 }}>
-                          CPF DO SIGNATÁRIO
-                        </label>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                          <label style={{ fontSize: 11, fontWeight: 600, color: 'hsl(var(--text-secondary))' }}>
+                            CPF do Signatário
+                          </label>
+                          {formNovo.signatario_cpf.replace(/\D/g, '').length === 11 && !validarCPF(formNovo.signatario_cpf) && (
+                            <span style={{
+                              fontSize: 10,
+                              fontWeight: 700,
+                              color: '#b91c1c',
+                              background: '#fee2e2',
+                              padding: '1px 6px',
+                              borderRadius: 4,
+                            }}>
+                              ✕ CPF Inválido
+                            </span>
+                          )}
+                        </div>
                         <input
                           type="text"
                           value={formNovo.signatario_cpf}
                           onChange={e => setFormNovo({ ...formNovo, signatario_cpf: formatarCpf(e.target.value) })}
                           placeholder="000.000.000-00"
+                          maxLength={14}
                           className="digital-modal-input"
-                          style={{ width: '100%', height: 40, background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 8, padding: '0 12px', color: 'hsl(var(--text-primary))', fontSize: 13, outline: 'none' }}
+                          style={{
+                            width: '100%',
+                            height: 38,
+                            background: 'hsl(var(--bg-surface))',
+                            border: `1px solid ${
+                              formNovo.signatario_cpf.replace(/\D/g, '').length === 11 && !validarCPF(formNovo.signatario_cpf)
+                                ? '#ef4444'
+                                : 'hsl(var(--border-subtle))'
+                            }`,
+                            borderRadius: 8,
+                            padding: '0 11px',
+                            color: 'hsl(var(--text-primary))',
+                            fontSize: 12.5,
+                            outline: 'none'
+                          }}
                         />
                       </div>
 
                       <div>
-                        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-secondary))', marginBottom: 5 }}>
-                          DATA DE NASCIMENTO
+                        <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'hsl(var(--text-secondary))', marginBottom: 4 }}>
+                          Data de Nascimento
                         </label>
                         <input
                           type="text"
@@ -6142,28 +6204,917 @@ export default function MatriculaDigitalPage() {
                           placeholder="DD/MM/AAAA"
                           maxLength={10}
                           className="digital-modal-input"
-                          style={{ width: '100%', height: 40, background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 8, padding: '0 12px', color: 'hsl(var(--text-primary))', fontSize: 13, outline: 'none' }}
+                          style={{ width: '100%', height: 38, background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 8, padding: '0 11px', color: 'hsl(var(--text-primary))', fontSize: 12.5, outline: 'none' }}
                         />
                       </div>
 
                       <div>
-                        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-secondary))', marginBottom: 5 }}>
-                          VÍNCULO / PAPEL
+                        <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'hsl(var(--text-secondary))', marginBottom: 4 }}>
+                          Vínculo / Papel
                         </label>
                         <input
                           type="text"
                           value={formNovo.signatario_cargo}
                           onChange={e => setFormNovo({ ...formNovo, signatario_cargo: e.target.value })}
-                          placeholder="Ex: Mãe, Pai, Resp. Financeiro, etc."
+                          placeholder="Ex: Mãe, Pai, Resp. Financeiro"
                           className="digital-modal-input"
-                          style={{ width: '100%', height: 40, background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 8, padding: '0 12px', color: 'hsl(var(--text-primary))', fontSize: 13, outline: 'none' }}
+                          style={{ width: '100%', height: 38, background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 8, padding: '0 11px', color: 'hsl(var(--text-primary))', fontSize: 12.5, outline: 'none' }}
                         />
                       </div>
                     </div>
 
-                    <div style={{ marginTop: 14, padding: '10px 14px', background: 'hsl(var(--bg-surface))', borderRadius: 10, border: '1px solid rgba(16, 185, 129, 0.2)', display: 'flex', alignItems: 'center', gap: 10, fontSize: 11, color: 'hsl(var(--text-secondary))', lineHeight: 1.4 }}>
-                      <ShieldCheck size={16} color="#059669" style={{ flexShrink: 0 }} />
-                      <span>Estes dados identificam formalmente o signatário perante a Lei Federal 14.063/2020. O código de segurança será enviado para o e-mail informado.</span>
+                    <div style={{ padding: '8px 12px', background: 'hsl(var(--bg-surface))', borderRadius: 8, border: '1px solid hsl(var(--border-subtle))', display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: 'hsl(var(--text-secondary))', lineHeight: 1.4 }}>
+                      <ShieldCheck size={14} color="#10b981" style={{ flexShrink: 0 }} />
+                      <span>Validade jurídica perante a Lei Federal 14.063/2020. O código de segurança OTP será enviado para o e-mail informado.</span>
+                    </div>
+                  </div>
+
+                  {/* ── PASSO 2. Upload de Documentos PDF para Assinatura ── */}
+                  <div
+                    onDragOver={(e) => {
+                      e.preventDefault()
+                      setArrastandoArquivo(true)
+                    }}
+                    onDragLeave={(e) => {
+                      e.preventDefault()
+                      setArrastandoArquivo(false)
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault()
+                      setArrastandoArquivo(false)
+                      const files = Array.from(e.dataTransfer.files || [])
+                      if (files.length > 0) processarArquivosSelecionados(files)
+                    }}
+                    style={{
+                      background: arrastandoArquivo
+                        ? 'rgba(37, 99, 235, 0.08)'
+                        : documentosUpload.length > 0
+                        ? 'hsl(var(--bg-elevated))'
+                        : 'hsl(var(--bg-elevated))',
+                      border: arrastandoArquivo
+                        ? '1.5px dashed #2563eb'
+                        : documentosUpload.length > 0
+                        ? '1px solid hsl(var(--border-subtle))'
+                        : convertendoDocumento
+                        ? '1.5px dashed #3b82f6'
+                        : '1.5px dashed hsl(var(--border-default))',
+                      borderRadius: 14,
+                      padding: documentosUpload.length > 0 ? '12px 14px' : '14px 18px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 10,
+                      transition: 'all 0.15s ease',
+                      position: 'relative',
+                      flexShrink: 0,
+                    }}
+                  >
+                    {/* Input file invisível com suporte a seleção de múltiplos arquivos */}
+                    <input
+                      id="input-multiplos-documentos-upload"
+                      type="file"
+                      multiple
+                      disabled={convertendoDocumento}
+                      accept=".pdf,application/pdf"
+                      style={{ display: 'none' }}
+                      onChange={handleFileUpload}
+                    />
+
+                    {/* Feedback visual durante processamento de arquivos PDF */}
+                    {convertendoDocumento && (
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 10,
+                          background: 'rgba(37, 99, 235, 0.08)',
+                          border: '1px solid rgba(37, 99, 235, 0.25)',
+                          borderRadius: 8,
+                          padding: '8px 12px',
+                          color: '#2563eb',
+                        }}
+                      >
+                        <Loader2 size={16} className="animate-spin" />
+                        <div style={{ fontSize: 12, fontWeight: 600 }}>
+                          {statusConversao || 'Processando arquivos PDF...'}
+                        </div>
+                      </div>
+                    )}
+
+                    {documentosUpload.length === 0 ? (
+                      /* Estado 0: Nenhum arquivo selecionado */
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          width: '100%',
+                          gap: 12,
+                          flexWrap: 'wrap',
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+                          <div
+                            style={{
+                              width: 38,
+                              height: 38,
+                              borderRadius: 10,
+                              background: 'rgba(37, 99, 235, 0.08)',
+                              color: '#2563eb',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              flexShrink: 0,
+                            }}
+                          >
+                            <Files size={18} />
+                          </div>
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                              <span style={{ fontWeight: 700, fontSize: 13, color: 'hsl(var(--text-primary))' }}>
+                                Passo 2: Selecionar Documento(s) (PDF)
+                              </span>
+                              <span
+                                style={{
+                                  fontSize: 9.5,
+                                  fontWeight: 700,
+                                  padding: '1px 6px',
+                                  borderRadius: 999,
+                                  background: 'rgba(37, 99, 235, 0.08)',
+                                  color: '#2563eb',
+                                  border: '1px solid rgba(37, 99, 235, 0.2)',
+                                }}
+                              >
+                                Múltiplos Arquivos
+                              </span>
+                            </div>
+                            <div style={{ fontSize: 11.5, color: 'hsl(var(--text-secondary))', marginTop: 2 }}>
+                              Arraste os arquivos aqui ou clique no botão ao lado
+                            </div>
+                          </div>
+                        </div>
+
+                        <label
+                          htmlFor="input-multiplos-documentos-upload"
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 6,
+                            background: '#2563eb',
+                            color: '#ffffff',
+                            padding: '8px 16px',
+                            borderRadius: 8,
+                            fontSize: 12,
+                            fontWeight: 600,
+                            cursor: convertendoDocumento ? 'not-allowed' : 'pointer',
+                            whiteSpace: 'nowrap',
+                            flexShrink: 0,
+                            transition: 'all 0.15s ease',
+                          }}
+                          onMouseEnter={(e) => (e.currentTarget.style.background = '#1d4ed8')}
+                          onMouseLeave={(e) => (e.currentTarget.style.background = '#2563eb')}
+                        >
+                          <Upload size={13} />
+                          <span>{convertendoDocumento ? 'Processando...' : 'Escolher Arquivo(s)'}</span>
+                        </label>
+                      </div>
+                    ) : (
+                      /* Estado 1+: Arquivos selecionados */
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 12, width: '100%' }}>
+                        {/* Barra de cabeçalho do upload com métricas e ações */}
+                        <div
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            flexWrap: 'wrap',
+                            gap: 10,
+                            paddingBottom: 8,
+                            borderBottom: '1px solid hsl(var(--border-subtle))',
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                            <span
+                              style={{
+                                fontSize: 12.5,
+                                fontWeight: 800,
+                                color: 'hsl(var(--text-primary))',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 6,
+                              }}
+                            >
+                              <Files size={16} color="#2563eb" />
+                              Passo 2: {documentosUpload.length} {documentosUpload.length === 1 ? 'documento selecionado' : 'documentos selecionados'}
+                            </span>
+                            <span
+                              style={{
+                                fontSize: 11,
+                                fontWeight: 700,
+                                padding: '2px 8px',
+                                borderRadius: 999,
+                                background: 'rgba(37, 99, 235, 0.1)',
+                                color: '#2563eb',
+                                border: '1px solid rgba(37, 99, 235, 0.2)',
+                              }}
+                            >
+                              Total: {totalTamanhoFormatadoGeral} • {totalPaginasGeral} {totalPaginasGeral === 1 ? 'pág' : 'págs'}
+                            </span>
+                          </div>
+
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <label
+                              htmlFor="input-multiplos-documentos-upload"
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 5,
+                                background: 'rgba(37, 99, 235, 0.1)',
+                                border: '1px solid rgba(37, 99, 235, 0.3)',
+                                color: '#2563eb',
+                                padding: '6px 12px',
+                                borderRadius: 8,
+                                fontSize: 11.5,
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                                transition: 'all 0.15s ease',
+                              }}
+                              title="Adicionar mais arquivos à lista"
+                            >
+                              <FilePlus2 size={13} /> + Adicionar Mais
+                            </label>
+
+                            <button
+                              type="button"
+                              onClick={handleLimparTodosDocumentos}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 4,
+                                background: 'rgba(239, 68, 68, 0.08)',
+                                border: '1px solid rgba(239, 68, 68, 0.25)',
+                                color: '#ef4444',
+                                padding: '6px 10px',
+                                borderRadius: 8,
+                                fontSize: 11.5,
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                                transition: 'all 0.15s ease',
+                              }}
+                              title="Remover todos os arquivos da lista"
+                            >
+                              <Trash2 size={13} /> Limpar
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Seletor de Modo de Envio (quando há 2 ou mais documentos) */}
+                        {documentosUpload.length > 1 && (
+                          <div
+                            style={{
+                              background: 'hsl(var(--bg-elevated))',
+                              border: '1.5px solid rgba(59, 130, 246, 0.25)',
+                              borderRadius: 12,
+                              padding: 12,
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: 10,
+                            }}
+                          >
+                            <div
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                flexWrap: 'wrap',
+                                gap: 8,
+                              }}
+                            >
+                              <div style={{ fontSize: 11.5, fontWeight: 800, color: 'hsl(var(--text-primary))', display: 'flex', alignItems: 'center', gap: 5 }}>
+                                <Layers size={14} color="#2563eb" /> Formato de Envio dos {documentosUpload.length} Documentos:
+                              </div>
+                              <button
+                                type="button"
+                                onClick={handleAbrirPreviaPacoteUnificado}
+                                disabled={gerandoPreviaPacote}
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: 5,
+                                  background: 'linear-gradient(135deg, rgba(56, 189, 248, 0.15) 0%, rgba(37, 99, 235, 0.15) 100%)',
+                                  border: '1px solid rgba(56, 189, 248, 0.35)',
+                                  color: '#0284c7',
+                                  padding: '5px 11px',
+                                  borderRadius: 8,
+                                  fontSize: 11,
+                                  fontWeight: 700,
+                                  cursor: gerandoPreviaPacote ? 'not-allowed' : 'pointer',
+                                }}
+                                title="Visualizar prévia de todos os documentos consolidados em um só arquivo PDF"
+                              >
+                                {gerandoPreviaPacote ? <Loader2 size={12} className="animate-spin" /> : <Eye size={12} />}
+                                Prévia do Pacote ({totalPaginasGeral} págs)
+                              </button>
+                            </div>
+
+                            <div
+                              style={{
+                                display: 'grid',
+                                gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+                                gap: 8,
+                              }}
+                            >
+                              {/* Opção 1: Pacote Unificado */}
+                              <div
+                                onClick={() => setModoEnvioMultiplo('unificado')}
+                                style={{
+                                  cursor: 'pointer',
+                                  padding: '10px 12px',
+                                  borderRadius: 10,
+                                  border: modoEnvioMultiplo === 'unificado'
+                                    ? '2px solid #2563eb'
+                                    : '1px solid hsl(var(--border-subtle))',
+                                  background: modoEnvioMultiplo === 'unificado'
+                                    ? 'rgba(37, 99, 235, 0.08)'
+                                    : 'hsl(var(--bg-surface))',
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                  gap: 4,
+                                  transition: 'all 0.15s ease',
+                                }}
+                              >
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 800, fontSize: 12, color: modoEnvioMultiplo === 'unificado' ? '#2563eb' : 'hsl(var(--text-primary))' }}>
+                                    <Layers size={14} /> Pacote Unificado
+                                  </div>
+                                  <span
+                                    style={{
+                                      fontSize: 9.5,
+                                      fontWeight: 800,
+                                      background: modoEnvioMultiplo === 'unificado' ? '#2563eb' : 'rgba(100,116,139,0.2)',
+                                      color: modoEnvioMultiplo === 'unificado' ? '#ffffff' : 'hsl(var(--text-secondary))',
+                                      padding: '1px 6px',
+                                      borderRadius: 4,
+                                    }}
+                                  >
+                                    Recomendado
+                                  </span>
+                                </div>
+                                <div style={{ fontSize: 10.5, color: 'hsl(var(--text-secondary))', lineHeight: 1.35 }}>
+                                  Mescla todos os documentos em 1 único arquivo sequencial. O responsável assina 1 única vez via link e código OTP.
+                                </div>
+                              </div>
+
+                              {/* Opção 2: Documentos Separados */}
+                              <div
+                                onClick={() => setModoEnvioMultiplo('separados')}
+                                style={{
+                                  cursor: 'pointer',
+                                  padding: '10px 12px',
+                                  borderRadius: 10,
+                                  border: modoEnvioMultiplo === 'separados'
+                                    ? '2px solid #2563eb'
+                                    : '1px solid hsl(var(--border-subtle))',
+                                  background: modoEnvioMultiplo === 'separados'
+                                    ? 'rgba(37, 99, 235, 0.08)'
+                                    : 'hsl(var(--bg-surface))',
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                  gap: 4,
+                                  transition: 'all 0.15s ease',
+                                }}
+                              >
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 800, fontSize: 12, color: modoEnvioMultiplo === 'separados' ? '#2563eb' : 'hsl(var(--text-primary))' }}>
+                                    <Files size={14} /> Documentos Separados
+                                  </div>
+                                  <span
+                                    style={{
+                                      fontSize: 9.5,
+                                      fontWeight: 800,
+                                      background: modoEnvioMultiplo === 'separados' ? '#2563eb' : 'rgba(100,116,139,0.2)',
+                                      color: modoEnvioMultiplo === 'separados' ? '#ffffff' : 'hsl(var(--text-secondary))',
+                                      padding: '1px 6px',
+                                      borderRadius: 4,
+                                    }}
+                                  >
+                                    Lote
+                                  </span>
+                                </div>
+                                <div style={{ fontSize: 10.5, color: 'hsl(var(--text-secondary))', lineHeight: 1.35 }}>
+                                  Gera {documentosUpload.length} contratos independentes com links de assinatura e protocolos separados.
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Lista de Documentos Selecionados */}
+                        <div
+                          style={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: 6,
+                            maxHeight: 280,
+                            overflowY: 'auto',
+                            paddingRight: 4,
+                          }}
+                        >
+                          {documentosUpload.map((doc, idx) => {
+                            const isDocx = doc.formatoOriginal === 'docx' || doc.formatoOriginal === 'doc'
+                            return (
+                              <div
+                                key={doc.id}
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'space-between',
+                                  padding: '8px 12px',
+                                  borderRadius: 10,
+                                  background: 'hsl(var(--bg-surface))',
+                                  border: '1px solid hsl(var(--border-subtle))',
+                                  gap: 10,
+                                  transition: 'all 0.15s ease',
+                                }}
+                              >
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                                  {/* Posição e botões de reordenar */}
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                    <span
+                                      style={{
+                                        fontSize: 10.5,
+                                        fontWeight: 800,
+                                        color: '#2563eb',
+                                        background: 'rgba(37, 99, 235, 0.1)',
+                                        padding: '2px 6px',
+                                        borderRadius: 5,
+                                        minWidth: 24,
+                                        textAlign: 'center',
+                                      }}
+                                    >
+                                      #{idx + 1}
+                                    </span>
+                                    {documentosUpload.length > 1 && (
+                                      <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                                        <button
+                                          type="button"
+                                          disabled={idx === 0}
+                                          onClick={() => handleMoverDocumento(idx, 'cima')}
+                                          style={{
+                                            background: 'none',
+                                            border: 'none',
+                                            padding: 0,
+                                            cursor: idx === 0 ? 'not-allowed' : 'pointer',
+                                            opacity: idx === 0 ? 0.25 : 0.8,
+                                            lineHeight: 1,
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                          }}
+                                          title="Mover para cima"
+                                        >
+                                          <ArrowUp size={12} />
+                                        </button>
+                                        <button
+                                          type="button"
+                                          disabled={idx === documentosUpload.length - 1}
+                                          onClick={() => handleMoverDocumento(idx, 'baixo')}
+                                          style={{
+                                            background: 'none',
+                                            border: 'none',
+                                            padding: 0,
+                                            cursor: idx === documentosUpload.length - 1 ? 'not-allowed' : 'pointer',
+                                            opacity: idx === documentosUpload.length - 1 ? 0.25 : 0.8,
+                                            lineHeight: 1,
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                          }}
+                                          title="Mover para baixo"
+                                        >
+                                          <ArrowDown size={12} />
+                                        </button>
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  {/* Ícone do tipo */}
+                                  <div
+                                    style={{
+                                      width: 32,
+                                      height: 32,
+                                      borderRadius: 8,
+                                      background: isDocx
+                                        ? 'rgba(37, 99, 235, 0.15)'
+                                        : 'rgba(16, 185, 129, 0.15)',
+                                      color: isDocx ? '#2563eb' : '#059669',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      flexShrink: 0,
+                                    }}
+                                  >
+                                    <FileText size={16} />
+                                  </div>
+
+                                  {/* Nome e Metadados */}
+                                  <div style={{ minWidth: 0 }}>
+                                    <div
+                                      title={doc.nome}
+                                      style={{
+                                        fontWeight: 700,
+                                        fontSize: 12.5,
+                                        color: 'hsl(var(--text-primary))',
+                                        maxWidth: 300,
+                                        overflow: 'hidden',
+                                        textOverflow: 'ellipsis',
+                                        whiteSpace: 'nowrap',
+                                      }}
+                                    >
+                                      {doc.nome}
+                                    </div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2, flexWrap: 'wrap' }}>
+                                      <span
+                                        style={{
+                                          fontSize: 9.5,
+                                          fontWeight: 800,
+                                          padding: '1px 5px',
+                                          borderRadius: 4,
+                                          background: isDocx ? 'rgba(37, 99, 235, 0.15)' : 'rgba(16, 185, 129, 0.15)',
+                                          color: isDocx ? '#2563eb' : '#059669',
+                                        }}
+                                      >
+                                        {doc.formatoOriginal.toUpperCase()}
+                                      </span>
+                                      <span style={{ fontSize: 10.5, color: 'hsl(var(--text-secondary))' }}>
+                                        {doc.tamanhoFormatado} • {doc.totalPaginas} {doc.totalPaginas === 1 ? 'pág' : 'págs'}
+                                      </span>
+                                      <span
+                                        style={{
+                                          fontSize: 9.5,
+                                          color: '#10b981',
+                                          fontWeight: 600,
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          gap: 3,
+                                        }}
+                                        title={`Hash SHA-256: ${doc.hashSha256}`}
+                                      >
+                                        <CheckCircle2 size={10} /> SHA-256
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Ações do arquivo */}
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleAbrirPreviaIndividual(doc)}
+                                    style={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: 4,
+                                      background: 'rgba(56, 189, 248, 0.12)',
+                                      border: '1px solid rgba(56, 189, 248, 0.3)',
+                                      color: '#0284c7',
+                                      padding: '5px 9px',
+                                      borderRadius: 6,
+                                      fontSize: 11,
+                                      fontWeight: 700,
+                                      cursor: 'pointer',
+                                    }}
+                                    title="Visualizar documento"
+                                  >
+                                    <Eye size={12} /> Prévia
+                                  </button>
+
+                                  <a
+                                    href={doc.pdfBase64}
+                                    download={doc.nomeArquivoPdf || `${doc.nome.replace(/\.(docx?|pdf)$/i, '')}.pdf`}
+                                    style={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: 4,
+                                      background: 'rgba(37, 99, 235, 0.08)',
+                                      border: '1px solid rgba(37, 99, 235, 0.2)',
+                                      color: '#2563eb',
+                                      padding: '5px 9px',
+                                      borderRadius: 6,
+                                      fontSize: 11,
+                                      fontWeight: 700,
+                                      textDecoration: 'none',
+                                      cursor: 'pointer',
+                                    }}
+                                    title="Baixar em PDF"
+                                  >
+                                    <Download size={12} />
+                                  </a>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoverDocumento(doc.id)}
+                                    style={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      background: 'rgba(239, 68, 68, 0.08)',
+                                      border: '1px solid rgba(239, 68, 68, 0.25)',
+                                      color: '#ef4444',
+                                      padding: '5px 7px',
+                                      borderRadius: 6,
+                                      cursor: 'pointer',
+                                    }}
+                                    title="Remover documento da seleção"
+                                  >
+                                    <Trash2 size={12} />
+                                  </button>
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* ── PASSO 3. POSICIONAMENTO DAS ASSINATURAS NO DOCUMENTO ── */}
+                  <div
+                    style={{
+                      background: 'hsl(var(--bg-elevated))',
+                      border: '1px solid hsl(var(--border-subtle))',
+                      borderRadius: 14,
+                      padding: '14px 16px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 12,
+                      flexShrink: 0,
+                    }}
+                  >
+                    {/* Cabeçalho do Passo 3 */}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <div
+                          style={{
+                            width: 32,
+                            height: 32,
+                            borderRadius: 8,
+                            background: 'rgba(59, 130, 246, 0.12)',
+                            color: '#3b82f6',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            flexShrink: 0,
+                          }}
+                        >
+                          <PenTool size={17} />
+                        </div>
+                        <div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <label style={{ fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-secondary))', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                              Passo 3: Posicionamento das Assinaturas no Documento
+                            </label>
+                            {signatariosPosicionaveis.length > 0 && (
+                              <span
+                                style={{
+                                  fontSize: 10,
+                                  fontWeight: 700,
+                                  color: Object.keys(posicoesAssinaturas).length === signatariosPosicionaveis.length ? '#059669' : '#d97706',
+                                  background: Object.keys(posicoesAssinaturas).length === signatariosPosicionaveis.length ? 'rgba(16, 185, 129, 0.12)' : 'rgba(245, 158, 11, 0.12)',
+                                  padding: '2px 8px',
+                                  borderRadius: 999,
+                                  border: `1px solid ${Object.keys(posicoesAssinaturas).length === signatariosPosicionaveis.length ? 'rgba(16, 185, 129, 0.3)' : 'rgba(245, 158, 11, 0.3)'}`,
+                                }}
+                              >
+                                {Object.keys(posicoesAssinaturas).length} de {signatariosPosicionaveis.length} posicionadas
+                              </span>
+                            )}
+                          </div>
+                          <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', marginTop: 1 }}>
+                            Defina o local exato onde cada pessoa irá assinar na folha. A rubrica repetitiva de rodapé com QR Code foi suprimida.
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Botões de Ação do Passo 3 */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                        <button
+                          type="button"
+                          onClick={handleAutoPosicionarRodape}
+                          disabled={documentosUpload.length === 0 || signatariosPosicionaveis.length === 0}
+                          style={{
+                            background: 'rgba(59, 130, 246, 0.1)',
+                            border: '1px solid rgba(59, 130, 246, 0.3)',
+                            color: '#2563eb',
+                            borderRadius: 8,
+                            padding: '7px 12px',
+                            fontSize: 12,
+                            fontWeight: 600,
+                            cursor: documentosUpload.length === 0 || signatariosPosicionaveis.length === 0 ? 'not-allowed' : 'pointer',
+                            opacity: documentosUpload.length === 0 || signatariosPosicionaveis.length === 0 ? 0.5 : 1,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 6,
+                            transition: 'all 0.15s ease',
+                          }}
+                          title="Distribuir automaticamente todas as assinaturas no rodapé da última página"
+                        >
+                          <Sparkles size={14} />
+                          <span>Auto-Posicionar no Rodapé</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (documentosUpload.length === 0) {
+                              toast.error('Faça upload de ao menos um arquivo PDF para abrir o posicionador visual.')
+                              return
+                            }
+                            if (signatariosPosicionaveis.length === 0) {
+                              toast.error('Selecione primeiro a instituição e os signatários que assinarão o documento.')
+                              return
+                            }
+                            setModalPosicionadorAberto(true)
+                          }}
+                          disabled={documentosUpload.length === 0 || signatariosPosicionaveis.length === 0}
+                          style={{
+                            background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
+                            border: 'none',
+                            color: '#ffffff',
+                            borderRadius: 8,
+                            padding: '7px 14px',
+                            fontSize: 12,
+                            fontWeight: 700,
+                            cursor: documentosUpload.length === 0 || signatariosPosicionaveis.length === 0 ? 'not-allowed' : 'pointer',
+                            opacity: documentosUpload.length === 0 || signatariosPosicionaveis.length === 0 ? 0.5 : 1,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 6,
+                            boxShadow: '0 2px 8px rgba(37, 99, 235, 0.25)',
+                            transition: 'all 0.15s ease',
+                          }}
+                        >
+                          <Move size={14} />
+                          <span>Abrir Posicionador Visual na Página</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Conteúdo / Cards de Signatários */}
+                    {documentosUpload.length === 0 ? (
+                      <div
+                        style={{
+                          padding: '16px',
+                          background: 'hsl(var(--bg-surface))',
+                          border: '1px dashed hsl(var(--border-subtle))',
+                          borderRadius: 10,
+                          textAlign: 'center',
+                          fontSize: 12,
+                          color: 'hsl(var(--text-secondary))',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          gap: 6,
+                        }}
+                      >
+                        <Upload size={22} style={{ opacity: 0.4 }} />
+                        <span>Faça o upload do documento no <strong>Passo 2</strong> acima para habilitar o posicionamento das assinaturas.</span>
+                      </div>
+                    ) : signatariosPosicionaveis.length === 0 ? (
+                      <div
+                        style={{
+                          padding: '14px',
+                          background: 'rgba(245, 158, 11, 0.05)',
+                          border: '1px dashed rgba(245, 158, 11, 0.4)',
+                          borderRadius: 10,
+                          textAlign: 'center',
+                          fontSize: 12,
+                          color: '#b45309',
+                        }}
+                      >
+                        Selecione a instituição e os representantes no <strong>Passo 1</strong> para configurar as assinaturas.
+                      </div>
+                    ) : (
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 10 }}>
+                        {signatariosPosicionaveis.map((sig) => {
+                          const posicao = posicoesAssinaturas[sig.id]
+                          return (
+                            <div
+                              key={sig.id}
+                              style={{
+                                padding: '10px 12px',
+                                borderRadius: 10,
+                                background: posicao ? 'rgba(16, 185, 129, 0.03)' : 'hsl(var(--bg-surface))',
+                                border: posicao ? '1px solid rgba(16, 185, 129, 0.35)' : '1px solid hsl(var(--border-subtle))',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                gap: 10,
+                              }}
+                            >
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                                <div
+                                  style={{
+                                    width: 10,
+                                    height: 10,
+                                    borderRadius: '50%',
+                                    background: sig.cor,
+                                    flexShrink: 0,
+                                  }}
+                                />
+                                <div style={{ minWidth: 0 }}>
+                                  <div style={{ fontSize: 12, fontWeight: 700, color: 'hsl(var(--text-primary))', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                    {sig.nome}
+                                  </div>
+                                  <div style={{ fontSize: 10.5, color: 'hsl(var(--text-secondary))', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                    {sig.cargo} {sig.tipo === 'escola' ? '(Instituição)' : '(Responsável)'}
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                                {posicao ? (
+                                  <>
+                                    <span
+                                      style={{
+                                        fontSize: 10,
+                                        fontWeight: 700,
+                                        color: '#059669',
+                                        background: 'rgba(16, 185, 129, 0.15)',
+                                        padding: '2px 7px',
+                                        borderRadius: 6,
+                                      }}
+                                    >
+                                      Pág {posicao.pagina} ({Math.round(posicao.xPercent)}%, {Math.round(posicao.yPercent)}%)
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setPosicoesAssinaturas(prev => {
+                                          const cp = { ...prev }
+                                          delete cp[sig.id]
+                                          return cp
+                                        })
+                                      }}
+                                      title="Remover posicionamento"
+                                      style={{
+                                        background: 'transparent',
+                                        border: 'none',
+                                        color: 'hsl(var(--text-muted))',
+                                        cursor: 'pointer',
+                                        padding: 4,
+                                        borderRadius: 4,
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                      }}
+                                    >
+                                      <X size={13} />
+                                    </button>
+                                  </>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() => setModalPosicionadorAberto(true)}
+                                    style={{
+                                      fontSize: 11,
+                                      fontWeight: 600,
+                                      color: '#2563eb',
+                                      background: 'rgba(37, 99, 235, 0.08)',
+                                      border: '1px solid rgba(37, 99, 235, 0.25)',
+                                      padding: '3px 8px',
+                                      borderRadius: 6,
+                                      cursor: 'pointer',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: 4,
+                                    }}
+                                  >
+                                    <Move size={11} /> Posicionar
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+
+                    {/* Informação sobre a supressão do rodapé repetitivo */}
+                    <div
+                      style={{
+                        fontSize: 11,
+                        color: 'hsl(var(--text-muted))',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        background: 'hsl(var(--bg-surface))',
+                        padding: '7px 10px',
+                        borderRadius: 8,
+                        border: '1px solid hsl(var(--border-subtle))',
+                      }}
+                    >
+                      <ShieldCheck size={13} color="#10b981" style={{ flexShrink: 0 }} />
+                      <span>
+                        As assinaturas contêm selo eletrônico com hash e linha demarcada. O carimbo repetitivo com QR Code nas margens foi suprimido, mantendo a folha oficial de evidências ao final.
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -6173,7 +7124,7 @@ export default function MatriculaDigitalPage() {
                   className="digital-modal-footer"
                   style={{
                     flexShrink: 0,
-                    padding: '14px 24px',
+                    padding: '13px 22px',
                     borderTop: '1px solid hsl(var(--border-subtle))',
                     background: 'hsl(var(--bg-surface))',
                     display: 'flex',
@@ -6195,10 +7146,10 @@ export default function MatriculaDigitalPage() {
                         background: 'hsl(var(--bg-elevated))',
                         border: '1px solid hsl(var(--border-subtle))',
                         color: 'hsl(var(--text-secondary))',
-                        borderRadius: 10,
-                        padding: '10px 18px',
+                        borderRadius: 8,
+                        padding: '9px 16px',
                         cursor: 'pointer',
-                        fontSize: 13,
+                        fontSize: 12.5,
                         fontWeight: 600,
                         transition: 'all 0.15s ease',
                       }}
@@ -6215,19 +7166,19 @@ export default function MatriculaDigitalPage() {
                         background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
                         color: '#fff',
                         border: 'none',
-                        borderRadius: 10,
-                        padding: '10px 22px',
+                        borderRadius: 8,
+                        padding: '9px 20px',
                         cursor: salvandoContrato ? 'not-allowed' : 'pointer',
-                        fontSize: 13.5,
+                        fontSize: 13,
                         fontWeight: 700,
                         display: 'flex',
                         alignItems: 'center',
-                        gap: 8,
-                        boxShadow: '0 4px 16px rgba(16, 185, 129, 0.35)',
-                        transition: 'all 0.18s ease',
+                        gap: 7,
+                        boxShadow: '0 2px 10px rgba(16, 185, 129, 0.3)',
+                        transition: 'all 0.15s ease',
                       }}
                       onMouseEnter={e => {
-                        if (!salvandoContrato) e.currentTarget.style.filter = 'brightness(1.08)'
+                        if (!salvandoContrato) e.currentTarget.style.filter = 'brightness(1.06)'
                       }}
                       onMouseLeave={e => {
                         e.currentTarget.style.filter = 'none'
@@ -6235,11 +7186,11 @@ export default function MatriculaDigitalPage() {
                     >
                       {salvandoContrato ? (
                         <>
-                          <RefreshCw size={15} className="animate-spin" /> Processando Arquivo e Hashes...
+                          <RefreshCw size={14} className="animate-spin" /> Processando Hashes...
                         </>
                       ) : (
                         <>
-                          <Check size={15} /> Enviar Documento & Gerar Link
+                          <Check size={14} /> Enviar Documento & Gerar Link
                         </>
                       )}
                     </button>
@@ -6871,12 +7822,23 @@ export default function MatriculaDigitalPage() {
                           nome: 'IVAN ROSSI SAMBRANA',
                           cpf: '00130220167',
                           cargo: 'Representante Legal / Diretor Geral',
-                          razaoSocial: 'NOVA RAZÃO SOCIAL LTDA',
+                          razaoSocial: 'NOVA INSTITUIÇÃO DE ENSINO LTDA',
                           cnpj: '00.000.000/0001-00',
                           email: 'direcao@colegioimpacto.net',
                           telefone: '(67) 99280-6464',
                           segmento: 'Novo Segmento',
                           padrao: false,
+                          signatarios: [
+                            {
+                              id: `sig_${novoId}_1`,
+                              nome: 'IVAN ROSSI SAMBRANA',
+                              cpf: '00130220167',
+                              cargo: 'Representante Legal / Diretor Geral',
+                              email: 'direcao@colegioimpacto.net',
+                              telefone: '(67) 99280-6464',
+                              padrao: true,
+                            },
+                          ],
                         }
                         const novaLista = [...configData.representantes, novoRep]
                         setConfigData({
@@ -6884,23 +7846,23 @@ export default function MatriculaDigitalPage() {
                           representantes: novaLista,
                         })
                         setRepConfigIndex(novaLista.length - 1)
-                        toast.success('Novo representante adicionado para edição.')
+                        toast.success('Novo CNPJ adicionado para configuração.')
                       }}
                       style={{
                         background: 'rgba(56, 189, 248, 0.15)',
                         border: '1px solid rgba(56, 189, 248, 0.3)',
                         color: '#38bdf8',
-                        padding: '4px 10px',
-                        borderRadius: 6,
-                        fontSize: 11,
-                        fontWeight: 600,
+                        padding: '5px 12px',
+                        borderRadius: 8,
+                        fontSize: 11.5,
+                        fontWeight: 700,
                         cursor: 'pointer',
                         display: 'flex',
                         alignItems: 'center',
-                        gap: 4,
+                        gap: 5,
                       }}
                     >
-                      <Plus size={13} /> Adicionar CNPJ / Representante
+                      <Plus size={13} /> Adicionar Nova Instituição / CNPJ
                     </button>
                   </div>
 
@@ -6932,10 +7894,12 @@ export default function MatriculaDigitalPage() {
                     ))}
                   </div>
 
-                  {/* Campos do Representante Ativo */}
+                  {/* Campos do CNPJ / Instituição Ativa e seus Múltiplos Representantes */}
                   {(() => {
                     const repAtivo = configData.representantes[repConfigIndex] || configData.representantes[0]
                     if (!repAtivo) return null
+                    const signatarios = garantirSignatarios(repAtivo)
+
                     const updateRepField = (field: keyof RepresentanteConfigItem, val: any) => {
                       const updated = [...configData.representantes]
                       updated[repConfigIndex] = { ...updated[repConfigIndex], [field]: val }
@@ -6946,82 +7910,623 @@ export default function MatriculaDigitalPage() {
                       })
                     }
 
+                    const handleAdicionarSignatario = () => {
+                      const updated = [...configData.representantes]
+                      const currentRep = updated[repConfigIndex]
+                      const currentSigs = garantirSignatarios(currentRep)
+                      const estilos = ['classica', 'moderna', 'fluida', 'rubrica']
+                      const estiloEscolhido = estilos[currentSigs.length % estilos.length]
+                      const novoSig: SignatarioEscolaItem = {
+                        id: `sig_${currentRep.id}_${Date.now()}`,
+                        nome: '',
+                        cpf: '',
+                        cargo: 'Diretor(a) / Representante Legal',
+                        email: currentRep.email || '',
+                        telefone: currentRep.telefone || '',
+                        padrao: currentSigs.length === 0,
+                        estiloCaligrafico: estiloEscolhido,
+                        assinaturaBase64: null,
+                      }
+                      const novosSigs = [...currentSigs, novoSig]
+                      const sigPadrao = novosSigs.find(s => s.padrao) || novosSigs[0]
+                      updated[repConfigIndex] = {
+                        ...currentRep,
+                        signatarios: novosSigs,
+                        nome: sigPadrao.nome,
+                        cpf: sigPadrao.cpf,
+                        cargo: sigPadrao.cargo,
+                      }
+                      setConfigData({
+                        ...configData,
+                        representantes: updated,
+                        representante: updated[0],
+                      })
+                      toast.success('Novo representante adicionado. Preencha os dados abaixo.')
+                    }
+
+                    const handleUpdateSignatarioField = (sIdx: number, field: keyof SignatarioEscolaItem, val: any) => {
+                      const updated = [...configData.representantes]
+                      const currentRep = updated[repConfigIndex]
+                      const currentSigs = [...garantirSignatarios(currentRep)]
+                      const sigAtual = { ...currentSigs[sIdx], [field]: val }
+
+                      // Se o nome foi digitado/alterado e a assinatura for caligráfica, atualiza o desenho instantaneamente
+                      if (field === 'nome' && typeof document !== 'undefined') {
+                        const nomeLimpo = String(val || '').trim()
+                        if (nomeLimpo && (!sigAtual.assinaturaBase64 || sigAtual.estiloCaligrafico !== 'custom')) {
+                          sigAtual.assinaturaBase64 = gerarAssinaturaCaligraficaCanvas(nomeLimpo, sigAtual.estiloCaligrafico || 'classica')
+                        }
+                      }
+
+                      currentSigs[sIdx] = sigAtual
+                      const sigPadrao = currentSigs.find(s => s.padrao) || currentSigs[0]
+                      updated[repConfigIndex] = {
+                        ...currentRep,
+                        signatarios: currentSigs,
+                        nome: sigPadrao.nome,
+                        cpf: sigPadrao.cpf,
+                        cargo: sigPadrao.cargo,
+                      }
+                      setConfigData({
+                        ...configData,
+                        representantes: updated,
+                        representante: updated[0],
+                      })
+                    }
+
+                    const handleCiclarEstiloAssinatura = (sIdx: number) => {
+                      const updated = [...configData.representantes]
+                      const currentRep = updated[repConfigIndex]
+                      const currentSigs = [...garantirSignatarios(currentRep)]
+                      const sigAtual = { ...currentSigs[sIdx] }
+                      const estilos = ['classica', 'formal']
+                      const idxAtual = estilos.indexOf(sigAtual.estiloCaligrafico || 'classica')
+                      const novoEstilo = estilos[(idxAtual + 1) % estilos.length]
+                      sigAtual.estiloCaligrafico = novoEstilo
+                      if (typeof document !== 'undefined') {
+                        const nomeParaAssinar = (sigAtual.nome || 'Representante').trim()
+                        sigAtual.assinaturaBase64 = gerarAssinaturaCaligraficaCanvas(nomeParaAssinar, novoEstilo)
+                      }
+                      currentSigs[sIdx] = sigAtual
+                      const sigPadrao = currentSigs.find(s => s.padrao) || currentSigs[0]
+                      updated[repConfigIndex] = {
+                        ...currentRep,
+                        signatarios: currentSigs,
+                        nome: sigPadrao.nome,
+                        cpf: sigPadrao.cpf,
+                        cargo: sigPadrao.cargo,
+                      }
+                      setConfigData({
+                        ...configData,
+                        representantes: updated,
+                        representante: updated[0],
+                      })
+                      const rotulo = ESTILOS_CHANCELA.find(e => e.id === novoEstilo)?.rotulo || novoEstilo
+                      toast.success(`Estilo de assinatura alterado para: ${rotulo}`)
+                    }
+
+                    const handleUploadAssinatura = (sIdx: number, e: React.ChangeEvent<HTMLInputElement>) => {
+                      const file = e.target.files?.[0]
+                      if (!file) return
+                      if (file.size > 2 * 1024 * 1024) {
+                        toast.error('O arquivo da assinatura deve ter no máximo 2MB.')
+                        return
+                      }
+                      const reader = new FileReader()
+                      reader.onload = (event) => {
+                        const base64 = event.target?.result as string
+                        if (!base64) return
+                        const updated = [...configData.representantes]
+                        const currentRep = updated[repConfigIndex]
+                        const currentSigs = [...garantirSignatarios(currentRep)]
+                        currentSigs[sIdx] = {
+                          ...currentSigs[sIdx],
+                          assinaturaBase64: base64,
+                          estiloCaligrafico: 'custom',
+                        }
+                        const sigPadrao = currentSigs.find(s => s.padrao) || currentSigs[0]
+                        updated[repConfigIndex] = {
+                          ...currentRep,
+                          signatarios: currentSigs,
+                          nome: sigPadrao.nome,
+                          cpf: sigPadrao.cpf,
+                          cargo: sigPadrao.cargo,
+                        }
+                        setConfigData({
+                          ...configData,
+                          representantes: updated,
+                          representante: updated[0],
+                        })
+                        toast.success('Imagem da assinatura carregada com sucesso!')
+                      }
+                      reader.readAsDataURL(file)
+                    }
+
+                    const handleDefinirSignatarioPadrao = (sIdx: number) => {
+                      const updated = [...configData.representantes]
+                      const currentRep = updated[repConfigIndex]
+                      const currentSigs = garantirSignatarios(currentRep).map((s, i) => ({
+                        ...s,
+                        padrao: i === sIdx,
+                      }))
+                      const sigPadrao = currentSigs[sIdx]
+                      updated[repConfigIndex] = {
+                        ...currentRep,
+                        signatarios: currentSigs,
+                        nome: sigPadrao.nome,
+                        cpf: sigPadrao.cpf,
+                        cargo: sigPadrao.cargo,
+                      }
+                      setConfigData({
+                        ...configData,
+                        representantes: updated,
+                        representante: updated[0],
+                      })
+                      toast.success(`"${sigPadrao.nome || 'Representante'}" definido como signatário padrão deste CNPJ.`)
+                    }
+
+                    const handleRemoverSignatario = (sIdx: number) => {
+                      const updated = [...configData.representantes]
+                      const currentRep = updated[repConfigIndex]
+                      const currentSigs = garantirSignatarios(currentRep)
+                      if (currentSigs.length <= 1) {
+                        toast.error('O CNPJ deve possuir pelo menos 1 representante cadastrado.')
+                        return
+                      }
+                      const sigRemovido = currentSigs[sIdx]
+                      if (sigRemovido.nome && !confirm(`Deseja realmente remover o representante "${sigRemovido.nome}"?`)) {
+                        return
+                      }
+                      let novosSigs = currentSigs.filter((_, i) => i !== sIdx)
+                      if (!novosSigs.some(s => s.padrao)) {
+                        novosSigs[0].padrao = true
+                      }
+                      const sigPadrao = novosSigs.find(s => s.padrao) || novosSigs[0]
+                      updated[repConfigIndex] = {
+                        ...currentRep,
+                        signatarios: novosSigs,
+                        nome: sigPadrao.nome,
+                        cpf: sigPadrao.cpf,
+                        cargo: sigPadrao.cargo,
+                      }
+                      setConfigData({
+                        ...configData,
+                        representantes: updated,
+                        representante: updated[0],
+                      })
+                      toast.info('Representante removido.')
+                    }
+
+                    const handleReplicarRepresentantes = () => {
+                      const currentRep = configData.representantes[repConfigIndex]
+                      const currentSigs = garantirSignatarios(currentRep)
+                      if (currentSigs.length === 0) return
+
+                      const confirmMsg = `Deseja replicar os ${currentSigs.length} representante(s) deste CNPJ para todos os outros ${configData.representantes.length - 1} CNPJ(s) cadastrados?`
+                      if (!confirm(confirmMsg)) return
+
+                      const updated = configData.representantes.map((rep, idx) => {
+                        if (idx === repConfigIndex) return rep
+                        const novosSigs: SignatarioEscolaItem[] = currentSigs.map((s, sIdx) => ({
+                          ...s,
+                          id: `sig_${rep.id}_${Date.now()}_${sIdx}`,
+                        }))
+                        const sigPadrao = novosSigs.find(s => s.padrao) || novosSigs[0]
+                        return {
+                          ...rep,
+                          signatarios: novosSigs,
+                          nome: sigPadrao.nome,
+                          cpf: sigPadrao.cpf,
+                          cargo: sigPadrao.cargo,
+                        }
+                      })
+
+                      setConfigData({
+                        ...configData,
+                        representantes: updated,
+                        representante: updated[0],
+                      })
+                      toast.success(`Representantes replicados com sucesso para os demais ${configData.representantes.length - 1} CNPJ(s)!`)
+                    }
+
                     return (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
-                          <div>
-                            <label style={{ display: 'block', fontSize: 11, color: 'hsl(var(--text-secondary))', marginBottom: 4 }}>RAZÃO SOCIAL *</label>
-                            <input
-                              type="text"
-                              required
-                              value={repAtivo.razaoSocial}
-                              onChange={e => updateRepField('razaoSocial', e.target.value)}
-                              placeholder="COLÉGIO IMPACTO CENTRO DE ENSINO LTDA"
-                              style={{ width: '100%', height: 36, background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 6, padding: '0 8px', color: 'hsl(var(--text-primary))', fontSize: 13 }}
-                            />
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                        {/* Seção 1: Dados Institucionais do CNPJ */}
+                        <div style={{ background: 'hsl(var(--bg-surface))', padding: 14, borderRadius: 10, border: '1px solid hsl(var(--border-subtle))' }}>
+                          <div style={{ fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-secondary))', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <Building2 size={13} color="#38bdf8" /> Dados da Instituição Emissora (Pessoa Jurídica)
                           </div>
-                          <div>
-                            <label style={{ display: 'block', fontSize: 11, color: 'hsl(var(--text-secondary))', marginBottom: 4 }}>CNPJ *</label>
-                            <input
-                              type="text"
-                              required
-                              value={repAtivo.cnpj}
-                              onChange={e => updateRepField('cnpj', e.target.value)}
-                              placeholder="04.395.789/0001-88"
-                              style={{ width: '100%', height: 36, background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 6, padding: '0 8px', color: 'hsl(var(--text-primary))', fontSize: 13 }}
-                            />
-                          </div>
-                          <div>
-                            <label style={{ display: 'block', fontSize: 11, color: 'hsl(var(--text-secondary))', marginBottom: 4 }}>SEGMENTO / DESCRIÇÃO</label>
-                            <input
-                              type="text"
-                              value={repAtivo.segmento || ''}
-                              onChange={e => updateRepField('segmento', e.target.value)}
-                              placeholder="Ex: Ed. Infantil e Ens. Fund / Ens. Médio"
-                              style={{ width: '100%', height: 36, background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 6, padding: '0 8px', color: 'hsl(var(--text-primary))', fontSize: 13 }}
-                            />
-                          </div>
-                        </div>
-
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
-                          <div>
-                            <label style={{ display: 'block', fontSize: 11, color: 'hsl(var(--text-secondary))', marginBottom: 4 }}>NOME COMPLETO DO REPRESENTANTE *</label>
-                            <input
-                              type="text"
-                              required
-                              value={repAtivo.nome}
-                              onChange={e => updateRepField('nome', e.target.value)}
-                              style={{ width: '100%', height: 36, background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 6, padding: '0 8px', color: 'hsl(var(--text-primary))', fontSize: 13 }}
-                            />
-                          </div>
-                          <div>
-                            <label style={{ display: 'block', fontSize: 11, color: 'hsl(var(--text-secondary))', marginBottom: 4 }}>CPF DO REPRESENTANTE *</label>
-                            <input
-                              type="text"
-                              required
-                              value={repAtivo.cpf}
-                              onChange={e => updateRepField('cpf', formatarCpf(e.target.value))}
-                              style={{ width: '100%', height: 36, background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 6, padding: '0 8px', color: 'hsl(var(--text-primary))', fontSize: 13 }}
-                            />
-                          </div>
-                          <div>
-                            <label style={{ display: 'block', fontSize: 11, color: 'hsl(var(--text-secondary))', marginBottom: 4 }}>CARGO INSTITUCIONAL *</label>
-                            <input
-                              type="text"
-                              required
-                              value={repAtivo.cargo}
-                              onChange={e => updateRepField('cargo', e.target.value)}
-                              style={{ width: '100%', height: 36, background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 6, padding: '0 8px', color: 'hsl(var(--text-primary))', fontSize: 13 }}
-                            />
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
+                            <div>
+                              <label style={{ display: 'block', fontSize: 11, color: 'hsl(var(--text-secondary))', marginBottom: 4 }}>RAZÃO SOCIAL *</label>
+                              <input
+                                type="text"
+                                required
+                                value={repAtivo.razaoSocial}
+                                onChange={e => updateRepField('razaoSocial', e.target.value)}
+                                placeholder="COLÉGIO IMPACTO CENTRO DE ENSINO LTDA"
+                                style={{ width: '100%', height: 36, background: 'hsl(var(--bg-elevated))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 6, padding: '0 8px', color: 'hsl(var(--text-primary))', fontSize: 13 }}
+                              />
+                            </div>
+                            <div>
+                              <label style={{ display: 'block', fontSize: 11, color: 'hsl(var(--text-secondary))', marginBottom: 4 }}>CNPJ *</label>
+                              <input
+                                type="text"
+                                required
+                                value={repAtivo.cnpj}
+                                onChange={e => updateRepField('cnpj', e.target.value)}
+                                placeholder="04.395.789/0001-88"
+                                style={{ width: '100%', height: 36, background: 'hsl(var(--bg-elevated))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 6, padding: '0 8px', color: 'hsl(var(--text-primary))', fontSize: 13 }}
+                              />
+                            </div>
+                            <div>
+                              <label style={{ display: 'block', fontSize: 11, color: 'hsl(var(--text-secondary))', marginBottom: 4 }}>SEGMENTO / DESCRIÇÃO</label>
+                              <input
+                                type="text"
+                                value={repAtivo.segmento || ''}
+                                onChange={e => updateRepField('segmento', e.target.value)}
+                                placeholder="Ex: Ed. Infantil e Ens. Fund / Ens. Médio"
+                                style={{ width: '100%', height: 36, background: 'hsl(var(--bg-elevated))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 6, padding: '0 8px', color: 'hsl(var(--text-primary))', fontSize: 13 }}
+                              />
+                            </div>
                           </div>
                         </div>
 
+                        {/* Seção 2: Representantes da Escola para este CNPJ (Múltiplos) */}
+                        <div style={{ background: 'hsl(var(--bg-surface))', padding: 14, borderRadius: 10, border: '1px solid hsl(var(--border-subtle))' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+                            <div>
+                              <div style={{ fontSize: 11.5, fontWeight: 700, color: '#38bdf8', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <Users size={14} /> Representantes Legais Autorizados a Assinar
+                                <span style={{ background: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8', padding: '1px 7px', borderRadius: 999, fontSize: 10.5, fontWeight: 700 }}>
+                                  {signatarios.length} {signatarios.length === 1 ? 'cadastrado' : 'cadastrados'}
+                                </span>
+                              </div>
+                              <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', marginTop: 2 }}>
+                                Cadastre diretores, secretários ou procuradores com poder de assinatura por este CNPJ.
+                              </div>
+                            </div>
+
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                              {configData.representantes.length > 1 && (
+                                <button
+                                  type="button"
+                                  onClick={handleReplicarRepresentantes}
+                                  style={{
+                                    background: 'rgba(56, 189, 248, 0.08)',
+                                    border: '1px solid rgba(56, 189, 248, 0.25)',
+                                    color: '#38bdf8',
+                                    padding: '4px 9px',
+                                    borderRadius: 6,
+                                    fontSize: 10.5,
+                                    fontWeight: 600,
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 4,
+                                  }}
+                                  title="Replicar estes representantes para todos os outros CNPJs cadastrados"
+                                >
+                                  <Copy size={11} /> Replicar para demais CNPJs
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={handleAdicionarSignatario}
+                                style={{
+                                  background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
+                                  border: '1px solid #3b82f6',
+                                  color: '#fff',
+                                  padding: '4px 10px',
+                                  borderRadius: 6,
+                                  fontSize: 11,
+                                  fontWeight: 600,
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: 4,
+                                }}
+                              >
+                                <Plus size={12} /> Adicionar Representante
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Lista de Representantes em Cards Dedicados */}
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                            {signatarios.map((sig, sIdx) => {
+                              const isPadrao = Boolean(sig.padrao)
+                              return (
+                                <div
+                                  key={sig.id || sIdx}
+                                  style={{
+                                    background: 'hsl(var(--bg-elevated))',
+                                    border: isPadrao ? '1.5px solid rgba(16, 185, 129, 0.45)' : '1px solid hsl(var(--border-subtle))',
+                                    borderRadius: 10,
+                                    padding: 12,
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    gap: 10,
+                                    boxShadow: isPadrao ? '0 0 15px -3px rgba(16, 185, 129, 0.1)' : 'none',
+                                    transition: 'all 0.15s ease',
+                                  }}
+                                >
+                                  {/* Topo do Card de Representante */}
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 6, borderBottom: '1px solid hsl(var(--border-subtle))', paddingBottom: 8 }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                      <div style={{ width: 22, height: 22, borderRadius: '50%', background: isPadrao ? 'rgba(16, 185, 129, 0.15)' : 'rgba(56, 189, 248, 0.15)', color: isPadrao ? '#10b981' : '#38bdf8', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700 }}>
+                                        {sIdx + 1}
+                                      </div>
+                                      <span style={{ fontSize: 12, fontWeight: 700, color: 'hsl(var(--text-primary))' }}>
+                                        Representante #{sIdx + 1}
+                                      </span>
+                                      {sig.nome && (
+                                        <span style={{ fontSize: 11.5, color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>
+                                          — {sig.nome}
+                                        </span>
+                                      )}
+                                      {isPadrao ? (
+                                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 10, fontWeight: 700, color: '#10b981', background: 'rgba(16, 185, 129, 0.15)', border: '1px solid rgba(16, 185, 129, 0.3)', padding: '1px 6px', borderRadius: 999 }}>
+                                          <Check size={10} strokeWidth={3} /> Signatário Padrão
+                                        </span>
+                                      ) : null}
+                                    </div>
+
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                      {!isPadrao && (
+                                        <button
+                                          type="button"
+                                          onClick={() => handleDefinirSignatarioPadrao(sIdx)}
+                                          style={{
+                                            background: 'rgba(255, 255, 255, 0.05)',
+                                            border: '1px solid hsl(var(--border-subtle))',
+                                            color: 'hsl(var(--text-secondary))',
+                                            padding: '3px 8px',
+                                            borderRadius: 6,
+                                            fontSize: 10.5,
+                                            fontWeight: 600,
+                                            cursor: 'pointer',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: 4,
+                                          }}
+                                          title="Tornar este representante o padrão na emissão de documentos deste CNPJ"
+                                        >
+                                          Definir como Padrão
+                                        </button>
+                                      )}
+                                      {signatarios.length > 1 && (
+                                        <button
+                                          type="button"
+                                          onClick={() => handleRemoverSignatario(sIdx)}
+                                          style={{
+                                            background: 'rgba(239, 68, 68, 0.08)',
+                                            border: '1px solid rgba(239, 68, 68, 0.25)',
+                                            color: '#f87171',
+                                            padding: '3px 8px',
+                                            borderRadius: 6,
+                                            fontSize: 10.5,
+                                            fontWeight: 600,
+                                            cursor: 'pointer',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: 3,
+                                          }}
+                                          title="Remover este representante"
+                                        >
+                                          <Trash2 size={11} /> Remover
+                                        </button>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  {/* Inputs do Representante */}
+                                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}>
+                                    <div>
+                                      <label style={{ display: 'block', fontSize: 10.5, color: 'hsl(var(--text-secondary))', marginBottom: 3 }}>NOME COMPLETO DO REPRESENTANTE *</label>
+                                      <input
+                                        type="text"
+                                        required
+                                        value={sig.nome}
+                                        onChange={e => handleUpdateSignatarioField(sIdx, 'nome', e.target.value)}
+                                        placeholder="Ex: IVAN ROSSI SAMBRANA"
+                                        style={{ width: '100%', height: 34, background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 6, padding: '0 8px', color: 'hsl(var(--text-primary))', fontSize: 12.5 }}
+                                      />
+                                    </div>
+                                    <div>
+                                      <label style={{ display: 'block', fontSize: 10.5, color: 'hsl(var(--text-secondary))', marginBottom: 3 }}>CPF DO REPRESENTANTE *</label>
+                                      <input
+                                        type="text"
+                                        required
+                                        value={sig.cpf}
+                                        onChange={e => handleUpdateSignatarioField(sIdx, 'cpf', formatarCpf(e.target.value))}
+                                        placeholder="000.000.000-00"
+                                        style={{ width: '100%', height: 34, background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 6, padding: '0 8px', color: 'hsl(var(--text-primary))', fontSize: 12.5 }}
+                                      />
+                                    </div>
+                                    <div>
+                                      <label style={{ display: 'block', fontSize: 10.5, color: 'hsl(var(--text-secondary))', marginBottom: 3 }}>CARGO INSTITUCIONAL *</label>
+                                      <input
+                                        type="text"
+                                        required
+                                        value={sig.cargo}
+                                        onChange={e => handleUpdateSignatarioField(sIdx, 'cargo', e.target.value)}
+                                        placeholder="Ex: Representante Legal / Diretor Geral"
+                                        style={{ width: '100%', height: 34, background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 6, padding: '0 8px', color: 'hsl(var(--text-primary))', fontSize: 12.5 }}
+                                      />
+                                    </div>
+                                    <div>
+                                      <label style={{ display: 'block', fontSize: 10.5, color: 'hsl(var(--text-secondary))', marginBottom: 3 }}>E-MAIL INSTITUCIONAL (OPCIONAL)</label>
+                                      <input
+                                        type="email"
+                                        value={sig.email || ''}
+                                        onChange={e => handleUpdateSignatarioField(sIdx, 'email', e.target.value)}
+                                        placeholder="direcao@colegioimpacto.net"
+                                        style={{ width: '100%', height: 34, background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 6, padding: '0 8px', color: 'hsl(var(--text-primary))', fontSize: 12.5 }}
+                                      />
+                                    </div>
+                                    <div>
+                                      <label style={{ display: 'block', fontSize: 10.5, color: 'hsl(var(--text-secondary))', marginBottom: 3 }}>TELEFONE / WHATSAPP (OPCIONAL)</label>
+                                      <input
+                                        type="text"
+                                        value={sig.telefone || ''}
+                                        onChange={e => handleUpdateSignatarioField(sIdx, 'telefone', formatarTelefone(e.target.value))}
+                                        placeholder="(67) 99280-6464"
+                                        style={{ width: '100%', height: 34, background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 6, padding: '0 8px', color: 'hsl(var(--text-primary))', fontSize: 12.5 }}
+                                      />
+                                    </div>
+                                  </div>
+
+                                  {/* Bloco de Assinatura e Chancela Digital deste Representante */}
+                                  <div
+                                    style={{
+                                      marginTop: 4,
+                                      padding: '10px 12px',
+                                      background: 'hsl(var(--bg-surface))',
+                                      border: '1px solid hsl(var(--border-subtle))',
+                                      borderRadius: 8,
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'space-between',
+                                      flexWrap: 'wrap',
+                                      gap: 10,
+                                    }}
+                                  >
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 240, flex: 1 }}>
+                                      {/* Caixa de visualização da assinatura */}
+                                      <div
+                                        style={{
+                                          width: 140,
+                                          height: 48,
+                                          background: '#ffffff',
+                                          borderRadius: 6,
+                                          border: '1px solid #cbd5e1',
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          justifyContent: 'center',
+                                          padding: '2px 6px',
+                                          overflow: 'hidden',
+                                          flexShrink: 0,
+                                        }}
+                                      >
+                                        {sig.assinaturaBase64 ? (
+                                          <img
+                                            src={sig.assinaturaBase64}
+                                            alt={`Assinatura de ${sig.nome || 'Representante'}`}
+                                            style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
+                                          />
+                                        ) : (
+                                          <span style={{ fontSize: 10.5, color: '#94a3b8', fontStyle: 'italic' }}>
+                                            Gerando chancela...
+                                          </span>
+                                        )}
+                                      </div>
+
+                                      <div>
+                                        <div style={{ fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-primary))', display: 'flex', alignItems: 'center', gap: 5 }}>
+                                          <PenTool size={12} color="#38bdf8" />
+                                          Chancela Digital de Assinatura
+                                          <span style={{ fontSize: 9.5, padding: '1px 6px', borderRadius: 999, background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', fontWeight: 700 }}>
+                                            {sig.estiloCaligrafico === 'custom'
+                                              ? 'Personalizada (Upload)'
+                                              : (ESTILOS_CHANCELA.find(e => e.id === sig.estiloCaligrafico)?.rotulo || 'Caligráfica')}
+                                          </span>
+                                        </div>
+                                        <div style={{ fontSize: 10, color: 'hsl(var(--text-secondary))', marginTop: 2 }}>
+                                          Esta assinatura é gravada individualmente nos contratos e no comprovante oficial.
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                    {/* Ações da Assinatura: Alternar Estilo / Upload PNG */}
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleCiclarEstiloAssinatura(sIdx)}
+                                        style={{
+                                          background: 'rgba(56, 189, 248, 0.08)',
+                                          border: '1px solid rgba(56, 189, 248, 0.25)',
+                                          color: '#38bdf8',
+                                          padding: '5px 9px',
+                                          borderRadius: 6,
+                                          fontSize: 10.5,
+                                          fontWeight: 600,
+                                          cursor: 'pointer',
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          gap: 4,
+                                          transition: 'all 0.15s ease',
+                                        }}
+                                        title="Alternar entre estilos caligráficos autênticos"
+                                      >
+                                        <RefreshCw size={11} /> Alternar Estilo
+                                      </button>
+
+                                      <label
+                                        style={{
+                                          background: 'rgba(255, 255, 255, 0.05)',
+                                          border: '1px solid hsl(var(--border-subtle))',
+                                          color: 'hsl(var(--text-secondary))',
+                                          padding: '5px 9px',
+                                          borderRadius: 6,
+                                          fontSize: 10.5,
+                                          fontWeight: 600,
+                                          cursor: 'pointer',
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          gap: 4,
+                                          transition: 'all 0.15s ease',
+                                        }}
+                                        title="Fazer upload de imagem (PNG/JPG) com a assinatura manuscrita ou rubrica deste representante"
+                                      >
+                                        <Upload size={11} /> Upload Imagem
+                                        <input
+                                          type="file"
+                                          accept="image/png,image/jpeg,image/webp"
+                                          style={{ display: 'none' }}
+                                          onChange={e => handleUploadAssinatura(sIdx, e)}
+                                        />
+                                      </label>
+                                    </div>
+                                  </div>
+                                </div>
+                              )
+                            })}
+                          </div>
+
+                          <div style={{ marginTop: 10 }}>
+                            <button
+                              type="button"
+                              onClick={handleAdicionarSignatario}
+                              style={{
+                                width: '100%',
+                                padding: '8px 12px',
+                                border: '1px dashed rgba(56, 189, 248, 0.4)',
+                                background: 'rgba(56, 189, 248, 0.04)',
+                                color: '#38bdf8',
+                                borderRadius: 8,
+                                fontSize: 11.5,
+                                fontWeight: 600,
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: 6,
+                                transition: 'all 0.15s ease',
+                              }}
+                            >
+                              <Plus size={13} /> Adicionar Outro Representante neste CNPJ
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Ação de Remoção do CNPJ inteiro */}
                         {configData.representantes.length > 1 && (
                           <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 4 }}>
                             <button
                               type="button"
                               onClick={() => {
-                                if (confirm(`Deseja realmente remover o representante do CNPJ ${repAtivo.cnpj}?`)) {
+                                if (confirm(`Deseja realmente remover a instituição/CNPJ ${repAtivo.cnpj} (${repAtivo.razaoSocial})?`)) {
                                   const novaLista = configData.representantes.filter((_, i) => i !== repConfigIndex)
                                   setConfigData({
                                     ...configData,
@@ -7029,14 +8534,14 @@ export default function MatriculaDigitalPage() {
                                     representante: novaLista[0],
                                   })
                                   setRepConfigIndex(Math.max(0, repConfigIndex - 1))
-                                  toast.info('Representante removido.')
+                                  toast.info('Instituição removida.')
                                 }
                               }}
                               style={{
                                 background: 'rgba(239, 68, 68, 0.1)',
                                 border: '1px solid rgba(239, 68, 68, 0.25)',
                                 color: '#f87171',
-                                padding: '4px 10px',
+                                padding: '5px 12px',
                                 borderRadius: 6,
                                 fontSize: 11,
                                 fontWeight: 600,
@@ -7046,7 +8551,7 @@ export default function MatriculaDigitalPage() {
                                 gap: 4,
                               }}
                             >
-                              <Trash2 size={12} /> Remover este CNPJ
+                              <Trash2 size={12} /> Remover esta Instituição / CNPJ
                             </button>
                           </div>
                         )}
@@ -8466,6 +9971,23 @@ export default function MatriculaDigitalPage() {
           pass: configData.smtp.pass,
           fromEmail: (configData.smtp as any).fromEmail || configData.smtp.from || configData.smtp.user,
           fromName: (configData.smtp as any).fromName || 'Colégio Impacto - Matrícula Digital',
+        }}
+      />
+
+      {/* ── MODAL INTERATIVO DE POSICIONAMENTO VISUAL DE ASSINATURAS ── */}
+      <PosicionadorAssinaturasModal
+        aberto={modalPosicionadorAberto}
+        onClose={() => setModalPosicionadorAberto(false)}
+        pdfUrl={previewPdfBlobUrl}
+        pdfBase64={pdfUploadBase64}
+        totalPaginas={totalPaginasDocumentoAtual}
+        documentoNome={formNovo.titulo_documento || pdfUploadNome || 'Documento'}
+        signatarios={signatariosPosicionaveis}
+        posicoesAtuais={posicoesAssinaturas}
+        onSalvar={(novas) => {
+          setPosicoesAssinaturas(novas)
+          setModalPosicionadorAberto(false)
+          toast.success('Posições das assinaturas salvas com sucesso!')
         }}
       />
     </div>

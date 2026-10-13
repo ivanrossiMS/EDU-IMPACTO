@@ -1,7 +1,7 @@
 'use client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 export function ReactQueryProvider({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(() => new QueryClient({
@@ -15,6 +15,14 @@ export function ReactQueryProvider({ children }: { children: React.ReactNode }) 
       }
     }
   }))
+
+  useEffect(() => {
+    const handleLogout = () => {
+      queryClient.clear()
+    }
+    window.addEventListener('edu:logout-start', handleLogout)
+    return () => window.removeEventListener('edu:logout-start', handleLogout)
+  }, [queryClient])
 
   return (
     <QueryClientProvider client={queryClient}>

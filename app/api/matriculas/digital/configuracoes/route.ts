@@ -26,6 +26,17 @@ const DEFAULT_REPRESENTANTES = [
     cidadeUf: 'Campo Grande - MS',
     segmento: 'Ed. Infantil e Ens. Fund',
     padrao: true,
+    signatarios: [
+      {
+        id: 'sig_ivan_infantil',
+        nome: 'IVAN ROSSI SAMBRANA',
+        cpf: '00130220167',
+        cargo: 'Representante Legal / Diretor Geral',
+        email: 'direcao@colegioimpacto.net',
+        telefone: '(67) 99280-6464',
+        padrao: true,
+      },
+    ],
   },
   {
     id: 'rep_ensino_medio',
@@ -40,6 +51,17 @@ const DEFAULT_REPRESENTANTES = [
     cidadeUf: 'Campo Grande - MS',
     segmento: 'Ens. Médio',
     padrao: false,
+    signatarios: [
+      {
+        id: 'sig_ivan_medio',
+        nome: 'IVAN ROSSI SAMBRANA',
+        cpf: '00130220167',
+        cargo: 'Representante Legal / Diretor Geral',
+        email: 'direcao@colegioimpacto.net',
+        telefone: '(67) 99280-6464',
+        padrao: true,
+      },
+    ],
   },
 ]
 
@@ -102,15 +124,53 @@ export async function GET(request: Request) {
       }
     }
 
-    // Normaliza os nomes de segmento para a nomenclatura oficial solicitada
-    representantes = representantes.map((r: any) => {
+    // Normaliza os nomes de segmento para a nomenclatura oficial solicitada e assegura lista de signatários
+    representantes = representantes.map((r: any, idx: number) => {
       let seg = r.segmento
       if (seg === 'Educação Infantil e Ensino Fundamental' || seg === 'Educação Infantil e Fundamental') {
         seg = 'Ed. Infantil e Ens. Fund'
       } else if (seg === 'Ensino Médio') {
         seg = 'Ens. Médio'
       }
-      return { ...r, segmento: seg }
+
+      let signatarios: any[] = Array.isArray(r.signatarios) && r.signatarios.length > 0
+        ? r.signatarios
+        : [
+            {
+              id: `${r.id || `rep_${idx}`}_sig_1`,
+              nome: r.nome || 'IVAN ROSSI SAMBRANA',
+              cpf: r.cpf || '00130220167',
+              cargo: r.cargo || 'Representante Legal / Diretor Geral',
+              email: r.email || '',
+              telefone: r.telefone || '',
+              padrao: true,
+            },
+          ]
+
+      signatarios = signatarios.map((s: any, sIdx: number) => ({
+        id: s.id || `${r.id || `rep_${idx}`}_sig_${sIdx + 1}`,
+        nome: String(s.nome || '').trim(),
+        cpf: String(s.cpf || '').trim(),
+        cargo: String(s.cargo || '').trim(),
+        email: String(s.email || '').trim(),
+        telefone: String(s.telefone || '').trim(),
+        padrao: Boolean(s.padrao),
+      }))
+
+      if (!signatarios.some((s: any) => s.padrao)) {
+        signatarios[0].padrao = true
+      }
+
+      const sigPadrao = signatarios.find((s: any) => s.padrao) || signatarios[0]
+
+      return {
+        ...r,
+        segmento: seg,
+        signatarios,
+        nome: sigPadrao.nome || r.nome,
+        cpf: sigPadrao.cpf || r.cpf,
+        cargo: sigPadrao.cargo || r.cargo,
+      }
     })
 
     const representante = representantes.find(r => r.padrao) || representantes[0] || DEFAULT_REPRESENTANTE
@@ -191,16 +251,59 @@ export async function POST(request: Request) {
       })
     }
 
-    // 2. Salvar representantes da escola (múltiplos por CNPJ)
+    // 2. Salvar representantes da escola (múltiplos por CNPJ com múltiplos signatários por CNPJ)
     if (body.representantes && Array.isArray(body.representantes)) {
+      const representantesLimpos = body.representantes.map((r: any, idx: number) => {
+        let signatarios: any[] = Array.isArray(r.signatarios) && r.signatarios.length > 0
+          ? r.signatarios
+          : [
+              {
+                id: `${r.id || `rep_${idx}`}_sig_1`,
+                nome: r.nome || 'IVAN ROSSI SAMBRANA',
+                cpf: r.cpf || '00130220167',
+                cargo: r.cargo || 'Representante Legal / Diretor Geral',
+                email: r.email || '',
+                telefone: r.telefone || '',
+                padrao: true,
+              },
+            ]
+
+        signatarios = signatarios.map((s: any, sIdx: number) => ({
+          id: s.id || `${r.id || `rep_${idx}`}_sig_${sIdx + 1}`,
+          nome: String(s.nome || '').trim(),
+          cpf: String(s.cpf || '').trim(),
+          cargo: String(s.cargo || '').trim(),
+          email: String(s.email || '').trim(),
+          telefone: String(s.telefone || '').trim(),
+          padrao: Boolean(s.padrao),
+          assinaturaBase64: s.assinaturaBase64 || null,
+          estiloCaligrafico: s.estiloCaligrafico || 'classica',
+        }))
+
+        if (!signatarios.some((s: any) => s.padrao)) {
+          signatarios[0].padrao = true
+        }
+
+        const sigPadrao = signatarios.find((s: any) => s.padrao) || signatarios[0]
+
+        return {
+          ...r,
+          signatarios,
+          nome: sigPadrao.nome || r.nome,
+          cpf: sigPadrao.cpf || r.cpf,
+          cargo: sigPadrao.cargo || r.cargo,
+          assinaturaBase64: sigPadrao.assinaturaBase64 || r.assinaturaBase64 || null,
+        }
+      })
+
       await supabase.from('configuracoes').upsert({
         chave: CONFIG_REPRESENTANTES_KEY,
-        valor: body.representantes,
+        valor: representantesLimpos,
         updated_at: new Date().toISOString(),
       }, { onConflict: 'chave' })
 
       // Atualiza também a chave singular com o padrão para compatibilidade com partes legadas
-      const repPadrao = body.representantes.find((r: any) => r.padrao) || body.representantes[0]
+      const repPadrao = representantesLimpos.find((r: any) => r.padrao) || representantesLimpos[0]
       if (repPadrao) {
         await supabase.from('configuracoes').upsert({
           chave: CONFIG_REPRESENTANTE_KEY,

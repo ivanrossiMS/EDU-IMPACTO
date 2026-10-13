@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/server/authGuard'
+import { requireStaff } from '@/lib/server/authGuard'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 import { invalidateColaboradoresCache } from '@/lib/server/colaboradoresCache'
@@ -7,7 +7,7 @@ import { invalidateColaboradoresCache } from '@/lib/server/colaboradoresCache'
 export const dynamic = 'force-dynamic'
 
 export async function PUT(req: Request, context: { params: Promise<{ id: string }> }) {
-  const { user, errorResponse } = await requireAuth()
+  const { errorResponse } = await requireStaff(req)
   if (errorResponse) return errorResponse
 
   const supabase = await createProtectedClient()
@@ -69,7 +69,7 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
 }
 
 export async function DELETE(req: Request, context: { params: Promise<{ id: string }> }) {
-  const { user, errorResponse } = await requireAuth()
+  const { errorResponse } = await requireStaff(req)
   if (errorResponse) return errorResponse
 
   const supabase = await createProtectedClient()

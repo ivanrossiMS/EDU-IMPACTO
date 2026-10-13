@@ -113,6 +113,8 @@ export async function GET(request: Request) {
     if (effectiveTo) {
       eventosQuery = eventosQuery.lte('data_hora', `${effectiveTo}T23:59:59.999-04:00`)
     }
+    eventosQuery = eventosQuery.limit(Math.min(limit, 1000))
+    freqQuery = freqQuery.limit(Math.min(limit, 1000))
 
     // Executa as consultas ao Supabase em paralelo para reduzir tempo de resposta
     const [callsRes, freqRes, eventosRes] = await Promise.all([
@@ -574,7 +576,8 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  const { user, errorResponse } = await requireAuth()
+  const { requireStaff } = await import('@/lib/server/authGuard')
+  const { errorResponse } = await requireStaff(request)
   if (errorResponse) return errorResponse
 
   try {

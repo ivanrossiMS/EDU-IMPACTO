@@ -407,7 +407,96 @@ export async function resolveFamilyScope(
       })
     )
 
-    const turmaGrupos: LinkedStudentTurmaGrupo[] = matchedGrupos.map(mg => {
+    // Helper interno para extrair ano numérico de 4 dígitos
+    const parseYearNum = (val: any): number | null => {
+      if (val === null || val === undefined) return null
+      if (typeof val === 'number' && !isNaN(val) && val >= 2000 && val <= 2100) return val
+      const str = String(val).trim()
+      const match = str.match(/\b(20\d{2})\b/)
+      if (match) return parseInt(match[1], 10)
+      const n = parseInt(str, 10)
+      if (!isNaN(n) && n >= 2000 && n <= 2100) return n
+      return null
+    }
+
+    // Identificar o ÚLTIMO ANO LETIVO da turma a que o aluno está vinculado
+    const candidateYears: number[] = []
+
+    matchedGrupos.forEach(mg => {
+      const rawTurmaId = String(mg.turma_id || mg.id || '').replace(/^sync-/, '')
+      const groupTInfo = turmasMap[rawTurmaId] || (mg.turma_id ? turmasMap[mg.turma_id] : null)
+      const y = parseYearNum(mg.dados?.ano || mg.dados?.ano_letivo || groupTInfo?.ano || tInfo?.ano)
+      if (y) candidateYears.push(y)
+    })
+
+    const directYear = parseYearNum(aluno.dados?.anoLetivo || (aluno as any).anoLetivo || (aluno as any).ano_letivo)
+    if (directYear) candidateYears.push(directYear)
+
+    if (tInfo?.ano) {
+      const y = parseYearNum(tInfo.ano)
+      if (y) candidateYears.push(y)
+    }
+
+    vinculos.forEach(v => {
+      const y = parseYearNum(v.anoLetivo)
+      if (y) candidateYears.push(y)
+    })
+
+    const htList = Array.isArray(aluno.dados?.historicoTurmas) ? aluno.dados.historicoTurmas : []
+    htList.forEach((ht: any) => {
+      const y = parseYearNum(ht.anoLetivo || ht.ano)
+      if (y) candidateYears.push(y)
+    })
+
+    const ultimoAnoLetivo = candidateYears.length > 0 ? Math.max(...candidateYears) : null
+
+    // Filtrar apenas as turmas/grupos do ÚLTIMO ano letivo
+    const gruposUltimoAno = matchedGrupos.filter(mg => {
+      if (ultimoAnoLetivo === null) return true
+      const rawTurmaId = String(mg.turma_id || mg.id || '').replace(/^sync-/, '')
+      const groupTInfo = turmasMap[rawTurmaId] || (mg.turma_id ? turmasMap[mg.turma_id] : null)
+      const groupAno = parseYearNum(mg.dados?.ano || mg.dados?.ano_letivo || groupTInfo?.ano || tInfo?.ano)
+      return groupAno === ultimoAnoLetivo
+    })
+
+    const candidateGrupos = gruposUltimoAno.length > 0 ? gruposUltimoAno : matchedGrupos
+
+    // Se houver turmas ativas (cursando) no último ano, exclui turmas históricas/anteriores
+    const nonHistGrupos = candidateGrupos.filter(mg => {
+      const rawTurmaId = String(mg.turma_id || mg.id || '').replace(/^sync-/, '')
+      const groupTInfo = turmasMap[rawTurmaId] || (mg.turma_id ? turmasMap[mg.turma_id] : null)
+      const groupTurmaNome = mg.nome || groupTInfo?.nome || turmaNome
+      const activeVinculo = vinculos.find(v => v.isCursando && (
+        String(v.turmaId) === rawTurmaId || v.turmaNome === groupTurmaNome || (mg.turma_id && String(v.turmaId) === String(mg.turma_id))
+      ))
+      const histVinculo = vinculos.find(v => !v.isCursando && (
+        String(v.turmaId) === rawTurmaId || v.turmaNome === groupTurmaNome || (mg.turma_id && String(v.turmaId) === String(mg.turma_id))
+      ))
+      const isHistorico = !activeVinculo && Boolean(histVinculo)
+      return !isHistorico
+    })
+
+    const finalGrupos = nonHistGrupos.length > 0 ? nonHistGrupos : candidateGrupos
+
+    // Mapear grupos históricos/anteriores para restringir leitura de mensagens caso necessário
+    matchedGrupos.forEach(mg => {
+      const rawTurmaId = String(mg.turma_id || mg.id || '').replace(/^sync-/, '')
+      const groupTInfo = turmasMap[rawTurmaId] || (mg.turma_id ? turmasMap[mg.turma_id] : null)
+      const groupTurmaNome = mg.nome || groupTInfo?.nome || turmaNome
+      const isCurrent = finalGrupos.some(fg => fg.id === mg.id)
+      const histVinculo = vinculos.find(v => !v.isCursando && (
+        String(v.turmaId) === rawTurmaId || v.turmaNome === groupTurmaNome || (mg.turma_id && String(v.turmaId) === String(mg.turma_id))
+      ))
+      const dataSaida = histVinculo?.dataFim || null
+
+      if (!isCurrent || histVinculo) {
+        historicalGroupIds.set(String(mg.id), { dataSaida })
+        if (mg.turma_id) historicalGroupIds.set(String(mg.turma_id), { dataSaida })
+        if (rawTurmaId) historicalGroupIds.set(rawTurmaId, { dataSaida })
+      }
+    })
+
+    const turmaGrupos: LinkedStudentTurmaGrupo[] = finalGrupos.map(mg => {
       allGroupIds.add(mg.id)
       const rawTurmaId = String(mg.turma_id || mg.id || '').replace(/^sync-/, '')
       if (rawTurmaId) {
@@ -433,21 +522,15 @@ export async function resolveFamilyScope(
       const dataSaida = isHistorico ? (histVinculo?.dataFim || null) : null
       const dataInicio = activeVinculo ? activeVinculo.dataInicio : (histVinculo?.dataInicio || null)
 
-      if (isHistorico) {
-        historicalGroupIds.set(String(mg.id), { dataSaida })
-        if (mg.turma_id) historicalGroupIds.set(String(mg.turma_id), { dataSaida })
-        if (rawTurmaId) historicalGroupIds.set(rawTurmaId, { dataSaida })
-      }
-
       return {
         id: mg.id,
         nome: groupTurmaNome,
         cor: mg.cor || '#10b981',
         tipo: 'turma',
         turma_id: mg.turma_id || rawTurmaId,
-        ano_letivo: mg.dados?.ano || mg.dados?.ano_letivo || groupTInfo?.ano || tInfo?.ano || '2026',
-        membrosCount: mg.colaboradoresIds.length,
-        colaboradoresIds: mg.colaboradoresIds,
+        ano_letivo: mg.dados?.ano || mg.dados?.ano_letivo || groupTInfo?.ano || tInfo?.ano || (ultimoAnoLetivo ? String(ultimoAnoLetivo) : '2026'),
+        membrosCount: (mg.colaboradoresIds || []).length,
+        colaboradoresIds: mg.colaboradoresIds || [],
         descricao: isHistorico ? `Turma anterior: ${groupTurmaNome}` : `Turma oficial: ${groupTurmaNome}`,
         isHistorico,
         dataSaida,
@@ -455,18 +538,11 @@ export async function resolveFamilyScope(
       }
     })
 
-    // Ordenar turmaGrupos para que os ativos fiquem na frente
-    turmaGrupos.sort((a, b) => {
-      if (a.isHistorico && !b.isHistorico) return 1
-      if (!a.isHistorico && b.isHistorico) return -1
-      return 0
-    })
-
     const turmaGrupo = turmaGrupos.find(g => !g.isHistorico) || turmaGrupos[0] || null
 
-    // Mapear todas as turmas que cada colaborador leciona para este aluno
+    // Mapear todas as turmas que cada colaborador leciona para este aluno NO ÚLTIMO ANO LETIVO
     const colabTurmasMap = new Map<string, string[]>()
-    matchedGrupos.forEach(mg => {
+    finalGrupos.forEach(mg => {
       if (mg.colaboradoresIds && mg.colaboradoresIds.length > 0) {
         mg.colaboradoresIds.forEach((colabId: any) => {
           allColabIds.add(String(colabId))
@@ -487,7 +563,7 @@ export async function resolveFamilyScope(
     const studentColabs: LinkedStudent['colaboradores'] = []
     const seenColabIds = new Set<string>()
 
-    matchedGrupos.forEach(mg => {
+    finalGrupos.forEach(mg => {
       if (mg.colaboradoresIds && mg.colaboradoresIds.length > 0) {
         mg.colaboradoresIds.forEach((colabId: any) => {
           const sColabId = String(colabId)
@@ -522,8 +598,8 @@ export async function resolveFamilyScope(
       id: aluno.id,
       nome: aluno.nome,
       turma: aluno.turma,
-      turmaNome,
-      turmaAno: tInfo?.ano || matchedGrupos[0]?.dados?.ano || '2026',
+      turmaNome: turmaGrupo?.nome || turmaNome,
+      turmaAno: turmaGrupo?.ano_letivo || (ultimoAnoLetivo ? String(ultimoAnoLetivo) : (tInfo?.ano || '2026')),
       foto: aluno.foto || null,
       serie: aluno.serie,
       turmaGrupo,

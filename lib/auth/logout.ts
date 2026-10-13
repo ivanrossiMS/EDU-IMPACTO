@@ -4,6 +4,14 @@ import { Preferences } from '@capacitor/preferences';
 import { createClient } from '@/utils/supabase/client';
 import { removeSettingAsync } from '@/lib/context';
 import { notificationService } from '@/lib/notifications/notificationService';
+import { clearStudentPhotoCache } from '@/lib/studentPhotoCache';
+import { clearChatMessagesCache } from '@/lib/chatMessagesCache';
+import { clearComunicadosRespostasCache } from '@/lib/comunicadosRespostasCache';
+import { clearMeusAlunosCache } from '@/lib/api/meusAlunosClient';
+import { invalidateConfigCache } from '@/lib/useConfigDb';
+import { useChatStore } from '@/lib/chatStore';
+import { useAcademicoStore } from '@/lib/stores/academicoStore';
+import { useFinanceiroStore } from '@/lib/stores/financeiroStore';
 
 const LOGOUT_FLAG = 'edu-logout-pending';
 let logoutPromise: Promise<void> | null = null;
@@ -47,6 +55,24 @@ async function executeLogout(userId?: string): Promise<void> {
   // 2. Limpa cookies de sessão no cliente imediatamente (proteção para logout offline)
   clearSessionCookiesOnClient();
 
+  // 2.5 Limpa caches em memória e stores Zustand para impedir vazamento entre sessões
+  try {
+    clearStudentPhotoCache();
+    clearChatMessagesCache();
+    clearComunicadosRespostasCache();
+    clearMeusAlunosCache();
+    invalidateConfigCache();
+    useChatStore.setState({
+      isModalOpen: false,
+      isDrawerOpen: false,
+      activeConversation: null,
+      unreadTotal: 0,
+      lastArchiveUpdated: null,
+    });
+    useAcademicoStore.setState({ globalSearchAcademico: '' });
+    useFinanceiroStore.setState({ filtroStatusTitulos: 'Todos' });
+  } catch (_) {}
+
   // 3. Limpa seletivamente chaves de autenticação do browser, preservando preferências de UI
   const projectStorageKey = getProjectStorageKey();
   if (typeof window !== 'undefined') {
@@ -68,15 +94,23 @@ async function executeLogout(userId?: string): Promise<void> {
           `edu-user-photo-${userId}`,
           `edu-profile-extra-${userId}`,
           `edu-active-modules-${userId}`,
-          `edu-active-unit-${userId}`
+          `edu-active-unit-${userId}`,
+          `edu-meus-alunos-${userId}`
         );
       }
       keysToClear.forEach(k => window.localStorage.removeItem(k));
 
-      // Limpeza exaustiva de quaisquer flags de push no localStorage
+      // Limpeza exaustiva de flags de push e caches por usuário no localStorage
       for (let i = window.localStorage.length - 1; i >= 0; i--) {
         const k = window.localStorage.key(i);
-        if (k && k.startsWith('edu_push_')) {
+        if (
+          k &&
+          (k.startsWith('edu_push_') ||
+            k.startsWith('edu-meus-alunos-') ||
+            k.startsWith('edu-user-photo-') ||
+            k.startsWith('edu-profile-extra-') ||
+            k.startsWith('ad_formularios_'))
+        ) {
           window.localStorage.removeItem(k);
         }
       }

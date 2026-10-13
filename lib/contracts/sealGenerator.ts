@@ -15,12 +15,18 @@ import {
   formatAbbreviatedSignerName,
   formatTimestampSelo,
   sanitizeWinAnsi,
+  sanitizeSignerName,
+  toTitleCase,
+  formatSignatureDisplayName,
 } from './sealUtils'
 
 export {
   formatAbbreviatedSignerName,
   formatTimestampSelo,
   sanitizeWinAnsi,
+  sanitizeSignerName,
+  toTitleCase,
+  formatSignatureDisplayName,
 }
 
 let cachedSignatureFontBytes: Buffer | null = null
@@ -46,7 +52,7 @@ export async function obterOuCarregarFonteAssinatura(pdfDoc: PDFDocument): Promi
       }
     }
     if (cachedSignatureFontBytes) {
-      return await pdfDoc.embedFont(cachedSignatureFontBytes)
+      return await pdfDoc.embedFont(cachedSignatureFontBytes, { features: { liga: false } })
     }
   } catch (err) {
     console.warn('[sealGenerator] Aviso ao carregar fonte cursiva TTF, usando Times-BoldItalic:', err)

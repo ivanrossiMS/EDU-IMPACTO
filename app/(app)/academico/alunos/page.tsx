@@ -1569,13 +1569,6 @@ export default function AlunosPage() {
     setFormData(prev => {
       if (index !== undefined && section === 'responsaveis') {
         const newArray = [...prev.responsaveis]
-        
-        // Regra 2: Apenas 1 responsável pode ser financeiro
-        if (field === 'isFinanceiro' && value === true) {
-          newArray.forEach((resp, i) => {
-            if (i !== index) newArray[i] = { ...newArray[i], isFinanceiro: false }
-          })
-        }
 
         let updatedResp = { ...newArray[index], [field]: value }
 
@@ -1774,11 +1767,6 @@ export default function AlunosPage() {
           errors.push({ field: `resp_${index}_tipo`, label: `O pai ou mãe deve ser marcado pelo menos como responsável pedagógico ou financeiro${suffix}`, tab: 'responsavel', tabLabel: 'Responsáveis' })
         }
       })
-      
-      const qtdFinanceiro = formData.responsaveis.filter(r => r.isFinanceiro).length
-      if (qtdFinanceiro > 1) {
-        errors.push({ field: 'responsaveis_financeiro', label: 'Apenas UM responsável pode ser definido como Financeiro', tab: 'responsavel', tabLabel: 'Responsáveis' })
-      }
     }
 
     // 3. Turma validation
@@ -4231,8 +4219,9 @@ export default function AlunosPage() {
                                 onClick={() => {
                                   const val = !resp.isFinanceiro;
                                   handleInputChange('responsaveis', 'isFinanceiro', val, index);
+                                  setValidationErrors(prev => prev.filter(err => err.field !== 'responsaveis_financeiro'));
                                   if (val || resp.isPedagogico || resp.isOutro) {
-                                    setValidationErrors(prev => prev.filter(err => err.field !== `resp_${index}_tipo`));
+                                    setValidationErrors(prev => prev.filter(err => err.field !== `resp_${index}_tipo` && err.field !== 'responsaveis_financeiro'));
                                   }
                                   if (!val) {
                                     setValidationErrors(prev => prev.filter(err => err.field !== `resp_${index}_email`));
