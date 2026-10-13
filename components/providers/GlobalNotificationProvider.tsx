@@ -760,27 +760,48 @@ export function GlobalNotificationProvider() {
 
     // 3b. Listener Supabase Realtime multi-dispositivos (rede de computadores e smartphones)
     let realtimeChannel: any = null
+    const destroyChannelCleanly = (ch: any) => {
+      if (!ch) return
+      try {
+        const wasJoined = ch.state === 'joined'
+        if (typeof ch.teardown === 'function') {
+          ch.teardown()
+        }
+        const rt = (supabase as any)?.realtime
+        if (rt && Array.isArray(rt.channels)) {
+          rt.channels = rt.channels.filter((item: any) => item !== ch && item?.topic !== ch?.topic)
+        }
+        if (wasJoined) {
+          supabase.removeChannel(ch).catch(() => {})
+        }
+      } catch (_) {}
+    }
+
     const subTimer = setTimeout(() => {
-      realtimeChannel = supabase.channel('saida_calls_shared_room_global_listener')
+      try {
+        for (const existing of supabase.getChannels()) {
+          if (existing?.topic === 'realtime:saida_calls_shared_room_global_listener') {
+            destroyChannelCleanly(existing)
+          }
+        }
+      } catch (_) {}
+
+      const ch = supabase.channel('saida_calls_shared_room_global_listener')
         .on('broadcast', { event: 'SPECIAL_AUTH_NOTIFY' }, (ev: any) => {
           handleSpecialAuthPayload(ev.payload?.data || ev.payload)
         })
-        .subscribe()
+      realtimeChannel = ch
+      if (!(ch as any)?.channelAdapter?.getChannel?.()?.joinedOnce) {
+        ch.subscribe()
+      }
     }, 150)
 
     return () => {
       clearTimeout(subTimer)
       unsubLocal()
       if (realtimeChannel) {
-        try {
-          const wasJoined = realtimeChannel.state === 'joined'
-          if (typeof realtimeChannel.teardown === 'function') {
-            realtimeChannel.teardown()
-          }
-          if (wasJoined) {
-            supabase.removeChannel(realtimeChannel).catch(() => {})
-          }
-        } catch (_) {}
+        destroyChannelCleanly(realtimeChannel)
+        realtimeChannel = null
       }
     }
   }, [onRealtime, showForegroundPushBanner])

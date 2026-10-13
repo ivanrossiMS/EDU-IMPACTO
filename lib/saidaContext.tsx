@@ -337,14 +337,34 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
     let isMounted = true
     let channel: any = null
 
+    const destroyChannelCleanly = (ch: any) => {
+      if (!ch) return
+      try {
+        const wasJoined = ch.state === 'joined'
+        if (typeof ch.teardown === 'function') {
+          ch.teardown()
+        }
+        const rt = (supabase as any)?.realtime
+        if (rt && Array.isArray(rt.channels)) {
+          rt.channels = rt.channels.filter((item: any) => item !== ch && item?.topic !== ch?.topic)
+        }
+        if (wasJoined) {
+          supabase.removeChannel(ch).catch(() => {})
+        }
+      } catch (_) {}
+    }
+
     const setupRealtime = async () => {
       setRealtimeStatus('connecting')
       
-      // Clean up any stale channel from React Strict Mode re-mounts
-      const existingChannels = supabase.getChannels().filter(c => c.topic === 'realtime:saida_calls_shared_room')
-      if (existingChannels.length > 0) {
-        await Promise.all(existingChannels.map(c => supabase.removeChannel(c)))
-      }
+      // Clean up any stale channel from React Strict Mode / HMR re-mounts synchronously
+      try {
+        for (const existing of supabase.getChannels()) {
+          if (existing?.topic === 'realtime:saida_calls_shared_room') {
+            destroyChannelCleanly(existing)
+          }
+        }
+      } catch (_) {}
 
       if (!isMounted) return
 
@@ -513,7 +533,8 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
     return () => {
       isMounted = false
       if (channel) {
-        supabase.removeChannel(channel)
+        destroyChannelCleanly(channel)
+        channel = null
       }
     }
   }, [])

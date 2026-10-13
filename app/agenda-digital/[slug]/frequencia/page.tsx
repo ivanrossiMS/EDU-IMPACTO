@@ -56,11 +56,12 @@ export default function ADFrequenciaPage({ params }: { params: any }) {
   });
   // Escuta em tempo real o Supabase para a tabela saida_calls (independente do dispositivo)
   React.useEffect(() => {
-    const channel = supabase.channel('saida_calls_agenda_sync')
+    const channelName = `saida_calls_agenda_sync_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
+    const channel = supabase.channel(channelName)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'saida_calls' },
-        (payload: any) => {
+        () => {
           // Invalida a query do React Query para forçar recarregamento na página do aluno
           queryClient.invalidateQueries({ queryKey: ['saida-calls-aluno'] })
         }
@@ -68,7 +69,19 @@ export default function ADFrequenciaPage({ params }: { params: any }) {
       .subscribe()
 
     return () => {
-      supabase.removeChannel(channel)
+      try {
+        const wasJoined = (channel as any)?.state === 'joined'
+        if (typeof (channel as any)?.teardown === 'function') {
+          ;(channel as any).teardown()
+        }
+        const rt = (supabase as any)?.realtime
+        if (rt && Array.isArray(rt.channels)) {
+          rt.channels = rt.channels.filter((item: any) => item !== channel && item?.topic !== (channel as any)?.topic)
+        }
+        if (wasJoined) {
+          supabase.removeChannel(channel).catch(() => {})
+        }
+      } catch (_) {}
     }
   }, [queryClient])
 
