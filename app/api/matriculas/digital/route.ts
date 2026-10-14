@@ -268,7 +268,7 @@ export async function POST(request: Request) {
               loteTotal: body.documentos.length,
               autorizacoesExigidas: body.autorizacoes_exigidas || [],
               escolaRepresentante: repInfo,
-              posicoesAssinaturas: body.posicoes_assinaturas || undefined,
+              posicoesAssinaturas: (itemDoc as any).posicoes_assinaturas || body.posicoes_assinaturas || undefined,
               suprimirRubricaRodape: true,
             },
             historico_eventos: itemHistoricoEventos,

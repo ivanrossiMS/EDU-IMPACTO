@@ -22,6 +22,7 @@ import {
   PosicaoAssinatura,
   SignatarioPosicionavel,
   gerarPosicionamentoPadrao,
+  gerarPosicionamentoDocumentos,
 } from '@/components/matriculas/PosicionadorAssinaturasModal'
 import { getWhatsAppShareUrl, DEFAULT_WHATSAPP_DIGITAL_TEMPLATE, formatarMensagemWhatsApp } from '@/lib/whatsapp'
 import {
@@ -600,6 +601,7 @@ export default function MatriculaDigitalPage() {
   // Estados do Posicionador Visual de Assinaturas
   const [posicoesAssinaturas, setPosicoesAssinaturas] = useState<Record<string, PosicaoAssinatura>>({})
   const [modalPosicionadorAberto, setModalPosicionadorAberto] = useState<boolean>(false)
+  const [signatarioModalAtivo, setSignatarioModalAtivo] = useState<string | null>(null)
 
   // Total de páginas do documento ativo na emissão (seja 1 arquivo ou pacote unificado)
   const totalPaginasDocumentoAtual = useMemo(() => {
@@ -683,15 +685,25 @@ export default function MatriculaDigitalPage() {
     formNovo.signatario_cpf,
   ])
 
-  // Ação rápida: auto-posicionar signatários no rodapé da última página
+  // Ação rápida: auto-posicionar signatários no rodapé da última página de cada documento
   const handleAutoPosicionarRodape = () => {
     if (signatariosPosicionaveis.length === 0) {
       toast.error('Selecione primeiro a instituição e os signatários que assinarão o documento.')
       return
     }
-    const novasPosicoes = gerarPosicionamentoPadrao(signatariosPosicionaveis, totalPaginasDocumentoAtual)
+    const docs = documentosUpload.map((d) => ({
+      id: d.id,
+      nome: d.nome,
+      totalPaginas: d.totalPaginas || 1,
+      pdfBase64: d.pdfBase64,
+    }))
+    const novasPosicoes = gerarPosicionamentoDocumentos(signatariosPosicionaveis, docs)
     setPosicoesAssinaturas(novasPosicoes)
-    toast.success(`Assinaturas posicionadas no rodapé da página ${totalPaginasDocumentoAtual}!`)
+    if (docs.length > 1) {
+      toast.success(`Assinaturas posicionadas no rodapé de cada um dos ${docs.length} documentos!`)
+    } else {
+      toast.success(`Assinaturas posicionadas no rodapé da página ${totalPaginasDocumentoAtual}!`)
+    }
   }
 
   // Estados do Verificador de Arquivo Local
@@ -1352,6 +1364,15 @@ export default function MatriculaDigitalPage() {
       }
       return filtrados
     })
+    setPosicoesAssinaturas(prev => {
+      const cp = { ...prev }
+      for (const k in cp) {
+        if (cp[k].documentoId === id) {
+          delete cp[k]
+        }
+      }
+      return cp
+    })
     if (docPreviaAtivo?.id === id) {
       setDocPreviaAtivo(null)
       setModalPreviaPdfAberto(false)
@@ -1364,6 +1385,7 @@ export default function MatriculaDigitalPage() {
     setDocumentosUpload([])
     setDocPreviaAtivo(null)
     setPdfUnificadoPreview(null)
+    setPosicoesAssinaturas({})
     setModalPreviaPdfAberto(false)
     toast.info('Todos os arquivos foram removidos.')
   }
@@ -1481,15 +1503,42 @@ export default function MatriculaDigitalPage() {
       const sigPrincipal = sigsFinais[0]
 
       // Prepara as posições visuais das assinaturas (ou auto-posiciona no rodapé caso não definidas manualmente)
-      const totalPaginasFinalDoc = modoEnvioMultiplo === 'separados'
-        ? (documentosUpload[0]?.totalPaginas || 1)
-        : totalPaginasDocumentoAtual
-
       let posicoesArray = Object.values(posicoesAssinaturas)
       if (posicoesArray.length === 0 && signatariosPosicionaveis.length > 0) {
-        const autoPos = gerarPosicionamentoPadrao(signatariosPosicionaveis, totalPaginasFinalDoc)
+        const autoPos = gerarPosicionamentoDocumentos(
+          signatariosPosicionaveis,
+          documentosUpload.map(d => ({
+            id: d.id,
+            nome: d.nome,
+            totalPaginas: d.totalPaginas || 1,
+            pdfBase64: d.pdfBase64,
+          }))
+        )
         posicoesArray = Object.values(autoPos)
       }
+
+      // Recalcula ou valida a página absoluta de acordo com a ordem atual dos documentos
+      let acumuladoPaginasSubmit = 0
+      const docMapSubmit = new Map<string, { start: number; total: number }>()
+      documentosUpload.forEach(d => {
+        const start = acumuladoPaginasSubmit + 1
+        const end = acumuladoPaginasSubmit + (d.totalPaginas || 1)
+        docMapSubmit.set(d.id, { start, total: d.totalPaginas || 1 })
+        acumuladoPaginasSubmit = end
+      })
+
+      posicoesArray = posicoesArray.map(p => {
+        if (p.documentoId && docMapSubmit.has(p.documentoId)) {
+          const docInfo = docMapSubmit.get(p.documentoId)!
+          const pagRelativa = p.paginaRelativa || Math.max(1, p.pagina - (docInfo.start - 1))
+          return {
+            ...p,
+            pagina: docInfo.start + (pagRelativa - 1),
+            paginaRelativa: pagRelativa,
+          }
+        }
+        return p
+      })
 
       const payloadBase: any = {
         signatario_nome: sanitizeSignerName(formNovo.signatario_nome),
@@ -1536,6 +1585,12 @@ export default function MatriculaDigitalPage() {
           titulo: doc.nome.replace(/\.(docx?|pdf)$/i, '').replace(/[_-]+/g, ' ').trim(),
           totalPaginas: doc.totalPaginas,
           formatoOriginal: doc.formatoOriginal,
+          posicoes_assinaturas: posicoesArray
+            .filter(p => !p.documentoId || p.documentoId === doc.id)
+            .map(p => ({
+              ...p,
+              pagina: p.paginaRelativa || p.pagina,
+            })),
         }))
       } else {
         // Modo Pacote Unificado (ou 1 único arquivo)
@@ -6877,14 +6932,15 @@ export default function MatriculaDigitalPage() {
                                 style={{
                                   fontSize: 10,
                                   fontWeight: 700,
-                                  color: Object.keys(posicoesAssinaturas).length === signatariosPosicionaveis.length ? '#059669' : '#d97706',
-                                  background: Object.keys(posicoesAssinaturas).length === signatariosPosicionaveis.length ? 'rgba(16, 185, 129, 0.12)' : 'rgba(245, 158, 11, 0.12)',
+                                  color: signatariosPosicionaveis.some(s => Object.values(posicoesAssinaturas).some(p => p.signatarioId === s.id)) ? '#059669' : '#d97706',
+                                  background: signatariosPosicionaveis.some(s => Object.values(posicoesAssinaturas).some(p => p.signatarioId === s.id)) ? 'rgba(16, 185, 129, 0.12)' : 'rgba(245, 158, 11, 0.12)',
                                   padding: '2px 8px',
                                   borderRadius: 999,
-                                  border: `1px solid ${Object.keys(posicoesAssinaturas).length === signatariosPosicionaveis.length ? 'rgba(16, 185, 129, 0.3)' : 'rgba(245, 158, 11, 0.3)'}`,
+                                  border: `1px solid ${signatariosPosicionaveis.some(s => Object.values(posicoesAssinaturas).some(p => p.signatarioId === s.id)) ? 'rgba(16, 185, 129, 0.3)' : 'rgba(245, 158, 11, 0.3)'}`,
                                 }}
                               >
-                                {Object.keys(posicoesAssinaturas).length} de {signatariosPosicionaveis.length} posicionadas
+                                {signatariosPosicionaveis.filter(sig => Object.values(posicoesAssinaturas).some(p => p.signatarioId === sig.id)).length} de {signatariosPosicionaveis.length} pessoas posicionadas
+                                {documentosUpload.length > 1 && ` • ${Object.keys(posicoesAssinaturas).length} posições em ${documentosUpload.length} docs`}
                               </span>
                             )}
                           </div>
@@ -6995,19 +7051,21 @@ export default function MatriculaDigitalPage() {
                     ) : (
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 10 }}>
                         {signatariosPosicionaveis.map((sig) => {
-                          const posicao = posicoesAssinaturas[sig.id]
+                          const posicoesDoSig = Object.values(posicoesAssinaturas).filter(p => p.signatarioId === sig.id)
+                          const temPosicoes = posicoesDoSig.length > 0
                           return (
                             <div
                               key={sig.id}
                               style={{
                                 padding: '10px 12px',
                                 borderRadius: 10,
-                                background: posicao ? 'rgba(16, 185, 129, 0.03)' : 'hsl(var(--bg-surface))',
-                                border: posicao ? '1px solid rgba(16, 185, 129, 0.35)' : '1px solid hsl(var(--border-subtle))',
+                                background: temPosicoes ? 'rgba(16, 185, 129, 0.03)' : 'hsl(var(--bg-surface))',
+                                border: temPosicoes ? '1px solid rgba(16, 185, 129, 0.35)' : '1px solid hsl(var(--border-subtle))',
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'space-between',
                                 gap: 10,
+                                flexWrap: 'wrap',
                               }}
                             >
                               <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
@@ -7030,49 +7088,92 @@ export default function MatriculaDigitalPage() {
                                 </div>
                               </div>
 
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-                                {posicao ? (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                                {temPosicoes ? (
                                   <>
-                                    <span
-                                      style={{
-                                        fontSize: 10,
-                                        fontWeight: 700,
-                                        color: '#059669',
-                                        background: 'rgba(16, 185, 129, 0.15)',
-                                        padding: '2px 7px',
-                                        borderRadius: 6,
-                                      }}
-                                    >
-                                      Pág {posicao.pagina} ({Math.round(posicao.xPercent)}%, {Math.round(posicao.yPercent)}%)
-                                    </span>
+                                    {posicoesDoSig.map((p, pIdx) => {
+                                      const keyToRemove = Object.keys(posicoesAssinaturas).find(
+                                        k => posicoesAssinaturas[k] === p || (posicoesAssinaturas[k].signatarioId === sig.id && posicoesAssinaturas[k].pagina === p.pagina && posicoesAssinaturas[k].documentoId === p.documentoId)
+                                      )
+                                      return (
+                                        <span
+                                          key={p.id || `${p.signatarioId}_${pIdx}`}
+                                          style={{
+                                            fontSize: 10,
+                                            fontWeight: 700,
+                                            color: '#059669',
+                                            background: 'rgba(16, 185, 129, 0.15)',
+                                            padding: '2px 7px',
+                                            borderRadius: 6,
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            gap: 4,
+                                          }}
+                                          title={`Posição no documento: (${Math.round(p.xPercent)}%, ${Math.round(p.yPercent)}%)`}
+                                        >
+                                          <span>
+                                            {p.documentoNome
+                                              ? `${p.documentoNome.length > 14 ? p.documentoNome.substring(0, 14) + '…' : p.documentoNome}: Pág ${p.paginaRelativa || p.pagina}`
+                                              : `Pág ${p.pagina}`}
+                                          </span>
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              if (keyToRemove) {
+                                                setPosicoesAssinaturas(prev => {
+                                                  const cp = { ...prev }
+                                                  delete cp[keyToRemove]
+                                                  return cp
+                                                })
+                                              }
+                                            }}
+                                            title="Remover esta posição"
+                                            style={{
+                                              background: 'transparent',
+                                              border: 'none',
+                                              color: '#059669',
+                                              cursor: 'pointer',
+                                              padding: 0,
+                                              display: 'flex',
+                                              alignItems: 'center',
+                                            }}
+                                          >
+                                            <X size={11} />
+                                          </button>
+                                        </span>
+                                      )
+                                    })}
                                     <button
                                       type="button"
                                       onClick={() => {
-                                        setPosicoesAssinaturas(prev => {
-                                          const cp = { ...prev }
-                                          delete cp[sig.id]
-                                          return cp
-                                        })
+                                        setSignatarioModalAtivo(sig.id)
+                                        setModalPosicionadorAberto(true)
                                       }}
-                                      title="Remover posicionamento"
                                       style={{
-                                        background: 'transparent',
-                                        border: 'none',
-                                        color: 'hsl(var(--text-muted))',
+                                        fontSize: 10.5,
+                                        fontWeight: 600,
+                                        color: '#2563eb',
+                                        background: 'rgba(37, 99, 235, 0.08)',
+                                        border: '1px solid rgba(37, 99, 235, 0.25)',
+                                        padding: '2px 7px',
+                                        borderRadius: 6,
                                         cursor: 'pointer',
-                                        padding: 4,
-                                        borderRadius: 4,
                                         display: 'flex',
                                         alignItems: 'center',
+                                        gap: 3,
                                       }}
+                                      title="Editar ou adicionar posições em outros documentos"
                                     >
-                                      <X size={13} />
+                                      <Move size={10} /> Ajustar
                                     </button>
                                   </>
                                 ) : (
                                   <button
                                     type="button"
-                                    onClick={() => setModalPosicionadorAberto(true)}
+                                    onClick={() => {
+                                      setSignatarioModalAtivo(sig.id)
+                                      setModalPosicionadorAberto(true)
+                                    }}
                                     style={{
                                       fontSize: 11,
                                       fontWeight: 600,
@@ -9977,16 +10078,29 @@ export default function MatriculaDigitalPage() {
       {/* ── MODAL INTERATIVO DE POSICIONAMENTO VISUAL DE ASSINATURAS ── */}
       <PosicionadorAssinaturasModal
         aberto={modalPosicionadorAberto}
-        onClose={() => setModalPosicionadorAberto(false)}
+        onClose={() => {
+          setModalPosicionadorAberto(false)
+          setSignatarioModalAtivo(null)
+        }}
         pdfUrl={previewPdfBlobUrl}
         pdfBase64={pdfUploadBase64}
-        totalPaginas={totalPaginasDocumentoAtual}
+        totalPaginas={totalPaginasGeral}
         documentoNome={formNovo.titulo_documento || pdfUploadNome || 'Documento'}
         signatarios={signatariosPosicionaveis}
         posicoesAtuais={posicoesAssinaturas}
+        signatarioInicialId={signatarioModalAtivo}
+        documentos={documentosUpload.map((doc) => ({
+          id: doc.id,
+          nome: doc.nome,
+          totalPaginas: doc.totalPaginas || 1,
+          pdfBase64: doc.pdfBase64,
+          tamanhoFormatado: doc.tamanhoFormatado,
+          formatoOriginal: doc.formatoOriginal,
+        }))}
         onSalvar={(novas) => {
           setPosicoesAssinaturas(novas)
           setModalPosicionadorAberto(false)
+          setSignatarioModalAtivo(null)
           toast.success('Posições das assinaturas salvas com sucesso!')
         }}
       />

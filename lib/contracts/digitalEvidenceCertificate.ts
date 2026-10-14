@@ -293,12 +293,16 @@ export interface EvidenceCertificateParams {
 }
 
 export interface PosicaoAssinaturaDocumento {
+  id?: string
   signatarioId?: string
   nome: string
   cpf?: string
   cargo?: string
   tipo: 'escola' | 'responsavel'
   pagina: number
+  documentoId?: string
+  documentoNome?: string
+  paginaRelativa?: number
   xPercent: number
   yPercent: number
   larguraPt?: number
@@ -430,8 +434,8 @@ export async function anexarCertificadoEvidencias(
         const targetPage = pdfDoc.getPage(pageIndex)
         const { width: pWidth, height: pHeight } = targetPage.getSize()
 
-        const boxWidth = Math.max(90, Math.min(320, pos.larguraPt || 160))
-        const boxHeight = Math.max(26, Math.min(80, pos.alturaPt || 44))
+        const boxWidth = Math.max(90, Math.min(320, pos.larguraPt || 190))
+        const boxHeight = Math.max(26, Math.min(80, pos.alturaPt || 45))
 
         const x = Math.max(8, Math.min(pWidth - boxWidth - 8, (pos.xPercent / 100) * pWidth))
         const topY = pHeight - ((pos.yPercent / 100) * pHeight)
@@ -487,7 +491,7 @@ export async function anexarCertificadoEvidencias(
 
           const maxFontePorAltura = Math.min(26, Math.max(10, boxHeight * 0.38))
           let sigSz = maxFontePorAltura
-          while (fonteParaUsar.widthOfTextAtSize(textoAssinatura, sigSz) > (boxWidth - 8) && sigSz > 8.5) {
+          while (fonteParaUsar.widthOfTextAtSize(textoAssinatura, sigSz) > (boxWidth - 8) && sigSz > 7.0) {
             sigSz -= 0.5
           }
 
@@ -508,7 +512,10 @@ export async function anexarCertificadoEvidencias(
         const dataFormatada = formatDataAssinaturaSimples(dataAssinaturaIso)
         const legendaAssinado = sanitizeWinAnsi(`Assinado eletronicamente ${dataFormatada}`)
 
-        const subSz = Math.max(4.2, Math.min(6.8, boxHeight * 0.13))
+        let subSz = Math.max(4.2, Math.min(6.8, boxHeight * 0.13))
+        while (fontRegular.widthOfTextAtSize(legendaAssinado, subSz) > (boxWidth - 8) && subSz > 3.8) {
+          subSz -= 0.2
+        }
         const subY = y + Math.max(2, Math.round(boxHeight * 0.08))
 
         targetPage.drawText(legendaAssinado, {
