@@ -652,21 +652,16 @@ export function DesktopTopNav() {
             {/* Divisor vertical discreto */}
             <div className="w-[1px] h-6 bg-white/20 mx-1" />
 
-            {/* Perfil do Usuário com Dropdown */}
+            {/* Identificação do Usuário */}
             <div className="relative">
-              <button
-                type="button"
-                onClick={() => {
-                  setIsProfileOpen(prev => !prev)
-                  setActiveDropdown(null)
-                  setIsAnoLetivoOpen(false)
-                }}
-                className="flex items-center gap-2.5 px-2 py-1.5 rounded-xl transition-all cursor-pointer border focus:outline-none"
+              <Link
+                href="/meu-perfil"
+                className="flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl transition-all cursor-pointer border focus:outline-none hover:bg-white/12"
                 style={{
-                  background: isProfileOpen ? 'rgba(255, 255, 255, 0.16)' : 'transparent',
-                  borderColor: isProfileOpen ? 'rgba(255, 255, 255, 0.2)' : 'transparent'
+                  background: 'rgba(255, 255, 255, 0.06)',
+                  borderColor: 'rgba(255, 255, 255, 0.14)'
                 }}
-                title="Menu de perfil e opções"
+                title="Acessar Meu Perfil"
               >
                 <div className="relative shrink-0">
                   <UserAvatar
@@ -674,7 +669,7 @@ export function DesktopTopNav() {
                     userId={currentUser?.id}
                     name={currentUser?.nome || 'Usuário'}
                     fotoUrl={currentUser?.foto}
-                    size={38}
+                    size={36}
                     style={{
                       borderRadius: '50%',
                       border: '2px solid rgba(255, 255, 255, 0.35)',
@@ -684,100 +679,23 @@ export function DesktopTopNav() {
                   <div className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-400 ring-2 ring-[#10152F]" />
                 </div>
 
-                <div className="flex flex-col text-left max-w-[130px] xl:max-w-[160px] truncate leading-tight">
-                  <span className="text-xs xl:text-sm font-bold text-white truncate">
+                <div className="flex flex-col text-left max-w-[140px] xl:max-w-[165px] truncate leading-tight">
+                  <span className="text-xs xl:text-[13px] font-bold text-white truncate">
                     {currentUser?.nome || 'Usuário'}
                   </span>
-                  <span className="text-[10px] xl:text-[11px] font-medium text-white/70 truncate">
+                  <span className="text-[10px] xl:text-[10.5px] font-medium text-white/70 truncate">
                     {currentUser?.cargo || currentUser?.perfil || 'Colaborador'}
                   </span>
                 </div>
-
-                <ChevronDown size={14} className={`text-white/70 transition-transform ${isProfileOpen ? 'rotate-180' : ''}`} />
-              </button>
-
-              {/* Menu do Perfil */}
-              <AnimatePresence>
-                {isProfileOpen && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 6 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: 6 }}
-                    className="absolute right-0 top-[calc(100%+8px)] w-60 bg-white text-slate-800 rounded-2xl shadow-2xl border border-slate-200/90 p-2 z-50 overflow-hidden"
-                  >
-                    {/* Header do Card com detalhes */}
-                    <div className="px-3 py-2.5 border-b border-slate-100 flex items-center gap-3">
-                      <UserAvatar
-                        userId={currentUser?.id}
-                        name={currentUser?.nome || 'Usuário'}
-                        fotoUrl={currentUser?.foto}
-                        size={40}
-                        style={{ borderRadius: '50%' }}
-                      />
-                      <div className="flex flex-col min-w-0">
-                        <span className="text-xs font-bold text-slate-900 truncate">
-                          {currentUser?.nome || 'Usuário'}
-                        </span>
-                        <span className="text-[11px] text-slate-500 font-medium truncate">
-                          {currentUser?.cargo || currentUser?.perfil || 'Colaborador'}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="p-1 space-y-0.5">
-                      {/* 1. Meu Perfil */}
-                      <Link
-                        href="/meu-perfil"
-                        onClick={() => setIsProfileOpen(false)}
-                        className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 hover:bg-purple-50 hover:text-purple-700 transition-colors"
-                      >
-                        <UserCircle size={16} className="text-purple-600" />
-                        <span>Meu perfil</span>
-                      </Link>
-
-                      {/* 2. Trocar Módulo */}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsProfileOpen(false)
-                          setIsTrocarModuloOpen(true)
-                        }}
-                        className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 hover:bg-cyan-50 hover:text-cyan-700 transition-colors cursor-pointer text-left"
-                      >
-                        <LayoutDashboard size={16} className="text-cyan-600" />
-                        <span>Trocar módulo</span>
-                      </button>
-
-                      <div className="h-[1px] bg-slate-100 my-1" />
-
-                      {/* 3. Sair */}
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          setIsProfileOpen(false)
-                          try {
-                            await performLogout()
-                          } catch {
-                            window.location.replace('/login')
-                          }
-                        }}
-                        className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer text-left"
-                      >
-                        <LogOut size={16} className="text-rose-600" />
-                        <span>Sair</span>
-                      </button>
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
+              </Link>
             </div>
 
           </div>
         </div>
 
         {/* ══════════ SEGUNDA LINHA: NAVEGAÇÃO HORIZONTAL (~52px) ══════════ */}
-        <div className="h-[52px] min-h-[52px] px-6 xl:px-8 max-w-[1920px] mx-auto flex items-center overflow-visible">
-          <nav className="flex items-center gap-1 xl:gap-2 w-full">
+        <div className="h-[52px] min-h-[52px] px-6 xl:px-8 max-w-[1920px] mx-auto flex items-center justify-between gap-3 overflow-visible">
+          <nav className="flex items-center gap-1 xl:gap-1.5">
             {filteredModules.map((module) => {
               const isActive = module.matchPaths(pathname)
               const isOpen = activeDropdown === module.id
@@ -961,6 +879,48 @@ export function DesktopTopNav() {
               )
             })}
           </nav>
+
+          {/* ── Botões Rápidos de Sessão na 2ª Linha à Direita (Abaixo do Perfil) ── */}
+          <div className="flex items-center gap-2 shrink-0">
+            <Link
+              href="/meu-perfil"
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${
+                pathname === '/meu-perfil'
+                  ? 'bg-white text-indigo-950 border-white shadow-xs'
+                  : 'text-white/90 bg-white/10 hover:bg-white/20 border-white/15 hover:text-white'
+              }`}
+              title="Acessar Meu Perfil"
+            >
+              <UserCircle size={15} className={pathname === '/meu-perfil' ? 'text-indigo-600' : 'text-purple-200'} />
+              <span>Meu perfil</span>
+            </Link>
+
+            <button
+              type="button"
+              onClick={() => setIsTrocarModuloOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-cyan-50 bg-cyan-400/15 hover:bg-cyan-400/25 border border-cyan-300/30 transition-all cursor-pointer shadow-2xs"
+              title="Alternar entre módulos do sistema"
+            >
+              <LayoutDashboard size={15} className="text-cyan-300" />
+              <span>Trocar módulo</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={async () => {
+                try {
+                  await performLogout()
+                } catch {
+                  window.location.replace('/login')
+                }
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-rose-50 bg-rose-500/25 hover:bg-rose-500/40 border border-rose-400/35 transition-all cursor-pointer shadow-2xs"
+              title="Sair do sistema"
+            >
+              <LogOut size={15} className="text-rose-200" />
+              <span>Sair</span>
+            </button>
+          </div>
         </div>
       </header>
 

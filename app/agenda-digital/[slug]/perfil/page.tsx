@@ -7,9 +7,9 @@ import { useSelectedStudent } from '@/lib/selectedStudentContext'
 import { LoadingGlass } from '@/components/LoadingGlass'
 import { 
   UserCog, Phone, Mail, ShieldAlert, GraduationCap, MapPin, 
-  Edit3, HeartPulse, ShieldCheck, Contact, FileText, Camera, 
-  Download, PlusCircle, AlertTriangle, Fingerprint, CalendarDays, Loader2,
-  DollarSign, Lock, Clock, History, CheckCircle2
+  Edit3, ShieldCheck, Contact, Camera, 
+  AlertTriangle, Fingerprint, CalendarDays, Loader2,
+  DollarSign, Lock, Clock, History, CheckCircle2, KeyRound, Eye, EyeOff, Check
 } from 'lucide-react'
 import { getInitials, formatDate } from '@/lib/utils'
 import { useApiQuery } from '@/hooks/useApi'
@@ -204,8 +204,7 @@ export default function ADPerfilPage() {
     }
   }
 
-  const [activeTab, setActiveTab] = useState<'geral' | 'responsaveis'>('geral')
-  const [hoveredCard, setHoveredCard] = useState<number | null>(null)
+  const [activeTab, setActiveTab] = useState<'geral' | 'responsaveis' | 'senha'>('geral')
 
   const [isEditingEmail, setIsEditingEmail] = useState(false)
   const [emailInput, setEmailInput] = useState('')
@@ -213,10 +212,81 @@ export default function ADPerfilPage() {
   const [phoneInput, setPhoneInput] = useState('')
   const [isSaving, setIsSaving] = useState(false)
 
+  // Estados para alteração de senha (sem requisitos mínimos)
+  const [pwForm, setPwForm] = useState({ atual: '', nova: '', confirmar: '' })
+  const [showPw, setShowPw] = useState({ atual: false, nova: false, confirmar: false })
+  const [pwError, setPwError] = useState('')
+  const [pwSuccess, setPwSuccess] = useState(false)
+  const [isChangingPw, setIsChangingPw] = useState(false)
+
   const searchParams = useSearchParams()
   const espelharRespId = searchParams?.get('espelhar_responsavel');
   const espelharAluno = searchParams?.get('espelhar_aluno') === 'true';
   const isMirroring = !!(espelharRespId || espelharAluno);
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (isChangingPw || isMirroring) return
+    setPwError('')
+    setPwSuccess(false)
+
+    if (!pwForm.atual) {
+      setPwError('Informe sua senha atual.')
+      return
+    }
+    if (!pwForm.nova) {
+      setPwError('Informe a nova senha.')
+      return
+    }
+    if (pwForm.nova !== pwForm.confirmar) {
+      setPwError('A confirmação de senha não coincide com a nova senha.')
+      return
+    }
+    if (pwForm.atual === pwForm.nova) {
+      setPwError('A nova senha deve ser diferente da senha atual.')
+      return
+    }
+
+    setIsChangingPw(true)
+    try {
+      const res = await apiFetch('/api/auth/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          currentPassword: pwForm.atual,
+          newPassword: pwForm.nova,
+        }),
+      })
+
+      const data = await res.json().catch(() => ({}))
+
+      if (!res.ok) {
+        const msg = data.error || 'Não foi possível alterar a senha. Verifique sua senha atual.'
+        setPwError(msg)
+        toast.error(msg)
+        return
+      }
+
+      if (typeof window !== 'undefined' && currentUser?.id) {
+        try {
+          const all = JSON.parse(localStorage.getItem('edu-user-passwords') ?? '{}')
+          all[currentUser.id] = pwForm.nova
+          localStorage.setItem('edu-user-passwords', JSON.stringify(all))
+        } catch {}
+      }
+
+      setPwSuccess(true)
+      setPwForm({ atual: '', nova: '', confirmar: '' })
+      toast.success('Senha alterada com sucesso!')
+      setTimeout(() => setPwSuccess(false), 6000)
+    } catch (err: any) {
+      const msg = err?.message || 'Erro de conexão ao tentar alterar a senha.'
+      setPwError(msg)
+      toast.error(msg)
+    } finally {
+      setIsChangingPw(false)
+    }
+  }
 
   // Atualizar o state do input se o aluno carregar depois do hook inicial
   useEffect(() => {
@@ -265,12 +335,11 @@ export default function ADPerfilPage() {
       })
       if (!res.ok) throw new Error('Falha ao salvar')
       
-      // Atualiza apenas localmente para a UI refletir a mudança,
-      // sem chamar setAlunos (o que dispararia um POST com 10MB de dados da coleção inteira).
       aluno[field] = value
       
       if (field === 'email') setIsEditingEmail(false)
       if (field === 'telefone') setIsEditingPhone(false)
+      toast.success('Informação atualizada com sucesso!')
     } catch (err) {
       alert('Erro ao atualizar: ' + (err as Error).message)
     } finally {
@@ -283,122 +352,778 @@ export default function ADPerfilPage() {
   ]
   const saude = (aluno as any).saude || {}
 
-  // Animations
   const containerVariants = {
     hidden: { opacity: 0 },
-    visible: { opacity: 1, transition: { staggerChildren: 0.1 } }
+    visible: { opacity: 1, transition: { staggerChildren: 0.08 } }
   } as const
 
   const itemVariants = {
-    hidden: { opacity: 0, y: 20 },
-    visible: { opacity: 1, y: 0, transition: { type: 'spring' as const, stiffness: 300, damping: 24 } }
+    hidden: { opacity: 0, y: 14 },
+    visible: { opacity: 1, y: 0, transition: { type: 'spring' as const, stiffness: 320, damping: 26 } }
   } as const
 
-  return (
-    <div style={{ maxWidth: 1000, margin: '0 auto', paddingBottom: 80, fontFamily: 'Outfit, Inter, sans-serif' }}>
-      
+  const tabsConfig = [
+    {
+      id: 'geral' as const,
+      label: 'Dados Gerais',
+      icon: <Contact size={16} strokeWidth={2.3} />,
+    },
+    {
+      id: 'responsaveis' as const,
+      label: 'Responsáveis',
+      icon: <ShieldCheck size={16} strokeWidth={2.3} />,
+    },
+    {
+      id: 'senha' as const,
+      label: 'Alterar Senha',
+      icon: <KeyRound size={16} strokeWidth={2.3} />,
+    },
+  ]
 
-      {/* Modern Tabs Navigation */}
-      <div style={{ display: 'flex', gap: 12, marginBottom: 32, overflowX: 'auto', paddingBottom: 10, scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
-        {[
-          { id: 'geral', label: 'Dados Gerais', icon: <Contact size={16} /> },
-          { id: 'responsaveis', label: 'Responsáveis & Autorizações', icon: <ShieldCheck size={16} /> },
-        ].map(tab => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id as any)}
-            style={{
-              padding: '12px 24px', borderRadius: 100, border: 'none', cursor: 'pointer',
-              display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 700,
-              whiteSpace: 'nowrap', flexShrink: 0,
-              background: activeTab === tab.id ? '#4f46e5' : 'hsl(var(--bg-surface))',
-              color: activeTab === tab.id ? 'white' : 'hsl(var(--text-muted))',
-              boxShadow: activeTab === tab.id ? '0 8px 16px rgba(79, 70, 229, 0.25)' : '0 2px 8px rgba(0,0,0,0.02)',
-              transition: 'all 0.3s'
-            }}
-          >
-            {tab.icon} {tab.label}
-          </button>
-        ))}
+  const alunoNascimento = (aluno.dataNascimento || aluno.data_nascimento)
+    ? formatDate(aluno.dataNascimento || aluno.data_nascimento)
+    : 'Não informado'
+  const alunoMatricula = aluno.matricula || aluno.dados?.codigo || aluno.codigo || String(aluno.id).slice(0, 8)
+  const alunoTurma = aluno.turma || aluno.serie || aluno.dados?.turma || 'Regular'
+
+  return (
+    <div className="ad-perfil-root" style={{ maxWidth: 1000, margin: '0 auto', paddingBottom: 88, fontFamily: 'Outfit, Inter, sans-serif' }}>
+      <style dangerouslySetInnerHTML={{__html: `
+        .avatar-edit-overlay:hover {
+          opacity: 1 !important;
+        }
+
+        /* ── Segmented Control Dock Ultra Moderno ── */
+        .ad-perfil-tabs-bar {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 6px;
+          padding: 6px;
+          margin-bottom: 20px;
+          background: rgba(255, 255, 255, 0.92);
+          backdrop-filter: blur(20px);
+          -webkit-backdrop-filter: blur(20px);
+          border: 1px solid rgba(226, 232, 240, 0.95);
+          border-radius: 20px;
+          box-shadow: 0 10px 30px -8px rgba(79, 70, 229, 0.08), 0 2px 8px rgba(15, 23, 42, 0.03);
+        }
+
+        .ad-perfil-tab-btn {
+          position: relative;
+          min-width: 0;
+          padding: 11px 12px;
+          border-radius: 14px;
+          border: 1px solid transparent;
+          background: transparent;
+          color: #475569;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          font-family: 'Outfit', Inter, sans-serif;
+          font-size: 13px;
+          font-weight: 800;
+          transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+          user-select: none;
+          -webkit-tap-highlight-color: transparent;
+        }
+
+        .ad-perfil-tab-btn:hover:not(.active) {
+          background: #f8fafc;
+          color: #0f172a;
+        }
+
+        .ad-perfil-tab-btn.active {
+          background: linear-gradient(135deg, #4f46e5 0%, #6366f1 60%, #7c3aed 100%);
+          color: #ffffff;
+          box-shadow: 0 8px 20px -4px rgba(79, 70, 229, 0.42);
+        }
+
+        .ad-perfil-tab-icon {
+          width: 28px;
+          height: 28px;
+          border-radius: 9px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+          background: #eef2ff;
+          color: #4f46e5;
+          transition: all 0.2s ease;
+        }
+
+        .ad-perfil-tab-btn.active .ad-perfil-tab-icon {
+          background: rgba(255, 255, 255, 0.22);
+          color: #ffffff;
+        }
+
+        .ad-perfil-tab-label {
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          line-height: 1.15;
+        }
+
+        /* ── Card Principal de Seção ── */
+        .ad-perfil-section-card {
+          background: rgba(255, 255, 255, 0.96);
+          border-radius: 26px;
+          border: 1px solid rgba(226, 232, 240, 0.95);
+          padding: 26px;
+          box-shadow: 0 16px 40px -12px rgba(15, 23, 42, 0.06), 0 2px 6px rgba(15, 23, 42, 0.02);
+          display: flex;
+          flex-direction: column;
+          gap: 20px;
+        }
+
+        /* ── Bento Grid (Dados Gerais) ── */
+        .ad-bento-top-grid {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 12px;
+        }
+
+        .ad-bento-contact-grid {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 14px;
+        }
+
+        .ad-resp-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+          gap: 16px;
+        }
+
+        .ad-pw-grid {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 14px;
+        }
+
+        .ad-pw-input-wrapper {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          background: #f8fafc;
+          border: 1.5px solid #cbd5e1;
+          border-radius: 14px;
+          padding: 0 8px 0 14px;
+          min-height: 48px;
+          transition: all 0.2s ease;
+        }
+
+        .ad-pw-input-wrapper:focus-within {
+          background: #ffffff;
+          border-color: #4f46e5;
+          box-shadow: 0 0 0 3.5px rgba(79, 70, 229, 0.12);
+        }
+
+        .ad-pw-input-wrapper.has-error {
+          border-color: #ef4444;
+          background: #fef2f2;
+        }
+
+        .ad-pw-input-wrapper.has-success {
+          border-color: #10b981;
+        }
+
+        input.ad-pw-input {
+          flex: 1;
+          min-width: 0;
+          width: 100%;
+          border: none !important;
+          outline: none !important;
+          background: transparent !important;
+          box-shadow: none !important;
+          font-family: 'Outfit', Inter, sans-serif;
+          font-size: 15px !important;
+          font-weight: 600;
+          color: #0f172a !important;
+          padding: 12px 4px !important;
+        }
+
+        input.ad-pw-input::placeholder {
+          color: #94a3b8 !important;
+          font-weight: 500;
+        }
+
+        @media (max-width: 680px) {
+          .ad-perfil-tabs-bar {
+            gap: 5px;
+            padding: 5px;
+            border-radius: 18px;
+            margin-bottom: 16px;
+          }
+
+          .ad-perfil-tab-btn {
+            flex-direction: column;
+            gap: 5px;
+            padding: 10px 4px;
+            border-radius: 14px;
+            font-size: 11px;
+          }
+
+          .ad-perfil-tab-icon {
+            width: 28px;
+            height: 28px;
+            border-radius: 9px;
+          }
+
+          .ad-perfil-section-card {
+            padding: 18px 16px !important;
+            border-radius: 22px !important;
+            gap: 16px !important;
+          }
+
+          .ad-bento-top-grid {
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+          }
+
+          .ad-bento-top-grid > div:last-child {
+            grid-column: 1 / -1;
+          }
+
+          .ad-bento-contact-grid {
+            grid-template-columns: 1fr;
+            gap: 12px;
+          }
+
+          .ad-pw-grid {
+            grid-template-columns: 1fr;
+            gap: 14px;
+          }
+
+          input.ad-pw-input {
+            font-size: 16px !important;
+          }
+
+          .ad-pw-submit-btn {
+            width: 100%;
+          }
+        }
+      `}} />
+
+      {/* Segmented Control Dock Ultra Moderno */}
+      <div
+        className="ad-perfil-tabs-bar"
+        role="tablist"
+        aria-label="Seções do perfil"
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+          gap: 6,
+          padding: 6,
+          marginBottom: 18,
+          background: 'rgba(255, 255, 255, 0.92)',
+          borderRadius: 20,
+          border: '1px solid rgba(226, 232, 240, 0.95)',
+          boxShadow: '0 10px 30px -8px rgba(79, 70, 229, 0.08), 0 2px 8px rgba(15, 23, 42, 0.03)',
+        }}
+      >
+        {tabsConfig.map(tab => {
+          const isActive = activeTab === tab.id
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              role="tab"
+              aria-selected={isActive}
+              onClick={() => setActiveTab(tab.id)}
+              className={`ad-perfil-tab-btn ${isActive ? 'active' : ''}`}
+              style={{
+                borderRadius: 14,
+                border: 'none',
+                background: isActive
+                  ? 'linear-gradient(135deg, #4f46e5 0%, #6366f1 60%, #7c3aed 100%)'
+                  : 'transparent',
+                color: isActive ? '#ffffff' : '#475569',
+                boxShadow: isActive ? '0 8px 20px -4px rgba(79, 70, 229, 0.42)' : 'none',
+                cursor: 'pointer',
+              }}
+            >
+              <span
+                className="ad-perfil-tab-icon"
+                style={{
+                  width: 28,
+                  height: 28,
+                  borderRadius: 9,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                  background: isActive ? 'rgba(255, 255, 255, 0.22)' : '#eef2ff',
+                  color: isActive ? '#ffffff' : '#4f46e5',
+                }}
+              >
+                {tab.icon}
+              </span>
+              <span className="ad-perfil-tab-label">{tab.label}</span>
+            </button>
+          )
+        })}
       </div>
 
       {/* Tab Contents */}
       <motion.div variants={containerVariants} initial="hidden" animate="visible">
         <AnimatePresence mode="wait">
           
-          {/* TAB: GERAL */}
+          {/* TAB 1: DADOS GERAIS */}
           {activeTab === 'geral' && (
-            <motion.div key="geral" variants={itemVariants} exit={{ opacity: 0, y: -20 }} style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+            <motion.div key="geral" variants={itemVariants} exit={{ opacity: 0, y: -14 }} style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
               
-              <div style={{ background: 'hsl(var(--bg-surface))', padding: 32, borderRadius: 24, border: '1px solid hsl(var(--border-subtle))', boxShadow: '0 12px 40px rgba(0,0,0,0.02)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
-                  <div style={{ width: 40, height: 40, borderRadius: 12, background: '#e0e7ff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <UserCog size={20} color="#4f46e5" />
-                  </div>
-                  <h3 style={{ margin: 0, fontSize: 20, fontWeight: 800 }}>Informações do Aluno</h3>
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+              <div
+                className="ad-perfil-section-card"
+                style={{
+                  background: '#ffffff',
+                  borderRadius: 24,
+                  border: '1px solid rgba(226, 232, 240, 0.95)',
+                  padding: 22,
+                  boxShadow: '0 16px 40px -12px rgba(15, 23, 42, 0.06)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 18,
+                }}
+              >
+                {/* Header */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, paddingBottom: 14, borderBottom: '1px solid #f1f5f9', flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <div
+                      style={{
+                        width: 44,
+                        height: 44,
+                        borderRadius: 14,
+                        background: 'linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%)',
+                        border: '1px solid #c7d2fe',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: '#4f46e5',
+                        flexShrink: 0,
+                      }}
+                    >
+                      <UserCog size={20} strokeWidth={2.2} />
+                    </div>
                     <div>
-                      <div style={{ fontSize: 11, fontWeight: 800, textTransform: 'uppercase', color: 'hsl(var(--text-muted))', letterSpacing: 0.5, marginBottom: 4 }}>Data de Nascimento</div>
-                      <div style={{ fontSize: 15, fontWeight: 700, color: 'hsl(var(--text-main))', display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <CalendarDays size={16} color="#94a3b8" /> {(aluno.dataNascimento || aluno.data_nascimento) ? formatDate(aluno.dataNascimento || aluno.data_nascimento) : 'Não informado'}
+                      <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: '#0f172a', lineHeight: 1.2 }}>
+                        Informações do Aluno
+                      </h3>
+                      <p style={{ margin: '3px 0 0 0', fontSize: 12, fontWeight: 500, color: '#64748b' }}>
+                        Dados cadastrais, contatos e endereço residencial
+                      </p>
+                    </div>
+                  </div>
+
+                  <span
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      padding: '5px 11px',
+                      borderRadius: 999,
+                      background: '#ecfdf5',
+                      border: '1px solid #a7f3d0',
+                      color: '#047857',
+                      fontSize: 11,
+                      fontWeight: 800,
+                      letterSpacing: '0.03em',
+                    }}
+                  >
+                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10b981' }} />
+                    CADASTRO ATIVO
+                  </span>
+                </div>
+
+                {/* Bento Row 1: Dados rápidos */}
+                <div className="ad-bento-top-grid">
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 12,
+                      padding: '13px 14px',
+                      borderRadius: 16,
+                      background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
+                      border: '1px solid #e2e8f0',
+                      minWidth: 0,
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: 36,
+                        height: 36,
+                        borderRadius: 11,
+                        background: '#eff6ff',
+                        color: '#2563eb',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0,
+                      }}
+                    >
+                      <CalendarDays size={17} strokeWidth={2.2} />
+                    </div>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#64748b', marginBottom: 2 }}>
+                        Nascimento
+                      </div>
+                      <div style={{ fontSize: 14, fontWeight: 800, color: '#0f172a' }}>{alunoNascimento}</div>
+                    </div>
+                  </div>
+
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 12,
+                      padding: '13px 14px',
+                      borderRadius: 16,
+                      background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
+                      border: '1px solid #e2e8f0',
+                      minWidth: 0,
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: 36,
+                        height: 36,
+                        borderRadius: 11,
+                        background: '#f5f3ff',
+                        color: '#7c3aed',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0,
+                      }}
+                    >
+                      <Fingerprint size={17} strokeWidth={2.2} />
+                    </div>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#64748b', marginBottom: 2 }}>
+                        Matrícula
+                      </div>
+                      <div style={{ fontSize: 14, fontWeight: 800, color: '#0f172a' }}>#{alunoMatricula}</div>
+                    </div>
+                  </div>
+
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 12,
+                      padding: '13px 14px',
+                      borderRadius: 16,
+                      background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
+                      border: '1px solid #e2e8f0',
+                      minWidth: 0,
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: 36,
+                        height: 36,
+                        borderRadius: 11,
+                        background: '#ecfdf5',
+                        color: '#059669',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0,
+                      }}
+                    >
+                      <GraduationCap size={17} strokeWidth={2.2} />
+                    </div>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#64748b', marginBottom: 2 }}>
+                        Turma / Série
+                      </div>
+                      <div style={{ fontSize: 14, fontWeight: 800, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {alunoTurma}
                       </div>
                     </div>
                   </div>
-                  
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16 }}>
-                    <div style={{ background: '#f8fafc', padding: 16, borderRadius: 16, border: '1px solid #e2e8f0' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                        <div style={{ fontSize: 11, fontWeight: 800, textTransform: 'uppercase', color: '#64748b', letterSpacing: 0.5 }}>E-mail do Aluno</div>
-                        {!isEditingEmail && !isMirroring && <button onClick={() => { setIsEditingEmail(true); setEmailInput(aluno.email || '') }} style={{ background: 'none', border: 'none', color: '#4f46e5', cursor: 'pointer', padding: 4 }}><Edit3 size={14} /></button>}
+                </div>
+
+                {/* Bento Row 2: E-mail & Telefone editáveis */}
+                <div className="ad-bento-contact-grid">
+                  {/* E-mail do Aluno */}
+                  <div
+                    style={{
+                      background: '#ffffff',
+                      padding: 16,
+                      borderRadius: 18,
+                      border: isEditingEmail ? '1.5px solid #4f46e5' : '1px solid #e2e8f0',
+                      boxShadow: isEditingEmail ? '0 0 0 3px rgba(79, 70, 229, 0.1)' : '0 2px 8px rgba(15, 23, 42, 0.02)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 8,
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span
+                          style={{
+                            width: 28,
+                            height: 28,
+                            borderRadius: 8,
+                            background: '#eef2ff',
+                            color: '#4f46e5',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                          }}
+                        >
+                          <Mail size={14} strokeWidth={2.3} />
+                        </span>
+                        <span style={{ fontSize: 11, fontWeight: 800, textTransform: 'uppercase', color: '#64748b', letterSpacing: '0.05em' }}>
+                          E-mail do Aluno
+                        </span>
                       </div>
-                      {isEditingEmail ? (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                          <input 
-                            value={emailInput} 
-                            onChange={e => setEmailInput(e.target.value)} 
-                            placeholder="aluno@email.com"
-                            style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid #cbd5e1', fontSize: 14, outline: 'none' }}
-                          />
-                          <div style={{ display: 'flex', gap: 8 }}>
-                            <button onClick={() => handleSaveField('email', emailInput)} disabled={isSaving} style={{ flex: 1, padding: '8px', background: '#4f46e5', color: 'white', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>{isSaving ? '...' : 'Salvar'}</button>
-                            <button onClick={() => setIsEditingEmail(false)} disabled={isSaving} style={{ flex: 1, padding: '8px', background: '#e2e8f0', color: '#475569', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>Cancelar</button>
-                          </div>
-                        </div>
-                      ) : (
-                        <div style={{ fontSize: 14, fontWeight: 700, color: '#334155', wordBreak: 'break-all' }}>{aluno.email || 'Não cadastrado'}</div>
+
+                      {!isEditingEmail && !isMirroring && (
+                        <button
+                          type="button"
+                          onClick={() => { setIsEditingEmail(true); setEmailInput(aluno.email || '') }}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 5,
+                            padding: '5px 10px',
+                            borderRadius: 999,
+                            background: '#eef2ff',
+                            border: '1px solid #e0e7ff',
+                            color: '#4f46e5',
+                            cursor: 'pointer',
+                            fontSize: 11,
+                            fontWeight: 700,
+                          }}
+                        >
+                          <Edit3 size={12} /> Editar
+                        </button>
                       )}
                     </div>
 
-                    <div style={{ background: '#f8fafc', padding: 16, borderRadius: 16, border: '1px solid #e2e8f0' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                        <div style={{ fontSize: 11, fontWeight: 800, textTransform: 'uppercase', color: '#64748b', letterSpacing: 0.5 }}>Telefone / Celular</div>
-                        {!isEditingPhone && !isMirroring && <button onClick={() => { setIsEditingPhone(true); setPhoneInput(aluno.telefone || '') }} style={{ background: 'none', border: 'none', color: '#4f46e5', cursor: 'pointer', padding: 4 }}><Edit3 size={14} /></button>}
-                      </div>
-                      {isEditingPhone ? (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                          <input 
-                            value={phoneInput} 
-                            onChange={e => setPhoneInput(e.target.value)} 
-                            placeholder="(00) 00000-0000"
-                            style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid #cbd5e1', fontSize: 14, outline: 'none' }}
-                          />
-                          <div style={{ display: 'flex', gap: 8 }}>
-                            <button onClick={() => handleSaveField('telefone', phoneInput)} disabled={isSaving} style={{ flex: 1, padding: '8px', background: '#4f46e5', color: 'white', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>{isSaving ? '...' : 'Salvar'}</button>
-                            <button onClick={() => setIsEditingPhone(false)} disabled={isSaving} style={{ flex: 1, padding: '8px', background: '#e2e8f0', color: '#475569', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>Cancelar</button>
-                          </div>
+                    {isEditingEmail ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 4 }}>
+                        <input 
+                          value={emailInput} 
+                          onChange={e => setEmailInput(e.target.value)} 
+                          placeholder="aluno@email.com"
+                          style={{
+                            width: '100%',
+                            padding: '10px 12px',
+                            borderRadius: 10,
+                            border: '1px solid #cbd5e1',
+                            fontSize: 14,
+                            fontWeight: 600,
+                            color: '#0f172a',
+                            outline: 'none',
+                          }}
+                        />
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          <button
+                            type="button"
+                            onClick={() => handleSaveField('email', emailInput)}
+                            disabled={isSaving}
+                            style={{
+                              flex: 1,
+                              padding: '9px 12px',
+                              background: 'linear-gradient(135deg, #4f46e5 0%, #6366f1 100%)',
+                              color: '#ffffff',
+                              border: 'none',
+                              borderRadius: 10,
+                              cursor: 'pointer',
+                              fontWeight: 700,
+                              fontSize: 13,
+                            }}
+                          >
+                            {isSaving ? 'Salvando...' : 'Salvar'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setIsEditingEmail(false)}
+                            disabled={isSaving}
+                            style={{
+                              flex: 1,
+                              padding: '9px 12px',
+                              background: '#f1f5f9',
+                              color: '#475569',
+                              border: 'none',
+                              borderRadius: 10,
+                              cursor: 'pointer',
+                              fontWeight: 700,
+                              fontSize: 13,
+                            }}
+                          >
+                            Cancelar
+                          </button>
                         </div>
-                      ) : (
-                        <div style={{ fontSize: 14, fontWeight: 700, color: '#334155' }}>{aluno.telefone || 'Não cadastrado'}</div>
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: 14.5, fontWeight: 700, color: aluno.email ? '#0f172a' : '#94a3b8', wordBreak: 'break-all', paddingLeft: 2 }}>
+                        {aluno.email || 'Não cadastrado'}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Telefone / Celular */}
+                  <div
+                    style={{
+                      background: '#ffffff',
+                      padding: 16,
+                      borderRadius: 18,
+                      border: isEditingPhone ? '1.5px solid #4f46e5' : '1px solid #e2e8f0',
+                      boxShadow: isEditingPhone ? '0 0 0 3px rgba(79, 70, 229, 0.1)' : '0 2px 8px rgba(15, 23, 42, 0.02)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 8,
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span
+                          style={{
+                            width: 28,
+                            height: 28,
+                            borderRadius: 8,
+                            background: '#ecfdf5',
+                            color: '#059669',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                          }}
+                        >
+                          <Phone size={14} strokeWidth={2.3} />
+                        </span>
+                        <span style={{ fontSize: 11, fontWeight: 800, textTransform: 'uppercase', color: '#64748b', letterSpacing: '0.05em' }}>
+                          Telefone / Celular
+                        </span>
+                      </div>
+
+                      {!isEditingPhone && !isMirroring && (
+                        <button
+                          type="button"
+                          onClick={() => { setIsEditingPhone(true); setPhoneInput(aluno.telefone || '') }}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 5,
+                            padding: '5px 10px',
+                            borderRadius: 999,
+                            background: '#eef2ff',
+                            border: '1px solid #e0e7ff',
+                            color: '#4f46e5',
+                            cursor: 'pointer',
+                            fontSize: 11,
+                            fontWeight: 700,
+                          }}
+                        >
+                          <Edit3 size={12} /> Editar
+                        </button>
                       )}
                     </div>
+
+                    {isEditingPhone ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 4 }}>
+                        <input 
+                          value={phoneInput} 
+                          onChange={e => setPhoneInput(e.target.value)} 
+                          placeholder="(00) 00000-0000"
+                          style={{
+                            width: '100%',
+                            padding: '10px 12px',
+                            borderRadius: 10,
+                            border: '1px solid #cbd5e1',
+                            fontSize: 14,
+                            fontWeight: 600,
+                            color: '#0f172a',
+                            outline: 'none',
+                          }}
+                        />
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          <button
+                            type="button"
+                            onClick={() => handleSaveField('telefone', phoneInput)}
+                            disabled={isSaving}
+                            style={{
+                              flex: 1,
+                              padding: '9px 12px',
+                              background: 'linear-gradient(135deg, #4f46e5 0%, #6366f1 100%)',
+                              color: '#ffffff',
+                              border: 'none',
+                              borderRadius: 10,
+                              cursor: 'pointer',
+                              fontWeight: 700,
+                              fontSize: 13,
+                            }}
+                          >
+                            {isSaving ? 'Salvando...' : 'Salvar'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setIsEditingPhone(false)}
+                            disabled={isSaving}
+                            style={{
+                              flex: 1,
+                              padding: '9px 12px',
+                              background: '#f1f5f9',
+                              color: '#475569',
+                              border: 'none',
+                              borderRadius: 10,
+                              cursor: 'pointer',
+                              fontWeight: 700,
+                              fontSize: 13,
+                            }}
+                          >
+                            Cancelar
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: 14.5, fontWeight: 700, color: aluno.telefone ? '#0f172a' : '#94a3b8', paddingLeft: 2 }}>
+                        {aluno.telefone || 'Não cadastrado'}
+                      </div>
+                    )}
                   </div>
-                  <div>
-                    <div style={{ fontSize: 11, fontWeight: 800, textTransform: 'uppercase', color: 'hsl(var(--text-muted))', letterSpacing: 0.5, marginBottom: 4 }}>Endereço Residencial</div>
-                    <div style={{ fontSize: 15, fontWeight: 700, color: 'hsl(var(--text-main))', display: 'flex', alignItems: 'flex-start', gap: 8, lineHeight: 1.4 }}>
-                      <MapPin size={16} color="#94a3b8" style={{ marginTop: 2 }} /> 
-                      {aluno.endereco ? `${aluno.endereco}, ${aluno.numero || 'S/N'} - ${aluno.bairro || 'Bairro'} - ${aluno.cidade || 'Cidade'}` : 'Endereço não cadastrado no sistema.'}
+                </div>
+
+                {/* Bento Row 3: Endereço Residencial */}
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 14,
+                    padding: '15px 16px',
+                    borderRadius: 18,
+                    background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
+                    border: '1px solid #e2e8f0',
+                  }}
+                >
+                  <div
+                    style={{
+                      width: 38,
+                      height: 38,
+                      borderRadius: 12,
+                      background: '#fff7ed',
+                      color: '#ea580c',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                    }}
+                  >
+                    <MapPin size={18} strokeWidth={2.2} />
+                  </div>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ fontSize: 10.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#64748b', marginBottom: 3 }}>
+                      Endereço Residencial
+                    </div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: aluno.endereco ? '#0f172a' : '#64748b', lineHeight: 1.4 }}>
+                      {aluno.endereco
+                        ? `${aluno.endereco}, ${aluno.numero || 'S/N'} — ${aluno.bairro || 'Bairro'}, ${aluno.cidade || 'Cidade'}`
+                        : 'Endereço não cadastrado no sistema.'}
                     </div>
                   </div>
                 </div>
@@ -407,25 +1132,52 @@ export default function ADPerfilPage() {
             </motion.div>
           )}
 
-          {/* TAB: RESPONSAVEIS */}
+          {/* TAB 2: RESPONSAVEIS & AUTORIZADOS */}
           {activeTab === 'responsaveis' && (
-            <motion.div key="responsaveis" variants={itemVariants} exit={{ opacity: 0, y: -20 }} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 24 }}>
+            <motion.div key="responsaveis" variants={itemVariants} exit={{ opacity: 0, y: -14 }} style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
               
-              <div style={{ gridColumn: '1 / -1', background: 'hsl(var(--bg-surface))', padding: 32, borderRadius: 24, border: '1px solid hsl(var(--border-subtle))', boxShadow: '0 12px 40px rgba(0,0,0,0.02)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24, flexWrap: 'wrap', gap: 16 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                    <div style={{ width: 40, height: 40, borderRadius: 12, background: '#fef3c7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <ShieldAlert size={20} color="#d97706" />
-                    </div>
-                    <div>
-                      <h3 style={{ margin: 0, fontSize: 20, fontWeight: 800 }}>Contatos e Autorizados</h3>
-                      <div style={{ fontSize: 13, color: 'hsl(var(--text-muted))', fontWeight: 500 }}>Pessoas responsáveis e autorizadas a retirar o aluno.</div>
+              <div
+                className="ad-perfil-section-card"
+                style={{
+                  background: '#ffffff',
+                  borderRadius: 24,
+                  border: '1px solid rgba(226, 232, 240, 0.95)',
+                  padding: 22,
+                  boxShadow: '0 16px 40px -12px rgba(15, 23, 42, 0.06)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 18,
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, paddingBottom: 14, borderBottom: '1px solid #f1f5f9' }}>
+                  <div
+                    style={{
+                      width: 44,
+                      height: 44,
+                      borderRadius: 14,
+                      background: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)',
+                      border: '1px solid #fcd34d',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#d97706',
+                      flexShrink: 0,
+                    }}
+                  >
+                    <ShieldAlert size={20} strokeWidth={2.2} />
+                  </div>
+                  <div>
+                    <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: '#0f172a', lineHeight: 1.2 }}>
+                      Contatos e Autorizados
+                    </h3>
+                    <div style={{ fontSize: 12, color: '#64748b', fontWeight: 500, marginTop: 3 }}>
+                      Pessoas responsáveis, permissões financeiras e autorizados a retirar o aluno
                     </div>
                   </div>
                 </div>
 
                 {/* Responsaveis Grid */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16 }}>
+                <div className="ad-resp-grid">
                   {responsaveisList.map((resp: any, i: number) => {
                     const authResp = (authData?.responsaveis || []).find((ar: any) => String(ar.id).trim() === String(resp.id).trim())
                     const isFin = Boolean(resp.respFinanceiro || resp.financeiro || authResp?.respFinanceiro || resp.tipo === 'Financeiro' || resp.tipo === 'Ambos')
@@ -433,33 +1185,45 @@ export default function ADPerfilPage() {
                     const latestAudit = authResp?.latestAudit || null
                     const isTitular = Boolean(authResp?.isTitular || (titularNome && resp.nome && titularNome.toLowerCase().trim() === resp.nome.toLowerCase().trim()))
                     
-                    // Se for o mesmo usuário logado, damos preferência à foto que já está na memória principal (sidebar)
                     const isSameUser = !isMirroring && ((resp.email && currentUser?.email && resp.email.toLowerCase() === currentUser.email.toLowerCase()) || 
                                        (resp.nome && currentUser?.nome && resp.nome.toLowerCase() === currentUser.nome.toLowerCase()));
                     const displayFoto = isSameUser ? (currentUser?.foto || resp.foto || resp.dados?.foto) : (resp.foto || resp.dados?.foto);
                     
                     return (
-                      <div key={i} style={{ padding: 20, borderRadius: 20, border: '1px solid hsl(var(--border-subtle))', background: 'hsl(var(--bg-main))', display: 'flex', flexDirection: 'column', gap: 16, transition: 'all 0.2s' }} onMouseEnter={e => e.currentTarget.style.borderColor = '#c7d2fe'} onMouseLeave={e => e.currentTarget.style.borderColor = 'hsl(var(--border-subtle))'}>
+                      <div
+                        key={i}
+                        style={{
+                          padding: 18,
+                          borderRadius: 20,
+                          border: '1px solid #e2e8f0',
+                          background: '#ffffff',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: 14,
+                          boxShadow: '0 4px 16px -6px rgba(15, 23, 42, 0.04)',
+                        }}
+                      >
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
                             <div style={{ position: 'relative' }}>
                               <div 
                                 onClick={() => {
-                                  if (resp.id) {
+                                  if (resp.id && isSameUser) {
                                     setSelectedRespId(resp.id)
                                     fileInputRef.current?.click()
                                   }
                                 }}
                                 style={{ 
-                                  width: 62, height: 62, borderRadius: 20, 
-                                  background: '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', 
-                                  fontWeight: 800, color: '#475569', fontSize: 20,
+                                  width: 58, height: 58, borderRadius: 18, 
+                                  background: 'linear-gradient(135deg, #e0e7ff 0%, #dbeafe 100%)',
+                                  display: 'flex', alignItems: 'center', justifyContent: 'center', 
+                                  fontWeight: 800, color: '#4338ca', fontSize: 18,
                                   position: 'relative', overflow: 'hidden', cursor: resp.id && isSameUser ? 'pointer' : 'default',
-                                  boxShadow: '0 4px 12px rgba(0,0,0,0.05)'
+                                  boxShadow: '0 4px 12px rgba(79, 70, 229, 0.1)'
                                 }}
                               >
                                 {uploadingAvatarId === resp.id ? (
-                                  <Loader2 size={24} className="animate-spin" color="#475569" />
+                                  <Loader2 size={22} className="animate-spin" color="#4338ca" />
                                 ) : displayFoto ? (
                                   // eslint-disable-next-line @next/next/no-img-element
                                   <img src={displayFoto} alt={resp.nome} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
@@ -467,82 +1231,82 @@ export default function ADPerfilPage() {
                                   getInitials(resp.nome)
                                 )}
                                 
-                                {/* Overlay de hover para edição */}
                                 {resp.id && !uploadingAvatarId && isSameUser && (
                                   <div className="avatar-edit-overlay" style={{
                                     position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
                                     background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center',
                                     opacity: 0, transition: 'opacity 0.2s'
                                   }}>
-                                    <Camera size={20} color="white" />
+                                    <Camera size={18} color="white" />
                                   </div>
                                 )}
                               </div>
 
-                              {/* Ícone fixo indicador de edição */}
                               {resp.id && !uploadingAvatarId && isSameUser && (
                                 <div 
                                   style={{
                                     position: 'absolute',
-                                    bottom: -4,
-                                    right: -4,
+                                    bottom: -3,
+                                    right: -3,
                                     background: '#4f46e5',
-                                    width: 24,
-                                    height: 24,
+                                    width: 22,
+                                    height: 22,
                                     borderRadius: '50%',
                                     display: 'flex',
                                     alignItems: 'center',
                                     justifyContent: 'center',
-                                    border: '2.5px solid #ffffff',
+                                    border: '2px solid #ffffff',
                                     boxShadow: '0 2px 6px rgba(0,0,0,0.15)',
                                     pointerEvents: 'none',
                                     zIndex: 2
                                   }}
                                 >
-                                  <Camera size={12} color="#ffffff" strokeWidth={2.5} />
+                                  <Camera size={11} color="#ffffff" strokeWidth={2.5} />
                                 </div>
                               )}
                             </div>
                             <div>
-                              <div style={{ fontWeight: 800, fontSize: 15, color: 'hsl(var(--text-main))', textTransform: 'capitalize' }}>{resp.nome}</div>
-                              <div style={{ fontSize: 12, color: 'hsl(var(--text-muted))', fontWeight: 700, textTransform: 'uppercase' }}>{resp.parentesco || 'Responsável'}</div>
+                              <div style={{ fontWeight: 800, fontSize: 15, color: '#0f172a', textTransform: 'capitalize' }}>{resp.nome}</div>
+                              <div style={{ fontSize: 11.5, color: '#64748b', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{resp.parentesco || 'Responsável'}</div>
                             </div>
                           </div>
                         </div>
 
                         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                           {isTitular && (
-                            <span style={{ fontSize: 10, fontWeight: 800, padding: '4px 10px', borderRadius: 8, background: '#dcfce7', color: '#166534', border: '1px solid #bbf7d0' }}>
+                            <span style={{ fontSize: 10, fontWeight: 800, padding: '4px 10px', borderRadius: 999, background: '#dcfce7', color: '#166534', border: '1px solid #bbf7d0' }}>
                               TITULAR FINANCEIRO
                             </span>
                           )}
                           {!isTitular && isFin && (
-                            <span style={{ fontSize: 10, fontWeight: 800, padding: '4px 10px', borderRadius: 8, background: '#dcfce7', color: '#166534' }}>
+                            <span style={{ fontSize: 10, fontWeight: 800, padding: '4px 10px', borderRadius: 999, background: '#dcfce7', color: '#166534' }}>
                               FINANCEIRO
                             </span>
                           )}
                           {isPed && (
-                            <span style={{ fontSize: 10, fontWeight: 800, padding: '4px 10px', borderRadius: 8, background: '#e0e7ff', color: '#3730a3' }}>
+                            <span style={{ fontSize: 10, fontWeight: 800, padding: '4px 10px', borderRadius: 999, background: '#e0e7ff', color: '#3730a3' }}>
                               PEDAGÓGICO
                             </span>
                           )}
                           {!isFin && !isPed && (
-                            <span style={{ fontSize: 10, fontWeight: 800, padding: '4px 10px', borderRadius: 8, background: '#f1f5f9', color: '#475569' }}>
+                            <span style={{ fontSize: 10, fontWeight: 800, padding: '4px 10px', borderRadius: 999, background: '#f1f5f9', color: '#475569' }}>
                               AUTORIZADO
                             </span>
                           )}
                         </div>
 
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 16, borderTop: '1px solid hsl(var(--border-subtle))' }}>
-                          {resp.telefone && <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'hsl(var(--text-main))', fontWeight: 600 }}><Phone size={14} color="#64748b" /> {resp.telefone}</div>}
-                          {resp.email && <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'hsl(var(--text-main))', fontWeight: 600 }}><Mail size={14} color="#64748b" /> {resp.email}</div>}
-                        </div>
+                        {(resp.telefone || resp.email) && (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 12, borderTop: '1px solid #f1f5f9' }}>
+                            {resp.telefone && <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#334155', fontWeight: 600 }}><Phone size={14} color="#64748b" /> {resp.telefone}</div>}
+                            {resp.email && <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#334155', fontWeight: 600, wordBreak: 'break-all' }}><Mail size={14} color="#64748b" style={{ flexShrink: 0 }} /> {resp.email}</div>}
+                          </div>
+                        )}
 
                         {/* Bloco de Gestão de Acesso Financeiro (Liga / Desliga) */}
                         {isTitular ? (
                           <div
                             style={{
-                              marginTop: 4,
+                              marginTop: 'auto',
                               padding: '12px 14px',
                               borderRadius: 14,
                               background: 'rgba(79, 70, 229, 0.05)',
@@ -560,7 +1324,7 @@ export default function ADPerfilPage() {
                         ) : (
                           <div
                             style={{
-                              marginTop: 4,
+                              marginTop: 'auto',
                               padding: '14px 16px',
                               borderRadius: 16,
                               background: isFin ? 'rgba(22, 163, 74, 0.05)' : '#f8fafc',
@@ -598,7 +1362,6 @@ export default function ADPerfilPage() {
                                 </div>
                               </div>
 
-                              {/* Botão Liga / Desliga (Switch) */}
                               <button
                                 type="button"
                                 onClick={() =>
@@ -665,7 +1428,6 @@ export default function ADPerfilPage() {
                               </button>
                             </div>
 
-                            {/* Detalhe de Auditoria / Último registro */}
                             {latestAudit ? (
                               <div
                                 style={{
@@ -729,21 +1491,21 @@ export default function ADPerfilPage() {
                   })}
                   
                   {saude.autorizados?.map((aut: any, idx: number) => (
-                    <div key={`aut-${idx}`} style={{ padding: 20, borderRadius: 20, border: '1px dashed #cbd5e1', background: '#f8fafc', display: 'flex', flexDirection: 'column', gap: 16 }}>
+                    <div key={`aut-${idx}`} style={{ padding: 18, borderRadius: 20, border: '1px dashed #cbd5e1', background: '#f8fafc', display: 'flex', flexDirection: 'column', gap: 14 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                         <div style={{ width: 44, height: 44, borderRadius: 14, background: 'white', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, color: '#64748b', fontSize: 16 }}>
                           {getInitials(aut.nome)}
                         </div>
                         <div>
                           <div style={{ fontWeight: 800, fontSize: 15, color: '#334155', textTransform: 'capitalize' }}>{aut.nome}</div>
-                          <div style={{ fontSize: 12, color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase' }}>{aut.parentesco || 'Terceiro Autorizado'}</div>
+                          <div style={{ fontSize: 11.5, color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase' }}>{aut.parentesco || 'Terceiro Autorizado'}</div>
                         </div>
                       </div>
                       <div style={{ display: 'flex', gap: 6 }}>
-                        <span style={{ fontSize: 10, fontWeight: 800, padding: '4px 10px', borderRadius: 8, background: '#f1f5f9', color: '#475569' }}>APENAS RETIRADA</span>
+                        <span style={{ fontSize: 10, fontWeight: 800, padding: '4px 10px', borderRadius: 999, background: '#f1f5f9', color: '#475569' }}>APENAS RETIRADA</span>
                       </div>
                       {aut.telefone && (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 16, borderTop: '1px dashed #e2e8f0' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 12, borderTop: '1px dashed #e2e8f0' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#475569', fontWeight: 600 }}><Phone size={14} color="#94a3b8" /> {aut.telefone}</div>
                         </div>
                       )}
@@ -753,20 +1515,433 @@ export default function ADPerfilPage() {
               </div>
 
               {/* Saída Info */}
-              <div style={{ gridColumn: '1 / -1', padding: 24, borderRadius: 20, background: saude.autorizaSaida ? '#f0fdf4' : '#fef2f2', border: `1px solid ${saude.autorizaSaida ? '#bbf7d0' : '#fecaca'}`, display: 'flex', alignItems: 'center', gap: 16 }}>
-                <div style={{ width: 48, height: 48, borderRadius: 16, background: saude.autorizaSaida ? '#dcfce7' : '#fee2e2', display: 'flex', alignItems: 'center', justifyContent: 'center', color: saude.autorizaSaida ? '#166534' : '#991b1b' }}>
-                  {saude.autorizaSaida ? <ShieldCheck size={24} /> : <AlertTriangle size={24} />}
+              <div style={{ padding: '18px 20px', borderRadius: 22, background: saude.autorizaSaida ? '#f0fdf4' : '#fef2f2', border: `1px solid ${saude.autorizaSaida ? '#bbf7d0' : '#fecaca'}`, display: 'flex', alignItems: 'center', gap: 14 }}>
+                <div style={{ width: 46, height: 46, borderRadius: 15, background: saude.autorizaSaida ? '#dcfce7' : '#fee2e2', display: 'flex', alignItems: 'center', justifyContent: 'center', color: saude.autorizaSaida ? '#166534' : '#991b1b', flexShrink: 0 }}>
+                  {saude.autorizaSaida ? <ShieldCheck size={23} /> : <AlertTriangle size={23} />}
                 </div>
                 <div>
-                  <h4 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: saude.autorizaSaida ? '#166534' : '#991b1b', marginBottom: 4 }}>
+                  <h4 style={{ margin: 0, fontSize: 15, fontWeight: 800, color: saude.autorizaSaida ? '#166534' : '#991b1b', marginBottom: 3 }}>
                     {saude.autorizaSaida ? 'Saída Independente Autorizada' : 'Saída Restrita'}
                   </h4>
-                  <p style={{ margin: 0, fontSize: 14, color: saude.autorizaSaida ? '#15803d' : '#b91c1c', fontWeight: 500 }}>
+                  <p style={{ margin: 0, fontSize: 13, color: saude.autorizaSaida ? '#15803d' : '#b91c1c', fontWeight: 500, lineHeight: 1.4 }}>
                     {saude.autorizaSaida ? 'O aluno tem permissão para sair sozinho das dependências da escola.' : 'O aluno NÃO pode sair sozinho. Requer acompanhante autorizado para a retirada.'}
                   </p>
                 </div>
               </div>
 
+            </motion.div>
+          )}
+
+          {/* TAB 3: ALTERAR SENHA (SEM REQUISITOS MÍNIMOS) */}
+          {activeTab === 'senha' && (
+            <motion.div key="senha" variants={itemVariants} exit={{ opacity: 0, y: -14 }} style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+              <div
+                className="ad-perfil-section-card"
+                style={{
+                  background: '#ffffff',
+                  borderRadius: 24,
+                  border: '1px solid rgba(226, 232, 240, 0.95)',
+                  padding: 22,
+                  boxShadow: '0 16px 40px -12px rgba(15, 23, 42, 0.06)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 18,
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, paddingBottom: 14, borderBottom: '1px solid #f1f5f9' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <div
+                      style={{
+                        width: 44,
+                        height: 44,
+                        borderRadius: 14,
+                        background: 'linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%)',
+                        border: '1px solid #c7d2fe',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: '#4f46e5',
+                        flexShrink: 0,
+                      }}
+                    >
+                      <KeyRound size={20} strokeWidth={2.2} />
+                    </div>
+                    <div>
+                      <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: '#0f172a', lineHeight: 1.2 }}>
+                        Alteração de Senha
+                      </h3>
+                      <div style={{ fontSize: 12, color: '#64748b', fontWeight: 500, marginTop: 3 }}>
+                        Crie sua nova senha livremente, sem requisitos mínimos de caracteres
+                      </div>
+                    </div>
+                  </div>
+
+                  <div
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 7,
+                      padding: '6px 12px',
+                      borderRadius: 999,
+                      background: '#f8fafc',
+                      border: '1px solid #e2e8f0',
+                      fontSize: 11.5,
+                      fontWeight: 700,
+                      color: '#334155',
+                    }}
+                  >
+                    <Lock size={12} color="#4f46e5" />
+                    <span>Conta: <strong style={{ color: '#0f172a' }}>{currentLoggedUserName}</strong></span>
+                  </div>
+                </div>
+
+                {isMirroring ? (
+                  <div
+                    style={{
+                      padding: '16px 18px',
+                      borderRadius: 16,
+                      background: '#fffbeb',
+                      border: '1px solid #fde68a',
+                      color: '#92400e',
+                      fontSize: 13.5,
+                      fontWeight: 600,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 12,
+                    }}
+                  >
+                    <AlertTriangle size={20} color="#d97706" style={{ flexShrink: 0 }} />
+                    <div>
+                      A alteração de senha está desativada durante o modo de espelhamento administrativo.
+                    </div>
+                  </div>
+                ) : (
+                  <form onSubmit={handleChangePassword} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                    {pwSuccess && (
+                      <div
+                        style={{
+                          padding: '14px 16px',
+                          borderRadius: 14,
+                          background: '#f0fdf4',
+                          border: '1px solid #bbf7d0',
+                          color: '#166534',
+                          fontSize: 13.5,
+                          fontWeight: 700,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 10,
+                        }}
+                      >
+                        <CheckCircle2 size={18} color="#16a34a" style={{ flexShrink: 0 }} />
+                        <span>Sua senha foi alterada com sucesso!</span>
+                      </div>
+                    )}
+
+                    {pwError && (
+                      <div
+                        style={{
+                          padding: '14px 16px',
+                          borderRadius: 14,
+                          background: '#fef2f2',
+                          border: '1px solid #fecaca',
+                          color: '#b91c1c',
+                          fontSize: 13.5,
+                          fontWeight: 700,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 10,
+                        }}
+                      >
+                        <AlertTriangle size={18} color="#dc2626" style={{ flexShrink: 0 }} />
+                        <span>{pwError}</span>
+                      </div>
+                    )}
+
+                    {/* Campo: Senha Atual */}
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                      <label
+                        htmlFor="ad-pw-atual"
+                        style={{
+                          fontSize: 11,
+                          fontWeight: 800,
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.05em',
+                          color: '#475569',
+                          marginBottom: 6,
+                        }}
+                      >
+                        Senha Atual
+                      </label>
+                      <div
+                        className="ad-pw-input-wrapper"
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 10,
+                          background: '#f8fafc',
+                          border: '1.5px solid #cbd5e1',
+                          borderRadius: 14,
+                          padding: '0 8px 0 14px',
+                          minHeight: 48,
+                        }}
+                      >
+                        <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b', flexShrink: 0 }}>
+                          <Lock size={16} />
+                        </span>
+                        <input
+                          id="ad-pw-atual"
+                          type={showPw.atual ? 'text' : 'password'}
+                          value={pwForm.atual}
+                          onChange={e => {
+                            setPwForm(prev => ({ ...prev, atual: e.target.value }))
+                            if (pwError) setPwError('')
+                          }}
+                          placeholder="Digite sua senha atual"
+                          autoComplete="current-password"
+                          className="ad-pw-input"
+                          style={{
+                            flex: 1,
+                            minWidth: 0,
+                            width: '100%',
+                            border: 'none',
+                            outline: 'none',
+                            background: 'transparent',
+                            fontSize: 15,
+                            fontWeight: 600,
+                            color: '#0f172a',
+                            padding: '12px 4px',
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPw(prev => ({ ...prev, atual: !prev.atual }))}
+                          aria-label={showPw.atual ? 'Ocultar senha atual' : 'Mostrar senha atual'}
+                          style={{
+                            width: 36,
+                            height: 36,
+                            borderRadius: 10,
+                            border: 'none',
+                            background: 'transparent',
+                            color: '#64748b',
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            flexShrink: 0,
+                          }}
+                        >
+                          {showPw.atual ? <EyeOff size={17} /> : <Eye size={17} />}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Grid: Nova Senha & Confirmar Nova Senha */}
+                    <div className="ad-pw-grid">
+                      <div style={{ display: 'flex', flexDirection: 'column' }}>
+                        <label
+                          htmlFor="ad-pw-nova"
+                          style={{
+                            fontSize: 11,
+                            fontWeight: 800,
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.05em',
+                            color: '#475569',
+                            marginBottom: 6,
+                          }}
+                        >
+                          Nova Senha
+                        </label>
+                        <div
+                          className="ad-pw-input-wrapper"
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 10,
+                            background: '#f8fafc',
+                            border: '1.5px solid #cbd5e1',
+                            borderRadius: 14,
+                            padding: '0 8px 0 14px',
+                            minHeight: 48,
+                          }}
+                        >
+                          <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b', flexShrink: 0 }}>
+                            <KeyRound size={16} />
+                          </span>
+                          <input
+                            id="ad-pw-nova"
+                            type={showPw.nova ? 'text' : 'password'}
+                            value={pwForm.nova}
+                            onChange={e => {
+                              setPwForm(prev => ({ ...prev, nova: e.target.value }))
+                              if (pwError) setPwError('')
+                            }}
+                            placeholder="Digite a nova senha"
+                            autoComplete="new-password"
+                            className="ad-pw-input"
+                            style={{
+                              flex: 1,
+                              minWidth: 0,
+                              width: '100%',
+                              border: 'none',
+                              outline: 'none',
+                              background: 'transparent',
+                              fontSize: 15,
+                              fontWeight: 600,
+                              color: '#0f172a',
+                              padding: '12px 4px',
+                            }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowPw(prev => ({ ...prev, nova: !prev.nova }))}
+                            aria-label={showPw.nova ? 'Ocultar nova senha' : 'Mostrar nova senha'}
+                            style={{
+                              width: 36,
+                              height: 36,
+                              borderRadius: 10,
+                              border: 'none',
+                              background: 'transparent',
+                              color: '#64748b',
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              flexShrink: 0,
+                            }}
+                          >
+                            {showPw.nova ? <EyeOff size={17} /> : <Eye size={17} />}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', flexDirection: 'column' }}>
+                        <label
+                          htmlFor="ad-pw-confirmar"
+                          style={{
+                            fontSize: 11,
+                            fontWeight: 800,
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.05em',
+                            color: '#475569',
+                            marginBottom: 6,
+                          }}
+                        >
+                          Confirmar Nova Senha
+                        </label>
+                        <div
+                          className={`ad-pw-input-wrapper ${pwForm.confirmar && pwForm.confirmar !== pwForm.nova ? 'has-error' : pwForm.confirmar && pwForm.confirmar === pwForm.nova ? 'has-success' : ''}`}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 10,
+                            background: pwForm.confirmar && pwForm.confirmar !== pwForm.nova ? '#fef2f2' : '#f8fafc',
+                            border: `1.5px solid ${pwForm.confirmar && pwForm.confirmar !== pwForm.nova ? '#ef4444' : pwForm.confirmar && pwForm.confirmar === pwForm.nova ? '#10b981' : '#cbd5e1'}`,
+                            borderRadius: 14,
+                            padding: '0 8px 0 14px',
+                            minHeight: 48,
+                          }}
+                        >
+                          <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b', flexShrink: 0 }}>
+                            <KeyRound size={16} />
+                          </span>
+                          <input
+                            id="ad-pw-confirmar"
+                            type={showPw.confirmar ? 'text' : 'password'}
+                            value={pwForm.confirmar}
+                            onChange={e => {
+                              setPwForm(prev => ({ ...prev, confirmar: e.target.value }))
+                              if (pwError) setPwError('')
+                            }}
+                            placeholder="Repita a nova senha"
+                            autoComplete="new-password"
+                            className="ad-pw-input"
+                            style={{
+                              flex: 1,
+                              minWidth: 0,
+                              width: '100%',
+                              border: 'none',
+                              outline: 'none',
+                              background: 'transparent',
+                              fontSize: 15,
+                              fontWeight: 600,
+                              color: '#0f172a',
+                              padding: '12px 4px',
+                            }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowPw(prev => ({ ...prev, confirmar: !prev.confirmar }))}
+                            aria-label={showPw.confirmar ? 'Ocultar confirmação de senha' : 'Mostrar confirmação de senha'}
+                            style={{
+                              width: 36,
+                              height: 36,
+                              borderRadius: 10,
+                              border: 'none',
+                              background: 'transparent',
+                              color: '#64748b',
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              flexShrink: 0,
+                            }}
+                          >
+                            {showPw.confirmar ? <EyeOff size={17} /> : <Eye size={17} />}
+                          </button>
+                        </div>
+                        {pwForm.confirmar && pwForm.nova !== pwForm.confirmar && (
+                          <div style={{ fontSize: 12, fontWeight: 700, color: '#ef4444', marginTop: 6, display: 'flex', alignItems: 'center', gap: 5 }}>
+                            <AlertTriangle size={13} /> As senhas não coincidem
+                          </div>
+                        )}
+                        {pwForm.confirmar && pwForm.nova && pwForm.nova === pwForm.confirmar && (
+                          <div style={{ fontSize: 12, fontWeight: 700, color: '#10b981', marginTop: 6, display: 'flex', alignItems: 'center', gap: 5 }}>
+                            <Check size={14} strokeWidth={2.5} /> As senhas coincidem
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: 4 }}>
+                      <button
+                        type="submit"
+                        disabled={isChangingPw || !pwForm.atual || !pwForm.nova || !pwForm.confirmar}
+                        className="ad-pw-submit-btn"
+                        style={{
+                          height: 48,
+                          padding: '0 24px',
+                          borderRadius: 14,
+                          border: 'none',
+                          background: 'linear-gradient(135deg, #4f46e5 0%, #6366f1 100%)',
+                          color: '#ffffff',
+                          fontFamily: 'Outfit, Inter, sans-serif',
+                          fontSize: 14.5,
+                          fontWeight: 800,
+                          cursor: isChangingPw || !pwForm.atual || !pwForm.nova || !pwForm.confirmar ? 'not-allowed' : 'pointer',
+                          opacity: isChangingPw || !pwForm.atual || !pwForm.nova || !pwForm.confirmar ? 0.55 : 1,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: 8,
+                          boxShadow: isChangingPw || !pwForm.atual || !pwForm.nova || !pwForm.confirmar ? 'none' : '0 8px 20px rgba(79, 70, 229, 0.25)',
+                        }}
+                      >
+                        {isChangingPw ? (
+                          <>
+                            <Loader2 size={17} className="animate-spin" />
+                            <span>Alterando Senha...</span>
+                          </>
+                        ) : (
+                          <>
+                            <KeyRound size={17} />
+                            <span>Salvar Nova Senha</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </form>
+                )}
+              </div>
             </motion.div>
           )}
 
@@ -799,13 +1974,6 @@ export default function ADPerfilPage() {
           />
         )}
       </AnimatePresence>
-
-      <style dangerouslySetInnerHTML={{__html: `
-        /* Adicionando hover ao overlay de edição do avatar */
-        .avatar-edit-overlay:hover {
-          opacity: 1 !important;
-        }
-      `}} />
     </div>
   )
 }

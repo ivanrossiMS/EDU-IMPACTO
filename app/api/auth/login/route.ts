@@ -179,6 +179,12 @@ export async function POST(request: NextRequest) {
         supabase.auth.signInWithPassword({ email: resolvedEmail, password }),
         new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT_SUPABASE')), 18000))
       ])
+      if (signInResult?.error && String(password).length > 0 && String(password).length < 6) {
+        signInResult = await Promise.race([
+          supabase.auth.signInWithPassword({ email: resolvedEmail, password: `${password}::imp6` }),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT_SUPABASE')), 18000))
+        ])
+      }
     } catch (e: any) {
       if (e?.message === 'TIMEOUT_SUPABASE') {
         return NextResponse.json({ 
@@ -209,10 +215,17 @@ export async function POST(request: NextRequest) {
         const virtualEmail = `aluno.${matricula}@impactoedu.local`
         
         if (resolvedEmail !== virtualEmail) {
-          const fallbackAttempt: any = await Promise.race([
+          let fallbackAttempt: any = await Promise.race([
             supabase.auth.signInWithPassword({ email: virtualEmail, password }),
             new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT_SUPABASE')), 8000))
           ]).catch(() => null)
+
+          if ((!fallbackAttempt || fallbackAttempt.error) && String(password).length > 0 && String(password).length < 6) {
+            fallbackAttempt = await Promise.race([
+              supabase.auth.signInWithPassword({ email: virtualEmail, password: `${password}::imp6` }),
+              new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT_SUPABASE')), 8000))
+            ]).catch(() => null)
+          }
 
           if (fallbackAttempt && !fallbackAttempt.error && fallbackAttempt.data?.user) {
             user = fallbackAttempt.data.user

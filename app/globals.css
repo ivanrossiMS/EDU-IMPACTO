@@ -1269,7 +1269,8 @@ select option {
   .form-input, select, textarea { 
     min-height: 48px !important; 
     font-size: 16px !important; /* 16px evita o zoom automático no iOS Safari */
-    padding: 12px 14px !important;
+    padding-top: 12px !important;
+    padding-bottom: 12px !important;
   }
   .ad-com-search input,
   .ad-search-input-ultra {

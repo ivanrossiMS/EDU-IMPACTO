@@ -36,41 +36,6 @@ function setProfileExtra(userId: string, data: UserProfile) {
   localStorage.setItem(`edu-profile-extra-${userId}`, JSON.stringify(data))
 }
 
-function PasswordStrength({ pw }: { pw: string }) {
-  const checks = [
-    { label: 'Mínimo 8 caracteres',  ok: pw.length >= 8 },
-    { label: 'Letra maiúscula',      ok: /[A-Z]/.test(pw) },
-    { label: 'Letra minúscula',      ok: /[a-z]/.test(pw) },
-    { label: 'Número',               ok: /\d/.test(pw) },
-    { label: 'Caractere especial',   ok: /[^a-zA-Z0-9]/.test(pw) },
-  ]
-  const score = checks.filter(c => c.ok).length
-  const color = score <= 1 ? '#ef4444' : score <= 3 ? '#f59e0b' : '#10b981'
-  const label = score <= 1 ? 'Muito fraca' : score <= 2 ? 'Fraca' : score <= 3 ? 'Razoável' : score === 4 ? 'Forte' : 'Muito forte'
-  if (!pw) return null
-  return (
-    <div style={{ marginTop: 8 }}>
-      <div style={{ display: 'flex', gap: 4, marginBottom: 6 }}>
-        {[1,2,3,4,5].map(i => (
-          <div key={i} style={{ flex: 1, height: 4, borderRadius: 2, background: i <= score ? color : '#e2e8f0' }} />
-        ))}
-      </div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-        <span style={{ fontSize: 11, color }}>Força: {label}</span>
-        <span style={{ fontSize: 11, color: '#64748b' }}>{score}/5 critérios</span>
-      </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-        {checks.map(c => (
-          <div key={c.label} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11 }}>
-            {c.ok ? <Check size={10} color="#10b981" /> : <X size={10} color="#6b7280" />}
-            <span style={{ color: c.ok ? '#10b981' : '#64748b' }}>{c.label}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
-
 export default function MeuPerfilPage(props?: any) {
   const { currentUser, currentUserPerfil, setCurrentUser } = useApp()
   const searchParams = useSearchParams()
@@ -109,6 +74,7 @@ export default function MeuPerfilPage(props?: any) {
   const [showPw, setShowPw] = useState({ atual: false, nova: false, confirmar: false })
   const [pwError, setPwError] = useState('')
   const [pwSuccess, setPwSuccess] = useState(false)
+  const [isChangingPw, setIsChangingPw] = useState(false)
 
   const [dbEmail, setDbEmail] = useState('')
   const [isUploading, setIsUploading] = useState(false)
@@ -212,17 +178,44 @@ export default function MeuPerfilPage(props?: any) {
     setTimeout(() => setSaved(false), 3000)
   }
 
-  const changePw = () => {
-    if (!effectiveUser) return
+  const changePw = async () => {
+    if (!effectiveUser || isChangingPw) return
     setPwError('')
+    setPwSuccess(false)
+
     if (!pwForm.atual) return setPwError('Informe a senha atual')
-    if (!verificarSenha(effectiveUser.id, pwForm.atual)) return setPwError('Senha atual incorreta')
-    if (pwForm.nova.length < 8) return setPwError('Nova senha deve ter ao menos 8 caracteres')
+    if (!pwForm.nova) return setPwError('Informe a nova senha')
     if (pwForm.nova !== pwForm.confirmar) return setPwError('As senhas não coincidem')
-    setSenha(effectiveUser.id, pwForm.nova)
-    setPwSuccess(true)
-    setPwForm({ atual: '', nova: '', confirmar: '' })
-    setTimeout(() => setPwSuccess(false), 4000)
+    if (pwForm.atual === pwForm.nova) return setPwError('A nova senha deve ser diferente da senha atual')
+
+    setIsChangingPw(true)
+    try {
+      const res = await fetch('/api/auth/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          currentPassword: pwForm.atual,
+          newPassword: pwForm.nova,
+        }),
+      })
+
+      const data = await res.json().catch(() => ({}))
+
+      if (!res.ok) {
+        setPwError(data.error || 'Não foi possível alterar a senha. Verifique sua senha atual.')
+        return
+      }
+
+      // Sincroniza também no cache local por compatibilidade
+      setSenha(effectiveUser.id, pwForm.nova)
+      setPwSuccess(true)
+      setPwForm({ atual: '', nova: '', confirmar: '' })
+      setTimeout(() => setPwSuccess(false), 5000)
+    } catch (err: any) {
+      setPwError(err?.message || 'Erro de conexão ao tentar alterar a senha.')
+    } finally {
+      setIsChangingPw(false)
+    }
   }
 
   const getInitials = (nome: string) =>
@@ -296,6 +289,63 @@ export default function MeuPerfilPage(props?: any) {
           grid-template-columns: 1fr 1fr;
           gap: 14px;
         }
+        .meu-perfil-container .pw-field-box {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          background: #ffffff;
+          border: 1px solid #cbd5e1;
+          border-radius: 10px;
+          padding: 0 6px 0 12px;
+          min-height: 44px;
+          transition: border-color 0.15s ease, box-shadow 0.15s ease;
+        }
+        .meu-perfil-container .pw-field-box:focus-within {
+          border-color: #6366f1 !important;
+          box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
+        }
+        .meu-perfil-container .pw-field-box.pw-field-error {
+          border-color: #ef4444 !important;
+        }
+        .meu-perfil-container .pw-field-icon {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: #64748b;
+          flex-shrink: 0;
+          pointer-events: none;
+        }
+        .meu-perfil-container input.pw-field-input {
+          flex: 1;
+          min-width: 0;
+          width: 100%;
+          border: none !important;
+          outline: none !important;
+          box-shadow: none !important;
+          background: transparent !important;
+          padding: 10px 4px !important;
+          font-size: 14px !important;
+          line-height: 1.4 !important;
+          color: #0f172a !important;
+        }
+        .meu-perfil-container .pw-field-toggle {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 34px;
+          height: 34px;
+          border-radius: 8px;
+          background: transparent;
+          border: none;
+          cursor: pointer;
+          color: #64748b;
+          flex-shrink: 0;
+          transition: background 0.15s ease, color 0.15s ease;
+        }
+        .meu-perfil-container .pw-field-toggle:hover {
+          background: #f1f5f9;
+          color: #0f172a;
+        }
         @media (max-width: 768px) {
           .profile-grid {
             grid-template-columns: 1fr !important;
@@ -309,6 +359,10 @@ export default function MeuPerfilPage(props?: any) {
           }
           .edit-fields-grid {
             grid-template-columns: 1fr !important;
+          }
+          .meu-perfil-container input.pw-field-input {
+            font-size: 16px !important;
+            padding: 11px 4px !important;
           }
         }
       `}} />
@@ -548,7 +602,7 @@ export default function MeuPerfilPage(props?: any) {
                 <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(239,68,68,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Key size={16} color="#ef4444" /></div>
                 <div>
                   <div style={{ fontWeight: 700, fontSize: 15, color: '#0f172a' }}>Segurança — Trocar Senha</div>
-                  <div style={{ fontSize: 11, color: '#64748b' }}>Mantenha sua conta protegida com uma senha forte</div>
+                  <div style={{ fontSize: 11, color: '#64748b' }}>Altere sua senha de acesso quando desejar</div>
                 </div>
               </div>
 
@@ -567,13 +621,25 @@ export default function MeuPerfilPage(props?: any) {
               {/* Senha atual */}
               <div>
                 <label className="form-label" style={{ color: '#0f172a' }}>Senha atual</label>
-                <div style={{ position: 'relative' }}>
-                  <Lock size={13} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#64748b', pointerEvents: 'none' }} />
-                  <input className="form-input" type={showPw.atual ? 'text' : 'password'} value={pwForm.atual}
-                    onChange={e => setPwForm(p => ({ ...p, atual: e.target.value }))} placeholder="Digite a senha atual"
-                    style={{ paddingLeft: 36, paddingRight: 40, color: '#0f172a', background: '#ffffff', borderColor: '#cbd5e1' }} />
-                  <button type="button" style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }} onClick={() => setShowPw(p => ({ ...p, atual: !p.atual }))}>
-                    {showPw.atual ? <EyeOff size={14} /> : <Eye size={14} />}
+                <div className="pw-field-box">
+                  <span className="pw-field-icon">
+                    <Lock size={15} />
+                  </span>
+                  <input
+                    className="pw-field-input"
+                    type={showPw.atual ? 'text' : 'password'}
+                    value={pwForm.atual}
+                    onChange={e => setPwForm(p => ({ ...p, atual: e.target.value }))}
+                    placeholder="Digite a senha atual"
+                    autoComplete="current-password"
+                  />
+                  <button
+                    type="button"
+                    className="pw-field-toggle"
+                    aria-label={showPw.atual ? 'Ocultar senha atual' : 'Mostrar senha atual'}
+                    onClick={() => setShowPw(p => ({ ...p, atual: !p.atual }))}
+                  >
+                    {showPw.atual ? <EyeOff size={16} /> : <Eye size={16} />}
                   </button>
                 </div>
               </div>
@@ -581,28 +647,51 @@ export default function MeuPerfilPage(props?: any) {
               {/* Nova senha */}
               <div>
                 <label className="form-label" style={{ color: '#0f172a' }}>Nova senha</label>
-                <div style={{ position: 'relative' }}>
-                  <Lock size={13} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#64748b', pointerEvents: 'none' }} />
-                  <input className="form-input" type={showPw.nova ? 'text' : 'password'} value={pwForm.nova}
-                    onChange={e => setPwForm(p => ({ ...p, nova: e.target.value }))} placeholder="Mínimo 8 caracteres"
-                    style={{ paddingLeft: 36, paddingRight: 40, color: '#0f172a', background: '#ffffff', borderColor: '#cbd5e1' }} />
-                  <button type="button" style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }} onClick={() => setShowPw(p => ({ ...p, nova: !p.nova }))}>
-                    {showPw.nova ? <EyeOff size={14} /> : <Eye size={14} />}
+                <div className="pw-field-box">
+                  <span className="pw-field-icon">
+                    <Lock size={15} />
+                  </span>
+                  <input
+                    className="pw-field-input"
+                    type={showPw.nova ? 'text' : 'password'}
+                    value={pwForm.nova}
+                    onChange={e => setPwForm(p => ({ ...p, nova: e.target.value }))}
+                    placeholder="Digite a nova senha"
+                    autoComplete="new-password"
+                  />
+                  <button
+                    type="button"
+                    className="pw-field-toggle"
+                    aria-label={showPw.nova ? 'Ocultar nova senha' : 'Mostrar nova senha'}
+                    onClick={() => setShowPw(p => ({ ...p, nova: !p.nova }))}
+                  >
+                    {showPw.nova ? <EyeOff size={16} /> : <Eye size={16} />}
                   </button>
                 </div>
-                <PasswordStrength pw={pwForm.nova} />
               </div>
 
               {/* Confirmar */}
               <div>
                 <label className="form-label" style={{ color: '#0f172a' }}>Confirmar nova senha</label>
-                <div style={{ position: 'relative' }}>
-                  <Lock size={13} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#64748b', pointerEvents: 'none' }} />
-                  <input className="form-input" type={showPw.confirmar ? 'text' : 'password'} value={pwForm.confirmar}
-                    onChange={e => setPwForm(p => ({ ...p, confirmar: e.target.value }))} placeholder="Repita a nova senha"
-                    style={{ paddingLeft: 36, paddingRight: 40, color: '#0f172a', background: '#ffffff', borderColor: pwForm.confirmar && pwForm.confirmar !== pwForm.nova ? '#ef4444' : '#cbd5e1' }} />
-                  <button type="button" style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }} onClick={() => setShowPw(p => ({ ...p, confirmar: !p.confirmar }))}>
-                    {showPw.confirmar ? <EyeOff size={14} /> : <Eye size={14} />}
+                <div className={`pw-field-box ${pwForm.confirmar && pwForm.confirmar !== pwForm.nova ? 'pw-field-error' : ''}`}>
+                  <span className="pw-field-icon">
+                    <Lock size={15} />
+                  </span>
+                  <input
+                    className="pw-field-input"
+                    type={showPw.confirmar ? 'text' : 'password'}
+                    value={pwForm.confirmar}
+                    onChange={e => setPwForm(p => ({ ...p, confirmar: e.target.value }))}
+                    placeholder="Repita a nova senha"
+                    autoComplete="new-password"
+                  />
+                  <button
+                    type="button"
+                    className="pw-field-toggle"
+                    aria-label={showPw.confirmar ? 'Ocultar confirmação de senha' : 'Mostrar confirmação de senha'}
+                    onClick={() => setShowPw(p => ({ ...p, confirmar: !p.confirmar }))}
+                  >
+                    {showPw.confirmar ? <EyeOff size={16} /> : <Eye size={16} />}
                   </button>
                 </div>
                 {pwForm.confirmar && pwForm.nova !== pwForm.confirmar && (
@@ -614,8 +703,14 @@ export default function MeuPerfilPage(props?: any) {
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                <button className="btn btn-primary" onClick={changePw} disabled={!pwForm.atual || !pwForm.nova || !pwForm.confirmar}>
-                  <Key size={13} />Alterar Senha
+                <button
+                  className="btn btn-primary"
+                  onClick={changePw}
+                  disabled={isChangingPw || !pwForm.atual || !pwForm.nova || !pwForm.confirmar}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                >
+                  {isChangingPw ? <Loader2 size={14} className="animate-spin" /> : <Key size={13} />}
+                  {isChangingPw ? 'Alterando Senha...' : 'Alterar Senha'}
                 </button>
               </div>
             </div>
