@@ -211,7 +211,7 @@ export async function POST(request: Request) {
     adicionarEventoAuditoriaEmMemoria(
       contrato,
       'ASSINATURA_SIGNATARIO',
-      `Assinatura eletrônica (${tipoAssinatura === 'nome_automatico' ? 'representação gráfica gerada' : 'manuscrita'}) manifestada por ${contrato.responsavel_nome}`,
+      `Confirmação expressa de aceite integral do pacote documental (${contrato.versao_documento || 'v1.0'} | Protocolo: ${contrato.protocolo} | Hash SHA-256 da versão apresentada: ${contrato.documento_original_hash}) e assinatura eletrônica (${tipoAssinatura === 'nome_automatico' ? 'representação gráfica gerada' : 'manuscrita'}) formalizada por ${contrato.responsavel_nome}`,
       clientIp,
       dataHoraAssinatura
     )
@@ -272,7 +272,7 @@ export async function POST(request: Request) {
     adicionarEventoAuditoriaEmMemoria(
       contrato,
       'DOCUMENTO_CONCLUIDO',
-      `Documento selado com assinatura PKCS#7 corporativa (/Sig e /ByteRange). Hash SHA-256 Final: ${sealedResult.documentoFinalHash.substring(0, 16)}...`,
+      `Documento selado com assinatura PKCS#7 corporativa (/Sig e /ByteRange). Hash do PDF final (SHA-256): ${sealedResult.documentoFinalHash}`,
       clientIp
     )
 
@@ -294,6 +294,9 @@ export async function POST(request: Request) {
         aceiteTexto,
         dataHoraAssinatura,
         assinaturaBase64Presente: Boolean(assinaturaBase64),
+        tipoAssinatura,
+        estiloCaligrafico: body.estiloCaligrafico || 'classica',
+        assinaturaBase64: tipoAssinatura === 'manual' ? assinaturaBase64 : null,
       },
       documentoOriginalHash: contrato.documento_original_hash,
       documentoFinalHash: sealedResult.documentoFinalHash,

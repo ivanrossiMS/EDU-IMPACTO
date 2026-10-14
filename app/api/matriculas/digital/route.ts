@@ -210,6 +210,7 @@ export async function POST(request: Request) {
           ]
 
           let lastItemHash = itemEventoHash
+          const emissorAutenticado = user?.email || 'Administração Escolar'
           escolaRepresentantes.forEach((rep, repIdx) => {
             const sigHash = calculateSha256(`${lastItemHash}|ASSINATURA_ESCOLA|${rep.cpf || ''}|${dataCriacao}|${clientIp}`)
             lastItemHash = sigHash
@@ -217,7 +218,7 @@ export async function POST(request: Request) {
               id: `ev-sch-${Date.now()}-${idx}-${repIdx}`,
               timestamp: dataCriacao,
               evento: 'ASSINATURA_ESCOLA',
-              descricao: `Chancela institucional emitida por ${rep.nome} (${rep.cargo})`,
+              descricao: `Aplicação automática de chancela institucional previamente autorizada para ${rep.nome} (${rep.cargo}), vinculada à emissão autenticada por ${emissorAutenticado}`,
               ip: clientIp,
               hash: sigHash,
             })
@@ -403,6 +404,7 @@ export async function POST(request: Request) {
     ]
 
     let lastUnificadoHash = eventoCriacaoHash
+    const emissorAutenticadoUnificado = user?.email || 'Administração Escolar'
     escolaRepresentantes.forEach((rep, repIdx) => {
       const sigHash = calculateSha256(`${lastUnificadoHash}|ASSINATURA_ESCOLA|${rep.cpf || ''}|${dataCriacao}|${clientIp}`)
       lastUnificadoHash = sigHash
@@ -410,7 +412,7 @@ export async function POST(request: Request) {
         id: `ev-sch-${Date.now()}-${repIdx}`,
         timestamp: dataCriacao,
         evento: 'ASSINATURA_ESCOLA',
-        descricao: `Chancela institucional emitida por ${rep.nome} (${rep.cargo})`,
+        descricao: `Aplicação automática de chancela institucional previamente autorizada para ${rep.nome} (${rep.cargo}), vinculada à emissão autenticada por ${emissorAutenticadoUnificado}`,
         ip: clientIp,
         hash: sigHash,
       })

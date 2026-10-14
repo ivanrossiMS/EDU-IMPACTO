@@ -3,9 +3,10 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  X, Check, ChevronLeft, ChevronRight, Sparkles, PenTool,
-  Move, Trash2, FileText, AlertCircle, RefreshCw, ZoomIn, ZoomOut,
-  Maximize2, Minus, Plus
+  X, Check, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
+  Sparkles, PenTool, Move, Trash2, FileText, AlertCircle, RefreshCw,
+  ZoomIn, ZoomOut, Maximize2, Minus, Plus, Building2, User,
+  CheckCircle2, RotateCcw, MousePointerClick, Layers
 } from 'lucide-react'
 import {
   formatAbbreviatedSignerName,
@@ -376,7 +377,8 @@ export function PosicionadorAssinaturasModal({
       if (!ctx) return
 
       const unscaledViewport = page.getViewport({ scale: 1 })
-      const maxDisplayWidth = Math.min(window.innerWidth - 80, 800)
+      const availableWidth = window.innerWidth > 960 ? window.innerWidth - 440 : window.innerWidth - 64
+      const maxDisplayWidth = Math.max(320, Math.min(availableWidth, 740))
       const baseScale = maxDisplayWidth / unscaledViewport.width
       const effectiveScale = baseScale * (zoom / 100)
       setCurrentScale(effectiveScale)
@@ -679,6 +681,18 @@ export function PosicionadorAssinaturasModal({
   ).length
   const todosPosicionados = totalSignatariosComPosicao === signatarios.length && signatarios.length > 0
 
+  const sigAtivoObj = signatarios.find(s => s.id === signatarioAtivoId) || signatarios[0]
+  const keyAtivoNoDoc = docsProcessados.length > 1 && sigAtivoObj
+    ? `${sigAtivoObj.id}_doc_${docAtivo.id}`
+    : sigAtivoObj?.id || ''
+  const larguraAtivaPt = posicoes[keyAtivoNoDoc]?.larguraPt || 190
+
+  const assinaturasNoDocAtivo = signatarios.filter(s =>
+    Object.values(posicoes).some(p =>
+      p.signatarioId === s.id && (p.documentoId === docAtivo.id || (!p.documentoId && docsProcessados.length <= 1))
+    )
+  ).length
+
   if (!aberto) return null
 
   return (
@@ -687,8 +701,11 @@ export function PosicionadorAssinaturasModal({
         position: 'fixed',
         inset: 0,
         zIndex: 100000,
-        background: 'rgba(10, 15, 30, 0.88)',
-        backdropFilter: 'blur(10px)',
+        background: 'rgba(15, 23, 42, 0.32)',
+        backdropFilter: 'blur(8px)',
+        WebkitBackdropFilter: 'blur(8px)',
+        overscrollBehavior: 'contain',
+        overflow: 'hidden',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -696,116 +713,142 @@ export function PosicionadorAssinaturasModal({
       }}
     >
       <motion.div
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        exit={{ opacity: 0, scale: 0.95 }}
+        initial={{ opacity: 0, scale: 0.97, y: 8 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.97, y: 8 }}
+        transition={{ duration: 0.18, ease: 'easeOut' }}
         style={{
           width: '100%',
-          maxWidth: 1140,
+          maxWidth: 1280,
           height: '92vh',
-          background: '#0b1120',
-          border: '1px solid rgba(255, 255, 255, 0.12)',
+          background: '#ffffff',
+          border: '1px solid #e2e8f0',
           borderRadius: 20,
           display: 'flex',
           flexDirection: 'column',
           overflow: 'hidden',
-          boxShadow: '0 30px 70px rgba(0, 0, 0, 0.8)',
+          overscrollBehavior: 'contain',
+          boxShadow: '0 24px 60px -12px rgba(15, 23, 42, 0.18), 0 0 0 1px rgba(15, 23, 42, 0.05)',
         }}
       >
-        {/* ── Top Header do Posicionador ── */}
+        {/* ── TOP HEADER (LIGHT & CLEAN) ── */}
         <div
           style={{
-            padding: '12px 20px',
-            borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
-            background: 'rgba(15, 23, 42, 0.85)',
+            padding: '14px 24px',
+            borderBottom: '1px solid #e2e8f0',
+            background: '#ffffff',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            gap: 12,
+            gap: 16,
             flexWrap: 'wrap',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <div
               style={{
-                width: 36,
-                height: 36,
-                borderRadius: 10,
-                background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-                color: '#fff',
+                width: 42,
+                height: 42,
+                borderRadius: 12,
+                background: 'linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%)',
+                border: '1px solid #a7f3d0',
+                color: '#059669',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 flexShrink: 0,
+                boxShadow: '0 2px 6px rgba(16, 185, 129, 0.12)',
               }}
             >
-              <PenTool size={18} />
+              <PenTool size={20} strokeWidth={2.2} />
             </div>
             <div>
-              <div style={{ fontWeight: 700, fontSize: 13.5, color: '#f8fafc', display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span>Posicionar Assinaturas das Pessoas</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <span style={{ fontWeight: 800, fontSize: 16, color: '#0f172a', letterSpacing: '-0.015em' }}>
+                  Posicionar Assinaturas das Pessoas
+                </span>
                 <span
                   style={{
-                    fontSize: 10.5,
+                    fontSize: 11,
                     fontWeight: 700,
-                    padding: '2px 8px',
+                    padding: '3px 10px',
                     borderRadius: 999,
-                    background: todosPosicionados ? 'rgba(16, 185, 129, 0.2)' : 'rgba(245, 158, 11, 0.2)',
-                    color: todosPosicionados ? '#34d399' : '#fbbf24',
-                    border: todosPosicionados ? '1px solid rgba(16, 185, 129, 0.4)' : '1px solid rgba(245, 158, 11, 0.4)',
+                    background: todosPosicionados ? '#ecfdf5' : '#fffbeb',
+                    color: todosPosicionados ? '#047857' : '#b45309',
+                    border: todosPosicionados ? '1px solid #a7f3d0' : '1px solid #fde68a',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 4,
                   }}
                 >
-                  {todosPosicionados
-                    ? `✓ Todas as ${signatarios.length} pessoas posicionadas`
-                    : `${totalSignatariosComPosicao} de ${signatarios.length} posicionadas`}
+                  {todosPosicionados ? (
+                    <>
+                      <CheckCircle2 size={12} /> Todas as {signatarios.length} pessoas posicionadas
+                    </>
+                  ) : (
+                    `${totalSignatariosComPosicao} de ${signatarios.length} posicionadas`
+                  )}
                 </span>
                 {docsProcessados.length > 1 && (
                   <span
                     style={{
-                      fontSize: 10.5,
-                      fontWeight: 600,
-                      padding: '2px 8px',
+                      fontSize: 11,
+                      fontWeight: 700,
+                      padding: '3px 10px',
                       borderRadius: 999,
-                      background: 'rgba(56, 189, 248, 0.15)',
-                      color: '#38bdf8',
-                      border: '1px solid rgba(56, 189, 248, 0.3)',
+                      background: '#eff6ff',
+                      color: '#1d4ed8',
+                      border: '1px solid #bfdbfe',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 4,
                     }}
                   >
-                    {docsProcessados.length} documentos anexados
+                    <Layers size={11} /> {docsProcessados.length} documentos anexados
                   </span>
                 )}
               </div>
-              <div style={{ fontSize: 11, color: '#94a3b8' }}>
-                {docsProcessados.length > 1
-                  ? 'Selecione o documento na barra abaixo, escolha a pessoa e clique na página para posicionar a assinatura.'
-                  : 'Clique na pessoa desejada e depois clique no documento para fixar sua assinatura. Você também pode arrastar a caixa.'}
+              <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
+                Siga o passo a passo à esquerda ou use o posicionamento automático inteligente no rodapé.
               </div>
             </div>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {/* Botões de Ação Rápida no Topo */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             {docsProcessados.length > 1 ? (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <>
                 <button
                   type="button"
                   onClick={handleAutoPosicionarDocAtual}
                   style={{
                     display: 'inline-flex',
                     alignItems: 'center',
-                    gap: 5,
-                    background: 'rgba(56, 189, 248, 0.15)',
-                    border: '1px solid rgba(56, 189, 248, 0.35)',
-                    color: '#38bdf8',
-                    fontSize: 11,
+                    gap: 6,
+                    background: '#f8fafc',
+                    border: '1px solid #cbd5e1',
+                    color: '#1e293b',
+                    fontSize: 12,
                     fontWeight: 600,
-                    padding: '6px 11px',
-                    borderRadius: 8,
+                    padding: '8px 13px',
+                    borderRadius: 10,
                     cursor: 'pointer',
                     transition: 'all 0.15s ease',
+                    boxShadow: '0 1px 2px rgba(15, 23, 42, 0.04)',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = '#eff6ff'
+                    e.currentTarget.style.borderColor = '#93c5fd'
+                    e.currentTarget.style.color = '#1d4ed8'
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = '#f8fafc'
+                    e.currentTarget.style.borderColor = '#cbd5e1'
+                    e.currentTarget.style.color = '#1e293b'
                   }}
                   title="Posiciona automaticamente todos os signatários no rodapé da última página deste documento"
                 >
-                  <Sparkles size={12} /> Auto-Posicionar neste Doc
+                  <Sparkles size={14} color="#2563eb" /> Auto-Posicionar neste Doc
                 </button>
                 <button
                   type="button"
@@ -813,22 +856,29 @@ export function PosicionadorAssinaturasModal({
                   style={{
                     display: 'inline-flex',
                     alignItems: 'center',
-                    gap: 5,
-                    background: 'rgba(16, 185, 129, 0.15)',
-                    border: '1px solid rgba(16, 185, 129, 0.35)',
-                    color: '#34d399',
-                    fontSize: 11,
-                    fontWeight: 600,
-                    padding: '6px 12px',
-                    borderRadius: 8,
+                    gap: 6,
+                    background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)',
+                    border: '1px solid #93c5fd',
+                    color: '#1d4ed8',
+                    fontSize: 12,
+                    fontWeight: 700,
+                    padding: '8px 14px',
+                    borderRadius: 10,
                     cursor: 'pointer',
                     transition: 'all 0.15s ease',
+                    boxShadow: '0 2px 6px rgba(37, 99, 235, 0.10)',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = 'linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%)'
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)'
                   }}
                   title="Posiciona automaticamente todos os signatários no rodapé da última página de CADA um dos documentos"
                 >
-                  <Sparkles size={12} /> Auto-Posicionar em Todos os Docs
+                  <Sparkles size={14} color="#1d4ed8" /> Auto-Posicionar em Todos os Docs
                 </button>
-              </div>
+              </>
             ) : (
               <button
                 type="button"
@@ -836,20 +886,55 @@ export function PosicionadorAssinaturasModal({
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
-                  gap: 5,
-                  background: 'rgba(16, 185, 129, 0.15)',
-                  border: '1px solid rgba(16, 185, 129, 0.35)',
-                  color: '#34d399',
-                  fontSize: 11,
-                  fontWeight: 600,
-                  padding: '6px 12px',
-                  borderRadius: 8,
+                  gap: 6,
+                  background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)',
+                  border: '1px solid #93c5fd',
+                  color: '#1d4ed8',
+                  fontSize: 12,
+                  fontWeight: 700,
+                  padding: '8px 14px',
+                  borderRadius: 10,
                   cursor: 'pointer',
                   transition: 'all 0.15s ease',
+                  boxShadow: '0 2px 6px rgba(37, 99, 235, 0.10)',
                 }}
                 title="Posiciona automaticamente todos os signatários lado a lado no rodapé da última página"
               >
-                <Sparkles size={12} /> Auto-Posicionar no Rodapé
+                <Sparkles size={14} color="#1d4ed8" /> Auto-Posicionar no Rodapé
+              </button>
+            )}
+
+            {Object.keys(posicoes).length > 0 && (
+              <button
+                type="button"
+                onClick={() => setPosicoes({})}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 5,
+                  background: '#ffffff',
+                  border: '1px solid #e2e8f0',
+                  color: '#64748b',
+                  fontSize: 11.5,
+                  fontWeight: 600,
+                  padding: '8px 11px',
+                  borderRadius: 10,
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = '#fef2f2'
+                  e.currentTarget.style.borderColor = '#fecaca'
+                  e.currentTarget.style.color = '#dc2626'
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = '#ffffff'
+                  e.currentTarget.style.borderColor = '#e2e8f0'
+                  e.currentTarget.style.color = '#64748b'
+                }}
+                title="Limpar todas as marcações de assinatura"
+              >
+                <RotateCcw size={13} /> Limpar
               </button>
             )}
 
@@ -857,639 +942,1111 @@ export function PosicionadorAssinaturasModal({
               type="button"
               onClick={onClose}
               style={{
-                background: 'rgba(255, 255, 255, 0.08)',
-                border: 'none',
-                color: '#cbd5e1',
-                padding: '7px',
-                borderRadius: 8,
+                background: '#f8fafc',
+                border: '1px solid #e2e8f0',
+                color: '#475569',
+                width: 36,
+                height: 36,
+                borderRadius: 10,
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
+                transition: 'all 0.15s ease',
               }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = '#f1f5f9'
+                e.currentTarget.style.color = '#0f172a'
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = '#f8fafc'
+                e.currentTarget.style.color = '#475569'
+              }}
+              title="Fechar posicionador"
             >
               <X size={18} />
             </button>
           </div>
         </div>
 
-        {/* ── Barra de Navegação entre Múltiplos Documentos (Tabs / Seletores) ── */}
-        {docsProcessados.length > 1 && (
+        {/* ── CORPO DIVIDIDO: SIDEBAR DIDÁTICA (ESQUERDA) + WORKSPACE DO DOCUMENTO (DIREITA) ── */}
+        <div
+          style={{
+            flex: 1,
+            display: 'flex',
+            minHeight: 0,
+            overflow: 'hidden',
+            background: '#f8fafc',
+          }}
+        >
+          {/* ── COLUNA ESQUERDA: PAINEL DIDÁTICO PASSO A PASSO ── */}
           <div
             style={{
-              padding: '8px 20px',
-              borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
-              background: 'rgba(15, 23, 42, 0.95)',
+              width: 340,
+              flexShrink: 0,
+              borderRight: '1px solid #e2e8f0',
+              background: '#f8fafc',
               display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: 12,
-              overflowX: 'auto',
+              flexDirection: 'column',
+              overflowY: 'auto',
+              padding: '16px',
+              gap: 18,
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, overflowX: 'auto' }}>
-              <span style={{ fontSize: 11, fontWeight: 700, color: '#38bdf8', textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 5 }}>
-                <FileText size={13} /> Documentos ({docsProcessados.length}):
-              </span>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, overflowX: 'auto', paddingBottom: 2 }}>
+            {/* PASSO 1: SELEÇÃO DE DOCUMENTOS */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                  <span
+                    style={{
+                      width: 20,
+                      height: 20,
+                      borderRadius: 6,
+                      background: '#2563eb',
+                      color: '#ffffff',
+                      fontSize: 11,
+                      fontWeight: 800,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    1
+                  </span>
+                  <span style={{ fontSize: 11.5, fontWeight: 800, color: '#1e293b', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+                    {docsProcessados.length > 1 ? `Escolha o Documento (${docsProcessados.length})` : 'Documento Atual'}
+                  </span>
+                </div>
+
+                {docsProcessados.length > 1 && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (docAtivoIndex > 0) {
+                          setDocAtivoIndex(i => i - 1)
+                          setPaginaAtualNoDoc(1)
+                        }
+                      }}
+                      disabled={docAtivoIndex <= 0}
+                      style={{
+                        background: '#ffffff',
+                        border: '1px solid #cbd5e1',
+                        color: docAtivoIndex <= 0 ? '#cbd5e1' : '#334155',
+                        padding: '3px 7px',
+                        borderRadius: 6,
+                        cursor: docAtivoIndex <= 0 ? 'not-allowed' : 'pointer',
+                        fontSize: 10.5,
+                        fontWeight: 700,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 2,
+                      }}
+                      title="Documento anterior"
+                    >
+                      <ChevronLeft size={12} /> Ant
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (docAtivoIndex < docsProcessados.length - 1) {
+                          setDocAtivoIndex(i => i + 1)
+                          setPaginaAtualNoDoc(1)
+                        }
+                      }}
+                      disabled={docAtivoIndex >= docsProcessados.length - 1}
+                      style={{
+                        background: '#ffffff',
+                        border: '1px solid #cbd5e1',
+                        color: docAtivoIndex >= docsProcessados.length - 1 ? '#cbd5e1' : '#334155',
+                        padding: '3px 7px',
+                        borderRadius: 6,
+                        cursor: docAtivoIndex >= docsProcessados.length - 1 ? 'not-allowed' : 'pointer',
+                        fontSize: 10.5,
+                        fontWeight: 700,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 2,
+                      }}
+                      title="Próximo documento"
+                    >
+                      Próx <ChevronRight size={12} />
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {docsProcessados.map((doc, idx) => {
                   const isAtivo = docAtivoIndex === idx
                   const sigsNesteDoc = Object.values(posicoes).filter(
                     p => p.documentoId === doc.id || (!p.documentoId && idx === 0)
                   ).length
+                  const completoNesteDoc = sigsNesteDoc >= signatarios.length && signatarios.length > 0
 
                   return (
-                    <button
+                    <div
                       key={doc.id}
-                      type="button"
                       onClick={() => {
-                        setDocAtivoIndex(idx)
-                        setPaginaAtualNoDoc(1)
+                        if (docAtivoIndex !== idx) {
+                          setDocAtivoIndex(idx)
+                          setPaginaAtualNoDoc(1)
+                        }
                       }}
                       style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: 6,
-                        padding: '5px 12px',
-                        borderRadius: 8,
+                        padding: '10px 12px',
+                        borderRadius: 12,
                         cursor: 'pointer',
-                        fontSize: 11.5,
-                        fontWeight: isAtivo ? 700 : 500,
-                        border: isAtivo
-                          ? '1.5px solid #38bdf8'
-                          : '1px solid rgba(255, 255, 255, 0.1)',
-                        background: isAtivo
-                          ? 'rgba(56, 189, 248, 0.22)'
-                          : 'rgba(255, 255, 255, 0.04)',
-                        color: isAtivo ? '#ffffff' : '#cbd5e1',
-                        whiteSpace: 'nowrap',
+                        background: isAtivo ? '#ffffff' : '#f1f5f9',
+                        border: isAtivo ? '2px solid #2563eb' : '1px solid #e2e8f0',
+                        boxShadow: isAtivo ? '0 4px 12px rgba(37, 99, 235, 0.08)' : 'none',
                         transition: 'all 0.15s ease',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 6,
                       }}
-                      title={`${doc.nome} (${doc.totalPaginas} ${doc.totalPaginas === 1 ? 'página' : 'páginas'})`}
                     >
-                      <span style={{ fontWeight: isAtivo ? 800 : 600 }}>
-                        {idx + 1}. {doc.nome.length > 24 ? doc.nome.substring(0, 24) + '…' : doc.nome}
-                      </span>
-                      <span style={{ fontSize: 10, opacity: 0.75 }}>
-                        ({doc.totalPaginas} {doc.totalPaginas === 1 ? 'pág' : 'págs'})
-                      </span>
-                      <span
-                        style={{
-                          fontSize: 9.5,
-                          fontWeight: 700,
-                          padding: '1px 6px',
-                          borderRadius: 999,
-                          background: sigsNesteDoc > 0 ? 'rgba(16, 185, 129, 0.25)' : 'rgba(245, 158, 11, 0.2)',
-                          color: sigsNesteDoc > 0 ? '#34d399' : '#fbbf24',
-                          border: sigsNesteDoc > 0 ? '1px solid rgba(16, 185, 129, 0.4)' : '1px solid rgba(245, 158, 11, 0.3)',
-                        }}
-                      >
-                        {sigsNesteDoc} {sigsNesteDoc === 1 ? 'assinatura' : 'assinaturas'}
-                      </span>
-                    </button>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
+                          <div
+                            style={{
+                              width: 22,
+                              height: 22,
+                              borderRadius: 6,
+                              background: isAtivo ? '#eff6ff' : '#e2e8f0',
+                              color: isAtivo ? '#2563eb' : '#475569',
+                              fontSize: 11,
+                              fontWeight: 800,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              flexShrink: 0,
+                            }}
+                          >
+                            {idx + 1}
+                          </div>
+                          <span
+                            style={{
+                              fontSize: 12,
+                              fontWeight: isAtivo ? 700 : 600,
+                              color: isAtivo ? '#0f172a' : '#334155',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                            }}
+                            title={doc.nome}
+                          >
+                            {doc.nome}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, paddingLeft: 29 }}>
+                        <span style={{ fontSize: 11, color: '#64748b', fontWeight: 500 }}>
+                          {doc.totalPaginas} {doc.totalPaginas === 1 ? 'página' : 'páginas'}
+                        </span>
+
+                        <span
+                          style={{
+                            fontSize: 10,
+                            fontWeight: 700,
+                            padding: '2px 8px',
+                            borderRadius: 999,
+                            background: completoNesteDoc ? '#ecfdf5' : sigsNesteDoc > 0 ? '#eff6ff' : '#fffbeb',
+                            color: completoNesteDoc ? '#047857' : sigsNesteDoc > 0 ? '#1d4ed8' : '#b45309',
+                            border: completoNesteDoc ? '1px solid #a7f3d0' : sigsNesteDoc > 0 ? '1px solid #bfdbfe' : '1px solid #fde68a',
+                          }}
+                        >
+                          {completoNesteDoc
+                            ? `✓ ${sigsNesteDoc}/${signatarios.length} assinaturas`
+                            : `${sigsNesteDoc}/${signatarios.length} assinaturas`}
+                        </span>
+                      </div>
+
+                      {isAtivo && doc.totalPaginas > 1 && paginaAtualNoDoc !== doc.totalPaginas && (
+                        <div style={{ paddingLeft: 29, paddingTop: 2 }}>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setPaginaAtualNoDoc(doc.totalPaginas)
+                            }}
+                            style={{
+                              background: '#eff6ff',
+                              border: '1px solid #bfdbfe',
+                              color: '#1d4ed8',
+                              fontSize: 10.5,
+                              fontWeight: 700,
+                              padding: '3px 8px',
+                              borderRadius: 6,
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 4,
+                            }}
+                          >
+                            Ir para última página (Pág. {doc.totalPaginas}) <ChevronsRight size={12} />
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   )
                 })}
               </div>
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-              <button
-                type="button"
-                onClick={() => {
-                  if (docAtivoIndex > 0) {
-                    setDocAtivoIndex(i => i - 1)
-                    setPaginaAtualNoDoc(1)
-                  }
-                }}
-                disabled={docAtivoIndex <= 0}
+            {/* PASSO 2: PESSOAS PARA ASSINAR */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                  <span
+                    style={{
+                      width: 20,
+                      height: 20,
+                      borderRadius: 6,
+                      background: '#2563eb',
+                      color: '#ffffff',
+                      fontSize: 11,
+                      fontWeight: 800,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    2
+                  </span>
+                  <span style={{ fontSize: 11.5, fontWeight: 800, color: '#1e293b', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+                    Pessoas para Assinar
+                  </span>
+                </div>
+                <span style={{ fontSize: 10.5, fontWeight: 600, color: '#64748b' }}>
+                  {assinaturasNoDocAtivo}/{signatarios.length} neste doc
+                </span>
+              </div>
+
+              <div style={{ fontSize: 11.5, color: '#475569', lineHeight: 1.4 }}>
+                Escolha a pessoa abaixo e <strong>clique na folha ao lado</strong> onde ela deve assinar:
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {signatarios.map((sig) => {
+                  const isAtivo = signatarioAtivoId === sig.id
+                  const posEntryNesteDoc = Object.entries(posicoes).find(([_, p]) =>
+                    p.signatarioId === sig.id && (p.documentoId === docAtivo.id || (!p.documentoId && docsProcessados.length <= 1))
+                  )
+                  const posNesteDoc = posEntryNesteDoc?.[1]
+                  const posKeyNesteDoc = posEntryNesteDoc?.[0]
+                  const todasPosicoesSig = Object.values(posicoes).filter(p => p.signatarioId === sig.id)
+
+                  return (
+                    <div
+                      key={sig.id}
+                      onClick={() => setSignatarioAtivoId(sig.id)}
+                      style={{
+                        padding: '10px 12px',
+                        borderRadius: 12,
+                        cursor: 'pointer',
+                        background: '#ffffff',
+                        border: isAtivo ? `2px solid ${sig.cor}` : '1px solid #e2e8f0',
+                        boxShadow: isAtivo ? `0 4px 14px ${sig.cor}22` : '0 1px 2px rgba(15, 23, 42, 0.03)',
+                        transition: 'all 0.15s ease',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 8,
+                        position: 'relative',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <div
+                          style={{
+                            width: 34,
+                            height: 34,
+                            borderRadius: 9,
+                            background: `${sig.cor}15`,
+                            border: `1.5px solid ${sig.cor}44`,
+                            color: sig.cor,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            flexShrink: 0,
+                          }}
+                        >
+                          {sig.tipo === 'escola' ? <Building2 size={16} /> : <User size={16} />}
+                        </div>
+
+                        <div style={{ minWidth: 0, flex: 1 }}>
+                          <div
+                            style={{
+                              fontSize: 12.5,
+                              fontWeight: 700,
+                              color: '#0f172a',
+                              whiteSpace: 'nowrap',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                            }}
+                            title={sig.nome}
+                          >
+                            {sig.nome}
+                          </div>
+                          <div
+                            style={{
+                              fontSize: 11,
+                              color: '#64748b',
+                              whiteSpace: 'nowrap',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                            }}
+                          >
+                            {sig.cargo}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, borderTop: '1px solid #f1f5f9', paddingTop: 6 }}>
+                        {posNesteDoc ? (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', width: '100%', justifyContent: 'space-between' }}>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setSignatarioAtivoId(sig.id)
+                                setPaginaAtualNoDoc(posNesteDoc.paginaRelativa || posNesteDoc.pagina)
+                              }}
+                              style={{
+                                fontSize: 10.5,
+                                fontWeight: 700,
+                                color: '#047857',
+                                background: '#ecfdf5',
+                                border: '1px solid #a7f3d0',
+                                padding: '2px 8px',
+                                borderRadius: 6,
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 4,
+                              }}
+                              title="Clique para ir até a página onde esta assinatura está posicionada"
+                            >
+                              <Check size={11} strokeWidth={3} /> Posicionado • Pág. {posNesteDoc.paginaRelativa || posNesteDoc.pagina}
+                            </button>
+
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                              {docsProcessados.length > 1 && (
+                                <span style={{ fontSize: 10, color: '#64748b', fontWeight: 600 }}>
+                                  ({todasPosicoesSig.length}/{docsProcessados.length} docs)
+                                </span>
+                              )}
+                              {posKeyNesteDoc && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => handleRemoverPosicao(posKeyNesteDoc, e)}
+                                  style={{
+                                    background: '#fff1f2',
+                                    border: '1px solid #fecdd3',
+                                    color: '#e11d48',
+                                    padding: '3px 6px',
+                                    borderRadius: 6,
+                                    cursor: 'pointer',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                  }}
+                                  title="Remover assinatura deste documento"
+                                >
+                                  <Trash2 size={11} />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        ) : (
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                            <span
+                              style={{
+                                fontSize: 10.5,
+                                fontWeight: 700,
+                                color: '#b45309',
+                                background: '#fffbeb',
+                                border: '1px solid #fde68a',
+                                padding: '2px 8px',
+                                borderRadius: 6,
+                              }}
+                            >
+                              Pendente neste doc
+                            </span>
+                            {isAtivo ? (
+                              <span
+                                style={{
+                                  fontSize: 10.5,
+                                  fontWeight: 700,
+                                  color: sig.cor,
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: 3,
+                                }}
+                              >
+                                <MousePointerClick size={12} /> Clique na folha →
+                              </span>
+                            ) : (
+                              <span style={{ fontSize: 10.5, color: '#94a3b8', fontWeight: 500 }}>
+                                Clique para selecionar
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* PASSO 3: TAMANHO DA ASSINATURA & DICAS */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                <span
+                  style={{
+                    width: 20,
+                    height: 20,
+                    borderRadius: 6,
+                    background: '#2563eb',
+                    color: '#ffffff',
+                    fontSize: 11,
+                    fontWeight: 800,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  3
+                </span>
+                <span style={{ fontSize: 11.5, fontWeight: 800, color: '#1e293b', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+                  Tamanho da Assinatura
+                </span>
+              </div>
+
+              <div
                 style={{
-                  background: 'rgba(255, 255, 255, 0.06)',
-                  border: '1px solid rgba(255, 255, 255, 0.1)',
-                  color: docAtivoIndex <= 0 ? '#475569' : '#cbd5e1',
-                  padding: '4px 8px',
-                  borderRadius: 6,
-                  cursor: docAtivoIndex <= 0 ? 'not-allowed' : 'pointer',
-                  fontSize: 10.5,
-                  fontWeight: 600,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 4,
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(4, 1fr)',
+                  gap: 6,
+                  background: '#ffffff',
+                  padding: 6,
+                  borderRadius: 12,
+                  border: '1px solid #e2e8f0',
                 }}
               >
-                <ChevronLeft size={13} /> Doc Anterior
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  if (docAtivoIndex < docsProcessados.length - 1) {
-                    setDocAtivoIndex(i => i + 1)
-                    setPaginaAtualNoDoc(1)
-                  }
-                }}
-                disabled={docAtivoIndex >= docsProcessados.length - 1}
+                {[
+                  { label: 'P', desc: 'Pequena', l: 140, a: 36 },
+                  { label: 'M', desc: 'Média', l: 190, a: 46 },
+                  { label: 'G', desc: 'Grande', l: 230, a: 52 },
+                  { label: 'GG', desc: 'Extra', l: 270, a: 60 },
+                ].map((preset) => {
+                  const isPresetAtivo = Math.abs(larguraAtivaPt - preset.l) < 20
+                  return (
+                    <button
+                      key={preset.label}
+                      type="button"
+                      onClick={() => handleAplicarPresetTamanho(preset.l, preset.a)}
+                      style={{
+                        background: isPresetAtivo ? '#eff6ff' : '#f8fafc',
+                        border: isPresetAtivo ? '1.5px solid #2563eb' : '1px solid #e2e8f0',
+                        color: isPresetAtivo ? '#1d4ed8' : '#334155',
+                        borderRadius: 8,
+                        padding: '6px 4px',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        gap: 1,
+                        transition: 'all 0.15s ease',
+                      }}
+                      title={`Definir tamanho ${preset.desc} (${preset.l}x${preset.a} pt)`}
+                    >
+                      <span style={{ fontSize: 12, fontWeight: 800 }}>{preset.label}</span>
+                      <span style={{ fontSize: 9.5, fontWeight: 600, opacity: 0.8 }}>{preset.desc}</span>
+                    </button>
+                  )
+                })}
+              </div>
+
+              {/* Card Didático de Ajuda Rápida */}
+              <div
                 style={{
-                  background: 'rgba(255, 255, 255, 0.06)',
-                  border: '1px solid rgba(255, 255, 255, 0.1)',
-                  color: docAtivoIndex >= docsProcessados.length - 1 ? '#475569' : '#cbd5e1',
-                  padding: '4px 8px',
-                  borderRadius: 6,
-                  cursor: docAtivoIndex >= docsProcessados.length - 1 ? 'not-allowed' : 'pointer',
-                  fontSize: 10.5,
-                  fontWeight: 600,
+                  marginTop: 4,
+                  padding: '12px',
+                  borderRadius: 12,
+                  background: '#eff6ff',
+                  border: '1px solid #bfdbfe',
+                  color: '#1e3a8a',
+                  fontSize: 11.5,
+                  lineHeight: 1.5,
                   display: 'flex',
-                  alignItems: 'center',
-                  gap: 4,
+                  flexDirection: 'column',
+                  gap: 6,
                 }}
               >
-                Próximo Doc <ChevronRight size={13} />
-              </button>
+                <div style={{ fontWeight: 800, fontSize: 11.5, color: '#1d4ed8', display: 'flex', alignItems: 'center', gap: 5 }}>
+                  <MousePointerClick size={14} /> Como manusear facilmente:
+                </div>
+                <div style={{ fontSize: 11, color: '#1e40af' }}>
+                  • <strong>Inserir:</strong> Selecione a pessoa no Passo 2 e clique no local desejado da folha.<br />
+                  • <strong>Mover:</strong> Arraste a caixa da assinatura livremente.<br />
+                  • <strong>Ajustar:</strong> Arraste o canto inferior direito da caixa ou use os botões <strong>−</strong> e <strong>+</strong>.
+                </div>
+              </div>
             </div>
           </div>
-        )}
 
-        {/* ── Barra de Signatários Selecionáveis ── */}
-        <div
-          style={{
-            padding: '10px 20px',
-            borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
-            background: 'rgba(15, 23, 42, 0.65)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 10,
-            flexWrap: 'wrap',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-              Pessoas para Assinar:
-            </span>
-            {signatarios.map(sig => {
-              const isAtivo = signatarioAtivoId === sig.id
-              const posNesteDoc = Object.values(posicoes).find(p =>
-                p.signatarioId === sig.id && (p.documentoId === docAtivo.id || (!p.documentoId && docsProcessados.length <= 1))
-              )
-              const todasPosicoesSig = Object.values(posicoes).filter(p => p.signatarioId === sig.id)
-
-              return (
-                <button
-                  key={sig.id}
-                  type="button"
-                  onClick={() => setSignatarioAtivoId(sig.id)}
+          {/* ── COLUNA DIREITA: WORKSPACE CLARO DO DOCUMENTO PDF ── */}
+          <div
+            style={{
+              flex: 1,
+              display: 'flex',
+              flexDirection: 'column',
+              minWidth: 0,
+              background: '#f1f5f9',
+            }}
+          >
+            {/* Barra de Ferramentas Superior do Documento (Navegação de Página + Indicador Ativo + Zoom) */}
+            <div
+              style={{
+                padding: '10px 20px',
+                background: '#ffffff',
+                borderBottom: '1px solid #e2e8f0',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 12,
+                flexWrap: 'wrap',
+              }}
+            >
+              {/* Indicador de Quem Está Sendo Posicionado Agora */}
+              {sigAtivoObj && (
+                <div
                   style={{
                     display: 'inline-flex',
                     alignItems: 'center',
-                    gap: 6,
-                    padding: '5px 10px',
-                    borderRadius: 8,
-                    cursor: 'pointer',
-                    fontSize: 11.5,
-                    fontWeight: isAtivo ? 700 : 500,
-                    border: isAtivo
-                      ? `2px solid ${sig.cor}`
-                      : '1px solid rgba(255, 255, 255, 0.1)',
-                    background: isAtivo
-                      ? `${sig.cor}22`
-                      : 'rgba(255, 255, 255, 0.04)',
-                    color: isAtivo ? '#ffffff' : '#cbd5e1',
-                    transition: 'all 0.15s ease',
+                    gap: 8,
+                    padding: '5px 12px',
+                    borderRadius: 999,
+                    background: `${sigAtivoObj.cor}12`,
+                    border: `1px solid ${sigAtivoObj.cor}40`,
                   }}
                 >
-                  <div
+                  <span
                     style={{
                       width: 8,
                       height: 8,
                       borderRadius: '50%',
-                      background: sig.cor,
+                      background: sigAtivoObj.cor,
+                      flexShrink: 0,
                     }}
                   />
-                  <span>{sig.nome}</span>
-                  <span style={{ fontSize: 9.5, opacity: 0.75 }}>({sig.cargo.split('/')[0].trim()})</span>
-                  {posNesteDoc ? (
-                    <span
-                      style={{
-                        fontSize: 9,
-                        fontWeight: 700,
-                        color: '#34d399',
-                        background: 'rgba(16, 185, 129, 0.2)',
-                        padding: '1px 5px',
-                        borderRadius: 4,
-                      }}
-                    >
-                      Pág {posNesteDoc.paginaRelativa || posNesteDoc.pagina}
-                    </span>
-                  ) : docsProcessados.length > 1 && todasPosicoesSig.length > 0 ? (
-                    <span
-                      style={{
-                        fontSize: 9,
-                        fontWeight: 600,
-                        color: '#38bdf8',
-                        background: 'rgba(56, 189, 248, 0.15)',
-                        padding: '1px 5px',
-                        borderRadius: 4,
-                      }}
-                    >
-                      {todasPosicoesSig.length}/{docsProcessados.length} docs
-                    </span>
-                  ) : (
-                    <span
-                      style={{
-                        fontSize: 9,
-                        color: '#fbbf24',
-                        background: 'rgba(245, 158, 11, 0.15)',
-                        padding: '1px 5px',
-                        borderRadius: 4,
-                      }}
-                    >
-                      Pendente
-                    </span>
-                  )}
-                </button>
-              )
-            })}
-          </div>
-
-          {/* Controles de Navegação de Página e Zoom */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'rgba(255, 255, 255, 0.05)', padding: '3px 8px', borderRadius: 8 }}>
-              <button
-                type="button"
-                onClick={handlePaginaAnterior}
-                disabled={paginaAtualNoDoc <= 1 && docAtivoIndex <= 0}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  color: paginaAtualNoDoc <= 1 && docAtivoIndex <= 0 ? '#475569' : '#e2e8f0',
-                  cursor: paginaAtualNoDoc <= 1 && docAtivoIndex <= 0 ? 'not-allowed' : 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                }}
-                title="Página anterior"
-              >
-                <ChevronLeft size={16} />
-              </button>
-              <span style={{ fontSize: 11.5, color: '#f1f5f9', fontWeight: 600 }}>
-                Página {paginaAtualNoDoc} de {totalPaginasDocAtivo}
-                {docsProcessados.length > 1 && (
-                  <span style={{ fontSize: 10, color: '#94a3b8', fontWeight: 400, marginLeft: 4 }}>
-                    (Pacote: {paginaGlobalAtual}/{totalPaginasPacote})
+                  <span style={{ fontSize: 11.5, color: '#334155', fontWeight: 600 }}>
+                    Posicionando: <strong style={{ color: '#0f172a' }}>{sigAtivoObj.nome}</strong>
                   </span>
-                )}
-              </span>
-              <button
-                type="button"
-                onClick={handleProximaPagina}
-                disabled={paginaAtualNoDoc >= totalPaginasDocAtivo && docAtivoIndex >= docsProcessados.length - 1}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  color: paginaAtualNoDoc >= totalPaginasDocAtivo && docAtivoIndex >= docsProcessados.length - 1 ? '#475569' : '#e2e8f0',
-                  cursor: paginaAtualNoDoc >= totalPaginasDocAtivo && docAtivoIndex >= docsProcessados.length - 1 ? 'not-allowed' : 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                }}
-                title="Próxima página"
-              >
-                <ChevronRight size={16} />
-              </button>
-            </div>
+                </div>
+              )}
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <button
-                type="button"
-                onClick={() => setZoom(z => Math.max(60, z - 10))}
-                style={{
-                  background: 'rgba(255, 255, 255, 0.06)',
-                  border: '1px solid rgba(255, 255, 255, 0.1)',
-                  color: '#cbd5e1',
-                  padding: '4px 6px',
-                  borderRadius: 6,
-                  cursor: 'pointer',
-                }}
-                title="Reduzir zoom"
-              >
-                <ZoomOut size={13} />
-              </button>
-              <span style={{ fontSize: 10.5, color: '#94a3b8', minWidth: 34, textAlign: 'center' }}>{zoom}%</span>
-              <button
-                type="button"
-                onClick={() => setZoom(z => Math.min(140, z + 10))}
-                style={{
-                  background: 'rgba(255, 255, 255, 0.06)',
-                  border: '1px solid rgba(255, 255, 255, 0.1)',
-                  color: '#cbd5e1',
-                  padding: '4px 6px',
-                  borderRadius: 6,
-                  cursor: 'pointer',
-                }}
-                title="Aumentar zoom"
-              >
-                <ZoomIn size={13} />
-              </button>
-            </div>
-
-            {/* Presets rápidos de tamanho da assinatura */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 3, background: 'rgba(255, 255, 255, 0.05)', padding: '3px 8px', borderRadius: 8 }}>
-              <span style={{ fontSize: 10, color: '#94a3b8', fontWeight: 600, marginRight: 2 }}>Tam:</span>
-              {[
-                { label: 'P', l: 140, a: 36, title: 'Tamanho Pequeno (140x36 pt)' },
-                { label: 'M', l: 190, a: 46, title: 'Tamanho Médio / Padrão (190x46 pt)' },
-                { label: 'G', l: 230, a: 52, title: 'Tamanho Grande (230x52 pt)' },
-                { label: 'GG', l: 270, a: 60, title: 'Tamanho Extra Grande (270x60 pt)' },
-              ].map(preset => (
-                <button
-                  key={preset.label}
-                  type="button"
-                  onClick={() => handleAplicarPresetTamanho(preset.l, preset.a)}
-                  title={preset.title}
+              {/* Controles Centrais de Navegação de Página + Botão Rápido Última Página */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                <div
                   style={{
-                    background: 'rgba(255, 255, 255, 0.08)',
-                    border: '1px solid rgba(255, 255, 255, 0.12)',
-                    color: '#e2e8f0',
-                    fontSize: 10,
-                    fontWeight: 700,
-                    padding: '2px 6px',
-                    borderRadius: 4,
-                    cursor: 'pointer',
-                    transition: 'all 0.15s ease',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 4,
+                    background: '#f8fafc',
+                    border: '1px solid #cbd5e1',
+                    padding: '3px 6px',
+                    borderRadius: 10,
                   }}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(56, 189, 248, 0.25)')}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)')}
                 >
-                  {preset.label}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
+                  <button
+                    type="button"
+                    onClick={() => setPaginaAtualNoDoc(1)}
+                    disabled={paginaAtualNoDoc <= 1}
+                    style={{
+                      background: 'transparent',
+                      border: 'none',
+                      color: paginaAtualNoDoc <= 1 ? '#cbd5e1' : '#334155',
+                      cursor: paginaAtualNoDoc <= 1 ? 'not-allowed' : 'pointer',
+                      padding: '4px',
+                      borderRadius: 6,
+                      display: 'flex',
+                      alignItems: 'center',
+                    }}
+                    title="Primeira página deste documento"
+                  >
+                    <ChevronsLeft size={15} />
+                  </button>
 
-        {/* ── Área de Visualização e Posicionamento do Documento (Canvas + Overlay Interativo) ── */}
-        <div
-          style={{
-            flex: 1,
-            overflow: 'auto',
-            background: '#090d16',
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'flex-start',
-            padding: '24px',
-            position: 'relative',
-          }}
-        >
-          {carregandoPdf ? (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, color: '#94a3b8', marginTop: 100 }}>
-              <RefreshCw size={24} className="animate-spin" color="#38bdf8" />
-              <span style={{ fontSize: 12 }}>
-                Renderizando {docAtivo?.nome ? `"${docAtivo.nome}"` : 'página do documento'}...
-              </span>
-            </div>
-          ) : erroPdf ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: '#f87171', background: 'rgba(239, 68, 68, 0.1)', padding: '16px 20px', borderRadius: 12, marginTop: 100 }}>
-              <AlertCircle size={20} />
-              <span>{erroPdf}</span>
-            </div>
-          ) : (
-            <div
-              style={{
-                position: 'relative',
-                boxShadow: '0 20px 40px rgba(0, 0, 0, 0.6)',
-                borderRadius: 4,
-                overflow: 'visible',
-                background: '#ffffff',
-              }}
-            >
-              {/* Canvas com a página renderizada do PDF */}
-              <canvas ref={canvasRef} style={{ display: 'block', borderRadius: 4 }} />
+                  <button
+                    type="button"
+                    onClick={handlePaginaAnterior}
+                    disabled={paginaAtualNoDoc <= 1 && docAtivoIndex <= 0}
+                    style={{
+                      background: '#ffffff',
+                      border: '1px solid #e2e8f0',
+                      color: paginaAtualNoDoc <= 1 && docAtivoIndex <= 0 ? '#cbd5e1' : '#0f172a',
+                      cursor: paginaAtualNoDoc <= 1 && docAtivoIndex <= 0 ? 'not-allowed' : 'pointer',
+                      padding: '4px 8px',
+                      borderRadius: 7,
+                      fontSize: 11.5,
+                      fontWeight: 600,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 3,
+                    }}
+                    title="Página anterior"
+                  >
+                    <ChevronLeft size={14} /> Anterior
+                  </button>
 
-              {/* Overlay interativo com suporte a clique e arrasto */}
+                  {/* Seletor Direto de Página */}
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '0 6px' }}>
+                    <span style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>Pág.</span>
+                    <select
+                      value={paginaAtualNoDoc}
+                      onChange={(e) => setPaginaAtualNoDoc(Number(e.target.value))}
+                      style={{
+                        background: '#ffffff',
+                        border: '1px solid #cbd5e1',
+                        borderRadius: 6,
+                        padding: '2px 6px',
+                        fontSize: 12,
+                        fontWeight: 700,
+                        color: '#0f172a',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {Array.from({ length: totalPaginasDocAtivo }, (_, i) => i + 1).map((pNum) => (
+                        <option key={pNum} value={pNum}>
+                          {pNum}
+                        </option>
+                      ))}
+                    </select>
+                    <span style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>
+                      de {totalPaginasDocAtivo}
+                    </span>
+                    {docsProcessados.length > 1 && (
+                      <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 500 }}>
+                        (Pacote {paginaGlobalAtual}/{totalPaginasPacote})
+                      </span>
+                    )}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleProximaPagina}
+                    disabled={paginaAtualNoDoc >= totalPaginasDocAtivo && docAtivoIndex >= docsProcessados.length - 1}
+                    style={{
+                      background: '#ffffff',
+                      border: '1px solid #e2e8f0',
+                      color: paginaAtualNoDoc >= totalPaginasDocAtivo && docAtivoIndex >= docsProcessados.length - 1 ? '#cbd5e1' : '#0f172a',
+                      cursor: paginaAtualNoDoc >= totalPaginasDocAtivo && docAtivoIndex >= docsProcessados.length - 1 ? 'not-allowed' : 'pointer',
+                      padding: '4px 8px',
+                      borderRadius: 7,
+                      fontSize: 11.5,
+                      fontWeight: 600,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 3,
+                    }}
+                    title="Próxima página"
+                  >
+                    Próxima <ChevronRight size={14} />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setPaginaAtualNoDoc(totalPaginasDocAtivo)}
+                    disabled={paginaAtualNoDoc >= totalPaginasDocAtivo}
+                    style={{
+                      background: paginaAtualNoDoc < totalPaginasDocAtivo ? '#eff6ff' : 'transparent',
+                      border: paginaAtualNoDoc < totalPaginasDocAtivo ? '1px solid #bfdbfe' : 'none',
+                      color: paginaAtualNoDoc >= totalPaginasDocAtivo ? '#cbd5e1' : '#1d4ed8',
+                      cursor: paginaAtualNoDoc >= totalPaginasDocAtivo ? 'not-allowed' : 'pointer',
+                      padding: '4px 8px',
+                      borderRadius: 7,
+                      fontSize: 11,
+                      fontWeight: 700,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 3,
+                    }}
+                    title="Ir direto para a última página deste documento"
+                  >
+                    Última Pág. <ChevronsRight size={14} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Controles de Zoom */}
               <div
-                ref={overlayRef}
-                onClick={handleOverlayClick}
                 style={{
-                  position: 'absolute',
-                  inset: 0,
-                  cursor: 'crosshair',
-                  userSelect: 'none',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  background: '#f8fafc',
+                  border: '1px solid #cbd5e1',
+                  padding: '3px 6px',
+                  borderRadius: 10,
                 }}
               >
-                {/* Renderiza as caixas de assinaturas desta página */}
-                {Object.entries(posicoes)
-                  .filter(([_, pos]) => {
-                    if (docsProcessados.length > 1) {
-                      if (pos.documentoId && pos.documentoId !== docAtivo.id) return false
-                      if (pos.documentoId === docAtivo.id) {
-                        return (pos.paginaRelativa || 1) === paginaAtualNoDoc
-                      }
-                      return pos.pagina === paginaGlobalAtual
-                    }
-                    return pos.pagina === paginaAtualNoDoc
-                  })
-                  .map(([posKey, pos]) => {
-                    const sigInfo = signatarios.find(s => s.id === pos.signatarioId)
-                    const cor = sigInfo?.cor || '#2563eb'
-                    const isAtivo = signatarioAtivoId === pos.signatarioId
-                    const larguraPt = pos.larguraPt || 190
-                    const alturaPt = pos.alturaPt || 45
-                    const boxWidthPx = Math.max(90, Math.round(larguraPt * currentScale))
-                    const boxHeightPx = Math.max(28, Math.round(alturaPt * currentScale))
-
-                    const nomeExibicao = formatSignatureDisplayName(sanitizeSignerName(pos.nome), 28)
-                    const numChars = Math.max(1, nomeExibicao.length)
-                    const largUtilPx = Math.max(60, boxWidthPx - 16)
-                    // Calcula dinamicamente o tamanho da fonte para a assinatura inteira caber 100% sem truncamento
-                    const maxFontePorLargura = Math.floor(largUtilPx / (numChars * 0.46))
-                    const maxFontePorAltura = Math.round(boxHeightPx * 0.38)
-                    const baseFontSize = Math.max(9.5, Math.min(maxFontePorAltura, maxFontePorLargura, 26))
-
-                    const textoSub = `Assinado eletronicamente ${new Date().toLocaleDateString('pt-BR')}`
-                    const maxSubPorLargura = Math.floor(largUtilPx / (textoSub.length * 0.48))
-                    const subFontSize = Math.max(6.5, Math.min(Math.round(boxHeightPx * 0.16), maxSubPorLargura, 9.5))
-
-                    return (
-                      <div
-                        key={posKey}
-                        onMouseDown={(e) => handleMouseDownItem(e, posKey)}
-                        title={`${pos.nome} (${pos.cargo || 'Signatário'}) - Arraste para mover ou use o canto para redimensionar`}
-                        style={{
-                          position: 'absolute',
-                          left: `${pos.xPercent}%`,
-                          top: `${pos.yPercent}%`,
-                          width: boxWidthPx,
-                          minHeight: boxHeightPx,
-                          padding: '5px 8px',
-                          borderRadius: 8,
-                          background: 'rgba(255, 255, 255, 0.75)',
-                          backdropFilter: 'blur(4px)',
-                          WebkitBackdropFilter: 'blur(4px)',
-                          border: `1.5px dashed ${cor}`,
-                          boxShadow: isAtivo ? `0 0 0 3px ${cor}44, 0 6px 16px rgba(0,0,0,0.12)` : '0 2px 8px rgba(0,0,0,0.08)',
-                          cursor: redimensionandoId === posKey ? 'se-resize' : 'grab',
-                          display: 'flex',
-                          flexDirection: 'column',
-                          justifyContent: 'space-between',
-                          gap: 2,
-                          transition: arrastandoId === posKey || redimensionandoId === posKey ? 'none' : 'box-shadow 0.15s ease',
-                          zIndex: isAtivo ? 50 : 20,
-                        }}
-                      >
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4 }}>
-                          <span
-                            style={{
-                              fontSize: 8,
-                              fontWeight: 800,
-                              color: cor,
-                              background: 'rgba(255, 255, 255, 0.90)',
-                              border: `1px solid ${cor}33`,
-                              padding: '1px 4px',
-                              borderRadius: 4,
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: 2,
-                              boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-                              whiteSpace: 'nowrap',
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              maxWidth: '50%',
-                            }}
-                          >
-                            <Move size={7} /> {pos.tipo === 'escola' ? 'Instituição' : 'Responsável'}
-                          </span>
-
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                            {/* Steppers de redimensionamento rápido */}
-                            <button
-                              type="button"
-                              onClick={(e) => handleAjustarTamanho(posKey, -15, e)}
-                              style={{
-                                background: 'rgba(255, 255, 255, 0.9)',
-                                border: '1px solid #cbd5e1',
-                                color: '#475569',
-                                cursor: 'pointer',
-                                padding: '1px 3px',
-                                borderRadius: 3,
-                                display: 'flex',
-                                alignItems: 'center',
-                                fontSize: 9,
-                              }}
-                              title="Diminuir tamanho (-15pt)"
-                            >
-                              <Minus size={8} />
-                            </button>
-                            <span style={{ fontSize: 8, color: '#64748b', fontWeight: 700 }}>
-                              {Math.round(larguraPt)}pt
-                            </span>
-                            <button
-                              type="button"
-                              onClick={(e) => handleAjustarTamanho(posKey, 15, e)}
-                              style={{
-                                background: 'rgba(255, 255, 255, 0.9)',
-                                border: '1px solid #cbd5e1',
-                                color: '#475569',
-                                cursor: 'pointer',
-                                padding: '1px 3px',
-                                borderRadius: 3,
-                                display: 'flex',
-                                alignItems: 'center',
-                                fontSize: 9,
-                              }}
-                              title="Aumentar tamanho (+15pt)"
-                            >
-                              <Plus size={8} />
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={(e) => handleRemoverPosicao(posKey, e)}
-                              style={{
-                                background: 'transparent',
-                                border: 'none',
-                                color: '#64748b',
-                                cursor: 'pointer',
-                                padding: '2px',
-                                borderRadius: 4,
-                                display: 'flex',
-                                alignItems: 'center',
-                                marginLeft: 2,
-                              }}
-                              title="Remover assinatura desta página"
-                            >
-                              <X size={11} />
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Apenas a Assinatura (sem nome por extenso e sem cargo/função) */}
-                        <div
-                          style={{
-                            fontFamily: "'Dancing Script', 'Caveat', 'Brush Script MT', cursive, sans-serif",
-                            fontSize: baseFontSize,
-                            fontWeight: 700,
-                            color: '#0e2454',
-                            lineHeight: 1.15,
-                            paddingTop: 1,
-                            paddingLeft: 2,
-                            whiteSpace: 'nowrap',
-                            overflow: 'visible',
-                            textShadow: '0 1px 2px rgba(255, 255, 255, 0.95)',
-                            userSelect: 'none',
-                          }}
-                        >
-                          {nomeExibicao}
-                        </div>
-                        <div
-                          style={{
-                            fontSize: subFontSize,
-                            color: '#64748b',
-                            fontWeight: 500,
-                            marginTop: 1,
-                            paddingLeft: 2,
-                            whiteSpace: 'nowrap',
-                            overflow: 'visible',
-                          }}
-                        >
-                          {textoSub}
-                        </div>
-
-                        {/* Alça interativa de redimensionamento (arrastar para aumentar/diminuir) */}
-                        <div
-                          onMouseDown={(e) => handleMouseDownResize(e, posKey)}
-                          title="Clique e arraste para redimensionar livremente"
-                          style={{
-                            position: 'absolute',
-                            right: -1,
-                            bottom: -1,
-                            width: 14,
-                            height: 14,
-                            cursor: 'se-resize',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            background: cor,
-                            color: '#ffffff',
-                            borderTopLeftRadius: 4,
-                            borderBottomRightRadius: 6,
-                            opacity: 0.9,
-                            zIndex: 10,
-                          }}
-                        >
-                          <svg width="8" height="8" viewBox="0 0 8 8" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <path d="M7 1L1 7M7 4L4 7M7 7H7.01" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
-                          </svg>
-                        </div>
-                      </div>
-                    )
-                  })}
+                <button
+                  type="button"
+                  onClick={() => setZoom(z => Math.max(60, z - 10))}
+                  style={{
+                    background: '#ffffff',
+                    border: '1px solid #e2e8f0',
+                    color: '#334155',
+                    padding: '4px 6px',
+                    borderRadius: 6,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                  }}
+                  title="Reduzir zoom"
+                >
+                  <ZoomOut size={14} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setZoom(100)}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    fontSize: 11.5,
+                    fontWeight: 700,
+                    color: '#334155',
+                    minWidth: 42,
+                    textAlign: 'center',
+                    cursor: 'pointer',
+                  }}
+                  title="Clique para restaurar zoom em 100%"
+                >
+                  {zoom}%
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setZoom(z => Math.min(140, z + 10))}
+                  style={{
+                    background: '#ffffff',
+                    border: '1px solid #e2e8f0',
+                    color: '#334155',
+                    padding: '4px 6px',
+                    borderRadius: 6,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                  }}
+                  title="Aumentar zoom"
+                >
+                  <ZoomIn size={14} />
+                </button>
               </div>
             </div>
-          )}
+
+            {/* ── Área de Visualização da Folha (Fundo Claro de Estúdio, Sem Cores Dark) ── */}
+            <div
+              style={{
+                flex: 1,
+                overflow: 'auto',
+                backgroundColor: '#e2e8f0',
+                backgroundImage: 'radial-gradient(#cbd5e1 1px, transparent 1px)',
+                backgroundSize: '18px 18px',
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'flex-start',
+                padding: '28px 24px',
+                position: 'relative',
+              }}
+            >
+              {carregandoPdf ? (
+                <div
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: 12,
+                    color: '#334155',
+                    background: '#ffffff',
+                    padding: '28px 36px',
+                    borderRadius: 16,
+                    border: '1px solid #e2e8f0',
+                    boxShadow: '0 10px 25px rgba(15, 23, 42, 0.06)',
+                    marginTop: 80,
+                  }}
+                >
+                  <RefreshCw size={26} className="animate-spin" color="#2563eb" />
+                  <span style={{ fontSize: 13, fontWeight: 600 }}>
+                    Carregando página de {docAtivo?.nome ? `"${docAtivo.nome}"` : 'documento'}...
+                  </span>
+                </div>
+              ) : erroPdf ? (
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                    color: '#dc2626',
+                    background: '#fef2f2',
+                    border: '1px solid #fecaca',
+                    padding: '16px 22px',
+                    borderRadius: 12,
+                    marginTop: 80,
+                    fontWeight: 600,
+                    fontSize: 13,
+                  }}
+                >
+                  <AlertCircle size={20} />
+                  <span>{erroPdf}</span>
+                </div>
+              ) : (
+                <div
+                  style={{
+                    position: 'relative',
+                    boxShadow: '0 12px 36px -4px rgba(15, 23, 42, 0.14), 0 2px 8px rgba(15, 23, 42, 0.06), 0 0 0 1px rgba(15, 23, 42, 0.06)',
+                    borderRadius: 6,
+                    overflow: 'visible',
+                    background: '#ffffff',
+                  }}
+                >
+                  {/* Canvas com a página renderizada do PDF */}
+                  <canvas ref={canvasRef} style={{ display: 'block', borderRadius: 6 }} />
+
+                  {/* Overlay interativo com suporte a clique e arrasto */}
+                  <div
+                    ref={overlayRef}
+                    onClick={handleOverlayClick}
+                    style={{
+                      position: 'absolute',
+                      inset: 0,
+                      cursor: 'crosshair',
+                      userSelect: 'none',
+                    }}
+                  >
+                    {/* Renderiza as caixas de assinaturas desta página */}
+                    {Object.entries(posicoes)
+                      .filter(([_, pos]) => {
+                        if (docsProcessados.length > 1) {
+                          if (pos.documentoId && pos.documentoId !== docAtivo.id) return false
+                          if (pos.documentoId === docAtivo.id) {
+                            return (pos.paginaRelativa || 1) === paginaAtualNoDoc
+                          }
+                          return pos.pagina === paginaGlobalAtual
+                        }
+                        return pos.pagina === paginaAtualNoDoc
+                      })
+                      .map(([posKey, pos]) => {
+                        const sigInfo = signatarios.find(s => s.id === pos.signatarioId)
+                        const cor = sigInfo?.cor || '#2563eb'
+                        const isAtivo = signatarioAtivoId === pos.signatarioId
+                        const larguraPt = pos.larguraPt || 190
+                        const alturaPt = pos.alturaPt || 45
+                        const boxWidthPx = Math.max(90, Math.round(larguraPt * currentScale))
+                        const boxHeightPx = Math.max(28, Math.round(alturaPt * currentScale))
+
+                        const nomeExibicao = formatSignatureDisplayName(sanitizeSignerName(pos.nome), 28)
+                        const numChars = Math.max(1, nomeExibicao.length)
+                        const largUtilPx = Math.max(60, boxWidthPx - 16)
+                        const maxFontePorLargura = Math.floor(largUtilPx / (numChars * 0.46))
+                        const maxFontePorAltura = Math.round(boxHeightPx * 0.38)
+                        const baseFontSize = Math.max(9.5, Math.min(maxFontePorAltura, maxFontePorLargura, 26))
+
+                        const textoSub = `Assinado eletronicamente ${new Date().toLocaleDateString('pt-BR')}`
+                        const maxSubPorLargura = Math.floor(largUtilPx / (textoSub.length * 0.48))
+                        const subFontSize = Math.max(6.5, Math.min(Math.round(boxHeightPx * 0.16), maxSubPorLargura, 9.5))
+
+                        return (
+                          <div
+                            key={posKey}
+                            onMouseDown={(e) => {
+                              setSignatarioAtivoId(pos.signatarioId)
+                              handleMouseDownItem(e, posKey)
+                            }}
+                            title={`${pos.nome} (${pos.cargo || 'Signatário'}) — Arraste para mover ou use o canto inferior direito para redimensionar`}
+                            style={{
+                              position: 'absolute',
+                              left: `${pos.xPercent}%`,
+                              top: `${pos.yPercent}%`,
+                              width: boxWidthPx,
+                              minHeight: boxHeightPx,
+                              padding: '5px 8px',
+                              borderRadius: 8,
+                              background: isAtivo ? 'rgba(255, 255, 255, 0.92)' : 'rgba(255, 255, 255, 0.84)',
+                              backdropFilter: 'blur(4px)',
+                              WebkitBackdropFilter: 'blur(4px)',
+                              border: `${isAtivo ? '2px' : '1.5px'} dashed ${cor}`,
+                              boxShadow: isAtivo
+                                ? `0 0 0 3px ${cor}30, 0 8px 20px rgba(15, 23, 42, 0.14)`
+                                : '0 2px 8px rgba(15, 23, 42, 0.08)',
+                              cursor: redimensionandoId === posKey ? 'se-resize' : 'grab',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              justifyContent: 'space-between',
+                              gap: 2,
+                              transition: arrastandoId === posKey || redimensionandoId === posKey ? 'none' : 'box-shadow 0.15s ease',
+                              zIndex: isAtivo ? 50 : 20,
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4 }}>
+                              <span
+                                style={{
+                                  fontSize: 8.5,
+                                  fontWeight: 800,
+                                  color: cor,
+                                  background: '#ffffff',
+                                  border: `1px solid ${cor}40`,
+                                  padding: '1px 5px',
+                                  borderRadius: 4,
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: 3,
+                                  boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+                                  whiteSpace: 'nowrap',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  maxWidth: '58%',
+                                }}
+                              >
+                                <Move size={7} /> {pos.tipo === 'escola' ? 'Instituição' : 'Responsável'}
+                              </span>
+
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                                <button
+                                  type="button"
+                                  onClick={(e) => handleAjustarTamanho(posKey, -15, e)}
+                                  style={{
+                                    background: '#ffffff',
+                                    border: '1px solid #cbd5e1',
+                                    color: '#334155',
+                                    cursor: 'pointer',
+                                    padding: '1px 3px',
+                                    borderRadius: 3,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    fontSize: 9,
+                                  }}
+                                  title="Diminuir tamanho (-15pt)"
+                                >
+                                  <Minus size={8} />
+                                </button>
+                                <span style={{ fontSize: 8, color: '#475569', fontWeight: 700 }}>
+                                  {Math.round(larguraPt)}pt
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={(e) => handleAjustarTamanho(posKey, 15, e)}
+                                  style={{
+                                    background: '#ffffff',
+                                    border: '1px solid #cbd5e1',
+                                    color: '#334155',
+                                    cursor: 'pointer',
+                                    padding: '1px 3px',
+                                    borderRadius: 3,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    fontSize: 9,
+                                  }}
+                                  title="Aumentar tamanho (+15pt)"
+                                >
+                                  <Plus size={8} />
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={(e) => handleRemoverPosicao(posKey, e)}
+                                  style={{
+                                    background: '#fff1f2',
+                                    border: '1px solid #fecdd3',
+                                    color: '#e11d48',
+                                    cursor: 'pointer',
+                                    padding: '1px 3px',
+                                    borderRadius: 3,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    marginLeft: 2,
+                                  }}
+                                  title="Remover assinatura desta página"
+                                >
+                                  <X size={9} />
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Assinatura Caligráfica */}
+                            <div
+                              style={{
+                                fontFamily: "'Dancing Script', 'Caveat', 'Brush Script MT', cursive, sans-serif",
+                                fontSize: baseFontSize,
+                                fontWeight: 700,
+                                color: '#0e2454',
+                                lineHeight: 1.15,
+                                paddingTop: 1,
+                                paddingLeft: 2,
+                                whiteSpace: 'nowrap',
+                                overflow: 'visible',
+                                textShadow: '0 1px 2px rgba(255, 255, 255, 0.95)',
+                                userSelect: 'none',
+                              }}
+                            >
+                              {nomeExibicao}
+                            </div>
+                            <div
+                              style={{
+                                fontSize: subFontSize,
+                                color: '#475569',
+                                fontWeight: 600,
+                                marginTop: 1,
+                                paddingLeft: 2,
+                                whiteSpace: 'nowrap',
+                                overflow: 'visible',
+                              }}
+                            >
+                              {textoSub}
+                            </div>
+
+                            {/* Alça interativa de redimensionamento */}
+                            <div
+                              onMouseDown={(e) => handleMouseDownResize(e, posKey)}
+                              title="Clique e arraste para redimensionar livremente"
+                              style={{
+                                position: 'absolute',
+                                right: -1,
+                                bottom: -1,
+                                width: 15,
+                                height: 15,
+                                cursor: 'se-resize',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                background: cor,
+                                color: '#ffffff',
+                                borderTopLeftRadius: 5,
+                                borderBottomRightRadius: 6,
+                                zIndex: 10,
+                              }}
+                            >
+                              <svg width="8" height="8" viewBox="0 0 8 8" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M7 1L1 7M7 4L4 7M7 7H7.01" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+                              </svg>
+                            </div>
+                          </div>
+                        )
+                      })}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
 
-        {/* ── Footer com Ações e Confirmação ── */}
+        {/* ── FOOTER CLARO COM RESUMO E CONFIRMAÇÃO ── */}
         <div
           style={{
-            padding: '12px 24px',
-            borderTop: '1px solid rgba(255, 255, 255, 0.1)',
-            background: 'rgba(15, 23, 42, 0.95)',
+            padding: '14px 24px',
+            borderTop: '1px solid #e2e8f0',
+            background: '#ffffff',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
@@ -1497,27 +2054,73 @@ export function PosicionadorAssinaturasModal({
             flexWrap: 'wrap',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#94a3b8' }}>
-            <span style={{ color: todosPosicionados ? '#34d399' : '#fbbf24', fontWeight: 600 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12.5, color: '#475569' }}>
+            <span
+              style={{
+                color: todosPosicionados ? '#047857' : '#b45309',
+                background: todosPosicionados ? '#ecfdf5' : '#fffbeb',
+                border: todosPosicionados ? '1px solid #a7f3d0' : '1px solid #fde68a',
+                padding: '4px 10px',
+                borderRadius: 8,
+                fontWeight: 700,
+                fontSize: 12,
+              }}
+            >
               {totalSignatariosComPosicao} de {signatarios.length} pessoas posicionadas
               {docsProcessados.length > 1 && ` • ${Object.keys(posicoes).length} posições em ${docsProcessados.length} documentos`}
             </span>
-            <span>• As assinaturas serão inseridas exatamente nestas posições, sem a rubrica no rodapé.</span>
+            <span style={{ color: '#64748b', fontSize: 12 }}>
+              As assinaturas serão aplicadas exatamente nas posições definidas acima.
+            </span>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            {docsProcessados.length > 1 && docAtivoIndex < docsProcessados.length - 1 && (
+              <button
+                type="button"
+                onClick={() => {
+                  setDocAtivoIndex(i => i + 1)
+                  setPaginaAtualNoDoc(1)
+                }}
+                style={{
+                  background: '#eff6ff',
+                  border: '1px solid #bfdbfe',
+                  color: '#1d4ed8',
+                  padding: '9px 16px',
+                  borderRadius: 10,
+                  fontSize: 12.5,
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                }}
+              >
+                Próximo Documento ({docAtivoIndex + 2}/{docsProcessados.length}) <ChevronRight size={15} />
+              </button>
+            )}
+
             <button
               type="button"
               onClick={onClose}
               style={{
-                background: 'rgba(255, 255, 255, 0.08)',
-                border: '1px solid rgba(255, 255, 255, 0.15)',
-                color: '#cbd5e1',
-                padding: '8px 16px',
-                borderRadius: 8,
-                fontSize: 12,
+                background: '#ffffff',
+                border: '1px solid #cbd5e1',
+                color: '#475569',
+                padding: '9px 18px',
+                borderRadius: 10,
+                fontSize: 12.5,
                 fontWeight: 600,
                 cursor: 'pointer',
+                transition: 'all 0.15s ease',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = '#f8fafc'
+                e.currentTarget.style.color = '#0f172a'
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = '#ffffff'
+                e.currentTarget.style.color = '#475569'
               }}
             >
               Cancelar
@@ -1532,19 +2135,20 @@ export function PosicionadorAssinaturasModal({
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
-                gap: 6,
+                gap: 7,
                 background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
                 border: 'none',
                 color: '#ffffff',
-                padding: '8px 20px',
-                borderRadius: 8,
-                fontSize: 12.5,
+                padding: '9px 22px',
+                borderRadius: 10,
+                fontSize: 13,
                 fontWeight: 700,
                 cursor: 'pointer',
-                boxShadow: '0 4px 12px rgba(16, 185, 129, 0.35)',
+                boxShadow: '0 4px 12px rgba(16, 185, 129, 0.30)',
+                transition: 'all 0.15s ease',
               }}
             >
-              <Check size={15} strokeWidth={2.5} /> Confirmar e Salvar Posições
+              <Check size={16} strokeWidth={2.5} /> Confirmar e Salvar Posições
             </button>
           </div>
         </div>

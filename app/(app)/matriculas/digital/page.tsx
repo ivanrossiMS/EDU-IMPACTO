@@ -7304,7 +7304,7 @@ export default function MatriculaDigitalPage() {
         )}
       </AnimatePresence>
 
-      {/* ── MODAL DE PRÉ-VISUALIZAÇÃO DO PDF CONVERTIDO ── */}
+      {/* ── MODAL DE PRÉ-VISUALIZAÇÃO DO PDF CONVERTIDO (LIGHT THEME) ── */}
       <AnimatePresence>
         {modalPreviaPdfAberto && pdfUploadBase64 && (
           <div
@@ -7313,8 +7313,10 @@ export default function MatriculaDigitalPage() {
               position: 'fixed',
               inset: 0,
               zIndex: 99999,
-              background: 'rgba(0, 0, 0, 0.82)',
+              background: 'rgba(15, 23, 42, 0.32)',
               backdropFilter: 'blur(8px)',
+              overscrollBehavior: 'contain',
+              overflow: 'hidden',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -7322,70 +7324,72 @@ export default function MatriculaDigitalPage() {
             }}
           >
             <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
+              initial={{ opacity: 0, scale: 0.96, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 8 }}
               style={{
                 width: '100%',
-                maxWidth: 920,
+                maxWidth: 980,
                 height: '88vh',
-                background: '#0f172a',
-                border: '1px solid rgba(255,255,255,0.12)',
-                borderRadius: 18,
+                background: '#ffffff',
+                border: '1px solid #e2e8f0',
+                borderRadius: 20,
                 display: 'flex',
                 flexDirection: 'column',
                 overflow: 'hidden',
-                boxShadow: '0 30px 60px rgba(0,0,0,0.7)',
+                overscrollBehavior: 'contain',
+                boxShadow: '0 24px 60px -12px rgba(15, 23, 42, 0.18), 0 0 0 1px rgba(15, 23, 42, 0.05)',
               }}
             >
               {/* Header do Preview */}
               <div
                 style={{
                   padding: '14px 20px',
-                  borderBottom: '1px solid rgba(255,255,255,0.1)',
+                  borderBottom: '1px solid #e2e8f0',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
-                  background: 'rgba(30, 41, 59, 0.7)',
+                  background: '#ffffff',
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                   <div
                     style={{
-                      width: 36,
-                      height: 36,
+                      width: 38,
+                      height: 38,
                       borderRadius: 10,
-                      background: 'rgba(56, 189, 248, 0.15)',
+                      background: '#eff6ff',
+                      border: '1px solid #bfdbfe',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
                     }}
                   >
-                    <FileText size={20} color="#38bdf8" />
+                    <FileText size={20} color="#2563eb" />
                   </div>
                   <div>
-                    <div style={{ fontWeight: 700, fontSize: 14, color: '#f8fafc', display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
+                    <div style={{ fontWeight: 700, fontSize: 14.5, color: '#0f172a', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                       <span>{pdfUploadNome}</span>
                       {previaEhPacoteUnificado && (
                         <span
                           style={{
-                            fontSize: 10,
-                            fontWeight: 800,
-                            padding: '1px 7px',
-                            borderRadius: 4,
-                            background: 'rgba(56, 189, 248, 0.2)',
-                            color: '#38bdf8',
-                            border: '1px solid rgba(56, 189, 248, 0.4)',
+                            fontSize: 10.5,
+                            fontWeight: 700,
+                            padding: '2px 8px',
+                            borderRadius: 999,
+                            background: '#eff6ff',
+                            color: '#1d4ed8',
+                            border: '1px solid #bfdbfe',
                             display: 'inline-flex',
                             alignItems: 'center',
-                            gap: 3,
+                            gap: 4,
                           }}
                         >
-                          <Layers size={10} /> Pacote Unificado
+                          <Layers size={11} /> Pacote Unificado
                         </span>
                       )}
                     </div>
-                    <div style={{ fontSize: 11, color: '#94a3b8' }}>
+                    <div style={{ fontSize: 11.5, color: '#64748b' }}>
                       {previaEhPacoteUnificado
                         ? `Consolidação sequencial de ${documentosUpload.length} documentos • Total de ${totalPaginasGeral} páginas • ${pdfUploadTamanho}`
                         : `Pré-visualização do documento PDF pronto para assinatura eletrônica • ${pdfUploadTamanho}`}
@@ -7401,27 +7405,27 @@ export default function MatriculaDigitalPage() {
                       display: 'inline-flex',
                       alignItems: 'center',
                       gap: 6,
-                      background: 'rgba(255,255,255,0.08)',
-                      border: '1px solid rgba(255,255,255,0.15)',
-                      color: '#f8fafc',
-                      padding: '6px 12px',
-                      borderRadius: 8,
+                      background: '#f8fafc',
+                      border: '1px solid #cbd5e1',
+                      color: '#1e293b',
+                      padding: '7px 14px',
+                      borderRadius: 10,
                       fontSize: 12,
                       fontWeight: 600,
                       textDecoration: 'none',
                     }}
                   >
-                    <Download size={13} /> Baixar PDF
+                    <Download size={14} color="#2563eb" /> Baixar PDF
                   </a>
                   <button
                     type="button"
                     onClick={() => setModalPreviaPdfAberto(false)}
                     style={{
-                      background: 'rgba(255,255,255,0.08)',
-                      border: 'none',
-                      color: '#f8fafc',
+                      background: '#f8fafc',
+                      border: '1px solid #e2e8f0',
+                      color: '#475569',
                       padding: '7px',
-                      borderRadius: 8,
+                      borderRadius: 10,
                       cursor: 'pointer',
                       display: 'flex',
                       alignItems: 'center',
@@ -7437,17 +7441,17 @@ export default function MatriculaDigitalPage() {
               {documentosUpload.length > 1 && (
                 <div
                   style={{
-                    padding: '8px 16px',
-                    borderBottom: '1px solid rgba(255,255,255,0.08)',
+                    padding: '8px 20px',
+                    borderBottom: '1px solid #e2e8f0',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: 6,
-                    background: 'rgba(15, 23, 42, 0.96)',
+                    gap: 8,
+                    background: '#f8fafc',
                     overflowX: 'auto',
                   }}
                 >
-                  <span style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 4, marginRight: 4 }}>
-                    <Layers size={13} color="#38bdf8" /> Alternar:
+                  <span style={{ fontSize: 11, fontWeight: 700, color: '#475569', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 4, marginRight: 4 }}>
+                    <Layers size={13} color="#2563eb" /> Alternar:
                   </span>
 
                   {/* Aba Pacote Unificado */}
@@ -7459,15 +7463,15 @@ export default function MatriculaDigitalPage() {
                       display: 'inline-flex',
                       alignItems: 'center',
                       gap: 5,
-                      padding: '4px 10px',
-                      borderRadius: 6,
-                      fontSize: 11,
+                      padding: '5px 11px',
+                      borderRadius: 8,
+                      fontSize: 11.5,
                       fontWeight: 700,
                       cursor: gerandoPreviaPacote ? 'not-allowed' : 'pointer',
                       whiteSpace: 'nowrap',
-                      border: previaEhPacoteUnificado ? '1px solid #38bdf8' : '1px solid rgba(255,255,255,0.12)',
-                      background: previaEhPacoteUnificado ? 'rgba(56, 189, 248, 0.2)' : 'rgba(255,255,255,0.05)',
-                      color: previaEhPacoteUnificado ? '#38bdf8' : '#94a3b8',
+                      border: previaEhPacoteUnificado ? '1.5px solid #2563eb' : '1px solid #cbd5e1',
+                      background: previaEhPacoteUnificado ? '#eff6ff' : '#ffffff',
+                      color: previaEhPacoteUnificado ? '#1d4ed8' : '#475569',
                       transition: 'all 0.15s ease',
                     }}
                   >
@@ -7486,17 +7490,17 @@ export default function MatriculaDigitalPage() {
                         style={{
                           display: 'inline-flex',
                           alignItems: 'center',
-                          gap: 4,
-                          padding: '4px 9px',
-                          borderRadius: 6,
-                          fontSize: 11,
+                          gap: 5,
+                          padding: '5px 11px',
+                          borderRadius: 8,
+                          fontSize: 11.5,
                           fontWeight: isAtivo ? 700 : 500,
                           cursor: 'pointer',
                           whiteSpace: 'nowrap',
-                          border: isAtivo ? '1px solid #2563eb' : '1px solid rgba(255,255,255,0.1)',
-                          background: isAtivo ? 'rgba(37, 99, 235, 0.25)' : 'rgba(255,255,255,0.04)',
-                          color: isAtivo ? '#93c5fd' : '#cbd5e1',
-                          maxWidth: 200,
+                          border: isAtivo ? '1.5px solid #2563eb' : '1px solid #cbd5e1',
+                          background: isAtivo ? '#eff6ff' : '#ffffff',
+                          color: isAtivo ? '#1d4ed8' : '#475569',
+                          maxWidth: 220,
                           overflow: 'hidden',
                           textOverflow: 'ellipsis',
                           transition: 'all 0.15s ease',
@@ -7507,7 +7511,7 @@ export default function MatriculaDigitalPage() {
                         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {doc.nome}
                         </span>
-                        <span style={{ opacity: 0.7, fontSize: 10 }}>({doc.totalPaginas}p)</span>
+                        <span style={{ opacity: 0.75, fontSize: 10 }}>({doc.totalPaginas}p)</span>
                       </button>
                     )
                   })}
@@ -7515,7 +7519,7 @@ export default function MatriculaDigitalPage() {
               )}
 
               {/* Corpo do Preview: Visualizador de PDF de alta fidelidade */}
-              <div style={{ flex: 1, width: '100%', background: '#1e293b', position: 'relative' }}>
+              <div style={{ flex: 1, width: '100%', background: '#f1f5f9', position: 'relative' }}>
                 <iframe
                   src={`${previewPdfBlobUrl || pdfUploadBase64}#toolbar=1&navpanes=0`}
                   title="Prévia do PDF"
