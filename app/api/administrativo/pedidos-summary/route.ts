@@ -4,7 +4,11 @@ import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 
 export const dynamic = 'force-dynamic'
 
-const EVENTOS_LIVROS = ['livros', 'apostilas em', 'apostilas fund2', 'apostila em', 'apostila fund2', 'apostilas ens. médio', 'liv', 'itinerário', 'itinerario']
+const EVENTOS_LIVROS = ['livros', 'apostilas em', 'apostilas fund2', 'apostila em', 'apostila fund2', 'apostilas ens. médio', 'liv', 'itinerário', 'itinerario', 'arte', 'inglês', 'ingles']
+
+function normKey(s?: string): string {
+  return String(s || '').toLowerCase().trim()
+}
 
 function isEventoLivro(descricao?: string): boolean {
   if (!descricao) return false
@@ -61,7 +65,8 @@ export async function GET(request: Request) {
 
     const pedidosMetaMap = new Map()
     for (const p of pedidosMeta) {
-      if (p.tituloId) pedidosMetaMap.set(p.tituloId, p)
+      if (p.tituloId) pedidosMetaMap.set(String(p.tituloId), p)
+      if (p.id) pedidosMetaMap.set(String(p.id), p)
     }
 
     // Filtra parcelas dos Títulos que são livros
@@ -99,7 +104,6 @@ export async function GET(request: Request) {
     // Otimização do agrupamento e atribuição de turmas
     for (const p of todasParcelas) {
       const key = `${p.aluno}__${p.eventoDescricao}`
-      const pMeta = pedidosMetaMap.get(p.id)
       
       let finalTurma = p.turma
       if (!finalTurma || finalTurma === 'S/T' || finalTurma === '—') {
@@ -109,6 +113,10 @@ export async function GET(request: Request) {
           finalTurma = tObj?.nome || matchingAluno.turma || 'S/T'
         }
       }
+
+      const compositeMetaKey = `ped-${normKey(p.aluno)}__${normKey(p.eventoDescricao)}__${normKey(finalTurma)}`
+      const compositeNoTurmaKey = `ped-${normKey(p.aluno)}__${normKey(p.eventoDescricao)}__`
+      const pMeta = pedidosMetaMap.get(String(p.id)) || pedidosMetaMap.get(compositeMetaKey) || pedidosMetaMap.get(compositeNoTurmaKey)
 
       if (!mapOrders.has(key)) {
         mapOrders.set(key, { 

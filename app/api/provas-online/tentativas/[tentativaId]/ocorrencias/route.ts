@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/server/authGuard'
+import { resolveUserRole } from '@/lib/server/authGuard'
+import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 import {
   dbGetTentativaById,
   dbSaveTentativa,
@@ -13,14 +14,71 @@ import { OcorrenciaMonitoramento } from '@/types/provas-online'
 
 export const dynamic = 'force-dynamic'
 
+async function canAccessTentativa(user: any, isStaff: boolean, tentativa: any): Promise<boolean> {
+  if (isStaff) return true
+  if (!user || !tentativa) return false
+  const metaAlunoId = user.user_metadata?.aluno_id ? String(user.user_metadata.aluno_id) : ''
+  const metaMatricula = user.user_metadata?.matricula ? String(user.user_metadata.matricula) : ''
+  const alunosIds: string[] = Array.isArray(user.user_metadata?.alunos_ids)
+    ? user.user_metadata.alunos_ids.map(String)
+    : []
+
+  if (
+    tentativa.alunoId === user.id ||
+    (metaAlunoId && (tentativa.alunoId === metaAlunoId || tentativa.alunoMatricula === metaAlunoId)) ||
+    (metaMatricula && (tentativa.alunoMatricula === metaMatricula || tentativa.alunoId === metaMatricula)) ||
+    alunosIds.includes(String(tentativa.alunoId))
+  ) {
+    return true
+  }
+
+  try {
+    const adminClient = getAdminClient()
+    const { data: aluno } = await adminClient
+      .from('alunos')
+      .select('id, matricula, email, email_responsavel, cpf_responsavel, responsavel_id, dados')
+      .or(`id.eq."${tentativa.alunoId}",matricula.eq."${tentativa.alunoId}"`)
+      .maybeSingle()
+
+    if (aluno) {
+      const userEmail = String(user.email || '').trim().toLowerCase()
+      const alunoEmail = String(aluno.email || aluno.dados?.email || '').trim().toLowerCase()
+      const respEmail = String(aluno.email_responsavel || aluno.dados?.email_responsavel || '').trim().toLowerCase()
+      const userCpf = String(user.user_metadata?.cpf || '').replace(/\D/g, '')
+      const respCpf = String(aluno.cpf_responsavel || aluno.dados?.cpf_responsavel || '').replace(/\D/g, '')
+      const respId = String(user.user_metadata?.responsavel_id || '')
+
+      if (
+        (userEmail && (userEmail === alunoEmail || userEmail === respEmail)) ||
+        (userCpf && respCpf && userCpf === respCpf) ||
+        (respId && String(aluno.responsavel_id || '') === respId)
+      ) {
+        return true
+      }
+    }
+  } catch {}
+
+  return false
+}
+
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ tentativaId: string }> }
 ) {
-  const { user, errorResponse } = await requireAuth(request)
-  if (errorResponse) return errorResponse
+  const { user, isStaff, errorResponse } = await resolveUserRole(request)
+  if (errorResponse || !user) return errorResponse!
 
   const { tentativaId } = await params
+  const tentativa = await dbGetTentativaById(tentativaId)
+  if (!tentativa) {
+    return NextResponse.json({ error: 'Tentativa não encontrada' }, { status: 404 })
+  }
+
+  const allowed = await canAccessTentativa(user, isStaff, tentativa)
+  if (!allowed) {
+    return NextResponse.json({ error: 'Acesso negado a esta tentativa.' }, { status: 403 })
+  }
+
   const ocorrencias = await dbGetOcorrenciasByTentativaId(tentativaId)
   return NextResponse.json({ ok: true, ocorrencias, total: ocorrencias.length })
 }
@@ -29,13 +87,18 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ tentativaId: string }> }
 ) {
-  const { user, errorResponse } = await requireAuth(request)
-  if (errorResponse) return errorResponse
+  const { user, isStaff, errorResponse } = await resolveUserRole(request)
+  if (errorResponse || !user) return errorResponse!
 
   const { tentativaId } = await params
   const tentativa = await dbGetTentativaById(tentativaId)
   if (!tentativa) {
     return NextResponse.json({ error: 'Tentativa não encontrada' }, { status: 404 })
+  }
+
+  const allowed = await canAccessTentativa(user, isStaff, tentativa)
+  if (!allowed) {
+    return NextResponse.json({ error: 'Acesso negado a esta tentativa.' }, { status: 403 })
   }
 
   const body = await request.json()
@@ -90,7 +153,14 @@ export async function POST(
 
     if (isCancellationIncident) {
       if (body.respostas && typeof body.respostas === 'object') {
-        tentativa.respostas = { ...tentativa.respostas, ...body.respostas }
+        const safeIncoming: Record<string, any> = {}
+        for (const [qId, val] of Object.entries(body.respostas)) {
+          if (val && typeof val === 'object') {
+            const { corrigida: _c, pontuacaoObtida: _po, pontosAtribuidos: _pa, nota: _n, comentarioProfessor: _cp, ...safeVal } = val as any
+            safeIncoming[qId] = safeVal
+          }
+        }
+        tentativa.respostas = { ...tentativa.respostas, ...safeIncoming }
       }
       const nowIso = new Date().toISOString()
       tentativa.status = 'entregue'
@@ -146,7 +216,14 @@ export async function POST(
       if (previousMinimizations.length >= 1) {
         // SECOND OR SUBSEQUENT INFRACTION -> CANCEL EXAM!
         if (body.respostas && typeof body.respostas === 'object') {
-          tentativa.respostas = { ...tentativa.respostas, ...body.respostas }
+          const safeIncoming: Record<string, any> = {}
+          for (const [qId, val] of Object.entries(body.respostas)) {
+            if (val && typeof val === 'object') {
+              const { corrigida: _c, pontuacaoObtida: _po, pontosAtribuidos: _pa, nota: _n, comentarioProfessor: _cp, ...safeVal } = val as any
+              safeIncoming[qId] = safeVal
+            }
+          }
+          tentativa.respostas = { ...tentativa.respostas, ...safeIncoming }
         }
         const nowIso = new Date().toISOString()
         tentativa.status = 'entregue'

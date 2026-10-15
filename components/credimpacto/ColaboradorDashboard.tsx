@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   Wallet,
   Clock,
@@ -39,6 +39,16 @@ export function ColaboradorDashboard({
 }: ColaboradorDashboardProps) {
   const [selectedLoanForContra, setSelectedLoanForContra] = useState<CredImpactoEmprestimo | null>(null)
   const [isAnsweringContra, setIsAnsweringContra] = useState(false)
+
+  // Mantém o modal de contraproposta sincronizado em tempo real caso a operação mude
+  useEffect(() => {
+    setSelectedLoanForContra((prev) => {
+      if (!prev) return null
+      const updated = emprestimos.find((e) => e.id === prev.id)
+      if (!updated || updated.status !== 'contraproposta') return null
+      return updated
+    })
+  }, [emprestimos])
 
   // Cálculos consolidados para o colaborador - estritamente contratos ativos e formalizados
   const emprestimosAtivos = emprestimos.filter((e) => e.status === 'ativo')

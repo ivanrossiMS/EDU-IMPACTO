@@ -4,9 +4,10 @@ import React, { useState, useRef, useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useSelectedStudent } from '@/lib/selectedStudentContext'
+import { useData } from '@/lib/dataContext'
 import { LoadingGlass } from '@/components/LoadingGlass'
 import { 
-  UserCog, Phone, Mail, ShieldAlert, GraduationCap, MapPin, 
+  UserCog, Phone, Mail, ShieldAlert, GraduationCap, 
   Edit3, ShieldCheck, Contact, Camera, 
   AlertTriangle, Fingerprint, CalendarDays, Loader2,
   DollarSign, Lock, Clock, History, CheckCircle2, KeyRound, Eye, EyeOff, Check
@@ -26,6 +27,7 @@ import {
 export default function ADPerfilPage() {
   const queryClient = useQueryClient()
   const { currentUser, setCurrentUser } = useApp()
+  const { turmas = [] } = useData()
   const { aluno: basicAluno, userAccessRole } = useSelectedStudent()
   const slug = basicAluno?.id
   
@@ -267,11 +269,9 @@ export default function ADPerfilPage() {
         return
       }
 
-      if (typeof window !== 'undefined' && currentUser?.id) {
+      if (typeof window !== 'undefined') {
         try {
-          const all = JSON.parse(localStorage.getItem('edu-user-passwords') ?? '{}')
-          all[currentUser.id] = pwForm.nova
-          localStorage.setItem('edu-user-passwords', JSON.stringify(all))
+          localStorage.removeItem('edu-user-passwords')
         } catch {}
       }
 
@@ -384,7 +384,25 @@ export default function ADPerfilPage() {
     ? formatDate(aluno.dataNascimento || aluno.data_nascimento)
     : 'Não informado'
   const alunoMatricula = aluno.matricula || aluno.dados?.codigo || aluno.codigo || String(aluno.id).slice(0, 8)
-  const alunoTurma = aluno.turma || aluno.serie || aluno.dados?.turma || 'Regular'
+  const turmaObj = (turmas || []).find(
+    (t: any) =>
+      t &&
+      (String(t.id) === String(aluno.turma) ||
+        String(t.codigo) === String(aluno.turma) ||
+        String(t.nome) === String(aluno.turma))
+  )
+  const rawTurmaNome =
+    (aluno.turma_nome && String(aluno.turma_nome) !== String(aluno.turma) ? aluno.turma_nome : null) ||
+    (basicAluno?.turma_nome && String(basicAluno.turma_nome) !== String(aluno.turma) ? basicAluno.turma_nome : null) ||
+    turmaObj?.nome ||
+    aluno.turma_nome ||
+    basicAluno?.turma_nome ||
+    aluno.serie ||
+    aluno.dados?.turma_nome ||
+    aluno.dados?.turma ||
+    aluno.turma ||
+    'Regular'
+  const alunoTurma = String(rawTurmaNome).split('-')[0].trim() || 'Regular'
 
   return (
     <div className="ad-perfil-root" style={{ maxWidth: 1000, margin: '0 auto', paddingBottom: 88, fontFamily: 'Outfit, Inter, sans-serif' }}>
@@ -711,7 +729,7 @@ export default function ADPerfilPage() {
                         Informações do Aluno
                       </h3>
                       <p style={{ margin: '3px 0 0 0', fontSize: 12, fontWeight: 500, color: '#64748b' }}>
-                        Dados cadastrais, contatos e endereço residencial
+                        Dados cadastrais e contatos
                       </p>
                     </div>
                   </div>
@@ -1086,45 +1104,6 @@ export default function ADPerfilPage() {
                         {aluno.telefone || 'Não cadastrado'}
                       </div>
                     )}
-                  </div>
-                </div>
-
-                {/* Bento Row 3: Endereço Residencial */}
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 14,
-                    padding: '15px 16px',
-                    borderRadius: 18,
-                    background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
-                    border: '1px solid #e2e8f0',
-                  }}
-                >
-                  <div
-                    style={{
-                      width: 38,
-                      height: 38,
-                      borderRadius: 12,
-                      background: '#fff7ed',
-                      color: '#ea580c',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      flexShrink: 0,
-                    }}
-                  >
-                    <MapPin size={18} strokeWidth={2.2} />
-                  </div>
-                  <div style={{ minWidth: 0, flex: 1 }}>
-                    <div style={{ fontSize: 10.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#64748b', marginBottom: 3 }}>
-                      Endereço Residencial
-                    </div>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: aluno.endereco ? '#0f172a' : '#64748b', lineHeight: 1.4 }}>
-                      {aluno.endereco
-                        ? `${aluno.endereco}, ${aluno.numero || 'S/N'} — ${aluno.bairro || 'Bairro'}, ${aluno.cidade || 'Cidade'}`
-                        : 'Endereço não cadastrado no sistema.'}
-                    </div>
                   </div>
                 </div>
               </div>

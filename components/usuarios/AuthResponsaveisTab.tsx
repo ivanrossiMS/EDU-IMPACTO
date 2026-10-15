@@ -126,9 +126,9 @@ export function AuthResponsaveisTab() {
   const displayed = guardians.map(g => {
     const refKey = g.email || g.cpf || g.nome
     const authRecord = authUsers.find(u => u.user_type === 'guardian' && (u.reference_key === refKey || (g.cpf && u.reference_key === g.cpf) || (g.email && u.reference_key === g.email)))
-    
     const searchEmail = (g.email || (authRecord?.email) || '').trim().toLowerCase()
-    const realUser = usersData?.find(u => u.email?.toLowerCase() === searchEmail && u.perfil === 'Família')
+    const usersList: any[] = Array.isArray(usersData) ? usersData : (Array.isArray((usersData as any)?.data) ? (usersData as any).data : [])
+    const realUser = usersList.find(u => u.email?.toLowerCase() === searchEmail && u.perfil === 'Família')
 
     const defaultAuth = {
       id: `virtual-${refKey}`,

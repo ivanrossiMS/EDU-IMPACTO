@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { requireAuth } from '@/lib/server/authGuard'
+import { requireAuth, resolveUserRole } from '@/lib/server/authGuard'
 import { isValidStudentPhoto } from '@/lib/utils'
 
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
@@ -83,13 +83,21 @@ export async function GET(req: NextRequest) {
       .from('portaria_dispositivos')
       .select('id, nome, ip, porta, modelo, status, configuracao')
 
+    const syncTokenHeader = req.headers.get('x-sync-token') || req.headers.get('authorization') || searchParams.get('token')
+    const expectedSyncToken = process.env.PORTARIA_SYNC_TOKEN || process.env.CRON_SECRET
+    let isAuthorizedDaemon = Boolean(expectedSyncToken && syncTokenHeader && syncTokenHeader.includes(expectedSyncToken))
+    if (!isAuthorizedDaemon) {
+      const { isStaff } = await resolveUserRole(req)
+      if (isStaff) isAuthorizedDaemon = true
+    }
+
     const dispositivos = (activeDevices || []).map(d => ({
       id: d.id,
       nome: d.nome,
       ip: d.ip,
       porta: d.porta || 80,
       tipo: (d.configuracao as any)?.sentido || (/sa[ií]da/i.test(d.nome || '') || d.ip === '192.168.1.154' ? 'saida' : (d.ip === '192.168.1.150' ? 'ambos' : 'entrada')),
-      senha: (d.configuracao as any)?.password || 'Pass1081$'
+      ...(isAuthorizedDaemon ? { senha: (d.configuracao as any)?.password || '' } : {})
     }))
 
     const { data: configRow } = await supabase

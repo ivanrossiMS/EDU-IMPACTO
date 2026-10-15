@@ -18,7 +18,7 @@ export function GabaritoRedacaoModal({ provaUploadId, onClose }: GabaritoRedacao
   useEffect(() => {
     async function loadData() {
       try {
-        const { data, error } = await supabase.from('provas_upload').select('*').eq('id', provaUploadId).single()
+        const { data, error } = await supabase.from('redacao_upload').select('*').eq('id', provaUploadId).single()
         const p = data as any
         if (error) throw error
 

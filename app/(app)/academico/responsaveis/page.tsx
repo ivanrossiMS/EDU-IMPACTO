@@ -327,40 +327,42 @@ export default function ResponsaveisPage() {
 
     setLoading(true)
     try {
-      const resp = formResponsaveis[0] // Assume apenas um item
-      const payload = {
-        ...resp,
-        alunos_vinculados: (resp.alunosVinculados || []).map((aluno: any) => ({
-          aluno_id: typeof aluno === 'object' ? aluno.id : aluno,
-          parentesco: resp.parentesco,
-          resp_pedagogico: resp.isPedagogico,
-          resp_financeiro: resp.isFinanceiro,
-          resp_outro: resp.isOutro
-        }))
-      }
+      const itemsToSave = editingResponsavel ? [formResponsaveis[0]] : formResponsaveis.filter(r => r.nome && r.nome.trim() !== '')
+      await Promise.all(itemsToSave.map(async (resp) => {
+        const payload = {
+          ...resp,
+          alunos_vinculados: (resp.alunosVinculados || []).map((aluno: any) => ({
+            aluno_id: typeof aluno === 'object' ? aluno.id : aluno,
+            parentesco: resp.parentesco,
+            resp_pedagogico: resp.isPedagogico,
+            resp_financeiro: resp.isFinanceiro,
+            resp_outro: resp.isOutro
+          }))
+        }
 
-      const method = editingResponsavel ? 'PUT' : 'POST'
-      const url = editingResponsavel ? `/api/responsaveis?id=${editingResponsavel.id}` : '/api/responsaveis'
+        const method = editingResponsavel ? 'PUT' : 'POST'
+        const url = editingResponsavel ? `/api/responsaveis?id=${editingResponsavel.id}` : '/api/responsaveis'
 
-      const res = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      })
-      
-      if (!res.ok) {
-        const errorData = await res.json()
-        throw new Error(errorData.error || 'Erro ao salvar responsável')
-      }
-      
-      const savedData = await res.json()
-      const realId = savedData.id || editingResponsavel?.id || payload.id
-      logSystemAction(
-        'Acadêmico (Responsáveis)',
-        editingResponsavel ? 'Edição' : 'Cadastro',
-        `${editingResponsavel ? 'Atualização' : 'Cadastro'} do responsável ${payload.nome}`,
-        { registroId: realId, detalhesDepois: payload }
-      )
+        const res = await fetch(url, {
+          method,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        })
+        
+        if (!res.ok) {
+          const errorData = await res.json()
+          throw new Error(errorData.error || `Erro ao salvar responsável ${resp.nome}`)
+        }
+        
+        const savedData = await res.json()
+        const realId = savedData.id || editingResponsavel?.id || payload.id
+        logSystemAction(
+          'Acadêmico (Responsáveis)',
+          editingResponsavel ? 'Edição' : 'Cadastro',
+          `${editingResponsavel ? 'Atualização' : 'Cadastro'} do responsável ${payload.nome}`,
+          { registroId: realId, detalhesDepois: payload }
+        )
+      }))
       
       queryClient.invalidateQueries({ queryKey: ['responsaveis'] })
       queryClient.invalidateQueries({ queryKey: ['alunos'] })
@@ -371,6 +373,32 @@ export default function ResponsaveisPage() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleExportCSV = () => {
+    const list = responsaveis || []
+    if (list.length === 0) {
+      alert('Não há responsáveis para exportar.')
+      return
+    }
+    const headers = ['ID', 'Nome', 'CPF', 'Email', 'Telefone', 'RFID', 'Alunos Vinculados']
+    const rows = list.map((r: any) => [
+      r.id || '',
+      `"${String(r.nome || '').replace(/"/g, '""')}"`,
+      r.cpf || r.dados?.cpf || '',
+      r.email || '',
+      r.telefone || '',
+      r.rfid || '',
+      `"${(r.alunosVinculados || []).map((a: any) => a.nome || a.id).join('; ').replace(/"/g, '""')}"`
+    ])
+    const csvContent = '\uFEFF' + [headers.join(','), ...rows.map(r => r.join(','))].join('\n')
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `responsaveis_${new Date().toISOString().split('T')[0]}.csv`
+    link.click()
+    URL.revokeObjectURL(url)
   }
 
 
@@ -436,7 +464,7 @@ export default function ResponsaveisPage() {
           <button className="neo-btn neo-btn-secondary" style={{ gap: 8 }}>
             <Filter size={16} /> Filtros
           </button>
-          <button className="neo-btn neo-btn-secondary" style={{ gap: 8 }}>
+          <button onClick={handleExportCSV} className="neo-btn neo-btn-secondary" style={{ gap: 8 }}>
             <Download size={16} /> Exportar
           </button>
         </div>
@@ -1149,6 +1177,109 @@ export default function ResponsaveisPage() {
                             onChange={e => handleInputChange('rfid', e.target.value, index)} 
                           />
                         </div>
+                      </div>
+                    </div>
+
+                    {/* Linha 2.5: Documentos, Nascimento, Profissão e Endereço */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 10 }}>
+                      <div>
+                        <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.03em', marginBottom: 4 }}>
+                          CPF
+                        </label>
+                        <input
+                          className="form-input"
+                          style={{ width: '100%', height: 32, padding: '0 8px', fontSize: 12, borderRadius: 6, background: '#fff' }}
+                          placeholder="000.000.000-00"
+                          value={resp.cpf || ''}
+                          onChange={e => handleInputChange('cpf', e.target.value, index)}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.03em', marginBottom: 4 }}>
+                          RG
+                        </label>
+                        <input
+                          className="form-input"
+                          style={{ width: '100%', height: 32, padding: '0 8px', fontSize: 12, borderRadius: 6, background: '#fff' }}
+                          placeholder="RG"
+                          value={resp.rg || ''}
+                          onChange={e => handleInputChange('rg', e.target.value, index)}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.03em', marginBottom: 4 }}>
+                          Data de Nasc.
+                        </label>
+                        <input
+                          type="date"
+                          className="form-input"
+                          style={{ width: '100%', height: 32, padding: '0 8px', fontSize: 12, borderRadius: 6, background: '#fff' }}
+                          value={resp.dataNasc || (resp as any).data_nasc || ''}
+                          onChange={e => handleInputChange('dataNasc', e.target.value, index)}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.03em', marginBottom: 4 }}>
+                          Profissão
+                        </label>
+                        <input
+                          className="form-input"
+                          style={{ width: '100%', height: 32, padding: '0 8px', fontSize: 12, borderRadius: 6, background: '#fff' }}
+                          placeholder="Ex: Engenheiro(a)"
+                          value={resp.profissao || ''}
+                          onChange={e => handleInputChange('profissao', e.target.value, index)}
+                        />
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr 1.2fr 1.2fr', gap: 10 }}>
+                      <div>
+                        <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.03em', marginBottom: 4 }}>
+                          CEP
+                        </label>
+                        <input
+                          className="form-input"
+                          style={{ width: '100%', height: 32, padding: '0 8px', fontSize: 12, borderRadius: 6, background: '#fff' }}
+                          placeholder="00000-000"
+                          value={resp.cep || ''}
+                          onChange={e => handleInputChange('cep', e.target.value, index)}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.03em', marginBottom: 4 }}>
+                          Endereço (Logradouro / Nº)
+                        </label>
+                        <input
+                          className="form-input"
+                          style={{ width: '100%', height: 32, padding: '0 8px', fontSize: 12, borderRadius: 6, background: '#fff' }}
+                          placeholder="Rua, Número, Compl."
+                          value={typeof (resp as any).endereco === 'object' ? ((resp as any).endereco?.logradouro || '') : (resp.endereco || (resp as any).logradouro || '')}
+                          onChange={e => handleInputChange('endereco', e.target.value, index)}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.03em', marginBottom: 4 }}>
+                          Bairro
+                        </label>
+                        <input
+                          className="form-input"
+                          style={{ width: '100%', height: 32, padding: '0 8px', fontSize: 12, borderRadius: 6, background: '#fff' }}
+                          placeholder="Bairro"
+                          value={resp.bairro || ''}
+                          onChange={e => handleInputChange('bairro', e.target.value, index)}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.03em', marginBottom: 4 }}>
+                          Cidade / UF
+                        </label>
+                        <input
+                          className="form-input"
+                          style={{ width: '100%', height: 32, padding: '0 8px', fontSize: 12, borderRadius: 6, background: '#fff' }}
+                          placeholder="Cidade"
+                          value={resp.cidade || ''}
+                          onChange={e => handleInputChange('cidade', e.target.value, index)}
+                        />
                       </div>
                     </div>
 

@@ -629,18 +629,42 @@ export function FloatingChat() {
     }
   }, [activeTab, contactsData.turmas, prefetchTurma])
 
-  // Ouvir atualizações de conversas vindas do realtime
+  // Ouvir atualizações de conversas vindas do realtime (apenas quando a gaveta estiver aberta, evitando thundering herd em background)
   useEffect(() => {
-    const handleConvUpdated = () => {
-      loadConversations()
+    if (!isDrawerOpen) return
+    let timer: ReturnType<typeof setTimeout> | null = null
+    const handleConvUpdated = (e?: any) => {
+      const msg = e?.detail
+      // Se veio uma mensagem realtime de uma conversa existente na lista, atualiza preview em memória imediatamente
+      if (msg && msg.conversation_id) {
+        setConversations(prev => {
+          const exists = prev.some(c => c.id === msg.conversation_id)
+          if (!exists) return prev
+          return prev.map(c =>
+            c.id === msg.conversation_id
+              ? {
+                  ...c,
+                  lastMessageText: msg.content || c.lastMessageText,
+                  lastMessageAt: msg.created_at || new Date().toISOString(),
+                  lastMessageBy: msg.sender_name || c.lastMessageBy,
+                  unreadCount: (c.unreadCount || 0) + 1
+                }
+              : c
+          )
+        })
+      }
+      if (timer) clearTimeout(timer)
+      timer = setTimeout(() => {
+        timer = null
+        loadConversations(true, chatViewMode)
+      }, 250)
     }
     window.addEventListener('chat:conversation-updated' as any, handleConvUpdated)
-    window.addEventListener('chat:unread-changed' as any, handleConvUpdated)
     return () => {
+      if (timer) clearTimeout(timer)
       window.removeEventListener('chat:conversation-updated' as any, handleConvUpdated)
-      window.removeEventListener('chat:unread-changed' as any, handleConvUpdated)
     }
-  }, [])
+  }, [isDrawerOpen, chatViewMode, activeAlunoId])
 
   const lastArchiveUpdated = useChatStore(s => s.lastArchiveUpdated)
 

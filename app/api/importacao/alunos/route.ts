@@ -314,6 +314,28 @@ export async function POST(request: Request) {
               extraData.historicoTurmas = [...histAnterior]
             }
           }
+
+          // Sincronizar também historicoMatriculas usado pelos Relatórios de Retenção/Progressão
+          const matEntry = {
+            ano: String(novoVinculo.anoLetivo),
+            turma: resolvedTurmaId,
+            serie: resolvedSerie || '',
+            segmento: resolvedSegmento || '',
+            status: filteredAlunoData.status || existingAluno?.status || 'matriculado'
+          }
+          const histMatAnterior = Array.isArray(existingAluno?.dados?.historicoMatriculas) ? existingAluno.dados.historicoMatriculas : []
+          if (tipoTurmaConfig === 'substituir') {
+            extraData.historicoMatriculas = [matEntry]
+          } else {
+            const mIdx = histMatAnterior.findIndex((m: any) => String(m.ano || m.anoLetivo) === matEntry.ano)
+            if (mIdx === -1) {
+              extraData.historicoMatriculas = [...histMatAnterior, matEntry]
+            } else {
+              const nextMat = [...histMatAnterior]
+              nextMat[mIdx] = { ...nextMat[mIdx], ...matEntry }
+              extraData.historicoMatriculas = nextMat
+            }
+          }
         }
 
         // Tag do lote para rastreabilidade e rollback
@@ -497,15 +519,17 @@ export async function POST(request: Request) {
     // 6. INATIVAÇÃO DE AUSENTES (Executa somente no último chunk se solicitado)
     if (isLastChunk && inativarAusentes && processedAlunoIds.length > 0) {
       console.log(`[Import] Inativando alunos não listados na planilha (${processedAlunoIds.length} ativos preservados)...`)
-      
-      const { data: absentStudents } = await supabase
+      const processedSet = new Set(processedAlunoIds.map(String))
+      const { data: activeStudents } = await supabase
         .from('alunos')
         .select('id')
-        .not('id', 'in', `(${processedAlunoIds.map(id => `'${id}'`).join(',')})`)
         .neq('status', 'inativo')
 
-      if (absentStudents && absentStudents.length > 0) {
-        const absentIds = absentStudents.map((s: any) => s.id)
+      const absentIds = (activeStudents || [])
+        .map((s: any) => String(s.id))
+        .filter((id: string) => !processedSet.has(id))
+
+      if (absentIds.length > 0) {
         batchTracker.alunosInativados = absentIds
 
         await supabase

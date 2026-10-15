@@ -45,7 +45,11 @@ export async function POST(request: Request) {
       )
     }
 
-    const emailDestino = (body.email_destinatario || contrato.responsavel_email || '').trim()
+    const { resolveUserRole } = await import('@/lib/server/authGuard')
+    const roleCtx = await resolveUserRole(request)
+    const isStaff = roleCtx.isStaff
+
+    const emailDestino = ((isStaff ? body.email_destinatario : contrato.responsavel_email) || contrato.responsavel_email || '').trim()
     if (!emailDestino || !emailDestino.includes('@')) {
       return NextResponse.json(
         { error: 'Endereço de e-mail de destino inválido.' },
@@ -80,14 +84,6 @@ export async function POST(request: Request) {
     })
 
     if (!emailResult.success) {
-      adicionarEventoAuditoriaEmMemoria(
-        contrato,
-        'FALHA_REENVIO_COPIA_EMAIL',
-        `Tentativa de reenvio da via do contrato para ${emailDestino} falhou: ${emailResult.error || 'Instabilidade temporária'}`,
-        clientIp
-      )
-      await salvarContrato(contrato)
-
       return NextResponse.json(
         {
           success: false,
@@ -97,23 +93,17 @@ export async function POST(request: Request) {
       )
     }
 
-    // 4. Registra evento de reenvio na trilha imutável
-    adicionarEventoAuditoriaEmMemoria(
-      contrato,
-      'REENVIO_COPIA_EMAIL',
-      `Via oficial do contrato assinado (PDF) reenviada para ${emailDestino}${emailResult.messageId ? ` (ID: ${emailResult.messageId})` : ''}`,
-      clientIp
-    )
-
+    // 4. Registra metadados de reenvio em evidencias (sem alterar historico_eventos já selado no PDF)
     contrato.evidencias = {
       ...contrato.evidencias,
       ultimoReenvioEmailEm: new Date().toISOString(),
       ultimoReenvioEmailDestino: emailDestino,
       ultimoReenvioMessageId: emailResult.messageId || null,
+      ultimoReenvioIp: clientIp,
     }
 
-    // Atualiza email cadastrado caso o usuário tenha corrigido
-    if (body.atualizar_email_cadastro && emailDestino !== contrato.responsavel_email) {
+    // Atualiza email cadastrado apenas se o requisitante for staff autenticado
+    if (isStaff && body.atualizar_email_cadastro && emailDestino !== contrato.responsavel_email) {
       contrato.responsavel_email = emailDestino
     }
 

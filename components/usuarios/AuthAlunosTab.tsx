@@ -185,9 +185,9 @@ export function AuthAlunosTab() {
     const effectiveEmail = rawStudentEmail || (authRecord?.email || '').trim()
     const effectivePhone = studentPhone || (authRecord?.celular || authRecord?.telefone || '').trim()
 
-    // Tenta encontrar o usuário real no banco (mapeado pelo e-mail)
     const searchEmail = effectiveEmail.toLowerCase()
-    const realUser = usersData?.find(u => u.email?.toLowerCase() === searchEmail && u.perfil === 'Família')
+    const usersList: any[] = Array.isArray(usersData) ? usersData : (Array.isArray((usersData as any)?.data) ? (usersData as any).data : [])
+    const realUser = usersList.find(u => u.email?.toLowerCase() === searchEmail && u.perfil === 'Família')
 
     // Virtual record automatically linking the user to FAMILIA and ATIVO
     const defaultAuth = {

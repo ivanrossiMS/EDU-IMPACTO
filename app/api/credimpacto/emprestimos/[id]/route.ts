@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/server/authGuard'
 import { dbGetEmprestimoById, dbSaveEmprestimo, dbGetConfiguracao } from '@/lib/credimpacto/db'
-import { resolveCredImpactoUser } from '@/lib/credimpacto/authHelper'
+import { resolveCredImpactoUser, isLoanOwnedByUser } from '@/lib/credimpacto/authHelper'
 import { simulateLoan } from '@/lib/credimpacto/engine'
 import { generateContractHtml } from '@/lib/credimpacto/contractTemplate'
 import crypto from 'crypto'
@@ -22,7 +22,7 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
     }
 
     // Valida acesso: somente o próprio colaborador ou administrador/financeiro
-    if (!resolved.isAdminOrFinance && loan.colaboradorId !== resolved.id && loan.colaboradorEmail !== resolved.email) {
+    if (!resolved.isAdminOrFinance && !isLoanOwnedByUser(loan, resolved)) {
       return NextResponse.json({ error: 'Acesso não autorizado a esta operação.' }, { status: 403 })
     }
 
@@ -261,7 +261,7 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
     // 2. AÇÃO: RESPONDER CONTRAPROPOSTA — Pelo Colaborador
     // ─────────────────────────────────────────────────────────────────────────
     if (acao === 'responder_contraproposta') {
-      const isOwner = loan.colaboradorId === resolved.id || loan.colaboradorEmail === resolved.email
+      const isOwner = isLoanOwnedByUser(loan, resolved)
       if (!isOwner && !resolved.isAdminOrFinance) {
         return NextResponse.json({ error: 'Apenas o colaborador titular pode responder à contraproposta.' }, { status: 403 })
       }
@@ -384,6 +384,9 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
     // 4. AÇÃO: CANCELAR OPERAÇÃO
     // ─────────────────────────────────────────────────────────────────────────
     if (acao === 'cancelar') {
+      if (!resolved.isAdminOrFinance && !isLoanOwnedByUser(loan, resolved)) {
+        return NextResponse.json({ error: 'Acesso não autorizado para cancelar esta operação.' }, { status: 403 })
+      }
       if (loan.status === 'ativo' || loan.status === 'quitado') {
         return NextResponse.json({ error: 'Operações ativas ou quitadas não podem ser canceladas diretamente. Utilize estorno ou liquidação.' }, { status: 400 })
       }
@@ -407,7 +410,7 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
     // 5. AÇÃO: ATUALIZAR DADOS BANCÁRIOS / CHAVE PIX
     // ─────────────────────────────────────────────────────────────────────────
     if (acao === 'atualizar_dados_bancarios') {
-      const isOwner = loan.colaboradorId === resolved.id || loan.colaboradorEmail === resolved.email
+      const isOwner = isLoanOwnedByUser(loan, resolved)
       if (!isOwner && !resolved.isAdminOrFinance) {
         return NextResponse.json({ error: 'Acesso não autorizado para atualizar dados bancários desta operação.' }, { status: 403 })
       }
@@ -437,7 +440,7 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
     // 6. AÇÃO: ATUALIZAR TELEFONE / WHATSAPP DO COLABORADOR
     // ─────────────────────────────────────────────────────────────────────────
     if (acao === 'atualizar_telefone_colaborador') {
-      const isOwner = loan.colaboradorId === resolved.id || loan.colaboradorEmail === resolved.email
+      const isOwner = isLoanOwnedByUser(loan, resolved)
       if (!isOwner && !resolved.isAdminOrFinance) {
         return NextResponse.json({ error: 'Acesso não autorizado.' }, { status: 403 })
       }

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/server/authGuard'
+import { requireAuth, requireStaff } from '@/lib/server/authGuard'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 import { getLoggedUserAccessStartDate } from '@/lib/server/visibility'
 
@@ -35,7 +35,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const { user, errorResponse } = await requireAuth()
+  const { errorResponse } = await requireStaff(request)
   if (errorResponse) return errorResponse
 
   try {

@@ -71,7 +71,10 @@ const PUBLIC_PATHS = [
 
 function isPublicPath(pathname: string): boolean {
   if (pathname === '/') return true
-  return PUBLIC_PATHS.some(p => pathname.startsWith(p))
+  return PUBLIC_PATHS.some(p => {
+    if (p === '/pesquisa') return pathname === '/pesquisa' || pathname.startsWith('/pesquisa/')
+    return pathname.startsWith(p)
+  })
 }
 
 function getProjectRef(): string {

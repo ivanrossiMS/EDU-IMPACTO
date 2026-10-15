@@ -136,9 +136,8 @@ export function useChatRealtime(alunoId?: string) {
                 })
               }).catch(() => {})
             } else {
-              // Disparar evento para atualizar a lista de conversas e contagem oficial
+              // Disparar evento único para atualizar lista de conversas (se aberta) e contagem de não lidos (com debounce)
               window.dispatchEvent(new CustomEvent('chat:conversation-updated', { detail: newMsg }))
-              window.dispatchEvent(new CustomEvent('chat:unread-changed'))
             }
           }
         )

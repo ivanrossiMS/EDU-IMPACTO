@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/server/authGuard'
 import { dbGetEmprestimoById, dbProcessarQuitacaoAntecipada } from '@/lib/credimpacto/db'
-import { resolveCredImpactoUser } from '@/lib/credimpacto/authHelper'
+import { resolveCredImpactoUser, isLoanOwnedByUser } from '@/lib/credimpacto/authHelper'
 import { calculateEarlyPayoff } from '@/lib/credimpacto/engine'
 
 export const dynamic = 'force-dynamic'
@@ -24,7 +24,7 @@ export async function POST(request: Request) {
     }
 
     const resolved = await resolveCredImpactoUser(user)
-    if (!resolved.isAdminOrFinance && loan.colaboradorId !== resolved.id && loan.colaboradorEmail !== resolved.email) {
+    if (!resolved.isAdminOrFinance && !isLoanOwnedByUser(loan, resolved)) {
       return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 })
     }
 

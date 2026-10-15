@@ -36,10 +36,10 @@ export default function TarefasPage() {
   const { currentUser: authUser } = useApp()
   const currentUser: any = authUser || {}
   
-  const { data: usersData } = useApiQuery<any[]>(['system-users'], '/api/configuracoes/usuarios', [])
+  const { data: usersData } = useApiQuery<any>(['system-users'], '/api/configuracoes/usuarios', [])
   const colaboradores = useMemo(() => {
-    if (!usersData) return []
-    return usersData.filter((u: any) => u.perfil !== 'Família' && u.status === 'ativo')
+    const list: any[] = Array.isArray(usersData) ? usersData : (Array.isArray((usersData as any)?.data) ? (usersData as any).data : [])
+    return list.filter((u: any) => u.perfil !== 'Família' && u.status === 'ativo')
   }, [usersData])
 
   const isLoading = false

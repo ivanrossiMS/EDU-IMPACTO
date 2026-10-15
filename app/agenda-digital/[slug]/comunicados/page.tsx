@@ -552,9 +552,17 @@ export default function ADComunicadosPage({ params }: { params: any }) {
   const hasResponded = !!previousSubmission;
 
   
+  const isAlunoLogado = Boolean(
+    searchParams?.get('espelhar_aluno') === 'true' ||
+    currentUser?.cargo === 'Aluno' ||
+    currentUser?.perfil === 'Aluno' ||
+    (currentUser as any)?.userType === 'aluno' ||
+    ((currentUser as any)?.aluno_id && currentUser?.cargo !== 'Responsável' && !(currentUser as any)?.responsavel_id)
+  );
+
   const handleCiencia = async (comunicadoId: string) => {
     const isMirroringMode = !!(searchParams.get('espelhar_aluno') || searchParams.get('espelhar_responsavel') || searchParams.get('espelhar_colaborador'));
-    if (isMirroringMode) return;
+    if (isMirroringMode || isAlunoLogado) return;
     
     const nowIso = new Date().toISOString()
     const cId = String(comunicadoId);
@@ -1566,7 +1574,7 @@ export default function ADComunicadosPage({ params }: { params: any }) {
                         {isCiencia ? 'Ciência registrada. Obrigado!' : 'Este comunicado exige a sua ciência obrigatória.'}
                       </div>
                       {!isCiencia ? (
-                        !isMirroring && (
+                        !isMirroring && !isAlunoLogado && (
                           <button 
                              onClick={(e) => { e.stopPropagation(); handleCiencia(c.id) }} 
                              className="btn" 

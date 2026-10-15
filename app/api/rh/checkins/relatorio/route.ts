@@ -1,12 +1,21 @@
 import { NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/server/authGuard'
+import { resolveUserRole } from '@/lib/server/authGuard'
 import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: Request) {
-  const { user, errorResponse } = await requireAuth()
-  if (errorResponse) return errorResponse
+  const roleCtx = await resolveUserRole(request)
+  if (roleCtx.errorResponse) return roleCtx.errorResponse
+  const p = String(roleCtx.perfil || '').toLowerCase()
+  const c = String(roleCtx.cargo || '').toLowerCase()
+  const isAllowed = roleCtx.isStaff && (
+    p.includes('admin') || p.includes('master') || p.includes('diret') || p.includes('rh') || p.includes('psic') ||
+    c.includes('rh') || c.includes('psic') || c.includes('recursos humanos') || c.includes('diret')
+  )
+  if (!isAllowed) {
+    return NextResponse.json({ error: 'Acesso restrito ao RH, Psicologia e Diretoria.' }, { status: 403 })
+  }
 
   const { searchParams } = new URL(request.url)
   const dataInicio = searchParams.get('data_inicio')

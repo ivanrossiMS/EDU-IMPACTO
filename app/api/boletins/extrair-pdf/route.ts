@@ -1,10 +1,14 @@
 import { NextResponse } from 'next/server'
 import { GoogleGenAI, Type, Schema } from '@google/genai'
+import { requireStaff } from '@/lib/server/authGuard'
 
 export const maxDuration = 60
 export const dynamic = 'force-dynamic'
 
 export async function POST(req: Request) {
+  const { errorResponse } = await requireStaff(req)
+  if (errorResponse) return errorResponse
+
   try {
     const formData = await req.formData()
     const file = formData.get('file') as File
@@ -114,7 +118,7 @@ Mantenha o formato original exatamente como impresso no PDF (números como "9,50
     }
 
     // Modelos em ordem de preferência (com timeout de segurança por tentativa)
-    const modelsToTry = ['gemini-2.5-flash', 'gemini-3.5-flash']
+    const modelsToTry = ['gemini-2.5-flash']
     let text = ''
     let lastError: any = null
 

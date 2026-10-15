@@ -231,11 +231,11 @@ export async function GET(req: Request) {
       }
     })
 
-    const alunosData = await fetchAll('alunos', 'id, nome, email, dados, matricula')
+    const alunosData = await fetchAll('alunos', 'id, nome, email, matricula')
 
     const mappedAlunos = (alunosData || []).reduce((acc: any[], aluno: any) => {
-       const alunoEmail = (aluno.email || aluno.dados?.email || '').trim().toLowerCase()
-       const virtualEmail = `aluno.${aluno.matricula || aluno.dados?.codigo || aluno.id}@impactoedu.local`.toLowerCase()
+       const alunoEmail = (aluno.email || '').trim().toLowerCase()
+       const virtualEmail = `aluno.${aluno.matricula || aluno.id}@impactoedu.local`.toLowerCase()
        
        const authUser = authMap.get(alunoEmail) || authMap.get(virtualEmail)
        
@@ -256,17 +256,19 @@ export async function GET(req: Request) {
     const respData = await fetchAll('responsaveis', 'id, nome, email')
     const linksData = await fetchAll('aluno_responsavel', 'responsavel_id, resp_financeiro, resp_pedagogico')
 
+    const activeRespIds = new Set(
+      (linksData || [])
+        .filter((l: any) => l.resp_financeiro === true || l.resp_pedagogico === true)
+        .map((l: any) => String(l.responsavel_id))
+    )
+
     const mappedResps: any[] = []
 
     if (respData && Array.isArray(respData)) {
       respData.forEach((resp: any) => {
+        if (!activeRespIds.has(String(resp.id))) return
+
         const email = (resp.email || '').trim().toLowerCase()
-
-        const links = (linksData || []).filter((l: any) => String(l.responsavel_id) === String(resp.id))
-        const hasActiveLink = links.some((l: any) => l.resp_financeiro === true || l.resp_pedagogico === true)
-        
-        if (!hasActiveLink) return
-
         const authUser = email ? authMap.get(email) : undefined
 
         mappedResps.push({

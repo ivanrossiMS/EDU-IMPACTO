@@ -66,26 +66,6 @@ export default function ColaboradorOcorrenciasPage() {
     }
   }, [selectedStudentForModal])
 
-  // Realtime updates
-  useAgendaRealtime({
-    table: 'ocorrencias',
-    toastConfig: {
-      enabled: true,
-      insertMessage: () => 'Nova ocorrência registrada na turma!',
-      updateMessage: () => 'Ocorrência disciplinar atualizada!',
-      icon: <AlertTriangle size={18} color="#ef4444" />
-    },
-    onInsert: () => {
-      queryClient.invalidateQueries({ queryKey: ['ocorrencias-colaborador'] })
-    },
-    onUpdate: () => {
-      queryClient.invalidateQueries({ queryKey: ['ocorrencias-colaborador'] })
-    },
-    onDelete: () => {
-      queryClient.invalidateQueries({ queryKey: ['ocorrencias-colaborador'] })
-    }
-  })
-
   // 1. Fetch Students
   const { data: rawAlunos, isLoading: isLoadingAlunos } = useApiQuery<any>(
     ['alunos-colaborador-ocorrencias'],
@@ -111,7 +91,12 @@ export default function ColaboradorOcorrenciasPage() {
 
   useAgendaRealtime({
     table: 'ocorrencias',
-    toastConfig: { enabled: false },
+    toastConfig: {
+      enabled: true,
+      insertMessage: () => 'Nova ocorrência registrada na turma!',
+      updateMessage: () => 'Ocorrência disciplinar atualizada!',
+      icon: <AlertTriangle size={18} color="#ef4444" />
+    },
     onInsert: () => {
       queryClient.invalidateQueries({ queryKey: ['ocorrencias-colaborador'] })
       refetchOcorrencias()
@@ -643,46 +628,35 @@ export default function ColaboradorOcorrenciasPage() {
                   }}
                 >
                   {/* Top Info */}
-                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
-                    <div className="ocorrencias-student-avatar">
-                      <UserAvatar
-                        userId={st.id}
-                        name={st.nome || 'Aluno'}
-                        fotoUrl={st.foto || st.avatar_url || st.avatar}
-                        size={46}
-                        className="shadow-sm"
-                      />
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <h3 className="ocorrencias-student-name" style={{ 
-                        fontSize: 16, 
-                        fontWeight: 800, 
-                        color: '#0f172a', 
-                        margin: '0 0 4px 0',
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis'
-                      }}>
-                        {st.nome}
-                      </h3>
+                  <div style={{ minWidth: 0 }}>
+                    <h3 className="ocorrencias-student-name" style={{ 
+                      fontSize: 16, 
+                      fontWeight: 800, 
+                      color: '#0f172a', 
+                      margin: '0 0 6px 0',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis'
+                    }}>
+                      {st.nome}
+                    </h3>
 
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                        <span style={{ 
-                          fontSize: 12, 
-                          fontWeight: 700, 
-                          color: '#2563eb', 
-                          background: '#eff6ff', 
-                          padding: '2px 8px', 
-                          borderRadius: 6 
-                        }}>
-                          {st.turmaDisplay}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      <span style={{ 
+                        fontSize: 12, 
+                        fontWeight: 700, 
+                        color: '#2563eb', 
+                        background: '#eff6ff', 
+                        padding: '2px 8px', 
+                        borderRadius: 6 
+                      }}>
+                        {st.turmaDisplay}
+                      </span>
+                      {st.matricula && (
+                        <span style={{ fontSize: 12, color: '#94a3b8', fontWeight: 500 }}>
+                          Matr: {st.matricula}
                         </span>
-                        {st.matricula && (
-                          <span style={{ fontSize: 12, color: '#94a3b8', fontWeight: 500 }}>
-                            Matr: {st.matricula}
-                          </span>
-                        )}
-                      </div>
+                      )}
                     </div>
                   </div>
 
@@ -860,15 +834,9 @@ export default function ColaboradorOcorrenciasPage() {
                           {/* Header: Aluno + Gravidade */}
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, flexWrap: 'wrap', gap: 10 }}>
                             <div 
-                              style={{ display: 'flex', alignItems: 'center', gap: 12, cursor: aluno ? 'pointer' : 'default' }}
+                              style={{ display: 'flex', alignItems: 'center', cursor: aluno ? 'pointer' : 'default' }}
                               onClick={() => aluno && setSelectedStudentForModal(aluno)}
                             >
-                              <UserAvatar
-                                userId={aluno?.id}
-                                name={aluno?.nome || 'Aluno'}
-                                fotoUrl={aluno?.foto || aluno?.avatar_url || aluno?.avatar}
-                                size={40}
-                              />
                               <div>
                                 <div style={{ fontSize: 15, fontWeight: 800, color: '#0f172a' }}>
                                   {aluno?.nome || 'Aluno'}

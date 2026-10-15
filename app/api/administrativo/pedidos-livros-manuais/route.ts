@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/server/authGuard'
+import { requireAuth, requireStaff } from '@/lib/server/authGuard'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: Request) {
-  const { user, errorResponse } = await requireAuth()
+  const { user, errorResponse } = await requireAuth(request)
   if (errorResponse) return errorResponse
 
   try {
@@ -28,23 +28,16 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const { user, errorResponse } = await requireAuth()
+  const { user, errorResponse } = await requireStaff(request)
   if (errorResponse) return errorResponse
 
   try {
     const body = await request.json()
     const supabase = await createProtectedClient()
 
-    const { data: { user } } = await supabase.auth.getUser()
     let usuarioNome = 'Sistema'
     if (user) {
-      usuarioNome = user.user_metadata?.nome || user.user_metadata?.name || user.email || 'Sistema'
-      const { data: dbUser } = await supabase
-        .from('system_users')
-        .select('nome')
-        .eq('id', user.id)
-        .maybeSingle()
-      if (dbUser?.nome) usuarioNome = dbUser.nome
+      usuarioNome = (user as any).nome || user.user_metadata?.nome || user.user_metadata?.name || user.email || 'Sistema'
     }
 
     const processItem = (item: any) => {
@@ -58,26 +51,16 @@ export async function POST(request: Request) {
 
     if (Array.isArray(body)) {
       const rows = body.map(processItem)
-      
-      // Smart sync: Delete records not in the incoming array
-      const incomingIds = rows.map(r => r.id).filter(Boolean)
-      
-      if (incomingIds.length > 0) {
-        // Delete records not in incomingIds
+      const incomingIdSet = new Set(rows.map(r => r.id).filter(Boolean))
+      const { data: existingRows } = await supabase.from('adm_pedidos_livros_manuais').select('id')
+      const toDelete = (existingRows || []).map((r: any) => r.id).filter((id: string) => id && !incomingIdSet.has(id))
+
+      if (toDelete.length > 0) {
         const { error: delError } = await supabase
           .from('adm_pedidos_livros_manuais')
           .delete()
-          .not('id', 'in', `(${incomingIds.join(',')})`)
-          
+          .in('id', toDelete)
         if (delError) console.error('Error deleting stale records:', delError)
-      } else {
-        // If incoming is empty, delete all
-        const { error: delError } = await supabase
-          .from('adm_pedidos_livros_manuais')
-          .delete()
-          .not('id', 'is', null)
-          
-        if (delError) console.error('Error deleting all records:', delError)
       }
 
       if (rows.length > 0) {

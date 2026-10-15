@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/server/authGuard'
+import { requireStaff } from '@/lib/server/authGuard'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 
 export const dynamic = 'force-dynamic'
@@ -228,7 +228,7 @@ const MODELS: Record<string, string[]> = {
 }
 
 export async function GET(request: Request) {
-  const { user, errorResponse } = await requireAuth()
+  const { errorResponse } = await requireStaff(request)
   if (errorResponse) return errorResponse
 
   const { searchParams } = new URL(request.url)
@@ -241,7 +241,7 @@ export async function GET(request: Request) {
 // ─── POST /api/importacao ────────────────────────────────────────────────────
 
 export async function POST(request: Request) {
-  const { user, errorResponse } = await requireAuth()
+  const { errorResponse } = await requireStaff(request)
   if (errorResponse) return errorResponse
 
   try {

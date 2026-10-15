@@ -148,7 +148,7 @@ export async function PUT(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const { errorResponse } = await requireStaff(request)
+  const { user, errorResponse } = await requireStaff(request)
   if (errorResponse) return errorResponse
 
   try {
@@ -159,6 +159,7 @@ export async function POST(request: Request) {
     if (body.action === 'save') {
       const { nomeArquivo, dadosDRE, tipoArquivo = 'pdf', arquivoBase64 } = body
       const { data: userData } = await supabase.auth.getUser()
+      const currentUser = user || userData?.user
 
       const base64ToUse = arquivoBase64 || dadosDRE?._arquivo_base64
 
@@ -176,13 +177,18 @@ export async function POST(request: Request) {
         criado_em: new Date().toISOString()
       }
 
-      if (userData?.user?.id) {
-        itemToSave.usuario_id = userData.user.id
+      if (currentUser?.id) {
+        itemToSave.criado_por = currentUser.id
       }
 
-      // Tenta salvar no Supabase
+      // Tenta salvar no Supabase (sem usuario_id/arquivo_base64 caso o banco rejeite essas colunas)
       try {
-        await supabase.from('dre_uploads').insert(itemToSave)
+        const { arquivo_base64: _b64, usuario_id: _uid, ...dbPayload } = itemToSave
+        const { error: insErr } = await supabase.from('dre_uploads').insert(dbPayload)
+        if (insErr && dbPayload.criado_por) {
+          const { criado_por: _cp, ...dbPayloadFallback } = dbPayload
+          await supabase.from('dre_uploads').insert(dbPayloadFallback)
+        }
       } catch (dbErr) {
         console.warn('Post ao Supabase dre_uploads opcional:', dbErr)
       }

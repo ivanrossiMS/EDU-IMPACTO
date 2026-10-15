@@ -4,7 +4,7 @@ import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 import { supabaseServer } from '@/lib/supabaseServer'
 
 export async function POST(request: Request) {
-  const { user, errorResponse } = await requireAuth()
+  const { user, errorResponse } = await requireAuth(request)
   if (errorResponse) return errorResponse
 
   try {
@@ -12,18 +12,43 @@ export async function POST(request: Request) {
     const body = await request.json()
     const { tipo, id, alunoId } = body
 
-    let isFamily = user.user_metadata?.perfil === 'Família' || user.user_metadata?.cargo === 'Aluno' || user.user_metadata?.cargo === 'Responsável' || !!user.user_metadata?.responsavel_id || !!user.user_metadata?.aluno_id;
+    const metaPerfil = String(user.user_metadata?.perfil || '').trim()
+    const metaCargo = String(user.user_metadata?.cargo || '').trim()
+
+    if (
+      metaPerfil.toLowerCase() === 'aluno' ||
+      metaCargo.toLowerCase() === 'aluno' ||
+      (Boolean(user.user_metadata?.aluno_id) && !user.user_metadata?.responsavel_id && metaCargo !== 'Responsável')
+    ) {
+      return NextResponse.json(
+        { error: 'Apenas responsáveis podem assinar ciência de comunicados e ocorrências.' },
+        { status: 403 }
+      )
+    }
+
+    let isFamily = metaPerfil === 'Família' || metaCargo === 'Responsável' || !!user.user_metadata?.responsavel_id;
     if (!isFamily) {
       const { data: dbUser } = await supabase.from('system_users').select('perfil, cargo').eq('id', user.id).maybeSingle();
       if (dbUser) {
-        isFamily = dbUser.perfil === 'Família' || dbUser.perfil === 'Responsável' || dbUser.cargo === 'Aluno' || dbUser.cargo === 'Responsável'
+        if (String(dbUser.perfil || '').toLowerCase() === 'aluno' || String(dbUser.cargo || '').toLowerCase() === 'aluno') {
+          return NextResponse.json(
+            { error: 'Apenas responsáveis podem assinar ciência de comunicados e ocorrências.' },
+            { status: 403 }
+          )
+        }
+        isFamily = dbUser.perfil === 'Família' || dbUser.perfil === 'Responsável' || dbUser.cargo === 'Responsável'
       } else {
-        const { data: respUser } = await supabase.from('responsaveis').select('id').eq('id', user.id).maybeSingle();
+        const { data: respUser } = await supabase.from('responsaveis').select('id').or(`id.eq.${user.id},auth_id.eq.${user.id}`).maybeSingle();
         if (respUser) {
           isFamily = true;
         } else {
           const { data: alunoUser } = await supabase.from('alunos').select('id').eq('id', user.id).maybeSingle();
-          if (alunoUser) isFamily = true;
+          if (alunoUser) {
+            return NextResponse.json(
+              { error: 'Apenas responsáveis podem assinar ciência de comunicados e ocorrências.' },
+              { status: 403 }
+            )
+          }
         }
       }
     }
@@ -31,8 +56,6 @@ export async function POST(request: Request) {
     if (isFamily) {
       if (user.user_metadata?.responsavel_id) {
         readerId = String(user.user_metadata.responsavel_id);
-      } else if (user.user_metadata?.aluno_id) {
-        readerId = String(user.user_metadata.aluno_id);
       }
     }
 

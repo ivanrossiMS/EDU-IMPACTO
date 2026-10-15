@@ -1,12 +1,24 @@
 import { NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/server/authGuard'
+import { resolveUserRole } from '@/lib/server/authGuard'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET() {
-  const { errorResponse } = await requireAuth()
-  if (errorResponse) return errorResponse
+function isHrOrAdmin(perfil?: string | null, cargo?: string | null): boolean {
+  const p = String(perfil || '').toLowerCase()
+  const c = String(cargo || '').toLowerCase()
+  return (
+    p.includes('admin') || p.includes('master') || p.includes('diret') || p.includes('rh') ||
+    c.includes('rh') || c.includes('recursos humanos') || c.includes('diret')
+  )
+}
+
+export async function GET(request: Request) {
+  const roleCtx = await resolveUserRole(request)
+  if (roleCtx.errorResponse) return roleCtx.errorResponse
+  if (!roleCtx.isStaff || !isHrOrAdmin(roleCtx.perfil, roleCtx.cargo)) {
+    return NextResponse.json({ error: 'Acesso restrito ao RH e Diretoria.' }, { status: 403 })
+  }
 
   try {
     const supabase = await createProtectedClient()
@@ -52,8 +64,11 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const { errorResponse } = await requireAuth()
-  if (errorResponse) return errorResponse
+  const roleCtx = await resolveUserRole(request)
+  if (roleCtx.errorResponse) return roleCtx.errorResponse
+  if (!roleCtx.isStaff || !isHrOrAdmin(roleCtx.perfil, roleCtx.cargo)) {
+    return NextResponse.json({ error: 'Acesso restrito ao RH e Diretoria.' }, { status: 403 })
+  }
 
   try {
     const supabase = await createProtectedClient()

@@ -16,68 +16,66 @@ export async function GET(request: Request) {
 
   try {
     const supabase = await createProtectedClient()
-    
+
     let query = supabase
       .from('gp_assinaturas')
-      .select('*, system_users!gp_assinaturas_user_id_fkey(nome, cargo)')
+      .select('*')
       .order('created_at', { ascending: false })
 
     if (entidade_id) {
       query = query.eq('entidade_id', entidade_id)
     }
 
-    const { data, error } = await query
-    
-    // Fallback manual join se o fkey falhar por falta de config no Supabase
-    if (error && error.code === 'PGRST200') {
-      // Fetch without join
-      const { data: rawData, error: rawError } = await supabase
-        .from('gp_assinaturas')
-        .select('*')
-        .order('created_at', { ascending: false })
-      
-      if (entidade_id) {
-        // filter is manual or via query
+    const { data: assinaturas, error: assinaturasError } = await query
+    if (assinaturasError) throw assinaturasError
+
+    const userIds = [...new Set((assinaturas || []).map(a => a.user_id).filter(Boolean))]
+    const supabaseAdmin = getAdminClient()
+    const usersMap: Record<string, { nome: string; cargo: string; email: string }> = {}
+
+    if (userIds.length > 0) {
+      const { data: sysUsers } = await supabaseAdmin
+        .from('system_users')
+        .select('id, auth_id, nome, cargo, email')
+        .or(`id.in.(${userIds.join(',')}),auth_id.in.(${userIds.join(',')})`)
+
+      for (const su of sysUsers || []) {
+        const entry = {
+          nome: su.nome || su.email?.split('@')[0] || 'Usuário Desconhecido',
+          cargo: su.cargo || 'Colaborador',
+          email: su.email || ''
+        }
+        if (su.id) usersMap[su.id] = entry
+        if (su.auth_id) usersMap[su.auth_id] = entry
+      }
+
+      const missingIds = userIds.filter(uid => !usersMap[uid])
+      if (missingIds.length > 0) {
+        await Promise.all(missingIds.map(async (uid) => {
+          try {
+            const { data: userAuth } = await supabaseAdmin.auth.admin.getUserById(uid)
+            if (userAuth?.user) {
+              usersMap[uid] = {
+                nome: userAuth.user.user_metadata?.nome || userAuth.user.email?.split('@')[0] || 'Usuário Desconhecido',
+                cargo: userAuth.user.user_metadata?.cargo || 'Colaborador',
+                email: userAuth.user.email || ''
+              }
+            }
+          } catch (err) {
+            console.error('Error fetching user', uid, err)
+          }
+        }))
       }
     }
-    
-    // To make it simple and bulletproof, fetch users manually if join fails
-    const { data: assinaturas, error: assinaturasError } = await supabase
-      .from('gp_assinaturas')
-      .select('*')
-      .eq('entidade_id', entidade_id || '')
-      .order('created_at', { ascending: false })
-      
-    if (assinaturasError) throw assinaturasError
-    
-    // Fetch user details from Supabase Auth directly to ensure accuracy
-    const userIds = [...new Set(assinaturas?.map(a => a.user_id) || [])]
-    const supabaseAdmin = getAdminClient()
-    const usersMap: any = {}
-    
-    await Promise.all(userIds.map(async (uid) => {
-      try {
-        const { data: userAuth } = await supabaseAdmin.auth.admin.getUserById(uid)
-        if (userAuth?.user) {
-          usersMap[uid] = {
-             nome: userAuth.user.user_metadata?.nome || userAuth.user.email?.split('@')[0] || 'Usuário Desconhecido',
-             cargo: userAuth.user.user_metadata?.cargo || 'Colaborador',
-             email: userAuth.user.email || ''
-          }
-        }
-      } catch (err) {
-        console.error('Error fetching user', uid, err)
-      }
-    }))
-    
-    const enrichedData = assinaturas?.map(a => ({
+
+    const enrichedData = (assinaturas || []).map(a => ({
       ...a,
-      user_nome: usersMap[a.user_id]?.nome || 'Usuário Desconhecido',
-      user_cargo: usersMap[a.user_id]?.cargo || 'Membro',
-      user_email: usersMap[a.user_id]?.email || ''
+      user_nome: a.usuario_nome || usersMap[a.user_id]?.nome || 'Usuário Desconhecido',
+      user_cargo: a.usuario_cargo || usersMap[a.user_id]?.cargo || 'Membro',
+      user_email: a.usuario_email || usersMap[a.user_id]?.email || ''
     }))
 
-    return NextResponse.json(enrichedData || [])
+    return NextResponse.json(enrichedData)
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 400 })
   }

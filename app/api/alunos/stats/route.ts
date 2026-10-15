@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { supabaseServer as supabase } from '@/lib/supabaseServer'
 import { requireAuth } from '@/lib/server/authGuard'
 import { isAlunoIntegralIntermediario } from '@/lib/studentTurmaUtils'
+import { getCachedTurmasAndGrupos } from '@/lib/server/turmasGruposCache'
 
 export const dynamic = 'force-dynamic'
 
@@ -10,10 +11,11 @@ export async function GET(request: Request) {
     const { user, errorResponse } = await requireAuth()
     if (errorResponse) return errorResponse
 
-    // Query leve para buscar os campos necessários para as estatísticas
-    const { data: students, error } = await supabase
-      .from('alunos')
-      .select('id, status, turno, turma, dados')
+    // Query com campos necessários para estatísticas e modalidade integral
+    const [{ data: students, error }, { allTurmas, allGrupos }] = await Promise.all([
+      supabase.from('alunos').select('id, status, turno, turma, serie, unidade, dados'),
+      getCachedTurmasAndGrupos()
+    ])
 
     if (error) {
       console.error('[API alunos/stats] Error:', error)
@@ -35,7 +37,7 @@ export async function GET(request: Request) {
         inativos++
       }
 
-      const isIntegral = isAlunoIntegralIntermediario(s)
+      const isIntegral = isAlunoIntegralIntermediario(s, allTurmas || [], allGrupos || [])
       if (isIntegral) {
         integral++
         if (isAtivo) {

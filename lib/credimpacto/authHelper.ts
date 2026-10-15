@@ -57,13 +57,16 @@ export async function resolveCredImpactoUser(authUser: any): Promise<ResolvedUse
     }
 
     // Se ainda não achou e temos nome confiável
-    if (!dbFunc && dbUser?.nome) {
-      const { data: func3 } = await sb
-        .from('funcionarios')
-        .select('*')
-        .ilike('nome', dbUser.nome.trim())
-        .maybeSingle()
-      if (func3) dbFunc = func3
+    if (!dbFunc && (dbUser?.nome || authUser.user_metadata?.nome)) {
+      const targetName = (dbUser?.nome || authUser.user_metadata?.nome || '').trim()
+      if (targetName) {
+        const { data: func3 } = await sb
+          .from('funcionarios')
+          .select('*')
+          .ilike('nome', targetName)
+          .limit(1)
+        if (Array.isArray(func3) && func3.length > 0) dbFunc = func3[0]
+      }
     }
   } catch (e) {}
 
@@ -103,6 +106,70 @@ export async function resolveCredImpactoUser(authUser: any): Promise<ResolvedUse
     telefone,
     isAdminOrFinance
   }
+}
+
+/**
+ * Verifica de forma resiliente se um empréstimo (ou payload de evento Realtime)
+ * pertence ao usuário autenticado (por Auth ID, Funcionario ID, SystemUser ID, Email, CPF ou Nome).
+ */
+export function isLoanOwnedByUser(
+  loan: {
+    colaboradorId?: string
+    colaboradorEmail?: string
+    colaboradorCpf?: string
+    colaboradorNome?: string
+  } | null | undefined,
+  user: {
+    id?: string
+    systemUserId?: string
+    funcionarioId?: string
+    email?: string
+    cpf?: string
+    nome?: string
+  } | null | undefined
+): boolean {
+  if (!loan || !user) return false
+
+  const cleanStr = (s?: string) =>
+    (s || '')
+      .trim()
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+  const cleanDoc = (s?: string) => (s || '').replace(/\D/g, '')
+
+  if (
+    loan.colaboradorId &&
+    (loan.colaboradorId === user.id ||
+      (user.funcionarioId && loan.colaboradorId === user.funcionarioId) ||
+      (user.systemUserId && loan.colaboradorId === user.systemUserId))
+  ) {
+    return true
+  }
+
+  if (
+    loan.colaboradorEmail &&
+    user.email &&
+    cleanStr(loan.colaboradorEmail) === cleanStr(user.email)
+  ) {
+    return true
+  }
+
+  const loanCpf = cleanDoc(loan.colaboradorCpf)
+  const userCpf = cleanDoc(user.cpf)
+  if (loanCpf.length === 11 && loanCpf !== '00000000000' && loanCpf === userCpf) {
+    return true
+  }
+
+  if (
+    loan.colaboradorNome &&
+    user.nome &&
+    cleanStr(loan.colaboradorNome) === cleanStr(user.nome)
+  ) {
+    return true
+  }
+
+  return false
 }
 
 /**

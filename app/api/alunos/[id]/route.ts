@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { resolveUserRole, requireStaff } from '@/lib/server/authGuard'
 import { supabaseServer as supabase } from '@/lib/supabaseServer'
-import { invalidateAlunosCache } from '@/lib/server/turmasGruposCache'
+import { invalidateAlunosCache, getCachedTurmasAndGrupos } from '@/lib/server/turmasGruposCache'
 import { checkResponsavelRelationship } from '@/lib/server/notificationHelper'
 
 export const dynamic = 'force-dynamic'
@@ -152,8 +152,17 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
 
     let turmaInfo: any = null
     if (student.turma) {
-      const { data: t } = await supabase.from('turmas').select('*').or(`id.eq.${student.turma},codigo.eq.${student.turma},nome.eq.${student.turma}`).limit(1).maybeSingle()
-      turmaInfo = t
+      const { allTurmas } = await getCachedTurmasAndGrupos()
+      turmaInfo = (allTurmas || []).find(
+        (t: any) =>
+          String(t.id) === String(student.turma) ||
+          String(t.codigo) === String(student.turma) ||
+          String(t.nome) === String(student.turma)
+      )
+      if (!turmaInfo) {
+        const { data: t } = await supabase.from('turmas').select('*').or(`id.eq.${student.turma},codigo.eq.${student.turma},nome.eq.${student.turma}`).limit(1).maybeSingle()
+        turmaInfo = t
+      }
     }
 
     const formattedStudent = {

@@ -388,18 +388,37 @@ async function resolveSimpleTable(table: string, filters: Record<string, string>
   const { data } = await supabase.from(table).select('*').order('created_at', { ascending: false }).limit(500)
   if (!data) return []
 
-  return data.filter((row: any) => {
+  const mapped = data.map((row: any) => {
+    if (table === 'ocorrencias') {
+      const dados = typeof row.dados === 'object' && row.dados ? row.dados : {}
+      return {
+        ...row,
+        alunoNome: dados.alunoNome || dados.aluno || row.aluno_nome || row.aluno_id || '',
+        tipoNome: dados.tipo || dados.tipoNome || row.tipo_id || row.titulo || '',
+        descricao: row.descricao || dados.descricao || row.titulo || '',
+        data: row.data || dados.data || (row.created_at ? String(row.created_at).slice(0, 10) : ''),
+        status: row.status || dados.status || 'aberta',
+        turma: dados.turma || row.turma || '',
+        unidade: dados.unidade || row.unidade || '',
+      }
+    }
+    return row
+  })
+
+  return mapped.filter((row: any) => {
     if (filters.busca) {
       const searchable = Object.values(row).join(' ').toLowerCase()
       if (!searchable.includes(filters.busca.toLowerCase())) return false
     }
     if (filters.unidade && row.unidade && !matchFilter(row.unidade, filters.unidade)) return false
+    if (filters.turma && row.turma && !matchFilter(row.turma, filters.turma)) return false
     if (filters.statusFunc && row.status !== filters.statusFunc) return false
     if (filters.perfil && row.perfil && !matchFilter(row.perfil, filters.perfil)) return false
     if (filters.modulo && row.modulo && !matchFilter(row.modulo, filters.modulo)) return false
     if (filters.cargo && row.cargo && !matchFilter(row.cargo, filters.cargo)) return false
-    if (filters.dataInicio && row.data_hora && row.data_hora < filters.dataInicio) return false
-    if (filters.dataFim && row.data_hora && row.data_hora > filters.dataFim + 'T23:59:59') return false
+    const refDate = row.data_hora || row.data || row.created_at
+    if (filters.dataInicio && refDate && refDate < filters.dataInicio) return false
+    if (filters.dataFim && refDate && refDate > filters.dataFim + 'T23:59:59') return false
     return true
   })
 }
@@ -598,6 +617,10 @@ async function resolveAlunosProgressao(filters: Record<string, string>): Promise
             codigo: dados.codigo || a.matricula || a.id.slice(0, 8),
             nome: a.nome,
             unidade: a.unidade || '',
+            turma: prog.disciplina || prog.turma || '',
+            serie: prog.serie || '',
+            turno: prog.turno || '',
+            status: prog.resultado || 'Cursando',
             
             // From prog
             progAno: prog.ano,
@@ -852,7 +875,7 @@ async function resolveRetencaoAlunos(filters: Record<string, string>): Promise<R
     { data: arLinks },
     { data: respDb }
   ] = await Promise.all([
-    supabase.from('alunos').select('id, nome, matricula, status, unidade, email, data_nascimento, dados, foto_url'),
+    supabase.from('alunos').select('id, nome, matricula, status, unidade, email, data_nascimento, dados'),
     supabase.from('aluno_responsavel').select('aluno_id, responsavel_id, resp_pedagogico, resp_financeiro'),
     supabase.from('responsaveis').select('id, nome, email, telefone, celular, dados')
   ])
@@ -866,7 +889,17 @@ async function resolveRetencaoAlunos(filters: Record<string, string>): Promise<R
 
   for (const a of (alunos || [])) {
     const dados = a.dados || {}
-    const hist = Array.isArray(dados.historicoMatriculas) ? dados.historicoMatriculas : []
+    const rawHistMat = Array.isArray(dados.historicoMatriculas) ? dados.historicoMatriculas : []
+    const rawHistTurmas = Array.isArray(dados.historicoTurmas)
+      ? dados.historicoTurmas.map((ht: any) => ({
+          ano: ht.ano ?? ht.anoLetivo,
+          turmaNome: ht.turmaNome ?? ht.serieTurma ?? ht.turma,
+          serie: ht.serie,
+          turno: ht.turno || '',
+          situacao: ht.situacao || 'Cursando',
+        }))
+      : []
+    const hist = rawHistMat.length > 0 ? rawHistMat : rawHistTurmas
 
     // 1. Procura registro no ANO BASE com situação válida
     const histBase = hist.find((h: any) => {
@@ -940,7 +973,7 @@ async function resolveRetencaoAlunos(filters: Record<string, string>): Promise<R
       nome: a.nome,
       dataNascimento: dados.dataNascimento || a.data_nascimento,
       idade: calcAge(dados.dataNascimento || a.data_nascimento),
-      foto: a.foto_url || '',
+      foto: (a as any).foto || dados.foto || '',
       // Dados Ano Base
       turmaAnterior: histBase.turmaNome || histBase.turma || '',
       serieAnterior: histBase.serie || '',

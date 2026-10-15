@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/server/authGuard'
+import { resolveUserRole } from '@/lib/server/authGuard'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 import { sendAgendaPushNotification } from '@/lib/server/agendaNotifications'
 import { getColaboradorIds } from '@/lib/server/notificationHelper'
@@ -8,8 +8,8 @@ import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 export const dynamic = 'force-dynamic'
 
 export async function POST(request: Request) {
-  const { user, errorResponse } = await requireAuth()
-  if (errorResponse) return errorResponse
+  const { user, dbUser, isStaff, errorResponse } = await resolveUserRole(request)
+  if (errorResponse || !user) return errorResponse || NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
 
   try {
     const { momentId, action, value, authorName, commentId } = await request.json()
@@ -63,13 +63,50 @@ export async function POST(request: Request) {
       comments.push({
         id: Date.now().toString(),
         author: authorName,
+        authorId: user.id,
         text: value,
         time: 'Agora'
       })
       dados.comments = comments
     } else if (action === 'delete_comment') {
       if (!commentId) return NextResponse.json({ error: 'Comment ID missing' }, { status: 400 })
-      comments = comments.filter((c: any) => c.id !== commentId)
+      const targetComment = comments.find((c: any) => String(c.id) === String(commentId))
+      if (!targetComment) {
+        return NextResponse.json({ error: 'Comentário não encontrado' }, { status: 404 })
+      }
+
+      const roleTokens = `${dbUser?.perfil || ''} ${dbUser?.cargo || ''}`.toLowerCase()
+      const isManager = isStaff && (
+        roleTokens.includes('admin') ||
+        roleTokens.includes('master') ||
+        roleTokens.includes('diretor') ||
+        roleTokens.includes('coordenad') ||
+        roleTokens.includes('supervisor') ||
+        roleTokens.includes('gestor')
+      )
+
+      if (!isManager) {
+        const userNames = [
+          dbUser?.nome,
+          user.user_metadata?.nome,
+          user.email,
+        ]
+          .filter(Boolean)
+          .map((n: any) => String(n).trim().toLowerCase())
+
+        const isCommentAuthor =
+          (targetComment.authorId && String(targetComment.authorId) === String(user.id)) ||
+          (!targetComment.authorId && targetComment.author && userNames.includes(String(targetComment.author).trim().toLowerCase()))
+
+        if (!isCommentAuthor) {
+          return NextResponse.json(
+            { error: 'Acesso negado: você só pode excluir seus próprios comentários.' },
+            { status: 403 }
+          )
+        }
+      }
+
+      comments = comments.filter((c: any) => String(c.id) !== String(commentId))
       dados.comments = comments
     }
 

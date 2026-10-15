@@ -32,8 +32,19 @@ export async function POST(request: Request) {
     const supabase = await createProtectedClient()
 
     if (Array.isArray(body)) {
-      if (body.length === 0) return NextResponse.json({ ok: true, count: 0 })
+      if (body.length === 0) {
+        await supabase.from('perfis').delete().neq('id', '')
+        return NextResponse.json({ ok: true, count: 0 })
+      }
       const rows = body.map(buildRowAuth)
+      const incomingIds = new Set(rows.map(r => String(r.id)))
+      const { data: existingRows } = await supabase.from('perfis').select('id')
+      const toDelete = (existingRows || [])
+        .map((r: any) => String(r.id))
+        .filter((id: string) => !incomingIds.has(id))
+      if (toDelete.length > 0) {
+        await supabase.from('perfis').delete().in('id', toDelete)
+      }
       const { error } = await supabase.from('perfis').upsert(rows)
       if (error) throw new Error(error.message)
       return NextResponse.json({ ok: true, count: rows.length })

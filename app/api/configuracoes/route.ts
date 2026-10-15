@@ -19,6 +19,16 @@ const SENSITIVE_STAFF_ONLY_CONFIG_KEYS = new Set([
   'matriculas_digitais_config',
   'matriculas_digitais_list',
   'matriculas_contratos_list',
+  'cfgBackupSnapshots',
+  'catraca_ip',
+  'catraca_user',
+  'catraca_pass',
+  'catraca_devices',
+  'portaria_config',
+  'totem_pin',
+  'import_batches_history',
+  'fin_acordos_renegociacao',
+  'rh_folha_processada',
 ]);
 
 export async function GET(request: Request) {

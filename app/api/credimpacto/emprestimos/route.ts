@@ -23,12 +23,14 @@ export async function GET(request: Request) {
     let allowedIds: string[] | undefined = undefined
     let filterEmail: string | undefined = undefined
     let filterNome: string | undefined = undefined
+    let filterCpf: string | undefined = undefined
 
     // Segurança rígida: se NÃO for admin ou diretor geral, força a visualização apenas dos seus próprios dados
     if (!resolved.isAdminOrFinance) {
       allowedIds = [resolved.id, resolved.systemUserId, resolved.funcionarioId].filter(Boolean) as string[]
       filterEmail = resolved.email
       filterNome = resolved.nome
+      filterCpf = resolved.cpf
     } else if (colaboradorIdParam) {
       allowedIds = [colaboradorIdParam]
     }
@@ -37,6 +39,7 @@ export async function GET(request: Request) {
       colaboradorIds: allowedIds,
       colaboradorEmail: filterEmail,
       colaboradorNome: filterNome,
+      colaboradorCpf: filterCpf,
       status: statusParam || undefined
     })
 
@@ -87,7 +90,7 @@ export async function POST(request: Request) {
     }
 
     // Valida limites das políticas (apenas para colaboradores solicitando por conta própria; admin tem liberdade total)
-    const isMasterOrAdminConcession = Boolean(resolved.isAdminOrFinance || criadoPorFinanceiro)
+    const isMasterOrAdminConcession = Boolean(resolved.isAdminOrFinance && criadoPorFinanceiro)
     if (!isMasterOrAdminConcession) {
       if (valor < config.valorMinimoEmprestimo || valor > config.valorMaximoEmprestimo) {
         return NextResponse.json({
@@ -169,9 +172,10 @@ export async function POST(request: Request) {
     }
     colabCpf = formattedCpf
 
-    if (formattedCpf) {
+    const existingColabCpf = (resolved.cpf || '').replace(/\D/g, '')
+    if (formattedCpf && (isMasterOrAdminConcession || !existingColabCpf)) {
       try {
-        const funcIdToUpdate = criadoPorFinanceiro && targetColaboradorId ? targetColaboradorId : resolved.funcionarioId
+        const funcIdToUpdate = isMasterOrAdminConcession && targetColaboradorId ? targetColaboradorId : resolved.funcionarioId
         if (funcIdToUpdate) {
           await sb.from('funcionarios').update({
             cpf: formattedCpf,
@@ -184,16 +188,11 @@ export async function POST(request: Request) {
           }).ilike('email', colabEmail)
         }
 
-        if (resolved.systemUserId || resolved.id) {
+        if (!isMasterOrAdminConcession && (resolved.systemUserId || resolved.id)) {
           await sb.from('system_users').update({
             cpf: formattedCpf,
             updated_at: new Date().toISOString()
           }).or(`id.eq.${resolved.systemUserId || resolved.id},auth_id.eq.${resolved.id}`)
-        } else if (colabEmail) {
-          await sb.from('system_users').update({
-            cpf: formattedCpf,
-            updated_at: new Date().toISOString()
-          }).ilike('email', colabEmail)
         }
       } catch (errSync) {
         console.warn('[Sync CPF error]', errSync)

@@ -29,8 +29,8 @@ export function RelatoriosTab({
 }: RelatoriosTabProps) {
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear().toString())
 
-  // Métricas Consolidadas - apenas operações ativas
-  const concedidos = useMemo(() => emprestimos.filter((e) => e.status === 'ativo'), [emprestimos])
+  // Métricas Consolidadas - operações ativas e quitadas
+  const concedidos = useMemo(() => emprestimos.filter((e) => e.status === 'ativo' || e.status === 'quitado'), [emprestimos])
   const totalOperacoes = concedidos.length
   const totalPrincipalConcedido = concedidos.reduce((acc, e) => acc + (e.valorAprovado || 0), 0)
   const totalSaldoDevedorGeral = concedidos.reduce((acc, e) => acc + (e.saldoDevedorAtual || 0), 0)

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/server/authGuard'
+import { requireStaff } from '@/lib/server/authGuard'
 import { createClient } from '@supabase/supabase-js'
 
 const supabase = createClient(
@@ -7,12 +7,17 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
 
-export async function GET() {
-  const { user, errorResponse } = await requireAuth()
-  if (errorResponse) return errorResponse
+export async function GET(req: NextRequest) {
+  const { user, errorResponse } = await requireStaff(req)
+  if (errorResponse || !user) return errorResponse!
 
   try {
-    const { data, error } = await supabase.from('saved_reports').select('*').order('updated_at', { ascending: false }).limit(100)
+    const { data, error } = await supabase
+      .from('saved_reports')
+      .select('*')
+      .or(`user_id.eq.${user.id},compartilhado.eq.true`)
+      .order('updated_at', { ascending: false })
+      .limit(100)
     if (error) throw error
     return NextResponse.json(data || [])
   } catch (err: any) {
@@ -21,21 +26,21 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  const { user, errorResponse } = await requireAuth()
-  if (errorResponse) return errorResponse
+  const { user, errorResponse } = await requireStaff(req)
+  if (errorResponse || !user) return errorResponse!
 
   try {
     const body = await req.json()
-    const { id, user_id, nome, descricao, tipo_relatorio, subtipo, configuracao, filtros, favorito, compartilhado } = body
+    const { id, nome, descricao, tipo_relatorio, subtipo, configuracao, filtros, favorito, compartilhado } = body
 
     if (id) {
       const { error } = await supabase.from('saved_reports').update({
         nome, descricao, tipo_relatorio, subtipo, configuracao, filtros, favorito, compartilhado, updated_at: new Date().toISOString()
-      }).eq('id', id)
+      }).eq('id', id).eq('user_id', user.id)
       if (error) throw error
     } else {
       const { error } = await supabase.from('saved_reports').insert({
-        user_id, nome, descricao, tipo_relatorio, subtipo, configuracao, filtros, favorito, compartilhado
+        user_id: user.id, nome, descricao, tipo_relatorio, subtipo, configuracao, filtros, favorito, compartilhado
       })
       if (error) throw error
     }
@@ -47,17 +52,18 @@ export async function POST(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-  const { user, errorResponse } = await requireAuth()
-  if (errorResponse) return errorResponse
+  const { user, errorResponse } = await requireStaff(req)
+  if (errorResponse || !user) return errorResponse!
 
   try {
     const { searchParams } = new URL(req.url)
     const id = searchParams.get('id')
     if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
-    const { error } = await supabase.from('saved_reports').delete().eq('id', id)
+    const { error } = await supabase.from('saved_reports').delete().eq('id', id).eq('user_id', user.id)
     if (error) throw error
     return NextResponse.json({ success: true })
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 })
   }
 }
+

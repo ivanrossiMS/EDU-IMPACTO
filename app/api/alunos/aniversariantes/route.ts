@@ -1,9 +1,13 @@
 import { NextResponse } from 'next/server'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
+import { requireAuth } from '@/lib/server/authGuard'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(req: Request) {
+  const { errorResponse } = await requireAuth(req)
+  if (errorResponse) return errorResponse
+
   try {
     const supabase = await createProtectedClient()
     

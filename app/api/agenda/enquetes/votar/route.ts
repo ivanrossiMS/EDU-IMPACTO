@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/server/authGuard'
+import { resolveUserRole } from '@/lib/server/authGuard'
 import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 import { EnqueteData, EnqueteVoto } from '@/lib/enquetes/types'
 import { getVoterKey, isEnqueteClosed } from '@/lib/enquetes/enqueteUtils'
@@ -7,8 +7,8 @@ import { getVoterKey, isEnqueteClosed } from '@/lib/enquetes/enqueteUtils'
 export const dynamic = 'force-dynamic'
 
 export async function POST(request: Request) {
-  const { user, errorResponse } = await requireAuth()
-  if (errorResponse) return errorResponse
+  const { user, dbUser, isStaff, errorResponse } = await resolveUserRole(request)
+  if (errorResponse || !user) return errorResponse || NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
 
   try {
     const body = await request.json()
@@ -31,12 +31,47 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Nenhuma opção selecionada' }, { status: 400 })
     }
 
+    const adminClient = getAdminClient()
+
+    if (requestedUserId && !isStaff) {
+      const allowedIds = new Set<string>(
+        [
+          String(user.id),
+          dbUser?.id ? String(dbUser.id) : null,
+          dbUser?.auth_id ? String(dbUser.auth_id) : null,
+          user.user_metadata?.responsavel_id ? String(user.user_metadata.responsavel_id) : null,
+          user.user_metadata?.aluno_id ? String(user.user_metadata.aluno_id) : null,
+          user.user_metadata?.uid_legacy ? String(user.user_metadata.uid_legacy) : null,
+        ].filter(Boolean) as string[]
+      )
+
+      if (!allowedIds.has(String(requestedUserId))) {
+        const userEmail = (user.email || dbUser?.email || '').trim().toLowerCase()
+        const orFilters = [`id.eq.${user.id}`, `auth_id.eq.${user.id}`]
+        if (userEmail) orFilters.push(`email.ilike.${userEmail}`)
+        const { data: respRows } = await adminClient
+          .from('responsaveis')
+          .select('id, auth_id')
+          .or(orFilters.join(','))
+        for (const r of respRows || []) {
+          if (r.id) allowedIds.add(String(r.id))
+          if (r.auth_id) allowedIds.add(String(r.auth_id))
+        }
+      }
+
+      if (!allowedIds.has(String(requestedUserId))) {
+        return NextResponse.json(
+          { error: 'Acesso negado: usuarioId não pertence ao usuário autenticado.' },
+          { status: 403 }
+        )
+      }
+    }
+
     const effectiveUserId = requestedUserId || user.id
-    const effectiveUserName = usuarioNome || user.user_metadata?.nome || user.email || 'Usuário'
+    const effectiveUserName = usuarioNome || dbUser?.nome || user.user_metadata?.nome || user.email || 'Usuário'
     const effectiveUserFoto = usuarioFoto || user.user_metadata?.foto || null
     const effectiveUserTipo = usuarioTipo || (user.user_metadata?.perfil === 'Família' ? 'responsavel' : 'colaborador')
 
-    const adminClient = getAdminClient()
     const { data: comRow, error: fetchErr } = await adminClient
       .from('comunicados')
       .select('*')

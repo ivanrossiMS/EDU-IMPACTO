@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { requireAuth } from '@/lib/server/authGuard'
 import { supabaseServer } from '@/lib/supabaseServer'
 
 export const dynamic = 'force-dynamic'
@@ -8,6 +9,9 @@ export const dynamic = 'force-dynamic'
  * Retorna lista de IDs de notificações que já foram lidas por este usuário.
  */
 export async function GET(request: Request) {
+  const { errorResponse } = await requireAuth(request)
+  if (errorResponse) return errorResponse
+
   try {
     const { searchParams } = new URL(request.url)
     const userId = searchParams.get('userId')
@@ -53,6 +57,9 @@ export async function GET(request: Request) {
  * Registra leitura de uma ou mais notificações para um colaborador individual.
  */
 export async function POST(request: Request) {
+  const { errorResponse } = await requireAuth(request)
+  if (errorResponse) return errorResponse
+
   try {
     const body = await request.json()
     const { userId, perfil = 'colaborador', items } = body

@@ -9,6 +9,8 @@ const ZodEstorno = z.object({
   aluno_id:        z.string().min(1, 'ID do aluno obrigatório'),
   parcela_nums:    z.array(z.number().int().positive()).min(1, 'Ao menos uma parcela'),
   cod_baixa_codes: z.array(z.string()).min(1, 'Ao menos um código de baixa'),
+  motivo:          z.string().optional(),
+  parcela_id:      z.string().optional(),
 })
 
 /**
@@ -17,6 +19,7 @@ const ZodEstorno = z.object({
  * Estorna baixas de um aluno de forma atômica:
  *  1. Marca as parcelas como 'pendente' no JSONB alunos.dados (cascateia por codBaixa)
  *  2. Deleta as movimentações do caixa cujo ID começa com o código de baixa (padrão CODXXX-PNN)
+ *  3. Marca recibos associados em financial_receipts como 'estornado'
  */
 export async function POST(request: NextRequest) {
   const { user, errorResponse } = await requireAuth()
@@ -24,7 +27,8 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json()
-    const { aluno_id, parcela_nums, cod_baixa_codes } = ZodEstorno.parse(body)
+    const { aluno_id, parcela_nums, cod_baixa_codes, motivo: motivoRaw, parcela_id } = ZodEstorno.parse(body)
+    const motivo = motivoRaw || 'Estorno de baixa financeira'
 
     const supabase = await createProtectedClient()
 
@@ -111,6 +115,47 @@ export async function POST(request: NextRequest) {
           movimentacoesDeleted = ids.length
         }
       }
+    }
+
+    // ── 5. Atualizar recibos financeiros (financial_receipts) ─────────────────
+    const reversedAt = new Date().toISOString()
+    try {
+      const receiptOrParts = [
+        ...cod_baixa_codes.map((code: string) => `baixa_id.eq.${code},baixa_id.like.${code}-%`),
+        ...(parcela_id ? [`parcela_id.eq.${parcela_id}`, `baixa_id.eq.${parcela_id}`] : []),
+      ].join(',')
+
+      if (receiptOrParts) {
+        const { error: recErr } = await supabase
+          .from('financial_receipts')
+          .update({
+            status: 'estornado',
+            receipt_status: 'estornado',
+            is_active: false,
+            reversal_reason: motivo,
+            reversed_at: reversedAt,
+            updated_at: reversedAt,
+          })
+          .or(receiptOrParts)
+
+        if (recErr) {
+          const fallbackOr = cod_baixa_codes.map((code: string) => `baixa_id.eq.${code},baixa_id.like.${code}-%`).join(',')
+          if (fallbackOr) {
+            await supabase
+              .from('financial_receipts')
+              .update({
+                receipt_status: 'estornado',
+                is_active: false,
+                cancellation_reason: motivo,
+                reversed_at: reversedAt,
+                updated_at: reversedAt,
+              })
+              .or(fallbackOr)
+          }
+        }
+      }
+    } catch (recEx) {
+      console.warn('[estornar-baixa] Aviso ao atualizar financial_receipts:', recEx)
     }
 
     return NextResponse.json({

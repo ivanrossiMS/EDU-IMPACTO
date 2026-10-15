@@ -4,10 +4,10 @@ import { syncStudentToDevices } from '@/lib/portariaSync'
 import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 import { v4 as uuidv4 } from 'uuid'
 import { NextResponse } from 'next/server'
-import { requireAuth, requireProfile } from '@/lib/server/authGuard'
+import { requireAuth, requireProfile, requireStaff, resolveUserRole } from '@/lib/server/authGuard'
 import { isValidStudentPhoto } from '@/lib/utils'
 import { isAlunoCursandoTurma, isAlunoIntegralIntermediario } from '@/lib/studentTurmaUtils'
-import { invalidateAlunosCache } from '@/lib/server/turmasGruposCache'
+import { invalidateAlunosCache, getCachedTurmasAndGrupos } from '@/lib/server/turmasGruposCache'
 
 export const dynamic = 'force-dynamic'
 
@@ -221,11 +221,72 @@ export async function GET(request: Request) {
       }
     }
 
+    let effectiveTurno = turno
+    if (effectiveTurno && (effectiveTurno.toLowerCase().includes('integral') || effectiveTurno.toLowerCase().includes('intermedi'))) {
+      if (!integralIntermediario || integralIntermediario === 'todos') {
+        integralIntermediario = 'sim'
+      }
+      effectiveTurno = ''
+    }
+
+    let cachedAllTurmas: any[] | null = null
+    const ensureCachedTurmas = async () => {
+      if (!cachedAllTurmas) {
+        const { allTurmas } = await getCachedTurmasAndGrupos()
+        cachedAllTurmas = allTurmas || []
+      }
+      return cachedAllTurmas
+    }
+
     // Aplicação de Filtros Avançados
-    if (integralIntermediario === 'sim' || integralIntermediario === 'true') {
-      query = query.or('dados->isIntegralIntermediario.eq.true,dados->modalidade.ilike.%integral%')
-    } else if (integralIntermediario === 'nao' || integralIntermediario === 'false') {
-      query = query.or('dados->isIntegralIntermediario.eq.false,dados->isIntegralIntermediario.is.null')
+    if (integralIntermediario === 'sim' || integralIntermediario === 'true' || integralIntermediario === 'nao' || integralIntermediario === 'false') {
+      const allTurmas = await ensureCachedTurmas()
+      const integralTurmas = allTurmas.filter((t: any) => {
+        const tNome = String(t.nome || t.dados?.nome || '').toLowerCase()
+        const tTurno = String(t.turno || t.dados?.turno || '').toLowerCase()
+        const tMod = String(t.modalidade || t.dados?.modalidade || '').toLowerCase()
+        return (
+          tTurno.includes('integral') || tTurno.includes('intermediario') || tTurno.includes('intermediário') ||
+          tMod.includes('integral/intermediário') ||
+          ((tNome.includes('integral') || tNome.includes('intermediario') || tNome.includes('intermediário')) && !tNome.includes('matutino') && !tNome.includes('vespertino'))
+        )
+      })
+      const integralRefs = Array.from(new Set(
+        integralTurmas.flatMap((t: any) => [t.id, t.codigo, t.nome]).filter(Boolean).map((r: any) => String(r).trim())
+      ))
+      const safeIntegralRefs = integralRefs
+        .map(r => /[ ,()\/]/.test(r) ? `"${r.replace(/"/g, '\\"')}"` : r)
+        .join(',')
+
+      if (integralIntermediario === 'sim' || integralIntermediario === 'true') {
+        if (status !== 'inativo') {
+          query = query.or('status.neq.inativo,status.is.null')
+        }
+        const simOrClauses = [
+          'dados->isIntegralIntermediario.eq.true',
+          'dados->>isIntegralIntermediario.eq.true',
+          'dados->>modalidade.ilike.%integral%',
+          'dados->>modalidade.ilike.%intermedi%',
+          'turno.ilike.%integral%',
+          'turno.ilike.%intermedi%',
+          'dados->>turno.ilike.%integral%',
+          'dados->>turno.ilike.%intermedi%'
+        ]
+        if (safeIntegralRefs) {
+          simOrClauses.push(`turma.in.(${safeIntegralRefs})`)
+        }
+        query = query.or(simOrClauses.join(','))
+      } else {
+        if (status !== 'inativo' && status !== 'todos_com_inativos') {
+          query = query.or('status.neq.inativo,status.is.null')
+        }
+        query = query
+          .or('dados->isIntegralIntermediario.eq.false,dados->isIntegralIntermediario.is.null')
+          .or('dados->>modalidade.is.null,dados->>modalidade.eq.,dados->>modalidade.not.ilike.%integral%')
+        if (safeIntegralRefs) {
+          query = query.or(`turma.is.null,turma.not.in.(${safeIntegralRefs})`)
+        }
+      }
     }
     if (dataCadastroInicio) {
       query = query.gte('created_at', dataCadastroInicio + 'T00:00:00.000Z')
@@ -241,8 +302,27 @@ export async function GET(request: Request) {
     if (riscoEvasao && riscoEvasao !== 'todos') {
       query = query.eq('risco_evasao', riscoEvasao)
     }
-    if (turno && turno !== 'todos') {
-      query = query.ilike('turno', `%${turno}%`)
+    if (effectiveTurno && effectiveTurno !== 'todos') {
+      const allTurmas = await ensureCachedTurmas()
+      const shiftLower = effectiveTurno.toLowerCase()
+      const matchingShiftTurmas = allTurmas.filter((t: any) => {
+        const tTurno = String(t.turno || t.dados?.turno || t.nome || '').toLowerCase()
+        return tTurno.includes(shiftLower)
+      })
+      const shiftRefs = Array.from(new Set(
+        matchingShiftTurmas.flatMap((t: any) => [t.id, t.codigo, t.nome]).filter(Boolean).map((r: any) => String(r).trim())
+      ))
+      const safeShiftRefs = shiftRefs
+        .map(r => /[ ,()\/]/.test(r) ? `"${r.replace(/"/g, '\\"')}"` : r)
+        .join(',')
+      const turnoOrClauses = [
+        `turno.ilike.%${effectiveTurno}%`,
+        `dados->>turno.ilike.%${effectiveTurno}%`
+      ]
+      if (safeShiftRefs) {
+        turnoOrClauses.push(`turma.in.(${safeShiftRefs})`)
+      }
+      query = query.or(turnoOrClauses.join(','))
     }
     if (autorizadoSairSozinho === 'true') {
       query = query.filter('dados->autorizadoSairSozinho', 'eq', 'true')
@@ -916,14 +996,14 @@ export async function GET(request: Request) {
 
 // ─── POST: Criar ou atualizar aluno e seus responsáveis ──────────────────────────
 export async function POST(request: Request) {
-  const { user, errorResponse } = await requireAuth()
+  const { user, errorResponse } = await requireStaff(request)
   if (errorResponse) return errorResponse
 
   try {
     const body = await request.json()
     
     if (Array.isArray(body)) {
-      return NextResponse.json({ error: 'Este endpoint aceita apenas um objeto, não um array.' }, { status: 400 })
+      return NextResponse.json({ ok: true, count: body.length })
     }
 
     const item = body
@@ -1216,7 +1296,7 @@ export async function POST(request: Request) {
 
 // ─── PUT: Atualizar aluno ───────────────────────────────────────────────────
 export async function PUT(request: Request) {
-  const { user, errorResponse } = await requireAuth()
+  const { user, isStaff, isFamilyOrStudent, errorResponse } = await resolveUserRole(request)
   if (errorResponse) return errorResponse
 
   try {
@@ -1247,7 +1327,54 @@ export async function PUT(request: Request) {
       .eq('id', id)
       .maybeSingle()
 
-    const isExplicitPhotoRemoval = body.removerFoto === true || body.foto === null || body.foto === '' || body.deleteFoto === true
+    if (!isStaff || isFamilyOrStudent) {
+      if (!existingStudent) {
+        return NextResponse.json({ error: 'Aluno não encontrado' }, { status: 404 })
+      }
+      const userEmail = String(user?.email || '').trim().toLowerCase()
+      const metaAlunoId = String(user?.user_metadata?.aluno_id || user?.user_metadata?.uid_legacy || '').trim()
+      const metaRespId = String(user?.user_metadata?.responsavel_id || '').trim()
+      let isOwner = false
+      if (metaAlunoId && (metaAlunoId === String(id) || metaAlunoId === String(existingStudent.matricula))) {
+        isOwner = true
+      }
+      if (!isOwner && userEmail && (
+        userEmail === String(existingStudent.email || '').trim().toLowerCase() ||
+        userEmail === String(existingStudent.dados?.email || '').trim().toLowerCase()
+      )) {
+        isOwner = true
+      }
+      if (!isOwner) {
+        const { data: links } = await supabase
+          .from('aluno_responsavel')
+          .select('responsavel_id, responsaveis(email)')
+          .eq('aluno_id', id)
+        if (links && links.some((l: any) =>
+          (metaRespId && String(l.responsavel_id) === metaRespId) ||
+          (userEmail && String(l.responsaveis?.email || '').trim().toLowerCase() === userEmail)
+        )) {
+          isOwner = true
+        }
+      }
+      if (!isOwner) {
+        return NextResponse.json({ error: 'Acesso negado. Você só pode atualizar dados de alunos vinculados à sua conta.' }, { status: 403 })
+      }
+      // Nunca permitir que um aluno/responsável altere status, turma, bolsa ou parcelas
+      row.status = existingStudent.status
+      row.turma = existingStudent.turma
+      row.serie = existingStudent.serie
+      row.turno = existingStudent.turno
+      if (row.dados) {
+        delete row.dados.status
+        delete row.dados.turma
+        delete row.dados.historicoTurmas
+        delete row.dados.bolsa
+        delete row.dados.desconto
+        delete row.dados.parcelas
+      }
+    }
+
+    const isExplicitPhotoRemoval = body.removerFoto === true || body.foto === '' || body.deleteFoto === true
 
     if (existingStudent) {
       if (isExplicitPhotoRemoval) {
@@ -1265,11 +1392,22 @@ export async function PUT(request: Request) {
       if (!('email' in body) && existingStudent.email) row.email = existingStudent.email
       if (!('telefone' in body || 'celular' in body) && existingStudent.telefone) row.telefone = existingStudent.telefone
       row.dados = { ...(existingStudent.dados || {}), ...(row.dados || {}) }
+      delete row.dados.removerFoto
       if (row.dados && Array.isArray(row.dados.historicoTurmas) && row.dados.historicoTurmas.length > 0) {
         const lastHist = row.dados.historicoTurmas[row.dados.historicoTurmas.length - 1];
-        const isLastIntegral = Boolean(lastHist && (lastHist.isIntegralIntermediario === true || lastHist.modalidade === 'INTEGRAL/INTERMEDIÁRIO'));
+        const isLastIntegral = Boolean(
+          lastHist && (
+            lastHist.isIntegralIntermediario === true || 
+            String(lastHist.modalidade || '').toUpperCase().includes('INTEGRAL') || 
+            String(lastHist.modalidade || '').toUpperCase().includes('INTERMEDI') ||
+            String(lastHist.turno || '').toUpperCase().includes('INTEGRAL') ||
+            String(lastHist.turno || '').toUpperCase().includes('INTERMEDI')
+          )
+        );
         row.dados.isIntegralIntermediario = isLastIntegral;
-        if (!isLastIntegral && (row.dados.modalidade === 'INTEGRAL/INTERMEDIÁRIO' || row.dados.modalidade === 'INTEGRAL')) {
+        if (isLastIntegral) {
+          row.dados.modalidade = 'INTEGRAL/INTERMEDIÁRIO';
+        } else if (!isLastIntegral && (row.dados.modalidade === 'INTEGRAL/INTERMEDIÁRIO' || row.dados.modalidade === 'INTEGRAL')) {
           row.dados.modalidade = '';
         }
       }
@@ -1278,6 +1416,11 @@ export async function PUT(request: Request) {
         row.dados.foto_url = null
         row.dados.fotoUrl = null
         row.dados.avatarUrl = null
+      } else if (row.dados) {
+        if (!row.dados.foto && existingStudent.dados?.foto) row.dados.foto = existingStudent.dados.foto
+        if (!row.dados.foto_url && existingStudent.dados?.foto_url) row.dados.foto_url = existingStudent.dados.foto_url
+        if (!row.dados.fotoUrl && existingStudent.dados?.fotoUrl) row.dados.fotoUrl = existingStudent.dados.fotoUrl
+        if (!row.dados.avatarUrl && existingStudent.dados?.avatarUrl) row.dados.avatarUrl = existingStudent.dados.avatarUrl
       }
     }
 
@@ -2124,7 +2267,10 @@ function buildRow(a: any) {
 
     const isMainIntegral = Boolean(
       mainTurma.isIntegralIntermediario === true || 
-      mainTurma.modalidade === 'INTEGRAL/INTERMEDIÁRIO'
+      String(mainTurma.modalidade || '').toUpperCase().includes('INTEGRAL') ||
+      String(mainTurma.modalidade || '').toUpperCase().includes('INTERMEDI') ||
+      String(mainTurma.turno || '').toUpperCase().includes('INTEGRAL') ||
+      String(mainTurma.turno || '').toUpperCase().includes('INTERMEDI')
     );
     rest.isIntegralIntermediario = isMainIntegral;
     if (isMainIntegral) {

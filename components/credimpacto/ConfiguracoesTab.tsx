@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   Settings,
   ShieldCheck,
@@ -37,6 +37,13 @@ export function ConfiguracoesTab({ initialConfig, onConfigSaved }: Configuracoes
     termoAutorizacaoDesconto: initialConfig.termoAutorizacaoDesconto ?? DEFAULT_TERMO_AUTORIZACAO
   })
   const [isSaving, setIsSaving] = useState(false)
+
+  useEffect(() => {
+    setConfig({
+      ...initialConfig,
+      termoAutorizacaoDesconto: initialConfig.termoAutorizacaoDesconto ?? DEFAULT_TERMO_AUTORIZACAO
+    })
+  }, [initialConfig])
 
   const handleResetTermo = () => {
     setConfig((prev) => ({

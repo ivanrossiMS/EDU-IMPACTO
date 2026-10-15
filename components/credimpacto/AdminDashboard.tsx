@@ -103,6 +103,25 @@ export function AdminDashboard({
   const [isUploading, setIsUploading] = useState(false)
   const [isSubmittingDisbursement, setIsSubmittingDisbursement] = useState(false)
 
+  // Sincroniza modais abertos quando a lista de empréstimos atualiza em tempo real
+  React.useEffect(() => {
+    setAnalyzingLoan((prev) => {
+      if (!prev) return null
+      const updated = emprestimos.find((e) => e.id === prev.id)
+      return updated ? { ...prev, ...updated } : null
+    })
+    setApprovingDirectLoan((prev) => {
+      if (!prev) return null
+      const updated = emprestimos.find((e) => e.id === prev.id)
+      return updated ? { ...prev, ...updated } : null
+    })
+    setDisbursingLoan((prev) => {
+      if (!prev) return null
+      const updated = emprestimos.find((e) => e.id === prev.id)
+      return updated ? { ...prev, ...updated } : null
+    })
+  }, [emprestimos])
+
   // Sistema de Envio de Mensagem no WhatsApp do Colaborador (Aprovado, Recusado, Depositado)
   const [notifyWhatsAppOnAction, setNotifyWhatsAppOnAction] = useState(true)
   const [whatsappModalLoan, setWhatsappModalLoan] = useState<CredImpactoEmprestimo | null>(null)

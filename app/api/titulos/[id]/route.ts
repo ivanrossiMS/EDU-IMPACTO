@@ -23,7 +23,25 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
   const { id: paramId } = await context.params
   try {
     const body = await request.json()
-    const { id, aluno, responsavel, descricao, valor, vencimento, pagamento, status, metodo, parcela, eventoId, eventoDescricao, ...rest } = body
+    const {
+      id, aluno, responsavel, descricao, valor, vencimento, pagamento,
+      status, metodo, parcela, eventoId, eventoDescricao,
+      dados, created_at, updated_at, evento_id, evento_descricao,
+      ...rest
+    } = body
+
+    const { data: existing } = await supabase
+      .from('titulos')
+      .select('dados')
+      .eq('id', paramId)
+      .maybeSingle()
+
+    const mergedDados = {
+      ...(existing?.dados || {}),
+      ...(typeof dados === 'object' && dados !== null ? dados : {}),
+      ...rest,
+    }
+
     const row = {
       id: paramId,
       aluno: aluno || '', responsavel: responsavel || '',
@@ -31,6 +49,7 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
       vencimento: vencimento || '', pagamento: pagamento || null,
       status: status || 'pendente', metodo: metodo || null, parcela: parcela || '',
       evento_id: eventoId || null, evento_descricao: eventoDescricao || null,
+      dados: mergedDados,
       updated_at: new Date().toISOString(),
     }
     const { data, error } = await supabase.from('titulos').upsert(row).select().single()

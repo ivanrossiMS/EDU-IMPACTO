@@ -61,8 +61,25 @@ function normalizeMargins(m?: Partial<TimbradoMargens> | null): TimbradoMargens 
 export default function SecretariaDocumentosPage() {
   const { logSystemAction } = useData()
 
-  // Tabs: 'emitir' | 'modelos' | 'timbrados'
-  const [activeTab, setActiveTab] = useState<'emitir' | 'modelos' | 'timbrados'>('emitir')
+  // Tabs: 'emitir' | 'modelos' | 'timbrados' | 'historico'
+  const [activeTab, setActiveTab] = useState<'emitir' | 'modelos' | 'timbrados' | 'historico'>('emitir')
+  const [documentosEmitidos, setDocumentosEmitidos] = useState<any[]>([])
+  const [loadingEmitidos, setLoadingEmitidos] = useState(false)
+
+  const fetchEmitidos = async () => {
+    setLoadingEmitidos(true)
+    try {
+      const res = await fetch('/api/documentos')
+      if (res.ok) {
+        const data = await res.json()
+        setDocumentosEmitidos(Array.isArray(data) ? data : [])
+      }
+    } catch (e) {
+      console.error('Erro ao buscar histórico de documentos emitidos:', e)
+    } finally {
+      setLoadingEmitidos(false)
+    }
+  }
 
   // Timbrados
   const [timbrados, setTimbrados] = useState<{name: string, url: string}[]>([])
@@ -463,25 +480,33 @@ export default function SecretariaDocumentosPage() {
       texto = replaceVar(texto, 'data_nascimento', alunoSel.data_nascimento || alunoSel.dataNascimento ? new Date(alunoSel.data_nascimento || alunoSel.dataNascimento).toLocaleDateString('pt-BR') : '')
       texto = replaceVar(texto, 'nacionalidade', alunoSel.nacionalidade || d.nacionalidade || 'Brasileira')
       texto = replaceVar(texto, 'naturalidade', alunoSel.naturalidade || d.naturalidade || '')
-      texto = replaceVar(texto, 'endereco', alunoSel.endereco || d.endereco || d.logradouro || '')
-      texto = replaceVar(texto, 'bairro', alunoSel.bairro || d.bairro || '')
-      texto = replaceVar(texto, 'cidade', alunoSel.cidade || d.cidade || '')
-      texto = replaceVar(texto, 'estado', alunoSel.estado || d.estado || d.uf || '')
-      texto = replaceVar(texto, 'cep', alunoSel.cep || d.cep || '')
+      const rawEnd = alunoSel.endereco || d.endereco || d.logradouro || ''
+      const formattedEnd = typeof rawEnd === 'object' && rawEnd !== null
+        ? [rawEnd.logradouro, rawEnd.numero, rawEnd.complemento, rawEnd.bairro, rawEnd.cidade, rawEnd.estado || rawEnd.uf, rawEnd.cep].filter(Boolean).join(', ')
+        : String(rawEnd || '')
+      texto = replaceVar(texto, 'endereco', formattedEnd)
+      texto = replaceVar(texto, 'bairro', (typeof rawEnd === 'object' ? rawEnd?.bairro : '') || alunoSel.bairro || d.bairro || '')
+      texto = replaceVar(texto, 'cidade', (typeof rawEnd === 'object' ? rawEnd?.cidade : '') || alunoSel.cidade || d.cidade || '')
+      texto = replaceVar(texto, 'estado', (typeof rawEnd === 'object' ? (rawEnd?.estado || rawEnd?.uf) : '') || alunoSel.estado || d.estado || d.uf || '')
+      texto = replaceVar(texto, 'cep', (typeof rawEnd === 'object' ? rawEnd?.cep : '') || alunoSel.cep || d.cep || '')
       
-      const respNome = alunoSel.responsavel || alunoSel.responsavel_nome || (alunoSel.responsaveis?.[0]?.nome) || ''
-      const respFin = alunoSel.responsavel_financeiro || alunoSel.responsavelFinanceiro || alunoSel.responsaveis?.find((r: any) => r.isFinanceiro)?.nome || respNome
-      const respPed = alunoSel.responsavel_pedagogico || alunoSel.responsavelPedagogico || alunoSel.responsaveis?.find((r: any) => r.isPedagogico)?.nome || respNome
-      const respCpf = alunoSel.cpf_responsavel || alunoSel.cpfResponsavel || d.cpfResponsavel || alunoSel.responsaveis?.find((r: any) => r.isFinanceiro || r.cpf)?.cpf || ''
+      const resps = alunoSel._responsaveis || alunoSel.responsaveis || []
+      const respNome = alunoSel.responsavel || alunoSel.responsavel_nome || (resps?.[0]?.nome) || ''
+      const respFinObj = resps?.find((r: any) => r.isFinanceiro || r.resp_financeiro)
+      const respPedObj = resps?.find((r: any) => r.isPedagogico || r.resp_pedagogico)
+      const respFin = alunoSel.responsavel_financeiro || alunoSel.responsavelFinanceiro || respFinObj?.nome || respNome
+      const respPed = alunoSel.responsavel_pedagogico || alunoSel.responsavelPedagogico || respPedObj?.nome || respNome
+      const respCpf = alunoSel.cpf_responsavel || alunoSel.cpfResponsavel || d.cpfResponsavel || respFinObj?.cpf || respFinObj?.dados?.cpf || resps?.find((r: any) => r.cpf || r.dados?.cpf)?.cpf || ''
 
       texto = replaceVar(texto, 'responsavel_nome', respNome)
       texto = replaceVar(texto, 'responsavel', respNome)
       texto = replaceVar(texto, 'responsavel_financeiro', respFin)
       texto = replaceVar(texto, 'responsavel_pedagogico', respPed)
       texto = replaceVar(texto, 'cpf_responsavel', respCpf)
+      texto = replaceVar(texto, 'cpf_responsavel_financeiro', respCpf)
       
-      const paiNome = alunoSel.nome_pai || alunoSel.pai || alunoSel.nomePai || d.nome_pai || d.pai || d.nomePai || alunoSel.responsaveis?.find((r: any) => r.parentesco?.toLowerCase() === 'pai')?.nome || ''
-      const maeNome = alunoSel.nome_mae || alunoSel.mae || alunoSel.nomeMae || d.nome_mae || d.mae || d.nomeMae || alunoSel.responsaveis?.find((r: any) => r.parentesco?.toLowerCase() === 'mãe' || r.parentesco?.toLowerCase() === 'mae')?.nome || ''
+      const paiNome = alunoSel.nome_pai || alunoSel.pai || alunoSel.nomePai || d.nome_pai || d.pai || d.nomePai || resps?.find((r: any) => r.parentesco?.toLowerCase() === 'pai')?.nome || ''
+      const maeNome = alunoSel.nome_mae || alunoSel.mae || alunoSel.nomeMae || d.nome_mae || d.mae || d.nomeMae || resps?.find((r: any) => r.parentesco?.toLowerCase() === 'mãe' || r.parentesco?.toLowerCase() === 'mae')?.nome || ''
       
       texto = replaceVar(texto, 'pai', paiNome)
       texto = replaceVar(texto, 'mae', maeNome)
@@ -928,8 +953,59 @@ export default function SecretariaDocumentosPage() {
           >
             Papéis Timbrados
           </button>
+          <button 
+            onClick={() => { setActiveTab('historico'); fetchEmitidos() }} 
+            style={{ padding: '8px 18px', background: activeTab === 'historico' ? '#2563eb' : 'transparent', color: activeTab === 'historico' ? '#fff' : '#64748b', border: 'none', borderRadius: '8px', fontSize: '13.5px', fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s' }}
+          >
+            Histórico de Emitidos
+          </button>
         </div>
       </div>
+
+      {/* ── TAB: HISTÓRICO DE EMITIDOS ──────────────────────────────────────── */}
+      {activeTab === 'historico' && (
+        <div style={{ background: '#fff', padding: '24px', borderRadius: '16px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+            <div>
+              <h2 style={{ fontSize: '18px', fontWeight: 700, color: '#0f172a', margin: 0 }}>Histórico de Documentos Emitidos</h2>
+              <p style={{ fontSize: '13.5px', color: '#64748b', margin: '4px 0 0 0' }}>Registro de declarações e documentos oficiais impressos pela Secretaria.</p>
+            </div>
+            <button onClick={fetchEmitidos} className="btn btn-secondary btn-sm">Atualizar</button>
+          </div>
+          {loadingEmitidos ? (
+            <div style={{ padding: '32px', textAlign: 'center', color: '#64748b' }}>Carregando histórico...</div>
+          ) : documentosEmitidos.length === 0 ? (
+            <div style={{ padding: '40px', textAlign: 'center', color: '#64748b', background: '#f8fafc', borderRadius: 12, border: '1px dashed #cbd5e1' }}>
+              Nenhum documento emitido registrado até o momento.
+            </div>
+          ) : (
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                <thead>
+                  <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0', textAlign: 'left' }}>
+                    <th style={{ padding: '12px 16px', fontWeight: 700, color: '#475569' }}>Data de Emissão</th>
+                    <th style={{ padding: '12px 16px', fontWeight: 700, color: '#475569' }}>Tipo de Documento</th>
+                    <th style={{ padding: '12px 16px', fontWeight: 700, color: '#475569' }}>ID / Matrícula do Aluno</th>
+                    <th style={{ padding: '12px 16px', fontWeight: 700, color: '#475569' }}>Emitido Por</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {documentosEmitidos.map((doc: any) => (
+                    <tr key={doc.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                      <td style={{ padding: '12px 16px', color: '#64748b' }}>
+                        {doc.data_emissao ? new Date(doc.data_emissao).toLocaleString('pt-BR') : '—'}
+                      </td>
+                      <td style={{ padding: '12px 16px', fontWeight: 700, color: '#0f172a' }}>{doc.documento_tipo || 'Documento'}</td>
+                      <td style={{ padding: '12px 16px', color: '#334155' }}>{doc.aluno_id || '—'}</td>
+                      <td style={{ padding: '12px 16px', color: '#475569' }}>{doc.emitido_por || 'Secretaria'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── TAB: GESTÃO DE TIMBRADOS ────────────────────────────────────────── */}
       {activeTab === 'timbrados' && (

@@ -228,6 +228,13 @@ export async function POST(req: Request) {
     }
 
     // Se for a ação real, dispara o download em lote em segundo plano para não travar a requisição HTTP
+    if (isSimulated) {
+      return NextResponse.json(
+        { error: 'Catracas inacessíveis na rede local (Modo Simulado). A sincronização real de fotos foi abortada para não sobrescrever fotos existentes.' },
+        { status: 503 }
+      )
+    }
+
     const runSyncInBg = async () => {
       console.log(`[Sync Massivo de Fotos] Iniciado download em lote para ${targetStudents.length} alunos...`)
       let processedCount = 0
@@ -250,12 +257,10 @@ export async function POST(req: Request) {
         for (const deviceUser of matches) {
           const deviceId = deviceUser.id
           const activeClient = deviceUser._client || primaryClient
+          if (!activeClient) continue
 
           try {
-            // Se for modo simulado, gera uma foto fake em base64 e salva
-            const base64Image = isSimulated || !activeClient
-              ? `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><rect width="100%" height="100%" fill="%236366f1"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="white" font-size="14">${student.nome.slice(0, 2).toUpperCase()}</text></svg>`
-              : await activeClient.getUserImage(deviceId)
+            const base64Image = await activeClient.getUserImage(deviceId)
 
             if (base64Image && isValidStudentPhoto(base64Image)) {
               downloadedPhoto = base64Image

@@ -8,7 +8,7 @@ export const maxDuration = 120
 /**
  * Mapeamento de Endpoint/SheetName para a tabela real no Supabase
  */
-function resolveTableName(endpointOrSheet: string): string {
+function resolveTableName(endpointOrSheet: string): string | null {
   const e = (endpointOrSheet || '').toLowerCase().trim()
 
   if (e.includes('aluno')) return 'alunos'
@@ -34,8 +34,7 @@ function resolveTableName(endpointOrSheet: string): string {
   if (e.includes('mantenedor') || e.includes('unidade')) return 'mantenedores'
   if (e.includes('log') || e.includes('auditoria')) return 'system_logs'
 
-  // Fallback: limpa barras e hífens
-  return e.replace(/[^a-z0-9_]/g, '_')
+  return null
 }
 
 export async function POST(req: Request) {
@@ -61,6 +60,11 @@ export async function POST(req: Request) {
     for (const [sheetName, tableData] of entries as [string, any][]) {
       const records = Array.isArray(tableData?.registros) ? tableData.registros : Array.isArray(tableData) ? tableData : []
       const tableName = resolveTableName(tableData?.endpoint || sheetName)
+
+      if (!tableName) {
+        results[sheetName] = { total: records.length, restored: 0, status: 'error', message: 'Tabela não permitida na whitelist de restauração.' }
+        continue
+      }
 
       if (records.length === 0) {
         results[sheetName] = { total: 0, restored: 0, status: 'ok', message: 'Nenhum registro para restaurar.' }

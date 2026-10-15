@@ -36,7 +36,7 @@ export default function NovaDenunciaPage() {
         body: JSON.stringify({
           ...formData,
           protocolo: newProtocol,
-          relator_id: currentUser?.id,
+          relator_id: formData.anonimo ? null : currentUser?.id,
           status: 'nova'
         })
       })

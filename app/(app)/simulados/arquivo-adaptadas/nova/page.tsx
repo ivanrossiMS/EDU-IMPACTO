@@ -40,7 +40,7 @@ export default function ScannerPage() {
   const cameraInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    if (currentUserPerfil === 'professor') {
+    if (currentUserPerfil?.toLowerCase() === 'professor') {
       router.push('/simulados')
     }
   }, [currentUserPerfil, router])
@@ -288,7 +288,7 @@ export default function ScannerPage() {
     }
   }
 
-  if (currentUserPerfil === 'professor') return null
+  if (currentUserPerfil?.toLowerCase() === 'professor') return null
 
   return (
     <div style={{ maxWidth: 900, margin: '0 auto', padding: '40px 24px' }}>

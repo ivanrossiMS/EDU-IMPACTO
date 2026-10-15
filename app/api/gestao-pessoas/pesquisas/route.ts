@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/server/authGuard'
+import { requireAuth, requireStaff } from '@/lib/server/authGuard'
 import { createProtectedClient } from '@/lib/server/supabaseServerFactory'
 
 export const dynamic = 'force-dynamic'
@@ -7,14 +7,14 @@ export const revalidate = 0
 
 export async function GET(req: Request) {
   try {
-    const { user, errorResponse } = await requireAuth()
+    const { user, errorResponse } = await requireStaff(req)
     if (errorResponse) return errorResponse
     const supabase = await createProtectedClient()
     
     // Fetch pesquisas and aggregate answers
     const { data: pesquisas, error } = await supabase
       .from('gp_pesquisas')
-      .select('*, gp_pesquisa_respostas(id, nota)')
+      .select('*, gp_pesquisa_respostas(id)')
       .order('criado_em', { ascending: false })
       
     if (error) throw error
@@ -31,13 +31,13 @@ export async function GET(req: Request) {
 
     return NextResponse.json(formatted)
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 401 })
+    return NextResponse.json({ error: error.message }, { status: 400 })
   }
 }
 
 export async function POST(req: Request) {
   try {
-    const { user, errorResponse } = await requireAuth()
+    const { user, errorResponse } = await requireStaff(req)
     if (errorResponse) return errorResponse
     const supabase = await createProtectedClient()
     

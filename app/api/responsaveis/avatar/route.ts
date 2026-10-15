@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/server/authGuard'
+import { resolveUserRole } from '@/lib/server/authGuard'
 import { createAdminClient } from '@/lib/server/supabaseServerFactory'
 
 export const dynamic = 'force-dynamic'
 
 export async function POST(request: Request) {
-  const { user, errorResponse } = await requireAuth()
-  if (errorResponse) return errorResponse
+  const { user, dbUser, isStaff, errorResponse } = await resolveUserRole(request)
+  if (errorResponse || !user) return errorResponse || NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
 
   try {
     const { responsavelId, email, avatarUrl } = await request.json()
@@ -17,18 +17,39 @@ export async function POST(request: Request) {
 
     const supabaseAdmin = createAdminClient()
 
-    // 1. Atualizar a tabela responsaveis (campo jsonb 'dados')
-    const { data: respData, error: fetchErr } = await supabaseAdmin.from('responsaveis').select('dados').eq('id', responsavelId).single()
-    
+    // 1. Buscar o responsável para validar propriedade se não for staff
+    const { data: respData, error: fetchErr } = await supabaseAdmin
+      .from('responsaveis')
+      .select('id, email, dados')
+      .eq('id', responsavelId)
+      .single()
+
+    if (!isStaff) {
+      const userEmail = String(user.email || dbUser?.email || '').trim().toLowerCase()
+      const respEmail = String(respData?.email || email || '').trim().toLowerCase()
+      const isOwnGuardian =
+        String(user.id) === String(responsavelId) ||
+        String(user.user_metadata?.responsavel_id || '') === String(responsavelId) ||
+        (userEmail && respEmail && userEmail === respEmail)
+
+      if (!isOwnGuardian) {
+        return NextResponse.json(
+          { error: 'Acesso negado: você só pode alterar o seu próprio avatar.' },
+          { status: 403 }
+        )
+      }
+    }
+
     if (!fetchErr) {
       const novosDados = { ...(respData?.dados || {}), foto: avatarUrl }
       await supabaseAdmin.from('responsaveis').update({ dados: novosDados }).eq('id', responsavelId)
     }
 
-    // 2. Sincronizar com a tabela system_users se o email for informado
-    if (email) {
-      const emailLower = email.trim().toLowerCase()
-      const { data: uData } = await supabaseAdmin.from('system_users').select('id, dados, auth_id').eq('email', emailLower).maybeSingle()
+    // 2. Sincronizar com a tabela system_users apenas se for Staff ou o próprio e-mail autenticado
+    const targetEmailLower = email ? email.trim().toLowerCase() : ''
+    const callerEmailLower = String(user.email || '').trim().toLowerCase()
+    if (targetEmailLower && (isStaff || targetEmailLower === callerEmailLower)) {
+      const { data: uData } = await supabaseAdmin.from('system_users').select('id, dados, auth_id').eq('email', targetEmailLower).maybeSingle()
       if (uData) {
         const sysDados = { ...(uData.dados || {}), foto: avatarUrl }
         await supabaseAdmin.from('system_users').update({ dados: sysDados }).eq('id', uData.id)

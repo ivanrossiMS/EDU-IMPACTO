@@ -31,14 +31,8 @@ type SortOrder = 'asc' | 'desc'
 const DEFAULT_MESSAGE_TEMPLATE = `Olá, colaborador! Esse é seu codigo para acesso a plataforma Shai, as instruções de acesso está na imagem enviada nos grupos.\nCODIGO: {CODIGO}`
 
 const MOCK_DEMO_DATA: Omit<ColaboradorShai, 'id' | 'status' | 'enviadoEm'>[] = [
-  { unidade: 'COLEGIO EF', nome: 'Alana Santos da Silva', cpf: '023.212.071-02', dataNascimento: '02/06/1987', whatsapp: '6798126-6568', codigo: 'DFD35855' },
-  { unidade: 'COLEGIO EF', nome: 'Ana Lúcia Fernandes Pedrosa', cpf: '143.810.208-98', dataNascimento: '04/06/1976', whatsapp: '6799245-7678', codigo: 'DFD35856' },
-  { unidade: 'COLEGIO EF', nome: 'Ana Paula da Silva Bolandine', cpf: '749.479.901-04', dataNascimento: '13/01/1992', whatsapp: '6799227-6915', codigo: 'DFD35857' },
-  { unidade: 'COLEGIO EF', nome: 'Anahi Aguirre Gabino Husmann', cpf: '012.244.801-47', dataNascimento: '26/06/1992', whatsapp: '6799263-8916', codigo: 'DFD35858' },
-  { unidade: 'COLEGIO EF', nome: 'Andreia da Silva Rodrigues', cpf: '019.720.431-70', dataNascimento: '19/06/1988', whatsapp: '6799654-1919', codigo: 'DFD35859' },
-  { unidade: 'COLEGIO EF', nome: 'Aparecida de Jesus Santos', cpf: '309.064.821-00', dataNascimento: '04/02/1963', whatsapp: '6799213-2003', codigo: 'DFD35860' },
-  { unidade: 'COLEGIO EF', nome: 'Bruna Rodrigues dos Reis Santos', cpf: '066.675.531-05', dataNascimento: '02/05/1998', whatsapp: '6799236-0358', codigo: 'DFD35861' },
-  { unidade: 'COLEGIO EF', nome: 'Cristina Izidora da Silva Brandão', cpf: '973.329.681-34', dataNascimento: '11/12/1980', whatsapp: '6798190-1550', codigo: 'DFD35862' },
+  { unidade: 'COLEGIO EF', nome: 'Colaborador Exemplo 1', cpf: '000.000.000-01', dataNascimento: '01/01/1990', whatsapp: '6799999-0001', codigo: 'DEMO0001' },
+  { unidade: 'COLEGIO EF', nome: 'Colaborador Exemplo 2', cpf: '000.000.000-02', dataNascimento: '02/02/1991', whatsapp: '6799999-0002', codigo: 'DEMO0002' },
 ]
 
 // Helper function to format Excel serial dates to DD/MM/YYYY

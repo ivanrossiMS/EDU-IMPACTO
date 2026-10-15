@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabaseServer as supabase } from '@/lib/supabaseServer'
 import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
-import { requireAuth } from '@/lib/server/authGuard'
+import { requireAuth, requireStaff } from '@/lib/server/authGuard'
 
 export const dynamic = 'force-dynamic'
 
@@ -445,7 +445,7 @@ function prepareResponsavelData(item: any, existingDados: any = {}) {
 
 // ─── POST: Criar ou atualizar responsável ─────────────────────────────────────
 export async function POST(request: Request) {
-  const { user, errorResponse } = await requireAuth()
+  const { user, errorResponse } = await requireStaff(request)
   if (errorResponse) return errorResponse
 
   try {
@@ -495,7 +495,7 @@ export async function POST(request: Request) {
 
 // ─── PUT: Atualizar responsável ──────────────────────────────────────────────
 export async function PUT(request: Request) {
-  const { user, errorResponse } = await requireAuth()
+  const { user, errorResponse } = await requireStaff(request)
   if (errorResponse) return errorResponse
 
   try {
@@ -575,7 +575,7 @@ export async function PUT(request: Request) {
 
 // ─── DELETE: Remover responsável ──────────────────────────────────────────────
 export async function DELETE(request: Request) {
-  const { user, errorResponse } = await requireAuth()
+  const { user, errorResponse } = await requireStaff(request)
   if (errorResponse) return errorResponse
 
   try {

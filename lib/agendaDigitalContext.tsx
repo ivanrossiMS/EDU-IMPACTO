@@ -472,7 +472,7 @@ export function AgendaDigitalProvider({ children, isFamily = false }: { children
             } catch (_) {}
           }
           if (db.ad_config) {
-            // Force removed features to false, while ensuring defaults for active modules
+            // Respect saved permissions in db.ad_config while providing defaults when undefined
             const sanitizedConfig = {
               ...db.ad_config,
               permissoes: {
@@ -484,10 +484,10 @@ export function AgendaDigitalProvider({ children, isFamily = false }: { children
                 visualizarOcorrencias: true,
                 chamadaAlunoPortaria: true,
                 ambienteSeguroMomentos: true,
-                ...(db.ad_config.permissoes || {}),
                 chat: true,
                 visualizarRelatorios: false,
                 confirmarPresencaEventos: false,
+                ...(db.ad_config.permissoes || {}),
               },
               notificacoes: {
                 pushComunicados: true,
@@ -499,9 +499,9 @@ export function AgendaDigitalProvider({ children, isFamily = false }: { children
                 pushOcorrencias: true,
                 pushNotas: true,
                 pushSaidaPortaria: true,
-                ...(db.ad_config.notificacoes || {}),
                 pushMensagemChat: true,
                 pushRelatorios: false,
+                ...(db.ad_config.notificacoes || {}),
               }
             }
             setAdConfig(sanitizedConfig)
@@ -529,16 +529,28 @@ export function AgendaDigitalProvider({ children, isFamily = false }: { children
         if (!prev || !prev.length) return prev;
         let hasChanges = false;
         const now = new Date();
+        const publishedNow: ADComunicado[] = [];
         const updated = prev.map(c => {
           if (c.status === 'agendado' && c.dataAgendamento) {
             const agendaData = new Date(c.dataAgendamento);
             if (agendaData <= now) {
               hasChanges = true;
-              return { ...c, status: 'enviado' as const, dataEnvio: c.dataAgendamento };
+              const nextCom = { ...c, status: 'enviado' as const, dataEnvio: c.dataAgendamento };
+              publishedNow.push(nextCom);
+              return nextCom;
             }
           }
           return c;
         });
+        if (publishedNow.length > 0) {
+          publishedNow.forEach(c => {
+            fetch('/api/comunicados', {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(c)
+            }).catch(err => console.error('Erro ao persistir comunicado agendado:', err));
+          });
+        }
         return hasChanges ? updated : prev;
       });
     }, 60000); // Verifica a cada 60 segundos

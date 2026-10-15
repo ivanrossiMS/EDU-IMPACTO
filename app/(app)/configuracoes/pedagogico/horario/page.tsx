@@ -33,22 +33,37 @@ function getColorFromName(name: string) {
 }
 
 export default function HorarioAulasPage() {
-  const { data: rawTurmas, isLoading: loadingTurmas, isFetching: fetchingTurmas } = useApiQuery<any[]>(['turmas'], '/api/turmas')
-  const { data: rawRotina, isLoading: loadingRotina, isFetching: fetchingRotina } = useApiQuery<RotinaItem[]>(['rotina'], '/api/academico/rotina')
+  const { data: rawTurmas, isLoading: loadingTurmas, isFetching: fetchingTurmas } = useApiQuery<any>(['turmas'], '/api/turmas')
+  const { data: rawRotina, isLoading: loadingRotina, isFetching: fetchingRotina, refetch: refetchRotina } = useApiQuery<RotinaItem[]>(['rotina'], '/api/agenda/rotina')
   const { data: rawDisciplinas } = useApiQuery<{ valor: any[] }>(['config-disciplinas'], '/api/configuracoes?chave=cfgDisciplinas')
+  const { data: rawGradeConfig } = useApiQuery<{ valor: Record<string, TimeSlot[]> }>(['config-horarios-grade'], '/api/configuracoes?chave=cfgHorariosGrade')
   
   const [rotinaItems, setRotinaItems] = useState<RotinaItem[]>([])
-  const turmas = rawTurmas || []
+  const turmas: any[] = Array.isArray(rawTurmas) ? rawTurmas : (rawTurmas?.data || [])
   const cfgDisciplinas = rawDisciplinas?.valor || []
   
   const isLoading = loadingTurmas || loadingRotina
   const isFetching = fetchingTurmas || fetchingRotina
 
   useEffect(() => {
-    if (rawRotina) {
+    if (Array.isArray(rawRotina)) {
       setRotinaItems(rawRotina)
     }
   }, [rawRotina])
+
+  const persistRotina = async (nextItems: RotinaItem[]) => {
+    setRotinaItems(nextItems)
+    try {
+      await fetch('/api/agenda/rotina', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(nextItems)
+      })
+      refetchRotina()
+    } catch (e) {
+      console.error('Erro ao salvar rotina:', e)
+    }
+  }
 
   // Navigation State
   const [viewMode, setViewMode] = useState<'lista' | 'grade'>('lista')
@@ -56,7 +71,7 @@ export default function HorarioAulasPage() {
 
   // Filtros
   const anosLetivos = useMemo(() => {
-    const anos = turmas.map(t => (t as any).anoLetivo || String(new Date().getFullYear())).filter(Boolean)
+    const anos = turmas.map(t => String((t as any).anoLetivo || (t as any).ano || new Date().getFullYear())).filter(Boolean)
     return [...new Set(anos)].sort().reverse()
   }, [turmas])
   const [anoFiltro, setAnoFiltro] = useState(() => String(new Date().getFullYear()))
@@ -64,7 +79,8 @@ export default function HorarioAulasPage() {
 
   const turmasFiltradas = useMemo(() =>
     turmas.filter(t => {
-      if (anoFiltro && (t as any).anoLetivo && (t as any).anoLetivo !== anoFiltro) return false
+      const tAno = String((t as any).anoLetivo || (t as any).ano || '')
+      if (anoFiltro && tAno && tAno !== anoFiltro) return false
       if (segFiltro !== 'todos' && (t as any).segmento && (t as any).segmento !== segFiltro) return false
       return true
     })
@@ -75,19 +91,28 @@ export default function HorarioAulasPage() {
     return [...new Set(segs)]
   }, [turmas])
 
-  // Custom Grade State (Persisted in localStorage per client visual preferences)
+  // Custom Grade State (Persisted in Supabase & localStorage)
   const [grade, setGrade] = useState<Record<string, TimeSlot[]>>({})
   
   useEffect(() => {
+    if (rawGradeConfig?.valor && typeof rawGradeConfig.valor === 'object') {
+      setGrade(rawGradeConfig.valor)
+      return
+    }
     try {
       const stored = localStorage.getItem('edu-horarios-grade')
       if (stored) setGrade(JSON.parse(stored))
     } catch(e) {}
-  }, [])
+  }, [rawGradeConfig])
 
   const saveGrade = (newGrade: Record<string, TimeSlot[]>) => {
     setGrade(newGrade)
-    localStorage.setItem('edu-horarios-grade', JSON.stringify(newGrade))
+    try { localStorage.setItem('edu-horarios-grade', JSON.stringify(newGrade)) } catch {}
+    fetch('/api/configuracoes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chave: 'cfgHorariosGrade', valor: newGrade })
+    }).catch(console.error)
   }
 
   const currentSlots = useMemo(() => turmaSel ? (grade[turmaSel] || DEFAULT_SLOTS) : [], [grade, turmaSel])
@@ -128,10 +153,10 @@ export default function HorarioAulasPage() {
     if (!slot) return
 
     const key = DIA_IDX[dia]
-    
-    setRotinaItems(prev => {
-      const filtered = prev.filter(r => !(r.turma === turmaSel && r.diaSemana === key && r.horaInicio === slot.inicio))
-      if (!cellForm.disciplina) return filtered
+    const filtered = rotinaItems.filter(r => !(r.turma === turmaSel && r.diaSemana === key && r.horaInicio === slot.inicio))
+    if (!cellForm.disciplina) {
+      persistRotina(filtered)
+    } else {
       const cor = getColorFromName(cellForm.disciplina)
       const novo: RotinaItem = {
         id: newId('RT'), turma: turmaSel, diaSemana: key,
@@ -140,8 +165,8 @@ export default function HorarioAulasPage() {
         sala: cellForm.sala, tipo: 'aula',
         cor: cor,
       }
-      return [...filtered, novo]
-    })
+      persistRotina([...filtered, novo])
+    }
     setEditCell(null)
   }
 
@@ -150,7 +175,7 @@ export default function HorarioAulasPage() {
     const { dia, slotId } = editCell
     const slot = currentSlots.find(s => s.id === slotId)
     if (slot) {
-      setRotinaItems(prev => prev.filter(r => !(r.turma === turmaSel && r.diaSemana === DIA_IDX[dia] && r.horaInicio === slot.inicio)))
+      persistRotina(rotinaItems.filter(r => !(r.turma === turmaSel && r.diaSemana === DIA_IDX[dia] && r.horaInicio === slot.inicio)))
     }
     setEditCell(null)
   }
@@ -171,12 +196,13 @@ export default function HorarioAulasPage() {
     saveGrade({ ...grade, [turmaSel]: newSlots })
 
     if (oldSlot.inicio !== rowForm.inicio || oldSlot.fim !== rowForm.fim) {
-      setRotinaItems(prev => prev.map(r => {
+      const updated = rotinaItems.map(r => {
         if (r.turma === turmaSel && r.horaInicio === oldSlot.inicio) {
           return { ...r, horaInicio: rowForm.inicio, horaFim: rowForm.fim }
         }
         return r
-      }))
+      })
+      persistRotina(updated)
     }
     setEditRowId(null)
   }
@@ -186,7 +212,7 @@ export default function HorarioAulasPage() {
     if (confirm('Tem certeza? Todas as aulas cadastradas nesta linha também serão apagadas.')) {
       const newSlots = currentSlots.filter(s => s.id !== id)
       saveGrade({ ...grade, [turmaSel]: newSlots })
-      setRotinaItems(prev => prev.filter(r => !(r.turma === turmaSel && r.horaInicio === oldInicio)))
+      persistRotina(rotinaItems.filter(r => !(r.turma === turmaSel && r.horaInicio === oldInicio)))
       setEditRowId(null)
     }
   }
@@ -327,7 +353,7 @@ export default function HorarioAulasPage() {
           </div>
         </div>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-          <button className="btn btn-secondary btn-sm"><Download size={13} />Exportar Grade</button>
+          <button className="btn btn-secondary btn-sm" onClick={() => window.print()}><Download size={13} />Exportar Grade</button>
         </div>
       </div>
 

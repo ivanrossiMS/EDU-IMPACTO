@@ -61,6 +61,20 @@ export async function GET(request: Request) {
       (cargoUser && ['responsável', 'responsavel', 'aluno'].some(k => cargoUser.toLowerCase().includes(k)))
     const convInfo = convInfoRes.data
 
+    const rawEspelharResp = searchParams.get('espelhar_responsavel')
+    const rawEspelharColab = searchParams.get('espelhar_colaborador')
+    const rawEspelharAluno = searchParams.get('espelhar_aluno') === 'true'
+
+    if (!isAdmin && (rawEspelharResp || rawEspelharColab || rawEspelharAluno)) {
+      return NextResponse.json(
+        { error: 'Acesso negado: apenas administradores podem espelhar usuários.' },
+        { status: 403 }
+      )
+    }
+
+    const espelharResp = isAdmin ? rawEspelharResp : null
+    const espelharColab = isAdmin ? rawEspelharColab : null
+
     let hasLeft = false
     let effectiveLeftAt: string | null = null
     let finalMessages = messagesRes.data || []
@@ -75,8 +89,8 @@ export async function GET(request: Request) {
         user.user_metadata?.responsavel_id ? String(user.user_metadata.responsavel_id) : null,
         dbUser?.dados?.responsavel_id ? String(dbUser.dados.responsavel_id) : null,
         dbUser?.dados?.colaborador_id ? String(dbUser.dados.colaborador_id) : null,
-        searchParams.get('espelhar_responsavel'),
-        searchParams.get('espelhar_colaborador'),
+        espelharResp,
+        espelharColab,
       ].filter(Boolean))) as string[]
 
       const { data: isParticipant } = await supabase
@@ -100,7 +114,7 @@ export async function GET(request: Request) {
       const userCandidateIds = Array.from(new Set([
         user.id,
         dbUser?.id,
-        searchParams.get('espelhar_colaborador'),
+        espelharColab,
         searchParams.get('aluno_id')
       ].filter(Boolean))) as string[]
 
@@ -145,45 +159,66 @@ export async function GET(request: Request) {
       const userCandidateIds = Array.from(new Set([
         user.id,
         dbUser?.id,
-        searchParams.get('espelhar_responsavel'),
+        espelharResp,
         searchParams.get('aluno_id')
       ].filter(Boolean))) as string[]
 
-      // 1. Checa se o participante tem left_at gravado
-      const { data: myPart } = await supabase
+      // 1. Checa se o participante está registrado ou se o grupo pertence ao escopo familiar
+      const { data: myParts } = await supabase
         .from('chat_participants')
-        .select('left_at')
+        .select('id, left_at')
         .eq('conversation_id', conversationId)
         .in('user_id', userCandidateIds)
-        .not('left_at', 'is', null)
         .order('left_at', { ascending: false })
-        .limit(1)
-        .maybeSingle()
 
-      if (myPart?.left_at) {
+      const myPartWithLeft = (myParts || []).find((p: any) => p.left_at)
+      let belongsToFamilyGroup = Boolean(myParts && myParts.length > 0)
+
+      if (myPartWithLeft?.left_at) {
         hasLeft = true
-        effectiveLeftAt = myPart.left_at
-      } else {
-        // 2. Ou checa via resolveFamilyScope se a turma/grupo é histórica para o aluno
-        try {
-          const { resolveFamilyScope } = await import('@/lib/server/chatFamilyHelper')
-          const familyScope = await resolveFamilyScope(user, {
-            alunoIdParam: searchParams.get('aluno_id'),
-            context: 'familia',
-            dbUser
-          })
-          const histInfo = 
-            (convInfo.grupo_id ? familyScope.historicalGroupIds.get(String(convInfo.grupo_id)) : null) ||
-            (convInfo.turma_id ? familyScope.historicalGroupIds.get(String(convInfo.turma_id)) : null) ||
-            (convInfo.turma_id ? familyScope.historicalGroupIds.get(String(convInfo.turma_id).replace(/^sync-/, '')) : null)
+        effectiveLeftAt = myPartWithLeft.left_at
+      }
 
-          if (histInfo) {
+      try {
+        const { resolveFamilyScope } = await import('@/lib/server/chatFamilyHelper')
+        const familyScope = await resolveFamilyScope(user, {
+          alunoIdParam: searchParams.get('aluno_id'),
+          context: 'familia',
+          dbUser
+        })
+        const rawGId = convInfo.grupo_id ? String(convInfo.grupo_id) : ''
+        const rawTId = convInfo.turma_id ? String(convInfo.turma_id) : ''
+        const cleanTId = rawTId.replace(/^sync-/, '')
+
+        if (
+          (rawGId && familyScope.allGroupIds.has(rawGId)) ||
+          (rawTId && (familyScope.allTurmaIds.has(rawTId) || familyScope.allGroupIds.has(rawTId))) ||
+          (cleanTId && (familyScope.allTurmaIds.has(cleanTId) || familyScope.allGroupIds.has(cleanTId)))
+        ) {
+          belongsToFamilyGroup = true
+        }
+
+        const histInfo = 
+          (rawGId ? familyScope.historicalGroupIds.get(rawGId) : null) ||
+          (rawTId ? familyScope.historicalGroupIds.get(rawTId) : null) ||
+          (cleanTId ? familyScope.historicalGroupIds.get(cleanTId) : null)
+
+        if (histInfo) {
+          belongsToFamilyGroup = true
+          if (!hasLeft) {
             hasLeft = true
             effectiveLeftAt = histInfo.dataSaida || null
           }
-        } catch (e) {
-          console.error('[Chat Messages] Error resolving historical group for family:', e)
         }
+      } catch (e) {
+        console.error('[Chat Messages] Error resolving historical group for family:', e)
+      }
+
+      if (!belongsToFamilyGroup) {
+        return NextResponse.json(
+          { error: 'Acesso negado: você não participa deste grupo.' },
+          { status: 403 }
+        )
       }
 
       if (hasLeft && effectiveLeftAt) {
@@ -241,19 +276,55 @@ export async function POST(request: Request) {
     let dbUser: any = null
     const { data: foundUser } = await supabase
       .from('system_users')
-      .select('id, nome, cargo, perfil, dados')
+      .select('id, auth_id, nome, cargo, perfil, dados')
       .or(`id.eq."${user.id}",auth_id.eq."${user.id}"${user.email ? `,email.ilike."${user.email}"` : ''}`)
       .maybeSingle()
 
     dbUser = foundUser
 
-    const senderId = overrideSenderId || dbUser?.id || user.id
-    const senderName = overrideSenderName || dbUser?.nome || user.user_metadata?.nome || user.email || 'Usuário'
-    const senderPerfil = overrideSenderPerfil || dbUser?.cargo || dbUser?.perfil || user.user_metadata?.perfil || 'Usuário'
-
     const perfilUser = (dbUser?.perfil || user.user_metadata?.perfil || '').trim()
     const cargoUser = (dbUser?.cargo || user.user_metadata?.cargo || '').trim()
     const isAdmin = checkIsAdmin(perfilUser, cargoUser)
+
+    // Validar overrideSenderId para evitar falsificação de identidade por usuários não-admin
+    if (overrideSenderId && !isAdmin) {
+      const legitimateIds = new Set<string>(
+        [
+          String(user.id),
+          dbUser?.id ? String(dbUser.id) : null,
+          dbUser?.auth_id ? String(dbUser.auth_id) : null,
+          user.user_metadata?.responsavel_id ? String(user.user_metadata.responsavel_id) : null,
+          user.user_metadata?.aluno_id ? String(user.user_metadata.aluno_id) : null,
+          user.user_metadata?.colaborador_id ? String(user.user_metadata.colaborador_id) : null,
+          user.user_metadata?.system_user_id ? String(user.user_metadata.system_user_id) : null,
+          user.user_metadata?.uid_legacy ? String(user.user_metadata.uid_legacy) : null,
+          dbUser?.dados?.responsavel_id ? String(dbUser.dados.responsavel_id) : null,
+          dbUser?.dados?.colaborador_id ? String(dbUser.dados.colaborador_id) : null,
+          dbUser?.dados?.aluno_id ? String(dbUser.dados.aluno_id) : null,
+        ].filter(Boolean) as string[]
+      )
+
+      if (!legitimateIds.has(String(overrideSenderId))) {
+        try {
+          const { resolveFamilyScope } = await import('@/lib/server/chatFamilyHelper')
+          const familyScope = await resolveFamilyScope(user, { context: 'familia', dbUser })
+          for (const cid of familyScope.candidateUserIds || []) {
+            legitimateIds.add(String(cid))
+          }
+        } catch {}
+      }
+
+      if (!legitimateIds.has(String(overrideSenderId))) {
+        return NextResponse.json(
+          { error: 'Acesso negado: o sender_id informado não pertence ao usuário autenticado.' },
+          { status: 403 }
+        )
+      }
+    }
+
+    const senderId = overrideSenderId || dbUser?.id || user.id
+    const senderName = overrideSenderName || dbUser?.nome || user.user_metadata?.nome || user.email || 'Usuário'
+    const senderPerfil = overrideSenderPerfil || dbUser?.cargo || dbUser?.perfil || user.user_metadata?.perfil || 'Usuário'
 
     // 1.1 Buscar detalhes da conversa para validação de permissões
     let { data: convInfo } = await supabase
@@ -557,15 +628,18 @@ export async function POST(request: Request) {
         .is('left_at', null)
 
       if (otherParticipants && otherParticipants.length > 0) {
-        for (const part of otherParticipants) {
-          await supabase
-            .from('chat_participants')
-            .update({
-              unread_count: (part.unread_count || 0) + 1,
-              updated_at: new Date().toISOString()
-            })
-            .eq('id', part.id)
-        }
+        const nowUpdateIso = new Date().toISOString()
+        await Promise.all(
+          otherParticipants.map((part: any) =>
+            supabase
+              .from('chat_participants')
+              .update({
+                unread_count: (part.unread_count || 0) + 1,
+                updated_at: nowUpdateIso
+              })
+              .eq('id', part.id)
+          )
+        )
       }
     } catch (e) {
       console.warn('Fallback trigger notice:', e)
@@ -673,7 +747,7 @@ export async function DELETE(request: Request) {
       dbUser?.auth_id ? String(dbUser.auth_id) : null,
       dbUser?.dados?.colaborador_id ? String(dbUser.dados.colaborador_id) : null,
       (user as any)?.user_metadata?.colaborador_id ? String((user as any).user_metadata.colaborador_id) : null,
-      searchParams.get('espelhar_colaborador')
+      isAdmin ? searchParams.get('espelhar_colaborador') : null
     ].filter(Boolean))) as string[]
 
     const isMyMessage = myCandidateIds.includes(String(targetMsg.sender_id))

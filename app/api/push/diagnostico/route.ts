@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/server/authGuard'
+import { requireStaff } from '@/lib/server/authGuard'
 import { supabaseServer } from '@/lib/supabaseServer'
 import { sendPushNotification } from '@/lib/server/pushService'
 
@@ -16,7 +16,7 @@ export const dynamic = 'force-dynamic'
  * Acesso: apenas Administradores
  */
 export async function GET(request: Request) {
-  const { user, errorResponse } = await requireAuth()
+  const { user, dbUser, perfil, cargo, errorResponse } = await requireStaff(request)
   if (errorResponse) return errorResponse
 
   try {
@@ -24,21 +24,8 @@ export async function GET(request: Request) {
 
     // Verificar se é admin
     const adminPerfis = ['administrador', 'administrador master', 'admin', 'diretor geral', 'diretora geral', 'direção', 'master']
-    let userFilter = `id.eq.${user.id}`
-    if (user.email) {
-      userFilter += `,auth_id.eq.${user.id},email.ilike.${user.email}`
-    } else {
-      userFilter += `,auth_id.eq.${user.id}`
-    }
-
-    const { data: dbUser } = await supabase
-      .from('system_users')
-      .select('id, auth_id, perfil, cargo')
-      .or(userFilter)
-      .maybeSingle()
-
-    const userPerfil = String(dbUser?.perfil || user.user_metadata?.perfil || '').toLowerCase().trim()
-    const userCargo = String(dbUser?.cargo || user.user_metadata?.cargo || '').toLowerCase().trim()
+    const userPerfil = String(perfil || dbUser?.perfil || user.user_metadata?.perfil || '').toLowerCase().trim()
+    const userCargo = String(cargo || dbUser?.cargo || user.user_metadata?.cargo || '').toLowerCase().trim()
     const isMasterOrAdmin = adminPerfis.includes(userPerfil) || adminPerfis.includes(userCargo)
 
     if (!isMasterOrAdmin) {
@@ -111,7 +98,7 @@ export async function GET(request: Request) {
  * clear-logs: Limpa logs antigos (mais de 30 dias)
  */
 export async function POST(request: Request) {
-  const { user, errorResponse } = await requireAuth()
+  const { user, dbUser, perfil, cargo, errorResponse } = await requireStaff(request)
   if (errorResponse) return errorResponse
 
   try {
@@ -119,21 +106,8 @@ export async function POST(request: Request) {
 
     // Verificar se é admin
     const adminPerfis = ['administrador', 'administrador master', 'admin', 'diretor geral', 'diretora geral', 'direção', 'master']
-    let userFilter = `id.eq.${user.id}`
-    if (user.email) {
-      userFilter += `,auth_id.eq.${user.id},email.ilike.${user.email}`
-    } else {
-      userFilter += `,auth_id.eq.${user.id}`
-    }
-
-    const { data: dbUser } = await supabase
-      .from('system_users')
-      .select('id, auth_id, perfil, cargo')
-      .or(userFilter)
-      .maybeSingle()
-
-    const userPerfil = String(dbUser?.perfil || user.user_metadata?.perfil || '').toLowerCase().trim()
-    const userCargo = String(dbUser?.cargo || user.user_metadata?.cargo || '').toLowerCase().trim()
+    const userPerfil = String(perfil || dbUser?.perfil || user.user_metadata?.perfil || '').toLowerCase().trim()
+    const userCargo = String(cargo || dbUser?.cargo || user.user_metadata?.cargo || '').toLowerCase().trim()
     const isMasterOrAdmin = adminPerfis.includes(userPerfil) || adminPerfis.includes(userCargo)
 
     if (!isMasterOrAdmin) {

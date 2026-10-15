@@ -31,13 +31,15 @@ function generateHash(data: {
   return createHash('sha256').update(content).digest('hex')
 }
 
-function maskDoc(doc: string | null): string {
+function maskDocument(doc: string | null): string {
   if (!doc) return '—'
+  if (doc.includes('*')) return doc
   const clean = doc.replace(/\D/g, '')
   if (clean.length === 11) return `***.***.${ clean.slice(6, 9)}-**`
   if (clean.length === 14) return `**.***.${ clean.slice(5, 8)}/${clean.slice(8, 12)}-**`
   return doc.slice(0, 3) + '***'
 }
+const maskDoc = maskDocument
 
 function fmtDate(d: string | null): string {
   if (!d) return '—'
@@ -309,7 +311,7 @@ export default async function PublicValidationPage({ params }: Props) {
                   { label: '💳 Forma de Pagamento', value: receipt.payment_method || '—' },
                   { label: '📋 Evento Financeiro', value: receipt.event_description || '—' },
                   { label: '🔑 ID da Baixa', value: receipt.baixa_id || '—' },
-                  { label: '🪪 CPF/CNPJ', value: receipt.payer_document || '—' },
+                  { label: '🪪 CPF/CNPJ', value: maskDocument(receipt.payer_document) },
                 ].map(item => (
                   <div key={item.label} style={{
                     background: 'rgba(30,41,59,0.5)',

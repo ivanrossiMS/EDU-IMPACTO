@@ -1416,23 +1416,24 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const { data: cfgSituacaoAluno, setData: setCfgSituacaoAluno } = useConfigDb<ConfigSituacaoAluno>('cfgSituacaoAluno')
   const { data: cfgGruposAlunos, setData: setCfgGruposAlunos } = useConfigDb<ConfigGrupoAluno>('cfgGruposAlunos')
   const { data: cfgDisciplinas, setData: setCfgDisciplinas } = useConfigDb<ConfigDisciplina>('cfgDisciplinas')
-  const { data: cfgNiveisEnsino, setData: setCfgNiveisEnsino } = useConfigDb<ConfigNivelEnsino>('cfgNiveisEnsino')
-  const { data: cfgSeries, setData: setCfgSeries } = useConfigDb<ConfigSerie>('cfgSeries')
+  const { data: cfgNiveisEnsino, setData: setCfgNiveisEnsino, loading: niveisLoading } = useConfigDb<ConfigNivelEnsino>('cfgNiveisEnsino')
+  const { data: cfgSeries, setData: setCfgSeries, loading: seriesLoading } = useConfigDb<ConfigSerie>('cfgSeries')
   const { data: cfgTiposOcorrencia, setData: setCfgTiposOcorrencia } = useConfigDb<ConfigTipoOcorrencia>('cfgTiposOcorrencia', TIPOS_OCORRENCIA_DEFAULT)
   const { data: cfgGruposAvaliacao, setData: setCfgGruposAvaliacao } = useConfigDb<ConfigGrupoAvaliacao>('cfgGruposAvaliacao')
   const { data: cfgArredondamentos, setData: setCfgArredondamentos } = useConfigDb<ConfigArredondamento>('cfgArredondamentos')
 
   // MIGRATION / INITIALIZATION: Auto-extract independent Series from internal Niveis Ensino nested array
+  // Only run AFTER both cfgSeries and cfgNiveisEnsino have finished loading from the server!
   useEffect(() => {
-    if (cfgSeries.length === 0 && cfgNiveisEnsino.length > 0) {
+    if (!seriesLoading && !niveisLoading && cfgSeries.length === 0 && cfgNiveisEnsino.length > 0) {
       let counter = 1
       const extracted: ConfigSerie[] = []
       cfgNiveisEnsino.forEach(n => {
         if (n.series && n.series.length > 0) {
-          n.series.forEach(s => {
+          n.series.forEach((s: any) => {
             const sequenceCode = String(counter++).padStart(2, '0')
             extracted.push({
-              id: newId('SER'),
+              id: s.id || `SER-${n.id}-${sequenceCode}`,
               codigo: sequenceCode,
               nome: s.nome,
               nivelEnsinoId: n.id,
@@ -1448,7 +1449,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cfgSeries.length, cfgNiveisEnsino])
+  }, [seriesLoading, niveisLoading, cfgSeries.length, cfgNiveisEnsino])
 
   const { data: cfgEsquemasAvaliacao, setData: setCfgEsquemasAvaliacao } = useConfigDb<ConfigEsquemaAvaliacao>('cfgEsquemasAvaliacao')
   const { data: esquemaNota, setData: setEsquemaNota } = useConfigDb<EsquemaNota>('esquemaNota')

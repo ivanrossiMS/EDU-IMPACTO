@@ -17,15 +17,30 @@ const PADROES_TURNOS = [
 ] as const
 
 export default function TurnosPage() {
-  const { data: rawConfig, isLoading, isFetching } = useApiQuery<{ valor: ConfigTurno[] }>(['config-turnos'], '/api/configuracoes?chave=cfgTurnos')
+  const { data: rawConfig, isLoading, isFetching, refetch } = useApiQuery<{ valor: ConfigTurno[] }>(['config-turnos'], '/api/configuracoes?chave=cfgTurnos')
   
   const [cfgTurnos, setCfgTurnos] = useState<ConfigTurno[]>([])
 
   useEffect(() => {
-    if (rawConfig?.valor) {
+    if (Array.isArray(rawConfig?.valor)) {
       setCfgTurnos(rawConfig.valor)
     }
   }, [rawConfig])
+
+  const persistTurnos = async (nextList: ConfigTurno[]) => {
+    setCfgTurnos(nextList)
+    try {
+      await fetch('/api/configuracoes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chave: 'cfgTurnos', valor: nextList })
+      })
+      refetch()
+    } catch (e) {
+      console.error('Erro ao salvar turnos:', e)
+    }
+  }
+
   const [search, setSearch] = useState('')
   const [filtroSituacao, setFiltroSituacao] = useState<'todos' | 'ativo' | 'inativo'>('todos')
   const [form, setForm] = useState(BLANK)
@@ -43,42 +58,39 @@ export default function TurnosPage() {
 
   const openNew = () => { setEditId(null); setForm({ ...BLANK }); setShowForm(true) }
   const openEdit = (t: ConfigTurno) => { setEditId(t.id); setForm({ codigo: t.codigo, nome: t.nome, horarioInicio: t.horarioInicio, horarioFim: t.horarioFim, situacao: t.situacao }); setShowForm(true) }
-  const handleDelete = (id: string) => setCfgTurnos(prev => prev.filter(t => t.id !== id))
+  const handleDelete = (id: string) => {
+    persistTurnos(cfgTurnos.filter(t => t.id !== id))
+  }
 
   const loadPadroes = () => {
-    setCfgTurnos(prev => {
-      const existingCodes = new Set(prev.map(p => p.codigo))
-      const news = PADROES_TURNOS.filter(p => !existingCodes.has(p.codigo)).map(p => ({
-        ...p, id: newId('TRN'), createdAt: new Date().toISOString()
-      }))
-      return [...prev, ...news]
-    })
+    const existingCodes = new Set(cfgTurnos.map(p => p.codigo))
+    const news = PADROES_TURNOS.filter(p => !existingCodes.has(p.codigo)).map(p => ({
+      ...p, id: newId('TRN'), createdAt: new Date().toISOString()
+    }))
+    if (news.length > 0) {
+      persistTurnos([...cfgTurnos, ...news])
+    }
   }
 
   const handleClearAll = () => {
     if (confirm('Tem certeza que deseja apagar TODOS os turnos? Essa ação afeta as matrículas e turmas deste turno.')) {
-      setCfgTurnos([])
+      persistTurnos([])
     }
   }
 
   const handleSave = () => {
     if (!form.nome.trim() || !form.codigo.trim()) return
     
-    // Outer guard (uses closure state, works for normal clicks)
     if (!editId && cfgTurnos.some(t => t.codigo === form.codigo)) {
       alert('Já existe um turno com este código!')
       return
     }
 
     if (editId) {
-      setCfgTurnos(prev => prev.map(t => t.id === editId ? { ...t, ...form } : t))
+      persistTurnos(cfgTurnos.map(t => t.id === editId ? { ...t, ...form } : t))
     } else {
       const novoId = newId('TRN')
-      setCfgTurnos(prev => {
-        // Inner guard (uses real-time queued state, works against double-click race conditions)
-        if (prev.some(t => t.codigo === form.codigo || t.id === novoId)) return prev
-        return [...prev, { ...form, id: novoId, createdAt: new Date().toISOString() }]
-      })
+      persistTurnos([...cfgTurnos, { ...form, id: novoId, createdAt: new Date().toISOString() }])
     }
     setForm(BLANK)
     setShowForm(false)

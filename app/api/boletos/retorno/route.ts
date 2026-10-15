@@ -5,6 +5,7 @@
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { processarRetornoCNAB240, interpretarOcorrencia240 } from '@/lib/banking/cnab240'
+import { requireStaff } from '@/lib/server/authGuard'
 
 // Mapeamento de ocorrências para status do título
 const OCORRENCIA_STATUS: Record<string, string> = {
@@ -20,6 +21,8 @@ const OCORRENCIA_STATUS: Record<string, string> = {
 }
 
 export async function POST(req: NextRequest) {
+  const { errorResponse } = await requireStaff(req)
+  if (errorResponse) return errorResponse
   try {
     const body = await req.json() as {
       conteudo: string // texto do arquivo CNAB 240

@@ -1,9 +1,10 @@
 'use client'
 
-import React, { useState, useEffect, useCallback, Suspense } from 'react'
+import React, { useState, useEffect, useCallback, useRef, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { useApp } from '@/lib/context'
 import { useData } from '@/lib/dataContext'
+import { supabase } from '@/lib/supabase'
 import { CredImpactoHeader } from '@/components/credimpacto/CredImpactoHeader'
 import { CredImpactoSidebar, CredImpactoBottomBar, TabId } from '@/components/credimpacto/CredImpactoNavigation'
 import { ColaboradorDashboard } from '@/components/credimpacto/ColaboradorDashboard'
@@ -21,7 +22,7 @@ import { AssinaturaEletronicaModal } from '@/components/credimpacto/AssinaturaEl
 import { QuitacaoAntecipadaModal } from '@/components/credimpacto/QuitacaoAntecipadaModal'
 import { CredImpactoConfig, CredImpactoEmprestimo } from '@/types/credimpacto'
 import { DEFAULT_TERMO_AUTORIZACAO } from '@/lib/credimpacto/contractTemplate'
-import { isCredImpactoAdmin } from '@/lib/credimpacto/authHelper'
+import { isCredImpactoAdmin, isLoanOwnedByUser } from '@/lib/credimpacto/authHelper'
 import { toast } from 'sonner'
 import { Landmark } from 'lucide-react'
 import { Capacitor } from '@capacitor/core'
@@ -56,8 +57,23 @@ function CredImpactoContent() {
   )
   const isBlocked = !perfisLoading && userPerfilObj?.bloqueadoCredImpacto === true
 
+  // Perfil enriquecido do usuário logado (com CPF, IDs e Unidade)
+  const [currentMe, setCurrentMe] = useState<{
+    id: string
+    systemUserId?: string
+    funcionarioId?: string
+    nome: string
+    email: string
+    cpf?: string
+    cargo?: string
+    perfil?: string
+    salarioBase?: number
+    unidade?: string
+    isAdminOrFinance: boolean
+  } | null>(null)
+
   // Identificação do Perfil e Privilégios: SOMENTE Admin e Diretor Geral têm acesso à Gestão
-  const isAdminOrFinance = isCredImpactoAdmin(effectivePerfil, effectiveCargo)
+  const isAdminOrFinance = isCredImpactoAdmin(effectivePerfil, effectiveCargo) || Boolean(currentMe?.isAdminOrFinance)
 
   // Estado da Visão: apenas admin/diretor geral pode acessar 'admin'; todos os demais acessam 'colaborador'
   const [viewMode, setViewMode] = useState<'admin' | 'colaborador'>(isAdminOrFinance ? 'admin' : 'colaborador')
@@ -122,11 +138,46 @@ function CredImpactoContent() {
   const [colaboradoresList, setColaboradoresList] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isRefreshing, setIsRefreshing] = useState(false)
+  const [realtimeStatus, setRealtimeStatus] = useState<'connecting' | 'online' | 'offline'>('connecting')
 
   // Modais
   const [selectedLoanForDetails, setSelectedLoanForDetails] = useState<CredImpactoEmprestimo | null>(null)
   const [selectedLoanForSign, setSelectedLoanForSign] = useState<CredImpactoEmprestimo | null>(null)
   const [selectedLoanForPayoff, setSelectedLoanForPayoff] = useState<CredImpactoEmprestimo | null>(null)
+
+  // Mantém modais abertos sincronizados em tempo real quando a lista de empréstimos atualiza
+  useEffect(() => {
+    setSelectedLoanForDetails((prev) => {
+      if (!prev) return null
+      const updated = emprestimos.find((e) => e.id === prev.id)
+      if (!updated) return null
+      return {
+        ...prev,
+        ...updated,
+        contratoConteudoHtml: updated.contratoConteudoHtml || prev.contratoConteudoHtml
+      }
+    })
+    setSelectedLoanForSign((prev) => {
+      if (!prev) return null
+      const updated = emprestimos.find((e) => e.id === prev.id)
+      if (!updated) return null
+      return {
+        ...prev,
+        ...updated,
+        contratoConteudoHtml: updated.contratoConteudoHtml || prev.contratoConteudoHtml
+      }
+    })
+    setSelectedLoanForPayoff((prev) => {
+      if (!prev) return null
+      const updated = emprestimos.find((e) => e.id === prev.id)
+      if (!updated) return null
+      return {
+        ...prev,
+        ...updated,
+        contratoConteudoHtml: updated.contratoConteudoHtml || prev.contratoConteudoHtml
+      }
+    })
+  }, [emprestimos])
 
   // Ficha Financeira por Colaborador selecionado
   const colaboradorParam = searchParams.get('colaborador') || undefined
@@ -144,27 +195,17 @@ function CredImpactoContent() {
     router.replace(`/credimpacto?tab=ficha_colaborador&colaborador=${encodeURIComponent(colaboradorId)}`, { scroll: false })
   }
 
-  // Perfil enriquecido do usuário logado (com CPF e Unidade)
-  const [currentMe, setCurrentMe] = useState<{
-    id: string
-    nome: string
-    email: string
-    cpf?: string
-    cargo?: string
-    perfil?: string
-    salarioBase?: number
-    unidade?: string
-    isAdminOrFinance: boolean
-  } | null>(null)
-
-  // Carga de Dados Inicial
-  const loadData = useCallback(async () => {
-    setIsRefreshing(true)
+  // Carga de Dados (com suporte a modo silencioso para atualizações Realtime sem spinner)
+  const loadData = useCallback(async (options?: { silent?: boolean }) => {
+    const isSilent = Boolean(options?.silent)
+    if (!isSilent) {
+      setIsRefreshing(true)
+    }
     try {
       const [cfgRes, empRes, meRes] = await Promise.all([
-        fetch('/api/credimpacto/configuracao'),
-        fetch('/api/credimpacto/emprestimos'),
-        fetch('/api/credimpacto/me')
+        fetch('/api/credimpacto/configuracao', { cache: 'no-store' }),
+        fetch('/api/credimpacto/emprestimos', { cache: 'no-store' }),
+        fetch('/api/credimpacto/me', { cache: 'no-store' })
       ])
 
       if (cfgRes.ok) {
@@ -177,15 +218,17 @@ function CredImpactoContent() {
         setEmprestimos(empData)
       }
 
+      let resolvedAdmin = isAdminOrFinance
       if (meRes.ok) {
         const meData = await meRes.json()
         setCurrentMe(meData)
+        if (meData?.isAdminOrFinance) resolvedAdmin = true
       }
 
       // Se for admin, carrega lista de funcionários para dropdowns de concessão
-      if (isAdminOrFinance) {
+      if (resolvedAdmin) {
         try {
-          const funcRes = await fetch('/api/rh/funcionarios?lightweight=true')
+          const funcRes = await fetch('/api/rh/funcionarios?lightweight=true', { cache: 'no-store' })
           if (funcRes.ok) {
             const funcs = await funcRes.json()
             setColaboradoresList(funcs)
@@ -196,13 +239,284 @@ function CredImpactoContent() {
       console.error('[CredImpacto loadData error]', err)
     } finally {
       setIsLoading(false)
-      setIsRefreshing(false)
+      if (!isSilent) {
+        setIsRefreshing(false)
+      }
     }
   }, [isAdminOrFinance])
 
   useEffect(() => {
     loadData()
   }, [loadData])
+
+  // Refs estáveis para callbacks de Realtime
+  const currentMeRef = useRef(currentMe)
+  const currentUserRef = useRef(currentUser)
+  const isAdminOrFinanceRef = useRef(isAdminOrFinance)
+  const viewModeRef = useRef(viewMode)
+  const loadDataRef = useRef(loadData)
+  const processedEventsRef = useRef<Set<string>>(new Set())
+  const silentRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    currentMeRef.current = currentMe
+    currentUserRef.current = currentUser
+    isAdminOrFinanceRef.current = isAdminOrFinance
+    viewModeRef.current = viewMode
+    loadDataRef.current = loadData
+  }, [currentMe, currentUser, isAdminOrFinance, viewMode, loadData])
+
+  // ============================================================================
+  // SINCRONIZAÇÃO EM TEMPO REAL (SUPABASE BROADCAST + POSTGRES_CHANGES + FOCUS)
+  // ============================================================================
+  useEffect(() => {
+    let isMounted = true
+
+    const scheduleSilentRefresh = (delayMs = 150) => {
+      if (silentRefreshTimerRef.current) {
+        clearTimeout(silentRefreshTimerRef.current)
+      }
+      silentRefreshTimerRef.current = setTimeout(() => {
+        if (isMounted) {
+          loadDataRef.current({ silent: true })
+        }
+      }, delayMs)
+    }
+
+    const rememberEventId = (id?: string) => {
+      if (!id) return false
+      if (processedEventsRef.current.has(id)) return true
+      processedEventsRef.current.add(id)
+      if (processedEventsRef.current.size > 200) {
+        const first = processedEventsRef.current.values().next().value
+        if (first) processedEventsRef.current.delete(first)
+      }
+      return false
+    }
+
+    // Remove canais órfãos de HMR / StrictMode
+    try {
+      for (const ch of supabase.getChannels()) {
+        if (ch?.topic === 'realtime:credimpacto_realtime_room') {
+          supabase.removeChannel(ch).catch(() => {})
+        }
+      }
+    } catch (_) {}
+
+    const channel = supabase.channel('credimpacto_realtime_room')
+
+    channel
+      .on('broadcast', { event: 'CREDIMPACTO_EVENT' }, (msg: any) => {
+        if (!isMounted) return
+        const payload = msg?.payload || {}
+        if (rememberEventId(payload.eventId)) return
+
+        const me = currentMeRef.current
+        const usr = currentUserRef.current
+        const isAdmin = isAdminOrFinanceRef.current
+        const userIdentity = {
+          id: me?.id || usr?.id,
+          systemUserId: me?.systemUserId,
+          funcionarioId: me?.funcionarioId || (usr as any)?.colaborador_id,
+          email: me?.email || usr?.email,
+          cpf: me?.cpf || (usr as any)?.cpf || (usr as any)?.user_metadata?.cpf,
+          nome: me?.nome || usr?.nome
+        }
+
+        const isTriggeredByOther =
+          Boolean(payload.autorId) &&
+          payload.autorId !== userIdentity.id &&
+          payload.autorId !== userIdentity.systemUserId &&
+          payload.autorId !== userIdentity.funcionarioId
+
+        if (payload.type === 'CONFIG_UPDATE') {
+          if (payload.config) {
+            setConfig(payload.config)
+          }
+          scheduleSilentRefresh(100)
+          window.dispatchEvent(new CustomEvent('credimpacto:realtime-update', { detail: payload }))
+          return
+        }
+
+        if (payload.type === 'EMPRESTIMO_DELETE') {
+          const targetId = payload.emprestimoId
+          if (targetId) {
+            setEmprestimos((prev) => {
+              const exists = prev.some((e) => e.id === targetId)
+              if (!exists) return prev
+              if (isTriggeredByOther && payload.codigoOperacao) {
+                toast.info(`A operação ${payload.codigoOperacao} foi removida.`)
+              }
+              return prev.filter((e) => e.id !== targetId)
+            })
+          }
+          scheduleSilentRefresh(100)
+          window.dispatchEvent(new CustomEvent('credimpacto:realtime-update', { detail: payload }))
+          return
+        }
+
+        if (payload.type === 'EMPRESTIMO_UPSERT') {
+          const belongsToMe = isLoanOwnedByUser(payload.emprestimo || payload, userIdentity)
+          if (!isAdmin && !belongsToMe) {
+            // Verifica se já estava na lista local do colaborador
+            setEmprestimos((prev) => {
+              if (prev.some((e) => e.id === payload.emprestimoId)) {
+                scheduleSilentRefresh(100)
+              }
+              return prev
+            })
+            return
+          }
+
+          // Atualização otimista instantânea (<50ms) na lista de empréstimos
+          if (payload.emprestimo) {
+            const incomingLoan = payload.emprestimo as CredImpactoEmprestimo
+            setEmprestimos((prev) => {
+              const idx = prev.findIndex((e) => e.id === incomingLoan.id)
+              if (idx >= 0) {
+                const updatedList = [...prev]
+                updatedList[idx] = {
+                  ...updatedList[idx],
+                  ...incomingLoan,
+                  contratoConteudoHtml:
+                    incomingLoan.contratoConteudoHtml || updatedList[idx].contratoConteudoHtml
+                }
+                return updatedList
+              }
+              const next = [incomingLoan, ...prev]
+              next.sort(
+                (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+              )
+              return next
+            })
+          }
+
+          // Notificações em tempo real quando a ação partiu da outra ponta (Escola <-> Colaborador)
+          if (isTriggeredByOther) {
+            const cod = payload.codigoOperacao || 'Empréstimo'
+            if (viewModeRef.current === 'colaborador' || !isAdmin) {
+              if (payload.acao === 'CRIACAO') {
+                toast.success(`Nova operação ${cod} disponível no seu painel!`)
+              } else if (payload.acao === 'APROVACAO') {
+                if (payload.status === 'aguardando_assinatura') {
+                  toast.success(`Empréstimo ${cod} aprovado! Assine digitalmente para liberação.`)
+                } else if (payload.status === 'ativo') {
+                  toast.success(`Empréstimo ${cod} aprovado e ativado!`)
+                } else {
+                  toast.success(`Empréstimo ${cod} aprovado e encaminhado para liberação!`)
+                }
+              } else if (payload.acao === 'CONTRAPROPOSTA') {
+                toast.info(`Você recebeu uma contraproposta para o empréstimo ${cod}.`)
+              } else if (payload.acao === 'LIBERACAO') {
+                toast.success(`Recursos do empréstimo ${cod} liberados!`)
+              } else if (payload.acao === 'RECUSA') {
+                toast.error(`Sua solicitação ${cod} não foi aprovada.`)
+              } else if (payload.acao === 'CONCILIACAO_FOLHA') {
+                toast.success(`Parcela do empréstimo ${cod} conciliada com sucesso!`)
+              } else if (payload.acao === 'QUITACAO_ANTECIPADA') {
+                toast.success(`Empréstimo ${cod} quitado integralmente!`)
+              }
+            } else if (isAdmin) {
+              const colab = payload.colaboradorNome || 'Colaborador'
+              if (payload.acao === 'CRIACAO') {
+                toast.info(`Nova solicitação (${cod}) enviada por ${colab}!`)
+              } else if (payload.acao === 'ASSINATURA') {
+                toast.success(`Contrato ${cod} assinado por ${colab}! Pronto para liberação TED.`)
+              } else if (payload.acao === 'APROVACAO' && payload.status === 'aguardando_assinatura') {
+                toast.success(`${colab} aceitou a contraproposta (${cod})!`)
+              } else if (payload.acao === 'CANCELAMENTO') {
+                toast.warning(`Operação ${cod} (${colab}) foi cancelada.`)
+              }
+            }
+          }
+
+          scheduleSilentRefresh(120)
+          window.dispatchEvent(new CustomEvent('credimpacto:realtime-update', { detail: payload }))
+        }
+      })
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'credimpacto_emprestimos' },
+        () => {
+          if (!isMounted) return
+          scheduleSilentRefresh(180)
+          window.dispatchEvent(new CustomEvent('credimpacto:realtime-update'))
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'credimpacto_parcelas' },
+        () => {
+          if (!isMounted) return
+          scheduleSilentRefresh(180)
+          window.dispatchEvent(new CustomEvent('credimpacto:realtime-update'))
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'credimpacto_configuracao' },
+        () => {
+          if (!isMounted) return
+          scheduleSilentRefresh(180)
+          window.dispatchEvent(new CustomEvent('credimpacto:realtime-update'))
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'relatorios_records' },
+        (payload: any) => {
+          if (!isMounted) return
+          const rowId = String(payload?.new?.id || payload?.old?.id || '')
+          if (rowId.startsWith('credimpacto:')) {
+            scheduleSilentRefresh(180)
+            window.dispatchEvent(new CustomEvent('credimpacto:realtime-update'))
+          }
+        }
+      )
+      .subscribe((status: string) => {
+        if (!isMounted) return
+        if (status === 'SUBSCRIBED') {
+          setRealtimeStatus('online')
+        } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          setRealtimeStatus('offline')
+        } else {
+          setRealtimeStatus('connecting')
+        }
+      })
+
+    // Sincroniza silenciosamente ao focar a janela, voltar para a aba ou reconectar à rede
+    const handleVisibilityOrFocus = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        scheduleSilentRefresh(80)
+        window.dispatchEvent(new CustomEvent('credimpacto:realtime-update'))
+      }
+    }
+
+    window.addEventListener('focus', handleVisibilityOrFocus)
+    window.addEventListener('online', handleVisibilityOrFocus)
+    document.addEventListener('visibilitychange', handleVisibilityOrFocus)
+
+    // Heartbeat silencioso a cada 15s enquanto a página estiver visível (contingência p/ firewalls restritos)
+    const heartbeatInterval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        loadDataRef.current({ silent: true })
+      }
+    }, 15000)
+
+    return () => {
+      isMounted = false
+      if (silentRefreshTimerRef.current) {
+        clearTimeout(silentRefreshTimerRef.current)
+      }
+      clearInterval(heartbeatInterval)
+      window.removeEventListener('focus', handleVisibilityOrFocus)
+      window.removeEventListener('online', handleVisibilityOrFocus)
+      document.removeEventListener('visibilitychange', handleVisibilityOrFocus)
+      try {
+        supabase.removeChannel(channel).catch(() => {})
+      } catch (_) {}
+    }
+  }, [])
 
   // Ajusta a StatusBar no aplicativo mobile nativo para estilo escuro (ícones escuros legíveis sobre fundo claro)
   useEffect(() => {
@@ -308,11 +622,12 @@ function CredImpactoContent() {
         pendingRequestsCount={pendingRequestsCount}
         pendingDisbursementCount={pendingDisbursementCount}
         onNewLoanClick={handleOpenNewLoan}
-        onRefresh={loadData}
+        onRefresh={() => loadData()}
         isRefreshing={isRefreshing}
         totalAtivo={totalEmprestadoAtivo}
         saldoDevedor={saldoDevedorTotal}
         currentMe={currentMe}
+        realtimeStatus={realtimeStatus}
       />
 
       {/* ÁREA DE CONTEÚDO PRINCIPAL (COM SCROLL INDEPENDENTE) */}
@@ -324,10 +639,11 @@ function CredImpactoContent() {
             viewMode={viewMode}
             onToggleViewMode={handleToggleViewMode}
             onNewLoanClick={handleOpenNewLoan}
-            onRefresh={loadData}
+            onRefresh={() => loadData()}
             isRefreshing={isRefreshing}
             activeTab={activeTab}
             currentMe={currentMe}
+            realtimeStatus={realtimeStatus}
           />
 
           {/* CONTEÚDO PRINCIPAL DE CADA ABA */}
@@ -347,7 +663,7 @@ function CredImpactoContent() {
                   emprestimos={emprestimos}
                   colaboradoresList={colaboradoresList}
                   onOpenDetails={setSelectedLoanForDetails}
-                  onRefresh={loadData}
+                  onRefresh={() => loadData()}
                   onOpenFichaColaborador={handleOpenFichaColaborador}
                 />
               )}
@@ -359,7 +675,7 @@ function CredImpactoContent() {
                   emprestimos={emprestimos}
                   colaboradoresList={colaboradoresList}
                   onOpenDetails={setSelectedLoanForDetails}
-                  onRefresh={loadData}
+                  onRefresh={() => loadData()}
                   onOpenFichaColaborador={handleOpenFichaColaborador}
                 />
               )}
@@ -371,7 +687,7 @@ function CredImpactoContent() {
                   emprestimos={emprestimos}
                   colaboradoresList={colaboradoresList}
                   onOpenDetails={setSelectedLoanForDetails}
-                  onRefresh={loadData}
+                  onRefresh={() => loadData()}
                   onOpenFichaColaborador={handleOpenFichaColaborador}
                 />
               )}
@@ -383,7 +699,7 @@ function CredImpactoContent() {
                   emprestimos={emprestimos}
                   colaboradoresList={colaboradoresList}
                   onOpenDetails={setSelectedLoanForDetails}
-                  onRefresh={loadData}
+                  onRefresh={() => loadData()}
                   onOpenFichaColaborador={handleOpenFichaColaborador}
                 />
               )}
@@ -393,7 +709,7 @@ function CredImpactoContent() {
                 <ParcelasTab
                   emprestimos={emprestimos}
                   onOpenDetails={setSelectedLoanForDetails}
-                  onRefresh={loadData}
+                  onRefresh={() => loadData()}
                 />
               )}
 
@@ -404,14 +720,14 @@ function CredImpactoContent() {
                   colaboradoresList={colaboradoresList}
                   config={config}
                   onOpenDetails={setSelectedLoanForDetails}
-                  onRefresh={loadData}
+                  onRefresh={() => loadData()}
                   initialSelectedColaboradorId={selectedColaboradorForFicha}
                 />
               )}
 
               {/* CONCILIAÇÃO EM FOLHA (ADMIN) */}
               {activeTab === 'folha' && viewMode === 'admin' && (
-                <ConciliacaoFolhaTab onRefresh={loadData} />
+                <ConciliacaoFolhaTab onRefresh={() => loadData()} />
               )}
 
               {/* RESCISÃO E DESLIGAMENTO CLT (ADMIN) */}
@@ -419,7 +735,7 @@ function CredImpactoContent() {
                 <RescisaoDesligamentoTab
                   emprestimos={emprestimos}
                   config={config}
-                  onRefresh={loadData}
+                  onRefresh={() => loadData()}
                 />
               )}
 
@@ -475,7 +791,7 @@ function CredImpactoContent() {
                   onOpenDetails={setSelectedLoanForDetails}
                   onOpenSignModal={setSelectedLoanForSign}
                   onOpenPayoffModal={setSelectedLoanForPayoff}
-                  onRefresh={loadData}
+                  onRefresh={() => loadData()}
                   onOpenNewLoan={handleOpenNewLoan}
                 />
               )}
@@ -494,11 +810,12 @@ function CredImpactoContent() {
         pendingRequestsCount={pendingRequestsCount}
         pendingDisbursementCount={pendingDisbursementCount}
         onNewLoanClick={handleOpenNewLoan}
-        onRefresh={loadData}
+        onRefresh={() => loadData()}
         isRefreshing={isRefreshing}
         totalAtivo={totalEmprestadoAtivo}
         saldoDevedor={saldoDevedorTotal}
         currentMe={currentMe}
+        realtimeStatus={realtimeStatus}
       />
 
       {/* MODAL DE DETALHES COMPLETOS & PARCELAS */}

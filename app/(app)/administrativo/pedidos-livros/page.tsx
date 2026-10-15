@@ -169,28 +169,37 @@ export default function PedidosLivrosPage() {
     } else if (parsed.type === 'aluno') {
       const alu = (alunos || []).find(a => a.id === parsed.studentId);
       if (alu) {
-        const updatedParcelas = (alu.parcelas || []).map((p: any) => {
-          const pId = p.num ?? p.codigo ?? '';
-          if (pId === parsed.parcelId) {
-            return {
-              ...p,
-              eventoDescricao: editForm.eventoDescricao,
-              descricao: editForm.eventoDescricao,
-              valor: Number(editForm.valor) || 0,
-              vencimento: editForm.vencimento
-            };
+        ;(async () => {
+          try {
+            const fullRes = await fetch(`/api/alunos/${alu.id}`);
+            const fullAluno = fullRes.ok ? await fullRes.json() : alu;
+            const currentParcelas = fullAluno.parcelas || fullAluno.dados?.parcelas || alu.parcelas || [];
+            const updatedParcelas = currentParcelas.map((p: any) => {
+              const pId = p.num ?? p.codigo ?? '';
+              if (String(pId) === String(parsed.parcelId)) {
+                return {
+                  ...p,
+                  eventoDescricao: editForm.eventoDescricao,
+                  descricao: editForm.eventoDescricao,
+                  valor: Number(editForm.valor) || 0,
+                  vencimento: editForm.vencimento
+                };
+              }
+              return p;
+            });
+            await fetch(`/api/alunos?id=${alu.id}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                ...fullAluno,
+                parcelas: updatedParcelas,
+                dados: { ...(fullAluno.dados || {}), parcelas: updatedParcelas }
+              })
+            });
+          } catch (err) {
+            console.error(err);
           }
-          return p;
-        });
-        const updatedAluno = { ...alu, parcelas: updatedParcelas };
-        
-        setAlunos(prev => prev.map(a => a.id === alu.id ? updatedAluno : a));
-        
-        fetch(`/api/alunos?id=${alu.id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(updatedAluno)
-        }).catch(console.error);
+        })();
       }
     } else if (parsed.type === 'titulo') {
       const tit = titulos.find(t => t.id === parsed.id);
@@ -221,19 +230,28 @@ export default function PedidosLivrosPage() {
     } else if (parsed.type === 'aluno') {
       const alu = (alunos || []).find(a => a.id === parsed.studentId);
       if (alu) {
-        const updatedParcelas = (alu.parcelas || []).filter((p: any) => {
-          const pId = p.num ?? p.codigo ?? '';
-          return pId !== parsed.parcelId;
-        });
-        const updatedAluno = { ...alu, parcelas: updatedParcelas };
-        
-        setAlunos(prev => prev.map(a => a.id === alu.id ? updatedAluno : a));
-        
-        fetch(`/api/alunos?id=${alu.id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(updatedAluno)
-        }).catch(console.error);
+        ;(async () => {
+          try {
+            const fullRes = await fetch(`/api/alunos/${alu.id}`);
+            const fullAluno = fullRes.ok ? await fullRes.json() : alu;
+            const currentParcelas = fullAluno.parcelas || fullAluno.dados?.parcelas || alu.parcelas || [];
+            const updatedParcelas = currentParcelas.filter((p: any) => {
+              const pId = p.num ?? p.codigo ?? '';
+              return String(pId) !== String(parsed.parcelId);
+            });
+            await fetch(`/api/alunos?id=${alu.id}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                ...fullAluno,
+                parcelas: updatedParcelas,
+                dados: { ...(fullAluno.dados || {}), parcelas: updatedParcelas }
+              })
+            });
+          } catch (err) {
+            console.error(err);
+          }
+        })();
       }
     } else if (parsed.type === 'titulo') {
       fetch(`/api/titulos?id=${parsed.id}`, { method: 'DELETE' }).catch(console.error);

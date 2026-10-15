@@ -49,7 +49,7 @@ export async function POST(
     }
     const { data } = await adminClient
       .from('alunos')
-      .select('id, nome, matricula, turma, serie, foto')
+      .select('id, nome, matricula, turma, serie, email, foto')
       .or(conds.join(','))
       .limit(1)
       .maybeSingle()
@@ -65,6 +65,7 @@ export async function POST(
 
   const cargo = dbUser?.cargo || user.user_metadata?.cargo || ''
   const perfil = dbUser?.perfil || user.user_metadata?.perfil || ''
+  const isStaffUser = Boolean(dbUser) && cargo !== 'Aluno' && perfil !== 'Aluno' && perfil !== 'Família' && perfil !== 'Responsável'
 
   const isCallerStudent = cargo === 'Aluno' || perfil === 'Aluno' || (user.user_metadata?.userType === 'aluno')
   const isResponsible = cargo === 'Responsável' || perfil === 'Família' || perfil === 'Responsável' || Boolean(user.user_metadata?.responsavel_id)
@@ -73,6 +74,24 @@ export async function POST(
     return NextResponse.json({
       error: 'Acesso negado: Responsáveis têm acesso exclusivamente para acompanhar o progresso e notas. A realização da avaliação deve ser feita exclusivamente na conta do próprio aluno.'
     }, { status: 403 })
+  }
+
+  if (!isStaffUser && dbAluno) {
+    const authAlunoId = String(user.user_metadata?.aluno_id || '')
+    const authMatricula = String(user.user_metadata?.matricula || '')
+    const authEmail = String(user.email || '').trim().toLowerCase()
+    const alunoEmail = String(dbAluno.email || '').trim().toLowerCase()
+    const matchesOwnStudent =
+      String(dbAluno.id) === String(user.id) ||
+      (authAlunoId && (String(dbAluno.id) === authAlunoId || String(dbAluno.matricula) === authAlunoId)) ||
+      (authMatricula && String(dbAluno.matricula) === authMatricula) ||
+      (authEmail && alunoEmail && authEmail === alunoEmail)
+
+    if (!matchesOwnStudent) {
+      return NextResponse.json({
+        error: 'Acesso negado: você só pode iniciar ou retomar avaliações na sua própria conta de aluno.'
+      }, { status: 403 })
+    }
   }
 
   const alunoId = dbAluno?.id || user.user_metadata?.aluno_id || user.id

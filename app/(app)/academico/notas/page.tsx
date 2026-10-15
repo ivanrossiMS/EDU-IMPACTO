@@ -451,7 +451,7 @@ export default function NotasPage() {
               </p>
               <button 
                 onClick={() => setShowSuccessExclusao(false)}
-                style={{ height: '44px', padding: '0: 24px', background: '#16a34a', border: 'none', borderRadius: '10px', color: '#fff', fontSize: '14px', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s', boxShadow: '0 4px 6px -1px rgba(22,163,74,0.2)' }}
+                style={{ height: '44px', padding: '0 24px', background: '#16a34a', border: 'none', borderRadius: '10px', color: '#fff', fontSize: '14px', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s', boxShadow: '0 4px 6px -1px rgba(22,163,74,0.2)' }}
               >
                 OK
               </button>
@@ -934,7 +934,7 @@ export default function NotasPage() {
   return (
     <div style={{ animation: 'fadeIn 0.3s ease' }}>
       {/* Header Turma */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, flexWrap: 'wrap', gap: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
           <button style={{ border: 'none', background: 'transparent', color: '#64748b', cursor: 'pointer' }} onClick={() => setTurmaSel(null)}>
             <ArrowLeft size={20} />
@@ -944,10 +944,10 @@ export default function NotasPage() {
               <h1 style={{ fontSize: 28, fontWeight: 900, color: '#0f172a', margin: 0, fontFamily: 'Outfit,sans-serif' }}>Turma {turmaObj?.nome}</h1>
               <span style={{ padding: '4px 10px', borderRadius: 20, background: 'rgba(37, 99, 235, 0.1)', color: '#2563eb', fontSize: 12, fontWeight: 800 }}>{anoLetivoSel}</span>
             </div>
-            <p style={{ fontSize: 14, color: '#64748b', margin: '2px 0 0 0' }}>Gerencie ou importe os boletins dos alunos desta turma.</p>
+            <p style={{ fontSize: 14, color: '#64748b', margin: '2px 0 0 0' }}>Gerencie boletins importados ou lance notas diretamente no diário.</p>
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 12 }}>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
           <button 
             onClick={handleDeleteAllClassBoletins}
             disabled={uploading}
@@ -970,6 +970,15 @@ export default function NotasPage() {
           </button>
         </div>
       </div>
+
+      {/* Painel Rápido de Lançamento de Notas (Diário) */}
+      <DiarioNotasSection
+        turmaObj={turmaObj}
+        anoLetivo={anoLetivoSel || new Date().getFullYear()}
+        alunosDaTurma={alunosDaTurma}
+        boletins={boletins}
+        onSaved={() => queryClient.invalidateQueries({ queryKey: ['boletins'] })}
+      />
 
       {/* Grid de Alunos em Caixas */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 20 }}>
@@ -1038,6 +1047,242 @@ export default function NotasPage() {
         )}
       </div>
       {renderModals()}
+    </div>
+  )
+}
+
+function DiarioNotasSection({
+  turmaObj,
+  anoLetivo,
+  alunosDaTurma,
+  boletins,
+  onSaved,
+}: {
+  turmaObj: any
+  anoLetivo: number
+  alunosDaTurma: any[]
+  boletins: any[]
+  onSaved: () => void
+}) {
+  const [openDiario, setOpenDiario] = useState(false)
+  const [bimestreSel, setBimestreSel] = useState('1º Bimestre')
+  const [disciplinaSel, setDisciplinaSel] = useState('LÍNGUA PORTUGUESA')
+  const [notasGrid, setNotasGrid] = useState<Record<string, { avm: string; avb: string; simulado: string; pntBonu: string; rec: string }>>({})
+  const [savingDiario, setSavingDiario] = useState(false)
+
+  useEffect(() => {
+    if (!openDiario) return
+    const nextGrid: Record<string, { avm: string; avb: string; simulado: string; pntBonu: string; rec: string }> = {}
+    for (const al of alunosDaTurma) {
+      const bol = (boletins || []).find((b: any) => {
+        const d = typeof b.dados === 'string' ? JSON.parse(b.dados) : b.dados
+        return String(b.aluno_id) === String(al.id) && (b.bimestre === bimestreSel || d?.bimestre === bimestreSel)
+      })
+      const dados = bol ? (typeof bol.dados === 'string' ? JSON.parse(bol.dados) : bol.dados) : null
+      const disc = (dados?.disciplinas || []).find((x: any) => String(x.nome || '').toUpperCase() === disciplinaSel.toUpperCase())
+      nextGrid[al.id] = {
+        avm: disc?.avm && disc.avm !== '---' ? String(disc.avm) : '',
+        avb: disc?.avb && disc.avb !== '---' ? String(disc.avb) : '',
+        simulado: disc?.simulado && disc.simulado !== '---' ? String(disc.simulado) : '',
+        pntBonu: disc?.pntBonu && disc.pntBonu !== '---' ? String(disc.pntBonu) : '',
+        rec: disc?.rec && disc.rec !== '---' ? String(disc.rec) : '',
+      }
+    }
+    setNotasGrid(nextGrid)
+  }, [openDiario, bimestreSel, disciplinaSel, alunosDaTurma, boletins])
+
+  const parseScore = (s: string) => {
+    const n = parseFloat(String(s || '').replace(',', '.'))
+    return isNaN(n) ? null : n
+  }
+
+  const calcMediaRow = (row?: { avm: string; avb: string; simulado: string; pntBonu: string; rec: string }) => {
+    if (!row) return { mediaF: '---', mediaG: '---' }
+    const avm = parseScore(row.avm)
+    const avb = parseScore(row.avb)
+    const sim = parseScore(row.simulado)
+    const bon = parseScore(row.pntBonu) || 0
+    const rec = parseScore(row.rec)
+    const parts = [avm, avb, sim].filter((v): v is number => v !== null)
+    if (parts.length === 0) return { mediaF: '---', mediaG: '---' }
+    const base = Math.min(10, (parts.reduce((a, b) => a + b, 0) / parts.length) + bon)
+    const mediaGVal = rec !== null ? Math.max(base, rec) : base
+    return {
+      mediaF: base.toFixed(2).replace('.', ','),
+      mediaG: mediaGVal.toFixed(2).replace('.', ','),
+    }
+  }
+
+  const handleSaveDiario = async () => {
+    if (!turmaObj?.id) return
+    setSavingDiario(true)
+    try {
+      const savePromises = alunosDaTurma.map(async (al: any) => {
+        const row = notasGrid[al.id]
+        if (!row) return
+        const hasAny = [row.avm, row.avb, row.simulado, row.pntBonu, row.rec].some(v => v && v.trim() !== '')
+        if (!hasAny) return
+
+        const { mediaF, mediaG } = calcMediaRow(row)
+        const bol = (boletins || []).find((b: any) => {
+          const d = typeof b.dados === 'string' ? JSON.parse(b.dados) : b.dados
+          return String(b.aluno_id) === String(al.id) && (b.bimestre === bimestreSel || d?.bimestre === bimestreSel)
+        })
+        const existingDados = bol ? (typeof bol.dados === 'string' ? JSON.parse(bol.dados) : bol.dados) : {
+          codigo: al.matricula || al.id,
+          nomeERP: al.nome,
+          bimestre: bimestreSel,
+          ano: anoLetivo,
+          disciplinas: [],
+        }
+
+        const otherDiscs = (existingDados.disciplinas || []).filter((x: any) => String(x.nome || '').toUpperCase() !== disciplinaSel.toUpperCase())
+        const updatedDisciplinas = [
+          ...otherDiscs,
+          {
+            nome: disciplinaSel.toUpperCase(),
+            avm: row.avm || '---',
+            avb: row.avb || '---',
+            simulado: row.simulado || '---',
+            pntBonu: row.pntBonu || '---',
+            mediaF,
+            rec: row.rec || '---',
+            mediaG,
+          },
+        ]
+
+        const res = await fetch('/api/boletins', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            turma_id: turmaObj.id,
+            aluno_id: al.id,
+            bimestre: bimestreSel,
+            dados: {
+              ...existingDados,
+              bimestre: bimestreSel,
+              ano: anoLetivo,
+              disciplinas: updatedDisciplinas,
+            },
+          }),
+        })
+        if (!res.ok) {
+          throw new Error(`Falha ao salvar boletim de ${al.nome}`)
+        }
+      })
+
+      await Promise.all(savePromises)
+      onSaved()
+      alert('Notas lançadas e salvas com sucesso no Boletim!')
+    } catch (e: any) {
+      alert('Erro ao salvar notas: ' + e.message)
+    } finally {
+      setSavingDiario(false)
+    }
+  }
+
+  return (
+    <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, padding: 20, marginBottom: 24 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <BookOpen size={20} color="#2563eb" />
+          <div>
+            <div style={{ fontSize: 15, fontWeight: 800, color: '#0f172a' }}>Lançamento de Notas (Diário)</div>
+            <div style={{ fontSize: 12, color: '#64748b' }}>Lance ou edite avaliações bimestrais e recuperação diretamente por disciplina.</div>
+          </div>
+        </div>
+        <button
+          onClick={() => setOpenDiario(v => !v)}
+          style={{ padding: '8px 16px', borderRadius: 10, border: '1px solid #bfdbfe', background: openDiario ? '#eff6ff' : '#fff', color: '#2563eb', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
+        >
+          {openDiario ? 'Ocultar Diário de Notas' : 'Abrir Lançamento de Notas'}
+        </button>
+      </div>
+
+      {openDiario && (
+        <div style={{ marginTop: 18, borderTop: '1px solid #f1f5f9', paddingTop: 16 }}>
+          <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#475569', marginBottom: 4 }}>Bimestre</label>
+              <select className="form-input" value={bimestreSel} onChange={e => setBimestreSel(e.target.value)} style={{ width: 160 }}>
+                <option value="1º Bimestre">1º Bimestre</option>
+                <option value="2º Bimestre">2º Bimestre</option>
+                <option value="3º Bimestre">3º Bimestre</option>
+                <option value="4º Bimestre">4º Bimestre</option>
+              </select>
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#475569', marginBottom: 4 }}>Disciplina</label>
+              <input
+                className="form-input"
+                value={disciplinaSel}
+                onChange={e => setDisciplinaSel(e.target.value)}
+                placeholder="Ex: MATEMÁTICA"
+                style={{ width: 240 }}
+              />
+            </div>
+            <button
+              onClick={handleSaveDiario}
+              disabled={savingDiario}
+              style={{ height: 40, padding: '0 20px', background: '#16a34a', color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
+            >
+              <Save size={15} /> {savingDiario ? 'Salvando...' : 'Salvar Notas do Diário'}
+            </button>
+          </div>
+
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <thead>
+                <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0', textAlign: 'left' }}>
+                  <th style={{ padding: '10px 12px' }}>Aluno</th>
+                  <th style={{ padding: '10px 8px', width: 95 }}>Av. Mensal</th>
+                  <th style={{ padding: '10px 8px', width: 95 }}>Av. Bimestral</th>
+                  <th style={{ padding: '10px 8px', width: 95 }}>Simulado</th>
+                  <th style={{ padding: '10px 8px', width: 95 }}>Bônus</th>
+                  <th style={{ padding: '10px 8px', width: 95 }}>Média</th>
+                  <th style={{ padding: '10px 8px', width: 95 }}>Recuperação</th>
+                  <th style={{ padding: '10px 8px', width: 95 }}>Média Geral</th>
+                </tr>
+              </thead>
+              <tbody>
+                {alunosDaTurma.map((al: any) => {
+                  const row = notasGrid[al.id] || { avm: '', avb: '', simulado: '', pntBonu: '', rec: '' }
+                  const { mediaF, mediaG } = calcMediaRow(row)
+                  const updateField = (k: keyof typeof row, val: string) =>
+                    setNotasGrid(prev => ({ ...prev, [al.id]: { ...row, [k]: val } }))
+                  return (
+                    <tr key={al.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                      <td style={{ padding: '8px 12px', fontWeight: 600, color: '#0f172a' }}>{al.nome}</td>
+                      {(['avm', 'avb', 'simulado', 'pntBonu'] as const).map(field => (
+                        <td key={field} style={{ padding: '6px 8px' }}>
+                          <input
+                            className="form-input"
+                            style={{ height: 32, padding: '0 8px', fontSize: 12, textAlign: 'center' }}
+                            placeholder="0,0"
+                            value={row[field]}
+                            onChange={e => updateField(field, e.target.value)}
+                          />
+                        </td>
+                      ))}
+                      <td style={{ padding: '6px 8px', fontWeight: 800, color: '#2563eb', textAlign: 'center' }}>{mediaF}</td>
+                      <td style={{ padding: '6px 8px' }}>
+                        <input
+                          className="form-input"
+                          style={{ height: 32, padding: '0 8px', fontSize: 12, textAlign: 'center' }}
+                          placeholder="---"
+                          value={row.rec}
+                          onChange={e => updateField('rec', e.target.value)}
+                        />
+                      </td>
+                      <td style={{ padding: '6px 8px', fontWeight: 800, color: '#16a34a', textAlign: 'center' }}>{mediaG}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

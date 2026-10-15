@@ -1,4 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
+import { resolveUserRole } from '@/lib/server/authGuard'
+import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 
 export const dynamic = 'force-dynamic'
 
@@ -14,6 +16,11 @@ export const dynamic = 'force-dynamic'
  */
 export async function POST(request: NextRequest) {
   try {
+    const { user, dbUser, isStaff, errorResponse } = await resolveUserRole(request)
+    if (errorResponse || !user) {
+      return errorResponse || NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
+    }
+
     const body = await request.json()
     const {
       subscriptionId,
@@ -47,6 +54,113 @@ export async function POST(request: NextRequest) {
     const cleanUserId = String(userId).trim()
     const cleanSubId = String(subscriptionId).trim()
     const colabIdent = colaboradorId || systemUserId
+
+    // Validar que os identificadores pertencem ao usuário autenticado
+    const allowedIds = new Set<string>()
+    const allowedEmails = new Set<string>()
+    const addId = (val: unknown) => {
+      if (val && typeof val === 'string' && val.trim()) allowedIds.add(val.trim())
+    }
+    const addEmail = (val: unknown) => {
+      if (val && typeof val === 'string' && val.trim()) {
+        allowedEmails.add(val.trim().toLowerCase())
+        allowedIds.add(val.trim().toLowerCase())
+      }
+    }
+
+    addId(user.id)
+    addId(dbUser?.id)
+    addId(dbUser?.auth_id)
+    addId(user.user_metadata?.responsavel_id)
+    addId(user.user_metadata?.aluno_id)
+    addId(user.user_metadata?.colaborador_id)
+    addId(user.user_metadata?.system_user_id)
+    addId(user.user_metadata?.uid_legacy)
+    addId(dbUser?.dados?.responsavel_id)
+    addId(dbUser?.dados?.aluno_id)
+    addId(dbUser?.dados?.colaborador_id)
+    addEmail(user.email)
+    addEmail(dbUser?.email)
+
+    const supabase = getAdminClient()
+    const userEmail = (user.email || dbUser?.email || '').trim().toLowerCase()
+
+    // Resolver vínculos reais no banco para responsáveis, alunos e colaboradores
+    const orFilters = [`id.eq.${user.id}`, `auth_id.eq.${user.id}`]
+    if (userEmail) orFilters.push(`email.ilike.${userEmail}`)
+
+    const [{ data: respRows }, { data: alunoRows }] = await Promise.all([
+      supabase.from('responsaveis').select('id, auth_id, email, dados').or(orFilters.join(',')),
+      supabase.from('alunos').select('id, dados').or(`id.eq.${user.id},dados->>email.ilike.${userEmail || '__none__'}`),
+    ])
+
+    const respIds: string[] = []
+    for (const r of respRows || []) {
+      addId(r.id)
+      addId(r.auth_id)
+      addEmail(r.email || r.dados?.email)
+      if (r.id) respIds.push(String(r.id))
+      if (Array.isArray(r.dados?.alunosVinculados)) {
+        r.dados.alunosVinculados.forEach((aid: unknown) => addId(aid))
+      }
+    }
+    if (user.user_metadata?.responsavel_id) {
+      respIds.push(String(user.user_metadata.responsavel_id))
+    }
+
+    if (respIds.length > 0) {
+      const { data: vinculos } = await supabase
+        .from('aluno_responsavel')
+        .select('aluno_id, responsavel_id')
+        .in('responsavel_id', Array.from(new Set(respIds)))
+      for (const v of vinculos || []) {
+        addId(v.aluno_id)
+        addId(v.responsavel_id)
+      }
+    }
+
+    for (const a of alunoRows || []) {
+      addId(a.id)
+      addEmail(a.dados?.email)
+    }
+
+    const isAdmin = isStaff && ['administrador', 'administrador master', 'admin', 'diretor', 'diretor geral', 'master'].includes(
+      String(dbUser?.perfil || dbUser?.cargo || user.user_metadata?.perfil || '').toLowerCase().trim()
+    )
+
+    if (!isAdmin) {
+      if (!allowedIds.has(cleanUserId) && !allowedIds.has(cleanUserId.toLowerCase())) {
+        return NextResponse.json(
+          { error: 'Acesso negado: userId não pertence ao usuário autenticado.' },
+          { status: 403 }
+        )
+      }
+      if (responsavelId && !allowedIds.has(String(responsavelId).trim())) {
+        return NextResponse.json(
+          { error: 'Acesso negado: responsavelId não pertence ao usuário autenticado.' },
+          { status: 403 }
+        )
+      }
+      if (alunoId && !allowedIds.has(String(alunoId).trim())) {
+        return NextResponse.json(
+          { error: 'Acesso negado: alunoId não está vinculado ao usuário autenticado.' },
+          { status: 403 }
+        )
+      }
+      if (colabIdent && (!isStaff || !allowedIds.has(String(colabIdent).trim()))) {
+        return NextResponse.json(
+          { error: 'Acesso negado: colaboradorId inválido para o usuário autenticado.' },
+          { status: 403 }
+        )
+      }
+      if (email && !allowedEmails.has(String(email).trim().toLowerCase())) {
+        return NextResponse.json(
+          { error: 'Acesso negado: email não pertence ao usuário autenticado.' },
+          { status: 403 }
+        )
+      }
+    }
+
     const authHeader = `Basic ${apiKey}`
 
     // 0. Verifica o estado atual do player para detectar external_user_id ausente

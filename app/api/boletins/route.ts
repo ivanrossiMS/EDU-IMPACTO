@@ -18,40 +18,55 @@ export async function GET(request: Request) {
     const aluno_id = searchParams.get('aluno_id')
     const limitParam = searchParams.get('limit')
     const limit = limitParam 
-      ? Math.min(Math.max(parseInt(limitParam, 10) || 50, 1), 2000) 
-      : (aluno_id ? 100 : (turma_id ? 1000 : 300))
-    
-    let query = supabase.from('boletins').select('*').order('created_at', { ascending: false }).limit(limit)
+      ? Math.min(Math.max(parseInt(limitParam, 10) || 50, 1), 5000) 
+      : (aluno_id ? 100 : 5000)
     
     const accessStartDate = await getLoggedUserAccessStartDate()
-    if (accessStartDate && !aluno_id) {
-      query = query.gte('created_at', accessStartDate.toISOString())
-    }
-    
-    if (turma_id) {
-      if (turma_id.includes(',')) {
-        const ids = turma_id.split(',').map(id => id.trim()).filter(Boolean)
-        query = query.in('turma_id', ids)
-      } else {
-        query = query.eq('turma_id', turma_id)
+
+    const buildQuery = () => {
+      let q = supabase.from('boletins').select('*').order('created_at', { ascending: false })
+      if (accessStartDate && !aluno_id) {
+        q = q.gte('created_at', accessStartDate.toISOString())
       }
-    }
-    
-    if (aluno_id) {
-      const alunoStr = String(aluno_id)
-      const alunoSemZero = alunoStr.replace(/^0+/, '')
-      if (alunoStr !== alunoSemZero) {
-        query = query.or(`aluno_id.eq.${alunoStr},aluno_id.eq.${alunoSemZero}`)
-      } else {
-        query = query.eq('aluno_id', aluno_id)
+      if (turma_id) {
+        if (turma_id.includes(',')) {
+          const ids = turma_id.split(',').map(id => id.trim()).filter(Boolean)
+          q = q.in('turma_id', ids)
+        } else {
+          q = q.eq('turma_id', turma_id)
+        }
       }
+      if (aluno_id) {
+        const alunoStr = String(aluno_id)
+        const alunoSemZero = alunoStr.replace(/^0+/, '')
+        if (alunoStr !== alunoSemZero) {
+          q = q.or(`aluno_id.eq.${alunoStr},aluno_id.eq.${alunoSemZero}`)
+        } else {
+          q = q.eq('aluno_id', aluno_id)
+        }
+      }
+      return q
     }
 
-    const { data, error } = await query
-    
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 })
-    
-    const boletinsData = data || []
+    let boletinsData: any[] = []
+    if (limit <= 1000) {
+      const { data, error } = await buildQuery().limit(limit)
+      if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+      boletinsData = data || []
+    } else {
+      let page = 0
+      const pageSize = 1000
+      while (boletinsData.length < limit) {
+        const from = page * pageSize
+        const to = from + Math.min(pageSize, limit - boletinsData.length) - 1
+        const { data, error } = await buildQuery().range(from, to)
+        if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+        if (!data || data.length === 0) break
+        boletinsData = boletinsData.concat(data)
+        if (data.length < pageSize) break
+        page++
+      }
+    }
     
     // Buscar nomes das turmas com cache em memória (TTL 60s) para contornar RLS e acelerar resposta
     const turmaIds = [...new Set(boletinsData.map((b: any) => b.turma_id || b.turma).filter(Boolean))]

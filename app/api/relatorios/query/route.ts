@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { resolveReportData } from '@/lib/reports/reportEngine'
-import { requireAuth } from '@/lib/server/authGuard'
+import { requireStaff } from '@/lib/server/authGuard'
 
 export async function POST(req: NextRequest) {
-  const { user, errorResponse } = await requireAuth()
+  const { errorResponse } = await requireStaff(req)
   if (errorResponse) return errorResponse
 
   try {

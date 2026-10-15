@@ -267,8 +267,8 @@ export function useSupabaseCollection<T>(
           }
           normalized = merged as any
           // Do NOT update cache while locked — preserve optimistic data
-        } else if (!isLocked && Array.isArray(latestState.current) && Array.isArray(normalized) && options?.mergeLocal !== false) {
-          // Outside lock window: still preserve local items missing from server response
+        } else if (!isLocked && Array.isArray(latestState.current) && Array.isArray(normalized) && options?.mergeLocal === true) {
+          // Only when explicitly requested via mergeLocal: true
           const serverIds = new Set((normalized as any[]).map((item: any) => item?.id).filter(Boolean))
           const localOnly = (latestState.current as any[]).filter((item: any) => item && item.id && !serverIds.has(item.id))
           if (localOnly.length > 0) {
@@ -331,7 +331,7 @@ export function useSupabaseCollection<T>(
               }
               normalized = merged as any
               // Do NOT update cache during lock — optimistic data wins
-            } else if (!isLocked && Array.isArray(latestState.current) && Array.isArray(normalized) && options?.mergeLocal !== false) {
+            } else if (!isLocked && Array.isArray(latestState.current) && Array.isArray(normalized) && options?.mergeLocal === true) {
               const serverIds = new Set((normalized as any[]).map((item: any) => item?.id).filter(Boolean))
               const localOnly = (latestState.current as any[]).filter((item: any) => item && item.id && !serverIds.has(item.id))
               if (localOnly.length > 0) {
@@ -560,8 +560,8 @@ export function useSupabaseArray<T>(
       })
       if (!res.ok) {
         const body = await res.json().catch(() => ({}))
-        if (res.status === 404) {
-           console.warn(`[useSupabaseArray] API POST 404 (Not Found) para o endpoint: /api/${endpoint}. Ignorando salvamento (pode ser coleção somente-leitura).`)
+        if (res.status === 404 || res.status === 405) {
+           console.warn(`[useSupabaseArray] API POST ${res.status} para o endpoint: /api/${endpoint}. Ignorando salvamento (coleção somente-leitura).`)
            return
         }
         console.error(`[useSupabaseArray] API POST failed for /api/${endpoint}:`, res.status, body)

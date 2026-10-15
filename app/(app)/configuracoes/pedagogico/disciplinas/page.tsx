@@ -48,18 +48,32 @@ function gerarCodigoDisc(existentes: string[]): string {
 }
 
 export default function DisciplinasPage() {
-  const { data: rawConfig, isLoading: loadingDisc, isFetching } = useApiQuery<{ valor: ConfigDisciplina[] }>(['config-disciplinas'], '/api/configuracoes?chave=cfgDisciplinas')
+  const { data: rawConfig, isLoading: loadingDisc, isFetching, refetch } = useApiQuery<{ valor: ConfigDisciplina[] }>(['config-disciplinas'], '/api/configuracoes?chave=cfgDisciplinas')
   const { data: rawTurmas } = useApiQuery<{ data: any[] }>(['turmas'], '/api/turmas')
   
   const [cfgDisciplinas, setCfgDisciplinas] = useState<ConfigDisciplina[]>([])
-  const turmas = rawTurmas?.data || []
+  const turmas = rawTurmas?.data || (Array.isArray(rawTurmas) ? rawTurmas : [])
   const isLoading = loadingDisc
 
   useEffect(() => {
-    if (rawConfig?.valor) {
+    if (Array.isArray(rawConfig?.valor)) {
       setCfgDisciplinas(rawConfig.valor)
     }
   }, [rawConfig])
+
+  const persistDisciplinas = async (nextList: ConfigDisciplina[]) => {
+    setCfgDisciplinas(nextList)
+    try {
+      await fetch('/api/configuracoes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chave: 'cfgDisciplinas', valor: nextList })
+      })
+      refetch()
+    } catch (e) {
+      console.error('Erro ao salvar disciplinas:', e)
+    }
+  }
 
   const [search, setSearch] = useState('')
   const [filtroNivel, setFiltroNivel] = useState('todos')
@@ -74,7 +88,7 @@ export default function DisciplinasPage() {
 
   const codigosExistentes = cfgDisciplinas.map(d => d.codigo)
   const codigoPreview = editId ? form.codigo : gerarCodigoDisc(codigosExistentes)
-  const turmasUnicas = useMemo(() => [...new Set(turmas.map(t => t.nome))].sort(), [turmas])
+  const turmasUnicas = useMemo(() => [...new Set(turmas.map((t: any) => t.nome))].sort(), [turmas])
 
   const filtered = useMemo(() =>
     cfgDisciplinas.filter(d => {
@@ -82,8 +96,19 @@ export default function DisciplinasPage() {
       const matchNivel = filtroNivel === 'todos' || d.niveisEnsino.includes(filtroNivel)
       const matchSit = filtroSituacao === 'todos' || d.situacao === filtroSituacao
       const matchTipo = filtroTipo === 'todos' || (filtroTipo === 'obrigatoria' ? d.obrigatoria : !d.obrigatoria)
-      return matchSearch && matchNivel && matchSit && matchTipo
-    }), [cfgDisciplinas, search, filtroNivel, filtroSituacao, filtroTipo])
+      const matchTurma = filtroTurma === 'todos' || (() => {
+        const tObj = turmas.find((t: any) => t.nome === filtroTurma)
+        const seg = tObj?.segmento || tObj?.dados?.segmento
+        return !seg || d.niveisEnsino.includes(seg)
+      })()
+      const matchTurno = filtroTurno === 'todos' || (() => {
+        const turmasDoTurno = turmas.filter((t: any) => t.turno === filtroTurno)
+        if (turmasDoTurno.length === 0) return true
+        const segs = new Set(turmasDoTurno.map((t: any) => t.segmento || t.dados?.segmento).filter(Boolean))
+        return segs.size === 0 || d.niveisEnsino.some(n => segs.has(n))
+      })()
+      return matchSearch && matchNivel && matchSit && matchTipo && matchTurma && matchTurno
+    }), [cfgDisciplinas, search, filtroNivel, filtroSituacao, filtroTipo, filtroTurma, filtroTurno, turmas])
 
   const hasFilters = filtroNivel !== 'todos' || filtroSituacao !== 'todos' || filtroTipo !== 'todos' || filtroTurno !== 'todos' || filtroTurma !== 'todos' || !!search
 
@@ -93,7 +118,7 @@ export default function DisciplinasPage() {
   const openNew = () => { setEditId(null); setForm({ ...BLANK }); setShowForm(true) }
   const openEdit = (d: ConfigDisciplina) => { setEditId(d.id); setForm({ codigo: d.codigo, nome: d.nome, cargaHoraria: d.cargaHoraria, niveisEnsino: d.niveisEnsino, obrigatoria: d.obrigatoria, situacao: d.situacao }); setShowForm(true) }
   const handleDelete = (id: string) => {
-    setCfgDisciplinas(prev => prev.filter(c => c.id !== id))
+    persistDisciplinas(cfgDisciplinas.filter(c => c.id !== id))
   }
 
   const toggleNivel = (n: string) =>
@@ -106,21 +131,17 @@ export default function DisciplinasPage() {
     if (!form.nome.trim()) return
     const codigo = editId ? form.codigo : gerarCodigoDisc(codigosExistentes)
 
-    // Outer guard (uses closure state, works for normal clicks)
     if (!editId && cfgDisciplinas.some(d => d.nome.toLowerCase() === form.nome.trim().toLowerCase())) {
       alert('Já existe uma disciplina com este nome!')
       return
     }
 
     if (editId) {
-      setCfgDisciplinas(prev => prev.map(c => c.id === editId ? { ...c, ...form, codigo } as ConfigDisciplina : c))
+      persistDisciplinas(cfgDisciplinas.map(c => c.id === editId ? { ...c, ...form, codigo } as ConfigDisciplina : c))
     } else {
       const novoId = newId('DS')
-      setCfgDisciplinas(prev => {
-        // Inner guard (uses real-time queued state, works against double-click race conditions)
-        if (prev.some(d => d.nome.toLowerCase() === form.nome.trim().toLowerCase() || d.id === novoId)) return prev
-        return [...prev, { ...form, id: novoId, codigo: gerarCodigoDisc(prev.map(p => p.codigo)), createdAt: new Date().toISOString() } as ConfigDisciplina]
-      })
+      const nextList = [...cfgDisciplinas, { ...form, id: novoId, codigo: gerarCodigoDisc(cfgDisciplinas.map(p => p.codigo)), createdAt: new Date().toISOString() } as ConfigDisciplina]
+      persistDisciplinas(nextList)
     }
     setShowForm(false)
   }
@@ -133,23 +154,16 @@ export default function DisciplinasPage() {
     } as ConfigDisciplina))
 
     if (news.length > 0) {
-      // Pequeno timeout visual para dar impressao de processamento batch
-      setTimeout(() => {
-        setCfgDisciplinas(prev => [...prev, ...news])
-        setIsProcessingBulk(false)
-      }, 800)
-    } else {
-      setIsProcessingBulk(false)
+      await persistDisciplinas([...cfgDisciplinas, ...news])
     }
+    setIsProcessingBulk(false)
   }
 
   const handleClearAll = async () => {
     if (confirm('Tem certeza que deseja apagar TODAS as disciplinas? Isso afetará os quadros de horários já vinculados.')) {
       setIsProcessingBulk(true)
-      setTimeout(() => {
-        setCfgDisciplinas([])
-        setIsProcessingBulk(false)
-      }, 500)
+      await persistDisciplinas([])
+      setIsProcessingBulk(false)
     }
   }
 

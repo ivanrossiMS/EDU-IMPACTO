@@ -1,18 +1,18 @@
 import { NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/server/authGuard'
+import { requireStaff } from '@/lib/server/authGuard'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: Request) {
-  const { user, errorResponse } = await requireAuth()
+  const { errorResponse } = await requireStaff(request)
   if (errorResponse) return errorResponse
 
   try {
     const supabase = await createProtectedClient();
     const { searchParams } = new URL(request.url)
     const status = searchParams.get('status')
-    const q = searchParams.get('q')?.toLowerCase()
+    const q = searchParams.get('q')?.toLowerCase().replace(/[,()]/g, '').trim()
 
     let query = supabase.from('leads').select('*').order('data', { ascending: false })
     if (status && status !== 'todos') query = query.eq('status', status)
@@ -28,7 +28,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const { user, errorResponse } = await requireAuth()
+  const { errorResponse } = await requireStaff(request)
   if (errorResponse) return errorResponse
 
   const supabase = await createProtectedClient();

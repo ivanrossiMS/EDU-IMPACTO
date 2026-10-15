@@ -170,7 +170,11 @@ export function getAlunoVinculosComPeriodo(aluno: any, anoLetivo?: string | numb
         dataInicio: tStart ? new Date(tStart).toISOString() : null,
         dataFim: tEnd ? new Date(tEnd).toISOString() : null,
         isCursando,
-        isIntegralIntermediario: Boolean(entry.isIntegralIntermediario || entry.modalidade === 'INTEGRAL/INTERMEDIÁRIO'),
+        isIntegralIntermediario: Boolean(
+          entry.isIntegralIntermediario || 
+          String(entry.modalidade || '').toUpperCase().includes('INTEGRAL') || 
+          String(entry.modalidade || '').toUpperCase().includes('INTERMEDI')
+        ),
         modalidade: entry.modalidade,
         raw: entry
       })
@@ -1084,7 +1088,14 @@ export function isAlunoIntegralIntermediario(aluno: any, turmas: any[] = [], gru
     for (const v of vinculosAtivos) {
       if (!v || v.status === 'Inativo' || v.status === 'Anterior' || v.status === 'Transferido') continue;
 
-      if (v.isIntegralIntermediario === true || v.modalidade === 'INTEGRAL/INTERMEDIÁRIO') {
+      const vMod = String(v.modalidade || '').toUpperCase();
+      if (
+        v.isIntegralIntermediario === true || 
+        vMod === 'INTEGRAL/INTERMEDIÁRIO' || 
+        vMod === 'INTEGRAL' || 
+        vMod.includes('INTEGRAL') || 
+        vMod.includes('INTERMEDI')
+      ) {
         return true;
       }
 
@@ -1096,7 +1107,14 @@ export function isAlunoIntegralIntermediario(aluno: any, turmas: any[] = [], gru
       if (Array.isArray(v.turmasAdicionais)) {
         for (const sub of v.turmasAdicionais) {
           if (!sub || sub.status === 'Inativo' || sub.status === 'Anterior') continue;
-          if (sub.isIntegralIntermediario === true || sub.modalidade === 'INTEGRAL/INTERMEDIÁRIO') {
+          const subMod = String(sub.modalidade || '').toUpperCase();
+          if (
+            sub.isIntegralIntermediario === true || 
+            subMod === 'INTEGRAL/INTERMEDIÁRIO' || 
+            subMod === 'INTEGRAL' || 
+            subMod.includes('INTEGRAL') || 
+            subMod.includes('INTERMEDI')
+          ) {
             return true;
           }
           const subSt = String(sub.serieTurma || sub.turma || sub.nome || '').toLowerCase();
@@ -1116,7 +1134,7 @@ export function isAlunoIntegralIntermediario(aluno: any, turmas: any[] = [], gru
             const tMod = String(tObj.modalidade || tObj.dados?.modalidade || '').toLowerCase();
             if (
               tTurno.includes('integral') || tTurno.includes('intermediario') || tTurno.includes('intermediário') ||
-              tMod.includes('integral/intermediário') ||
+              tMod.includes('integral') || tMod.includes('intermediario') || tMod.includes('intermediário') ||
               ((tNome.includes('integral') || tNome.includes('intermediario')) && !tNome.includes('matutino') && !tNome.includes('vespertino'))
             ) {
               return true;
@@ -1160,7 +1178,7 @@ export function isAlunoIntegralIntermediario(aluno: any, turmas: any[] = [], gru
   if (directTurno.includes('integral') || directTurno.includes('intermediario') || directTurno.includes('intermediário')) return true;
 
   const directModalidade = String(aluno.modalidade || aluno.dados?.modalidade || '').toLowerCase();
-  if (directModalidade.includes('integral/intermediário')) return true;
+  if (directModalidade.includes('integral') || directModalidade.includes('intermediario') || directModalidade.includes('intermediário')) return true;
 
   // 2. Active turmas for student (quando não tem histórico)
   if (Array.isArray(turmas) && turmas.length > 0) {
@@ -1171,7 +1189,7 @@ export function isAlunoIntegralIntermediario(aluno: any, turmas: any[] = [], gru
         const tMod = String(t.modalidade || t.dados?.modalidade || '').toLowerCase();
         if (
           tTurno.includes('integral') || tTurno.includes('intermediario') || tTurno.includes('intermediário') ||
-          tMod.includes('integral/intermediário') ||
+          tMod.includes('integral') || tMod.includes('intermediario') || tMod.includes('intermediário') ||
           ((tNome.includes('integral') || tNome.includes('intermediario')) && !tNome.includes('matutino') && !tNome.includes('vespertino'))
         ) {
           return true;

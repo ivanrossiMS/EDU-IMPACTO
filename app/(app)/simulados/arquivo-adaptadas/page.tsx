@@ -32,7 +32,7 @@ export default function ArquivoAdaptadasPage() {
   }
 
   useEffect(() => {
-    if (currentUserPerfil === 'professor') {
+    if (currentUserPerfil?.toLowerCase() === 'professor') {
       router.push('/simulados')
     }
   }, [currentUserPerfil, router])
@@ -107,7 +107,7 @@ export default function ArquivoAdaptadasPage() {
     }
   }
 
-  if (currentUserPerfil === 'professor') return null
+  if (currentUserPerfil?.toLowerCase() === 'professor') return null
 
   const groupedByTurma = arquivos.reduce((acc, curr) => {
     const turma = curr.turma || 'Sem Turma'

@@ -214,8 +214,10 @@ export default function PesquisaClimaAdminPage() {
   useEffect(() => {
     fetchPesquisas()
     fetchCheckinConfig()
-    fetchCheckinRelatorio()
-  }, [])
+    if (isAdmin) {
+      fetchCheckinRelatorio()
+    }
+  }, [isAdmin])
 
   const fetchPesquisas = async () => {
     try {
@@ -2171,12 +2173,12 @@ export default function PesquisaClimaAdminPage() {
                           style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: 20, cursor: 'pointer', background: isExpanded ? '#f8fafc' : '#fff', transition: 'background 0.2s' }}
                         >
                           <div>
-                            <div style={{ fontSize: 16, fontWeight: 800, color: '#0f172a' }}>{r.usuario_nome}</div>
-                            <div style={{ fontSize: 13, color: '#64748b' }}>{r.usuario_cargo}</div>
+                            <div style={{ fontSize: 16, fontWeight: 800, color: '#0f172a' }}>{r.usuario_nome || r.user_nome || 'Anônimo'}</div>
+                            <div style={{ fontSize: 13, color: '#64748b' }}>{r.usuario_cargo || r.user_cargo || ''}</div>
                           </div>
                           <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
-                            <div style={{ fontSize: 12, color: '#94a3b8' }}>{new Date(r.data_assinatura).toLocaleString('pt-BR')}</div>
-                            <div style={{ fontSize: 11, color: '#94a3b8' }}>IP: {r.ip_assinatura}</div>
+                            <div style={{ fontSize: 12, color: '#94a3b8' }}>{(r.data_assinatura || r.created_at) ? new Date(r.data_assinatura || r.created_at).toLocaleString('pt-BR') : '-'}</div>
+                            <div style={{ fontSize: 11, color: '#94a3b8' }}>IP: {r.ip_assinatura || r.ip_address || '-'}</div>
                             <div style={{ fontSize: 12, fontWeight: 700, color: '#4f46e5', marginTop: 4 }}>
                               {isExpanded ? 'Ocultar Respostas ▲' : 'Ver Respostas ▼'}
                             </div>

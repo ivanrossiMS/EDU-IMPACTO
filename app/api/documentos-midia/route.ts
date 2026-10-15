@@ -1,11 +1,12 @@
+import path from 'path'
 import { NextRequest, NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/server/authGuard'
+import { requireStaff } from '@/lib/server/authGuard'
 import { createClient } from '@supabase/supabase-js'
 
 export const dynamic = 'force-dynamic'
 
 export async function POST(req: NextRequest) {
-  const { user, errorResponse } = await requireAuth()
+  const { errorResponse } = await requireStaff(req)
   if (errorResponse) return errorResponse
 
   const supabase = createClient(
@@ -58,8 +59,10 @@ export async function POST(req: NextRequest) {
     }
 
     if (action === 'delete') {
-      const fileName = formData.get('fileName') as string
-      const { error } = await supabase.storage.from('documentos').remove([`timbrados/${fileName}`])
+      const rawFileName = String(formData.get('fileName') || '')
+      const safeFileName = path.basename(rawFileName).replace(/[^a-zA-Z0-9._-]/g, '_')
+      if (!safeFileName) throw new Error('Nome de arquivo inválido')
+      const { error } = await supabase.storage.from('documentos').remove([`timbrados/${safeFileName}`])
       if (error) throw error
       return NextResponse.json({ success: true })
     }
@@ -68,10 +71,11 @@ export async function POST(req: NextRequest) {
       const file = formData.get('file') as File
       if (!file) throw new Error('Nenhum arquivo enviado')
       
-      const fileName = `${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`
+      const safeBaseName = path.basename(file.name).replace(/[^a-zA-Z0-9.-]/g, '_')
+      const fileName = `${Date.now()}_${safeBaseName}`
       
       const buffer = Buffer.from(await file.arrayBuffer())
-      const { data, error } = await supabase.storage.from('documentos').upload(`timbrados/${fileName}`, buffer, {
+      const { error } = await supabase.storage.from('documentos').upload(`timbrados/${fileName}`, buffer, {
         contentType: file.type,
         cacheControl: '3600',
         upsert: false

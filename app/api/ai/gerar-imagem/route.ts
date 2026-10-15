@@ -1,7 +1,11 @@
 import { NextResponse } from 'next/server';
 import { GoogleGenAI } from '@google/genai';
+import { requireStaff } from '@/lib/server/authGuard';
 
 export async function POST(request: Request) {
+  const { errorResponse } = await requireStaff(request);
+  if (errorResponse) return errorResponse;
+
   try {
     const { enunciado, disciplina } = await request.json();
 

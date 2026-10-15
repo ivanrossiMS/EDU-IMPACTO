@@ -10,8 +10,8 @@ import { UserAvatar } from '@/components/UserAvatar'
 
 export default function ADAdminPessoas() {
   const { turmas = [] } = useData();
-  const [alunos, setAlunos, { loading: isAlunosLoading }] = useSupabaseArray<any>('alunos?limit=10000');
-  const { adAlert, adConfirm } = useAgendaDigital()
+  const [alunos, setAlunos, { loading: isAlunosLoading }] = useSupabaseArray<any>('alunos?limit=10000&lightweight=true');
+  const { adAlert, adConfirm, comunicados = [] } = useAgendaDigital()
   const [search, setSearch] = useState('')
   const [filterType, setFilterType] = useState('todos')
   const [filterTurma, setFilterTurma] = useState('')
@@ -24,7 +24,7 @@ export default function ADAdminPessoas() {
 
   // Force fresh data every time this page is opened (bust the stale cache)
   useEffect(() => {
-    invalidateCache('alunos?limit=10000')
+    invalidateCache('alunos?limit=10000&lightweight=true')
   }, [])
 
   // Reset pagination to first page when any filters or search queries change
@@ -51,11 +51,35 @@ export default function ADAdminPessoas() {
   const uniqueTurmas = Array.from(new Set((alunos || []).map(a => a.turma).filter(Boolean)))
   const uniqueAnos = Array.from(new Set((turmas || []).map(t => t.ano).filter(Boolean))).sort()
 
-  const getEngajamento = (id: string) => {
-    const hash = id.split('').reduce((a, b) => a + b.charCodeAt(0), 0)
-    if (hash % 3 === 0) return { label: 'Baixo', color: '#ef4444', pct: 25 }
-    if (hash % 2 === 0) return { label: 'Medio', color: '#f59e0b', pct: 60 }
-    return { label: 'Alto', color: '#10b981', pct: 95 }
+  const getEngajamento = (alunoItem: any) => {
+    const id = typeof alunoItem === 'string' ? alunoItem : String(alunoItem?.id || '')
+    const matricula = typeof alunoItem === 'object' ? String(alunoItem?.matricula || '') : ''
+    const resps = responsaveisMap[id] || (typeof alunoItem === 'object' ? alunoItem?.responsaveis : []) || []
+    const sentComs = (comunicados || []).filter((c: any) => c.status === 'enviado' || c.status === 'publicado')
+    if (sentComs.length > 0) {
+      let readCount = 0
+      sentComs.forEach((c: any) => {
+        const leituras = c.leituras || {}
+        const ciencias = c.ciencias || {}
+        const hasStudentRead = Boolean(
+          leituras[id] || ciencias[id] ||
+          (matricula && (leituras[matricula] || ciencias[matricula])) ||
+          Object.keys(leituras).some(k => k.endsWith(`_${id}`) || k.startsWith(`${id}_`))
+        )
+        const hasRespRead = resps.some((r: any) => r?.id && (leituras[r.id] || ciencias[r.id]))
+        if (hasStudentRead || hasRespRead) readCount++
+      })
+      const pct = Math.min(100, Math.round((readCount / sentComs.length) * 100))
+      if (pct >= 65) return { label: 'Alto', color: '#10b981', pct: Math.max(pct, 75) }
+      if (pct >= 25) return { label: 'Medio', color: '#f59e0b', pct }
+      return { label: 'Baixo', color: '#ef4444', pct: Math.max(pct, 10) }
+    }
+    const hasActiveAccount = Boolean(
+      (typeof alunoItem === 'object' && (alunoItem?.ultimoAcesso || alunoItem?.senhaDefinida)) ||
+      resps.some((r: any) => r?.ultimoAcesso || r?.ultimo_acesso || r?.senhaDefinida || r?.email)
+    )
+    if (hasActiveAccount) return { label: 'Ativo', color: '#10b981', pct: 80 }
+    return { label: 'Baixo', color: '#ef4444', pct: 15 }
   }
 
   const filtered = (alunos || []).filter(a => {
@@ -66,9 +90,9 @@ export default function ADAdminPessoas() {
       const turmaRef = (turmas || []).find(t => t.nome === a.turma || t.id === a.turma || String(t.codigo) === a.turma)
       if (turmaRef?.ano?.toString() !== filterAno) return false
     }
-    const engj = getEngajamento(a.id)
+    const engj = getEngajamento(a)
     if (filterType === 'baixo' && engj.label !== 'Baixo') return false
-    if (filterType === 'alto' && engj.label !== 'Alto') return false
+    if (filterType === 'alto' && engj.label !== 'Alto' && engj.label !== 'Ativo') return false
     return true
   })
 
@@ -222,16 +246,17 @@ export default function ADAdminPessoas() {
           </thead>
           <tbody>
             {paginatedAlunos.map(a => {
-              const engj = getEngajamento(a.id)
+              const engj = getEngajamento(a)
+              const isBlocked = Boolean(a.bloqueadoAgenda || a.bloqueadoAgendaDigital)
               return (
-                <tr key={a.id} style={{ borderBottom: '1px solid hsl(var(--border-subtle))', background: a.bloqueadoAgenda ? 'rgba(239, 68, 68, 0.05)' : '' }}>
+                <tr key={a.id} style={{ borderBottom: '1px solid hsl(var(--border-subtle))', background: isBlocked ? 'rgba(239, 68, 68, 0.05)' : '' }}>
                   <td style={{ padding: '16px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                       <UserAvatar userId={a.id} name={a.nome} fotoUrl={a.foto} size={54} />
                       <div>
                         <div style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
                           {a.nome}
-                          {a.bloqueadoAgenda && <span className="badge" style={{ background: '#ef4444', color: 'white', fontSize: 10, padding: '2px 6px' }}>BLOQUEADO</span>}
+                          {isBlocked && <span className="badge" style={{ background: '#ef4444', color: 'white', fontSize: 10, padding: '2px 6px' }}>BLOQUEADO</span>}
                         </div>
                         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
                           {(() => {
@@ -307,16 +332,27 @@ export default function ADAdminPessoas() {
                       <button className="btn btn-ghost btn-sm" title="Gerenciar Senhas e Perfil" onClick={() => handleOpenProfile(a)} disabled={loadingProfile}>
                         {loadingProfile ? <Loader size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <Settings size={14} />}
                       </button>
-                      <button className="btn btn-ghost btn-sm" title={a.bloqueadoAgenda ? "Desbloquear Acesso" : "Bloquear Acesso"} style={{ color: a.bloqueadoAgenda ? '#10b981' : '#ef4444' }}
+                      <button className="btn btn-ghost btn-sm" title={isBlocked ? "Desbloquear Acesso" : "Bloquear Acesso"} style={{ color: isBlocked ? '#10b981' : '#ef4444' }}
                         onClick={() => {
-                          const action = a.bloqueadoAgenda ? 'Desbloquear' : 'Bloquear';
-                          adConfirm(`${action} acesso desta familia ao App imediatamente?`, `${action} Acesso`, () => {
-                            setAlunos((prev: any) => prev.map((al: any) => al.id === a.id ? { ...al, bloqueadoAgenda: !al.bloqueadoAgenda } : al));
-                            adAlert(a.bloqueadoAgenda ? 'Acesso Liberado!' : 'Acesso Suspenso!', 'Acao Realizada');
+                          const action = isBlocked ? 'Desbloquear' : 'Bloquear';
+                          adConfirm(`${action} acesso desta familia ao App imediatamente?`, `${action} Acesso`, async () => {
+                            const nextBlocked = !isBlocked;
+                            setAlunos((prev: any) => prev.map((al: any) => al.id === a.id ? { ...al, bloqueadoAgenda: nextBlocked, bloqueadoAgendaDigital: nextBlocked } : al));
+                            try {
+                              const fullRes = await fetch(`/api/alunos/${encodeURIComponent(a.id)}`).catch(() => null);
+                              const fullData = fullRes && fullRes.ok ? await fullRes.json().catch(() => null) : null;
+                              const baseAluno = fullData || a;
+                              await fetch(`/api/alunos?id=${encodeURIComponent(a.id)}`, {
+                                method: 'PUT',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ ...baseAluno, bloqueadoAgenda: nextBlocked, bloqueadoAgendaDigital: nextBlocked })
+                              });
+                            } catch (_) {}
+                            adAlert(isBlocked ? 'Acesso Liberado!' : 'Acesso Suspenso!', 'Acao Realizada');
                           });
                         }}
                       >
-                        {a.bloqueadoAgenda ? <CheckCircle size={14} /> : <Lock size={14} />}
+                        {isBlocked ? <CheckCircle size={14} /> : <Lock size={14} />}
                       </button>
                     </div>
                   </td>
@@ -329,7 +365,8 @@ export default function ADAdminPessoas() {
         {/* Mobile Cards View */}
         <div className="ad-pessoas-mobile-cards">
           {paginatedAlunos.map(a => {
-            const engj = getEngajamento(a.id)
+            const engj = getEngajamento(a)
+            const isBlocked = Boolean(a.bloqueadoAgenda || a.bloqueadoAgendaDigital)
             const resps = responsaveisMap[a.id] || a.responsaveis || []
             const devCount = resps.length > 0 ? resps.length : (a.status === 'matriculado' || a.status === 'ativo' ? 1 : 0)
             const turmaNome = turmas.find((t: any) => t.id === a.turma)?.nome || a.turma
@@ -355,7 +392,7 @@ export default function ADAdminPessoas() {
                     <div>
                       <div style={{ fontWeight: 800, fontSize: 14, color: 'hsl(var(--text-main))', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                         {a.nome}
-                        {a.bloqueadoAgenda && <span className="badge" style={{ background: '#ef4444', color: 'white', fontSize: 9, padding: '2px 5px' }}>BLOQUEADO</span>}
+                        {isBlocked && <span className="badge" style={{ background: '#ef4444', color: 'white', fontSize: 9, padding: '2px 5px' }}>BLOQUEADO</span>}
                       </div>
                       <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', marginTop: 1 }}>
                         Turma: {turmaNome || 'Sem Turma'}
@@ -366,16 +403,27 @@ export default function ADAdminPessoas() {
                     <button className="btn btn-ghost btn-sm" title="Gerenciar Senhas e Perfil" onClick={() => handleOpenProfile(a)} disabled={loadingProfile} style={{ padding: '6px' }}>
                       {loadingProfile ? <Loader size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <Settings size={15} />}
                     </button>
-                    <button className="btn btn-ghost btn-sm" title={a.bloqueadoAgenda ? "Desbloquear" : "Bloquear"} style={{ color: a.bloqueadoAgenda ? '#10b981' : '#ef4444', padding: '6px' }}
+                    <button className="btn btn-ghost btn-sm" title={isBlocked ? "Desbloquear" : "Bloquear"} style={{ color: isBlocked ? '#10b981' : '#ef4444', padding: '6px' }}
                       onClick={() => {
-                        const action = a.bloqueadoAgenda ? 'Desbloquear' : 'Bloquear';
-                        adConfirm(`${action} acesso desta familia ao App imediatamente?`, `${action} Acesso`, () => {
-                          setAlunos((prev: any) => prev.map((al: any) => al.id === a.id ? { ...al, bloqueadoAgenda: !al.bloqueadoAgenda } : al));
-                          adAlert(a.bloqueadoAgenda ? 'Acesso Liberado!' : 'Acesso Suspenso!', 'Acao Realizada');
+                        const action = isBlocked ? 'Desbloquear' : 'Bloquear';
+                        adConfirm(`${action} acesso desta familia ao App imediatamente?`, `${action} Acesso`, async () => {
+                          const nextBlocked = !isBlocked;
+                          setAlunos((prev: any) => prev.map((al: any) => al.id === a.id ? { ...al, bloqueadoAgenda: nextBlocked, bloqueadoAgendaDigital: nextBlocked } : al));
+                          try {
+                            const fullRes = await fetch(`/api/alunos/${encodeURIComponent(a.id)}`).catch(() => null);
+                            const fullData = fullRes && fullRes.ok ? await fullRes.json().catch(() => null) : null;
+                            const baseAluno = fullData || a;
+                            await fetch(`/api/alunos?id=${encodeURIComponent(a.id)}`, {
+                              method: 'PUT',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ ...baseAluno, bloqueadoAgenda: nextBlocked, bloqueadoAgendaDigital: nextBlocked })
+                            });
+                          } catch (_) {}
+                          adAlert(isBlocked ? 'Acesso Liberado!' : 'Acesso Suspenso!', 'Acao Realizada');
                         });
                       }}
                     >
-                      {a.bloqueadoAgenda ? <CheckCircle size={15} /> : <Lock size={15} />}
+                      {isBlocked ? <CheckCircle size={15} /> : <Lock size={15} />}
                     </button>
                   </div>
                 </div>

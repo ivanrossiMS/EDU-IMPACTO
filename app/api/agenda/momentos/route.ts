@@ -1,5 +1,5 @@
 import { NextResponse, after } from 'next/server'
-import { requireAuth } from '@/lib/server/authGuard'
+import { requireAuth, requireStaff } from '@/lib/server/authGuard'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 import { supabaseServer } from '@/lib/supabaseServer'
 import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
@@ -757,16 +757,10 @@ function normalizeMomentoParams(rawDados: any) {
 }
 
 export async function DELETE(request: Request) {
-  const { user, errorResponse } = await requireAuth()
+  const { user, dbUser, perfil, cargo, errorResponse } = await requireStaff(request)
   if (errorResponse) return errorResponse
 
   try {
-    const perfil = user.user_metadata?.perfil || '';
-    const cargo = user.user_metadata?.cargo || '';
-    if (perfil === 'Família' || perfil === 'Responsável' || cargo === 'Responsável' || cargo === 'Aluno' || perfil === 'Aluno') {
-      return NextResponse.json({ error: 'Acesso negado: Famílias não podem apagar Momentos.' }, { status: 403 });
-    }
-
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
     const idsParam = searchParams.get('ids')
@@ -791,6 +785,63 @@ export async function DELETE(request: Request) {
 
     if (fetchErr) {
       console.error('Erro ao buscar momentos para exclusão:', fetchErr)
+    }
+
+    // Verificar se o colaborador é o autor do(s) momento(s) ou possui cargo de gestão (Admin/Coordenador/Diretor)
+    const managementRoles = [
+      'administrador',
+      'administrador master',
+      'admin',
+      'master',
+      'gestor',
+      'diretor',
+      'diretora',
+      'diretor geral',
+      'diretora geral',
+      'direção',
+      'direcao',
+      'coordenador',
+      'coordenadora',
+      'coordenação',
+      'coordenacao',
+      'coordenador(a) pedagógico(a)',
+    ]
+    const lowerPerfil = String(perfil || dbUser?.perfil || user.user_metadata?.perfil || '').toLowerCase().trim()
+    const lowerCargo = String(cargo || dbUser?.cargo || user.user_metadata?.cargo || '').toLowerCase().trim()
+    const isManager =
+      managementRoles.some(r => lowerPerfil.includes(r) || lowerCargo.includes(r))
+
+    if (!isManager && momentosList && momentosList.length > 0) {
+      const myCandidateIds = new Set<string>(
+        [
+          String(user.id),
+          dbUser?.id ? String(dbUser.id) : null,
+          dbUser?.auth_id ? String(dbUser.auth_id) : null,
+          user.user_metadata?.colaborador_id ? String(user.user_metadata.colaborador_id) : null,
+          user.user_metadata?.system_user_id ? String(user.user_metadata.system_user_id) : null,
+          dbUser?.dados?.colaborador_id ? String(dbUser.dados.colaborador_id) : null,
+        ].filter(Boolean) as string[]
+      )
+      const myNames = new Set<string>(
+        [dbUser?.nome, user.user_metadata?.nome]
+          .filter(Boolean)
+          .map((n: any) => String(n).trim().toLowerCase())
+      )
+
+      const isAuthorOfAll = momentosList.every((mom: any) => {
+        const momAuthorId = mom.dados?.authorId || mom.dados?.criadoPorId
+        const momAuthorName = mom.dados?.author || mom.dados?.autor
+        if (momAuthorId && myCandidateIds.has(String(momAuthorId))) return true
+        if (!momAuthorId && momAuthorName && myNames.has(String(momAuthorName).trim().toLowerCase())) return true
+        return false
+      })
+
+      if (!isAuthorOfAll) {
+        return NextResponse.json(
+          { error: 'Acesso negado: apenas o autor da publicação ou a coordenação/direção podem excluir este Momento.' },
+          { status: 403 }
+        )
+      }
     }
 
     const urlsToDelete: string[] = []

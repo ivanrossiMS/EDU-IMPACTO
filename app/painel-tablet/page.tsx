@@ -1493,18 +1493,20 @@ function PainelTabletContent() {
                               <button key={i}
                                 onClick={() => {
                                   if (blocked) return
+                                  const tObj = (turmas || []).find((t: any) => String(t.id) === String(a.turma) || t.codigo === a.turma || t.nome === a.turma)
+                                  const turmaNome = tObj?.nome || a.turma
+                                  const gId = `manual-${a.id}-${i}`
+                                  const aPhoto = a.foto || a.foto_url || a.fotoUrl || a.avatarUrl || a.imagem1 || a.dados?.foto || a.dados?.avatarUrl || null
                                   if (g.proibido) {
+                                    blockAttempt?.(a.id, a.nome, turmaNome, gId, g.name, undefined, 'proibido', 'Responsável proibido de retirar o aluno (Modo Manual)', aPhoto)
                                     showToast(`❌ ${g.name} está PROIBIDO(A) de retirar o aluno!`, false)
                                     return
                                   }
                                   if (!diaOk) {
+                                    blockAttempt?.(a.id, a.nome, turmaNome, gId, g.name, undefined, 'dia_restrito', 'Responsável fora do dia autorizado (Modo Manual)', aPhoto)
                                     showToast(`⚠️ ${g.name} não tem autorização para retirar hoje!`, false)
                                     return
                                   }
-                                  const gId = `manual-${a.id}-${i}`
-                                  const tObj = (turmas || []).find((t: any) => String(t.id) === String(a.turma) || t.codigo === a.turma || t.nome === a.turma)
-                                  const turmaNome = tObj?.nome || a.turma
-                                  const aPhoto = a.foto || a.foto_url || a.fotoUrl || a.avatarUrl || a.imagem1 || a.dados?.foto || a.dados?.avatarUrl || null
                                   const call = callStudent(a.id, a.nome, turmaNome, gId, g.name, 'manual', undefined, aPhoto)
                                   if (!call) showToast(`${a.nome} já em chamada!`, false)
                                   else showToast(`📣 ${a.nome} chamado via ${g.name}!`)

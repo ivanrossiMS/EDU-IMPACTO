@@ -106,25 +106,30 @@ export default function DashboardPage() {
   } = kpis
 
   // ── Usuários Cadastrados / Acessos
-  const { data: usuariosData, isLoading: loadUsuarios } = useApiQuery<any[]>(
+  const { data: usuariosData, isLoading: loadUsuarios } = useApiQuery<any>(
     ['dash-usuarios'],
     `/api/configuracoes/usuarios`,
     {},
     { staleTime: 300_000 }
   )
+
+  const usuariosList: any[] = useMemo(() => {
+    if (Array.isArray(usuariosData)) return usuariosData
+    if (usuariosData && Array.isArray((usuariosData as any).data)) return (usuariosData as any).data
+    return []
+  }, [usuariosData])
   
   const usuariosAtivos = useMemo(() => {
-    if (!usuariosData) return []
-    return usuariosData.filter((u: any) => u.ultimoAcesso && u.ultimoAcesso !== 'Nunca acessou')
-  }, [usuariosData])
+    return usuariosList.filter((u: any) => u.ultimoAcesso && u.ultimoAcesso !== 'Nunca acessou')
+  }, [usuariosList])
 
   const statsUsuarios = useMemo(() => {
-    if (!usuariosData) return { colab: 0, colabTotal: 0, alunos: 0, alunosTotal: 0, resps: 0, respsTotal: 0, total: 0, totalGeral: 0 }
+    if (!usuariosList.length) return { colab: 0, colabTotal: 0, alunos: 0, alunosTotal: 0, resps: 0, respsTotal: 0, total: 0, totalGeral: 0 }
     let colab = 0, colabTotal = 0
     let alunos = 0, alunosTotal = 0
     let resps = 0, respsTotal = 0
 
-    usuariosData.forEach((u: any) => {
+    usuariosList.forEach((u: any) => {
       const isAtivo = u.ultimoAcesso && u.ultimoAcesso !== 'Nunca acessou'
       if (u.cargo === 'Alunos') {
         alunosTotal++
@@ -139,8 +144,8 @@ export default function DashboardPage() {
         if (isAtivo) colab++
       }
     })
-    return { colab, colabTotal, alunos, alunosTotal, resps, respsTotal, total: usuariosAtivos.length, totalGeral: usuariosData.length }
-  }, [usuariosData, usuariosAtivos])
+    return { colab, colabTotal, alunos, alunosTotal, resps, respsTotal, total: usuariosAtivos.length, totalGeral: usuariosList.length }
+  }, [usuariosList, usuariosAtivos])
 
   // ── Derived Data
   const todayStr = hoje.toISOString().slice(0, 10)

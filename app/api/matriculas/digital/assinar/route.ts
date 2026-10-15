@@ -202,16 +202,31 @@ export async function POST(request: Request) {
       contrato.responsavel_cpf = String(body.signatario_cpf).trim()
     }
     if (body.signatario_telefone) contrato.responsavel_telefone = String(body.signatario_telefone).trim()
-    if (body.signatario_email) contrato.responsavel_email = String(body.signatario_email).trim()
+    if (body.signatario_email && !contrato.responsavel_email) {
+      contrato.responsavel_email = String(body.signatario_email).trim()
+    }
     if (body.signatario_data_nascimento) contrato.responsavel_data_nascimento = String(body.signatario_data_nascimento).trim()
 
     const tipoAssinatura = body.tipoAssinatura || (assinaturaBase64 ? 'manual' : 'nome_automatico')
 
-    // Registra evento de assinatura na trilha em memória com o timestamp canônico da assinatura
+    const { getAuthenticatedUser } = await import('@/lib/server/supabaseAuthFactory')
+    const authUser = await getAuthenticatedUser().catch(() => null)
+    const isVerifiedAppUser = Boolean(authUser && body.usuarioAutenticadoApp)
+
+    // Registra evento de assinatura e conclusão na trilha em memória ANTES de gerar o Certificado de Evidências
+    // para que o trilhaAuditoriaHash impresso no PDF bata 100% com contrato.historico_eventos!
     adicionarEventoAuditoriaEmMemoria(
       contrato,
       'ASSINATURA_SIGNATARIO',
       `Confirmação expressa de aceite integral do pacote documental (${contrato.versao_documento || 'v1.0'} | Protocolo: ${contrato.protocolo} | Hash SHA-256 da versão apresentada: ${contrato.documento_original_hash}) e assinatura eletrônica (${tipoAssinatura === 'nome_automatico' ? 'representação gráfica gerada' : 'manuscrita'}) formalizada por ${contrato.responsavel_nome}`,
+      clientIp,
+      dataHoraAssinatura
+    )
+
+    adicionarEventoAuditoriaEmMemoria(
+      contrato,
+      'DOCUMENTO_CONCLUIDO',
+      `Documento selado com assinatura PKCS#7 corporativa (/Sig e /ByteRange) e Certificado de Evidências Digitais.`,
       clientIp,
       dataHoraAssinatura
     )
@@ -244,7 +259,7 @@ export async function POST(request: Request) {
         tipoAssinatura,
         estiloCaligrafico: body.estiloCaligrafico || 'classica',
         assinaturaBase64,
-        usuarioAutenticadoApp: Boolean(body.usuarioAutenticadoApp),
+        usuarioAutenticadoApp: isVerifiedAppUser,
       },
       representanteEscola: {
         nome: repEscola.nome,
@@ -267,14 +282,6 @@ export async function POST(request: Request) {
     // Salva o PDF assinado no Storage isolado
     const signedPdfBuf = Buffer.from(sealedResult.pdfBytes)
     const assinadoPath = await salvarPdfBytes(contrato.id, 'assinado', signedPdfBuf)
-
-    // Registra evento de documento concluído na trilha
-    adicionarEventoAuditoriaEmMemoria(
-      contrato,
-      'DOCUMENTO_CONCLUIDO',
-      `Documento selado com assinatura PKCS#7 corporativa (/Sig e /ByteRange). Hash do PDF final (SHA-256): ${sealedResult.documentoFinalHash}`,
-      clientIp
-    )
 
     // 5. Atualiza o status, higieniza credenciais temporárias e sela o contrato
     contrato.status = 'assinado'
@@ -306,7 +313,7 @@ export async function POST(request: Request) {
     // Único salvamento atômico ultraleve
     await salvarContrato(contrato)
 
-    // 6. Envio oficial da cópia do contrato assinado (despacho assíncrono em background sem bloquear o signatário)
+    // 6. Envio oficial da cópia do contrato assinado (despacho assíncrono em background sem alterar historico_eventos já selado)
     const emailPayload = {
       destinatario: contrato.responsavel_email,
       nomeDestinatario: contrato.responsavel_nome,
@@ -318,18 +325,12 @@ export async function POST(request: Request) {
       nomeArquivo: `Contrato_${(contrato.aluno_nome || 'Documento').replace(/\s+/g, '_')}_${contrato.protocolo}.pdf`,
     }
 
-    // Executa o envio por e-mail em background sem prender o modal do usuário
+    // Executa o envio por e-mail em background registrando metadados apenas em evidencias (preservando trilha_auditoria_hash)
     void (async () => {
       try {
         const emailEnvioResultado = await enviarCopiaContratoAssinadoEmail(emailPayload)
         const contratoAtual = (await buscarContratoPorToken(token)) || contrato
         if (emailEnvioResultado?.success) {
-          adicionarEventoAuditoriaEmMemoria(
-            contratoAtual,
-            'ENVIO_COPIA_EMAIL',
-            `Via oficial do contrato assinado (PDF) enviada para ${contrato.responsavel_email}${emailEnvioResultado.messageId ? ` (ID: ${emailEnvioResultado.messageId})` : ''}`,
-            clientIp
-          )
           contratoAtual.evidencias = {
             ...contratoAtual.evidencias,
             emailCopiaEnviado: true,
@@ -338,12 +339,6 @@ export async function POST(request: Request) {
             emailCopiaDestinatario: contrato.responsavel_email,
           }
         } else {
-          adicionarEventoAuditoriaEmMemoria(
-            contratoAtual,
-            'FALHA_ENVIO_COPIA_EMAIL',
-            `Tentativa de envio da cópia do contrato para ${contrato.responsavel_email} falhou: ${emailEnvioResultado?.error || 'Instabilidade temporária'}`,
-            clientIp
-          )
           contratoAtual.evidencias = {
             ...contratoAtual.evidencias,
             emailCopiaEnviado: false,

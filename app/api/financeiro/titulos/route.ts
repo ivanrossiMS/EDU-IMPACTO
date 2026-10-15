@@ -44,11 +44,12 @@ export async function GET(request: Request) {
   const result = (data || []).map(row => ({
     ...row,
     ...(row.dados_bancarios || {}),
+    ...(row.dados || {}),
     // map snake_case back to camelCase for frontend
-    alunoId: row.aluno_id,
-    eventoId: row.evento_id,
-    eventoDescricao: row.evento_descricao,
-    dataNascimento: row.data_nascimento,
+    alunoId: row.aluno_id ?? row.dados?.alunoId ?? row.dados?.aluno_id,
+    eventoId: row.evento_id ?? row.dados?.eventoId ?? row.dados?.evento_id,
+    eventoDescricao: row.evento_descricao ?? row.dados?.eventoDescricao ?? row.dados?.evento_descricao,
+    dataNascimento: row.data_nascimento ?? row.dados?.dataNascimento,
   }))
   return NextResponse.json(result, {
     headers: {
@@ -68,9 +69,11 @@ export async function POST(request: Request) {
   try {
     const body = await request.json()
     const {
-      id, codigo, aluno, alunoId, responsavel, descricao, valor,
-      vencimento, pagamento, status, metodo, parcela, turma, ano,
-      eventoId, eventoDescricao, ...dadosBancarios
+      id, codigo, aluno, alunoId, responsavel, descricao, categoria, valor,
+      vencimento, pagamento, data_pagamento, status, metodo, forma_pagamento,
+      parcela, turma, ano, eventoId, eventoDescricao,
+      nossonumero, codigo_barras, linha_digitavel, dados,
+      ...dadosBancarios
     } = body
 
     const { data: { user } } = await supabase.auth.getUser()
@@ -85,33 +88,47 @@ export async function POST(request: Request) {
       if (dbUser?.nome) usuarioNome = dbUser.nome
     }
 
-    const row = {
-      id: id || `TIT${Date.now()}`,
-      codigo: codigo || `TIT-${Math.floor(Math.random() * 90000) + 10000}`,
-      aluno: aluno || '',
-      aluno_id: alunoId || '',
+    const codigoFinal = codigo || `TIT-${Math.floor(Math.random() * 90000) + 10000}`
+    const dadosPayload = {
+      ...(typeof dados === 'object' && dados !== null ? dados : {}),
+      codigo: codigoFinal,
+      alunoId: alunoId || '',
       responsavel: responsavel || '',
-      descricao: descricao || '',
-      valor: valor || 0,
-      vencimento: vencimento || '',
-      pagamento: pagamento || null,
-      status: status || 'pendente',
-      metodo: metodo || null,
+      metodo: metodo || forma_pagamento || null,
+      pagamento: pagamento || data_pagamento || null,
       parcela: parcela || '',
       turma: turma || '',
       ano: ano || new Date().getFullYear(),
-      evento_id: eventoId || '',
-      evento_descricao: eventoDescricao || '',
-      dados_bancarios: {
+      eventoId: eventoId || '',
+      eventoDescricao: eventoDescricao || '',
+      dadosBancarios: {
         ...dadosBancarios,
         dataLancamento: dadosBancarios.dataLancamento || new Date().toISOString(),
         usuarioLancamento: dadosBancarios.usuarioLancamento || usuarioNome,
       },
+      dataLancamento: dadosBancarios.dataLancamento || new Date().toISOString(),
+      usuarioLancamento: dadosBancarios.usuarioLancamento || usuarioNome,
+    }
+
+    const row = {
+      id: id || `TIT${Date.now()}`,
+      descricao: descricao || '',
+      categoria: categoria || eventoDescricao || 'Mensalidade',
+      aluno: aluno || '',
+      valor: Number(valor) || 0,
+      vencimento: vencimento || '',
+      status: status || 'pendente',
+      forma_pagamento: forma_pagamento || metodo || null,
+      data_pagamento: data_pagamento || pagamento || null,
+      nossonumero: nossonumero || dadosBancarios.nossoNumero || dadosBancarios.nossonumero || null,
+      codigo_barras: codigo_barras || dadosBancarios.codigoBarras || dadosBancarios.codigo_barras || null,
+      linha_digitavel: linha_digitavel || dadosBancarios.linhaDigitavel || dadosBancarios.linha_digitavel || null,
+      dados: dadosPayload,
     }
 
     const { data, error } = await supabase.from('titulos').upsert(row).select().single()
     if (error) return NextResponse.json({ error: error.message }, { status: 400 })
-    return NextResponse.json(data, { status: 201 })
+    return NextResponse.json({ ...data, ...(data?.dados || {}) }, { status: 201 })
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 400 })
   }

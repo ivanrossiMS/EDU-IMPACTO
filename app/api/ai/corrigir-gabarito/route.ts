@@ -1,8 +1,12 @@
 import { NextResponse } from 'next/server'
 import { GoogleGenAI, Type, Schema } from '@google/genai'
 import { createClient } from '@supabase/supabase-js'
+import { requireStaff } from '@/lib/server/authGuard'
 
 export async function POST(request: Request) {
+  const { errorResponse } = await requireStaff(request);
+  if (errorResponse) return errorResponse;
+
   try {
     const { imageBase64, mimeType, gabaritoOficial, simuladoUploadId, nomeAluno } = await request.json()
 
@@ -65,8 +69,8 @@ Retorne um JSON com o array de respostas para exatamente as ${totalQuestoes} que
       required: ['respostas']
     }
 
-    // Attempt with state-of-the-art Gemini 3.8 Flash, with automatic fallback to Gemini 2.5 Flash
-    const modelsToTry = ['gemini-3.8-flash', 'gemini-2.5-flash']
+    // Attempt with Gemini 2.5 Flash
+    const modelsToTry = ['gemini-2.5-flash']
     let rawText = ''
     let lastError: any = null
 

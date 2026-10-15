@@ -24,6 +24,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Você precisa aceitar expressamente os termos do contrato e a autorização de desconto em folha.' }, { status: 400 })
     }
 
+    if (!senha || !String(senha).trim()) {
+      return NextResponse.json({ error: 'A senha de acesso é obrigatória para assinar o contrato.' }, { status: 400 })
+    }
+
     const resolved = await resolveCredImpactoUser(user)
     const loan = await dbGetEmprestimoById(emprestimoId)
 
@@ -69,23 +73,28 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Apenas o colaborador titular do empréstimo pode assinar o contrato.' }, { status: 403 })
     }
 
-    // Processa CPF enviado no momento do aceite ou já existente
-    const submittedCpfDigits = (cpf || loan.colaboradorCpf || resolved.cpf || '').replace(/\D/g, '')
+    // Processa CPF enviado no momento do aceite ou já existente (sem sobrescrever CPF já cadastrado de outro colaborador)
+    const existingResolvedCpf = cleanDoc(resolved.cpf)
+    const submittedCpfDigits = existingResolvedCpf.length === 11
+      ? existingResolvedCpf
+      : (cpf || loan.colaboradorCpf || '').replace(/\D/g, '')
     if (submittedCpfDigits.length === 11 && submittedCpfDigits !== '00000000000') {
       const formattedCpf = `${submittedCpfDigits.slice(0, 3)}.${submittedCpfDigits.slice(3, 6)}.${submittedCpfDigits.slice(6, 9)}-${submittedCpfDigits.slice(9, 11)}`
       loan.colaboradorCpf = formattedCpf
 
-      // Sincroniza o CPF nos registros do funcionário e system_user para completar o cadastro
-      try {
-        const { supabaseServer } = await import('@/lib/supabaseServer')
-        if (resolved.funcionarioId) {
-          await supabaseServer.from('funcionarios').update({ cpf: formattedCpf }).eq('id', resolved.funcionarioId)
+      // Só sincroniza o CPF nos registros funcionais se o colaborador ainda não possuir CPF cadastrado
+      if (!existingResolvedCpf) {
+        try {
+          const { supabaseServer } = await import('@/lib/supabaseServer')
+          if (resolved.funcionarioId) {
+            await supabaseServer.from('funcionarios').update({ cpf: formattedCpf }).eq('id', resolved.funcionarioId)
+          }
+          if (resolved.systemUserId) {
+            await supabaseServer.from('system_users').update({ cpf: formattedCpf }).eq('id', resolved.systemUserId)
+          }
+        } catch (syncErr) {
+          console.error('[CredImpacto] Erro ao sincronizar CPF com tabelas funcionais:', syncErr)
         }
-        if (resolved.systemUserId) {
-          await supabaseServer.from('system_users').update({ cpf: formattedCpf }).eq('id', resolved.systemUserId)
-        }
-      } catch (syncErr) {
-        console.error('[CredImpacto] Erro ao sincronizar CPF com tabelas funcionais:', syncErr)
       }
     } else {
       return NextResponse.json({

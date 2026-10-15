@@ -113,7 +113,11 @@ export async function GET(request: Request) {
     }
 
     if (updated) {
-      void dbSaveProva(p).catch(() => {})
+      void adminClient
+        .from('provas_online')
+        .update({ status: p.status, updated_at: new Date().toISOString() })
+        .eq('id', p.id)
+        .then(() => {}, () => {})
     }
   }
 
@@ -238,6 +242,26 @@ export async function GET(request: Request) {
         const submittedTentativas = myTentativas.filter(t => t.status === 'entregue' || t.status === 'expirada')
         const canView = shouldPublishResults(prova, tentativas)
 
+        let safeUltimaTentativa = myTentativas[0] || null
+        if (safeUltimaTentativa && !canView) {
+          const maskedRespostas: Record<string, any> = {}
+          for (const [k, v] of Object.entries(safeUltimaTentativa.respostas || {})) {
+            if (v && typeof v === 'object') {
+              const { pontuacaoObtida: _p, corrigida: _c, comentarioProfessor: _cp, ...rest } = v as any
+              maskedRespostas[k] = rest
+            } else {
+              maskedRespostas[k] = v
+            }
+          }
+          safeUltimaTentativa = {
+            ...safeUltimaTentativa,
+            pontuacaoObjetiva: null as any,
+            pontuacaoDissertativa: null as any,
+            notaFinal: null as any,
+            respostas: maskedRespostas
+          }
+        }
+
         const sanitized = sanitizeExamForParticipant(prova, canView)
         return {
           ...sanitized,
@@ -246,7 +270,7 @@ export async function GET(request: Request) {
             tentativasPermitidas: prova.quantidadeTentativas || 1,
             tentativaAtivaId: activeTentativa?.id || null,
             statusTentativaAtiva: activeTentativa?.status || null,
-            ultimaTentativa: myTentativas[0] || null,
+            ultimaTentativa: safeUltimaTentativa,
             submetida: submittedTentativas.length > 0,
             resultadoLiberado: canView
           }
@@ -282,9 +306,9 @@ export async function GET(request: Request) {
             filhosResultados: filhosTentativas.map(t => ({
               alunoId: t.alunoId,
               alunoNome: t.alunoNome,
-              notaFinal: t.notaFinal,
-              pontuacaoObjetiva: t.pontuacaoObjetiva,
-              pontuacaoDissertativa: t.pontuacaoDissertativa,
+              notaFinal: canView ? t.notaFinal : null,
+              pontuacaoObjetiva: canView ? t.pontuacaoObjetiva : null,
+              pontuacaoDissertativa: canView ? t.pontuacaoDissertativa : null,
               entregueEm: t.entregueEm,
               comprovanteCodigo: t.comprovanteCodigo
             }))

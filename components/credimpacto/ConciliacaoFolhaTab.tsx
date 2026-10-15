@@ -69,23 +69,34 @@ export function ConciliacaoFolhaTab({ onRefresh }: ConciliacaoFolhaTabProps) {
   const [loteCodigo, setLoteCodigo] = useState(`FOLHA-${defaultComp}`)
   const [isSubmittingBatch, setIsSubmittingBatch] = useState(false)
 
-  const fetchFolha = async () => {
-    setIsLoading(true)
+  const fetchFolha = async (silent = false) => {
+    if (!silent) setIsLoading(true)
     try {
       const url = competencia ? `/api/credimpacto/folha?competencia=${competencia}` : '/api/credimpacto/folha'
-      const res = await fetch(url)
+      const res = await fetch(url, { cache: 'no-store' })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Erro ao carregar dados da folha')
       setFolhaData(data)
     } catch (err: any) {
-      toast.error(err.message || 'Falha ao buscar folha')
+      if (!silent) toast.error(err.message || 'Falha ao buscar folha')
     } finally {
-      setIsLoading(false)
+      if (!silent) setIsLoading(false)
     }
   }
 
   useEffect(() => {
     fetchFolha()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [competencia])
+
+  useEffect(() => {
+    const handleRealtimeUpdate = () => {
+      fetchFolha(true)
+    }
+    window.addEventListener('credimpacto:realtime-update', handleRealtimeUpdate)
+    return () => {
+      window.removeEventListener('credimpacto:realtime-update', handleRealtimeUpdate)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [competencia])
 

@@ -93,11 +93,12 @@ export function sanitizeExamForParticipant(
   canViewResults: boolean = false
 ): ProvaOnline {
   const sanitizedQuestoes = (prova.questoes || []).map(q => {
-    const safeQ: QuestaoProva = {
+    const safeQ: any = {
       ...q,
       // If results are NOT released yet, hide sensitive fields
       respostaEsperada: canViewResults ? q.respostaEsperada : undefined,
       explicacaoResposta: canViewResults ? q.explicacaoResposta : undefined,
+      criteriosAvaliacao: canViewResults ? (q as any).criteriosAvaliacao : undefined,
       alternativas: (q.alternativas || []).map(alt => ({
         id: alt.id,
         letra: alt.letra,
@@ -112,18 +113,27 @@ export function sanitizeExamForParticipant(
         correta: canViewResults ? item.correta : false // Mask correct answer
       }))
     }
-    return safeQ
+    delete safeQ.dados
+    delete safeQ.itens_vf
+    delete safeQ.resposta_esperada
+    delete safeQ.explicacao_resposta
+    delete safeQ.criterios_avaliacao
+    return safeQ as QuestaoProva
   })
 
   const hasPin = Boolean(prova.codigoLiberacao && String(prova.codigoLiberacao).trim() !== '')
 
-  return {
+  const sanitizedProva: any = {
     ...prova,
     questoes: sanitizedQuestoes,
     exigeCodigoAcesso: hasPin,
     codigoLiberacao: undefined, // Never send release PIN to student browser
+    codigo_liberacao: undefined,
+    dados: undefined,
     materiaisPermitidos: undefined
   }
+
+  return sanitizedProva as ProvaOnline
 }
 
 /**

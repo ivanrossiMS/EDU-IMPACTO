@@ -66,7 +66,7 @@ export default function VerRedaçãoUploadPage() {
     try {
       await (supabase as any).from('redacao_upload').update({ status }).eq('id', redacaoId)
       setRedação((prev: any) => ({ ...prev, status }))
-      setSuccessMessage(`Redação ${status === 'aredacaodo' ? 'aredacaoda' : status === 'reredacaodo' ? 'reredacaoda' : 'publicada'} com sucesso!`)
+      setSuccessMessage(`Redação ${status === 'aprovado' || status === 'aredacaodo' ? 'aprovada' : status === 'reprovado' || status === 'reredacaodo' ? 'reprovada' : 'publicada'} com sucesso!`)
       setSuccessModal(true)
     } catch (e: any) { alert('Erro: ' + e.message) }
     finally { setSaving(false) }
@@ -97,8 +97,10 @@ export default function VerRedaçãoUploadPage() {
   const statusConfig: Record<string, { label: string; color: string; bg: string }> = {
     aguardando: { label: 'Aguardando', color: '#f59e0b', bg: 'rgba(245,158,11,0.1)' },
     em_revisao: { label: 'Em Revisão', color: '#3b82f6', bg: 'rgba(59,130,246,0.1)' },
-    aredacaodo: { label: 'Aredacaodo', color: '#10b981', bg: 'rgba(16,185,129,0.1)' },
-    reredacaodo: { label: 'Reredacaodo', color: '#ef4444', bg: 'rgba(239,68,68,0.1)' },
+    aprovado: { label: 'Aprovado', color: '#10b981', bg: 'rgba(16,185,129,0.1)' },
+    aredacaodo: { label: 'Aprovado', color: '#10b981', bg: 'rgba(16,185,129,0.1)' },
+    reprovado: { label: 'Reprovado', color: '#ef4444', bg: 'rgba(239,68,68,0.1)' },
+    reredacaodo: { label: 'Reprovado', color: '#ef4444', bg: 'rgba(239,68,68,0.1)' },
     publicado: { label: 'Publicado', color: '#8b5cf6', bg: 'rgba(139,92,246,0.1)' },
   }
   const derivedStatus = getDerivedStatus({ ...redacao, redacao_upload_requisicoes: requisicoes }, 'redacao')
@@ -198,7 +200,7 @@ export default function VerRedaçãoUploadPage() {
               style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px', borderRadius: 12, background: 'hsl(var(--bg-surface))', color: 'hsl(var(--text-primary))', border: '1px solid hsl(var(--border-subtle))', fontSize: 13, fontWeight: 700, cursor: 'pointer', boxShadow: '0 2px 8px rgba(0,0,0,0.04)', whiteSpace: 'nowrap' }}>
               <Printer size={16} color="#3b82f6" /> Pré-visualizar A4
             </motion.button>
-            <motion.button onClick={() => updateStatus('reredacaodo')} disabled={saving}
+            <motion.button onClick={() => updateStatus('reprovado')} disabled={saving}
               whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
               style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px', borderRadius: 12, background: 'rgba(239,68,68,0.08)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.2)', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
               <XCircle size={16} /> Reprovar
@@ -278,8 +280,10 @@ export default function VerRedaçãoUploadPage() {
                   const reqStatuses: Record<string, { color: string; label: string }> = {
                     pendente: { color: '#f59e0b', label: 'Pendente' },
                     enviado: { color: '#3b82f6', label: 'Enviado' },
-                    aredacaodo: { color: '#10b981', label: 'Aredacaodo' },
-                    reredacaodo: { color: '#ef4444', label: 'Reredacaodo' },
+                    aprovado: { color: '#10b981', label: 'Aprovado' },
+                    aredacaodo: { color: '#10b981', label: 'Aprovado' },
+                    reprovado: { color: '#ef4444', label: 'Reprovado' },
+                    reredacaodo: { color: '#ef4444', label: 'Reprovado' },
                   }
                   const rs = reqStatuses[req.status] || reqStatuses['pendente']
                   return (
@@ -320,7 +324,7 @@ export default function VerRedaçãoUploadPage() {
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span style={{ color: 'hsl(var(--text-secondary))' }}>Enviadas:</span>
-                    <span style={{ fontWeight: 700, color: '#10b981' }}>{requisicoes.filter(r => r.status === 'enviado' || r.status === 'aredacaodo').length}</span>
+                    <span style={{ fontWeight: 700, color: '#10b981' }}>{requisicoes.filter(r => r.status === 'enviado' || r.status === 'aprovado' || r.status === 'aredacaodo').length}</span>
                   </div>
                 </div>
               </div>

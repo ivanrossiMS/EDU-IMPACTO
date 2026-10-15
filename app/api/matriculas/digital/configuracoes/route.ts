@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/server/authGuard'
+import { requireStaff } from '@/lib/server/authGuard'
 import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 import { testarConexaoSmtp, executarDiagnosticoSmtp, enviarEmailTeste, SmtpConfig } from '@/lib/server/emailService'
 import { DEFAULT_WHATSAPP_DIGITAL_TEMPLATE } from '@/lib/whatsapp'
@@ -73,7 +73,7 @@ const DEFAULT_WHATSAPP = DEFAULT_WHATSAPP_DIGITAL_TEMPLATE
  * GET /api/matriculas/digital/configuracoes
  */
 export async function GET(request: Request) {
-  const { user, errorResponse } = await requireAuth(request)
+  const { errorResponse } = await requireStaff(request)
   if (errorResponse) return errorResponse
 
   try {
@@ -191,7 +191,7 @@ export async function GET(request: Request) {
         port: Number(smtpRow.port) || 587,
         secure: smtpRow.secure !== undefined ? Boolean(smtpRow.secure) : (Number(smtpRow.port) || 587) === 465,
         user: smtpRow.user || 'direcao@colegioimpacto.net',
-        pass: passSalva,
+        pass: passSalva ? '••••••••' : '',
         passMascarado: passSalva ? '••••••••' : '',
         fromEmail: smtpRow.fromEmail || smtpRow.user || 'direcao@colegioimpacto.net',
         fromName: smtpRow.fromName || 'Colégio Impacto - Matrícula Digital',
@@ -209,7 +209,7 @@ export async function GET(request: Request) {
  * Salva representantes, logo, template de WhatsApp ou testa/salva SMTP
  */
 export async function POST(request: Request) {
-  const { user, errorResponse } = await requireAuth(request)
+  const { errorResponse } = await requireStaff(request)
   if (errorResponse) return errorResponse
 
   try {

@@ -4070,6 +4070,17 @@ export default function FrequenciaPage() {
                 <button
                   type="button"
                   onClick={() => {
+                    const autorizado = Boolean(
+                      (aluno as any)?.autorizadoSairSozinho ||
+                      (aluno as any)?.dados?.autorizadoSairSozinho ||
+                      (aluno as any)?.sairSozinho
+                    )
+                    if (!autorizado) {
+                      const ok = window.confirm(
+                        `ATENÇÃO: O(a) aluno(a) ${aluno?.nome || ''} NÃO possui autorização cadastrada para sair desacompanhado(a).\n\nDeseja realmente registrar a saída como "Saiu Sozinho"?`
+                      )
+                      if (!ok) return
+                    }
                     setSaidaModalResponsavel('Saiu Sozinho')
                     setCustomResponsavel('')
                   }}

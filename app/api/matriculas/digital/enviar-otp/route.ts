@@ -48,8 +48,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Este contrato foi cancelado pela administração escolar.' }, { status: 400 })
     }
 
-    // 1. Resolução do destinatário informado no formulário
-    const emailEfetivo = (body.email_destinatario || contrato.responsavel_email || '').trim()
+    // 1. Resolução do destinatário: se o contrato já possui e-mail cadastrado, só staff autenticado pode alterá-lo
+    let canOverrideEmail = !contrato.responsavel_email
+    if (body.email_destinatario && contrato.responsavel_email && body.email_destinatario.trim().toLowerCase() !== contrato.responsavel_email.trim().toLowerCase()) {
+      const { resolveUserRole } = await import('@/lib/server/authGuard')
+      const roleCtx = await resolveUserRole(request)
+      canOverrideEmail = roleCtx.isStaff
+    }
+    const emailEfetivo = ((canOverrideEmail ? body.email_destinatario : contrato.responsavel_email) || contrato.responsavel_email || body.email_destinatario || '').trim()
     const nomeEfetivo = (body.nome_destinatario || contrato.responsavel_nome || '').trim()
 
     // Validação estrita do CPF do signatário se enviado
@@ -69,7 +75,7 @@ export async function POST(request: Request) {
     const otpHash = calculateSha256(otpCode)
     const expiraEm = new Date(Date.now() + 15 * 60 * 1000).toISOString() // 15 minutos
 
-    // 3. Atualiza dados no contrato (inclusive se o responsável corrigiu o e-mail)
+    // 3. Atualiza dados no contrato
     contrato.responsavel_email = emailEfetivo
     if (nomeEfetivo) contrato.responsavel_nome = nomeEfetivo
     contrato.otp_codigo_hash = otpHash
@@ -118,13 +124,13 @@ export async function POST(request: Request) {
       }, { status: 502 })
     }
 
+    const isProd = process.env.NODE_ENV === 'production'
     return NextResponse.json({
       success: true,
       message: `Código enviado com sucesso para ${maskEmail(emailEfetivo)}.`,
       emailMascarado: maskEmail(emailEfetivo),
       simulated: emailResult.simulated,
-      // Se estiver em modo simulado (sem SMTP conectado ainda), retorna o código para facilitar testes imediatos
-      codigoSimulado: emailResult.simulated ? otpCode : undefined,
+      codigoSimulado: (!isProd && emailResult.simulated) ? otpCode : undefined,
     })
   } catch (err: any) {
     console.error('[API Enviar OTP] Erro:', err)

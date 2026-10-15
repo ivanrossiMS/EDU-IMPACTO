@@ -510,7 +510,8 @@ export default function UploadSimuladoPage() {
                   pendente: { color: '#f59e0b', label: 'Pendente' },
                   enviado: { color: '#3b82f6', label: 'Enviado' },
                   aprovado: { color: '#10b981', label: 'Aprovado' },
-                  resimuladodo: { color: '#ef4444', label: 'Resimuladodo' },
+                  reprovado: { color: '#ef4444', label: 'Reprovado' },
+                  resimuladodo: { color: '#ef4444', label: 'Reprovado' },
                 }
                 const rs = reqStatuses[req.status] || reqStatuses['pendente']
                 return (

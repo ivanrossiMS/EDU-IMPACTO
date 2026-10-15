@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server'
 import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
-import { requireAuth } from '@/lib/server/authGuard'
+import { requireStaff } from '@/lib/server/authGuard'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: Request) {
   try {
-    const { user, errorResponse } = await requireAuth()
+    const { user, errorResponse } = await requireStaff(request)
     if (errorResponse) return errorResponse
 
     const url = new URL(request.url)

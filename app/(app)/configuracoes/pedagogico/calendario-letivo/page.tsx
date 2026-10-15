@@ -137,18 +137,32 @@ function Modal({ form, onChange, onSave, onClose, editing }: {
 }
 
 export default function CalendarioLetivoPage() {
-  const { data: rawConfig, isLoading, isFetching } = useApiQuery<{ valor: ConfigCalendarioLetivo[] }>(['config-calendario-letivo'], '/api/configuracoes?chave=cfgCalendarioLetivo')
+  const { data: rawConfig, isLoading, isFetching, refetch } = useApiQuery<{ valor: ConfigCalendarioLetivo[] }>(['config-parametros-letivos'], '/api/configuracoes?chave=cfgParametrosLetivos')
   
   const [cfgCalendarioLetivo, setCfgCalendarioLetivo] = useState<ConfigCalendarioLetivo[]>([])
 
   useEffect(() => {
-    if (rawConfig?.valor) {
+    if (Array.isArray(rawConfig?.valor)) {
       setCfgCalendarioLetivo(rawConfig.valor)
     }
   }, [rawConfig])
   const [modal, setModal] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [form, setForm] = useState<FormCal>(BLANK)
+
+  const persistList = async (nextList: ConfigCalendarioLetivo[]) => {
+    setCfgCalendarioLetivo(nextList)
+    try {
+      await fetch('/api/configuracoes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chave: 'cfgParametrosLetivos', valor: nextList })
+      })
+      refetch()
+    } catch (e) {
+      console.error('Erro ao salvar parâmetros letivos:', e)
+    }
+  }
 
   const calendarioAtual = useMemo(() =>
     cfgCalendarioLetivo.find(c => c.ano === ANO_ATUAL), [cfgCalendarioLetivo])
@@ -168,16 +182,21 @@ export default function CalendarioLetivoPage() {
   }
 
   const handleSave = () => {
+    let nextList: ConfigCalendarioLetivo[]
     if (editingId) {
-      setCfgCalendarioLetivo(prev => prev.map(c => c.id === editingId ? { ...c, ...form } : c))
+      nextList = cfgCalendarioLetivo.map(c => c.id === editingId ? { ...c, ...form } : c)
     } else {
       const novo: ConfigCalendarioLetivo = { ...form, id: newId('CAL'), createdAt: new Date().toISOString() }
-      setCfgCalendarioLetivo(prev => [novo, ...prev])
+      nextList = [novo, ...cfgCalendarioLetivo]
     }
+    persistList(nextList)
     setModal(false)
   }
 
-  const handleDelete = (id: string) => setCfgCalendarioLetivo(prev => prev.filter(c => c.id !== id))
+  const handleDelete = (id: string) => {
+    const nextList = cfgCalendarioLetivo.filter(c => c.id !== id)
+    persistList(nextList)
+  }
 
   const maxFaltas = (c: ConfigCalendarioLetivo) => Math.floor((c.totalDiasLetivos ?? 200) * (1 - (c.frequenciaMinima ?? 75) / 100))
 

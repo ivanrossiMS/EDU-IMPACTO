@@ -173,6 +173,7 @@ export default function DREPage() {
 
   // Modais de Edição / Salvar
   const [showRenameModal, setShowRenameModal] = useState(false)
+  const [modalRenomearId, setModalRenomearId] = useState<string>('')
   const [editingItem, setEditingItem] = useState<{ id: string; nome: string } | null>(null)
 
   // Histórico
@@ -483,6 +484,9 @@ export default function DREPage() {
 
       setNomeRelatorio(nomePadrao)
       setDreData(dadosEnriquecidos)
+      if (result.savedDREId) {
+        setModalRenomearId(result.savedDREId)
+      }
       setActiveTab('dre')
 
       // O servidor já realizou a gravação do histórico no upload, atualiza a lista
@@ -509,6 +513,7 @@ export default function DREPage() {
   }
 
   const handleCarregarHistorico = async (item: DREHistoricoItem) => {
+    setModalRenomearId(item.id)
     // Se o item tiver dados_dre no LocalStorage, carrega direto
     if (item.dados_dre) {
       setDreData(item.dados_dre)
@@ -588,15 +593,18 @@ export default function DREPage() {
   // Renomear Item do Histórico
   const handleRenomearItem = async (id: string, novoNome: string) => {
     if (!novoNome.trim()) return
+    const resolvedId = id && id !== 'current' ? id : (currentHistoricoItem.id !== 'current' ? currentHistoricoItem.id : (historico[0]?.id || id))
 
     // 1. Atualiza LocalStorage
     try {
       const stored = localStorage.getItem(LOCAL_STORAGE_KEY)
       if (stored) {
         const list: DREHistoricoItem[] = JSON.parse(stored)
-        const updated = list.map(item => item.id === id ? { ...item, nome_arquivo: novoNome } : item)
+        const updated = list.map(item => item.id === resolvedId ? { ...item, nome_arquivo: novoNome } : item)
         localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updated))
         setHistorico(updated)
+      } else {
+        setHistorico(prev => prev.map(item => item.id === resolvedId ? { ...item, nome_arquivo: novoNome } : item))
       }
     } catch (err) {
       console.error(err)
@@ -607,13 +615,13 @@ export default function DREPage() {
       await fetch('/api/financeiro/dre/historico', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, novoNome })
+        body: JSON.stringify({ id: resolvedId, novoNome })
       })
     } catch (err) {
       console.error(err)
     }
 
-    if (dreData && (id === editingItem?.id || nomeRelatorio)) {
+    if (dreData && (resolvedId === editingItem?.id || nomeRelatorio)) {
       setNomeRelatorio(novoNome)
     }
     setEditingItem(null)
@@ -1198,7 +1206,12 @@ export default function DREPage() {
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
           {dreData && (
             <button
-              onClick={() => setShowRenameModal(true)}
+              onClick={() => {
+                if (!modalRenomearId || modalRenomearId === 'current') {
+                  setModalRenomearId(currentHistoricoItem.id !== 'current' ? currentHistoricoItem.id : (historico[0]?.id || ''))
+                }
+                setShowRenameModal(true)
+              }}
               style={{
                 height: '42px',
                 padding: '0 16px',
@@ -1513,7 +1526,7 @@ export default function DREPage() {
               </button>
               <button
                 onClick={() => {
-                  salvarNoHistorico(dreData, nomeRelatorio)
+                  handleRenomearItem(modalRenomearId, nomeRelatorio)
                   setShowRenameModal(false)
                 }}
                 style={{ padding: '8px 20px', background: '#7c3aed', color: '#ffffff', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}

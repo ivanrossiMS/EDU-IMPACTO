@@ -450,21 +450,40 @@ function MonitorContent() {
     }
   }
 
-  // Sincronizar displayCalls diretamente de activeCalls (apenas alunos aguardando retirada na portaria)
-  // Assim que a saída é confirmada em /saida-alunos/chamadas, o aluno sai imediatamente do Monitor TV.
+  // Sincronizar displayCalls diretamente de activeCalls respeitando config.tvDisplayTime
   useEffect(() => {
-    const confirmedStudentIds = new Set(
-      activeCalls
-        .filter(c => c.status === 'confirmed' && c.studentId != null)
-        .map(c => String(c.studentId))
-    )
-    const waitingCalls = activeCalls.filter(c => 
-      (c.status === 'waiting' || c.status === 'called') && 
-      c.studentId != null && 
-      !confirmedStudentIds.has(String(c.studentId))
-    )
-    setDisplayCalls(waitingCalls.sort(byTimeDesc).slice(0, 25))
-  }, [activeCalls])
+    const updateDisplay = () => {
+      const now = Date.now()
+      const displayTimeMs = Math.max(0, Number(config?.tvDisplayTime ?? 0)) * 1000
+
+      const fullyConfirmedStudentIds = new Set(
+        activeCalls
+          .filter(c => {
+            if (c.status !== 'confirmed' || c.studentId == null) return false
+            if (displayTimeMs <= 0) return true
+            const confTime = c.confirmedAt ? new Date(c.confirmedAt).getTime() : 0
+            return !confTime || (now - confTime) >= displayTimeMs
+          })
+          .map(c => String(c.studentId))
+      )
+
+      const visibleCalls = activeCalls.filter(c => {
+        if (c.studentId == null) return false
+        if (fullyConfirmedStudentIds.has(String(c.studentId))) return false
+        if (c.status === 'waiting' || c.status === 'called') return true
+        if (c.status === 'confirmed' && displayTimeMs > 0 && c.confirmedAt) {
+          const confTime = new Date(c.confirmedAt).getTime()
+          return confTime > 0 && (now - confTime) < displayTimeMs
+        }
+        return false
+      })
+      setDisplayCalls(visibleCalls.sort(byTimeDesc).slice(0, 25))
+    }
+
+    updateDisplay()
+    const timer = setInterval(updateDisplay, 2000)
+    return () => clearInterval(timer)
+  }, [activeCalls, config?.tvDisplayTime])
 
   // TTS voice feedback
   useEffect(() => {

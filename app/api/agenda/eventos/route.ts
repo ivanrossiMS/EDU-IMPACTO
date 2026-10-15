@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/server/authGuard'
+import { requireAuth, requireStaff, resolveUserRole } from '@/lib/server/authGuard'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 import { createClient } from '@supabase/supabase-js'
 import { getLoggedUserAccessStartDate } from '@/lib/server/visibility'
@@ -10,8 +10,8 @@ import { formatFriendlyStudentName } from '@/lib/studentNameHelper'
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: Request) {
-  const { user, errorResponse } = await requireAuth()
-  if (errorResponse) return errorResponse
+  const { user, isFamilyOrStudent: resolvedIsFamily, errorResponse } = await resolveUserRole(request)
+  if (errorResponse || !user) return errorResponse || NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
 
   try {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
@@ -36,7 +36,7 @@ export async function GET(request: Request) {
     const perfil = user.user_metadata?.perfil || '';
     const cargo = user.user_metadata?.cargo || '';
     const hasDualRole = Boolean(user.user_metadata?.hasDualRole || user.user_metadata?.responsavel_id);
-    const isFamilyOrStudent = ['Família', 'Responsável', 'Aluno'].includes(perfil) || ['Responsável', 'Aluno'].includes(cargo) || hasDualRole;
+    const isFamilyOrStudent = resolvedIsFamily || ['Família', 'Responsável', 'Aluno'].includes(perfil) || ['Responsável', 'Aluno'].includes(cargo) || hasDualRole;
     
     if (isFamilyOrStudent && alunoId) {
       let resolvedTurma = null;
@@ -76,6 +76,16 @@ export async function GET(request: Request) {
       }
       
       query = query.or(conditions.join(','));
+    } else if (isFamilyOrStudent && !alunoId) {
+      // Sem aluno_id informado por perfil familiar/aluno: retornar apenas eventos públicos/globais da escola
+      const publicConditions = [
+        `turmas.eq."[]"`,
+        `turmas.is.null`,
+        `turmas.cs.["Todos"]`,
+        `turmas.cs.["Toda a escola"]`,
+        `turmas.cs.["Todas"]`,
+      ]
+      query = query.or(publicConditions.join(','))
     }
 
     if (limitParam) {
@@ -247,7 +257,7 @@ async function dispatchPushNotifications(supabase: any, row: any) {
 }
 
 export async function POST(request: Request) {
-  const { user, errorResponse } = await requireAuth()
+  const { errorResponse } = await requireStaff(request)
   if (errorResponse) return errorResponse
 
   try {
@@ -299,6 +309,10 @@ export async function POST(request: Request) {
   }
 }
 
+export async function PUT(request: Request) {
+  return POST(request)
+}
+
 function buildRowAuth(body: any) {
   const { id, titulo, descricao, tipo, data, horaInicio, horaFim, turmas, local, cor, recorrente, criadoPor, unidade, ...rest } = body
   return {
@@ -320,7 +334,7 @@ function buildRowAuth(body: any) {
 }
 
 export async function DELETE(request: Request) {
-  const { user, errorResponse } = await requireAuth()
+  const { errorResponse } = await requireStaff(request)
   if (errorResponse) return errorResponse
 
   try {
@@ -340,18 +354,16 @@ export async function DELETE(request: Request) {
       }
     }
 
-    if (id) {
-      const { error } = await supabase.from('eventos_agenda').delete().eq('id', id)
-      if (error) throw new Error(error.message)
-      return NextResponse.json({ ok: true, id })
+    if (!id || !String(id).trim()) {
+      return NextResponse.json(
+        { error: 'O parâmetro id é obrigatório para exclusão de evento.' },
+        { status: 400 }
+      )
     }
 
-    // Se nenhum id for especificado, realiza a limpeza total
-    const { error } = await supabase.from('eventos_agenda').delete().neq('id', '00000000-0000-0000-0000-000000000000')
-    
+    const { error } = await supabase.from('eventos_agenda').delete().eq('id', String(id).trim())
     if (error) throw new Error(error.message)
-
-    return NextResponse.json({ ok: true })
+    return NextResponse.json({ ok: true, id: String(id).trim() })
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 400 })
   }

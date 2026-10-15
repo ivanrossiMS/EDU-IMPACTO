@@ -1,7 +1,11 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { requireStaff } from '@/lib/server/authGuard'
 
 export async function POST(request: Request) {
+  const { errorResponse } = await requireStaff(request);
+  if (errorResponse) return errorResponse;
+
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!

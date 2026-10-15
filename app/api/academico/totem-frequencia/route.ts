@@ -20,7 +20,8 @@ export const dynamic = 'force-dynamic'
 function validarToken(request: Request): boolean {
   const authHeader = request.headers.get('Authorization') || ''
   const token = authHeader.replace(/^Bearer\s+/i, '').trim()
-  const secret = process.env.API_TOTEM_SECRET || '1081'
+  const secret = process.env.API_TOTEM_SECRET || (process.env.NODE_ENV !== 'production' ? '1081' : '')
+  if (!secret) return false
   return token === secret
 }
 
@@ -172,6 +173,7 @@ export async function POST(request: Request) {
           diarioId,
           anoLetivo,
           origem: 'totem', // identifica que o registro veio do BAT/catraca
+          tempos: { '1': false, '2': false, '3': false, '4': false, '5': false },
         },
       }
     })

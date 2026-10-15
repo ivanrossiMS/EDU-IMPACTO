@@ -126,6 +126,39 @@ export default function ADInnerLayout({
         }
 
         const data = await res.json()
+        if (!isMirrorMode && !isMirrorModeActive && !isAlunoLogado) {
+          const allowedList: any[] = Array.isArray(data?.meusAlunos) ? data.meusAlunos : []
+          const slugStr = String(resolvedParams.slug).trim()
+          if (allowedList.length > 0) {
+            const belongsToGuardian = allowedList.some((a: any) =>
+              String(a.id) === slugStr ||
+              String(a.matricula || '') === slugStr ||
+              String(a.codigo || a.dados?.codigo || '') === slugStr
+            )
+            if (!belongsToGuardian) {
+              router.replace('/agenda-digital/selecionar-aluno')
+              return
+            }
+          } else {
+            // Double check via /api/agenda/meus-alunos if perfil-acesso returned empty meusAlunos
+            const checkRes = await apiFetch(`/api/agenda/meus-alunos?responsavel_id=${encodeURIComponent(respId)}`).catch(() => null)
+            if (checkRes && checkRes.ok) {
+              const checkData = await checkRes.json().catch(() => null)
+              const childrenList = Array.isArray(checkData?.alunos) ? checkData.alunos : (Array.isArray(checkData) ? checkData : [])
+              if (childrenList.length > 0) {
+                const belongs = childrenList.some((a: any) =>
+                  String(a.id) === slugStr ||
+                  String(a.matricula || '') === slugStr ||
+                  String(a.codigo || a.dados?.codigo || '') === slugStr
+                )
+                if (!belongs) {
+                  router.replace('/agenda-digital/selecionar-aluno')
+                  return
+                }
+              }
+            }
+          }
+        }
         setProfileData(data)
       } catch(e) {
         console.error('Failed to load profile data:', e)
@@ -134,7 +167,7 @@ export default function ADInnerLayout({
       }
     }
     loadProfile()
-  }, [hydrated, currentUser, resolvedParams?.slug, respId, isAlunoLogado, pathname, router])
+  }, [hydrated, currentUser, resolvedParams?.slug, respId, isAlunoLogado, isMirrorMode, isMirrorModeActive, pathname, router])
 
   useEffect(() => {
     if (setAdLoading) setAdLoading(isLoading)
@@ -154,6 +187,12 @@ export default function ADInnerLayout({
   const aluno = profileData?.aluno || null
   const vinculo = profileData?.vinculo || null
   const meusAlunos = profileData?.meusAlunos || []
+  const isBlockedAgenda = Boolean(
+    aluno?.bloqueadoAgenda ||
+    aluno?.bloqueadoAgendaDigital ||
+    aluno?.dados?.bloqueadoAgenda ||
+    aluno?.dados?.bloqueadoAgendaDigital
+  )
 
   const cleanTurma = useMemo(() => {
     if (!aluno) return 'S/T'
@@ -183,6 +222,32 @@ export default function ADInnerLayout({
     setLoadingPath('logout')
     await performLogout()
   }, [setLoadingPath])
+
+  if (isBlockedAgenda && !isMirrorMode && !isMirrorModeActive) {
+    return (
+      <div style={{ minHeight: '75vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+        <div className="card" style={{ maxWidth: 440, width: '100%', padding: 32, borderRadius: 24, textAlign: 'center', border: '1px solid rgba(239,68,68,0.25)' }}>
+          <div style={{ width: 56, height: 56, borderRadius: '50%', background: 'rgba(239,68,68,0.1)', color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+            <X size={28} />
+          </div>
+          <h2 style={{ fontSize: 20, fontWeight: 800, marginBottom: 8 }}>Acesso Temporariamente Suspenso</h2>
+          <p style={{ fontSize: 14, color: 'hsl(var(--text-muted))', lineHeight: 1.6, marginBottom: 24 }}>
+            O acesso à Agenda Digital para <strong>{aluno?.nome || 'este aluno'}</strong> encontra-se temporariamente bloqueado. Entre em contato com a secretaria escolar para regularização.
+          </p>
+          <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
+            {meusAlunos.length > 1 && (
+              <Link href="/agenda-digital/selecionar-aluno" className="btn btn-secondary">
+                Trocar de Aluno
+              </Link>
+            )}
+            <button className="btn btn-primary" onClick={handleLogout}>
+              <LogOut size={16} style={{ marginRight: 6 }} /> Sair
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <>

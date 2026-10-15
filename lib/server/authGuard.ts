@@ -90,7 +90,7 @@ export async function requireAuth(req?: Request) {
 }
 
 interface SystemUserCacheEntry {
-  dbUser: { id: string; nome?: string; perfil: string; cargo: string; status: string } | null
+  dbUser: { id: string; nome?: string; email?: string; auth_id?: string; dados?: any; perfil: string; cargo: string; status: string } | null
   expiresAt: number
 }
 
@@ -126,7 +126,7 @@ async function fetchAuthoritativeSystemUser(user: any) {
 
   const { data: dbUser } = await supabaseAdmin
     .from('system_users')
-    .select('id, nome, perfil, cargo, status')
+    .select('id, nome, email, auth_id, dados, perfil, cargo, status')
     .or(orParts.join(','))
     .limit(1)
     .maybeSingle()
@@ -135,6 +135,9 @@ async function fetchAuthoritativeSystemUser(user: any) {
     ? {
         id: String(dbUser.id),
         nome: dbUser.nome ? String(dbUser.nome) : undefined,
+        email: dbUser.email ? String(dbUser.email) : undefined,
+        auth_id: dbUser.auth_id ? String(dbUser.auth_id) : undefined,
+        dados: dbUser.dados || {},
         perfil: String(dbUser.perfil || ''),
         cargo: String(dbUser.cargo || ''),
         status: String(dbUser.status || 'ativo'),

@@ -33,6 +33,13 @@ export default function ADOcorrenciasPage({ params }: { params: any }) {
   const espelharAluno = searchParams?.get('espelhar_aluno') === 'true';
   const queryItemId = searchParams?.get('id') || searchParams?.get('ocorrencia_id') || searchParams?.get('item_id');
   const isMirroring = !!(espelharRespId || espelharAluno);
+  const isAlunoLogado = Boolean(
+    espelharAluno ||
+    currentUser?.cargo === 'Aluno' ||
+    currentUser?.perfil === 'Aluno' ||
+    (currentUser as any)?.userType === 'aluno' ||
+    ((currentUser as any)?.aluno_id && currentUser?.cargo !== 'Responsável' && !(currentUser as any)?.responsavel_id)
+  );
   const [signingIds, setSigningIds] = useState<Record<string, boolean>>({})
   const [selectedYear, setSelectedYear] = useState<string>('')
   const [expandedIds, setExpandedIds] = useState<Record<string, boolean>>({})
@@ -628,10 +635,10 @@ export default function ADOcorrenciasPage({ params }: { params: any }) {
                               </div>
 
                               {/* Botão de Assinar Ciência com Gradiente Aurora */}
-                              {!isMirroring && (
+                              {!isMirroring && (!isAlunoLogado || o.ciencia_responsavel) && (
                                 <button 
-                                  onClick={() => !o.ciencia_responsavel && handleAssinar(o.id)}
-                                  disabled={!!signingIds[o.id] || o.ciencia_responsavel}
+                                  onClick={() => !o.ciencia_responsavel && !isAlunoLogado && handleAssinar(o.id)}
+                                  disabled={!!signingIds[o.id] || o.ciencia_responsavel || isAlunoLogado}
                                   style={{ 
                                     width: '100%', 
                                     height: 44,

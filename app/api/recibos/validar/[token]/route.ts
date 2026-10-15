@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/server/authGuard'
 import { createClient } from '@supabase/supabase-js'
 import { createHash } from 'crypto'
 
@@ -30,9 +29,6 @@ export async function GET(
   req: NextRequest,
   context: { params: Promise<{ token: string }> }
 ) {
-  const { user, errorResponse } = await requireAuth()
-  if (errorResponse) return errorResponse
-
   const supabase = getPublicSupabase()
   const { token } = await context.params
   const ip = req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || 'unknown'
@@ -194,6 +190,7 @@ function buildPublicPayload(receipt: any) {
 
 function maskDocument(doc: string | null): string {
   if (!doc) return '***'
+  if (doc.includes('*')) return doc
   const clean = doc.replace(/\D/g, '')
   if (clean.length === 11) {
     // CPF

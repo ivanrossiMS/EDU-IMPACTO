@@ -118,7 +118,10 @@ export default function ConteudosTarefasPage() {
       ...form,
       id: editingId,
       ano: turmaObj?.ano || form.ano || filtroAno,
-      tipo: 'conteudo',
+      disciplina: form.disciplina || 'Geral',
+      tipo: form.tipo || 'conteudo',
+      aulas: Number(form.aulas) || 1,
+      data_entrega: form.tipo === 'tarefa' ? (form.data_entrega || undefined) : undefined,
       observacoes: form.observacoes ? `${userInfo}\n${form.observacoes}` : userInfo
     }
 
@@ -724,6 +727,57 @@ export default function ConteudosTarefasPage() {
                     onChange={e => setForm(p => ({ ...p, data: e.target.value }))}
                   />
                 </div>
+
+                <div>
+                  <label style={{ fontSize: '12px', fontWeight: 700, color: '#475569', marginBottom: '8px', display: 'block', textTransform: 'uppercase' }}>Disciplina</label>
+                  <input 
+                    type="text"
+                    className="form-input" 
+                    placeholder="Ex: Matemática, Português, Geral..."
+                    style={{ height: '48px', borderRadius: '12px', background: '#f8fafc', border: '1px solid #e2e8f0', fontSize: '14px' }}
+                    value={form.disciplina || ''}
+                    onChange={e => setForm(p => ({ ...p, disciplina: e.target.value }))}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '12px', fontWeight: 700, color: '#475569', marginBottom: '8px', display: 'block', textTransform: 'uppercase' }}>Tipo de Registro</label>
+                  <select 
+                    className="form-input" 
+                    style={{ height: '48px', borderRadius: '12px', background: '#f8fafc', border: '1px solid #e2e8f0', fontSize: '14px' }}
+                    value={form.tipo || 'conteudo'}
+                    onChange={e => setForm(p => ({ ...p, tipo: e.target.value as 'conteudo' | 'tarefa' }))}
+                  >
+                    <option value="conteudo">Conteúdo Ministrado</option>
+                    <option value="tarefa">Tarefa / Para Casa</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '12px', fontWeight: 700, color: '#475569', marginBottom: '8px', display: 'block', textTransform: 'uppercase' }}>Nº de Aulas</label>
+                  <input 
+                    type="number"
+                    min={1}
+                    max={10}
+                    className="form-input" 
+                    style={{ height: '48px', borderRadius: '12px', background: '#f8fafc', border: '1px solid #e2e8f0', fontSize: '14px' }}
+                    value={form.aulas ?? 1}
+                    onChange={e => setForm(p => ({ ...p, aulas: Math.max(1, parseInt(e.target.value) || 1) }))}
+                  />
+                </div>
+
+                {form.tipo === 'tarefa' && (
+                  <div>
+                    <label style={{ fontSize: '12px', fontWeight: 700, color: '#475569', marginBottom: '8px', display: 'block', textTransform: 'uppercase' }}>Data de Entrega</label>
+                    <input 
+                      type="date"
+                      className="form-input" 
+                      style={{ height: '48px', borderRadius: '12px', background: '#f8fafc', border: '1px solid #e2e8f0', fontSize: '14px' }}
+                      value={form.data_entrega || ''}
+                      onChange={e => setForm(p => ({ ...p, data_entrega: e.target.value }))}
+                    />
+                  </div>
+                )}
 
                 <div style={{ gridColumn: '1/-1', background: '#f8fafc', padding: '12px 16px', borderRadius: '10px', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <Clock size={16} style={{ color: '#2563eb' }} />

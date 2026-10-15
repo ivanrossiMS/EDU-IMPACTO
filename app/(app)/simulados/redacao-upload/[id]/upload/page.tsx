@@ -182,7 +182,7 @@ export default function UploadRedaçãoPage() {
   }
 
 
-  const handleSave = async (updatedQuestoes?: any[], actionType?: 'enviar_revisao' | 'aredacaor', config_estudio?: any) => {
+  const handleSave = async (updatedQuestoes?: any[], actionType?: 'enviar_revisao' | 'aprovar' | 'aredacaor', config_estudio?: any) => {
     const currentQs = Array.isArray(updatedQuestoes) ? updatedQuestoes : questoes;
 
     const myAssignment = redacao?.redacao_upload_requisicoes?.find((r: any) => r.id_professor === currentUser?.id);
@@ -256,8 +256,8 @@ export default function UploadRedaçãoPage() {
         updated_at: new Date().toISOString(),
       }
 
-      if (actionType === 'aredacaor') {
-        updatePayload.status = 'aredacaodo'
+      if (actionType === 'aprovar' || actionType === 'aredacaor') {
+        updatePayload.status = 'aprovado'
       } else if (actionType === 'enviar_revisao') {
         updatePayload.status = 'em_revisao'
       }
@@ -269,9 +269,9 @@ export default function UploadRedaçãoPage() {
            status: 'enviado',
            enviado_em: new Date().toISOString()
          }).eq('id', myAssignment.id)
-      } else if (actionType === 'aredacaor') {
+      } else if (actionType === 'aprovar' || actionType === 'aredacaor') {
          await (supabase as any).from('redacao_upload_requisicoes').update({
-           status: 'aredacaodo'
+           status: 'aprovado'
          }).eq('id_redacao_upload', redacaoId)
       }
 
@@ -452,10 +452,10 @@ export default function UploadRedaçãoPage() {
                 {saving ? <><Loader2 size={16} style={{ animation: 'spin 0.8s linear infinite' }} /> Processando...</> : <><Save size={16} /> Salvar e Enviar para Revisão</>}
               </motion.button>
             ) : (
-              <motion.button onClick={() => handleSave(undefined, 'aredacaor')} disabled={saving}
+              <motion.button onClick={() => handleSave(undefined, 'aprovar')} disabled={saving}
                 whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
                 style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px', borderRadius: 12, background: 'linear-gradient(135deg, #10b981, #059669)', color: 'white', border: 'none', fontSize: 13, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1, boxShadow: '0 4px 12px rgba(16,185,129,0.3)', whiteSpace: 'nowrap' }}>
-                {saving ? <><Loader2 size={16} style={{ animation: 'spin 0.8s linear infinite' }} /> Processando...</> : <><CheckCircle size={16} /> Salvar e Aredacaor</>}
+                {saving ? <><Loader2 size={16} style={{ animation: 'spin 0.8s linear infinite' }} /> Processando...</> : <><CheckCircle size={16} /> Salvar e Aprovar</>}
               </motion.button>
             )}
           </div>
@@ -606,8 +606,10 @@ export default function UploadRedaçãoPage() {
                 const reqStatuses: Record<string, { color: string; label: string }> = {
                   pendente: { color: '#f59e0b', label: 'Pendente' },
                   enviado: { color: '#3b82f6', label: 'Enviado' },
-                  aredacaodo: { color: '#10b981', label: 'Aredacaodo' },
-                  reredacaodo: { color: '#ef4444', label: 'Reredacaodo' },
+                  aprovado: { color: '#10b981', label: 'Aprovado' },
+                  aredacaodo: { color: '#10b981', label: 'Aprovado' },
+                  reprovado: { color: '#ef4444', label: 'Reprovado' },
+                  reredacaodo: { color: '#ef4444', label: 'Reprovado' },
                 }
                 const rs = reqStatuses[req.status] || reqStatuses['pendente']
                 const activeReqParam = searchParams.get('req')
@@ -748,7 +750,7 @@ export default function UploadRedaçãoPage() {
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span style={{ color: 'hsl(var(--text-secondary))' }}>Enviadas:</span>
-                  <span style={{ fontWeight: 700, color: '#10b981' }}>{redacao.redacao_upload_requisicoes.filter((r: any) => r.status === 'enviado' || r.status === 'aredacaodo').length}</span>
+                  <span style={{ fontWeight: 700, color: '#10b981' }}>{redacao.redacao_upload_requisicoes.filter((r: any) => r.status === 'enviado' || r.status === 'aprovado' || r.status === 'aredacaodo').length}</span>
                 </div>
               </div>
             </div>

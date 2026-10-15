@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/server/authGuard'
+import { requireStaff } from '@/lib/server/authGuard'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 
 export async function GET(req: NextRequest) {
-  const { user, errorResponse } = await requireAuth()
+  const { errorResponse } = await requireStaff(req)
   if (errorResponse) return errorResponse
 
   const supabase = await createProtectedClient()
@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const { user, errorResponse } = await requireAuth()
+  const { errorResponse } = await requireStaff(req)
   if (errorResponse) return errorResponse
 
   const supabase = await createProtectedClient()

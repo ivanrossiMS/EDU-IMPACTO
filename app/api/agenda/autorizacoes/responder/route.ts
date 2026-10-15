@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/server/authGuard'
+import { resolveUserRole } from '@/lib/server/authGuard'
 import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 import { AutorizacaoData, AutorizacaoResposta } from '@/lib/autorizacoes/types'
 import { 
@@ -14,8 +14,8 @@ import {
 export const dynamic = 'force-dynamic'
 
 export async function POST(request: Request) {
-  const { user, errorResponse } = await requireAuth()
-  if (errorResponse) return errorResponse
+  const { user, dbUser, isStaff, perfil, cargo, errorResponse } = await resolveUserRole(request)
+  if (errorResponse || !user) return errorResponse || NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
 
   try {
     const body = await request.json()
@@ -35,6 +35,35 @@ export async function POST(request: Request) {
       documentoResponsavel
     } = body
 
+    const adminClient = getAdminClient()
+
+    // Bloquear perfil Aluno de assinar autorizações familiares
+    const lowerPerfil = String(perfil || user.user_metadata?.perfil || '').toLowerCase().trim()
+    const lowerCargo = String(cargo || user.user_metadata?.cargo || '').toLowerCase().trim()
+    const isDirectAluno =
+      lowerPerfil === 'aluno' ||
+      lowerCargo === 'aluno' ||
+      String(usuarioTipo || '').toLowerCase().trim() === 'aluno' ||
+      (!isStaff && Boolean(user.user_metadata?.aluno_id) && !user.user_metadata?.responsavel_id && lowerCargo !== 'responsável' && lowerCargo !== 'responsavel')
+
+    if (isDirectAluno) {
+      return NextResponse.json(
+        { error: 'Apenas responsáveis podem assinar autorizações escolares.' },
+        { status: 403 }
+      )
+    }
+
+    if (!isStaff && !user.user_metadata?.responsavel_id) {
+      const { data: alunoRow } = await adminClient.from('alunos').select('id').eq('id', user.id).maybeSingle()
+      const { data: respRow } = await adminClient.from('responsaveis').select('id').or(`id.eq.${user.id},auth_id.eq.${user.id}`).maybeSingle()
+      if (alunoRow && !respRow) {
+        return NextResponse.json(
+          { error: 'Apenas responsáveis podem assinar autorizações escolares.' },
+          { status: 403 }
+        )
+      }
+    }
+
     if (!comunicadoId) {
       return NextResponse.json({ error: 'comunicadoId é obrigatório' }, { status: 400 })
     }
@@ -43,12 +72,44 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Nenhuma opção de autorização foi selecionada' }, { status: 400 })
     }
 
+    if (requestedUserId && !isStaff) {
+      const allowedIds = new Set<string>(
+        [
+          String(user.id),
+          dbUser?.id ? String(dbUser.id) : null,
+          dbUser?.auth_id ? String(dbUser.auth_id) : null,
+          user.user_metadata?.responsavel_id ? String(user.user_metadata.responsavel_id) : null,
+          user.user_metadata?.uid_legacy ? String(user.user_metadata.uid_legacy) : null,
+        ].filter(Boolean) as string[]
+      )
+
+      if (!allowedIds.has(String(requestedUserId))) {
+        const userEmail = (user.email || dbUser?.email || '').trim().toLowerCase()
+        const orFilters = [`id.eq.${user.id}`, `auth_id.eq.${user.id}`]
+        if (userEmail) orFilters.push(`email.ilike.${userEmail}`)
+        const { data: respRows } = await adminClient
+          .from('responsaveis')
+          .select('id, auth_id')
+          .or(orFilters.join(','))
+        for (const r of respRows || []) {
+          if (r.id) allowedIds.add(String(r.id))
+          if (r.auth_id) allowedIds.add(String(r.auth_id))
+        }
+      }
+
+      if (!allowedIds.has(String(requestedUserId))) {
+        return NextResponse.json(
+          { error: 'Acesso negado: usuarioId não pertence ao responsável autenticado.' },
+          { status: 403 }
+        )
+      }
+    }
+
     const effectiveUserId = requestedUserId || user.id
-    const effectiveUserName = usuarioNome || user.user_metadata?.nome || user.email || 'Responsável'
+    const effectiveUserName = usuarioNome || dbUser?.nome || user.user_metadata?.nome || user.email || 'Responsável'
     const effectiveUserFoto = usuarioFoto || user.user_metadata?.foto || null
     const effectiveUserTipo = usuarioTipo || (user.user_metadata?.perfil === 'Família' ? 'responsavel' : 'responsavel')
 
-    const adminClient = getAdminClient()
     const { data: comRow, error: fetchErr } = await adminClient
       .from('comunicados')
       .select('*')

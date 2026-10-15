@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/server/authGuard'
+import { requireStaff } from '@/lib/server/authGuard'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 
 export const dynamic = 'force-dynamic'
 
 export async function POST(request: Request) {
-  const { user, errorResponse } = await requireAuth()
+  const { errorResponse } = await requireStaff(request)
   if (errorResponse) return errorResponse
 
   try {
@@ -142,8 +142,8 @@ export async function POST(request: Request) {
   }
 }
 
-export async function GET() {
-  const { user, errorResponse } = await requireAuth()
+export async function GET(request: Request) {
+  const { errorResponse } = await requireStaff(request)
   if (errorResponse) return errorResponse
 
   try {

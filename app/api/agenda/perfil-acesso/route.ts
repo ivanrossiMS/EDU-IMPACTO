@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/server/authGuard'
+import { resolveUserRole } from '@/lib/server/authGuard'
 import { createProtectedClient } from '@/lib/server/supabaseServerFactory'
 import { isAlunoIntegralIntermediario } from '@/lib/studentTurmaUtils'
 import { getCachedTurmasAndGrupos } from '@/lib/server/turmasGruposCache'
@@ -9,8 +9,8 @@ export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
 export async function GET(request: Request) {
-  const { user, errorResponse } = await requireAuth(request)
-  if (errorResponse) return errorResponse
+  const { user, dbUser, isStaff, isFamilyOrStudent, errorResponse } = await resolveUserRole(request)
+  if (errorResponse || !user) return errorResponse || NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
 
   try {
     const authHeader = request.headers.get('authorization') || ''
@@ -91,6 +91,81 @@ export async function GET(request: Request) {
     let responsaveisDb: any[] = [];
     let meusAlunos: any[] = [];
     
+    const { data: links, error: linkError } = await supabase
+      .from('aluno_responsavel')
+      .select('parentesco, resp_financeiro, resp_pedagogico, responsaveis!fk_ar_responsavel(id, nome, email, rfid, dias_acesso, proibido, dados)')
+      .eq('aluno_id', slug)
+
+    if (!linkError && links && links.length > 0) {
+      responsaveisDb = links.map((l: any) => {
+        const resp = Array.isArray(l.responsaveis) ? l.responsaveis[0] : l.responsaveis;
+        return {
+          id: resp?.id,
+          nome: resp?.nome,
+          email: resp?.email,
+          parentesco: l.parentesco,
+          resp_financeiro: l.resp_financeiro,
+          resp_pedagogico: l.resp_pedagogico,
+          dias_acesso: resp?.dias_acesso || resp?.dados?.diasPermitidos || resp?.dados?.dias_acesso || resp?.dados?.diasAcesso || resp?.dados?.diasSemana || [],
+          proibido: resp?.proibido === true || resp?.dados?.proibido === true,
+          dados: resp?.dados || {}
+        };
+      });
+    }
+
+    // Validação de isolamento familiar (anti-IDOR): se não for staff, precisa ter vínculo legítimo com o aluno
+    if (!isStaff && isFamilyOrStudent) {
+      const userEmail = String(user.email || dbUser?.email || '').trim().toLowerCase()
+      const candidateIds = new Set(
+        [
+          String(user.id),
+          user.user_metadata?.uid_legacy ? String(user.user_metadata.uid_legacy) : null,
+          user.user_metadata?.aluno_id ? String(user.user_metadata.aluno_id) : null,
+          user.user_metadata?.responsavel_id ? String(user.user_metadata.responsavel_id) : null,
+          dbUser?.id ? String(dbUser.id) : null,
+          dbUser?.dados?.aluno_id ? String(dbUser.dados.aluno_id) : null,
+          dbUser?.dados?.responsavel_id ? String(dbUser.dados.responsavel_id) : null,
+        ].filter(Boolean) as string[]
+      )
+
+      const isOwnStudentAccount =
+        candidateIds.has(String(aluno.id)) ||
+        (aluno.matricula && candidateIds.has(String(aluno.matricula))) ||
+        (userEmail && String(aluno.dados?.email || '').trim().toLowerCase() === userEmail) ||
+        (userEmail && userEmail === `${String(aluno.id).toLowerCase()}@impacto.edu.br`) ||
+        (aluno.matricula && userEmail === `${String(aluno.matricula).toLowerCase()}@impacto.edu.br`)
+
+      const isLinkedGuardian =
+        responsaveisDb.some((r: any) =>
+          (r.id && candidateIds.has(String(r.id))) ||
+          (userEmail && r.email && String(r.email).trim().toLowerCase() === userEmail)
+        ) ||
+        (Array.isArray(aluno.dados?.responsaveis) &&
+          aluno.dados.responsaveis.some((r: any) =>
+            (r?.id && candidateIds.has(String(r.id))) ||
+            (userEmail && r?.email && String(r.email).trim().toLowerCase() === userEmail)
+          ))
+
+      let isGuardianByEmailTable = false
+      if (!isOwnStudentAccount && !isLinkedGuardian && userEmail) {
+        const { data: respByEmail } = await supabase
+          .from('responsaveis')
+          .select('id')
+          .ilike('email', userEmail)
+        if (respByEmail && respByEmail.length > 0) {
+          const respIds = respByEmail.map((r: any) => String(r.id))
+          isGuardianByEmailTable = responsaveisDb.some((r: any) => respIds.includes(String(r.id)))
+        }
+      }
+
+      if (!isOwnStudentAccount && !isLinkedGuardian && !isGuardianByEmailTable) {
+        return NextResponse.json(
+          { error: 'Acesso negado: você não possui vínculo com este aluno.' },
+          { status: 403 }
+        )
+      }
+    }
+
     if (isAlunoProfile) {
        vinculo = {
          parentesco: 'Próprio Aluno',
@@ -99,38 +174,15 @@ export async function GET(request: Request) {
        }
        meusAlunos = [aluno]
     } else {
-       // Sempre buscar os responsáveis do aluno para ter os dados de restrição atualizados, independente de quem acessa
-       const { data: links, error: linkError } = await supabase
-         .from('aluno_responsavel')
-         .select('parentesco, resp_financeiro, resp_pedagogico, responsaveis!fk_ar_responsavel(id, nome, email, rfid, dias_acesso, proibido, dados)')
-         .eq('aluno_id', slug)
-         
-       if (!linkError && links && links.length > 0) {
-         if (responsavel_id) {
-           const meuVinculo = links.find((l: any) => l.responsaveis?.id === responsavel_id || (Array.isArray(l.responsaveis) && l.responsaveis[0]?.id === responsavel_id));
-           if (meuVinculo) {
-             vinculo = {
-               parentesco: meuVinculo.parentesco,
-               resp_financeiro: meuVinculo.resp_financeiro,
-               resp_pedagogico: meuVinculo.resp_pedagogico
-             }
+       if (links && links.length > 0 && responsavel_id) {
+         const meuVinculo = links.find((l: any) => l.responsaveis?.id === responsavel_id || (Array.isArray(l.responsaveis) && l.responsaveis[0]?.id === responsavel_id));
+         if (meuVinculo) {
+           vinculo = {
+             parentesco: meuVinculo.parentesco,
+             resp_financeiro: meuVinculo.resp_financeiro,
+             resp_pedagogico: meuVinculo.resp_pedagogico
            }
          }
-         
-         responsaveisDb = links.map((l: any) => {
-            const resp = Array.isArray(l.responsaveis) ? l.responsaveis[0] : l.responsaveis;
-            return {
-              id: resp?.id,
-              nome: resp?.nome,
-              email: resp?.email,
-              parentesco: l.parentesco,
-              resp_financeiro: l.resp_financeiro,
-              resp_pedagogico: l.resp_pedagogico,
-              dias_acesso: resp?.dias_acesso || resp?.dados?.diasPermitidos || resp?.dados?.dias_acesso || resp?.dados?.diasAcesso || resp?.dados?.diasSemana || [],
-              proibido: resp?.proibido === true || resp?.dados?.proibido === true,
-              dados: resp?.dados || {}
-            };
-         });
        }
 
         if (responsavel_id) {

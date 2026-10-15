@@ -9,8 +9,11 @@ import {
   interpretarOcorrencia400,
   OCORRENCIA_STATUS_400,
 } from '@/lib/banking/cnab400'
+import { requireStaff } from '@/lib/server/authGuard'
 
 export async function POST(req: NextRequest) {
+  const { errorResponse } = await requireStaff(req)
+  if (errorResponse) return errorResponse
   try {
     const body = await req.json() as {
       conteudo: string // Texto do arquivo CNAB 400

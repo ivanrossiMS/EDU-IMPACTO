@@ -98,20 +98,34 @@ export default function MetodosPagamentoPage() {
     if (!form.nome.trim()) return
     if (modal === 'new') {
       const cod = genCod(metodos)
-      setMetodos(prev => [...prev, { ...form, id: `MP_${Date.now()}`, codigo: cod, createdAt: new Date().toISOString() }])
+      setMetodos(prev => {
+        const base = (prev && prev.length > 0) ? prev : DEFAULTS
+        return [...base, { ...form, id: `MP_${Date.now()}`, codigo: cod, createdAt: new Date().toISOString() }]
+      })
     } else if (editId) {
-      setMetodos(prev => prev.map(m => m.id === editId ? { ...m, ...form } : m))
+      setMetodos(prev => {
+        const base = (prev && prev.length > 0) ? prev : DEFAULTS
+        return base.map(m => m.id === editId ? { ...m, ...form } : m)
+      })
     }
     setModal(null); setEditId(null)
   }
 
   const handleDelete = () => {
-    if (confirmId) setMetodos(prev => prev.filter(m => m.id !== confirmId))
+    if (confirmId) {
+      setMetodos(prev => {
+        const base = (prev && prev.length > 0) ? prev : DEFAULTS
+        return base.filter(m => m.id !== confirmId)
+      })
+    }
     setConfirmId(null)
   }
 
   const toggleSituacao = (id: string) => {
-    setMetodos(prev => prev.map(m => m.id === id ? { ...m, situacao: m.situacao === 'ativo' ? 'inativo' : 'ativo' } : m))
+    setMetodos(prev => {
+      const base = (prev && prev.length > 0) ? prev : DEFAULTS
+      return base.map(m => m.id === id ? { ...m, situacao: m.situacao === 'ativo' ? 'inativo' : 'ativo' } : m)
+    })
   }
 
   return (

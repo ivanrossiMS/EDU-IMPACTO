@@ -54,6 +54,36 @@ export async function POST(request: Request) {
 
     let novoStatus = 'PENDING'
     if (status === 'approved') {
+      const { data: destinatario } = await supabase
+        .from('agenda_cobrancas_destinatarios')
+        .select('id, cobranca_id, status')
+        .eq('id', externalReference)
+        .maybeSingle()
+
+      if (!destinatario) {
+        return NextResponse.json({ error: 'Destinatário não encontrado' }, { status: 404 })
+      }
+
+      const { data: cobranca } = await supabase
+        .from('agenda_cobrancas')
+        .select('id, valor')
+        .eq('id', destinatario.cobranca_id)
+        .maybeSingle()
+
+      if (!cobranca) {
+        return NextResponse.json({ error: 'Cobrança vinculada não encontrada' }, { status: 404 })
+      }
+
+      const isAmountValid = Number(paymentData.transaction_amount) >= Number(cobranca.valor) - 0.05
+      if (!isAmountValid) {
+        console.error('[MercadoPago Webhook] Valor pago divergente do valor da cobrança:', {
+          transaction_amount: paymentData.transaction_amount,
+          cobranca_valor: cobranca.valor,
+          externalReference,
+        })
+        return NextResponse.json({ error: 'Valor pago inferior ao valor da cobrança' }, { status: 400 })
+      }
+
       novoStatus = 'RECEIVED'
     } else if (status === 'rejected' || status === 'cancelled') {
       novoStatus = 'OVERDUE' // Ou algum status de erro/cancelado

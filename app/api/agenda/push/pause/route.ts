@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/server/authGuard'
+import { requireAuth, resolveUserRole } from '@/lib/server/authGuard'
 import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 import { getPushPauseStatus, setPushNotificationsPaused } from '@/lib/server/pushPauseService'
 
@@ -52,10 +52,21 @@ async function verifyPauseAuth(req?: Request) {
  * GET /api/agenda/push/pause
  * Retorna o status atual da pausa global de notificações push.
  */
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const { isStaff, errorResponse } = await resolveUserRole(request)
+    if (errorResponse) return errorResponse
+
     const status = await getPushPauseStatus()
-    return NextResponse.json(status, {
+    const payload = isStaff
+      ? status
+      : {
+          paused: status.paused,
+          pausedAt: status.pausedAt,
+          pauseReason: status.pauseReason,
+        }
+
+    return NextResponse.json(payload, {
       headers: {
         'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
       },

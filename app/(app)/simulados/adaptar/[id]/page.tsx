@@ -221,7 +221,7 @@ export default function AdaptarSimuladoPage() {
       setTimeout(() => {
         window.print()
         setSaving(false)
-        router.push('/simulados/lista')
+        router.push('/simulados')
       }, 500)
 
     } catch (e: any) {

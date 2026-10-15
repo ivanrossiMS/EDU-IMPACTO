@@ -259,10 +259,12 @@ export default function AlunosPage() {
     try {
       const activeFilters: Record<string, string> = {
         all: 'true',
+        status: statusFiltro,
         sortField,
         sortOrder,
         _t: Date.now().toString()
       }
+      if (busca.trim()) activeFilters.search = busca.trim()
       if (filtrosAvancados.dataCadastroInicio) activeFilters.dataCadastroInicio = filtrosAvancados.dataCadastroInicio
       if (filtrosAvancados.dataCadastroFim) activeFilters.dataCadastroFim = filtrosAvancados.dataCadastroFim
       if (filtrosAvancados.inadimplente !== 'todos') activeFilters.inadimplente = filtrosAvancados.inadimplente
@@ -1619,7 +1621,10 @@ export default function AlunosPage() {
     }
   }
 
+  const [removerFotoExplicit, setRemoverFotoExplicit] = useState(false)
+
   const handleNovoAluno = () => {
+    setRemoverFotoExplicit(false)
     const randCode = Math.floor(1000000 + Math.random() * 9000000).toString();
     const anoAtual = (() => {
       const calAtivo = cfgCalendarioLetivo?.find((c: any) => c.status === 'ativo' || c.ativo);
@@ -1805,14 +1810,20 @@ export default function AlunosPage() {
     const hList = formData.historicoTurmas || [];
     const activeHist = hList.length > 0 ? hList[hList.length - 1] : null;
     const isIntegralAtivo = activeHist
-      ? Boolean(activeHist.isIntegralIntermediario === true || activeHist.modalidade === 'INTEGRAL/INTERMEDIÁRIO')
+      ? Boolean(
+          activeHist.isIntegralIntermediario === true || 
+          String(activeHist.modalidade || '').toUpperCase().includes('INTEGRAL') || 
+          String(activeHist.modalidade || '').toUpperCase().includes('INTERMEDI') ||
+          String(activeHist.turno || '').toUpperCase().includes('INTEGRAL') ||
+          String(activeHist.turno || '').toUpperCase().includes('INTERMEDI')
+        )
       : false;
 
     const newAluno = {
       id: editingAlunoId || `TEMP-${Date.now()}`,
       ...formData.aluno,
       rga: finalRga,
-      removerFoto: formData.aluno.foto === null,
+      removerFoto: removerFotoExplicit === true,
       responsavel: formData.responsaveis[0] || null,
       responsaveis: formData.responsaveis,
       historicoTurmas: formData.historicoTurmas,
@@ -1860,6 +1871,7 @@ export default function AlunosPage() {
   }
 
   const handleEdit = (aluno: any) => {
+    setRemoverFotoExplicit(false)
     const turmaDoAluno = todasTurmas.find((t: any) => 
       String(t.id) === String(aluno.turma) || 
       t.nome === aluno.turma
@@ -2096,6 +2108,12 @@ export default function AlunosPage() {
         });
       })(),
       historicoTurmas: (() => {
+        const isIntegralFallback = Boolean(
+          aluno.isIntegralIntermediario === true ||
+          aluno.dados?.isIntegralIntermediario === true ||
+          String(aluno.modalidade || aluno.dados?.modalidade || '').toUpperCase().includes('INTEGRAL') ||
+          String(aluno.modalidade || aluno.dados?.modalidade || '').toUpperCase().includes('INTERMEDI')
+        );
         const rawList = (aluno.dados?.historicoTurmas && aluno.dados.historicoTurmas.length > 0) 
           ? aluno.dados.historicoTurmas 
           : (aluno.turma ? [{
@@ -2104,7 +2122,8 @@ export default function AlunosPage() {
               segmento: segmento,
               serie: aluno.serie || aluno.dados?.serie || turmaDoAluno?.serie || turmaDoAluno?.dados?.serie || '',
               serieTurma: turmaDoAluno?.id || aluno.turma || '',
-              modalidade: aluno.dados?.modalidade || '',
+              modalidade: aluno.dados?.modalidade || (isIntegralFallback ? 'INTEGRAL/INTERMEDIÁRIO' : ''),
+              isIntegralIntermediario: isIntegralFallback,
               status: 'Matriculado'
             }] : []);
 
@@ -2112,11 +2131,20 @@ export default function AlunosPage() {
           const tObj = todasTurmas.find((t: any) => String(t.id) === String(h.serieTurma || h.turma || aluno.turma));
           const resolvedSerie = h.serie || aluno.serie || aluno.dados?.serie || tObj?.serie || tObj?.dados?.serie || '';
           const resolvedSegmento = h.segmento || aluno.segmento || aluno.dados?.segmento || tObj?.segmento || tObj?.dados?.segmento || '';
+          const hIntegral = Boolean(
+            h.isIntegralIntermediario === true || 
+            String(h.modalidade || '').toUpperCase().includes('INTEGRAL') || 
+            String(h.modalidade || '').toUpperCase().includes('INTERMEDI') ||
+            String(h.turno || '').toUpperCase().includes('INTEGRAL') ||
+            String(h.turno || '').toUpperCase().includes('INTERMEDI')
+          );
           return {
             ...h,
             serie: resolvedSerie,
             segmento: resolvedSegmento,
-            serieTurma: h.serieTurma || h.turma || tObj?.id || ''
+            serieTurma: h.serieTurma || h.turma || tObj?.id || '',
+            isIntegralIntermediario: hIntegral,
+            modalidade: h.modalidade || (hIntegral ? 'INTEGRAL/INTERMEDIÁRIO' : '')
           };
         });
       })(),
@@ -2154,6 +2182,7 @@ export default function AlunosPage() {
                 ...prev,
                 aluno: {
                   ...prev.aluno,
+                  foto: full.foto ?? prev.aluno.foto,
                   cpf: full.cpf || fullD.cpf || prev.aluno.cpf,
                   rga: full.rga || fullD.rga || prev.aluno.rga,
                   sexo: full.sexo || fullD.sexo || prev.aluno.sexo,
@@ -2762,6 +2791,11 @@ export default function AlunosPage() {
               active: statusFiltro === 'todos_com_inativos',
               onClick: () => {
                 setStatusFiltro(prev => prev === 'todos_com_inativos' ? 'todos' : 'todos_com_inativos')
+                setFiltrosAvancados(prev => ({
+                  ...prev,
+                  integralIntermediario: 'todos',
+                  turno: prev.turno === 'integral' ? 'todos' : prev.turno
+                }))
                 setPaginaAtual(1)
               }
             },
@@ -2774,9 +2808,14 @@ export default function AlunosPage() {
               color: '#10b981',
               bg: 'rgba(16, 185, 129, 0.08)',
               bd: 'rgba(16, 185, 129, 0.25)',
-              active: statusFiltro === 'ativo' || statusFiltro === 'todos',
+              active: (statusFiltro === 'ativo' || statusFiltro === 'todos') && filtrosAvancados.integralIntermediario !== 'sim' && filtrosAvancados.turno !== 'integral',
               onClick: () => {
                 setStatusFiltro(prev => prev === 'ativo' ? 'todos' : 'ativo')
+                setFiltrosAvancados(prev => ({
+                  ...prev,
+                  integralIntermediario: 'todos',
+                  turno: prev.turno === 'integral' ? 'todos' : prev.turno
+                }))
                 setPaginaAtual(1)
               }
             },
@@ -2792,6 +2831,11 @@ export default function AlunosPage() {
               active: statusFiltro === 'inativo',
               onClick: () => {
                 setStatusFiltro(prev => prev === 'inativo' ? 'todos' : 'inativo')
+                setFiltrosAvancados(prev => ({
+                  ...prev,
+                  integralIntermediario: 'todos',
+                  turno: prev.turno === 'integral' ? 'todos' : prev.turno
+                }))
                 setPaginaAtual(1)
               }
             },
@@ -2804,9 +2848,15 @@ export default function AlunosPage() {
               color: '#8b5cf6',
               bg: 'rgba(139, 92, 246, 0.08)',
               bd: 'rgba(139, 92, 246, 0.25)',
-              active: statusFiltro === 'integral_sim',
+              active: statusFiltro === 'integral_sim' || filtrosAvancados.integralIntermediario === 'sim' || filtrosAvancados.turno === 'integral',
               onClick: () => {
-                setStatusFiltro(prev => prev === 'integral_sim' ? 'todos' : 'integral_sim')
+                const isIntegralActive = statusFiltro === 'integral_sim' || filtrosAvancados.integralIntermediario === 'sim' || filtrosAvancados.turno === 'integral'
+                setStatusFiltro(isIntegralActive ? 'todos' : 'integral_sim')
+                setFiltrosAvancados(prev => ({
+                  ...prev,
+                  integralIntermediario: 'todos',
+                  turno: prev.turno === 'integral' ? 'todos' : prev.turno
+                }))
                 setPaginaAtual(1)
               }
             }
@@ -2941,7 +2991,10 @@ export default function AlunosPage() {
                 style={{ paddingLeft: 34, height: 38, borderRadius: 10, border: '1px solid #e2e8f0', width: '100%', fontSize: 13 }} 
                 placeholder="Buscar por nome, código ou CPF…" 
                 value={busca}
-                onChange={e => setBusca(e.target.value)}
+                onChange={e => {
+                  setBusca(e.target.value)
+                  setPaginaAtual(1)
+                }}
               />
             </div>
             
@@ -2950,7 +3003,18 @@ export default function AlunosPage() {
               className="form-input" 
               style={{ height: 38, borderRadius: 10, border: '1px solid #e2e8f0', padding: '0 10px', fontSize: 13, width: 145, flexShrink: 0, cursor: 'pointer', backgroundColor: '#fff' }}
               value={statusFiltro}
-              onChange={e => setStatusFiltro(e.target.value)}
+              onChange={e => {
+                const nextVal = e.target.value
+                setStatusFiltro(nextVal)
+                if (nextVal === 'integral_sim' || nextVal === 'integral_nao' || nextVal === 'todos' || nextVal === 'ativo' || nextVal === 'inativo' || nextVal === 'todos_com_inativos') {
+                  setFiltrosAvancados(prev => ({
+                    ...prev,
+                    integralIntermediario: 'todos',
+                    turno: prev.turno === 'integral' ? 'todos' : prev.turno
+                  }))
+                }
+                setPaginaAtual(1)
+              }}
             >
               <option value="todos">Todos (Ativos)</option>
               <option value="todos_com_inativos">Todos (Com inativos)</option>
@@ -3511,6 +3575,7 @@ export default function AlunosPage() {
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   handleInputChange('aluno', 'foto', null);
+                                  setRemoverFotoExplicit(true);
                                   const fileInput = document.getElementById('foto-aluno-input') as HTMLInputElement;
                                   if (fileInput) fileInput.value = '';
                                 }}
@@ -3608,6 +3673,7 @@ export default function AlunosPage() {
                                       canvas.width = width;
                                       canvas.height = height;
                                       const ctx = canvas.getContext('2d');
+                                      setRemoverFotoExplicit(false);
                                       if (ctx) {
                                         ctx.drawImage(img, 0, 0, width, height);
                                         const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
@@ -5004,31 +5070,36 @@ export default function AlunosPage() {
                             onClick={(e) => {
                               e.preventDefault();
                               const newHist = [...formData.historicoTurmas];
-                              const isSel = newHist[index].isIntegralIntermediario || newHist[index].modalidade === 'INTEGRAL/INTERMEDIÁRIO';
+                              const curItem = newHist[index];
+                              const isSel = Boolean(
+                                curItem.isIntegralIntermediario || 
+                                String(curItem.modalidade || '').toUpperCase().includes('INTEGRAL') || 
+                                String(curItem.modalidade || '').toUpperCase().includes('INTERMEDI')
+                              );
                               newHist[index].isIntegralIntermediario = !isSel;
                               newHist[index].modalidade = !isSel ? 'INTEGRAL/INTERMEDIÁRIO' : '';
                               setFormData(prev => ({ ...prev, historicoTurmas: newHist }));
                             }}
                             style={{
-                              border: (hist.isIntegralIntermediario || hist.modalidade === 'INTEGRAL/INTERMEDIÁRIO') ? 'none' : '1px solid #cbd5e1',
+                              border: (hist.isIntegralIntermediario || String(hist.modalidade || '').toUpperCase().includes('INTEGRAL') || String(hist.modalidade || '').toUpperCase().includes('INTERMEDI')) ? 'none' : '1px solid #cbd5e1',
                               borderRadius: 6,
                               padding: '0 10px',
                               height: 32,
                               fontSize: 10.5,
                               fontWeight: 700,
-                              background: (hist.isIntegralIntermediario || hist.modalidade === 'INTEGRAL/INTERMEDIÁRIO') ? '#2563eb' : '#fff',
-                              color: (hist.isIntegralIntermediario || hist.modalidade === 'INTEGRAL/INTERMEDIÁRIO') ? '#ffffff' : '#64748b',
+                              background: (hist.isIntegralIntermediario || String(hist.modalidade || '').toUpperCase().includes('INTEGRAL') || String(hist.modalidade || '').toUpperCase().includes('INTERMEDI')) ? '#2563eb' : '#fff',
+                              color: (hist.isIntegralIntermediario || String(hist.modalidade || '').toUpperCase().includes('INTEGRAL') || String(hist.modalidade || '').toUpperCase().includes('INTERMEDI')) ? '#ffffff' : '#64748b',
                               cursor: 'pointer',
                               transition: 'all 0.15s ease',
                               whiteSpace: 'nowrap',
-                              boxShadow: (hist.isIntegralIntermediario || hist.modalidade === 'INTEGRAL/INTERMEDIÁRIO') ? '0 2px 6px rgba(37,99,235,0.25)' : 'none',
+                              boxShadow: (hist.isIntegralIntermediario || String(hist.modalidade || '').toUpperCase().includes('INTEGRAL') || String(hist.modalidade || '').toUpperCase().includes('INTERMEDI')) ? '0 2px 6px rgba(37,99,235,0.25)' : 'none',
                               display: 'inline-flex',
                               alignItems: 'center',
                               justifyContent: 'center',
                               gap: 4
                             }}
                           >
-                            {(hist.isIntegralIntermediario || hist.modalidade === 'INTEGRAL/INTERMEDIÁRIO') && <span>✓</span>}
+                            {(hist.isIntegralIntermediario || String(hist.modalidade || '').toUpperCase().includes('INTEGRAL') || String(hist.modalidade || '').toUpperCase().includes('INTERMEDI')) && <span>✓</span>}
                             INTEGRAL/INTERMEDIÁRIO
                           </button>
                         </div>
@@ -6533,7 +6604,12 @@ export default function AlunosPage() {
                     return (
                       <button
                         key={item.val}
-                        onClick={() => setFiltrosAvancados(prev => ({ ...prev, integralIntermediario: item.val }))}
+                        onClick={() => {
+                          setFiltrosAvancados(prev => ({ ...prev, integralIntermediario: item.val }))
+                          if (statusFiltro === 'integral_sim' || statusFiltro === 'integral_nao') {
+                            setStatusFiltro('ativo')
+                          }
+                        }}
                         className={`optionButton-fa ${isActive ? 'active' : ''}`}
                       >
                         {item.label}
@@ -6551,6 +6627,9 @@ export default function AlunosPage() {
                   setFiltrosAvancados({
                     dataCadastroInicio: '', dataCadastroFim: '', inadimplente: 'todos', riscoEvasao: 'todos', turno: 'todos', autorizadoSairSozinho: 'todos', foto: 'todos', observacoes: 'todos', integralIntermediario: 'todos'
                   })
+                  if (statusFiltro === 'integral_sim' || statusFiltro === 'integral_nao') {
+                    setStatusFiltro('ativo')
+                  }
                   setPaginaAtual(1)
                 }}
                 className="flex items-center justify-center gap-2 min-h-[44px] px-5 rounded-[12px] text-[14px] font-bold text-slate-500 hover:text-slate-800 hover:bg-slate-200/50 transition-colors"

@@ -12,7 +12,7 @@ export async function GET(request: Request) {
     // Busca leve para determinar o próximo código/matrícula sequencial de aluno
     const { data, error } = await supabase
       .from('alunos')
-      .select('id, matricula, dados')
+      .select('id, matricula')
 
     if (error) {
       console.error('[API alunos/proxima-matricula] Error:', error)
@@ -23,9 +23,7 @@ export async function GET(request: Request) {
     for (const a of data || []) {
       const candidates = [
         String(a.matricula || '').trim(),
-        String(a.id || '').trim(),
-        String(a.dados?.codigo || '').trim(),
-        String(a.dados?.matricula || '').trim()
+        String(a.id || '').trim()
       ]
       for (const raw of candidates) {
         if (/^\d{1,7}$/.test(raw)) {

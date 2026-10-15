@@ -16,15 +16,15 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url)
     const alunoIdParam = searchParams.get('aluno_id')
     const contextParam = searchParams.get('context') // 'familia' | 'colaborador' | null
-    const espelharRespId = searchParams.get('espelhar_responsavel')
-    const espelharColabId = searchParams.get('espelhar_colaborador')
-    const espelharAluno = searchParams.get('espelhar_aluno') === 'true'
+    const rawEspelharRespId = searchParams.get('espelhar_responsavel')
+    const rawEspelharColabId = searchParams.get('espelhar_colaborador')
+    const rawEspelharAluno = searchParams.get('espelhar_aluno') === 'true'
 
     // Resolver usuário local
     let dbUser: any = null
     const { data: foundUser } = await supabase
       .from('system_users')
-      .select('id, nome, cargo, perfil, dados')
+      .select('id, auth_id, nome, cargo, perfil, dados')
       .or(`id.eq."${user.id}",auth_id.eq."${user.id}"${user.email ? `,email.ilike."${user.email}"` : ''}`)
       .maybeSingle()
 
@@ -34,6 +34,17 @@ export async function GET(request: Request) {
     const cargo = (dbUser?.cargo || user.user_metadata?.cargo || '').trim()
     const isAdmin = checkIsAdmin(perfil, cargo)
     const isSchoolStaff = checkIsCollaboratorOrTeacher(cargo, perfil, dbUser) || checkIsStaffManagement(cargo, perfil)
+
+    if (!isAdmin && (rawEspelharRespId || rawEspelharColabId || rawEspelharAluno)) {
+      return NextResponse.json(
+        { error: 'Acesso negado: apenas administradores podem espelhar usuários.' },
+        { status: 403 }
+      )
+    }
+
+    const espelharRespId = isAdmin ? rawEspelharRespId : null
+    const espelharColabId = isAdmin ? rawEspelharColabId : null
+    const espelharAluno = isAdmin ? rawEspelharAluno : false
 
     // Se o contexto for explicitamente colaborador, ou se for administrador/equipe escolar (sem contexto explícito de família/aluno)
     const isColabMode = 
@@ -141,7 +152,7 @@ export async function GET(request: Request) {
 
     const allConvIds = Array.from(new Set([...convIds, ...Array.from(groupConvIds)]))
     const requestedConvId = searchParams.get('conversation_id') || searchParams.get('openChat')
-    if (requestedConvId && !allConvIds.includes(requestedConvId)) {
+    if (isAdmin && requestedConvId && !allConvIds.includes(requestedConvId)) {
       allConvIds.push(requestedConvId)
     }
 

@@ -64,6 +64,26 @@ export default function ADAdminDashboard() {
     })
   }, [alunos])
 
+  const getTargetDestinatariosCount = useMemo(() => {
+    const ativos = alunosAtivos || []
+    return (c: ADComunicado) => {
+      if (ativos.length === 0) return 0
+      const alunosIds = Array.isArray(c?.alunosIds) ? c.alunosIds : (Array.isArray((c as any)?.dados?.alunosIds) ? (c as any).dados.alunosIds : [])
+      if (alunosIds.length > 0) return alunosIds.length
+      const turmasAlvo = Array.isArray(c?.turmas) ? c.turmas : (Array.isArray((c as any)?.dados?.turmas) ? (c as any).dados.turmas : [])
+      if (turmasAlvo.length > 0 && !turmasAlvo.some((t: any) => String(t).toLowerCase() === 'todas' || String(t).toLowerCase() === 'todos')) {
+        const targetSet = new Set(turmasAlvo.map((t: any) => String(t).trim().toLowerCase()))
+        const matched = ativos.filter((a: any) => {
+          const at = String(a.turma || '').trim().toLowerCase()
+          const atNome = String(a.turma_nome || '').trim().toLowerCase()
+          return targetSet.has(at) || (atNome && targetSet.has(atNome))
+        }).length
+        if (matched > 0) return matched
+      }
+      return ativos.length
+    }
+  }, [alunosAtivos])
+
   // Taxa real de leitura e ciência
   const { leituraRate, cienciaRate, totalLeituras } = useMemo(() => {
     const ativos = alunosAtivos || []
@@ -77,15 +97,15 @@ export default function ADAdminDashboard() {
     coms.forEach((c: ADComunicado) => {
       tl += Object.keys(c?.leituras || {}).length
       tc += Object.keys(c?.ciencias || {}).length
-      expected += ativos.length
+      expected += getTargetDestinatariosCount(c)
     })
     
     return {
-      leituraRate: expected > 0 ? Math.round((tl / expected) * 100) : 0,
-      cienciaRate: expected > 0 ? Math.round((tc / expected) * 100) : 0,
+      leituraRate: expected > 0 ? Math.min(100, Math.round((tl / expected) * 100)) : 0,
+      cienciaRate: expected > 0 ? Math.min(100, Math.round((tc / expected) * 100)) : 0,
       totalLeituras: tl
     }
-  }, [comunicados, alunosAtivos])
+  }, [comunicados, alunosAtivos, getTargetDestinatariosCount])
 
 
 
@@ -380,8 +400,9 @@ export default function ADAdminDashboard() {
             {recentComms.map((c: ADComunicado, i: number) => {
               const leituras = Object.keys(c.leituras || {}).length
               const ciencias = Object.keys(c.ciencias || {}).length
-              const pctL = alunosAtivos.length > 0 ? Math.round((leituras / alunosAtivos.length) * 100) : 0
-              const pctC = alunosAtivos.length > 0 ? Math.round((ciencias / alunosAtivos.length) * 100) : 0
+              const denom = getTargetDestinatariosCount(c)
+              const pctL = denom > 0 ? Math.min(100, Math.round((leituras / denom) * 100)) : 0
+              const pctC = denom > 0 ? Math.min(100, Math.round((ciencias / denom) * 100)) : 0
               const prioColor = c.prioridade === 'urgente' ? '#ef4444' : c.prioridade === 'alta' ? '#f59e0b' : '#10b981'
 
               return (

@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server'
 import { supabaseServer as supabase } from '@/lib/supabaseServer'
-import { requireAuth } from '@/lib/server/authGuard'
+import { resolveUserRole } from '@/lib/server/authGuard'
 
 export async function POST(request: Request) {
   try {
-    const { user, errorResponse } = await requireAuth()
-    if (errorResponse) return errorResponse
+    const { user, isFamilyOrStudent, errorResponse } = await resolveUserRole(request)
+    if (errorResponse || !user) return errorResponse!
 
     const body = await request.json()
     const { cobranca_destinatario_id, cobranca_id } = body
@@ -14,14 +14,74 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Faltam dados obrigatórios' }, { status: 400 })
     }
 
-    // IDEMPOTÊNCIA: Verifica se já existe preferência de pagamento gerada para este destinatário
+    // Busca destinatário e valida vínculo com cobranca_id para impedir manipulação de preço
     const { data: existingDest } = await supabase
       .from('agenda_cobrancas_destinatarios')
-      .select('id, url_pagamento, status')
+      .select('id, cobranca_id, aluno_id, url_pagamento, status, pagador_usuario_id')
       .eq('id', cobranca_destinatario_id)
       .maybeSingle()
 
-    if (existingDest?.url_pagamento && existingDest.status !== 'pago') {
+    if (!existingDest || String(existingDest.cobranca_id) !== String(cobranca_id)) {
+      return NextResponse.json(
+        { error: 'Destinatário inválido ou não vinculado à cobrança informada' },
+        { status: 400 }
+      )
+    }
+
+    if (existingDest.status === 'RECEIVED' || existingDest.status === 'pago') {
+      return NextResponse.json({ error: 'Esta cobrança já se encontra quitada' }, { status: 400 })
+    }
+
+    if (isFamilyOrStudent && existingDest.aluno_id) {
+      const userEmail = (user.email || '').trim().toLowerCase()
+      const metaAlunoId = String(user.user_metadata?.aluno_id || user.user_metadata?.alunoId || '')
+      const metaAlunosIds: string[] = Array.isArray(user.user_metadata?.alunos_ids)
+        ? user.user_metadata.alunos_ids.map(String)
+        : []
+
+      let hasAccess =
+        metaAlunoId === String(existingDest.aluno_id) ||
+        metaAlunosIds.includes(String(existingDest.aluno_id)) ||
+        Boolean(existingDest.pagador_usuario_id && String(existingDest.pagador_usuario_id) === String(user.id))
+
+      if (!hasAccess && userEmail) {
+        const { data: alunoRow } = await supabase
+          .from('alunos')
+          .select('id, email, dados')
+          .eq('id', existingDest.aluno_id)
+          .maybeSingle()
+
+        if (alunoRow) {
+          const d = alunoRow.dados || {}
+          const emailsVinculados = [
+            alunoRow.email,
+            d.email,
+            d.emailAluno,
+            d.emailResponsavel,
+            d.responsavel_email,
+            d.responsavelEmail,
+            d.mae_email,
+            d.pai_email,
+          ]
+            .filter(Boolean)
+            .map((e: string) => String(e).trim().toLowerCase())
+
+          if (emailsVinculados.includes(userEmail)) {
+            hasAccess = true
+          }
+        }
+      }
+
+      if (!hasAccess) {
+        return NextResponse.json(
+          { error: 'Acesso negado: você não possui vínculo com o aluno destinatário desta cobrança.' },
+          { status: 403 }
+        )
+      }
+    }
+
+    // IDEMPOTÊNCIA: Verifica se já existe preferência de pagamento gerada para este destinatário
+    if (existingDest.url_pagamento && existingDest.status !== 'RECEIVED' && existingDest.status !== 'pago') {
       return NextResponse.json({ 
         success: true, 
         invoiceUrl: existingDest.url_pagamento,

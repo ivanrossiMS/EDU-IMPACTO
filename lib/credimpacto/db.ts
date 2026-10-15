@@ -186,7 +186,64 @@ export async function dbSaveConfiguracao(
     createdAt: new Date().toISOString()
   })
 
+  // Emite broadcast Realtime para sincronização imediata entre clientes
+  await broadcastCredImpactoRealtimeEvent({
+    type: 'CONFIG_UPDATE',
+    acao: 'ALTERACAO_CONFIG',
+    config: merged,
+    autorId: autor.id,
+    autorNome: autor.nome
+  })
+
   return merged
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// REALTIME BROADCAST HELPER (SUB-100MS SERVER -> CLIENT)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface CredImpactoRealtimePayload {
+  eventId: string
+  type: 'EMPRESTIMO_UPSERT' | 'EMPRESTIMO_DELETE' | 'CONFIG_UPDATE' | 'AUDIT_LOG_INSERT'
+  acao?: string
+  emprestimoId?: string
+  codigoOperacao?: string
+  colaboradorId?: string
+  colaboradorEmail?: string
+  colaboradorNome?: string
+  colaboradorCpf?: string
+  status?: string
+  emprestimo?: CredImpactoEmprestimo
+  config?: CredImpactoConfig
+  autorId?: string
+  autorNome?: string
+  timestamp: string
+}
+
+export async function broadcastCredImpactoRealtimeEvent(
+  payload: Omit<CredImpactoRealtimePayload, 'eventId' | 'timestamp'>
+): Promise<void> {
+  try {
+    const sb = getAdminClient()
+    const fullPayload: CredImpactoRealtimePayload = {
+      ...payload,
+      eventId: crypto.randomUUID(),
+      timestamp: new Date().toISOString()
+    }
+    const channel = sb.channel('credimpacto_realtime_room')
+    if (typeof (channel as any).httpSend === 'function') {
+      await (channel as any).httpSend('CREDIMPACTO_EVENT', fullPayload)
+    } else {
+      await channel.send({
+        type: 'broadcast',
+        event: 'CREDIMPACTO_EVENT',
+        payload: fullPayload
+      })
+    }
+    await sb.removeChannel(channel).catch(() => {})
+  } catch (err) {
+    console.warn('[CredImpacto Realtime Broadcast Error]', err)
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -198,6 +255,7 @@ export async function dbGetEmprestimos(filtros?: {
   colaboradorIds?: string[]
   colaboradorEmail?: string
   colaboradorNome?: string
+  colaboradorCpf?: string
   status?: string
   competencia?: string
 }): Promise<CredImpactoEmprestimo[]> {
@@ -207,7 +265,15 @@ export async function dbGetEmprestimos(filtros?: {
     new Set([filtros?.colaboradorId, ...(filtros?.colaboradorIds || [])].filter(Boolean))
   ) as string[]
   const cleanEmail = (filtros?.colaboradorEmail || '').trim().toLowerCase()
-  const cleanNome = (filtros?.colaboradorNome || '').trim().toLowerCase()
+  const normalizeText = (s?: string) =>
+    (s || '')
+      .trim()
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+  const cleanNome = normalizeText(filtros?.colaboradorNome)
+  const cleanCpfDigits = (filtros?.colaboradorCpf || '').replace(/\D/g, '')
+  const validFilterCpf = cleanCpfDigits.length === 11 && cleanCpfDigits !== '00000000000' ? cleanCpfDigits : ''
 
   // Map para unificar operações de ambas as origens (dedicada + fallback) sem duplicidade
   const loansMap = new Map<string, CredImpactoEmprestimo>()
@@ -318,13 +384,14 @@ export async function dbGetEmprestimos(filtros?: {
   // Ordena por data de criação descrescente
   list.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())
 
-  // Filtragem flexível de colaborador (por ID, e-mail ou nome completo)
+  // Filtragem flexível de colaborador (por ID, e-mail, CPF ou nome completo normalizado)
   const allowedIds = new Set(idList)
-  if (allowedIds.size > 0 || cleanEmail || cleanNome) {
+  if (allowedIds.size > 0 || cleanEmail || cleanNome || validFilterCpf) {
     list = list.filter((e) => {
       if (allowedIds.has(e.colaboradorId)) return true
       if (cleanEmail && e.colaboradorEmail && e.colaboradorEmail.trim().toLowerCase() === cleanEmail) return true
-      if (cleanNome && e.colaboradorNome && e.colaboradorNome.trim().toLowerCase() === cleanNome) return true
+      if (validFilterCpf && e.colaboradorCpf && e.colaboradorCpf.replace(/\D/g, '') === validFilterCpf) return true
+      if (cleanNome && e.colaboradorNome && normalizeText(e.colaboradorNome) === cleanNome) return true
       return false
     })
   }
@@ -436,7 +503,15 @@ export async function dbSaveEmprestimo(
   }
 
   // Recalcula totais amortizados e saldo devedor real a partir das parcelas
-  if (updatedLoan.parcelas && updatedLoan.parcelas.length > 0) {
+  if (updatedLoan.status === 'quitado') {
+    updatedLoan.totalAmortizado = roundMoney(updatedLoan.valorAprovado)
+    updatedLoan.saldoDevedorAtual = 0
+  } else if ((updatedLoan as any).valorAbatidoRescisao || (updatedLoan.status as string) === 'renegociado') {
+    updatedLoan.saldoDevedorAtual = roundMoney(Math.max(0, Number(updatedLoan.saldoDevedorAtual || 0)))
+    updatedLoan.totalAmortizado = roundMoney(
+      Math.max(0, updatedLoan.valorAprovado - updatedLoan.saldoDevedorAtual)
+    )
+  } else if (updatedLoan.parcelas && updatedLoan.parcelas.length > 0) {
     const parcelasPagas = updatedLoan.parcelas.filter(
       (p) => p.status === 'descontada' || p.status === 'paga_avulso'
     )
@@ -587,6 +662,23 @@ export async function dbSaveEmprestimo(
     createdAt: nowIso
   })
 
+  // 4. Emite broadcast Realtime sanitizado para sincronização imediata (<100ms)
+  const { contratoConteudoHtml, dadosBancarios: _db, colaboradorSalarioBase: _sal, ...lightweightLoan } = updatedLoan
+  await broadcastCredImpactoRealtimeEvent({
+    type: 'EMPRESTIMO_UPSERT',
+    acao: acaoAudit,
+    emprestimoId: updatedLoan.id,
+    codigoOperacao: updatedLoan.codigoOperacao,
+    colaboradorId: updatedLoan.colaboradorId,
+    colaboradorEmail: updatedLoan.colaboradorEmail,
+    colaboradorNome: updatedLoan.colaboradorNome,
+    colaboradorCpf: '',
+    status: updatedLoan.status,
+    emprestimo: lightweightLoan as CredImpactoEmprestimo,
+    autorId: autor.id,
+    autorNome: autor.nome
+  })
+
   return updatedLoan
 }
 
@@ -627,6 +719,20 @@ export async function dbDeleteEmprestimo(
       createdAt: new Date().toISOString()
     })
   } catch (err) {}
+
+  // 4. Emite broadcast Realtime de exclusão
+  await broadcastCredImpactoRealtimeEvent({
+    type: 'EMPRESTIMO_DELETE',
+    acao: 'EXCLUSAO',
+    emprestimoId: id,
+    codigoOperacao: previous.codigoOperacao,
+    colaboradorId: previous.colaboradorId,
+    colaboradorEmail: previous.colaboradorEmail,
+    colaboradorNome: previous.colaboradorNome,
+    colaboradorCpf: previous.colaboradorCpf,
+    autorId: autor.id,
+    autorNome: autor.nome
+  })
 
   return true
 }

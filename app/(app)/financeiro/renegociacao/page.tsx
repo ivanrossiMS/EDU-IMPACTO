@@ -1,10 +1,10 @@
 'use client'
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSupabaseArray } from '@/lib/useSupabaseCollection';
+import { useConfigDb } from '@/lib/useConfigDb';
 import { PageSkeleton } from '@/components/skeletons/PageSkeleton';
-﻿
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useData, newId } from '@/lib/dataContext'
 import { RefreshCw, Plus, X, Trash2, DollarSign, FileText, CheckCircle, Search, Filter, TrendingDown } from 'lucide-react'
 
@@ -30,8 +30,20 @@ const STATUS_BADGE = {
 export default function RenegociacaoPage() {
   const [alunos, setAlunos, { loading: l1 }] = useSupabaseArray<any>('alunos');
   const [titulos, setTitulos, { loading: l2 }] = useSupabaseArray<any>('titulos');
-  const [acordos, setAcordos] = useState<AcordoRenegociacao[]>([])
+  const { data: acordos, setData: setAcordos } = useConfigDb<AcordoRenegociacao>('fin_acordos_renegociacao', [])
   const { logSystemAction } = useData()
+
+  useEffect(() => {
+    fetch('/api/configuracoes?chave=fin_acordos_renegociacao')
+      .then(r => r.ok ? r.json() : null)
+      .then(val => {
+        if (Array.isArray(val) && val.length > 0 && (!acordos || acordos.length === 0)) {
+          setAcordos(val)
+        }
+      })
+      .catch(() => {})
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
   const [showModal, setShowModal] = useState(false)
   const [filtroStatus, setFiltroStatus] = useState<'todos'|'ativo'|'quitado'|'inadimplente'>('todos')
   const [search, setSearch] = useState('')
@@ -49,14 +61,14 @@ export default function RenegociacaoPage() {
   const inadimplentes = (alunos || []).filter(a=>a.inadimplente)
   const titulosAtrasados = (titulos || []).filter(t=>t.status==='atrasado')
 
-  // Quando seleciona aluno, preenche valor original e responsável automaticamente
+  // Quando seleciona aluno, preenche valor original (soma de todos os títulos atrasados) e responsável automaticamente
   const handleSelectAluno = (nome: string) => {
     const aluno = (alunos || []).find(a => a.nome === nome)
-    const titulo = (titulosAtrasados || []).find(t => t.aluno === nome)
-    const valorOrig = titulo?.valor || 0
+    const tits = titulosAtrasados.filter(t => t.aluno === nome)
+    const valorOrig = tits.reduce((s, t) => s + Number(t.valor || 0), 0)
     setForm(f => ({
       ...f, alunoNome: nome,
-      responsavel: aluno?.responsavel || titulo?.responsavel || '',
+      responsavel: aluno?.responsavel || tits[0]?.responsavel || '',
       valorOriginal: String(valorOrig),
       valorNegociado: String((valorOrig * 0.9).toFixed(2)),
       desconto: '10'
@@ -78,17 +90,18 @@ export default function RenegociacaoPage() {
     setForm(f=>({...f, valorNegociado:val, desconto:desc}))
   }
 
-  function handleSave() {
+  async function handleSave() {
     if(!form.alunoNome) return
+    const nParcelas = Math.max(1, parseInt(form.parcelas) || 1)
     const novo: AcordoRenegociacao = {
       id:newId('RNG'), ...form,
       valorOriginal: parseFloat(form.valorOriginal)||0,
       valorNegociado: parseFloat(form.valorNegociado)||0,
       desconto: parseFloat(form.desconto)||0,
-      parcelas: parseInt(form.parcelas)||1,
+      parcelas: nParcelas,
       motivoInadimpl: form.motivoInadimpl,
     }
-    setAcordos(prev=>[novo,...prev])
+    setAcordos(prev=>[novo,...(prev || [])])
     
     logSystemAction(
       'Financeiro (Renegociação)',
@@ -97,12 +110,68 @@ export default function RenegociacaoPage() {
       { registroId: novo.id, detalhesDepois: novo }
     )
     
-    setBuscaAluno('')
-    // Atualiza título para pendente se existia
-    const titulo = titulosAtrasados.find(t=>t.aluno===form.alunoNome)
-    if(titulo){
-      setTitulos(prev=>(prev || []).map(t=>t.id===titulo.id?{...t, valor:novo.valorNegociado, status:'pendente', descricao:`${t.descricao} [Reneg. ${form.parcelas}x]`}:t))
+    const titsAluno = titulosAtrasados.filter(t => t.aluno === form.alunoNome)
+    const baseData = new Date((form.data || getToday()) + 'T12:00:00')
+    const valorParcelaBase = Math.floor((novo.valorNegociado / nParcelas) * 100) / 100
+    const novasParcelas = Array.from({ length: nParcelas }, (_, idx) => {
+      const vencDate = new Date(baseData)
+      vencDate.setMonth(vencDate.getMonth() + idx)
+      const isUltima = idx === nParcelas - 1
+      const valParc = isUltima
+        ? Number((novo.valorNegociado - valorParcelaBase * (nParcelas - 1)).toFixed(2))
+        : valorParcelaBase
+      return {
+        id: `${novo.id}-P${String(idx + 1).padStart(2, '0')}`,
+        codigo: `${novo.id}-P${String(idx + 1).padStart(2, '0')}`,
+        aluno: novo.alunoNome,
+        responsavel: novo.responsavel,
+        descricao: `Acordo Renegociação ${novo.id} (${idx + 1}/${nParcelas})`,
+        valor: valParc,
+        vencimento: vencDate.toISOString().slice(0, 10),
+        pagamento: null,
+        status: 'pendente',
+        metodo: null,
+        parcela: `${idx + 1}/${nParcelas}`,
+        origemLanca: 'manual_receber',
+        acordoId: novo.id,
+      }
+    })
+
+    const idsOriginais = new Set(titsAluno.map(t => t.id))
+    setTitulos(prev => [
+      ...novasParcelas,
+      ...(prev || []).map(t =>
+        idsOriginais.has(t.id)
+          ? { ...t, status: 'renegociado', descricao: `${t.descricao} [Reneg. ${novo.id}]`, acordoId: novo.id }
+          : t
+      ),
+    ])
+
+    try {
+      await Promise.all(
+        titsAluno.map(t =>
+          fetch(`/api/titulos/${t.id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              ...t,
+              status: 'renegociado',
+              descricao: `${t.descricao} [Reneg. ${novo.id}]`,
+              acordoId: novo.id,
+            }),
+          })
+        )
+      )
+      await fetch('/api/titulos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(novasParcelas),
+      })
+    } catch (err) {
+      console.error('Erro ao persistir títulos da renegociação:', err)
     }
+
+    setBuscaAluno('')
     setShowModal(false)
     setForm({alunoNome:'',responsavel:'',valorOriginal:'',valorNegociado:'',desconto:'0',parcelas:'3',data:getToday(),status:'ativo',obs:'',motivoInadimpl:'Dificuldade financeira'})
   }

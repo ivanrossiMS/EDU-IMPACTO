@@ -631,7 +631,7 @@ export default function ADAdminPessoaDetail() {
 
   // Actions: Block / Unblock student access
   const handleToggleBlockAccess = () => {
-    const isCurrentlyBlocked = Boolean(aluno.bloqueadoAgenda)
+    const isCurrentlyBlocked = Boolean(aluno.bloqueadoAgenda || aluno.bloqueadoAgendaDigital)
     const actionLabel = isCurrentlyBlocked ? 'Desbloquear' : 'Bloquear'
 
     adConfirm(
@@ -639,9 +639,20 @@ export default function ADAdminPessoaDetail() {
       `${actionLabel} Acesso`,
       async () => {
         try {
+          const nextBlocked = !isCurrentlyBlocked
           await setAlunos((prev: any[]) =>
-            prev.map((a: any) => (a.id === aluno.id ? { ...a, bloqueadoAgenda: !isCurrentlyBlocked } : a))
+            prev.map((a: any) => (a.id === aluno.id ? { ...a, bloqueadoAgenda: nextBlocked, bloqueadoAgendaDigital: nextBlocked } : a))
           )
+          try {
+            const fullRes = await fetch(`/api/alunos/${encodeURIComponent(aluno.id)}`).catch(() => null)
+            const fullData = fullRes && fullRes.ok ? await fullRes.json().catch(() => null) : null
+            const baseAluno = fullData || aluno
+            await fetch(`/api/alunos?id=${encodeURIComponent(aluno.id)}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ ...baseAluno, bloqueadoAgenda: nextBlocked, bloqueadoAgendaDigital: nextBlocked })
+            })
+          } catch (_) {}
           adAlert(`Acesso ${isCurrentlyBlocked ? 'liberado' : 'bloqueado'} com sucesso!`, 'Atualização Salva')
         } catch (err) {
           console.error('Erro ao atualizar bloqueio:', err)
@@ -1195,12 +1206,9 @@ export default function ADAdminPessoaDetail() {
                 <div style={{ padding: 40, textAlign: 'center', color: 'hsl(var(--text-muted))', border: '1px dashed hsl(var(--border-subtle))', borderRadius: 12, display: 'flex', flexDirection: 'column', alignItems: 'center', margin: 'auto 0' }}>
                   <AlertTriangle size={32} style={{ marginBottom: 16, opacity: 0.5 }} />
                   <h4 style={{ fontSize: 16, fontWeight: 600, color: 'hsl(var(--text-main))', margin: '0 0 8px 0' }}>Sem dados recentes</h4>
-                  <p style={{ margin: '0 0 16px 0', fontSize: 14, maxWidth: 360 }}>
+                  <p style={{ margin: 0, fontSize: 14, maxWidth: 360 }}>
                     Esta família ainda não possui histórico de interações com o App.
                   </p>
-                  <button className="btn btn-secondary" onClick={generateSimulatedLogs}>
-                    <RefreshCw size={14} style={{ marginRight: 6 }} /> Gerar Dados Simulados
-                  </button>
                 </div>
               )}
             </div>

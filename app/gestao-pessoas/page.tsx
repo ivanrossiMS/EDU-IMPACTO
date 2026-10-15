@@ -308,7 +308,7 @@ export default function GestaoPessoasDashboard() {
                           <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 6px', background: '#e0f2fe', color: '#0284c7', borderRadius: 6, flexShrink: 0 }}>{p.tipo}</span>
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#64748b', fontSize: 12 }}>
-                          <CheckCircle2 size={14} color="#10b981" /> <strong>{p.qtd_respostas || 0}</strong> respostas coletadas
+                          <CheckCircle2 size={14} color="#10b981" /> <strong>{p.qtd_respostas ?? p.respostasCount ?? 0}</strong> respostas coletadas
                         </div>
                       </div>
                     ))}

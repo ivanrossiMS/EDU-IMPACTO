@@ -817,6 +817,7 @@ EXIGÊNCIA CONTÁBIL IMPERATIVA DE TOTALIZAÇÃO:
     try {
       const supabase = await createClient()
       const { data: userData } = await supabase.auth.getUser()
+      const user = userData?.user
 
       const payloadToSave: any = {
         id: savedDREId,
@@ -831,15 +832,26 @@ EXIGÊNCIA CONTÁBIL IMPERATIVA DE TOTALIZAÇÃO:
         criado_em: itemHistorico.criado_em
       }
 
-      if (userData?.user?.id) {
-        payloadToSave.usuario_id = userData.user.id
+      if (user?.id) {
+        payloadToSave.criado_por = user.id
       }
 
-      const { data: inserted, error: dbError } = await supabase
+      let { data: inserted, error: dbError } = await supabase
         .from('dre_uploads')
         .insert(payloadToSave)
         .select('id')
         .single()
+
+      if (dbError && payloadToSave.criado_por) {
+        const { criado_por: _cp, ...payloadFallback } = payloadToSave
+        const retry = await supabase
+          .from('dre_uploads')
+          .insert(payloadFallback)
+          .select('id')
+          .single()
+        inserted = retry.data
+        dbError = retry.error
+      }
 
       if (!dbError && inserted) {
         savedDREId = inserted.id

@@ -67,8 +67,10 @@ export default function ContasReceberPage() {
   const { cfgEventos, cfgMetodosPagamento, setMovimentacoesManuais, logSystemAction } = useData();
   const { currentUser } = useApp();
   const [alunos, setAlunos] = useSupabaseArray<any>('alunos');
-  // Removido endpoint 404 /api/financeiro/caixas provisoriamente
-  const caixasAbertos: any[] = []
+  const caixasAbertos: any[] = [
+    { id: 'CX-TESOURARIA', nome: 'Caixa Geral / Secretaria', nomeCaixa: 'Caixa Geral / Secretaria', fechado: false, dataAbertura: today(), operador: currentUser?.nome || 'Tesouraria' },
+    { id: 'CX-BANCO', nome: 'Conta Bancária / PIX', nomeCaixa: 'Conta Bancária / PIX', fechado: false, dataAbertura: today(), operador: currentUser?.nome || 'Banco' },
+  ]
   
   const [ctxTitulos, setTitulos] = useSupabaseArray<any>('titulos');
   
@@ -121,7 +123,7 @@ export default function ContasReceberPage() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [confirmId, setConfirmId] = useState<string | null>(null)
   const [form, setForm] = useState<typeof BLANK>({ ...BLANK })
-  const [baixaForm, setBaixaForm] = useState({ metodo: 'PIX', dataPagamento: today(), valorPago: 0, obs: '', caixaId: '' })
+  const [baixaForm, setBaixaForm] = useState({ metodo: 'PIX', dataPagamento: today(), valorPago: 0, obs: '', caixaId: 'CX-TESOURARIA' })
 
   const set = (k: string, v: unknown) => setForm(p => ({ ...p, [k]: v }))
   const anos = useMemo(() => [...new Set(titulosReceber.map(t => t.vencimento?.slice(0, 4)).filter(Boolean))].sort().reverse(), [titulosReceber])
@@ -254,7 +256,7 @@ export default function ContasReceberPage() {
   }
   const openBaixa = (t: Titulo) => {
     setEditingId(t.id)
-    const cxDef = caixasAbertos.filter(c => !c.fechado).sort((a, b) => b.dataAbertura.localeCompare(a.dataAbertura))[0]?.id ?? ''
+    const cxDef = caixasAbertos.filter(c => !c.fechado).sort((a, b) => (b.dataAbertura || '').localeCompare(a.dataAbertura || ''))[0]?.id || 'CX-TESOURARIA'
     setBaixaForm({ metodo: t.metodo ?? 'PIX', dataPagamento: today(), valorPago: t.valor, obs: '', caixaId: cxDef })
     setModal('baixa')
   }
@@ -317,44 +319,59 @@ export default function ContasReceberPage() {
     const titulo = titulos.find(t => t.id === editingId)
     if (!titulo) return
     
+    const valorPago = Number(baixaForm.valorPago || titulo.valor)
+    const isParcial = valorPago > 0 && valorPago < Number(titulo.valor)
+    const saldoResidual = Math.round((Number(titulo.valor) - valorPago) * 100) / 100
+
     const changes = {
       ...titulo, // preserva
       status: 'pago' as const, pagamento: baixaForm.dataPagamento,
-      metodo: baixaForm.metodo, valor: baixaForm.valorPago || titulo.valor,
+      metodo: baixaForm.metodo, valor: valorPago,
+      valorOriginal: (titulo as any).valorOriginal || titulo.valor,
       obs: baixaForm.obs,
     }
     
     // Upsert Instantâneo na Rota Segura (Zod e RLS validará automaticamente)
     await mutateTitulo.mutateAsync(changes)
 
-    // Espelhar como Movimentação na Rota Server-Side Segura
-    if (baixaForm.caixaId && titulo) {
-      try {
-        const response = await fetch('/api/financeiro/movimentacoes', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            caixaId: baixaForm.caixaId,
-            tipo: 'entrada',
-            valor: Math.abs(baixaForm.valorPago || titulo.valor),
-            descricao: `Contas a Receber — ${titulo.descricao}${titulo.aluno ? ` · ${titulo.aluno}` : ''}`,
-            data: baixaForm.dataPagamento,
-            operador: 'Sistema',
-            planoContasId: null,
-            forma_pagamento: baixaForm.metodo,
-            compensadoBanco: 'Compensado',
-            origem: 'baixa_receber',
-            referenciaId: titulo.id,
-            obs: baixaForm.obs || ''
-          })
-        })
-        if (!response.ok) {
-           const errText = await response.text()
-           console.error('SERVER REJECTED MOVIMENTACAO RECEBER:', errText)
-        }
-      } catch (e) {
-        console.error('Erro de rede ao injetar movimentação', e)
+    // Se for baixa parcial, cria automaticamente um novo título pendente com o saldo residual
+    if (isParcial && saldoResidual > 0) {
+      const residualPayload = {
+        ...titulo,
+        id: undefined,
+        codigo: `${(titulo as any).codigo || genCod(titulos as any)}-RES`,
+        descricao: `${titulo.descricao} (Saldo Residual)`,
+        valor: saldoResidual,
+        valorOriginal: (titulo as any).valorOriginal || titulo.valor,
+        status: 'pendente' as const,
+        pagamento: null,
+        origemLanca: (titulo as any).origemLanca || 'manual_receber',
+        dataLancamento: new Date().toISOString(),
+        usuarioLancamento: currentUser?.nome || 'Sistema',
       }
+      await mutateTitulo.mutateAsync(residualPayload)
+    }
+
+    // Espelhar no contexto local de movimentações manuais sem chamar rota inexistente
+    if (baixaForm.caixaId && titulo) {
+      setMovimentacoesManuais((prev: any) => [
+        {
+          id: newId('MOV'),
+          caixaId: baixaForm.caixaId,
+          tipo: 'entrada',
+          valor: Math.abs(valorPago),
+          descricao: `Contas a Receber — ${titulo.descricao}${titulo.aluno ? ` · ${titulo.aluno}` : ''}`,
+          data: baixaForm.dataPagamento,
+          operador: currentUser?.nome || 'Sistema',
+          planoContasId: null,
+          forma_pagamento: baixaForm.metodo,
+          compensadoBanco: 'Compensado',
+          origem: 'baixa_receber',
+          referenciaId: titulo.id,
+          obs: baixaForm.obs || ''
+        },
+        ...(Array.isArray(prev) ? prev : [])
+      ])
     }
     
     logSystemAction('Financeiro (Receber)', 'Baixa de Pagamento', `Título liquidado via ${baixaForm.metodo}`, { registroId: (titulo as any)?.codigo, nomeRelacionado: titulo?.aluno })
@@ -380,6 +397,34 @@ export default function ContasReceberPage() {
     setFiltroAging('todos'); setFiltroEvento('todos')
   }
 
+  const handleExportCSV = () => {
+    const headers = ['Código', 'Aluno', 'Responsável', 'Descrição', 'Vencimento', 'Pagamento', 'Valor', 'Status', 'Método']
+    const rows = filtered.map(t => [
+      (t as any).codigo || t.id,
+      t.aluno || '',
+      t.responsavel || '',
+      t.descricao || '',
+      t.vencimento || '',
+      t.pagamento || '',
+      Number(t.valor || 0).toFixed(2).replace('.', ','),
+      t.status || '',
+      t.metodo || '',
+    ])
+    const csvContent = [
+      headers.join(';'),
+      ...rows.map(r => r.map(field => `"${String(field).replace(/"/g, '""')}"`).join(';')),
+    ].join('\n')
+    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `contas-a-receber-${today()}.csv`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+
   const activeFilters = [filtroMetodo !== 'todos', filtroMes !== 'todos', filtroAno !== 'todos', dataVencDe, dataVencAte, filtroAging !== 'todos', filtroEvento !== 'todos'].filter(Boolean).length
 
   const selectedTitulo = titulos.find(t => t.id === editingId)
@@ -400,7 +445,7 @@ export default function ContasReceberPage() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
-          <button className="btn btn-secondary btn-sm"><Download size={13} />Exportar</button>
+          <button className="btn btn-secondary btn-sm" onClick={handleExportCSV}><Download size={13} />Exportar</button>
           <button className="btn btn-primary btn-sm" onClick={openNew}><Plus size={13} />Novo Título</button>
         </div>
       </div>

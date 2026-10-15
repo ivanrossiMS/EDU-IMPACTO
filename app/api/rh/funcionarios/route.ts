@@ -1,14 +1,62 @@
 import { NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/server/authGuard'
+import { requireStaff, resolveUserRole } from '@/lib/server/authGuard'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 import { getAdminClient, findAuthUserByEmail } from '@/lib/server/supabaseAdminSingleton'
 import { invalidateColaboradoresCache } from '@/lib/server/colaboradoresCache'
 
 export const dynamic = 'force-dynamic'
 
+const PRIVILEGED_HR_ROLES = new Set([
+  'administrador',
+  'administrador master',
+  'diretor',
+  'diretor geral',
+  'master',
+  'rh',
+  'gestor rh',
+  'recursos humanos',
+  'financeiro',
+  'gestor financeiro',
+])
+
+function isPrivilegedHrRole(perfil?: string | null, cargo?: string | null): boolean {
+  const p = String(perfil || '').trim().toLowerCase()
+  const c = String(cargo || '').trim().toLowerCase()
+  return (
+    PRIVILEGED_HR_ROLES.has(p) ||
+    PRIVILEGED_HR_ROLES.has(c) ||
+    p.includes('admin') ||
+    p.includes('diret') ||
+    p.includes('rh') ||
+    p.includes('financ') ||
+    c.includes('rh') ||
+    c.includes('recursos humanos')
+  )
+}
+
+function stripSensitiveFuncFields(obj: Record<string, any>) {
+  const clone = { ...obj }
+  delete clone.salario
+  delete clone.bonus
+  delete clone.pis
+  delete clone.banco
+  delete clone.agencia
+  delete clone.conta
+  delete clone.chavePix
+  delete clone.cpf
+  delete clone.rg
+  delete clone.ctps
+  return clone
+}
+
 export async function GET(request: Request) {
-  const { user, errorResponse } = await requireAuth()
-  if (errorResponse) return errorResponse
+  const roleCtx = await resolveUserRole(request)
+  if (roleCtx.errorResponse) return roleCtx.errorResponse
+  if (!roleCtx.isStaff) {
+    return NextResponse.json({ error: 'Acesso restrito a colaboradores.' }, { status: 403 })
+  }
+
+  const canSeeSensitive = isPrivilegedHrRole(roleCtx.perfil, roleCtx.cargo)
 
   try {
     // Usa admin client para leitura — evita problemas de RLS em tabela que não tem policy de SELECT
@@ -33,26 +81,29 @@ export async function GET(request: Request) {
     }
 
     if (lightweight) {
-      return NextResponse.json(((data || []) as any[]).map(r => ({
-        id: r.id,
-        nome: r.nome,
-        status: r.status,
-        email: r.email,
-        cpf: r.cpf,
-        cargo: r.cargo,
-        unidade: r.unidade,
-        codigo: r.codigo || r.dados?.codigo || r.dados?.matricula || '',
-        matricula: r.codigo || r.dados?.matricula || r.dados?.codigo || '',
-        telefone: r.celular || r.telefone || r.dados?.celular || r.dados?.telefone || '',
-        celular: r.celular || r.dados?.celular || r.telefone || r.dados?.telefone || '',
-        salario: r.salario ? Number(r.salario) : (r.dados?.salario ? Number(r.dados.salario) : undefined),
-        foto: r.dados?.foto || r.dados?.fotoUrl || r.dados?.avatarUrl || null
-      })))
+      return NextResponse.json(((data || []) as any[]).map(r => {
+        const item = {
+          id: r.id,
+          nome: r.nome,
+          status: r.status,
+          email: r.email,
+          cpf: r.cpf,
+          cargo: r.cargo,
+          unidade: r.unidade,
+          codigo: r.codigo || r.dados?.codigo || r.dados?.matricula || '',
+          matricula: r.codigo || r.dados?.matricula || r.dados?.codigo || '',
+          telefone: r.celular || r.telefone || r.dados?.celular || r.dados?.telefone || '',
+          celular: r.celular || r.dados?.celular || r.telefone || r.dados?.telefone || '',
+          salario: r.salario ? Number(r.salario) : (r.dados?.salario ? Number(r.dados.salario) : undefined),
+          foto: r.dados?.foto || r.dados?.fotoUrl || r.dados?.avatarUrl || null
+        }
+        return canSeeSensitive ? item : stripSensitiveFuncFields(item)
+      }))
     }
 
     return NextResponse.json(((data || []) as any[]).map(({ dados, ...r }) => {
       const { data_nascimento, tipo_contrato, carga_horaria, perfil_sistema, ...rest } = r
-      return {
+      const item = {
         ...rest,
         dataNascimento: data_nascimento,
         tipoContrato: tipo_contrato,
@@ -60,6 +111,7 @@ export async function GET(request: Request) {
         perfilSistema: perfil_sistema,
         ...(dados || {})
       }
+      return canSeeSensitive ? item : stripSensitiveFuncFields(item)
     }))
   } catch (e: any) {
     console.error('[funcionarios GET] unexpected:', e?.message)
@@ -309,8 +361,11 @@ async function syncFuncionarioAccess(
 }
 
 export async function POST(request: Request) {
-  const { user, errorResponse } = await requireAuth()
-  if (errorResponse) return errorResponse
+  const roleCtx = await resolveUserRole(request)
+  if (roleCtx.errorResponse) return roleCtx.errorResponse
+  if (!roleCtx.isStaff || !isPrivilegedHrRole(roleCtx.perfil, roleCtx.cargo)) {
+    return NextResponse.json({ error: 'Apenas Administradores, Diretores ou RH podem cadastrar/alterar funcionários.' }, { status: 403 })
+  }
 
   const supabase = await createProtectedClient();
   try {
@@ -403,7 +458,17 @@ export async function POST(request: Request) {
         
         for (const row of rowsToUpsert) {
           const oldFunc = currentMap.get(row.id) || (row.codigo ? currentByCodigo.get(row.codigo) : null);
-          await syncFuncionarioAccess(supabaseAdmin, row, oldFunc, allValidFuncEmails);
+          const accessFieldsChanged =
+            !oldFunc ||
+            String(oldFunc.email || '').trim().toLowerCase() !== String(row.email || '').trim().toLowerCase() ||
+            String(oldFunc.nome || '').trim() !== String(row.nome || '').trim() ||
+            String(oldFunc.cargo || '').trim() !== String(row.cargo || '').trim() ||
+            String(oldFunc.status || '').trim() !== String(row.status || '').trim() ||
+            String(oldFunc.perfil_sistema || '').trim() !== String(row.perfil_sistema || '').trim() ||
+            Boolean((row.dados as any)?.senha)
+          if (accessFieldsChanged) {
+            await syncFuncionarioAccess(supabaseAdmin, row, oldFunc, allValidFuncEmails);
+          }
         }
       }
       return NextResponse.json(body, { status: 201 })
@@ -474,8 +539,11 @@ export async function POST(request: Request) {
 }
 
 export async function PUT(request: Request) {
-  const { user, errorResponse } = await requireAuth()
-  if (errorResponse) return errorResponse
+  const roleCtx = await resolveUserRole(request)
+  if (roleCtx.errorResponse) return roleCtx.errorResponse
+  if (!roleCtx.isStaff || !isPrivilegedHrRole(roleCtx.perfil, roleCtx.cargo)) {
+    return NextResponse.json({ error: 'Apenas Administradores, Diretores ou RH podem alterar funcionários.' }, { status: 403 })
+  }
 
   const supabase = await createProtectedClient();
   const { searchParams } = new URL(request.url)
@@ -544,8 +612,11 @@ export async function PUT(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  const { user, errorResponse } = await requireAuth()
-  if (errorResponse) return errorResponse
+  const roleCtx = await resolveUserRole(request)
+  if (roleCtx.errorResponse) return roleCtx.errorResponse
+  if (!roleCtx.isStaff || !isPrivilegedHrRole(roleCtx.perfil, roleCtx.cargo)) {
+    return NextResponse.json({ error: 'Apenas Administradores, Diretores ou RH podem remover funcionários.' }, { status: 403 })
+  }
 
   const supabase = await createProtectedClient();
   const { searchParams } = new URL(request.url)

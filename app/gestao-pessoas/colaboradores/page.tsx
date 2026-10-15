@@ -4,8 +4,8 @@ import React, { useEffect, useState, useRef } from 'react'
 import { Search, UserPlus, Filter, Clock, Calendar, CheckCircle2, AlertTriangle, Printer, BadgeIcon, Download, Info, HeartPulse } from 'lucide-react'
 import { SidePanel } from '@/components/ui/SidePanel'
 
-type Funcionario = { id: string; nome: string; cpf: string; email: string; telefone: string; status: string; cargo: string; data_nascimento?: string; foto?: string }
-type Ausencia = { id: string; funcionario_id: string; tipo: string; data_inicio: string; data_fim: string; status: string; motivo?: string }
+type Funcionario = { id: string; nome: string; cpf: string; email: string; telefone: string; status: string; cargo: string; data_nascimento?: string; dataNascimento?: string; foto?: string }
+type Ausencia = { id: string; funcionario_id: string; tipo: string; data_inicio: string; dataInicio?: string; data_fim: string; dataFim?: string; status: string; motivo?: string; obs?: string; dados?: any }
 
 export default function GestaoPessoasColaboradores() {
   const [funcionarios, setFuncionarios] = useState<Funcionario[]>([])
@@ -318,7 +318,7 @@ export default function GestaoPessoasColaboradores() {
                 </div>
                 <div>
                   <div style={{ fontSize: 12, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 4 }}>Data Nasc.</div>
-                  <div style={{ fontSize: 15, color: '#0f172a', fontWeight: 500 }}>{selectedFunc.data_nascimento ? new Date(selectedFunc.data_nascimento).toLocaleDateString('pt-BR') : '-'}</div>
+                  <div style={{ fontSize: 15, color: '#0f172a', fontWeight: 500 }}>{(selectedFunc.data_nascimento || selectedFunc.dataNascimento) ? new Date(String(selectedFunc.data_nascimento || selectedFunc.dataNascimento)).toLocaleDateString('pt-BR') : '-'}</div>
                 </div>
               </div>
 
@@ -342,6 +342,9 @@ export default function GestaoPessoasColaboradores() {
                         // For ISO strings like 'YYYY-MM-DD', UTC prevents day shifting
                         return dString.length === 10 ? d.toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : d.toLocaleDateString('pt-BR')
                       }
+                      const dtInicio = aus.data_inicio || aus.dataInicio || aus.dados?.dataInicio || ''
+                      const dtFim = aus.data_fim || aus.dataFim || aus.dados?.dataFim || ''
+                      const motivoText = aus.motivo || aus.obs || aus.dados?.obs || ''
                       
                       return (
                       <div key={aus.id} style={{ padding: 16, border: '1px solid #e2e8f0', borderRadius: 12, background: '#fff' }}>
@@ -350,9 +353,9 @@ export default function GestaoPessoasColaboradores() {
                           <span style={{ fontSize: 12, fontWeight: 600, color: aus.status === 'aprovado' ? '#059669' : '#d97706', textTransform: 'uppercase' }}>{aus.status}</span>
                         </div>
                         <div style={{ fontSize: 13, color: '#64748b' }}>
-                          De {formatSafeDate(aus.data_inicio)} até {formatSafeDate(aus.data_fim)}
+                          De {formatSafeDate(dtInicio)} até {formatSafeDate(dtFim)}
                         </div>
-                        {aus.motivo && <div style={{ fontSize: 13, color: '#475569', marginTop: 8, background: '#f8fafc', padding: 8, borderRadius: 8 }}>{aus.motivo}</div>}
+                        {motivoText && <div style={{ fontSize: 13, color: '#475569', marginTop: 8, background: '#f8fafc', padding: 8, borderRadius: 8 }}>{motivoText}</div>}
                       </div>
                     )})}
                   </div>

@@ -30,7 +30,7 @@ const getTurnoBadgeStyle = (turno: string) => {
 }
 
 export default function TurmasPage() {
-  const { cfgNiveisEnsino, cfgTurnos, cfgCalendarioLetivo, logSystemAction } = useData()
+  const { cfgNiveisEnsino, cfgSeries, cfgTurnos, cfgCalendarioLetivo, logSystemAction } = useData()
   const queryClient = useQueryClient()
   
   const [search, setSearch] = useState('')
@@ -157,7 +157,8 @@ export default function TurmasPage() {
       
       if (res.ok) {
         const savedData = await res.json()
-        const realId = savedData.id || selectedTurma?.id
+        const newId = savedData?.data?.id || savedData?.id
+        const realId = newId || selectedTurma?.id
         logSystemAction(
           'Acadêmico (Turmas)',
           isEditing ? 'Edição' : 'Cadastro',
@@ -179,9 +180,13 @@ export default function TurmasPage() {
         setValidationErrors([])
         setIsValidationModalOpen(false)
         queryClient.invalidateQueries({ queryKey: ['turmas-paginadas'] })
+      } else {
+        const errData = await res.json().catch(() => ({}))
+        alert(`Erro ao salvar turma: ${errData.error || 'Falha na comunicação com o servidor.'}`)
       }
     } catch (error) {
       console.error('Erro ao salvar turma:', error)
+      alert('Erro de conexão ao salvar turma.')
     }
   }
 
@@ -584,7 +589,14 @@ export default function TurmasPage() {
   const totalPaginas = Math.ceil(totalItens / itensPorPagina)
 
   const selectedNivel = cfgNiveisEnsino?.find((n: any) => n.nome === formData.segmento)
-  const seriesDisponiveis = selectedNivel?.series || []
+  const seriesByNivel = (cfgSeries || []).filter((s: any) =>
+    selectedNivel && (
+      String(s.nivelEnsinoId || s.nivelId || '') === String(selectedNivel.id) ||
+      String(s.nivelEnsinoId || s.nivelId || '') === String(selectedNivel.codigo) ||
+      String(s.segmento || '') === String(selectedNivel.nome)
+    )
+  )
+  const seriesDisponiveis = seriesByNivel.length > 0 ? seriesByNivel : (selectedNivel?.series || [])
 
   return (
     <div className="turmas-page-container" style={{ padding: '24px', background: '#f8fafc', minHeight: '100vh' }}>

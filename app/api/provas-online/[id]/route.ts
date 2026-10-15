@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { requireAuth, requireStaff } from '@/lib/server/authGuard'
+import { resolveUserRole, requireStaff } from '@/lib/server/authGuard'
 import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 import { dbGetProvaById, dbSaveProva, dbDeleteProva, dbGetTentativasByProvaId, dbGetTentativaById } from '@/lib/provas-online/db'
 import { sanitizeExamForParticipant, shouldPublishResults } from '@/lib/provas-online/engine'
@@ -10,8 +10,8 @@ export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { user, errorResponse } = await requireAuth(request)
-  if (errorResponse) return errorResponse
+  const { user, isStaff, isFamilyOrStudent, errorResponse } = await resolveUserRole(request)
+  if (errorResponse || !user) return errorResponse!
 
   const { id } = await params
   let prova = await dbGetProvaById(id)
@@ -27,37 +27,47 @@ export async function GET(
     return NextResponse.json({ error: 'Prova não encontrada' }, { status: 404 })
   }
 
-  const adminClient = getAdminClient()
-  const { data: dbUser } = await adminClient
-    .from('system_users')
-    .select('id, perfil, cargo, nome, status')
-    .or(`id.eq.${user.id},auth_id.eq.${user.id},email.eq.${user.email}`)
-    .maybeSingle()
-
-  const isStaff = Boolean(dbUser && String(dbUser.status || 'ativo').toLowerCase() !== 'inativo')
-  const cargo = dbUser?.cargo || user.user_metadata?.cargo || ''
-  const perfil = dbUser?.perfil || user.user_metadata?.perfil || ''
-  const isStudent = !isStaff || cargo === 'Aluno' || perfil === 'Aluno' || Boolean(user.user_metadata?.aluno_id)
-  const isResponsible = !isStaff || cargo === 'Responsável' || perfil === 'Família' || perfil === 'Responsável'
-
   const { searchParams } = new URL(request.url)
   const requestedAlunoId = searchParams.get('aluno_id') || searchParams.get('slug')
 
   const tentativas = await dbGetTentativasByProvaId(prova.id)
 
-  if (!isStaff || isStudent || isResponsible) {
+  if (!isStaff || isFamilyOrStudent) {
     const alunoId = requestedAlunoId || user.user_metadata?.aluno_id || user.id
     const matricula = user.user_metadata?.matricula || ''
-    const myTentativa = initialTentativaFromId || tentativas.find(t => 
+    const rawTentativa = initialTentativaFromId || tentativas.find(t => 
       (t.alunoId === alunoId || t.alunoMatricula === alunoId || (matricula && t.alunoMatricula === matricula)) && 
       (t.status === 'em_andamento' || t.status === 'suspensa' || t.status === 'entregue' || t.statusCorrecao === 'corrigida')
     ) || null
     const canView = shouldPublishResults(prova, tentativas)
+    let myTentativa = rawTentativa
+    if (rawTentativa && !canView) {
+      const maskedRespostas: Record<string, any> = {}
+      for (const [k, v] of Object.entries(rawTentativa.respostas || {})) {
+        if (v && typeof v === 'object') {
+          const { pontuacaoObtida: _p, corrigida: _c, comentarioProfessor: _cp, ...rest } = v as any
+          maskedRespostas[k] = rest
+        } else {
+          maskedRespostas[k] = v
+        }
+      }
+      myTentativa = {
+        ...rawTentativa,
+        pontuacaoObjetiva: null,
+        pontuacaoDissertativa: null,
+        notaFinal: null,
+        respostas: maskedRespostas
+      }
+    }
     const sanitized = sanitizeExamForParticipant(prova, canView)
+    const quantidadeQuestoes = (prova as any).quantidadeQuestoes ?? (prova.questoes?.length || 0)
+    const safeProva = !myTentativa
+      ? { ...sanitized, questoes: [], quantidadeQuestoes }
+      : { ...sanitized, quantidadeQuestoes }
     return NextResponse.json({
-      prova: sanitized,
+      prova: safeProva,
       myTentativa,
-      ...sanitized
+      ...safeProva
     })
   }
 

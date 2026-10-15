@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/server/authGuard'
+import { requireStaff } from '@/lib/server/authGuard'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 
 export const dynamic = 'force-dynamic'
@@ -18,12 +18,10 @@ function brDateToISO(d: string): string {
 }
 
 export async function GET(request: Request) {
-  const { user, errorResponse } = await requireAuth()
+  const { user, errorResponse } = await requireStaff(request)
   if (errorResponse) return errorResponse
 
   const supabase = await createProtectedClient();
-  const { data: { user: currentUser }, error: authErr } = await supabase.auth.getUser()
-  console.log(`[DRE-AUTH] DRE API Hit. User: ${currentUser?.id}, AuthError: ${authErr?.message}`)
   
   try {
     const { searchParams } = new URL(request.url)
@@ -287,14 +285,9 @@ export async function GET(request: Request) {
     }
 
     // ── 5. Parcelas dos Alunos (aluno.dados.parcelas) ─────────────────────────
-    const { data: alunos, error: errAlunos5 } = await supabase
-      .from('alunos')
-      .select('id, nome, dados')
+    const alunos = precoAlunos || []
 
-    if (errAlunos5) console.error(`[DRE-DEBUG] Fatal error fetching alunos:`, errAlunos5)
-    console.log(`[DRE-DEBUG] Fetched ${alunos?.length || 0} alunos from DB in Section 5`)
-
-    for (const aluno of (alunos || []) as any[]) {
+    for (const aluno of alunos as any[]) {
       const dados    = aluno.dados || {}
       const parcelas: any[] = dados.parcelas || []
       

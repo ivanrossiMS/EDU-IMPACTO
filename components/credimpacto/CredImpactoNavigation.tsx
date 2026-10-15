@@ -71,6 +71,7 @@ export interface CredImpactoNavigationProps {
   totalAtivo?: number
   saldoDevedor?: number
   currentMe?: any
+  realtimeStatus?: 'connecting' | 'online' | 'offline'
 }
 
 interface NavItem {
@@ -112,7 +113,8 @@ export function CredImpactoSidebar({
   isRefreshing = false,
   totalAtivo = 0,
   saldoDevedor = 0,
-  currentMe
+  currentMe,
+  realtimeStatus = 'online'
 }: CredImpactoNavigationProps) {
   const { currentUser, theme, setTheme, setLoadingPath } = useApp()
   const router = useRouter()
@@ -355,7 +357,23 @@ export function CredImpactoSidebar({
           {/* WIDGET RESUMO FINANCEIRO */}
           <div className="p-2.5 rounded-xl bg-white/[0.05] border border-white/10 shadow-inner backdrop-blur-md">
             <div className="flex items-center justify-between text-slate-400 text-[10px] font-bold uppercase">
-              <span>{viewMode === 'admin' ? 'Total Concedido' : 'Meu Saldo Restante'}</span>
+              <div className="flex items-center gap-1.5">
+                <span
+                  className={`w-1.5 h-1.5 rounded-full ${
+                    realtimeStatus === 'online'
+                      ? 'bg-emerald-400 shadow-[0_0_6px_#10b981] animate-pulse'
+                      : realtimeStatus === 'connecting'
+                      ? 'bg-amber-400 animate-pulse'
+                      : 'bg-emerald-500/60'
+                  }`}
+                  title={
+                    realtimeStatus === 'online'
+                      ? 'Sincronizado em tempo real'
+                      : 'Sincronização automática ativa'
+                  }
+                />
+                <span>{viewMode === 'admin' ? 'Total Concedido' : 'Meu Saldo Restante'}</span>
+              </div>
               <button
                 onClick={onRefresh}
                 disabled={isRefreshing}

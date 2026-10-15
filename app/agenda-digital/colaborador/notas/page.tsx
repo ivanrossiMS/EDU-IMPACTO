@@ -102,16 +102,16 @@ export default function ColaboradorNotasPage() {
   const boletinsQueryKey = useMemo(() => ['boletins-colaborador', selectedTurmaId, selectedAno], [selectedTurmaId, selectedAno])
   const boletinsEndpoint = useMemo(() => {
     if (selectedTurmaId !== 'all') {
-      return `/api/boletins?turma_id=${selectedTurmaId}`
+      return `/api/boletins?turma_id=${selectedTurmaId}&limit=5000`
     }
     if (isEquipeEscolar) {
-      return '/api/boletins'
+      return '/api/boletins?limit=5000'
     }
     if (activeTurmas.length > 0) {
       const ids = activeTurmas.map(t => t.id).join(',')
-      return `/api/boletins?turma_ids=${ids}`
+      return `/api/boletins?turma_ids=${ids}&limit=5000`
     }
-    return '/api/boletins'
+    return '/api/boletins?limit=5000'
   }, [selectedTurmaId, activeTurmas, isEquipeEscolar])
 
   const { data: rawBoletins, isLoading: isLoadingBoletins } = useApiQuery<any>(
@@ -119,6 +119,14 @@ export default function ColaboradorNotasPage() {
     boletinsEndpoint,
     undefined,
     { enabled: activeTurmas.length > 0 || isMasterAdmin }
+  )
+
+  // 2.1 Busca dedicada dos boletins do aluno selecionado ao abrir o modal (garante 100% dos bimestres do aluno)
+  const { data: rawModalStudentBoletins } = useApiQuery<any>(
+    ['boletins-student-modal', selectedStudentForModal?.id || ''],
+    `/api/boletins?aluno_id=${selectedStudentForModal?.id}&limit=100`,
+    undefined,
+    { enabled: !!selectedStudentForModal?.id }
   )
 
   const allBoletins: any[] = useMemo(() => {
@@ -350,12 +358,50 @@ export default function ColaboradorNotasPage() {
     if (!selectedStudentForModal) return []
     const alunoIdStr = String(selectedStudentForModal.id)
     const alunoSemZero = alunoIdStr.replace(/^0+/, '')
-    return allBoletins.filter(b => 
+
+    const fromAll = allBoletins.filter(b => 
       b.alunoIdStr === alunoIdStr || 
       b.alunoIdStr === alunoSemZero || 
       String(b.aluno_id) === alunoIdStr
     )
-  }, [selectedStudentForModal, allBoletins])
+
+    const rawList = Array.isArray(rawModalStudentBoletins) 
+      ? rawModalStudentBoletins 
+      : (rawModalStudentBoletins?.data || [])
+
+    const fromStudentQuery = rawList.map((b: any) => {
+      let parsedDados = b.dados
+      if (typeof parsedDados === 'string') {
+        try { parsedDados = JSON.parse(parsedDados) } catch { parsedDados = {} }
+      } else if (!parsedDados) {
+        parsedDados = {}
+      }
+
+      const ano = parsedDados.ano || (b.created_at ? new Date(b.created_at).getFullYear().toString() : '2026')
+      const tId = b.turma_id || b.turma
+      const tObj = turmas.find(t => String(t.id) === String(tId) || String(t.codigo) === String(tId) || String(t.nome) === String(tId))
+      const nomeTurma = b.turmaNome || tObj?.nome || b.turma || 'Sem Turma'
+      const rawBim = b.bimestre || parsedDados.bimestre || ''
+      const bimNum = getBimestreNumber(rawBim)
+      const formattedBim = formatBimestreLabel(rawBim)
+
+      return {
+        ...b,
+        parsedDados,
+        anoStr: String(ano),
+        nomeTurma,
+        alunoIdStr: String(b.aluno_id || b.alunoId || ''),
+        bimNum,
+        formattedBim
+      }
+    })
+
+    const map = new Map<string, any>()
+    fromAll.forEach(b => { if (b.id) map.set(b.id, b) })
+    fromStudentQuery.forEach((b: any) => { if (b.id) map.set(b.id, b) })
+
+    return Array.from(map.values())
+  }, [selectedStudentForModal, allBoletins, rawModalStudentBoletins, turmas])
 
   const modalAnosDisponiveis = useMemo(() => {
     const anos = modalStudentBoletins.map(b => b.anoStr)
@@ -399,52 +445,139 @@ export default function ColaboradorNotasPage() {
     return list.sort((a, b) => a.bimNum - b.bimNum || a.originalTitle.localeCompare(b.originalTitle))
   }, [selectedStudentForModal, modalStudentBoletins, modalAno])
 
-  // Auto-select preferred bimestre in modal
+  // Todas as abas de bimestres que devem aparecer (1º ao 4º ou mais, se houver)
+  const modalBimestreTabs = useMemo(() => {
+    if (!selectedStudentForModal) return []
+
+    const setNums = new Set<number>()
+    modalBimestresDisponiveis.forEach(b => {
+      if (b.bimNum > 0) setNums.add(b.bimNum)
+    })
+
+    // Na estrutura escolar, existem no mínimo 4 bimestres
+    const maxBim = Math.max(4, ...Array.from(setNums))
+    const tabs: Array<{
+      id: string
+      bimNum: number
+      label: string
+      fullLabel: string
+      hasData: boolean
+      boletim: any | null
+    }> = []
+
+    for (let i = 1; i <= maxBim; i++) {
+      const match = modalBimestresDisponiveis.find(b => b.bimNum === i)
+      if (match) {
+        tabs.push({
+          id: match.id,
+          bimNum: i,
+          label: `${i}º Bim`,
+          fullLabel: match.nome || `${i}º Bimestre`,
+          hasData: true,
+          boletim: match
+        })
+      } else {
+        tabs.push({
+          id: `bim_${i}`,
+          bimNum: i,
+          label: `${i}º Bim`,
+          fullLabel: `${i}º Bimestre`,
+          hasData: false,
+          boletim: null
+        })
+      }
+    }
+
+    // Se houver algum boletim cadastrado com número fora do intervalo 1..maxBim
+    modalBimestresDisponiveis.forEach(b => {
+      if (!tabs.some(t => t.id === b.id)) {
+        tabs.push({
+          id: b.id,
+          bimNum: b.bimNum || 0,
+          label: (b.nome || 'Bimestre').replace('Bimestre', 'Bim'),
+          fullLabel: b.nome || 'Bimestre',
+          hasData: true,
+          boletim: b
+        })
+      }
+    })
+
+    return tabs
+  }, [selectedStudentForModal, modalBimestresDisponiveis])
+
+  // Auto-select preferred bimestre in modal:
+  // "deve aparecer todos os bimestres mas vir selecionado o ultimo bimestre cadastrado."
   useEffect(() => {
-    if (selectedStudentForModal && modalBimestresDisponiveis.length > 0) {
-      // 0. If user specifically selected 'media_anual', maintain it!
+    if (selectedStudentForModal && modalBimestreTabs.length > 0) {
+      // 0. Se o usuário selecionou 'media_anual' explicitamente, mantém
       if (modalBimestreId === 'media_anual') {
         return
       }
-      // 1. If currently displayed modalBimestreId still exists in modal, keep it!
-      if (modalBimestreId && modalBimestresDisponiveis.some(b => b.id === modalBimestreId)) {
-        return
-      }
-      // 2. If student has activeBoletim in modal, select it!
-      if (selectedStudentForModal.activeBoletim?.id) {
-        const match = modalBimestresDisponiveis.find(b => b.id === selectedStudentForModal.activeBoletim.id)
-        if (match) {
-          setModalBimestreId(match.id)
+
+      // Encontrar todos os bimestres que possuem notas cadastradas
+      const cadastrados = modalBimestreTabs.filter(t => t.hasData)
+      // O último bimestre cadastrado (maior bimNum)
+      const ultimoCadastrado = cadastrados.length > 0
+        ? [...cadastrados].sort((a, b) => b.bimNum - a.bimNum)[0]
+        : null
+
+      // 1. Se o modal acabou de abrir ou não há seleção ativa:
+      if (!modalBimestreId) {
+        // Se o usuário na página principal filtrou por um bimestre específico (ex: 2ºBim):
+        if (selectedBimestre !== 'ultimo') {
+          const targetBimNum = parseInt(selectedBimestre, 10)
+          const targetTab = modalBimestreTabs.find(t => t.bimNum === targetBimNum)
+          if (targetTab) {
+            setModalBimestreId(targetTab.id)
+            return
+          }
+        }
+
+        // Padrão: vir selecionado o ÚLTIMO BIMESTRE CADASTRADO
+        if (ultimoCadastrado) {
+          setModalBimestreId(ultimoCadastrado.id)
           return
         }
-      }
-      // 3. If user is filtering by a specific bimester and student has it in modal:
-      if (selectedBimestre !== 'ultimo') {
-        const targetBimNum = parseInt(selectedBimestre, 10)
-        const match = modalBimestresDisponiveis.find(b => b.bimNum === targetBimNum)
-        if (match) {
-          setModalBimestreId(match.id)
-          return
-        }
-      }
-      // 4. Otherwise pick the highest bimester available for this student
-      const highest = [...modalBimestresDisponiveis].sort((a, b) => b.bimNum - a.bimNum)[0]
-      if (highest) {
-        setModalBimestreId(highest.id)
+
+        // Se nenhum estiver cadastrado ainda, seleciona a primeira aba
+        setModalBimestreId(modalBimestreTabs[0].id)
         return
       }
-      setModalBimestreId(modalBimestresDisponiveis[modalBimestresDisponiveis.length - 1].id)
+
+      // 2. Se o modalBimestreId atual ainda existe nas abas, mantém
+      const exists = modalBimestreTabs.some(t => t.id === modalBimestreId)
+      if (exists) {
+        return
+      }
+
+      // 3. Fallback: seleciona o último cadastrado ou a primeira aba
+      if (ultimoCadastrado) {
+        setModalBimestreId(ultimoCadastrado.id)
+      } else {
+        setModalBimestreId(modalBimestreTabs[0].id)
+      }
     } else if (!selectedStudentForModal) {
       setModalBimestreId(null)
     }
-  }, [selectedStudentForModal, modalBimestresDisponiveis, selectedBimestre, modalBimestreId])
+  }, [selectedStudentForModal, modalBimestreTabs, selectedBimestre, modalBimestreId])
 
   const isMediaAnual = modalBimestreId === 'media_anual'
 
   const currentModalBoletim = useMemo(() => {
     if (!modalBimestreId || modalBimestreId === 'media_anual') return null
-    return modalBimestresDisponiveis.find(b => b.id === modalBimestreId) || null
+    const byId = modalBimestresDisponiveis.find(b => b.id === modalBimestreId)
+    if (byId) return byId
+    if (modalBimestreId.startsWith('bim_')) {
+      const num = parseInt(modalBimestreId.replace('bim_', ''), 10)
+      return modalBimestresDisponiveis.find(b => b.bimNum === num) || null
+    }
+    return null
   }, [modalBimestreId, modalBimestresDisponiveis])
+
+  const currentModalTab = useMemo(() => {
+    if (!modalBimestreId || modalBimestreId === 'media_anual') return null
+    return modalBimestreTabs.find(t => t.id === modalBimestreId) || null
+  }, [modalBimestreId, modalBimestreTabs])
 
   const totalBimestresLancados = useMemo(() => {
     const seen = new Set<number>()
@@ -1122,46 +1255,35 @@ export default function ColaboradorNotasPage() {
                 }}
               >
                 {/* Top Info */}
-                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
-                  <div className="notas-student-avatar">
-                    <UserAvatar
-                      userId={st.id}
-                      name={st.nome || 'Aluno'}
-                      fotoUrl={st.foto || st.avatar_url || st.avatar}
-                      size={46}
-                      className="shadow-sm"
-                    />
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <h3 className="notas-student-name" style={{ 
-                      fontSize: 16, 
-                      fontWeight: 800, 
-                      color: '#0f172a', 
-                      margin: '0 0 4px 0',
-                      whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis'
-                    }}>
-                      {st.nome}
-                    </h3>
+                <div style={{ minWidth: 0 }}>
+                  <h3 className="notas-student-name" style={{ 
+                    fontSize: 16, 
+                    fontWeight: 800, 
+                    color: '#0f172a', 
+                    margin: '0 0 6px 0',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis'
+                  }}>
+                    {st.nome}
+                  </h3>
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                      <span style={{ 
-                        fontSize: 12, 
-                        fontWeight: 700, 
-                        color: '#2563eb', 
-                        background: '#eff6ff', 
-                        padding: '2px 8px', 
-                        borderRadius: 6 
-                      }}>
-                        {st.turmaDisplay}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <span style={{ 
+                      fontSize: 12, 
+                      fontWeight: 700, 
+                      color: '#2563eb', 
+                      background: '#eff6ff', 
+                      padding: '2px 8px', 
+                      borderRadius: 6 
+                    }}>
+                      {st.turmaDisplay}
+                    </span>
+                    {st.matricula && (
+                      <span style={{ fontSize: 12, color: '#94a3b8', fontWeight: 500 }}>
+                        Matr: {st.matricula}
                       </span>
-                      {st.matricula && (
-                        <span style={{ fontSize: 12, color: '#94a3b8', fontWeight: 500 }}>
-                          Matr: {st.matricula}
-                        </span>
-                      )}
-                    </div>
+                    )}
                   </div>
                 </div>
 
@@ -1326,7 +1448,7 @@ export default function ColaboradorNotasPage() {
                       Boletim Escolar
                     </div>
                     <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600, marginTop: 2 }}>
-                      {isMediaAnual ? `Média Anual Progressiva (${totalBimestresLancados} ${totalBimestresLancados === 1 ? 'Bimestre' : 'Bimestres'})` : (currentModalBoletim?.originalTitle || 'Boletim')} • Ano {modalAno || selectedAno}
+                      {isMediaAnual ? `Média Anual Progressiva (${totalBimestresLancados} ${totalBimestresLancados === 1 ? 'Bimestre' : 'Bimestres'})` : (currentModalBoletim?.originalTitle || currentModalTab?.fullLabel || 'Boletim')} • Ano {modalAno || selectedAno}
                     </div>
                   </div>
                 </div>
@@ -1414,7 +1536,7 @@ export default function ColaboradorNotasPage() {
                 )}
 
                 {/* Bimestres Buttons */}
-                {modalBimestresDisponiveis.length > 0 && (
+                {modalBimestreTabs.length > 0 && (
                   <div style={{
                     display: 'flex',
                     gap: 6,
@@ -1426,6 +1548,7 @@ export default function ColaboradorNotasPage() {
                   }}>
                     {/* Botão Média Anual - Antes dos bimestres */}
                     <button
+                      type="button"
                       onClick={() => setModalBimestreId('media_anual')}
                       style={{
                         padding: '6px 14px',
@@ -1449,12 +1572,13 @@ export default function ColaboradorNotasPage() {
                       <span>Média Anual</span>
                     </button>
 
-                    {modalBimestresDisponiveis.map(b => {
-                      const isSelected = modalBimestreId === b.id
+                    {modalBimestreTabs.map(tab => {
+                      const isSelected = modalBimestreId === tab.id
                       return (
                         <button
-                          key={b.id}
-                          onClick={() => setModalBimestreId(b.id)}
+                          key={tab.id}
+                          type="button"
+                          onClick={() => setModalBimestreId(tab.id)}
                           style={{
                             padding: '6px 14px',
                             borderRadius: 10,
@@ -1464,12 +1588,13 @@ export default function ColaboradorNotasPage() {
                             whiteSpace: 'nowrap',
                             cursor: 'pointer',
                             background: isSelected ? '#2563eb' : 'transparent',
-                            color: isSelected ? '#ffffff' : '#475569',
+                            color: isSelected ? '#ffffff' : (tab.hasData ? '#475569' : '#94a3b8'),
                             boxShadow: isSelected ? '0 2px 8px rgba(37,99,235,0.25)' : 'none',
                             transition: 'all 0.2s ease'
                           }}
+                          title={tab.hasData ? `${tab.fullLabel} (Notas lançadas)` : `${tab.fullLabel} (Sem notas cadastradas)`}
                         >
-                          {b.nome.replace('Bimestre', 'Bim')}
+                          {tab.label}
                         </button>
                       )
                     })}
@@ -1815,7 +1940,7 @@ export default function ColaboradorNotasPage() {
                       Nenhum boletim lançado
                     </h3>
                     <p style={{ fontSize: 14, color: '#64748b', margin: 0, maxWidth: 360 }}>
-                      Não há notas registradas para este aluno no período selecionado ({modalAno || selectedAno}).
+                      Não há notas registradas para o {currentModalTab?.fullLabel || 'período selecionado'} deste aluno no ano letivo selecionado ({modalAno || selectedAno}).
                     </p>
                   </div>
                 ) : (

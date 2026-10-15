@@ -18,18 +18,8 @@ interface Props {
 
 async function resolverContratoAssinatura(rawToken: string) {
   const clean = decodeURIComponent(rawToken || '').trim()
-  if (!clean) return null
-  let contrato = await buscarContratoPorToken(clean)
-  if (!contrato) {
-    contrato = await buscarContratoPorProtocolo(clean)
-  }
-  if (!contrato) {
-    contrato = await buscarContratoPorId(clean)
-  }
-  if (!contrato && clean.length >= 8) {
-    contrato = await buscarContratoPorHash(clean)
-  }
-  return contrato
+  if (!clean || /^IMP-\d{4}-/i.test(clean)) return null
+  return await buscarContratoPorToken(clean)
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {

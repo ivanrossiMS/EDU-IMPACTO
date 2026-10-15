@@ -45,10 +45,11 @@ export function calcFatorVencimento(dataISO: string): string {
  * Útil para verificação/auditoria
  */
 export function fatorParaData(fator: string): string {
-  const f = parseInt(fator)
+  const f = parseInt(fator, 10)
   if (isNaN(f) || f < 1000 || f > 9999) return ''
-  
-  const diasDesdeBase = f - FATOR_BASE
+
+  // Fatores entre 1000 e 4500 no contexto atual pertencem ao 2º ciclo (pós-22/02/2025: dias = f + 9000)
+  const diasDesdeBase = f < 4500 ? f + 9000 : f - FATOR_BASE
   const dataVenc = new Date(BASE_DATE.getTime() + diasDesdeBase * 24 * 60 * 60 * 1000)
   return dataVenc.toISOString().slice(0, 10)
 }

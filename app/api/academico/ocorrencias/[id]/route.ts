@@ -1,26 +1,55 @@
 import { NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/server/authGuard'
-import { db } from '@/lib/mockDb'
+import { requireStaff } from '@/lib/server/authGuard'
+import { supabaseServer as supabase } from '@/lib/supabaseServer'
 
-export async function PUT(request: Request, context: any) {
-  const { user, errorResponse } = await requireAuth()
+export const dynamic = 'force-dynamic'
+
+export async function PUT(request: Request, context: { params: Promise<{ id: string }> }) {
+  const { errorResponse } = await requireStaff(request)
   if (errorResponse) return errorResponse
 
-  const id = context.params.id;
+  const { id } = await context.params
   const updates = await request.json()
-  const index = db.ocorrencias.findIndex((c: any) => c.id === id)
-  if (index === -1) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  db.ocorrencias[index] = { ...db.ocorrencias[index], ...updates }
-  return NextResponse.json(db.ocorrencias[index])
+
+  const { data: existing } = await supabase
+    .from('ocorrencias')
+    .select('*')
+    .eq('id', id)
+    .maybeSingle()
+
+  if (!existing) {
+    return NextResponse.json({ error: 'Ocorrência não encontrada' }, { status: 404 })
+  }
+
+  const dados = { ...(existing.dados || {}), ...updates }
+  const payload: Record<string, any> = {
+    dados,
+    aluno_id: updates.aluno_id ?? updates.alunoId ?? existing.aluno_id,
+    turma_id: updates.turma_id ?? updates.turma ?? existing.turma_id,
+    data: updates.data ?? existing.data,
+    tipo: updates.tipo ?? existing.tipo,
+    descricao: updates.descricao ?? existing.descricao,
+    gravidade: updates.gravidade ?? existing.gravidade,
+    responsavel: updates.responsavel ?? existing.responsavel,
+  }
+
+  const { data, error } = await supabase
+    .from('ocorrencias')
+    .update(payload)
+    .eq('id', id)
+    .select()
+    .single()
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+  return NextResponse.json({ ...(data.dados || {}), ...data })
 }
 
-export async function DELETE(request: Request, context: any) {
-  const { user, errorResponse } = await requireAuth()
+export async function DELETE(request: Request, context: { params: Promise<{ id: string }> }) {
+  const { errorResponse } = await requireStaff(request)
   if (errorResponse) return errorResponse
 
-  const id = context.params.id;
-  const index = db.ocorrencias.findIndex((c: any) => c.id === id)
-  if (index === -1) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  const deleted = db.ocorrencias.splice(index, 1)
-  return NextResponse.json(deleted)
+  const { id } = await context.params
+  const { error } = await supabase.from('ocorrencias').delete().eq('id', id)
+  if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+  return NextResponse.json({ ok: true, id })
 }

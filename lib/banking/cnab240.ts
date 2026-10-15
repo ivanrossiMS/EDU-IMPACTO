@@ -153,7 +153,7 @@ export function gerarSegmentoP(
     numZ(convenio.conta.replace(/\D/g, ''), 12) +       // 24-35: Conta
     numZ(0, 1) +                                         // 36:    DV conta
     numZ(0, 1) +                                         // 37:    DV ag+conta
-    alfaL(convenio.convenio, 20) +                       // 38-57: Nosso nº/identificação
+    alfaL(titulo.nossoNumero || convenio.convenio || '', 20) + // 38-57: Nosso nº/identificação
     numZ(titulo.carteira || convenio.carteira || '109', 3) + // 58-60: Carteira
     tipoCarteira +                                        // 61:    Tipo carteira
     formaCadastro +                                       // 62:    Forma cadastro
@@ -182,8 +182,7 @@ export function gerarSegmentoP(
     numZ(0, 2) +                                         // 225-226: Código baixa (0=sem baixa)
     numZ(0, 3) +                                         // 227-229: Prazo baixa
     numZ(986, 3) +                                       // 230-232: Moeda (986=Real)
-    z(10) +                                              // 233-242 → ajusta para 240
-    ' '                                                  // extra fill
+    z(8)                                                 // 233-240: Zeros reservado
 
   // Ajusta para exatamente 240
   return assertLen240(linha.slice(0, 240).padEnd(240, ' '), 'Segmento P')
@@ -305,7 +304,7 @@ export function gerarTrailerLote(
     b(9) +
     numZ(qtdRegistros, 6) +    // Qtd registros no lote (incluindo header e trailer)
     numZ(qtdTitulos, 6) +      // Qtd títulos
-    z(17) +                    // Valor total cobrança simples
+    formatarValorCNAB(valorTotal, 17) + // Valor total cobrança simples
     numZ(0, 6) +               // Qtd cobrança vinculada
     z(17) +                    // Valor cobrança vinculada
     numZ(0, 6) +               // Qtd cobrança descontada
@@ -367,18 +366,18 @@ export function gerarArquivoRemessa240(
     segSeq++
 
     // Segmento P
-    linhas.push(gerarSegmentoP(titulo, convenio, lote, seqReg + segSeq - 1))
+    linhas.push(gerarSegmentoP(titulo, convenio, lote, segSeq))
     seqReg++
 
     // Segmento Q
     segSeq++
-    linhas.push(gerarSegmentoQ(titulo, lote, seqReg + segSeq - 2))
+    linhas.push(gerarSegmentoQ(titulo, lote, segSeq))
     seqReg++
 
     // Segmento R (somente se há encargos)
     if (titulo.percJuros || titulo.percMulta) {
       segSeq++
-      linhas.push(gerarSegmentoR(titulo, lote, seqReg + segSeq - 3))
+      linhas.push(gerarSegmentoR(titulo, lote, segSeq))
       seqReg++
     }
   }

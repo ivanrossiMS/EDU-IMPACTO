@@ -63,13 +63,31 @@ function GestaoPessoasLayoutInner({ children }: { children: React.ReactNode }) {
   React.useEffect(() => {
     if (!hydrated) return
 
+    const restrictedPaths = ['/gestao-pessoas/colaboradores', '/gestao-pessoas/sst', '/gestao-pessoas/shai']
+    const isTryingToAccessRestricted = restrictedPaths.some(p => pathname.startsWith(p))
+    const pLow = String(currentUser?.perfil || '').toLowerCase()
+    const cLow = String(currentUser?.cargo || '').toLowerCase()
+    const isAdmin =
+      currentUser?.cargo === 'Administrador Master' ||
+      currentUser?.perfil === 'Administrador' ||
+      currentUser?.perfil === 'Diretor Geral' ||
+      currentUser?.cargo === 'Diretor Geral' ||
+      currentUser?.perfil === 'Administrador Master' ||
+      currentUser?.cargo === 'Administrador' ||
+      pLow === 'rh' ||
+      pLow === 'gestor rh' ||
+      cLow.includes('rh') ||
+      cLow.includes('recursos humanos')
+
     // Timeout de emergência: se após 1.5s o acesso não foi resolvido (ex: perfis travado),
-    // libera o acesso para funcionários internos e nega para família/alunos.
+    // libera o acesso para funcionários internos (respeitando restrictedPaths) e nega para família/alunos.
     const emergencyTimer = setTimeout(() => {
       setAccessState(prev => {
         if (prev !== 'checking') return prev
         const isFamily = currentUser?.perfil === 'Família' || currentUser?.cargo === 'Aluno' || currentUser?.cargo === 'Responsável'
-        return isFamily ? 'denied' : 'allowed'
+        if (isFamily) return 'denied'
+        if (!isAdmin && isTryingToAccessRestricted) return 'denied'
+        return 'allowed'
       })
     }, 1500)
 
@@ -91,16 +109,6 @@ function GestaoPessoasLayoutInner({ children }: { children: React.ReactNode }) {
     
     // Se o perfil não foi encontrado na tabela, por padrão PERMITE acesso a funcionários internos (exceto rotas restritas)
     const hasAccess = userPerfilObj ? !userPerfilObj.bloqueadoGestaoPessoas : true
-    
-    const isAdmin = 
-      currentUser.cargo === 'Administrador Master' || 
-      currentUser.perfil === 'Administrador' || 
-      currentUser.perfil === 'Diretor Geral' ||
-      currentUser.cargo === 'Diretor Geral' ||
-      currentUser.perfil === 'Administrador Master' ||
-      currentUser.cargo === 'Administrador'
-    const restrictedPaths = ['/gestao-pessoas/colaboradores', '/gestao-pessoas/sst', '/gestao-pessoas/shai']
-    const isTryingToAccessRestricted = restrictedPaths.some(p => pathname.startsWith(p))
 
     if (hasAccess) {
       if (!isAdmin && isTryingToAccessRestricted) {

@@ -1090,7 +1090,7 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
     }
   }, [emit, addLog, sendBroadcast])
 
-  // ── Zerar lista diariamente às 23:59 ────────────────────────────────────────
+  // ── Zerar lista em memória diariamente às 23:59 (preservando histórico no DB) ──
   useEffect(() => {
     const checkTimeAndClear = () => {
       const d = new Date()
@@ -1099,14 +1099,14 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
         const todayStr = getTodayStr()
         // Prevents triggering multiple times in the same minute
         if (lastCleared !== todayStr) {
-          clearCalls()
+          setActiveCalls([])
           localStorage.setItem('lastClearedDate', todayStr)
         }
       }
     }
     const interval = setInterval(checkTimeAndClear, 30000) // Check every 30s
     return () => clearInterval(interval)
-  }, [clearCalls, getTodayStr])
+  }, [getTodayStr, setActiveCalls])
 
   const refreshCalls = useCallback(async () => {
     try {

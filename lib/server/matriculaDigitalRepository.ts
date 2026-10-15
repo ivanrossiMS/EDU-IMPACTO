@@ -545,31 +545,32 @@ async function getAllFromStorage(forceRefresh = false): Promise<{ list: Contrato
     }
   }
 
-  // 2. Consulta fallback de metadados em configuracoes
+  // 2. Consulta fallback de metadados em configuracoes apenas se a tabela dedicada falhou ou está vazia
   let fallbackContracts: ContratoDigitalModel[] = []
-  try {
-    const { data: cfgRow, error: cfgError } = await supabase
-      .from('configuracoes')
-      .select('valor')
-      .eq('chave', FALLBACK_KEY)
-      .maybeSingle()
-
-    if (cfgError) {
-      console.warn('[Repository] Aviso ao ler configuracoes fallback, realizando retry:', cfgError)
-      const { data: retryRow, error: retryErr } = await supabase
+  if (!tableQuerySuccess || dbContracts.length === 0) {
+    try {
+      const { data: cfgRow, error: cfgError } = await supabase
         .from('configuracoes')
         .select('valor')
         .eq('chave', FALLBACK_KEY)
         .maybeSingle()
 
-      if (!retryErr && retryRow && Array.isArray(retryRow.valor)) {
-        fallbackContracts = retryRow.valor.map(normalizeContrato)
+      if (cfgError) {
+        const { data: retryRow, error: retryErr } = await supabase
+          .from('configuracoes')
+          .select('valor')
+          .eq('chave', FALLBACK_KEY)
+          .maybeSingle()
+
+        if (!retryErr && retryRow && Array.isArray(retryRow.valor)) {
+          fallbackContracts = retryRow.valor.map(normalizeContrato)
+        }
+      } else if (cfgRow && Array.isArray(cfgRow.valor)) {
+        fallbackContracts = cfgRow.valor.map(normalizeContrato)
       }
-    } else if (cfgRow && Array.isArray(cfgRow.valor)) {
-      fallbackContracts = cfgRow.valor.map(normalizeContrato)
+    } catch (err) {
+      console.warn('[Repository] Falha ao ler do fallback configuracoes:', err)
     }
-  } catch (err) {
-    console.warn('[Repository] Falha ao ler do fallback configuracoes:', err)
   }
 
   // 3. Estratégia de unificação resiliente com reconciliação profunda campo a campo:
@@ -577,77 +578,7 @@ async function getAllFromStorage(forceRefresh = false): Promise<{ list: Contrato
   let usedFallbackFinal = false
 
   if (tableQuerySuccess && dbContracts.length > 0) {
-    const fallbackMap = new Map<string, ContratoDigitalModel>()
-    for (const fc of fallbackContracts) {
-      if (fc.id) fallbackMap.set(String(fc.id).toLowerCase(), fc)
-      if (fc.protocolo) fallbackMap.set(String(fc.protocolo).toLowerCase(), fc)
-    }
-
-    const contractsToHeal: ContratoDigitalModel[] = []
-
-    const reconciledDb = dbContracts.map(dbItem => {
-      const keyId = String(dbItem.id || '').toLowerCase()
-      const keyProto = String(dbItem.protocolo || '').toLowerCase()
-      const fbItem = fallbackMap.get(keyId) || fallbackMap.get(keyProto)
-
-      if (!fbItem) return dbItem
-
-      let needsHeal = false
-      const merged = { ...dbItem }
-
-      // Se o fallback tiver otp_confirmado_em e o banco não tiver, prioriza a validação!
-      if (!merged.otp_confirmado_em && fbItem.otp_confirmado_em) {
-        merged.otp_confirmado_em = fbItem.otp_confirmado_em
-        needsHeal = true
-      }
-
-      // Se o fallback tiver status assinado e o banco não, prioriza assinatura!
-      if (merged.status !== 'assinado' && fbItem.status === 'assinado') {
-        merged.status = fbItem.status
-        merged.documento_assinado_hash = fbItem.documento_assinado_hash || merged.documento_assinado_hash
-        needsHeal = true
-      }
-
-      // Se o fallback tiver histórico de auditoria mais longo, reconcilia!
-      if (Array.isArray(fbItem.historico_eventos) && fbItem.historico_eventos.length > (merged.historico_eventos?.length || 0)) {
-        merged.historico_eventos = fbItem.historico_eventos
-        needsHeal = true
-      }
-
-      const dbTime = new Date(dbItem.updated_at || dbItem.created_at || 0).getTime()
-      const fbTime = new Date(fbItem.updated_at || fbItem.created_at || 0).getTime()
-      if (fbTime > dbTime + 1000) {
-        Object.assign(merged, fbItem)
-        needsHeal = true
-      }
-
-      if (needsHeal) {
-        contractsToHeal.push(merged)
-      }
-      return merged
-    })
-
-    const dbIds = new Set(dbContracts.map(c => String(c.id || c.protocolo).trim().toLowerCase()))
-    const missingFromDb = fallbackContracts.filter(
-      c => !dbIds.has(String(c.id || '').trim().toLowerCase()) && !dbIds.has(String(c.protocolo || '').trim().toLowerCase())
-    )
-
-    if (missingFromDb.length > 0 || contractsToHeal.length > 0) {
-      mergedList = [...reconciledDb, ...missingFromDb].sort(
-        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-      )
-      // Auto-cura atômica: insere ou atualiza itens faltantes/desatualizados no banco
-      Promise.resolve().then(async () => {
-        const toSave = [...missingFromDb, ...contractsToHeal]
-        for (const item of toSave) {
-          try {
-            await supabase.from('matriculas_digitais').upsert(toTableRecord(item), { onConflict: 'id' })
-          } catch {}
-        }
-      })
-    } else {
-      mergedList = reconciledDb
-    }
+    mergedList = dbContracts
     usedFallbackFinal = false
   } else if (fallbackContracts.length > 0) {
     // Tabela está vazia ou inacessível, mas fallback tem dados (ex: migração inicial ou tabela recém-criada)
@@ -722,6 +653,8 @@ export async function salvarContrato(contrato: ContratoDigitalModel): Promise<Co
     updated_at: new Date().toISOString(),
   }
 
+  let savedToDedicatedTable = false
+
   // Tenta salvar na tabela dedicada sanitizado com toTableRecord (apenas colunas existentes)
   if (canTryTable()) {
     try {
@@ -734,15 +667,33 @@ export async function salvarContrato(contrato: ContratoDigitalModel): Promise<Co
 
       if (!error && data) {
         isTableAvailable = true
+        savedToDedicatedTable = true
       } else if (error) {
         console.warn('[Repository] Erro no upsert de matriculas_digitais:', error.message)
-        // Se falhou o upsert (por ex. conflito de chave única ou lock), tenta update direto por ID
-        if (payload.id) {
+        if (error.code === 'PGRST204' || error.message?.includes('storage_path')) {
+          const {
+            documento_pdf_storage_path: _p1,
+            documento_assinado_storage_path: _p2,
+            ...compatRecord
+          } = tableRecord
+          const { data: retryData, error: retryErr } = await supabase
+            .from('matriculas_digitais')
+            .upsert(compatRecord, { onConflict: 'id' })
+            .select()
+            .maybeSingle()
+          if (!retryErr && retryData) {
+            isTableAvailable = true
+            savedToDedicatedTable = true
+          }
+        } else if (payload.id) {
+          // Se falhou o upsert (por ex. conflito de chave única ou lock), tenta update direto por ID
           const { error: updErr } = await supabase
             .from('matriculas_digitais')
             .update(tableRecord)
             .eq('id', payload.id)
-          if (updErr) {
+          if (!updErr) {
+            savedToDedicatedTable = true
+          } else {
             console.warn('[Repository] Falha também no update direto:', updErr.message)
           }
         }
@@ -758,26 +709,28 @@ export async function salvarContrato(contrato: ContratoDigitalModel): Promise<Co
     }
   }
 
-  // Sincroniza com o fallback de metadados leves em configuracoes
-  try {
-    const { data: cfgRow } = await supabase
-      .from('configuracoes')
-      .select('valor')
-      .eq('chave', FALLBACK_KEY)
-      .maybeSingle()
+  // Sincroniza com o fallback em configuracoes apenas se a tabela dedicada falhar
+  if (!savedToDedicatedTable) {
+    try {
+      const { data: cfgRow } = await supabase
+        .from('configuracoes')
+        .select('valor')
+        .eq('chave', FALLBACK_KEY)
+        .maybeSingle()
 
-    const rawList: any[] = Array.isArray(cfgRow?.valor) ? cfgRow.valor : []
-    const idx = rawList.findIndex((c: any) => c && (c.id === contrato.id || c.protocolo === contrato.protocolo))
-    let updatedList: any[] = []
-    if (idx >= 0) {
-      updatedList = [...rawList]
-      updatedList[idx] = payload
-    } else {
-      updatedList = [payload, ...rawList]
+      const rawList: any[] = Array.isArray(cfgRow?.valor) ? cfgRow.valor : []
+      const idx = rawList.findIndex((c: any) => c && (c.id === contrato.id || c.protocolo === contrato.protocolo))
+      let updatedList: any[] = []
+      if (idx >= 0) {
+        updatedList = [...rawList]
+        updatedList[idx] = payload
+      } else {
+        updatedList = [payload, ...rawList]
+      }
+      await saveToFallback(updatedList)
+    } catch (err) {
+      console.warn('[Repository] Falha ao sincronizar fallback:', err)
     }
-    await saveToFallback(updatedList)
-  } catch (err) {
-    console.warn('[Repository] Falha ao sincronizar fallback:', err)
   }
 
   invalidarCacheMemoriaContratos()

@@ -124,7 +124,61 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json()
-    const { nome, serie, segmento, turno, sala, capacidade, professor, unidade, ano } = body
+
+    // Se Array.isArray(body) for recebido (chamado por setTurmas do useSupabaseArray, ex: Padrão de Pagamento)
+    if (Array.isArray(body)) {
+      const { data: existingTurmas } = await supabaseServer.from('turmas').select('*')
+      const existingMap = new Map<string, any>()
+      ;(existingTurmas || []).forEach((t: any) => {
+        if (t.id) existingMap.set(String(t.id), t)
+      })
+
+      const rowsToUpsert = body
+        .filter((item: any) => item && (item.id || item.nome))
+        .map((item: any) => {
+          const id = String(item.id || item.codigo || Math.floor(1000 + Math.random() * 9000))
+          const existing = existingMap.get(id)
+          const existingDados = existing?.dados || {}
+          const itemDados = item.dados || {}
+          const {
+            id: _id, codigo, nome, serie, turno, professor, sala,
+            capacidade, matriculados, unidade, ano, dados: _dados,
+            created_at, updated_at, ...extraFields
+          } = item
+
+          return {
+            id,
+            codigo: codigo || existing?.codigo || id,
+            nome: nome ?? existing?.nome ?? '',
+            serie: serie ?? existing?.serie ?? '',
+            turno: turno ?? existing?.turno ?? '',
+            professor: professor ?? existing?.professor ?? '',
+            sala: sala ?? existing?.sala ?? '',
+            capacidade: parseInt(capacidade) || existing?.capacidade || 30,
+            matriculados: matriculados ?? existing?.matriculados ?? 0,
+            unidade: unidade ?? existing?.unidade ?? '',
+            ano: parseInt(ano) || existing?.ano || new Date().getFullYear(),
+            dados: {
+              ...existingDados,
+              ...itemDados,
+              ...extraFields,
+              status: itemDados.status ?? extraFields.status ?? existingDados.status ?? 'ativa',
+              segmento: extraFields.segmento ?? itemDados.segmento ?? existingDados.segmento ?? '',
+              padraoPagamentoIds: item.padraoPagamentoIds ?? itemDados.padraoPagamentoIds ?? existingDados.padraoPagamentoIds
+            }
+          }
+        })
+
+      if (rowsToUpsert.length > 0) {
+        const { error } = await supabaseServer.from('turmas').upsert(rowsToUpsert, { onConflict: 'id' })
+        if (error) throw error
+      }
+
+      invalidateTurmasCache()
+      return NextResponse.json({ success: true, count: rowsToUpsert.length })
+    }
+
+    const { nome, serie, segmento, turno, sala, capacidade, professor, unidade, ano, ...extraFields } = body
 
     if (!nome) {
       return NextResponse.json({ error: 'Nome da turma é obrigatório' }, { status: 400 })
@@ -157,8 +211,10 @@ export async function POST(request: Request) {
       unidade: unidade || '',
       ano: parseInt(ano) || new Date().getFullYear(),
       dados: {
+        ...(body.dados || {}),
+        ...extraFields,
         status: 'ativa',
-        segmento: segmento || '',
+        segmento: segmento || body.dados?.segmento || '',
         dataMatricula: new Date().toISOString().split('T')[0]
       }
     }
@@ -184,23 +240,32 @@ export async function PUT(request: Request) {
 
   try {
     const body = await request.json()
-    const { id, nome, serie, segmento, turno, sala, capacidade, professor, unidade, ano } = body
+    const { id, nome, serie, segmento, turno, sala, capacidade, professor, unidade, ano, dados: bodyDados, ...extraFields } = body
 
     if (!id) {
       return NextResponse.json({ error: 'ID da turma é obrigatório' }, { status: 400 })
     }
 
+    const { data: existing } = await supabaseServer
+      .from('turmas')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle()
+
     const updatedTurma = {
-      nome,
-      serie,
-      turno,
-      professor,
-      sala,
-      capacidade: parseInt(capacidade),
-      unidade,
-      ano: parseInt(ano),
+      nome: nome ?? existing?.nome,
+      serie: serie ?? existing?.serie,
+      turno: turno ?? existing?.turno,
+      professor: professor !== undefined ? professor : (existing?.professor ?? ''),
+      sala: sala !== undefined ? sala : (existing?.sala ?? ''),
+      capacidade: parseInt(capacidade) || existing?.capacidade || 30,
+      unidade: unidade !== undefined ? unidade : (existing?.unidade ?? ''),
+      ano: parseInt(ano) || existing?.ano || new Date().getFullYear(),
       dados: {
-        segmento: segmento || ''
+        ...(existing?.dados || {}),
+        ...(bodyDados || {}),
+        ...extraFields,
+        segmento: segmento ?? bodyDados?.segmento ?? existing?.dados?.segmento ?? ''
       }
     }
 

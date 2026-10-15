@@ -4,6 +4,7 @@ import { useSupabaseArray } from '@/lib/useSupabaseCollection';
 import { TableSkeleton } from '@/components/skeletons/TableSkeleton';
 
 import { useState, useMemo } from 'react'
+import { useConfigDb } from '@/lib/useConfigDb'
 
 import { formatCurrency } from '@/lib/utils'
 import {
@@ -47,23 +48,26 @@ function calcIR(baseCalculo: number) {
   return 0
 }
 
-function calcFolha(salario: number, bonus: number = 0, valeTransporte: boolean = false) {
-  const inssFunc = calcINSS(salario)
+function calcFolha(salario: number, bonus: number = 0, valeTransporte: boolean = false, tipoContrato?: string) {
+  const contratoNorm = String(tipoContrato || 'CLT').trim().toLowerCase()
+  const isPjOrEstagio = contratoNorm === 'pj' || contratoNorm.includes('estag') || contratoNorm.includes('estág')
+
+  const inssFunc = isPjOrEstagio ? 0 : calcINSS(salario)
   
   const baseIrTradicional = salario - inssFunc
-  const irTradicional = Math.max(0, calcIR(baseIrTradicional))
+  const irTradicional = isPjOrEstagio ? 0 : Math.max(0, calcIR(baseIrTradicional))
   
   const baseIrSimplificado = salario - 564.80 
-  const irSimplificado = Math.max(0, calcIR(baseIrSimplificado))
+  const irSimplificado = isPjOrEstagio ? 0 : Math.max(0, calcIR(baseIrSimplificado))
   
-  const ir = Math.min(irTradicional, irSimplificado)
-  const vt = valeTransporte ? +(salario * 0.06).toFixed(2) : 0
+  const ir = isPjOrEstagio ? 0 : Math.min(irTradicional, irSimplificado)
+  const vt = (!isPjOrEstagio && valeTransporte) ? +(salario * 0.06).toFixed(2) : 0
   const liquido = +(salario - inssFunc - ir + bonus - vt).toFixed(2)
   
-  const inssPatronal = +(salario * 0.20).toFixed(2)
-  const fgts = +(salario * 0.08).toFixed(2)
-  const prov13 = +(salario * 0.0833).toFixed(2)
-  const provFerias = +(salario * 0.1111).toFixed(2)
+  const inssPatronal = isPjOrEstagio ? 0 : +(salario * 0.20).toFixed(2)
+  const fgts = isPjOrEstagio ? 0 : +(salario * 0.08).toFixed(2)
+  const prov13 = isPjOrEstagio ? 0 : +(salario * 0.0833).toFixed(2)
+  const provFerias = isPjOrEstagio ? 0 : +(salario * 0.1111).toFixed(2)
   
   // FIX: Removed ratTerceiros from sum
   const custoTotal = +(salario + bonus + inssPatronal + fgts + prov13 + provFerias).toFixed(2)
@@ -85,13 +89,21 @@ function calcFolha(salario: number, bonus: number = 0, valeTransporte: boolean =
 export default function FolhaPagamentoPage() {
   const [funcionarios, setFuncionarios, { loading: isFuncsLoading }] = useSupabaseArray<any>('rh/funcionarios');
   const [adiantamentos = [], , { loading: isAdiantamentosLoading }] = useSupabaseArray<any>('rh/adiantamentos', [])
+  const { data: folhasProcessadas, setData: setFolhasProcessadas } = useConfigDb<{ compKey: string; processado: boolean }>('rh_folha_processada', [])
   const isLoading = isFuncsLoading || isAdiantamentosLoading;
   const hoje = new Date()
   const [mes, setMes] = useState(hoje.getMonth())
   const [ano, setAno] = useState(hoje.getFullYear())
   const [search, setSearch] = useState('')
   const [filtroDep, setFiltroDep] = useState('Todos')
-  const [processado, setProcessado] = useState(false)
+  const compKey = `${ano}-${String(mes + 1).padStart(2, '0')}`
+  const processado = Boolean((folhasProcessadas || []).find(item => item.compKey === compKey)?.processado)
+  const toggleProcessado = (val: boolean) => {
+    setFolhasProcessadas(prev => {
+      const list = Array.isArray(prev) ? prev.filter(item => item.compKey !== compKey) : []
+      return [...list, { compKey, processado: val }]
+    })
+  }
   const [showDetalhe, setShowDetalhe] = useState<string | null>(null)
   const [modalKpi, setModalKpi] = useState<string | null>(null)
 
@@ -118,7 +130,7 @@ export default function FolhaPagamentoPage() {
       return acc + sum
     }, 0)
 
-    const calc = calcFolha(f.salario, f.bonus || 0, f.valeTransporte || false)
+    const calc = calcFolha(f.salario || 0, f.bonus || 0, f.valeTransporte || false, f.tipoContrato || f.contrato)
     
     return {
       f,
@@ -128,7 +140,33 @@ export default function FolhaPagamentoPage() {
     }
   }), [ativos, adiantamentos, mes, ano])
 
-  const totalBruto = folha.reduce((s, r) => s + r.f.salario, 0)
+  const handleExportCsv = () => {
+    const headers = ['Nome', 'Cargo', 'Departamento', 'Contrato', 'Salario Bruto', 'INSS', 'IRRF', 'Bonus', 'VT', 'Adiantamento', 'Salario Liquido', 'Custo Empresa']
+    const rows = folha.map(r => [
+      `"${(r.f.nome || '').replace(/"/g, '""')}"`,
+      `"${(r.f.cargo || '').replace(/"/g, '""')}"`,
+      `"${(r.f.departamento || '').replace(/"/g, '""')}"`,
+      `"${r.f.tipoContrato || r.f.contrato || 'CLT'}"`,
+      (r.f.salario || 0).toFixed(2),
+      r.inssFunc.toFixed(2),
+      r.ir.toFixed(2),
+      (r.bonus || 0).toFixed(2),
+      (r.vt || 0).toFixed(2),
+      (r.adiantamento || 0).toFixed(2),
+      r.liquido.toFixed(2),
+      r.custoTotal.toFixed(2),
+    ].join(';'))
+    const csvContent = '\uFEFF' + [headers.join(';'), ...rows].join('\n')
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `folha_${MESES[mes].toLowerCase()}_${ano}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const totalBruto = folha.reduce((s, r) => s + (r.f.salario || 0), 0)
   const totalInssFunc = folha.reduce((s, r) => s + r.inssFunc, 0)
   const totalIr = folha.reduce((s, r) => s + r.ir, 0)
   const totalBonus = folha.reduce((s, r) => s + (r.bonus || 0), 0)
@@ -172,15 +210,15 @@ export default function FolhaPagamentoPage() {
           <p style={{ fontSize: '13px', color: '#64748b', margin: '4px 0 0' }}>Competência: {MESES[mes]}/{ano} • {ativos.length} colaborador(es) ativo(s)</p>
         </div>
         <div style={{ display: 'flex', gap: '12px' }}>
-          <button style={{ height: '40px', padding: '0 16px', background: '#fff', color: '#475569', border: '1px solid #e2e8f0', borderRadius: '8px', fontWeight: 700, fontSize: '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <button onClick={handleExportCsv} style={{ height: '40px', padding: '0 16px', background: '#fff', color: '#475569', border: '1px solid #e2e8f0', borderRadius: '8px', fontWeight: 700, fontSize: '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Download size={16} /> Exportar
           </button>
           {processado ? (
-            <button onClick={() => setProcessado(false)} style={{ height: '40px', padding: '0 16px', background: '#059669', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 700, fontSize: '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <button onClick={() => toggleProcessado(false)} style={{ height: '40px', padding: '0 16px', background: '#059669', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 700, fontSize: '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
               <CheckCircle size={16} /> Folha Processada
             </button>
           ) : (
-            <button onClick={() => setProcessado(true)} style={{ height: '40px', padding: '0 16px', background: '#2563eb', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 700, fontSize: '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <button onClick={() => toggleProcessado(true)} style={{ height: '40px', padding: '0 16px', background: '#2563eb', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 700, fontSize: '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
               <Banknote size={16} /> Processar Folha
             </button>
           )}
@@ -193,10 +231,10 @@ export default function FolhaPagamentoPage() {
           <Calendar size={18} color="#2563eb" />
           <span style={{ fontSize: '13px', fontWeight: 700, color: '#475569' }}>Competência:</span>
         </div>
-        <select style={{ ...inputStyle, width: '160px' }} value={mes} onChange={e => { setMes(+e.target.value); setProcessado(false) }}>
+        <select style={{ ...inputStyle, width: '160px' }} value={mes} onChange={e => { setMes(+e.target.value) }}>
           {MESES.map((m, i) => <option key={m} value={i}>{m}</option>)}
         </select>
-        <select style={{ ...inputStyle, width: '100px' }} value={ano} onChange={e => { setAno(+e.target.value); setProcessado(false) }}>
+        <select style={{ ...inputStyle, width: '100px' }} value={ano} onChange={e => { setAno(+e.target.value) }}>
           {ANOS.map(a => <option key={a}>{a}</option>)}
         </select>
         {processado && (

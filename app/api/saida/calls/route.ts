@@ -48,18 +48,22 @@ async function fetchAlunosBatch(supabaseClient: any, ids: string[]): Promise<Rec
 }
 
 export async function GET(request: Request) {
-  const { user, errorResponse } = await requireAuth()
-  if (errorResponse) return errorResponse
-
   try {
-    const supabase = await createProtectedClient()
-    
     const url = new URL(request.url)
     const fromDate = url.searchParams.get('from')
     const toDate = url.searchParams.get('to')
     const studentId = url.searchParams.get('studentId')
     const limitParam = url.searchParams.get('limit')
     const limit = limitParam ? parseInt(limitParam, 10) : 500
+
+    // Consultas históricas de relatórios exigem autenticação de staff; o painel operacional do dia (Monitor TV / Tablet) é público na rede escolar
+    if (fromDate || toDate) {
+      const { requireStaff } = await import('@/lib/server/authGuard')
+      const { errorResponse } = await requireStaff(request)
+      if (errorResponse) return errorResponse
+    }
+
+    const supabase = getAdminClient()
     let query = supabase.from('saida_calls').select('id, dados, created_at').order('created_at', { ascending: false }).limit(limit)
     
     if (studentId) {

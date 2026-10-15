@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/server/authGuard'
+import { requireStaff } from '@/lib/server/authGuard'
 import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 import {
   dbGetProvaById,
@@ -13,7 +13,7 @@ export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { user, errorResponse } = await requireAuth(request)
+  const { user, errorResponse } = await requireStaff(request)
   if (errorResponse) return errorResponse
 
   const { id: provaId } = await params

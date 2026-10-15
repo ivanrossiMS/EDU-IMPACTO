@@ -328,6 +328,14 @@ export default function EventosPage() {
         <div className="table-container">
           <table>
             <thead>
+              <tr>
+                <th>Código</th>
+                <th>Descrição</th>
+                <th>Tipo</th>
+                <th>Plano de Contas</th>
+                <th>Status</th>
+                <th>Ações</th>
+              </tr>
             </thead>
             <tbody>
               {filtered.map(e => {

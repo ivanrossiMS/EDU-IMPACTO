@@ -751,7 +751,7 @@ export function gerarRetornoSimulado400(
     '341' +
     alfaD('BANCO ITAU SA', 15) +
     dataDDMMAAA(hoje.toISOString().slice(0, 10)) +
-    ' '.repeat(294) +
+    ' '.repeat(284) +
     numZ(convenio.convenio, 7) +
     ' ' +
     numZ(seqReg, 6)

@@ -185,7 +185,7 @@ function AlunoSearch({ value, onChange, alunosDaTurma, todosAlunos, hasError, on
   )
 }
 
-function OcorrenciaModal({ form, setForm, onSave, onClose, alunosDaTurma, todosAlunos, tiposOcorrencia, turmas, validationErrors, setValidationErrors }: {
+function OcorrenciaModal({ form, setForm, onSave, onClose, alunosDaTurma, todosAlunos, tiposOcorrencia, turmas, validationErrors, setValidationErrors, isEditing }: {
   form: Omit<Ocorrencia,'id'|'createdAt'>
   setForm: React.Dispatch<React.SetStateAction<Omit<Ocorrencia,'id'|'createdAt'>>>
   onSave: () => void; onClose: () => void
@@ -195,6 +195,7 @@ function OcorrenciaModal({ form, setForm, onSave, onClose, alunosDaTurma, todosA
   turmas: any[]
   validationErrors: { field: string; label: string }[]
   setValidationErrors: React.Dispatch<React.SetStateAction<{ field: string; label: string }[]>>
+  isEditing?: boolean
 }) {
   const [isUploading, setIsUploading] = useState(false)
   const s = (k: keyof typeof form, v: any) => setForm(p => ({ ...p, [k]: v }))
@@ -210,7 +211,7 @@ function OcorrenciaModal({ form, setForm, onSave, onClose, alunosDaTurma, todosA
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div>
               <h2 style={{ fontFamily: 'Outfit,sans-serif', fontWeight: 900, fontSize: 22, color: '#fff', margin: 0, letterSpacing: '-0.5px' }}>
-                {form.alunoId ? 'Editar Ocorrência' : 'Nova Ocorrência'}
+                {isEditing ? 'Editar Ocorrência' : 'Nova Ocorrência'}
               </h2>
               <p style={{ fontSize: '13px', color: 'rgba(255, 255, 255, 0.8)', margin: '4px 0 0 0' }}>Preencha os dados da ocorrência disciplinar.</p>
             </div>
@@ -1662,6 +1663,7 @@ export default function OcorrenciasPage() {
           turmas={turmas} 
           validationErrors={validationErrors}
           setValidationErrors={setValidationErrors}
+          isEditing={!!editingId}
         />
       )}
 

@@ -47,7 +47,7 @@ async function getPortariaLookupIndex(): Promise<PortariaLookupIndex> {
     }
 
     const [studentsData, responsaveisData, linksData, turmasData] = await Promise.all([
-      fetchAllPages('alunos', 'id, nome, matricula, foto, turma, turno, status, dados'),
+      fetchAllPages('alunos', 'id, nome, matricula, turma, turno, status'),
       fetchAllPages('responsaveis', 'id, nome, codigo, rfid, dados'),
       fetchAllPages('aluno_responsavel', 'aluno_id, responsavel_id, parentesco'),
       supabase.from('turmas').select('id, nome').then(r => r.data || []),
