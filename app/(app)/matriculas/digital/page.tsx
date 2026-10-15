@@ -23,6 +23,7 @@ import {
   SignatarioPosicionavel,
   gerarPosicionamentoPadrao,
   gerarPosicionamentoDocumentos,
+  validarPosicionamentoCompleto,
 } from '@/components/matriculas/PosicionadorAssinaturasModal'
 import { getWhatsAppShareUrl, DEFAULT_WHATSAPP_DIGITAL_TEMPLATE, formatarMensagemWhatsApp } from '@/lib/whatsapp'
 import {
@@ -683,6 +684,47 @@ export default function MatriculaDigitalPage() {
     formNovo.signatario_nome,
     formNovo.signatario_cargo,
     formNovo.signatario_cpf,
+  ])
+
+  const diagnosticoPosicionamento = useMemo(() => {
+    let acumulado = 0
+    const docsFormatados =
+      documentosUpload.length > 0
+        ? documentosUpload.map((d, idx) => {
+            const pags = Math.max(1, d.totalPaginas || 1)
+            const start = acumulado + 1
+            const end = acumulado + pags
+            acumulado = end
+            return {
+              id: d.id || `doc_${idx + 1}`,
+              nome: d.nome,
+              totalPaginas: pags,
+              paginaInicioGlobal: start,
+              paginaFimGlobal: end,
+            }
+          })
+        : [
+            {
+              id: 'doc_1',
+              nome: formNovo.titulo_documento || pdfUploadNome || 'Documento',
+              totalPaginas: Math.max(1, totalPaginasDocumentoAtual || 1),
+              paginaInicioGlobal: 1,
+              paginaFimGlobal: Math.max(1, totalPaginasDocumentoAtual || 1),
+            },
+          ]
+
+    return validarPosicionamentoCompleto(
+      signatariosPosicionaveis,
+      docsFormatados,
+      posicoesAssinaturas
+    )
+  }, [
+    signatariosPosicionaveis,
+    documentosUpload,
+    posicoesAssinaturas,
+    formNovo.titulo_documento,
+    pdfUploadNome,
+    totalPaginasDocumentoAtual,
   ])
 
   // Ação rápida: auto-posicionar signatários no rodapé da última página de cada documento
@@ -6932,15 +6974,15 @@ export default function MatriculaDigitalPage() {
                                 style={{
                                   fontSize: 10,
                                   fontWeight: 700,
-                                  color: signatariosPosicionaveis.some(s => Object.values(posicoesAssinaturas).some(p => p.signatarioId === s.id)) ? '#059669' : '#d97706',
-                                  background: signatariosPosicionaveis.some(s => Object.values(posicoesAssinaturas).some(p => p.signatarioId === s.id)) ? 'rgba(16, 185, 129, 0.12)' : 'rgba(245, 158, 11, 0.12)',
+                                  color: diagnosticoPosicionamento.tudoPosicionado ? '#059669' : '#d97706',
+                                  background: diagnosticoPosicionamento.tudoPosicionado ? 'rgba(16, 185, 129, 0.12)' : 'rgba(245, 158, 11, 0.12)',
                                   padding: '2px 8px',
                                   borderRadius: 999,
-                                  border: `1px solid ${signatariosPosicionaveis.some(s => Object.values(posicoesAssinaturas).some(p => p.signatarioId === s.id)) ? 'rgba(16, 185, 129, 0.3)' : 'rgba(245, 158, 11, 0.3)'}`,
+                                  border: `1px solid ${diagnosticoPosicionamento.tudoPosicionado ? 'rgba(16, 185, 129, 0.3)' : 'rgba(245, 158, 11, 0.3)'}`,
                                 }}
                               >
-                                {signatariosPosicionaveis.filter(sig => Object.values(posicoesAssinaturas).some(p => p.signatarioId === sig.id)).length} de {signatariosPosicionaveis.length} pessoas posicionadas
-                                {documentosUpload.length > 1 && ` • ${Object.keys(posicoesAssinaturas).length} posições em ${documentosUpload.length} docs`}
+                                {diagnosticoPosicionamento.sigsCompletosEmTodosDocsCount} de {signatariosPosicionaveis.length} pessoas posicionadas
+                                {documentosUpload.length > 1 && ` • ${diagnosticoPosicionamento.totalPosicionado}/${diagnosticoPosicionamento.totalEsperado} posições em ${documentosUpload.length} docs`}
                               </span>
                             )}
                           </div>
@@ -7050,17 +7092,28 @@ export default function MatriculaDigitalPage() {
                       </div>
                     ) : (
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 10 }}>
-                        {signatariosPosicionaveis.map((sig) => {
+                        {signatariosPosicionaveis.map((sig, sigIdx) => {
                           const posicoesDoSig = Object.values(posicoesAssinaturas).filter(p => p.signatarioId === sig.id)
                           const temPosicoes = posicoesDoSig.length > 0
+                          const diagSig = diagnosticoPosicionamento.porSignatario[sigIdx]
+                          const completoSig = Boolean(diagSig?.completoEmTodosDocs)
+                          const faltamDocsCount = diagSig?.docsFaltantes.length || 0
                           return (
                             <div
                               key={sig.id}
                               style={{
                                 padding: '10px 12px',
                                 borderRadius: 10,
-                                background: temPosicoes ? 'rgba(16, 185, 129, 0.03)' : 'hsl(var(--bg-surface))',
-                                border: temPosicoes ? '1px solid rgba(16, 185, 129, 0.35)' : '1px solid hsl(var(--border-subtle))',
+                                background: completoSig
+                                  ? 'rgba(16, 185, 129, 0.03)'
+                                  : temPosicoes
+                                  ? 'rgba(245, 158, 11, 0.04)'
+                                  : 'hsl(var(--bg-surface))',
+                                border: completoSig
+                                  ? '1px solid rgba(16, 185, 129, 0.35)'
+                                  : temPosicoes
+                                  ? '1px solid rgba(245, 158, 11, 0.4)'
+                                  : '1px solid hsl(var(--border-subtle))',
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'space-between',
@@ -7143,6 +7196,21 @@ export default function MatriculaDigitalPage() {
                                         </span>
                                       )
                                     })}
+                                    {faltamDocsCount > 0 && (
+                                      <span
+                                        style={{
+                                          fontSize: 10,
+                                          fontWeight: 700,
+                                          color: '#b45309',
+                                          background: 'rgba(245, 158, 11, 0.15)',
+                                          border: '1px solid rgba(245, 158, 11, 0.35)',
+                                          padding: '2px 7px',
+                                          borderRadius: 6,
+                                        }}
+                                      >
+                                        Falta em {faltamDocsCount} doc(s)
+                                      </span>
+                                    )}
                                     <button
                                       type="button"
                                       onClick={() => {
@@ -7164,7 +7232,7 @@ export default function MatriculaDigitalPage() {
                                       }}
                                       title="Editar ou adicionar posições em outros documentos"
                                     >
-                                      <Move size={10} /> Ajustar
+                                      <Move size={10} /> {faltamDocsCount > 0 ? 'Completar' : 'Ajustar'}
                                     </button>
                                   </>
                                 ) : (

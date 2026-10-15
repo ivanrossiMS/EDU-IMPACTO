@@ -1,6 +1,11 @@
 import { Metadata } from 'next'
 import { notFound } from 'next/navigation'
-import { buscarContratoPorToken } from '@/lib/server/matriculaDigitalRepository'
+import {
+  buscarContratoPorToken,
+  buscarContratoPorProtocolo,
+  buscarContratoPorId,
+  buscarContratoPorHash,
+} from '@/lib/server/matriculaDigitalRepository'
 import { SigningPortalClient } from './SigningPortalClient'
 import { ShieldAlert, Phone } from 'lucide-react'
 import { getWhatsAppShareUrl } from '@/lib/whatsapp'
@@ -11,9 +16,25 @@ interface Props {
   params: Promise<{ token: string }>
 }
 
+async function resolverContratoAssinatura(rawToken: string) {
+  const clean = decodeURIComponent(rawToken || '').trim()
+  if (!clean) return null
+  let contrato = await buscarContratoPorToken(clean)
+  if (!contrato) {
+    contrato = await buscarContratoPorProtocolo(clean)
+  }
+  if (!contrato) {
+    contrato = await buscarContratoPorId(clean)
+  }
+  if (!contrato && clean.length >= 8) {
+    contrato = await buscarContratoPorHash(clean)
+  }
+  return contrato
+}
+
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { token } = await params
-  const contrato = await buscarContratoPorToken(token)
+  const contrato = await resolverContratoAssinatura(token)
 
   return {
     title: contrato
@@ -26,7 +47,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function AssinarPage({ params }: Props) {
   const { token } = await params
-  const contrato = await buscarContratoPorToken(token)
+  const contrato = await resolverContratoAssinatura(token)
 
   if (!contrato) {
     return (

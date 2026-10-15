@@ -3,8 +3,10 @@ import {
   buscarContratoPorToken,
   buscarContratoPorProtocolo,
   buscarContratoPorId,
+  buscarContratoPorHash,
   obterPdfBytes,
 } from '@/lib/server/matriculaDigitalRepository'
+import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 
 export const dynamic = 'force-dynamic'
 
@@ -12,36 +14,136 @@ interface Props {
   params: Promise<{ token: string }>
 }
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/**
+ * Tenta recuperar o PDF diretamente do Supabase Storage ou tabela configuracoes
+ * pelo UUID do contrato caso o registro tenha sido substituído/reemitido enquanto a aba estava aberta.
+ */
+async function recuperarPdfDiretoPorId(
+  contratoId: string,
+  preferencia: 'original' | 'assinado'
+): Promise<Buffer | null> {
+  if (!contratoId || !UUID_REGEX.test(contratoId)) return null
+  const supabase = getAdminClient()
+  const tipos: Array<'original' | 'assinado'> =
+    preferencia === 'assinado' ? ['assinado', 'original'] : ['original', 'assinado']
+
+  for (const t of tipos) {
+    try {
+      const storagePath = `contratos/${contratoId}/${t}.pdf`
+      const { data, error } = await supabase.storage.from('documentos').download(storagePath)
+      if (!error && data) {
+        const ab = await data.arrayBuffer()
+        if (ab.byteLength > 100) {
+          return Buffer.from(ab)
+        }
+      }
+    } catch {}
+
+    try {
+      const cfgKey = `matricula_pdf_${t === 'assinado' ? 'ass' : 'orig'}_${contratoId}`
+      const { data: cfgRow } = await supabase
+        .from('configuracoes')
+        .select('valor')
+        .eq('chave', cfgKey)
+        .maybeSingle()
+      if (cfgRow?.valor && typeof cfgRow.valor === 'string') {
+        return Buffer.from(cfgRow.valor.replace(/^data:application\/pdf;base64,/, ''), 'base64')
+      }
+    } catch {}
+  }
+
+  return null
+}
+
+/**
+ * Sanitiza o nome do arquivo para ASCII seguro no header HTTP Content-Disposition (evita ByteString error no Node/Undici)
+ */
+function buildContentDisposition(disposition: 'inline' | 'attachment', rawFilename: string): string {
+  const fallback = rawFilename
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\x20-\x7E]/g, '_')
+    .replace(/["\\;]/g, '_')
+    .trim() || 'documento.pdf'
+  const encoded = encodeURIComponent(rawFilename)
+  return `${disposition}; filename="${fallback}"; filename*=UTF-8''${encoded}`
+}
+
 /**
  * GET /api/matriculas/digital/pdf/[token]
  * Serve diretamente o binário do PDF do contrato para visualização nativa em todos os navegadores,
  * incluindo Safari no macOS/iOS sem bloqueios de CSP ou problemas de URLs base64 em iframes.
- * Suporta busca por Token de Assinatura, Protocolo ou ID do documento.
+ * Suporta busca por Token de Assinatura, Protocolo, ID ou Hash do documento, além de recuperação direta no Storage.
  */
 export async function GET(request: Request, { params }: Props) {
   try {
     const { token } = await params
-
-    if (!token) {
-      return new NextResponse('Token de documento não fornecido.', { status: 400 })
-    }
-
-    const clean = decodeURIComponent(token).trim()
-    let contrato = await buscarContratoPorToken(clean)
-    if (!contrato) {
-      contrato = await buscarContratoPorProtocolo(clean)
-    }
-    if (!contrato) {
-      contrato = await buscarContratoPorId(clean)
-    }
-
-    if (!contrato) {
-      return new NextResponse('Documento não localizado ou expirado.', { status: 404 })
-    }
-
     const url = new URL(request.url)
     const versao = url.searchParams.get('versao') || url.searchParams.get('v')
     const isDownload = url.searchParams.get('download') === '1'
+    const idParam = (url.searchParams.get('id') || '').trim()
+    const protocoloParam = (url.searchParams.get('protocolo') || '').trim()
+    const hashParam = (url.searchParams.get('h') || url.searchParams.get('hash') || '').trim()
+
+    if (!token && !idParam && !protocoloParam) {
+      return new NextResponse('Token de documento não fornecido.', { status: 400 })
+    }
+
+    const clean = decodeURIComponent(token || '').trim()
+    let contrato = clean ? await buscarContratoPorToken(clean) : null
+    if (!contrato && clean) {
+      contrato = await buscarContratoPorProtocolo(clean)
+    }
+    if (!contrato && clean) {
+      contrato = await buscarContratoPorId(clean)
+    }
+    if (!contrato && clean && clean.length >= 8) {
+      contrato = await buscarContratoPorHash(clean)
+    }
+
+    // Fallbacks adicionais via query params (id, protocolo, hash)
+    if (!contrato && idParam) {
+      contrato = await buscarContratoPorId(idParam)
+    }
+    if (!contrato && protocoloParam) {
+      contrato = await buscarContratoPorProtocolo(protocoloParam)
+    }
+    if (!contrato && hashParam && hashParam.length >= 8) {
+      contrato = await buscarContratoPorHash(hashParam)
+    }
+
+    // Se o registro foi removido/reemitido no banco enquanto o usuário estava com a tela aberta,
+    // recupera o binário diretamente do Supabase Storage pelo ID
+    if (!contrato) {
+      const candidateUuid = UUID_REGEX.test(idParam)
+        ? idParam
+        : UUID_REGEX.test(clean)
+        ? clean
+        : ''
+      if (candidateUuid) {
+        const directBuf = await recuperarPdfDiretoPorId(
+          candidateUuid,
+          versao === 'assinado' ? 'assinado' : 'original'
+        )
+        if (directBuf) {
+          const disp = isDownload ? 'attachment' : 'inline'
+          return new NextResponse(new Uint8Array(directBuf), {
+            status: 200,
+            headers: {
+              'Content-Type': 'application/pdf',
+              'Content-Disposition': buildContentDisposition(disp, `Documento_${protocoloParam || candidateUuid}.pdf`),
+              'Content-Length': String(directBuf.length),
+              'Cache-Control': 'private, max-age=30',
+              'X-Content-Type-Options': 'nosniff',
+            },
+          })
+        }
+      }
+
+      return new NextResponse('Documento não localizado ou expirado.', { status: 404 })
+    }
 
     const tipoDesejado: 'original' | 'assinado' =
       versao === 'original'
@@ -62,7 +164,10 @@ export async function GET(request: Request, { params }: Props) {
       return new NextResponse('Arquivo PDF não disponível para este documento.', { status: 404 })
     }
 
-    const docBase = (contrato.titulo_documento || 'documento').replace(/[^\w.-]/gi, '_')
+    const docBase = (contrato.titulo_documento || 'documento')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^\w.-]/gi, '_')
     let contentType = 'application/pdf'
     let filename = ''
     let disposition: 'inline' | 'attachment' = isDownload ? 'attachment' : 'inline'
@@ -116,7 +221,7 @@ export async function GET(request: Request, { params }: Props) {
       status: 200,
       headers: {
         'Content-Type': contentType,
-        'Content-Disposition': `${disposition}; filename="${filename}"`,
+        'Content-Disposition': buildContentDisposition(disposition, filename),
         'Content-Length': String(pdfBuffer.length),
         'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
         'X-Content-Type-Options': 'nosniff',

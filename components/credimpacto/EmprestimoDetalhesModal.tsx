@@ -15,10 +15,18 @@ import {
   ExternalLink,
   Download,
   AlertCircle,
-  Trash2
+  Trash2,
+  Copy,
+  MessageCircle
 } from 'lucide-react'
 import { CredImpactoEmprestimo } from '@/types/credimpacto'
 import { formatBrl, METODOS_LABELS } from '@/lib/credimpacto/engine'
+import {
+  buildCredImpactoWhatsAppMessage,
+  getCredImpactoWhatsAppUrl,
+  resolveColaboradorPhone
+} from '@/lib/credimpacto/whatsappTemplates'
+import { toast } from 'sonner'
 
 interface EmprestimoDetalhesModalProps {
   loan: CredImpactoEmprestimo | null
@@ -42,6 +50,25 @@ export function EmprestimoDetalhesModal({
   const [activeSubTab, setActiveSubTab] = useState<'resumo' | 'parcelas' | 'contrato' | 'memoria'>('resumo')
 
   if (!loan) return null
+
+  const copyToClipboard = (text: string, label: string) => {
+    navigator.clipboard.writeText(text)
+    toast.success(`${label} copiado!`)
+  }
+
+  const handleSendWhatsAppSchedule = () => {
+    const phone = resolveColaboradorPhone(loan)
+    const msg = buildCredImpactoWhatsAppMessage(loan, 'contrato_cronograma')
+    const url = getCredImpactoWhatsAppUrl(phone, msg)
+    window.open(url, '_blank', 'noopener,noreferrer')
+    toast.success('Abrindo WhatsApp com os dados do contrato e cronograma!')
+  }
+
+  const handleCopyWhatsAppSchedule = () => {
+    const msg = buildCredImpactoWhatsAppMessage(loan, 'contrato_cronograma')
+    navigator.clipboard.writeText(msg)
+    toast.success('Extrato do contrato e cronograma copiado!')
+  }
 
   const justificativaTexto =
     loan.justificativaSolicitacao ||
@@ -78,6 +105,32 @@ export function EmprestimoDetalhesModal({
     }
   }
 
+  const isDispensaAdmin = Boolean(
+    loan.aprovadoDiretoPorNome ||
+    (loan.codigoVerificacaoAssinatura && loan.codigoVerificacaoAssinatura.startsWith('VAL-ADM-')) ||
+    loan.assinanteDocumento === 'Autorização Administrativa'
+  )
+  const isSignedByColaborador = Boolean(loan.assinadoEm && !isDispensaAdmin)
+  const formattedSignatureDate = loan.assinadoEm
+    ? new Date(loan.assinadoEm).toLocaleString('pt-BR', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      })
+    : ''
+  const sigBadgeLabel = isSignedByColaborador
+    ? 'Contrato Assinado'
+    : isDispensaAdmin
+    ? 'S/ Assinatura (Admin)'
+    : 'Não Assinado'
+  const sigBadgeClass = isSignedByColaborador
+    ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800/60'
+    : isDispensaAdmin
+    ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-800/60'
+    : 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/50 dark:text-rose-300 dark:border-rose-800/60'
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in">
       <div className="bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-2xl max-w-5xl w-full h-[90vh] flex flex-col shadow-2xl overflow-hidden">
@@ -88,10 +141,14 @@ export function EmprestimoDetalhesModal({
               {loan.codigoOperacao.split('-')[2] || 'CRED'}
             </div>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <h3 className="text-base font-bold text-slate-900 dark:text-white font-mono">{loan.codigoOperacao}</h3>
                 <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
                   {loan.status}
+                </span>
+                <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border inline-flex items-center gap-1 ${sigBadgeClass}`}>
+                  {isSignedByColaborador ? <CheckCircle2 size={11} /> : <Clock size={11} />}
+                  <span>{sigBadgeLabel}</span>
                 </span>
               </div>
               <div className="text-xs text-slate-500 dark:text-slate-400">
@@ -101,16 +158,24 @@ export function EmprestimoDetalhesModal({
           </div>
 
           <div className="flex items-center gap-2 flex-wrap justify-end">
-            {isAdminOrFinance && onDirectApprove && (loan.status === 'aguardando_assinatura' || loan.status === 'solicitado') && (
-              <button
-                onClick={() => onDirectApprove(loan)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-sm transition-all"
-                title="Aprovar Diretamente (Dispensar Autorização do Colaborador)"
-              >
-                <CheckCircle2 size={14} />
-                <span>Aprovar Direto</span>
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={handleSendWhatsAppSchedule}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/50 dark:hover:bg-emerald-900/50 border border-emerald-200 dark:border-emerald-800/60 text-emerald-700 dark:text-emerald-300 text-xs font-bold transition-all"
+              title="Enviar Detalhes do Contrato e Cronograma de Parcelas pelo WhatsApp"
+            >
+              <MessageCircle size={14} />
+              <span>Enviar WhatsApp</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleCopyWhatsAppSchedule}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 border border-slate-200/80 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold transition-all"
+              title="Copiar Extrato e Cronograma em Texto"
+            >
+              <Copy size={14} />
+              <span className="hidden sm:inline">Copiar Extrato</span>
+            </button>
             {isAdminOrFinance && onDelete && (
               <button
                 onClick={() => onDelete(loan)}
@@ -197,7 +262,7 @@ export function EmprestimoDetalhesModal({
                   <div className="text-lg font-black text-emerald-600 dark:text-emerald-400 mt-0.5">{formatBrl(loan.saldoDevedorAtual)}</div>
                 </div>
                 <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800 rounded-xl p-3.5">
-                  <span className="text-[10px] text-slate-500 dark:text-slate-400 uppercase font-sans font-semibold">Total de Juros</span>
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 uppercase font-sans font-semibold">Total de Juros ({loan.taxaMensal}% a.m.)</span>
                   <div className="text-lg font-black text-amber-600 dark:text-amber-400 mt-0.5">{formatBrl(loan.totalJuros)}</div>
                 </div>
                 <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800 rounded-xl p-3.5">
@@ -232,6 +297,19 @@ export function EmprestimoDetalhesModal({
                     <span className="text-slate-500 dark:text-slate-400 font-sans">Data de Solicitação:</span>
                     <span className="text-slate-700 dark:text-slate-300">{new Date(loan.createdAt).toLocaleString('pt-BR')}</span>
                   </div>
+                  <div className="flex justify-between items-center pt-1.5 border-t border-slate-200/70 dark:border-slate-700/70">
+                    <span className="text-slate-500 dark:text-slate-400 font-sans">Assinatura do Contrato:</span>
+                    <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border inline-flex items-center gap-1 ${sigBadgeClass}`}>
+                      {isSignedByColaborador ? <CheckCircle2 size={11} /> : <Clock size={11} />}
+                      <span>
+                        {isSignedByColaborador
+                          ? `Assinado em ${formattedSignatureDate}`
+                          : isDispensaAdmin
+                          ? `Sem assinatura (Aprovado por ${loan.aprovadoDiretoPorNome || 'Admin'})`
+                          : 'Não Assinado'}
+                      </span>
+                    </span>
+                  </div>
                   {finalidadeTexto && (
                     <div className="flex justify-between">
                       <span className="text-slate-500 dark:text-slate-400 font-sans">Finalidade:</span>
@@ -255,9 +333,24 @@ export function EmprestimoDetalhesModal({
                       </a>
                     )}
                   </div>
-                  <div className="flex justify-between">
+                  <div className="flex justify-between items-center gap-2">
                     <span className="text-slate-500 dark:text-slate-400 font-sans">Chave PIX:</span>
-                    <span className="font-mono font-medium text-slate-900 dark:text-white">{loan.dadosBancarios?.chavePix || 'Não informada'}</span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-mono font-medium text-slate-900 dark:text-white">
+                        {loan.dadosBancarios?.chavePix || loan.colaboradorCpf || 'Não informada'}
+                      </span>
+                      {(loan.dadosBancarios?.chavePix || loan.colaboradorCpf) && (
+                        <button
+                          type="button"
+                          onClick={() => copyToClipboard(loan.dadosBancarios?.chavePix || loan.colaboradorCpf, 'Chave PIX')}
+                          className="px-2 py-0.5 rounded-md bg-cyan-50 hover:bg-cyan-100 dark:bg-cyan-950/60 dark:hover:bg-cyan-900/60 text-cyan-700 dark:text-cyan-300 border border-cyan-200/70 dark:border-cyan-800/60 font-bold text-[10px] flex items-center gap-1 transition-colors"
+                          title="Copiar Chave PIX"
+                        >
+                          <Copy size={11} />
+                          <span>Copiar</span>
+                        </button>
+                      )}
+                    </div>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-500 dark:text-slate-400 font-sans">Banco / Ag / Conta:</span>
@@ -308,24 +401,13 @@ export function EmprestimoDetalhesModal({
                   <div>
                     <div className="font-bold text-emerald-900 dark:text-emerald-300 flex items-center gap-1.5">
                       <CheckCircle2 size={16} className="text-emerald-600 dark:text-emerald-400" />
-                      <span>{isAdminOrFinance ? 'Aprovação Direta Disponível (Administrador)' : 'Contrato Aprovado e Pronto para Assinatura'}</span>
+                      <span>Contrato Aprovado e Pronto para Assinatura</span>
                     </div>
                     <div className="text-slate-600 dark:text-slate-400 text-[11px] mt-0.5">
-                      {isAdminOrFinance
-                        ? 'Como Administrador, você pode aprovar este empréstimo diretamente, dispensando a necessidade de autorização ou assinatura do colaborador.'
-                        : 'Para dar continuidade à liberação dos fundos, efetue a assinatura eletrônica com aceite da autorização de desconto em folha.'}
+                      Para dar continuidade à liberação dos fundos, efetue a assinatura eletrônica com aceite da autorização de desconto em folha.
                     </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    {isAdminOrFinance && onDirectApprove && (
-                      <button
-                        onClick={() => onDirectApprove(loan)}
-                        className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shrink-0 shadow-sm shadow-emerald-600/20 transition-colors flex items-center gap-1.5"
-                      >
-                        <CheckCircle2 size={14} />
-                        <span>Aprovar Direto</span>
-                      </button>
-                    )}
                     {onOpenSignModal && (
                       <button
                         onClick={() => onOpenSignModal(loan)}
@@ -335,27 +417,6 @@ export function EmprestimoDetalhesModal({
                       </button>
                     )}
                   </div>
-                </div>
-              )}
-
-              {loan.status === 'solicitado' && isAdminOrFinance && onDirectApprove && (
-                <div className="p-4 rounded-xl bg-amber-50/80 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-                  <div>
-                    <div className="font-bold text-amber-900 dark:text-amber-300 flex items-center gap-1.5">
-                      <Clock size={16} className="text-amber-600 dark:text-amber-400" />
-                      <span>Solicitação Pendente de Análise / Aprovação</span>
-                    </div>
-                    <div className="text-slate-600 dark:text-slate-400 text-[11px] mt-0.5">
-                      Você pode aprovar este empréstimo diretamente sem exigir a assinatura prévia do colaborador.
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => onDirectApprove(loan)}
-                    className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shrink-0 shadow-sm shadow-emerald-600/20 transition-colors flex items-center gap-1.5"
-                  >
-                    <CheckCircle2 size={14} />
-                    <span>Aprovar Direto</span>
-                  </button>
                 </div>
               )}
             </div>
@@ -444,11 +505,32 @@ export function EmprestimoDetalhesModal({
             <div className="space-y-4 animate-in fade-in duration-200">
               <div className="flex items-center justify-between bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-200/80 dark:border-slate-800 text-xs">
                 <div className="flex items-center gap-2">
-                  <ShieldCheck size={16} className={loan.assinadoEm ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400'} />
+                  <ShieldCheck
+                    size={16}
+                    className={
+                      isSignedByColaborador
+                        ? 'text-emerald-600 dark:text-emerald-400'
+                        : isDispensaAdmin
+                        ? 'text-amber-600 dark:text-amber-400'
+                        : 'text-rose-500 dark:text-rose-400'
+                    }
+                  />
                   <span>
                     Status da Assinatura:{' '}
-                    <strong className={loan.assinadoEm ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}>
-                      {loan.assinadoEm ? 'Assinado Eletronicamente' : 'Pendente de Assinatura'}
+                    <strong
+                      className={
+                        isSignedByColaborador
+                          ? 'text-emerald-600 dark:text-emerald-400'
+                          : isDispensaAdmin
+                          ? 'text-amber-600 dark:text-amber-400'
+                          : 'text-rose-600 dark:text-rose-400'
+                      }
+                    >
+                      {isSignedByColaborador
+                        ? `Assinado Eletronicamente pelo Colaborador (${formattedSignatureDate})`
+                        : isDispensaAdmin
+                        ? `Não Assinado pelo Colaborador (Aprovado s/ assinatura por ${loan.aprovadoDiretoPorNome || 'Admin'})`
+                        : 'Não Assinado (Pendente de Assinatura)'}
                     </strong>
                   </span>
                 </div>

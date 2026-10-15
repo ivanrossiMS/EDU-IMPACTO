@@ -16,6 +16,7 @@ export interface ResolvedUser {
   matricula?: string
   salarioBase?: number
   unidade?: string
+  telefone?: string
   isAdminOrFinance: boolean
 }
 
@@ -72,6 +73,17 @@ export async function resolveCredImpactoUser(authUser: any): Promise<ResolvedUse
   const cpf = dbFunc?.cpf || dbUser?.cpf || authUser.user_metadata?.cpf || ''
   const matricula = dbFunc?.codigo || authUser.user_metadata?.matricula || ''
   const unidade = dbFunc?.unidade || ''
+  const telefone =
+    dbFunc?.celular ||
+    dbFunc?.telefone ||
+    dbFunc?.dados?.celular ||
+    dbFunc?.dados?.telefone ||
+    dbUser?.celular ||
+    dbUser?.telefone ||
+    dbUser?.dados?.celular ||
+    dbUser?.dados?.telefone ||
+    authUser.user_metadata?.telefone ||
+    ''
   const salarioBase = dbFunc?.salario ? Number(dbFunc.salario) : (dbFunc?.dados?.salario ? Number(dbFunc.dados.salario) : undefined)
 
   const isAdminOrFinance = isCredImpactoAdmin(perfil, cargo)
@@ -88,6 +100,7 @@ export async function resolveCredImpactoUser(authUser: any): Promise<ResolvedUse
     matricula,
     salarioBase,
     unidade,
+    telefone,
     isAdminOrFinance
   }
 }

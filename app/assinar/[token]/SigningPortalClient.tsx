@@ -12,7 +12,7 @@ import {
   Building2, Home, Expand, Minus, Plus, Phone
 } from 'lucide-react'
 import { getWhatsAppShareUrl } from '@/lib/whatsapp'
-import { PdfCanvasViewer } from './PdfCanvasViewer'
+import { PdfCanvasViewer, getCachedPdfBlobUrl } from './PdfCanvasViewer'
 import {
   formatAbbreviatedSignerName,
   formatTimestampSelo,
@@ -489,10 +489,12 @@ export function SigningPortalClient({ contrato }: { contrato: ContratoProps }) {
     return canvas.toDataURL('image/png')
   }
 
-  // URL direta da rota de streaming do PDF
-  const pdfViewUrl = `/api/matriculas/digital/pdf/${contrato.token_assinatura}?v=${signedResult ? 'assinado' : 'original'}&t=${signedResult ? '1' : '0'}`
+  // URL direta da rota de streaming do PDF com parâmetros de fallback resilientes (id, protocolo e hash)
+  const safeTokenParam = encodeURIComponent(contrato.token_assinatura || contrato.protocolo || contrato.id)
+  const pdfVersion = signedResult || contrato.status === 'assinado' ? 'assinado' : 'original'
+  const pdfViewUrl = `/api/matriculas/digital/pdf/${safeTokenParam}?v=${pdfVersion}&t=${signedResult ? '1' : '0'}&id=${encodeURIComponent(contrato.id || '')}&protocolo=${encodeURIComponent(contrato.protocolo || '')}&h=${encodeURIComponent((signedResult?.documentoFinalHash || contrato.documento_original_hash || '').slice(0, 32))}`
 
-  // Abrir PDF em nova aba via Rota de API oficial
+  // Abrir PDF em nova aba via Rota de API oficial (ou Blob em memória se já carregado)
   const handleOpenPdfInNewTab = () => {
     window.open(pdfViewUrl, '_blank')
   }
@@ -690,6 +692,7 @@ export function SigningPortalClient({ contrato }: { contrato: ContratoProps }) {
         throw new Error(data.error || 'Falha ao processar assinatura eletrônica.')
       }
 
+      setLoadedPdfDoc(null)
       setSignedResult({
         protocolo: data.protocolo,
         documentoFinalHash: data.documentoFinalHash,
@@ -755,7 +758,7 @@ export function SigningPortalClient({ contrato }: { contrato: ContratoProps }) {
     if (source && source.startsWith('data:')) {
       downloadLink.href = source
     } else {
-      downloadLink.href = `/api/matriculas/digital/pdf/${contrato.token_assinatura}?v=assinado&download=1`
+      downloadLink.href = `/api/matriculas/digital/pdf/${safeTokenParam}?v=assinado&download=1&id=${encodeURIComponent(contrato.id || '')}&protocolo=${encodeURIComponent(contrato.protocolo || '')}`
     }
     downloadLink.download = finalName
     document.body.appendChild(downloadLink)
@@ -2694,8 +2697,11 @@ export function SigningPortalClient({ contrato }: { contrato: ContratoProps }) {
                 renderAllPages={true}
                 zoomPercent={zoomModalScale}
                 enableGestures={true}
+                externalPdfDoc={loadedPdfDoc}
                 onZoomChange={setZoomModalScale}
                 onPageChange={setCurrentPage}
+                onTotalPagesLoaded={setTotalPages}
+                onPdfDocLoaded={setLoadedPdfDoc}
                 footerAction={
                   <div
                     style={{

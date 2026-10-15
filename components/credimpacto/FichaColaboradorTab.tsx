@@ -32,14 +32,24 @@ import {
   Mail,
   SlidersHorizontal,
   ChevronDown,
-  Sparkles
+  Sparkles,
+  MessageCircle,
+  Banknote
 } from 'lucide-react'
 import {
   CredImpactoEmprestimo,
   CredImpactoParcela,
   CredImpactoConfig
 } from '@/types/credimpacto'
-import { formatBrl, METODOS_LABELS, roundMoney } from '@/lib/credimpacto/engine'
+import { formatBrl, METODOS_LABELS, roundMoney, simulateLoan } from '@/lib/credimpacto/engine'
+import { getWhatsAppShareUrl } from '@/lib/whatsapp'
+import {
+  buildCredImpactoWhatsAppMessage,
+  getCredImpactoWhatsAppUrl,
+  resolveColaboradorPhone,
+  formatInstallmentsScheduleBlock,
+  WhatsAppEventType
+} from '@/lib/credimpacto/whatsappTemplates'
 import { toast } from 'sonner'
 
 interface FichaColaboradorTabProps {
@@ -70,11 +80,89 @@ interface ColaboradorItem {
   contratosEmAnaliseCount: number
   contratosConcedidosCount: number
   saldoDevedor: number
+  jurosAReceber: number
   totalAmortizado: number
   totalJuros: number
   hasLoans: boolean
   hasActiveLoans: boolean
   proximaParcela: (CredImpactoParcela & { codigoOperacao: string }) | null
+}
+
+function getLoanReceivableInfo(loan: CredImpactoEmprestimo) {
+  const rawValor = Number(loan.valorAprovado || loan.valorSolicitado || 0)
+  const rawTotalAPagar = Number(loan.totalAPagar || 0)
+  const rawTotalJuros = Number(loan.totalJuros || 0)
+  const valorConcedidoSemJuros =
+    rawTotalAPagar > 0 && rawTotalJuros > 0 && Math.abs(rawValor - rawTotalAPagar) < 0.01
+      ? roundMoney(Math.max(0, rawTotalAPagar - rawTotalJuros))
+      : roundMoney(rawValor)
+
+  if (
+    loan.status === 'quitado' ||
+    loan.status === 'cancelado' ||
+    loan.status === 'recusado' ||
+    loan.status === 'solicitado' ||
+    loan.status === 'em_analise'
+  ) {
+    return {
+      valorConcedidoSemJuros,
+      principalAReceber: 0,
+      jurosAReceber: 0,
+      saldoAReceberComJuros: 0
+    }
+  }
+
+  if (loan.parcelas && loan.parcelas.length > 0) {
+    const parcelasEmAberto = loan.parcelas.filter(
+      (p) =>
+        p.status !== 'descontada' &&
+        p.status !== 'paga_avulso' &&
+        p.status !== 'cancelada' &&
+        p.status !== 'renegociada'
+    )
+    const principalAReceber = roundMoney(
+      parcelasEmAberto.reduce((acc, p) => acc + (p.valorAmortizacao || 0), 0)
+    )
+    const jurosAReceber = roundMoney(
+      parcelasEmAberto.reduce((acc, p) => acc + (p.valorJuros || 0), 0)
+    )
+    const saldoAReceberComJuros = roundMoney(
+      parcelasEmAberto.reduce((acc, p) => acc + (p.valorTotal || 0), 0)
+    )
+    return {
+      valorConcedidoSemJuros,
+      principalAReceber,
+      jurosAReceber,
+      saldoAReceberComJuros
+    }
+  }
+
+  const principalAReceber = roundMoney(loan.saldoDevedorAtual ?? valorConcedidoSemJuros)
+  const ratioAberto = valorConcedidoSemJuros > 0 ? principalAReceber / valorConcedidoSemJuros : 0
+  let totalJurosContrato = Number(loan.totalJuros || 0)
+  if (totalJurosContrato <= 0 && (loan.taxaMensal || 0) > 0) {
+    const sim = simulateLoan(
+      valorConcedidoSemJuros,
+      loan.quantidadeParcelas || 1,
+      loan.taxaMensal || 0,
+      loan.metodoCalculo || 'JUROS_SIMPLES_SALDO',
+      loan.colaboradorSalarioBase,
+      loan.createdAt ? new Date(loan.createdAt) : new Date(),
+      5,
+      loan.primeiraParcelaCompetencia,
+      loan.primeiraParcelaVencimento
+    )
+    totalJurosContrato = sim.totalJuros
+  }
+  const jurosAReceber = roundMoney(totalJurosContrato * ratioAberto)
+  const saldoAReceberComJuros = roundMoney(principalAReceber + jurosAReceber)
+
+  return {
+    valorConcedidoSemJuros,
+    principalAReceber,
+    jurosAReceber,
+    saldoAReceberComJuros
+  }
 }
 
 function cleanCpfDigits(val?: string | null): string {
@@ -114,7 +202,14 @@ export function FichaColaboradorTab({
   const [activeTabSubView, setActiveTabSubView] = useState<'contratos' | 'cronograma' | 'pagas'>('contratos')
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
   const [expandedLoanId, setExpandedLoanId] = useState<string | null>(null)
-  
+
+  // Modal de Envio de Contrato e Cronograma por Empréstimo no WhatsApp
+  const [whatsappModalLoan, setWhatsappModalLoan] = useState<CredImpactoEmprestimo | null>(null)
+  const [whatsappEventType, setWhatsappEventType] = useState<WhatsAppEventType>('contrato_cronograma')
+  const [whatsappPhone, setWhatsappPhone] = useState('')
+  const [whatsappMessage, setWhatsappMessage] = useState('')
+  const [isSavingWhatsappPhone, setIsSavingWhatsappPhone] = useState(false)
+
   useEffect(() => {
     if (initialSelectedColaboradorId) {
       setSelectedColabId(initialSelectedColaboradorId)
@@ -223,7 +318,7 @@ export function FichaColaboradorTab({
           cargo: emp.colaboradorCargo || 'Colaborador',
           unidade: emp.colaboradorUnidade || 'Geral',
           email: emp.colaboradorEmail || '',
-          telefone: '',
+          telefone: emp.colaboradorTelefone || '',
           salario: emp.colaboradorSalarioBase || 0,
           dadosBancarios: emp.dadosBancarios,
           loans: [],
@@ -233,6 +328,7 @@ export function FichaColaboradorTab({
           contratosEmAnaliseCount: 0,
           contratosConcedidosCount: 0,
           saldoDevedor: 0,
+          jurosAReceber: 0,
           totalAmortizado: 0,
           totalJuros: 0,
           hasLoans: true,
@@ -248,12 +344,15 @@ export function FichaColaboradorTab({
       }
       colab.hasLoans = true
 
+      const receivableInfo = getLoanReceivableInfo(emp)
+
       if (emp.status === 'ativo') {
         if (!colab.activeLoans.some((l) => l.id === emp.id)) {
           colab.activeLoans.push(emp)
         }
         colab.hasActiveLoans = true
-        colab.saldoDevedor += emp.saldoDevedorAtual || 0
+        colab.saldoDevedor = roundMoney(colab.saldoDevedor + receivableInfo.saldoAReceberComJuros)
+        colab.jurosAReceber = roundMoney(colab.jurosAReceber + receivableInfo.jurosAReceber)
       }
 
       // 1. Contratos Concedidos / Formalizados (Ativo, Quitado, Aguardando Liberação TED, Renegociado)
@@ -264,7 +363,7 @@ export function FichaColaboradorTab({
         emp.status === 'renegociado'
 
       if (isConcedido) {
-        colab.totalTomado += emp.valorAprovado || emp.valorSolicitado || 0
+        colab.totalTomado = roundMoney(colab.totalTomado + receivableInfo.valorConcedidoSemJuros)
         colab.contratosConcedidosCount += 1
       }
 
@@ -298,6 +397,9 @@ export function FichaColaboradorTab({
       }
       if (emp.colaboradorEmail && !colab.email) {
         colab.email = emp.colaboradorEmail
+      }
+      if (emp.colaboradorTelefone && !colab.telefone) {
+        colab.telefone = emp.colaboradorTelefone
       }
       if (emp.colaboradorMatricula && !colab.matricula) {
         colab.matricula = emp.colaboradorMatricula
@@ -366,6 +468,7 @@ export function FichaColaboradorTab({
           contratosEmAnaliseCount: 0,
           contratosConcedidosCount: 0,
           saldoDevedor: 0,
+          jurosAReceber: 0,
           totalAmortizado: 0,
           totalJuros: 0,
           hasLoans: false,
@@ -479,6 +582,7 @@ export function FichaColaboradorTab({
         contratosEmAnaliseCount: 0,
         contratosConcedidosCount: 0,
         saldoDevedor: 0,
+        jurosAReceber: 0,
         totalAmortizado: 0,
         percentAmortizado: 0,
         totalJurosContratados: 0,
@@ -512,6 +616,7 @@ export function FichaColaboradorTab({
     const contratosEmAnaliseCount = selectedColaborador.contratosEmAnaliseCount
     const contratosConcedidosCount = selectedColaborador.contratosConcedidosCount
     const saldoDevedor = selectedColaborador.saldoDevedor
+    const jurosAReceber = selectedColaborador.jurosAReceber
     const totalAmortizado = selectedColaborador.totalAmortizado
     const percentAmortizado = totalTomado > 0
       ? Math.min(100, Math.round((totalAmortizado / totalTomado) * 100))
@@ -532,6 +637,7 @@ export function FichaColaboradorTab({
       contratosEmAnaliseCount,
       contratosConcedidosCount,
       saldoDevedor,
+      jurosAReceber,
       totalAmortizado,
       percentAmortizado,
       totalJurosContratados: selectedColaborador.totalJuros,
@@ -1018,38 +1124,156 @@ export function FichaColaboradorTab({
   }
 
   /**
-   * COMPARTILHAR / ENVIAR NO WHATSAPP
+   * ABRIR MODAL DE WHATSAPP PARA UM EMPRÉSTIMO ESPECÍFICO (CONTRATO + CRONOGRAMA)
+   */
+  const handleOpenLoanWhatsApp = (
+    loan: CredImpactoEmprestimo,
+    defaultType: WhatsAppEventType = 'contrato_cronograma'
+  ) => {
+    const resolvedPhone =
+      resolveColaboradorPhone(loan, colaboradoresList) || selectedColaborador?.telefone || ''
+    const msg = buildCredImpactoWhatsAppMessage(loan, defaultType)
+    setWhatsappModalLoan(loan)
+    setWhatsappEventType(defaultType)
+    setWhatsappPhone(resolvedPhone)
+    setWhatsappMessage(msg)
+  }
+
+  const handleChangeWhatsAppEventType = (newType: WhatsAppEventType) => {
+    setWhatsappEventType(newType)
+    if (whatsappModalLoan) {
+      setWhatsappMessage(buildCredImpactoWhatsAppMessage(whatsappModalLoan, newType))
+    }
+  }
+
+  const handleCopyLoanExtrato = (loan: CredImpactoEmprestimo) => {
+    const msg = buildCredImpactoWhatsAppMessage(loan, 'contrato_cronograma')
+    navigator.clipboard.writeText(msg)
+    toast.success(`Extrato e cronograma do contrato ${loan.codigoOperacao} copiados!`)
+  }
+
+  const handleSaveWhatsAppPhone = async (silent = false) => {
+    if (!whatsappModalLoan) return
+    const cleaned = whatsappPhone.trim()
+    if (!cleaned || cleaned.replace(/\D/g, '').length < 10) {
+      if (!silent) toast.error('Informe um número de WhatsApp válido com DDD.')
+      return
+    }
+    setIsSavingWhatsappPhone(true)
+    try {
+      const res = await fetch(`/api/credimpacto/emprestimos/${whatsappModalLoan.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          acao: 'atualizar_telefone_colaborador',
+          telefone: cleaned
+        })
+      })
+      if (res.ok) {
+        whatsappModalLoan.colaboradorTelefone = cleaned
+        if (selectedColaborador) {
+          selectedColaborador.telefone = cleaned
+        }
+        if (!silent) {
+          toast.success('Telefone de WhatsApp salvo no cadastro do colaborador!')
+          onRefresh?.()
+        }
+      } else if (!silent) {
+        const data = await res.json().catch(() => ({}))
+        toast.error(data.error || 'Erro ao salvar telefone')
+      }
+    } catch {
+      if (!silent) toast.error('Erro ao salvar telefone do colaborador')
+    } finally {
+      setIsSavingWhatsappPhone(false)
+    }
+  }
+
+  const handleSendLoanWhatsAppNow = async () => {
+    if (!whatsappMessage.trim()) {
+      toast.error('A mensagem não pode estar vazia.')
+      return
+    }
+    if (whatsappModalLoan && whatsappPhone.trim() && whatsappPhone.replace(/\D/g, '').length >= 10) {
+      handleSaveWhatsAppPhone(true)
+    }
+    const url = getCredImpactoWhatsAppUrl(whatsappPhone, whatsappMessage)
+    window.open(url, '_blank', 'noopener,noreferrer')
+    toast.success('Abrindo WhatsApp para envio ao colaborador!')
+  }
+
+  /**
+   * COMPARTILHAR / ENVIAR FICHA CONSOLIDADA + CONTRATOS E PARCELAS NO WHATSAPP
    */
   const handleSendWhatsApp = () => {
     if (!selectedColaborador) return
 
+    // Se o colaborador possui exatamente 1 contrato, já abre o modal organizado daquele contrato com todas as opções
+    if (selectedColaborador.loans.length === 1) {
+      handleOpenLoanWhatsApp(selectedColaborador.loans[0], 'contrato_cronograma')
+      return
+    }
+
     const dataHoje = new Date().toLocaleDateString('pt-BR')
+    const contratosDetalhadosTexto =
+      selectedColaborador.loans.length > 0
+        ? selectedColaborador.loans
+            .map((loan, idx) => {
+              const rec = getLoanReceivableInfo(loan)
+              const badge = getStatusBadge(loan.status)
+              const taxaFmt = Number(loan.taxaMensal || 0).toLocaleString('pt-BR', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+              })
+              const cronograma = formatInstallmentsScheduleBlock(
+                loan.parcelas || [],
+                loan.quantidadeParcelas
+              )
+              return (
+                `📑 *CONTRATO ${idx + 1}: ${loan.codigoOperacao}* (${badge.label})\n` +
+                `• Valor Concedido: *${formatBrl(rec.valorConcedidoSemJuros)}* em *${loan.quantidadeParcelas}x*\n` +
+                `• Taxa de Juros: *${taxaFmt}% a.m.* | Total Juros: *${formatBrl(loan.totalJuros)}*\n` +
+                `• Total do Contrato: *${formatBrl(loan.totalAPagar)}*\n` +
+                `• Saldo a Receber: *${formatBrl(rec.saldoAReceberComJuros)}*\n\n` +
+                `📅 *Cronograma (${loan.codigoOperacao}):*\n` +
+                `${cronograma}`
+              )
+            })
+            .join('\n\n────────────────────────\n\n')
+        : 'Nenhum contrato registrado.'
+
     const text =
-      `📄 *CREDIMPACTO • Ficha Financeira Individual*\n` +
+      `📄 *CREDIMPACTO • FICHA FINANCEIRA E CRONOGRAMA DE EMPRÉSTIMOS*\n\n` +
       `👤 *Colaborador:* ${selectedColaborador.nome}\n` +
-      `💼 *Cargo:* ${selectedColaborador.cargo}\n` +
+      `💼 *Cargo:* ${selectedColaborador.cargo} • *Unidade:* ${selectedColaborador.unidade || 'Matriz'}\n` +
       `🆔 *CPF:* ${selectedColaborador.cpf || 'Não informado'}\n\n` +
-      `💰 *RESUMO FINANCEIRO:*\n` +
-      `• Total Concedido: ${formatBrl(colabMetrics.totalTomado)}\n` +
+      `💰 *RESUMO GERAL CONSOLIDADO:*\n` +
+      `• Total Concedido: *${formatBrl(colabMetrics.totalTomado)}*\n` +
       (colabMetrics.totalEmAnalise > 0
-        ? `• Em Análise: ${formatBrl(colabMetrics.totalEmAnalise)} (${colabMetrics.contratosEmAnaliseCount} ${colabMetrics.contratosEmAnaliseCount === 1 ? 'proposta pendente' : 'propostas pendentes'})\n`
+        ? `• Em Análise: *${formatBrl(colabMetrics.totalEmAnalise)}* (${colabMetrics.contratosEmAnaliseCount} ${colabMetrics.contratosEmAnaliseCount === 1 ? 'proposta pendente' : 'propostas pendentes'})\n`
         : '') +
-      `• Saldo Devedor Atual: ${formatBrl(colabMetrics.saldoDevedor)}\n` +
-      `• Total Já Amortizado: ${formatBrl(colabMetrics.totalAmortizado)} (${colabMetrics.percentAmortizado}% quitado)\n` +
-      `• Contratos Ativos: ${colabMetrics.contratosAtivosCount}\n\n` +
-      (colabMetrics.proximaParcela
-        ? `📅 *PRÓXIMO DESCONTO EM FOLHA:*\n` +
-          `• Parcela: ${formatBrl(colabMetrics.proximaParcela.valorTotal)}\n` +
-          `• Vencimento: ${new Date(colabMetrics.proximaParcela.dataVencimento + 'T12:00:00Z').toLocaleDateString('pt-BR')} (Competência ${colabMetrics.proximaParcela.competencia})\n\n`
-        : `📅 *DESCONTOS:* Nenhuma parcela pendente em aberto.\n\n`) +
-      `Emitido em ${dataHoje} pelo Sistema de Gestão Financeira • Colégio Impacto.`
+      `• Saldo a Receber Atual: *${formatBrl(colabMetrics.saldoDevedor)}*\n` +
+      `• Total Já Amortizado: *${formatBrl(colabMetrics.totalAmortizado)}* (${colabMetrics.percentAmortizado}% quitado)\n` +
+      `• Contratos Ativos: *${colabMetrics.contratosAtivosCount}*\n\n` +
+      `════════════════════════\n` +
+      `${contratosDetalhadosTexto}\n` +
+      `════════════════════════\n\n` +
+      `_Emitido em ${dataHoje} • Departamento Financeiro • Colégio Impacto_`
 
-    const cleanPhone = (selectedColaborador.telefone || '').replace(/\D/g, '')
-    const whatsappUrl = cleanPhone.length >= 10
-      ? `https://wa.me/55${cleanPhone}?text=${encodeURIComponent(text)}`
-      : `https://wa.me/?text=${encodeURIComponent(text)}`
+    const firstLoan = selectedColaborador.loans[0] || null
+    const resolvedPhone =
+      selectedColaborador.telefone ||
+      (firstLoan ? resolveColaboradorPhone(firstLoan, colaboradoresList) : '')
 
-    window.open(whatsappUrl, '_blank')
+    if (firstLoan) {
+      setWhatsappModalLoan(firstLoan)
+      setWhatsappEventType('contrato_cronograma')
+      setWhatsappPhone(resolvedPhone)
+      setWhatsappMessage(text)
+    } else {
+      const whatsappUrl = getWhatsAppShareUrl(resolvedPhone, text)
+      window.open(whatsappUrl, '_blank', 'noopener,noreferrer')
+    }
   }
 
   /**
@@ -1057,6 +1281,11 @@ export function FichaColaboradorTab({
    */
   const handleCopySummary = () => {
     if (!selectedColaborador) return
+
+    if (selectedColaborador.loans.length === 1) {
+      handleCopyLoanExtrato(selectedColaborador.loans[0])
+      return
+    }
 
     const dataHoje = new Date().toLocaleDateString('pt-BR')
     const text =
@@ -1525,7 +1754,7 @@ export function FichaColaboradorTab({
                 {formatBrl(colabMetrics.totalTomado)}
               </div>
               <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 font-semibold truncate">
-                {colabMetrics.contratosConcedidosCount} {colabMetrics.contratosConcedidosCount === 1 ? 'operação concedida' : 'operações concedidas'}
+                {colabMetrics.contratosConcedidosCount} {colabMetrics.contratosConcedidosCount === 1 ? 'operação concedida' : 'operações concedidas'} • Sem juros
               </div>
             </div>
 
@@ -1561,12 +1790,12 @@ export function FichaColaboradorTab({
               </div>
             </div>
 
-            {/* CARD 3: SALDO DEVEDOR ATUAL */}
+            {/* CARD 3: SALDO A RECEBER (COM JUROS + DETALHE DE JUROS ABAIXO) */}
             <div className="bg-white/90 dark:bg-slate-900/85 backdrop-blur-xl border border-white/80 dark:border-slate-700/60 rounded-2xl p-4 shadow-[0_10px_25px_-5px_rgba(15,23,42,0.08),0_8px_10px_-6px_rgba(15,23,42,0.04),inset_0_1px_1px_rgba(255,255,255,0.95)] dark:shadow-[0_12px_28px_-6px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.08)] ring-1 ring-slate-900/5 dark:ring-white/5 relative overflow-hidden transition-all hover:shadow-xl">
               <div className="h-1.5 w-full bg-gradient-to-r from-cyan-500 to-blue-500 absolute top-0 left-0" />
               <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 mb-2">
                 <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-cyan-800 dark:text-cyan-300">
-                  Saldo Devedor Atual
+                  Saldo a Receber
                 </span>
                 <div className="p-1.5 sm:p-2 rounded-xl bg-cyan-100 dark:bg-cyan-950/70 text-cyan-700 dark:text-cyan-300">
                   <Receipt size={16} />
@@ -1575,8 +1804,8 @@ export function FichaColaboradorTab({
               <div className="text-lg sm:text-2xl font-black text-emerald-600 dark:text-emerald-400 font-mono">
                 {formatBrl(colabMetrics.saldoDevedor)}
               </div>
-              <div className="text-[11px] text-cyan-800/80 dark:text-cyan-400/80 mt-1 font-semibold truncate">
-                {colabMetrics.contratosAtivosCount} {colabMetrics.contratosAtivosCount === 1 ? 'contrato em aberto' : 'contratos em aberto'}
+              <div className="text-[11px] text-cyan-800/80 dark:text-cyan-400/80 mt-1 font-semibold truncate font-mono">
+                Juros: {formatBrl(colabMetrics.jurosAReceber)}
               </div>
             </div>
 
@@ -1671,6 +1900,22 @@ export function FichaColaboradorTab({
                   selectedColaborador.loans.map((loan) => {
                     const badge = getStatusBadge(loan.status)
                     const cardStyle = getStatusCardStyles(loan.status)
+                    const isDispensaAdmin = Boolean(
+                      loan.aprovadoDiretoPorNome ||
+                      (loan.codigoVerificacaoAssinatura && loan.codigoVerificacaoAssinatura.startsWith('VAL-ADM-')) ||
+                      loan.assinanteDocumento === 'Autorização Administrativa'
+                    )
+                    const isSignedByColaborador = Boolean(loan.assinadoEm && !isDispensaAdmin)
+                    const sigBadgeLabel = isSignedByColaborador
+                      ? 'Contrato Assinado'
+                      : isDispensaAdmin
+                      ? 'S/ Assinatura (Admin)'
+                      : 'Não Assinado'
+                    const sigBadgeClass = isSignedByColaborador
+                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800/70'
+                      : isDispensaAdmin
+                      ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800/70'
+                      : 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/60 dark:text-rose-300 dark:border-rose-800/70'
                     const percentQuitado = loan.valorAprovado > 0
                       ? Math.min(100, Math.round(((loan.totalAmortizado || 0) / loan.valorAprovado) * 100))
                       : 0
@@ -1701,15 +1946,46 @@ export function FichaColaboradorTab({
                                 <span className={`text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full border shadow-xs whitespace-nowrap ${badge.bg}`}>
                                   {badge.label}
                                 </span>
+                                <span
+                                  className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border shadow-xs whitespace-nowrap inline-flex items-center gap-1 ${sigBadgeClass}`}
+                                  title={
+                                    isSignedByColaborador && loan.assinadoEm
+                                      ? `Contrato assinado eletronicamente em ${new Date(loan.assinadoEm).toLocaleString('pt-BR')}`
+                                      : isDispensaAdmin
+                                      ? `Aprovado pelo Admin (${loan.aprovadoDiretoPorNome || 'Admin'}) sem assinatura eletrônica do colaborador`
+                                      : 'Contrato ainda não foi assinado pelo colaborador'
+                                  }
+                                >
+                                  {isSignedByColaborador ? <CheckCircle2 size={10} /> : <Clock size={10} />}
+                                  <span>{sigBadgeLabel}</span>
+                                </span>
                               </div>
                               <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                                Contratado em {new Date(loan.createdAt).toLocaleDateString('pt-BR')} • {loan.quantidadeParcelas}x parcelas • Taxa: {loan.taxaMensal}% a.m.
+                                Contratado em {new Date(loan.createdAt).toLocaleDateString('pt-BR')} • {loan.quantidadeParcelas}x parcelas • Taxa: {Number(loan.taxaMensal ?? 0)}% a.m.
                               </div>
                             </div>
                           </div>
 
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
                             <button
+                              type="button"
+                              onClick={() => handleOpenLoanWhatsApp(loan, 'contrato_cronograma')}
+                              className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 transition-all shadow-sm shadow-emerald-600/20 active:scale-95"
+                              title="Enviar Detalhes do Contrato e Cronograma de Parcelas pelo WhatsApp"
+                            >
+                              <MessageCircle size={13} />
+                              <span>Enviar WhatsApp</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleCopyLoanExtrato(loan)}
+                              className="p-1.5 rounded-xl bg-white/90 hover:bg-white dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-200/80 dark:border-slate-700 transition-all shadow-xs"
+                              title="Copiar Contrato e Cronograma de Parcelas em Texto"
+                            >
+                              <Copy size={13} />
+                            </button>
+                            <button
+                              type="button"
                               onClick={() => onOpenDetails(loan)}
                               className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs flex items-center gap-1.5 transition-all shadow-xs"
                             >
@@ -1717,6 +1993,7 @@ export function FichaColaboradorTab({
                               <span>Ver Contrato</span>
                             </button>
                             <button
+                              type="button"
                               onClick={() => setExpandedLoanId(isExpanded ? null : loan.id)}
                               className="px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 font-bold text-xs flex items-center gap-1.5 transition-all border border-emerald-200 dark:border-emerald-800/50 shadow-xs"
                             >
@@ -1732,6 +2009,7 @@ export function FichaColaboradorTab({
                             const isPendingAppr = loan.status === 'solicitado' || loan.status === 'em_analise' || loan.status === 'contraproposta'
                             const isPendingSignOrDisb = loan.status === 'aguardando_assinatura' || loan.status === 'aguardando_liberacao'
                             const isEffectivelyActive = loan.status === 'ativo'
+                            const receivableInfo = getLoanReceivableInfo(loan)
 
                             return (
                               <>
@@ -1741,22 +2019,29 @@ export function FichaColaboradorTab({
                                       {isPendingAppr ? 'Valor Solicitado' : 'Valor Concedido'}
                                     </span>
                                     <div className="text-sm font-bold text-slate-900 dark:text-white mt-0.5">
-                                      {formatBrl(loan.valorAprovado || loan.valorSolicitado)}
+                                      {formatBrl(receivableInfo.valorConcedidoSemJuros)}
+                                    </div>
+                                    <div className="text-[9px] text-slate-400 font-sans mt-0.5">
+                                      Sem juros
                                     </div>
                                   </div>
 
                                   <div className="bg-slate-50/80 dark:bg-slate-800/50 backdrop-blur-sm p-3 rounded-xl border border-slate-200/60 dark:border-slate-800">
-                                    <span className="text-[10px] uppercase font-sans text-slate-400 font-semibold">Saldo Devedor</span>
+                                    <span className="text-[10px] uppercase font-sans text-slate-400 font-semibold">Saldo a Receber</span>
                                     <div className={`text-sm font-bold mt-0.5 ${
                                       isEffectivelyActive
                                         ? 'text-emerald-600 dark:text-emerald-400'
                                         : 'text-slate-500 dark:text-slate-400'
                                     }`}>
-                                      {isEffectivelyActive ? formatBrl(loan.saldoDevedorAtual) : 'R$ 0,00'}
+                                      {isEffectivelyActive ? formatBrl(receivableInfo.saldoAReceberComJuros) : 'R$ 0,00'}
                                     </div>
-                                    {!isEffectivelyActive && (
+                                    {isEffectivelyActive ? (
+                                      <div className="text-[9px] text-slate-500 dark:text-slate-400 font-mono mt-0.5">
+                                        Juros: {formatBrl(receivableInfo.jurosAReceber)}
+                                      </div>
+                                    ) : (
                                       <div className="text-[9px] text-amber-600 dark:text-amber-400 font-sans mt-0.5">
-                                        {isPendingAppr ? 'Em análise (não liberado)' : isPendingSignOrDisb ? 'Aguardando liberação' : 'Sem saldo devedor'}
+                                        {isPendingAppr ? 'Em análise (não liberado)' : isPendingSignOrDisb ? 'Aguardando liberação' : 'Sem saldo a receber'}
                                       </div>
                                     )}
                                   </div>
@@ -1814,9 +2099,29 @@ export function FichaColaboradorTab({
                           {/* TABELA DETALHADA DE PARCELAS EXPANSÍVEL */}
                           {isExpanded && (
                             <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800 overflow-x-auto">
-                              <div className="text-xs font-bold text-slate-900 dark:text-white mb-2 flex items-center gap-1.5">
-                                <Receipt size={14} className="text-emerald-500" />
-                                <span>Tabela de Parcelas • {loan.codigoOperacao}</span>
+                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+                                <div className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                                  <Receipt size={14} className="text-emerald-500" />
+                                  <span>Tabela de Parcelas • {loan.codigoOperacao}</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenLoanWhatsApp(loan, 'contrato_cronograma')}
+                                    className="px-3 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:hover:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800/60 font-bold text-[11px] flex items-center gap-1.5 transition-all"
+                                  >
+                                    <MessageCircle size={13} />
+                                    <span>Enviar Contrato e Cronograma no WhatsApp</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleCopyLoanExtrato(loan)}
+                                    className="px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 font-bold text-[11px] flex items-center gap-1.5 transition-all"
+                                  >
+                                    <Copy size={12} />
+                                    <span>Copiar Cronograma</span>
+                                  </button>
+                                </div>
                               </div>
                               <table className="w-full text-xs text-left">
                                 <thead className="bg-slate-50/80 dark:bg-slate-800/50 text-[10px] font-bold text-slate-500 uppercase tracking-wider border-y border-slate-200/80 dark:border-slate-800">
@@ -2045,6 +2350,171 @@ export function FichaColaboradorTab({
             )}
           </div>
         </>
+      )}
+
+      {/* MODAL DE ENVIO DE CONTRATO E CRONOGRAMA NO WHATSAPP */}
+      {whatsappModalLoan && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-white dark:bg-slate-900 border border-emerald-200/90 dark:border-emerald-800/60 rounded-2xl max-w-xl w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-start border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+                  <MessageCircle size={20} />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                    Enviar Contrato e Cronograma no WhatsApp
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    {whatsappModalLoan.colaboradorNome} • Operação <span className="font-mono font-bold">{whatsappModalLoan.codigoOperacao}</span>
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setWhatsappModalLoan(null)}
+                className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors text-sm p-1"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* SELETOR DE MODELO DE MENSAGEM */}
+            <div className="space-y-1.5">
+              <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider">
+                Modelo de Mensagem Organizada
+              </label>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleChangeWhatsAppEventType('contrato_cronograma')}
+                  className={`py-2 px-2 rounded-xl border text-[11px] font-bold flex items-center justify-center gap-1.5 transition-all ${
+                    whatsappEventType === 'contrato_cronograma'
+                      ? 'bg-emerald-50 dark:bg-emerald-950/50 border-emerald-400 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300 shadow-xs'
+                      : 'bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-100'
+                  }`}
+                >
+                  <FileText size={13} />
+                  <span>Contrato & Parcelas</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleChangeWhatsAppEventType('aprovado')}
+                  className={`py-2 px-2 rounded-xl border text-[11px] font-bold flex items-center justify-center gap-1.5 transition-all ${
+                    whatsappEventType === 'aprovado'
+                      ? 'bg-emerald-50 dark:bg-emerald-950/50 border-emerald-400 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300 shadow-xs'
+                      : 'bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-100'
+                  }`}
+                >
+                  <CheckCircle2 size={13} />
+                  <span>Aprovado</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleChangeWhatsAppEventType('depositado')}
+                  className={`py-2 px-2 rounded-xl border text-[11px] font-bold flex items-center justify-center gap-1.5 transition-all ${
+                    whatsappEventType === 'depositado'
+                      ? 'bg-cyan-50 dark:bg-cyan-950/50 border-cyan-400 dark:border-cyan-700 text-cyan-700 dark:text-cyan-300 shadow-xs'
+                      : 'bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-100'
+                  }`}
+                >
+                  <Banknote size={13} />
+                  <span>Depositado</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleChangeWhatsAppEventType('recusado')}
+                  className={`py-2 px-2 rounded-xl border text-[11px] font-bold flex items-center justify-center gap-1.5 transition-all ${
+                    whatsappEventType === 'recusado'
+                      ? 'bg-rose-50 dark:bg-rose-950/50 border-rose-400 dark:border-rose-700 text-rose-700 dark:text-rose-300 shadow-xs'
+                      : 'bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-100'
+                  }`}
+                >
+                  <AlertTriangle size={13} />
+                  <span>Recusado</span>
+                </button>
+              </div>
+            </div>
+
+            {/* TELEFONE / WHATSAPP DO COLABORADOR */}
+            <div className="space-y-1.5 bg-slate-50 dark:bg-slate-800/50 p-3.5 rounded-xl border border-slate-200/80 dark:border-slate-700/60">
+              <div className="flex items-center justify-between">
+                <label className="text-[11px] font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                  <Phone size={13} className="text-emerald-600 dark:text-emerald-400" />
+                  <span>WhatsApp do Colaborador (com DDD)</span>
+                </label>
+                {!whatsappPhone.trim() && (
+                  <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400">
+                    ⚠️ Telefone não cadastrado — informe abaixo
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="tel"
+                  value={whatsappPhone}
+                  onChange={(e) => setWhatsappPhone(e.target.value)}
+                  placeholder="Ex: (92) 99999-9999"
+                  className="flex-1 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-mono font-bold text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                />
+                <button
+                  type="button"
+                  disabled={isSavingWhatsappPhone || !whatsappPhone.trim()}
+                  onClick={() => handleSaveWhatsAppPhone(false)}
+                  className="px-3 py-2 rounded-xl bg-slate-200/80 hover:bg-slate-300/80 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-[11px] font-bold transition-colors disabled:opacity-50 shrink-0"
+                  title="Salvar número no cadastro do colaborador"
+                >
+                  {isSavingWhatsappPhone ? 'Salvando...' : 'Salvar Nº'}
+                </button>
+              </div>
+            </div>
+
+            {/* TEXTO DA MENSAGEM (EDITÁVEL) */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="text-[11px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider">
+                  Mensagem Organizada (Contrato + Cronograma de Parcelas)
+                </label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(whatsappMessage)
+                    toast.success('Mensagem copiada para a área de transferência!')
+                  }}
+                  className="text-[11px] font-bold text-cyan-600 dark:text-cyan-400 hover:underline flex items-center gap-1"
+                >
+                  <Copy size={12} />
+                  <span>Copiar Texto</span>
+                </button>
+              </div>
+              <textarea
+                rows={12}
+                value={whatsappMessage}
+                onChange={(e) => setWhatsappMessage(e.target.value)}
+                className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl p-3 text-xs text-slate-800 dark:text-slate-200 font-sans leading-relaxed focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+              />
+            </div>
+
+            <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2">
+              <button
+                type="button"
+                onClick={() => setWhatsappModalLoan(null)}
+                className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 transition-colors"
+              >
+                Fechar
+              </button>
+              <button
+                type="button"
+                disabled={!whatsappMessage.trim()}
+                onClick={handleSendLoanWhatsAppNow}
+                className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white shadow-sm shadow-emerald-600/30 disabled:opacity-50 transition-all flex items-center gap-2"
+              >
+                <MessageCircle size={15} />
+                <span>Enviar no WhatsApp</span>
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

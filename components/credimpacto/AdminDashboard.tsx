@@ -24,14 +24,26 @@ import {
   DollarSign,
   CreditCard,
   Pencil,
-  Building
+  Building,
+  ChevronDown,
+  ChevronUp,
+  MessageCircle,
+  Send,
+  Phone
 } from 'lucide-react'
 import { CredImpactoEmprestimo, StatusEmprestimo } from '@/types/credimpacto'
-import { formatBrl, METODOS_LABELS } from '@/lib/credimpacto/engine'
+import { formatBrl, METODOS_LABELS, roundMoney, simulateLoan } from '@/lib/credimpacto/engine'
+import {
+  WhatsAppEventType,
+  resolveColaboradorPhone,
+  buildCredImpactoWhatsAppMessage,
+  getCredImpactoWhatsAppUrl
+} from '@/lib/credimpacto/whatsappTemplates'
 import { toast } from 'sonner'
 
 interface AdminDashboardProps {
   emprestimos: CredImpactoEmprestimo[]
+  colaboradoresList?: any[]
   onOpenDetails: (loan: CredImpactoEmprestimo) => void
   onRefresh: () => void
   viewModeTab?: 'dashboard' | 'emprestimos' | 'analise' | 'liberacoes'
@@ -40,6 +52,7 @@ interface AdminDashboardProps {
 
 export function AdminDashboard({
   emprestimos,
+  colaboradoresList = [],
   onOpenDetails,
   onRefresh,
   viewModeTab = 'dashboard',
@@ -74,6 +87,7 @@ export function AdminDashboard({
   const [contraParcelas, setContraParcelas] = useState<number>(0)
   const [contraMotivo, setContraMotivo] = useState('')
   const [isSubmittingAnalysis, setIsSubmittingAnalysis] = useState(false)
+  const [showAnalysisSchedule, setShowAnalysisSchedule] = useState(false)
 
   // Modal de Aprovação Direta (Dispensar Autorização do Colaborador)
   const [approvingDirectLoan, setApprovingDirectLoan] = useState<CredImpactoEmprestimo | null>(null)
@@ -81,12 +95,102 @@ export function AdminDashboard({
   const [directApprovePixKey, setDirectApprovePixKey] = useState('')
   const [directApprovePixType, setDirectApprovePixType] = useState<'cpf' | 'email' | 'telefone' | 'aleatoria'>('cpf')
   const [isSubmittingDirectApproval, setIsSubmittingDirectApproval] = useState(false)
+  const [showDirectApproveSchedule, setShowDirectApproveSchedule] = useState(false)
 
   // Modal de Liberação de Recursos
   const [disbursingLoan, setDisbursingLoan] = useState<CredImpactoEmprestimo | null>(null)
   const [comprovanteUrl, setComprovanteUrl] = useState('')
   const [isUploading, setIsUploading] = useState(false)
   const [isSubmittingDisbursement, setIsSubmittingDisbursement] = useState(false)
+
+  // Sistema de Envio de Mensagem no WhatsApp do Colaborador (Aprovado, Recusado, Depositado)
+  const [notifyWhatsAppOnAction, setNotifyWhatsAppOnAction] = useState(true)
+  const [whatsappModalLoan, setWhatsappModalLoan] = useState<CredImpactoEmprestimo | null>(null)
+  const [whatsappEventType, setWhatsappEventType] = useState<WhatsAppEventType>('aprovado')
+  const [whatsappPhone, setWhatsappPhone] = useState('')
+  const [whatsappMessage, setWhatsappMessage] = useState('')
+  const [isSavingWhatsappPhone, setIsSavingWhatsappPhone] = useState(false)
+
+  const handleOpenWhatsAppNotification = (
+    loan: CredImpactoEmprestimo,
+    eventType?: WhatsAppEventType,
+    autoOpenWindow = false
+  ) => {
+    const resolvedEvent: WhatsAppEventType =
+      eventType ||
+      (loan.status === 'recusado'
+        ? 'recusado'
+        : loan.status === 'ativo' || loan.status === 'quitado'
+        ? 'depositado'
+        : 'aprovado')
+
+    const phone = resolveColaboradorPhone(loan, colaboradoresList)
+    const message = buildCredImpactoWhatsAppMessage(loan, resolvedEvent)
+
+    setWhatsappModalLoan(loan)
+    setWhatsappEventType(resolvedEvent)
+    setWhatsappPhone(phone)
+    setWhatsappMessage(message)
+
+    if (autoOpenWindow && phone.replace(/\D/g, '').length >= 10) {
+      const url = getCredImpactoWhatsAppUrl(phone, message)
+      window.open(url, '_blank', 'noopener,noreferrer')
+    }
+  }
+
+  const handleChangeWhatsAppEventType = (newType: WhatsAppEventType) => {
+    setWhatsappEventType(newType)
+    if (whatsappModalLoan) {
+      setWhatsappMessage(buildCredImpactoWhatsAppMessage(whatsappModalLoan, newType))
+    }
+  }
+
+  const handleSaveWhatsAppPhone = async (silent = false) => {
+    if (!whatsappModalLoan) return
+    const clean = whatsappPhone.trim()
+    if (clean.replace(/\D/g, '').length < 10) {
+      if (!silent) toast.error('Informe um número de WhatsApp válido com DDD (mínimo 10 dígitos).')
+      return
+    }
+    setIsSavingWhatsappPhone(true)
+    try {
+      const res = await fetch(`/api/credimpacto/emprestimos/${whatsappModalLoan.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          acao: 'atualizar_telefone_colaborador',
+          telefone: clean
+        })
+      })
+      if (res.ok) {
+        if (!silent) toast.success('Número de WhatsApp salvo no cadastro do colaborador!')
+        setWhatsappModalLoan({ ...whatsappModalLoan, colaboradorTelefone: clean })
+        onRefresh()
+      }
+    } catch (e) {
+      if (!silent) toast.error('Não foi possível salvar o telefone.')
+    } finally {
+      setIsSavingWhatsappPhone(false)
+    }
+  }
+
+  const handleSendWhatsAppNow = async () => {
+    if (!whatsappModalLoan) return
+    const cleanDigits = whatsappPhone.replace(/\D/g, '')
+    if (cleanDigits.length < 10) {
+      toast.error('Informe o número de WhatsApp do colaborador com DDD antes de enviar.')
+      return
+    }
+
+    // Se o telefone digitado for novo ou diferente do salvo na operação, salva automaticamente em background
+    if (whatsappPhone.trim() !== (whatsappModalLoan.colaboradorTelefone || '').trim()) {
+      handleSaveWhatsAppPhone(true)
+    }
+
+    const url = getCredImpactoWhatsAppUrl(whatsappPhone, whatsappMessage)
+    window.open(url, '_blank', 'noopener,noreferrer')
+    toast.success(`Abrindo WhatsApp para ${whatsappModalLoan.colaboradorNome}...`)
+  }
 
   // Modal de Exclusão de Empréstimo
   const [loanToDelete, setLoanToDelete] = useState<CredImpactoEmprestimo | null>(null)
@@ -143,6 +247,30 @@ export function AdminDashboard({
         })
       }
 
+      if (analyzingLoan && analyzingLoan.id === editingPixLoan.id) {
+        setAnalyzingLoan({
+          ...analyzingLoan,
+          dadosBancarios: {
+            ...(analyzingLoan.dadosBancarios || { tipoConta: 'corrente' }),
+            chavePix: clean,
+            tipoChavePix: editingPixType
+          }
+        })
+      }
+
+      if (approvingDirectLoan && approvingDirectLoan.id === editingPixLoan.id) {
+        setApprovingDirectLoan({
+          ...approvingDirectLoan,
+          dadosBancarios: {
+            ...(approvingDirectLoan.dadosBancarios || { tipoConta: 'corrente' }),
+            chavePix: clean,
+            tipoChavePix: editingPixType
+          }
+        })
+        setDirectApprovePixKey(clean)
+        setDirectApprovePixType(editingPixType)
+      }
+
       setEditingPixLoan(null)
       onRefresh()
     } catch (err: any) {
@@ -176,10 +304,95 @@ export function AdminDashboard({
     }
   }
 
+  // Helper para calcular valor concedido (sem juros), saldo a receber (com juros) e juros em aberto de cada contrato
+  const getLoanReceivableInfo = (loan: CredImpactoEmprestimo) => {
+    const rawValor = Number(loan.valorAprovado || loan.valorSolicitado || 0)
+    const rawTotalAPagar = Number(loan.totalAPagar || 0)
+    const rawTotalJuros = Number(loan.totalJuros || 0)
+    const valorConcedidoSemJuros =
+      rawTotalAPagar > 0 && rawTotalJuros > 0 && Math.abs(rawValor - rawTotalAPagar) < 0.01
+        ? roundMoney(Math.max(0, rawTotalAPagar - rawTotalJuros))
+        : roundMoney(rawValor)
+
+    if (
+      loan.status === 'quitado' ||
+      loan.status === 'cancelado' ||
+      loan.status === 'recusado' ||
+      loan.status === 'solicitado' ||
+      loan.status === 'em_analise'
+    ) {
+      return {
+        valorConcedidoSemJuros,
+        principalAReceber: 0,
+        jurosAReceber: 0,
+        saldoAReceberComJuros: 0
+      }
+    }
+
+    if (loan.parcelas && loan.parcelas.length > 0) {
+      const parcelasEmAberto = loan.parcelas.filter(
+        (p) =>
+          p.status !== 'descontada' &&
+          p.status !== 'paga_avulso' &&
+          p.status !== 'cancelada' &&
+          p.status !== 'renegociada'
+      )
+      const principalAReceber = roundMoney(
+        parcelasEmAberto.reduce((acc, p) => acc + (p.valorAmortizacao || 0), 0)
+      )
+      const jurosAReceber = roundMoney(
+        parcelasEmAberto.reduce((acc, p) => acc + (p.valorJuros || 0), 0)
+      )
+      const saldoAReceberComJuros = roundMoney(
+        parcelasEmAberto.reduce((acc, p) => acc + (p.valorTotal || 0), 0)
+      )
+      return {
+        valorConcedidoSemJuros,
+        principalAReceber,
+        jurosAReceber,
+        saldoAReceberComJuros
+      }
+    }
+
+    const principalAReceber = roundMoney(loan.saldoDevedorAtual ?? valorConcedidoSemJuros)
+    const ratioAberto = valorConcedidoSemJuros > 0 ? principalAReceber / valorConcedidoSemJuros : 0
+    let totalJurosContrato = Number(loan.totalJuros || 0)
+    if (totalJurosContrato <= 0 && (loan.taxaMensal || 0) > 0) {
+      const sim = simulateLoan(
+        valorConcedidoSemJuros,
+        loan.quantidadeParcelas || 1,
+        loan.taxaMensal || 0,
+        loan.metodoCalculo || 'JUROS_SIMPLES_SALDO',
+        loan.colaboradorSalarioBase,
+        loan.createdAt ? new Date(loan.createdAt) : new Date(),
+        5,
+        loan.primeiraParcelaCompetencia,
+        loan.primeiraParcelaVencimento
+      )
+      totalJurosContrato = sim.totalJuros
+    }
+    const jurosAReceber = roundMoney(totalJurosContrato * ratioAberto)
+    const saldoAReceberComJuros = roundMoney(principalAReceber + jurosAReceber)
+
+    return {
+      valorConcedidoSemJuros,
+      principalAReceber,
+      jurosAReceber,
+      saldoAReceberComJuros
+    }
+  }
+
   // Cálculos de KPIs Globais - APENAS empréstimos efetivamente ativos
   const ativos = emprestimos.filter((e) => e.status === 'ativo')
-  const totalEmprestadoAtivo = ativos.reduce((acc, e) => acc + (e.valorAprovado || 0), 0)
-  const totalSaldoAReceber = ativos.reduce((acc, e) => acc + (e.saldoDevedorAtual || 0), 0)
+  const totalEmprestadoAtivo = roundMoney(
+    ativos.reduce((acc, e) => acc + getLoanReceivableInfo(e).valorConcedidoSemJuros, 0)
+  )
+  const totalSaldoAReceber = roundMoney(
+    ativos.reduce((acc, e) => acc + getLoanReceivableInfo(e).saldoAReceberComJuros, 0)
+  )
+  const totalJurosAReceber = roundMoney(
+    ativos.reduce((acc, e) => acc + getLoanReceivableInfo(e).jurosAReceber, 0)
+  )
   const totalLiquidadoGeral = emprestimos.filter((e) => e.status === 'quitado').reduce((acc, e) => acc + (e.valorAprovado || 0), 0)
 
   // Empréstimos elegíveis para acompanhamento de parcelas (apenas ativos)
@@ -235,7 +448,6 @@ export function AdminDashboard({
   }, [emprestimos, searchTerm, statusFilter])
 
   // Abertura do Modal de Análise
-  // Abertura do Modal de Análise
   const handleOpenAnalysisModal = (loan: CredImpactoEmprestimo) => {
     setAnalyzingLoan(loan)
     setAnalysisDecision('aprovar')
@@ -245,6 +457,7 @@ export function AdminDashboard({
     setContraValor(loan.valorSolicitado)
     setContraParcelas(loan.quantidadeParcelas)
     setContraMotivo('Ajuste para compatibilidade com o teto de desconto em folha.')
+    setShowAnalysisSchedule(false)
   }
 
   // Abertura do Modal de Aprovação Direta
@@ -255,6 +468,7 @@ export function AdminDashboard({
     const isPlaceholder = existing.toLowerCase().includes('definir')
     setDirectApprovePixKey(isPlaceholder ? '' : existing)
     setDirectApprovePixType((loan.dadosBancarios?.tipoChavePix as any) || 'cpf')
+    setShowDirectApproveSchedule(false)
   }
 
   const handleConfirmDirectApproval = async () => {
@@ -281,6 +495,14 @@ export function AdminDashboard({
       )
       setApprovingDirectLoan(null)
       onRefresh()
+
+      if (notifyWhatsAppOnAction) {
+        handleOpenWhatsAppNotification(
+          data,
+          directApproveDestination === 'ativo' ? 'depositado' : 'aprovado',
+          true
+        )
+      }
     } catch (err: any) {
       toast.error(err.message || 'Falha ao aprovar operação')
     } finally {
@@ -346,6 +568,18 @@ export function AdminDashboard({
 
       setAnalyzingLoan(null)
       onRefresh()
+
+      if (notifyWhatsAppOnAction) {
+        if (analysisDecision === 'aprovar') {
+          handleOpenWhatsAppNotification(
+            data,
+            analysisDispensarAssinatura && analysisAtivarDireto ? 'depositado' : 'aprovado',
+            true
+          )
+        } else if (analysisDecision === 'recusar') {
+          handleOpenWhatsAppNotification(data, 'recusado', true)
+        }
+      }
     } catch (err: any) {
       toast.error(err.message || 'Falha ao analisar proposta')
     } finally {
@@ -408,6 +642,10 @@ export function AdminDashboard({
       setDisbursingLoan(null)
       setComprovanteUrl('')
       onRefresh()
+
+      if (notifyWhatsAppOnAction) {
+        handleOpenWhatsAppNotification(data, 'depositado', true)
+      }
     } catch (err: any) {
       toast.error(err.message || 'Falha ao liberar recursos')
     } finally {
@@ -437,6 +675,73 @@ export function AdminDashboard({
         return { label: 'Cancelado', bg: 'bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-800/50 dark:text-slate-400 dark:border-slate-700/50' }
       default:
         return { label: status, bg: 'bg-slate-100 text-slate-700 border-slate-200 dark:bg-white/10 dark:text-white dark:border-white/20' }
+    }
+  }
+
+  const getSignatureStatusInfo = (loan: CredImpactoEmprestimo) => {
+    const isDispensaAdmin = Boolean(
+      loan.aprovadoDiretoPorNome ||
+      (loan.codigoVerificacaoAssinatura && loan.codigoVerificacaoAssinatura.startsWith('VAL-ADM-')) ||
+      loan.assinanteDocumento === 'Autorização Administrativa'
+    )
+    const isSignedByColaborador = Boolean(loan.assinadoEm && !isDispensaAdmin)
+    const formattedDate = loan.assinadoEm
+      ? new Date(loan.assinadoEm).toLocaleDateString('pt-BR')
+      : ''
+    const formattedDateTime = loan.assinadoEm
+      ? new Date(loan.assinadoEm).toLocaleString('pt-BR', {
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        })
+      : ''
+
+    if (isSignedByColaborador) {
+      return {
+        isSigned: true,
+        isSignedByColaborador: true,
+        isDispensaAdmin: false,
+        badgeLabel: 'Contrato Assinado',
+        detailLabel: `Assinado pelo Colaborador (${formattedDateTime})`,
+        tooltip: `Contrato assinado eletronicamente pelo colaborador em ${formattedDateTime}${loan.codigoVerificacaoAssinatura ? ` • Cód: ${loan.codigoVerificacaoAssinatura}` : ''}`,
+        badgeClass:
+          'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20',
+        dateStr: formattedDate,
+        dateTimeStr: formattedDateTime,
+        code: loan.codigoVerificacaoAssinatura || ''
+      }
+    }
+
+    if (isDispensaAdmin) {
+      return {
+        isSigned: false,
+        isSignedByColaborador: false,
+        isDispensaAdmin: true,
+        badgeLabel: 'S/ Assinatura (Admin)',
+        detailLabel: `Não Assinado pelo Colaborador (Aprovado s/ assinatura por ${loan.aprovadoDiretoPorNome || 'Admin'})`,
+        tooltip: `Aprovado diretamente pela gestão (${loan.aprovadoDiretoPorNome || 'Admin'}) em ${formattedDateTime} com dispensa de assinatura do colaborador • Cód: ${loan.codigoVerificacaoAssinatura || 'VAL-ADM'}`,
+        badgeClass:
+          'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20',
+        dateStr: formattedDate,
+        dateTimeStr: formattedDateTime,
+        code: loan.codigoVerificacaoAssinatura || ''
+      }
+    }
+
+    return {
+      isSigned: false,
+      isSignedByColaborador: false,
+      isDispensaAdmin: false,
+      badgeLabel: 'Não Assinado',
+      detailLabel: 'Não Assinado (Pendente de Assinatura do Colaborador)',
+      tooltip: 'O contrato ainda não foi assinado eletronicamente pelo colaborador.',
+      badgeClass:
+        'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-500/10 dark:text-rose-400 dark:border-rose-500/20',
+      dateStr: '',
+      dateTimeStr: '',
+      code: ''
     }
   }
 
@@ -578,7 +883,7 @@ export function AdminDashboard({
               <div className="text-lg sm:text-xl font-black text-purple-700 dark:text-purple-400 font-mono truncate">
                 {formatBrl(totalEmprestadoAtivo)}
               </div>
-              <div className="text-[11px] font-semibold text-purple-800/80 dark:text-purple-400/80 mt-1 truncate">Ativos em folha</div>
+              <div className="text-[11px] font-semibold text-purple-800/80 dark:text-purple-400/80 mt-1 truncate">Ativos em folha • Sem juros</div>
             </div>
 
             <div className="col-span-2 lg:col-span-1 bg-gradient-to-br from-teal-50 via-emerald-50/30 to-white dark:from-teal-950/40 dark:via-slate-900 dark:to-slate-900 border border-teal-200/90 dark:border-teal-800/70 rounded-2xl p-4 shadow-sm relative overflow-hidden transition-all hover:shadow-md">
@@ -592,7 +897,9 @@ export function AdminDashboard({
               <div className="text-lg sm:text-xl font-black text-teal-700 dark:text-teal-400 font-mono truncate">
                 {formatBrl(totalSaldoAReceber)}
               </div>
-              <div className="text-[11px] font-semibold text-teal-800/80 dark:text-teal-400/80 mt-1 truncate">Principal restante</div>
+              <div className="text-[11px] font-semibold text-teal-800/80 dark:text-teal-400/80 mt-1 truncate font-mono">
+                Juros: {formatBrl(totalJurosAReceber)}
+              </div>
             </div>
           </>
         ) : (
@@ -609,7 +916,7 @@ export function AdminDashboard({
                 {formatBrl(totalEmprestadoAtivo)}
               </div>
               <div className="text-[11px] font-semibold text-blue-700 dark:text-blue-400 mt-1 truncate">
-                {ativos.length} {ativos.length === 1 ? 'contrato ativo' : 'contratos ativos'}
+                {ativos.length} {ativos.length === 1 ? 'contrato ativo' : 'contratos ativos'} • Sem juros
               </div>
             </div>
 
@@ -624,7 +931,9 @@ export function AdminDashboard({
               <div className="text-lg sm:text-xl font-black text-emerald-700 dark:text-emerald-400 font-mono truncate">
                 {formatBrl(totalSaldoAReceber)}
               </div>
-              <div className="text-[11px] font-semibold text-emerald-800/80 dark:text-emerald-400/80 mt-1 truncate">Principal em aberto</div>
+              <div className="text-[11px] font-semibold text-emerald-800/80 dark:text-emerald-400/80 mt-1 truncate font-mono">
+                Juros: {formatBrl(totalJurosAReceber)}
+              </div>
             </div>
 
             <div className="bg-gradient-to-br from-cyan-50 via-sky-50/30 to-white dark:from-cyan-950/40 dark:via-slate-900 dark:to-slate-900 border border-cyan-200/90 dark:border-cyan-800/70 rounded-2xl p-4 shadow-sm relative overflow-hidden transition-all hover:shadow-md">
@@ -761,8 +1070,10 @@ export function AdminDashboard({
               ) : (
                 filteredEmprestimos.map((loan) => {
                   const badge = getStatusBadge(loan.status)
+                  const sigInfo = getSignatureStatusInfo(loan)
                   const isPendingAnalysis = loan.status === 'solicitado' || loan.status === 'em_analise'
                   const isPendingDisbursement = loan.status === 'aguardando_liberacao'
+                  const receivableInfo = getLoanReceivableInfo(loan)
 
                   if (viewModeTab === 'liberacoes') {
                     return (
@@ -870,9 +1181,16 @@ export function AdminDashboard({
                         </td>
 
                         <td className="py-2.5 px-2 text-center whitespace-nowrap">
-                          <div className="flex items-center justify-center">
+                          <div className="flex flex-col items-center justify-center gap-1">
                             <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full border whitespace-nowrap ${badge.bg}`}>
                               {badge.label}
+                            </span>
+                            <span
+                              title={sigInfo.tooltip}
+                              className={`text-[9px] font-bold px-2 py-0.5 rounded-full border inline-flex items-center gap-1 whitespace-nowrap ${sigInfo.badgeClass}`}
+                            >
+                              {sigInfo.isSigned ? <Check size={10} /> : <Clock size={10} />}
+                              <span>{sigInfo.badgeLabel}</span>
                             </span>
                           </div>
                         </td>
@@ -896,6 +1214,21 @@ export function AdminDashboard({
                                 <CheckCircle2 size={12} /> Liberado
                               </span>
                             )}
+
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleOpenWhatsAppNotification(
+                                  loan,
+                                  loan.status === 'ativo' || loan.status === 'quitado' ? 'depositado' : 'aprovado',
+                                  false
+                                )
+                              }
+                              className="p-1.5 rounded-lg bg-green-50 hover:bg-green-100 dark:bg-green-950/40 dark:hover:bg-green-900/40 text-green-600 dark:text-green-400 border border-green-200/60 dark:border-green-800/40 transition-all"
+                              title="Enviar Mensagem no WhatsApp do Colaborador"
+                            >
+                              <MessageCircle size={14} />
+                            </button>
 
                             {onOpenFichaColaborador && (
                               <button
@@ -970,9 +1303,9 @@ export function AdminDashboard({
                       </td>
 
                       <td className="py-2.5 px-3 text-center font-mono font-bold text-slate-900 dark:text-white whitespace-nowrap">
-                        <div>{formatBrl(loan.valorAprovado || loan.valorSolicitado)}</div>
+                        <div>{formatBrl(receivableInfo.valorConcedidoSemJuros)}</div>
                         <div className="text-[10px] text-slate-400 font-sans font-normal">
-                          {loan.taxaMensal}% a.m.
+                          {Number(loan.taxaMensal ?? 0)}% a.m.
                         </div>
                       </td>
 
@@ -981,49 +1314,39 @@ export function AdminDashboard({
                       </td>
 
                       <td className="py-2.5 px-3 text-center font-mono font-bold text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
-                        {formatBrl(loan.saldoDevedorAtual)}
+                        <div>{formatBrl(receivableInfo.saldoAReceberComJuros)}</div>
+                        {receivableInfo.saldoAReceberComJuros > 0 && (
+                          <div className="text-[10px] text-slate-400 dark:text-slate-500 font-normal">
+                            Juros: {formatBrl(receivableInfo.jurosAReceber)}
+                          </div>
+                        )}
                       </td>
 
                       <td className="py-2.5 px-2 text-center whitespace-nowrap">
-                        <div className="flex items-center justify-center">
+                        <div className="flex flex-col items-center justify-center gap-1">
                           <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full border whitespace-nowrap ${badge.bg}`}>
                             {badge.label}
+                          </span>
+                          <span
+                            title={sigInfo.tooltip}
+                            className={`text-[9px] font-bold px-2 py-0.5 rounded-full border inline-flex items-center gap-1 whitespace-nowrap ${sigInfo.badgeClass}`}
+                          >
+                            {sigInfo.isSigned ? <Check size={10} /> : <Clock size={10} />}
+                            <span>{sigInfo.badgeLabel}</span>
                           </span>
                         </div>
                       </td>
 
                       <td className="py-2.5 px-3 text-center whitespace-nowrap">
                         <div className="flex items-center justify-center gap-1.5">
-                          {/* Ação 1: Analisar ou Aprovar Direto quando Solicitado */}
+                          {/* Ação 1: Analisar quando Solicitado */}
                           {isPendingAnalysis && (
-                            <>
-                              <button
-                                onClick={() => handleOpenDirectApprovalModal(loan)}
-                                className="px-2 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] shadow-sm flex items-center gap-1 transition-all"
-                                title="Aprovar Diretamente (Dispensar Autorização do Colaborador)"
-                              >
-                                <Check size={12} />
-                                <span>Aprovar</span>
-                              </button>
-                              <button
-                                onClick={() => handleOpenAnalysisModal(loan)}
-                                className="px-2 py-1 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-bold text-[11px] shadow-sm flex items-center gap-1 transition-all"
-                                title="Analisar Proposta"
-                              >
-                                <span>Analisar</span>
-                              </button>
-                            </>
-                          )}
-
-                          {/* Ação: Aprovar Direto quando Aguardando Assinatura */}
-                          {loan.status === 'aguardando_assinatura' && (
                             <button
-                              onClick={() => handleOpenDirectApprovalModal(loan)}
-                              className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] shadow-sm flex items-center gap-1.5 transition-all"
-                              title="Aprovar Diretamente (Dispensar Autorização do Colaborador)"
+                              onClick={() => handleOpenAnalysisModal(loan)}
+                              className="px-2 py-1 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-bold text-[11px] shadow-sm flex items-center gap-1 transition-all"
+                              title="Analisar Proposta"
                             >
-                              <CheckCircle2 size={13} />
-                              <span>Aprovar Direto</span>
+                              <span>Analisar</span>
                             </button>
                           )}
 
@@ -1041,6 +1364,16 @@ export function AdminDashboard({
                               <span>Liberar</span>
                             </button>
                           )}
+
+                          {/* Ação: Enviar Mensagem WhatsApp (Aprovado, Recusado, Depositado) */}
+                          <button
+                            type="button"
+                            onClick={() => handleOpenWhatsAppNotification(loan)}
+                            className="p-1.5 rounded-lg bg-green-50 hover:bg-green-100 dark:bg-green-950/40 dark:hover:bg-green-900/40 text-green-600 dark:text-green-400 border border-green-200/60 dark:border-green-800/40 transition-all"
+                            title="Notificar Colaborador no WhatsApp (Aprovado / Recusado / Depositado)"
+                          >
+                            <MessageCircle size={14} />
+                          </button>
 
                           {/* Ação: Ver Ficha do Colaborador */}
                           {onOpenFichaColaborador && (
@@ -1090,9 +1423,11 @@ export function AdminDashboard({
         ) : (
           filteredEmprestimos.map((loan) => {
             const badge = getStatusBadge(loan.status)
+            const sigInfo = getSignatureStatusInfo(loan)
             const cardStyle = getStatusCardStyles(loan.status)
             const isPendingAnalysis = loan.status === 'solicitado' || loan.status === 'em_analise'
             const isPendingDisbursement = loan.status === 'aguardando_liberacao'
+            const receivableInfo = getLoanReceivableInfo(loan)
 
             return (
               <div
@@ -1118,9 +1453,18 @@ export function AdminDashboard({
                         </div>
                       </div>
                     </div>
-                    <span className={`text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full border shadow-xs whitespace-nowrap ${badge.bg}`}>
-                      {badge.label}
-                    </span>
+                    <div className="flex flex-col items-end gap-1">
+                      <span className={`text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full border shadow-xs whitespace-nowrap ${badge.bg}`}>
+                        {badge.label}
+                      </span>
+                      <span
+                        title={sigInfo.tooltip}
+                        className={`text-[9px] font-bold px-2 py-0.5 rounded-full border inline-flex items-center gap-1 whitespace-nowrap ${sigInfo.badgeClass}`}
+                      >
+                        {sigInfo.isSigned ? <Check size={10} /> : <Clock size={10} />}
+                        <span>{sigInfo.badgeLabel}</span>
+                      </span>
+                    </div>
                   </div>
 
                   <div className="flex items-center justify-between gap-2">
@@ -1224,15 +1568,21 @@ export function AdminDashboard({
                     <div className="grid grid-cols-3 gap-2 bg-slate-50/80 dark:bg-slate-800/50 backdrop-blur-sm p-2.5 rounded-xl border border-slate-200/60 dark:border-slate-800/80 text-center font-mono shadow-xs">
                       <div>
                         <div className="text-[9px] uppercase font-sans text-slate-500 dark:text-slate-400 font-semibold">Concedido</div>
-                        <div className="font-bold text-slate-900 dark:text-white text-xs mt-0.5">{formatBrl(loan.valorAprovado)}</div>
+                        <div className="font-bold text-slate-900 dark:text-white text-xs mt-0.5">{formatBrl(receivableInfo.valorConcedidoSemJuros)}</div>
+                        <div className="text-[9px] font-sans text-slate-400">{Number(loan.taxaMensal ?? 0)}% a.m.</div>
                       </div>
                       <div>
                         <div className="text-[9px] uppercase font-sans text-slate-500 dark:text-slate-400 font-semibold">Parcelas</div>
                         <div className="font-bold text-slate-700 dark:text-slate-300 text-xs mt-0.5">{loan.quantidadeParcelas}x</div>
                       </div>
                       <div>
-                        <div className="text-[9px] uppercase font-sans text-slate-500 dark:text-slate-400 font-semibold">Saldo Devedor</div>
-                        <div className="font-bold text-emerald-600 dark:text-emerald-400 text-xs mt-0.5">{formatBrl(loan.saldoDevedorAtual)}</div>
+                        <div className="text-[9px] uppercase font-sans text-slate-500 dark:text-slate-400 font-semibold">Saldo a Receber</div>
+                        <div className="font-bold text-emerald-600 dark:text-emerald-400 text-xs mt-0.5">{formatBrl(receivableInfo.saldoAReceberComJuros)}</div>
+                        {receivableInfo.saldoAReceberComJuros > 0 && (
+                          <div className="text-[9px] text-slate-500 dark:text-slate-400">
+                            Juros: {formatBrl(receivableInfo.jurosAReceber)}
+                          </div>
+                        )}
                       </div>
                     </div>
                   )}
@@ -1240,30 +1590,11 @@ export function AdminDashboard({
                   {/* AÇÕES MOBILE */}
                   <div className="flex flex-col gap-2 pt-1">
                     {isPendingAnalysis && (
-                      <div className="grid grid-cols-2 gap-2">
-                        <button
-                          onClick={() => handleOpenDirectApprovalModal(loan)}
-                          className="py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-md shadow-emerald-600/20 active:scale-98 transition-all"
-                        >
-                          <CheckCircle2 size={14} />
-                          <span>Aprovar Direto</span>
-                        </button>
-                        <button
-                          onClick={() => handleOpenAnalysisModal(loan)}
-                          className="py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-md shadow-amber-500/20 active:scale-98 transition-all"
-                        >
-                          <span>Analisar Proposta</span>
-                        </button>
-                      </div>
-                    )}
-
-                    {loan.status === 'aguardando_assinatura' && (
                       <button
-                        onClick={() => handleOpenDirectApprovalModal(loan)}
-                        className="w-full py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-md shadow-emerald-600/20 active:scale-98 transition-all"
+                        onClick={() => handleOpenAnalysisModal(loan)}
+                        className="w-full py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-md shadow-amber-500/20 active:scale-98 transition-all"
                       >
-                        <CheckCircle2 size={15} />
-                        <span>Aprovar Direto (Dispensar Autorização)</span>
+                        <span>Analisar Proposta</span>
                       </button>
                     )}
 
@@ -1287,6 +1618,15 @@ export function AdminDashboard({
                       >
                         <Eye size={14} />
                         <span>Ver Detalhes</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleOpenWhatsAppNotification(loan)}
+                        className="px-3 py-2 rounded-xl bg-green-50/90 hover:bg-green-100 dark:bg-green-950/40 text-green-700 dark:text-green-300 border border-green-200/70 dark:border-green-800/50 font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-xs"
+                        title="Notificar Colaborador no WhatsApp"
+                      >
+                        <MessageCircle size={14} />
+                        <span>WhatsApp</span>
                       </button>
                       {onOpenFichaColaborador && (
                         <button
@@ -1315,234 +1655,484 @@ export function AdminDashboard({
       </div>
 
       {/* MODAL DE ANÁLISE DE PROPOSTA */}
-      {analyzingLoan && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-3">
-              <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                <span>Análise de Crédito: {analyzingLoan.codigoOperacao}</span>
-              </h3>
-              <button onClick={() => setAnalyzingLoan(null)} className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors">✕</button>
-            </div>
+      {analyzingLoan && (() => {
+        const analysisSigInfo = getSignatureStatusInfo(analyzingLoan)
+        const isContraActive = analysisDecision === 'contraproposta' && contraValor > 0 && contraParcelas > 0
+        const simFallback = simulateLoan(
+          isContraActive ? contraValor : (analyzingLoan.valorSolicitado || analyzingLoan.valorAprovado || 0),
+          isContraActive ? contraParcelas : (analyzingLoan.quantidadeParcelas || 1),
+          analyzingLoan.taxaMensal ?? 0,
+          analyzingLoan.metodoCalculo || 'JUROS_SIMPLES_SALDO',
+          analyzingLoan.colaboradorSalarioBase,
+          analyzingLoan.createdAt ? new Date(analyzingLoan.createdAt) : new Date(),
+          5,
+          analyzingLoan.primeiraParcelaCompetencia,
+          analyzingLoan.primeiraParcelaVencimento
+        )
 
-            {/* DADOS DO SOLICITANTE */}
-            <div className="bg-slate-50 dark:bg-slate-800/60 rounded-xl p-3.5 border border-slate-200/80 dark:border-slate-700/60 text-xs space-y-1.5">
-              <div className="flex justify-between">
-                <span className="text-slate-500 dark:text-slate-400">Colaborador:</span>
-                <span className="font-bold text-slate-900 dark:text-white">{analyzingLoan.colaboradorNome}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500 dark:text-slate-400">Cargo / Matrícula:</span>
-                <span className="text-slate-700 dark:text-slate-300">{analyzingLoan.colaboradorCargo || 'N/A'} • {analyzingLoan.colaboradorMatricula || 'N/A'}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500 dark:text-slate-400">Salário Base Cadastrado:</span>
-                <span className="font-mono font-medium text-slate-900 dark:text-white">{analyzingLoan.colaboradorSalarioBase ? formatBrl(analyzingLoan.colaboradorSalarioBase) : 'Não informado'}</span>
-              </div>
-              <div className="flex justify-between pt-1 border-t border-slate-200/60 dark:border-slate-700/60">
-                <span className="text-slate-500 dark:text-slate-400">Valor Solicitado:</span>
-                <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">{formatBrl(analyzingLoan.valorSolicitado)} em {analyzingLoan.quantidadeParcelas}x</span>
-              </div>
-              {analyzingLoan.justificativaSolicitacao && (
-                <div className="pt-1 text-[11px] text-slate-600 dark:text-slate-400">
-                  <strong className="text-slate-700 dark:text-slate-300">Justificativa do Colaborador:</strong> {analyzingLoan.justificativaSolicitacao}
+        const parcelasExibicao =
+          !isContraActive && analyzingLoan.parcelas && analyzingLoan.parcelas.length > 0
+            ? analyzingLoan.parcelas
+            : simFallback.parcelas
+
+        const valorPrincipalExibicao = isContraActive
+          ? contraValor
+          : (analyzingLoan.valorSolicitado || analyzingLoan.valorAprovado || 0)
+
+        const qtdParcelasExibicao = isContraActive
+          ? contraParcelas
+          : analyzingLoan.quantidadeParcelas
+
+        const totalJurosExibicao = !isContraActive && typeof analyzingLoan.totalJuros === 'number'
+          ? analyzingLoan.totalJuros
+          : parcelasExibicao.reduce((acc, p) => acc + (p.valorJuros || 0), 0)
+
+        const totalAPagarExibicao = !isContraActive && typeof analyzingLoan.totalAPagar === 'number' && analyzingLoan.totalAPagar > 0
+          ? analyzingLoan.totalAPagar
+          : valorPrincipalExibicao + totalJurosExibicao
+
+        const rawPix = analyzingLoan.dadosBancarios?.chavePix?.trim() || ''
+        const hasValidPix = Boolean(rawPix && !rawPix.toLowerCase().includes('definir'))
+        const pixToDisplay = hasValidPix ? rawPix : (analyzingLoan.colaboradorCpf || '')
+        const pixTipoBadge = hasValidPix
+          ? (analyzingLoan.dadosBancarios?.tipoChavePix ? analyzingLoan.dadosBancarios.tipoChavePix.toUpperCase() : 'PIX')
+          : analyzingLoan.colaboradorCpf
+          ? 'CPF'
+          : 'PENDENTE'
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in">
+            <div className="bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-2xl max-w-xl w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+              <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-3">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                    Análise de Crédito: {analyzingLoan.codigoOperacao}
+                  </h3>
+                  <span
+                    title={analysisSigInfo.tooltip}
+                    className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border inline-flex items-center gap-1 whitespace-nowrap ${analysisSigInfo.badgeClass}`}
+                  >
+                    {analysisSigInfo.isSigned ? <Check size={11} /> : <Clock size={11} />}
+                    <span>{analysisSigInfo.badgeLabel}</span>
+                  </span>
                 </div>
-              )}
-            </div>
-
-            {/* SELEÇÃO DA DECISÃO */}
-            <div className="space-y-3">
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
-                Decisão da Análise Financeira
-              </label>
-              <div className="grid grid-cols-3 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setAnalysisDecision('aprovar')}
-                  className={`p-2.5 rounded-xl border text-xs font-bold transition-all flex flex-col items-center gap-1 ${
-                    analysisDecision === 'aprovar'
-                      ? 'bg-emerald-600 text-white border-emerald-500 shadow-sm shadow-emerald-600/30'
-                      : 'bg-slate-50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800'
-                  }`}
-                >
-                  <Check size={16} />
-                  <span>Aprovar</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setAnalysisDecision('contraproposta')}
-                  className={`p-2.5 rounded-xl border text-xs font-bold transition-all flex flex-col items-center gap-1 ${
-                    analysisDecision === 'contraproposta'
-                      ? 'bg-purple-600 text-white border-purple-500 shadow-sm shadow-purple-600/30'
-                      : 'bg-slate-50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800'
-                  }`}
-                >
-                  <Sparkles size={16} />
-                  <span>Contraproposta</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setAnalysisDecision('recusar')}
-                  className={`p-2.5 rounded-xl border text-xs font-bold transition-all flex flex-col items-center gap-1 ${
-                    analysisDecision === 'recusar'
-                      ? 'bg-rose-600 text-white border-rose-500 shadow-sm shadow-rose-600/30'
-                      : 'bg-slate-50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800'
-                  }`}
-                >
-                  <X size={16} />
-                  <span>Recusar</span>
-                </button>
+                <button onClick={() => setAnalyzingLoan(null)} className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors">✕</button>
               </div>
 
-              {/* DETALHES DE APROVAÇÃO DIRETA */}
-              {analysisDecision === 'aprovar' && (
-                <div className="p-3.5 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/50 rounded-xl space-y-2.5 text-xs animate-in fade-in">
-                  <div className="flex items-center gap-2 text-emerald-800 dark:text-emerald-300 font-bold text-xs">
-                    <CheckCircle2 size={16} className="text-emerald-600 dark:text-emerald-400 shrink-0" />
-                    <span>Aprovação Direta sem Autorização do Colaborador</span>
-                  </div>
-                  <p className="text-[11px] text-emerald-900/80 dark:text-emerald-300/80">
-                    O empréstimo será formalizado diretamente pela administração sem exigir que o colaborador assine previamente no portal.
-                  </p>
+              {/* DADOS DO SOLICITANTE E CONDIÇÕES FINANCEIRAS */}
+              <div className="bg-slate-50 dark:bg-slate-800/60 rounded-xl p-3.5 border border-slate-200/80 dark:border-slate-700/60 text-xs space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-slate-500 dark:text-slate-400">Colaborador:</span>
+                  <span className="font-bold text-slate-900 dark:text-white">{analyzingLoan.colaboradorNome}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500 dark:text-slate-400">Cargo / Matrícula:</span>
+                  <span className="text-slate-700 dark:text-slate-300">{analyzingLoan.colaboradorCargo || 'N/A'} • {analyzingLoan.colaboradorMatricula || 'N/A'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500 dark:text-slate-400">Salário Base Cadastrado:</span>
+                  <span className="font-mono font-medium text-slate-900 dark:text-white">{analyzingLoan.colaboradorSalarioBase ? formatBrl(analyzingLoan.colaboradorSalarioBase) : 'Não informado'}</span>
+                </div>
 
-                  <div className="pt-2 border-t border-emerald-200/60 dark:border-emerald-800/40 space-y-2">
-                    <label className="block text-[11px] font-bold text-emerald-950 dark:text-emerald-200 uppercase tracking-wider">
-                      Destino Pós-Aprovação:
+                <div className="pt-2 border-t border-slate-200/60 dark:border-slate-700/60 space-y-1.5">
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-500 dark:text-slate-400">
+                      {isContraActive ? 'Valor na Contraproposta:' : 'Valor Solicitado:'}
+                    </span>
+                    <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                      {formatBrl(valorPrincipalExibicao)} em {qtdParcelasExibicao}x
+                    </span>
+                  </div>
+
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-500 dark:text-slate-400">Taxa de Juros (%):</span>
+                    <span className="font-mono font-bold text-cyan-700 dark:text-cyan-400">
+                      {Number(analyzingLoan.taxaMensal || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}% {analyzingLoan.metodoCalculo === 'ACRESCIMO_UNICO' ? '(Taxa Única)' : 'a.m.'}
+                      <span className="text-[10px] font-sans font-normal text-slate-400 dark:text-slate-500 ml-1">
+                        ({METODOS_LABELS[analyzingLoan.metodoCalculo]?.nome || analyzingLoan.metodoCalculo})
+                      </span>
+                    </span>
+                  </div>
+
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-500 dark:text-slate-400">Valor Total dos Juros:</span>
+                    <span className="font-mono font-bold text-amber-600 dark:text-amber-400">
+                      {formatBrl(totalJurosExibicao)}
+                    </span>
+                  </div>
+
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-500 dark:text-slate-400">Total a Pagar (Capital + Juros):</span>
+                    <span className="font-mono font-black text-slate-900 dark:text-white">
+                      {formatBrl(totalAPagarExibicao)}
+                    </span>
+                  </div>
+                </div>
+
+                {/* STATUS DE ASSINATURA DO CONTRATO */}
+                <div className="pt-2 border-t border-slate-200/60 dark:border-slate-700/60">
+                  <div className="flex items-center justify-between gap-2 bg-white dark:bg-slate-900 px-3 py-2 rounded-lg border border-slate-200/80 dark:border-slate-700/80">
+                    <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
+                      <FileText size={13} className={analysisSigInfo.isSigned ? 'text-emerald-600 dark:text-emerald-400 shrink-0' : 'text-amber-500 shrink-0'} />
+                      <span className="text-slate-500 dark:text-slate-400 shrink-0">Assinatura do Contrato:</span>
+                      <span
+                        title={analysisSigInfo.tooltip}
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full border inline-flex items-center gap-1 ${analysisSigInfo.badgeClass}`}
+                      >
+                        {analysisSigInfo.isSigned ? <Check size={10} /> : <Clock size={10} />}
+                        <span>{analysisSigInfo.detailLabel}</span>
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => onOpenDetails(analyzingLoan)}
+                      className="px-2 py-1 rounded-md bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200/80 dark:border-slate-700 font-bold text-[10px] flex items-center gap-1 shrink-0 transition-colors"
+                      title="Visualizar Contrato Completo"
+                    >
+                      <Eye size={11} />
+                      <span>Ver Contrato</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* CHAVE PIX COM BOTÃO DE COPIAR */}
+                <div className="pt-1.5">
+                  <div className="flex items-center justify-between gap-2 bg-white dark:bg-slate-900 px-3 py-2 rounded-lg border border-slate-200/80 dark:border-slate-700/80">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="text-slate-500 dark:text-slate-400 shrink-0">Chave PIX:</span>
+                      <span className="text-[9px] uppercase font-bold px-1.5 py-0.5 rounded bg-cyan-100 dark:bg-cyan-950 text-cyan-800 dark:text-cyan-300 font-mono shrink-0">
+                        {pixTipoBadge}
+                      </span>
+                      <span
+                        className="font-mono font-bold text-slate-900 dark:text-white truncate"
+                        title={pixToDisplay || 'Não informada'}
+                      >
+                        {pixToDisplay || 'Não informada'}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      {pixToDisplay && (
+                        <button
+                          type="button"
+                          onClick={() => copyToClipboard(pixToDisplay, 'Chave PIX')}
+                          className="px-2 py-1 rounded-md bg-cyan-50 hover:bg-cyan-100 dark:bg-cyan-950/60 dark:hover:bg-cyan-900/60 text-cyan-700 dark:text-cyan-300 border border-cyan-200/70 dark:border-cyan-800/60 font-bold text-[11px] flex items-center gap-1 transition-colors"
+                          title="Copiar Chave PIX"
+                        >
+                          <Copy size={12} />
+                          <span>Copiar</span>
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => handleOpenEditPix(analyzingLoan)}
+                        className="p-1 rounded-md text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                        title="Editar / Definir Chave PIX"
+                      >
+                        <Pencil size={13} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* EXPANDIR / RECOLHER CRONOGRAMA DE PARCELAS DISCRIMINADO */}
+                <div className="pt-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setShowAnalysisSchedule((prev) => !prev)}
+                    className="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-slate-100/90 hover:bg-slate-200/70 dark:bg-slate-800 dark:hover:bg-slate-700/80 border border-slate-200/80 dark:border-slate-700 text-slate-700 dark:text-slate-200 font-bold text-[11px] transition-all"
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <Calendar size={13} className="text-emerald-600 dark:text-emerald-400" />
+                      <span>
+                        Cronograma das Parcelas ({parcelasExibicao.length}x)
+                        {isContraActive ? ' • Simulação Contraproposta' : ''}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-emerald-700 dark:text-emerald-400">
+                      <span>{showAnalysisSchedule ? 'Recolher' : 'Expandir parcelas'}</span>
+                      {showAnalysisSchedule ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                    </div>
+                  </button>
+
+                  {showAnalysisSchedule && (
+                    <div className="mt-2 rounded-lg border border-slate-200/90 dark:border-slate-700 overflow-hidden bg-white dark:bg-slate-900 animate-in fade-in">
+                      <div className="overflow-x-auto max-h-56 overflow-y-auto">
+                        <table className="w-full text-[11px] text-left">
+                          <thead className="bg-slate-100 dark:bg-slate-800/90 text-[9px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider border-b border-slate-200 dark:border-slate-700 sticky top-0">
+                            <tr>
+                              <th className="py-1.5 px-2 text-center">Nº</th>
+                              <th className="py-1.5 px-2 text-center">Vencimento</th>
+                              <th className="py-1.5 px-2 text-right">Principal</th>
+                              <th className="py-1.5 px-2 text-right">Juros</th>
+                              <th className="py-1.5 px-2 text-right">Valor Parcela</th>
+                              <th className="py-1.5 px-2 text-right">Saldo Após</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-mono">
+                            {parcelasExibicao.map((p) => (
+                              <tr key={p.numero} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
+                                <td className="py-1.5 px-2 text-center font-bold text-slate-600 dark:text-slate-400">
+                                  {String(p.numero).padStart(2, '0')}
+                                </td>
+                                <td className="py-1.5 px-2 text-center text-slate-700 dark:text-slate-300 whitespace-nowrap font-sans">
+                                  {new Date(p.dataVencimento + 'T12:00:00Z').toLocaleDateString('pt-BR')}
+                                </td>
+                                <td className="py-1.5 px-2 text-right text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                                  {formatBrl(p.valorAmortizacao)}
+                                </td>
+                                <td className="py-1.5 px-2 text-right text-amber-600 dark:text-amber-400 whitespace-nowrap">
+                                  {formatBrl(p.valorJuros)}
+                                </td>
+                                <td className="py-1.5 px-2 text-right font-bold text-emerald-700 dark:text-emerald-400 whitespace-nowrap">
+                                  {formatBrl(p.valorTotal)}
+                                </td>
+                                <td className="py-1.5 px-2 text-right text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                                  {formatBrl(p.saldoDevedorApos)}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                          <tfoot className="bg-slate-50 dark:bg-slate-800/80 border-t border-slate-200 dark:border-slate-700 font-mono font-bold text-[10px]">
+                            <tr>
+                              <td colSpan={2} className="py-1.5 px-2 text-left font-sans uppercase text-slate-500 dark:text-slate-400">
+                                Total Discriminado
+                              </td>
+                              <td className="py-1.5 px-2 text-right text-slate-800 dark:text-slate-200 whitespace-nowrap">
+                                {formatBrl(valorPrincipalExibicao)}
+                              </td>
+                              <td className="py-1.5 px-2 text-right text-amber-600 dark:text-amber-400 whitespace-nowrap">
+                                {formatBrl(totalJurosExibicao)}
+                              </td>
+                              <td className="py-1.5 px-2 text-right text-emerald-700 dark:text-emerald-400 whitespace-nowrap">
+                                {formatBrl(totalAPagarExibicao)}
+                              </td>
+                              <td className="py-1.5 px-2 text-right text-slate-400">—</td>
+                            </tr>
+                          </tfoot>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {analyzingLoan.justificativaSolicitacao && (
+                  <div className="pt-1.5 border-t border-slate-200/60 dark:border-slate-700/60 text-[11px] text-slate-600 dark:text-slate-400">
+                    <strong className="text-slate-700 dark:text-slate-300">Justificativa do Colaborador:</strong> {analyzingLoan.justificativaSolicitacao}
+                  </div>
+                )}
+              </div>
+
+              {/* SELEÇÃO DA DECISÃO */}
+              <div className="space-y-3">
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+                  Decisão da Análise Financeira
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setAnalysisDecision('aprovar')}
+                    className={`p-2.5 rounded-xl border text-xs font-bold transition-all flex flex-col items-center gap-1 ${
+                      analysisDecision === 'aprovar'
+                        ? 'bg-emerald-600 text-white border-emerald-500 shadow-sm shadow-emerald-600/30'
+                        : 'bg-slate-50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800'
+                    }`}
+                  >
+                    <Check size={16} />
+                    <span>Aprovar</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setAnalysisDecision('contraproposta')}
+                    className={`p-2.5 rounded-xl border text-xs font-bold transition-all flex flex-col items-center gap-1 ${
+                      analysisDecision === 'contraproposta'
+                        ? 'bg-purple-600 text-white border-purple-500 shadow-sm shadow-purple-600/30'
+                        : 'bg-slate-50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800'
+                    }`}
+                  >
+                    <Sparkles size={16} />
+                    <span>Contraproposta</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setAnalysisDecision('recusar')}
+                    className={`p-2.5 rounded-xl border text-xs font-bold transition-all flex flex-col items-center gap-1 ${
+                      analysisDecision === 'recusar'
+                        ? 'bg-rose-600 text-white border-rose-500 shadow-sm shadow-rose-600/30'
+                        : 'bg-slate-50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800'
+                    }`}
+                  >
+                    <X size={16} />
+                    <span>Recusar</span>
+                  </button>
+                </div>
+
+                {/* DETALHES DE APROVAÇÃO DIRETA */}
+                {analysisDecision === 'aprovar' && (
+                  <div className="p-3.5 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/50 rounded-xl space-y-2.5 text-xs animate-in fade-in">
+                    <div className="flex items-center gap-2 text-emerald-800 dark:text-emerald-300 font-bold text-xs">
+                      <CheckCircle2 size={16} className="text-emerald-600 dark:text-emerald-400 shrink-0" />
+                      <span>Aprovação Direta sem Autorização do Colaborador</span>
+                    </div>
+                    <p className="text-[11px] text-emerald-900/80 dark:text-emerald-300/80">
+                      O empréstimo será formalizado diretamente pela administração sem exigir que o colaborador assine previamente no portal.
+                    </p>
+
+                    <div className="pt-2 border-t border-emerald-200/60 dark:border-emerald-800/40 space-y-2">
+                      <label className="block text-[11px] font-bold text-emerald-950 dark:text-emerald-200 uppercase tracking-wider">
+                        Destino Pós-Aprovação:
+                      </label>
+                      <div className="space-y-1.5">
+                        <label className="flex items-start gap-2 cursor-pointer p-2 rounded-lg hover:bg-emerald-100/50 dark:hover:bg-emerald-900/20 transition-colors">
+                          <input
+                            type="radio"
+                            name="analysisDest"
+                            checked={analysisDispensarAssinatura && !analysisAtivarDireto}
+                            onChange={() => {
+                              setAnalysisDispensarAssinatura(true)
+                              setAnalysisAtivarDireto(false)
+                            }}
+                            className="mt-0.5 text-emerald-600 focus:ring-emerald-500"
+                          />
+                          <div>
+                            <div className="font-bold text-slate-900 dark:text-white text-xs">Encaminhar para Liberações TED (Recomendado)</div>
+                            <div className="text-[10px] text-slate-500 dark:text-slate-400">Aprova a operação e a envia para a tesouraria realizar o TED/PIX e anexar comprovante.</div>
+                          </div>
+                        </label>
+
+                        <label className="flex items-start gap-2 cursor-pointer p-2 rounded-lg hover:bg-emerald-100/50 dark:hover:bg-emerald-900/20 transition-colors">
+                          <input
+                            type="radio"
+                            name="analysisDest"
+                            checked={analysisDispensarAssinatura && analysisAtivarDireto}
+                            onChange={() => {
+                              setAnalysisDispensarAssinatura(true)
+                              setAnalysisAtivarDireto(true)
+                            }}
+                            className="mt-0.5 text-emerald-600 focus:ring-emerald-500"
+                          />
+                          <div>
+                            <div className="font-bold text-slate-900 dark:text-white text-xs">Ativar Imediatamente</div>
+                            <div className="text-[10px] text-slate-500 dark:text-slate-400">Utilize se os recursos já foram entregues ao colaborador. O empréstimo ficará ativo agora.</div>
+                          </div>
+                        </label>
+
+                        <label className="flex items-start gap-2 cursor-pointer p-2 rounded-lg hover:bg-emerald-100/50 dark:hover:bg-emerald-900/20 transition-colors">
+                          <input
+                            type="radio"
+                            name="analysisDest"
+                            checked={!analysisDispensarAssinatura}
+                            onChange={() => {
+                              setAnalysisDispensarAssinatura(false)
+                              setAnalysisAtivarDireto(false)
+                            }}
+                            className="mt-0.5 text-emerald-600 focus:ring-emerald-500"
+                          />
+                          <div>
+                            <div className="font-bold text-slate-900 dark:text-white text-xs">Ainda assim exigir assinatura digital do colaborador</div>
+                            <div className="text-[10px] text-slate-500 dark:text-slate-400">O contrato ficará aguardando o colaborador aceitar os termos no portal.</div>
+                          </div>
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* CAMPOS ESPECÍFICOS DE RECUSA */}
+                {analysisDecision === 'recusar' && (
+                  <div className="space-y-1.5 animate-in fade-in">
+                    <label className="block text-xs font-bold text-rose-600 dark:text-rose-400">
+                      Motivo Formal da Recusa (visível para o colaborador)
                     </label>
-                    <div className="space-y-1.5">
-                      <label className="flex items-start gap-2 cursor-pointer p-2 rounded-lg hover:bg-emerald-100/50 dark:hover:bg-emerald-900/20 transition-colors">
-                        <input
-                          type="radio"
-                          name="analysisDest"
-                          checked={analysisDispensarAssinatura && !analysisAtivarDireto}
-                          onChange={() => {
-                            setAnalysisDispensarAssinatura(true)
-                            setAnalysisAtivarDireto(false)
-                          }}
-                          className="mt-0.5 text-emerald-600 focus:ring-emerald-500"
-                        />
-                        <div>
-                          <div className="font-bold text-slate-900 dark:text-white text-xs">Encaminhar para Liberações TED (Recomendado)</div>
-                          <div className="text-[10px] text-slate-500 dark:text-slate-400">Aprova a operação e a envia para a tesouraria realizar o TED/PIX e anexar comprovante.</div>
-                        </div>
-                      </label>
-
-                      <label className="flex items-start gap-2 cursor-pointer p-2 rounded-lg hover:bg-emerald-100/50 dark:hover:bg-emerald-900/20 transition-colors">
-                        <input
-                          type="radio"
-                          name="analysisDest"
-                          checked={analysisDispensarAssinatura && analysisAtivarDireto}
-                          onChange={() => {
-                            setAnalysisDispensarAssinatura(true)
-                            setAnalysisAtivarDireto(true)
-                          }}
-                          className="mt-0.5 text-emerald-600 focus:ring-emerald-500"
-                        />
-                        <div>
-                          <div className="font-bold text-slate-900 dark:text-white text-xs">Ativar Imediatamente</div>
-                          <div className="text-[10px] text-slate-500 dark:text-slate-400">Utilize se os recursos já foram entregues ao colaborador. O empréstimo ficará ativo agora.</div>
-                        </div>
-                      </label>
-
-                      <label className="flex items-start gap-2 cursor-pointer p-2 rounded-lg hover:bg-emerald-100/50 dark:hover:bg-emerald-900/20 transition-colors">
-                        <input
-                          type="radio"
-                          name="analysisDest"
-                          checked={!analysisDispensarAssinatura}
-                          onChange={() => {
-                            setAnalysisDispensarAssinatura(false)
-                            setAnalysisAtivarDireto(false)
-                          }}
-                          className="mt-0.5 text-emerald-600 focus:ring-emerald-500"
-                        />
-                        <div>
-                          <div className="font-bold text-slate-900 dark:text-white text-xs">Ainda assim exigir assinatura digital do colaborador</div>
-                          <div className="text-[10px] text-slate-500 dark:text-slate-400">O contrato ficará aguardando o colaborador aceitar os termos no portal.</div>
-                        </div>
-                      </label>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* CAMPOS ESPECÍFICOS DE RECUSA */}
-              {analysisDecision === 'recusar' && (
-                <div className="space-y-1.5 animate-in fade-in">
-                  <label className="block text-xs font-bold text-rose-600 dark:text-rose-400">
-                    Motivo Formal da Recusa (visível para o colaborador)
-                  </label>
-                  <textarea
-                    rows={3}
-                    value={motivoRecusa}
-                    onChange={(e) => setMotivoRecusa(e.target.value)}
-                    placeholder="Ex: Margem salarial indisponível, histórico de restrições ou período aquisitivo mínimo..."
-                    className="w-full bg-rose-50/40 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900/50 rounded-xl p-3 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500"
-                  />
-                </div>
-              )}
-
-              {/* CAMPOS ESPECÍFICOS DE CONTRAPROPOSTA */}
-              {analysisDecision === 'contraproposta' && (
-                <div className="space-y-3 bg-purple-50/70 dark:bg-purple-950/20 border border-purple-200 dark:border-purple-800/40 rounded-xl p-3.5 animate-in fade-in text-xs">
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="block text-[11px] font-bold text-purple-900 dark:text-purple-300 mb-1">Novo Valor Proposto (R$)</label>
-                      <input
-                        type="number"
-                        step="100"
-                        value={contraValor}
-                        onChange={(e) => setContraValor(Number(e.target.value))}
-                        className="w-full bg-white dark:bg-slate-950 border border-purple-200 dark:border-purple-800/50 rounded-xl px-3 py-2 text-slate-900 dark:text-white font-mono focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] font-bold text-purple-900 dark:text-purple-300 mb-1">Parcelas Propostas</label>
-                      <input
-                        type="number"
-                        min="1"
-                        max="24"
-                        value={contraParcelas}
-                        onChange={(e) => setContraParcelas(Number(e.target.value))}
-                        className="w-full bg-white dark:bg-slate-950 border border-purple-200 dark:border-purple-800/50 rounded-xl px-3 py-2 text-slate-900 dark:text-white font-mono focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-bold text-purple-900 dark:text-purple-300 mb-1">Justificativa da Alteração</label>
                     <textarea
-                      rows={2}
-                      value={contraMotivo}
-                      onChange={(e) => setContraMotivo(e.target.value)}
-                      placeholder="Explicação do ajuste para o colaborador..."
-                      className="w-full bg-white dark:bg-slate-950 border border-purple-200 dark:border-purple-800/50 rounded-xl p-2.5 text-slate-900 dark:text-white focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
+                      rows={3}
+                      value={motivoRecusa}
+                      onChange={(e) => setMotivoRecusa(e.target.value)}
+                      placeholder="Ex: Margem salarial indisponível, histórico de restrições ou período aquisitivo mínimo..."
+                      className="w-full bg-rose-50/40 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900/50 rounded-xl p-3 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500"
                     />
                   </div>
-                </div>
-              )}
-            </div>
+                )}
 
-            <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setAnalyzingLoan(null)}
-                className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 transition-colors"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                disabled={isSubmittingAnalysis}
-                onClick={handleConfirmAnalysis}
-                className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-xs font-bold text-white shadow-sm shadow-blue-600/30 disabled:opacity-50 transition-colors"
-              >
-                {isSubmittingAnalysis ? 'Salvando...' : 'Confirmar Decisão'}
-              </button>
+                {/* CAMPOS ESPECÍFICOS DE CONTRAPROPOSTA */}
+                {analysisDecision === 'contraproposta' && (
+                  <div className="space-y-3 bg-purple-50/70 dark:bg-purple-950/20 border border-purple-200 dark:border-purple-800/40 rounded-xl p-3.5 animate-in fade-in text-xs">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-[11px] font-bold text-purple-900 dark:text-purple-300 mb-1">Novo Valor Proposto (R$)</label>
+                        <input
+                          type="number"
+                          step="100"
+                          value={contraValor}
+                          onChange={(e) => setContraValor(Number(e.target.value))}
+                          className="w-full bg-white dark:bg-slate-950 border border-purple-200 dark:border-purple-800/50 rounded-xl px-3 py-2 text-slate-900 dark:text-white font-mono focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-bold text-purple-900 dark:text-purple-300 mb-1">Parcelas Propostas</label>
+                        <input
+                          type="number"
+                          min="1"
+                          max="24"
+                          value={contraParcelas}
+                          onChange={(e) => setContraParcelas(Number(e.target.value))}
+                          className="w-full bg-white dark:bg-slate-950 border border-purple-200 dark:border-purple-800/50 rounded-xl px-3 py-2 text-slate-900 dark:text-white font-mono focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-purple-900 dark:text-purple-300 mb-1">Justificativa da Alteração</label>
+                      <textarea
+                        rows={2}
+                        value={contraMotivo}
+                        onChange={(e) => setContraMotivo(e.target.value)}
+                        placeholder="Explicação do ajuste para o colaborador..."
+                        className="w-full bg-white dark:bg-slate-950 border border-purple-200 dark:border-purple-800/50 rounded-xl p-2.5 text-slate-900 dark:text-white focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {(analysisDecision === 'aprovar' || analysisDecision === 'recusar') && (
+                <label className="flex items-center gap-2.5 p-3 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200/80 dark:border-emerald-800/50 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={notifyWhatsAppOnAction}
+                    onChange={(e) => setNotifyWhatsAppOnAction(e.target.checked)}
+                    className="rounded text-emerald-600 focus:ring-emerald-500 w-4 h-4"
+                  />
+                  <div className="flex items-center gap-2 text-xs text-emerald-900 dark:text-emerald-200 font-semibold">
+                    <MessageCircle size={15} className="text-emerald-600 dark:text-emerald-400 shrink-0" />
+                    <span>
+                      Abrir mensagem de WhatsApp para o colaborador após confirmar ({analysisDecision === 'aprovar' ? 'Aprovado' : 'Recusado'})
+                    </span>
+                  </div>
+                </label>
+              )}
+
+              <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setAnalyzingLoan(null)}
+                  className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  disabled={isSubmittingAnalysis}
+                  onClick={handleConfirmAnalysis}
+                  className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-xs font-bold text-white shadow-sm shadow-blue-600/30 disabled:opacity-50 transition-colors"
+                >
+                  {isSubmittingAnalysis ? 'Salvando...' : 'Confirmar Decisão'}
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )
+      })()}
 
       {/* MODAL DE LIBERAÇÃO DE RECURSOS (DISBURSEMENT) */}
       {disbursingLoan && (
@@ -1656,6 +2246,19 @@ export function AdminDashboard({
                 </div>
               )}
             </div>
+
+            <label className="flex items-center gap-2.5 p-3 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200/80 dark:border-emerald-800/50 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={notifyWhatsAppOnAction}
+                onChange={(e) => setNotifyWhatsAppOnAction(e.target.checked)}
+                className="rounded text-emerald-600 focus:ring-emerald-500 w-4 h-4"
+              />
+              <div className="flex items-center gap-2 text-xs text-emerald-900 dark:text-emerald-200 font-semibold">
+                <MessageCircle size={15} className="text-emerald-600 dark:text-emerald-400 shrink-0" />
+                <span>Notificar colaborador no WhatsApp que o valor foi depositado</span>
+              </div>
+            </label>
 
             {(() => {
               const isPixMissing = !disbursingLoan.dadosBancarios?.chavePix || disbursingLoan.dadosBancarios.chavePix.toLowerCase().includes('definir')
@@ -1855,139 +2458,456 @@ export function AdminDashboard({
       )}
 
       {/* MODAL DE APROVAÇÃO DIRETA (DISPENSAR AUTORIZAÇÃO DO COLABORADOR) */}
-      {approvingDirectLoan && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-3">
-              <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                <CheckCircle2 size={18} className="text-emerald-600 dark:text-emerald-400" />
-                <span>Aprovação Direta de Empréstimo</span>
-              </h3>
-              <button onClick={() => setApprovingDirectLoan(null)} className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors">✕</button>
-            </div>
+      {approvingDirectLoan && (() => {
+        const valorPrincipalDireto = approvingDirectLoan.valorAprovado || approvingDirectLoan.valorSolicitado || 0
+        const simDireto = simulateLoan(
+          valorPrincipalDireto,
+          approvingDirectLoan.quantidadeParcelas || 1,
+          approvingDirectLoan.taxaMensal ?? 0,
+          approvingDirectLoan.metodoCalculo || 'JUROS_SIMPLES_SALDO',
+          approvingDirectLoan.colaboradorSalarioBase,
+          approvingDirectLoan.createdAt ? new Date(approvingDirectLoan.createdAt) : new Date(),
+          5,
+          approvingDirectLoan.primeiraParcelaCompetencia,
+          approvingDirectLoan.primeiraParcelaVencimento
+        )
+        const parcelasDireto =
+          approvingDirectLoan.parcelas && approvingDirectLoan.parcelas.length > 0
+            ? approvingDirectLoan.parcelas
+            : simDireto.parcelas
+        const totalJurosDireto =
+          typeof approvingDirectLoan.totalJuros === 'number'
+            ? approvingDirectLoan.totalJuros
+            : parcelasDireto.reduce((acc, p) => acc + (p.valorJuros || 0), 0)
+        const totalAPagarDireto =
+          typeof approvingDirectLoan.totalAPagar === 'number' && approvingDirectLoan.totalAPagar > 0
+            ? approvingDirectLoan.totalAPagar
+            : valorPrincipalDireto + totalJurosDireto
+        const pixKeyDireto = (directApprovePixKey || approvingDirectLoan.dadosBancarios?.chavePix || approvingDirectLoan.colaboradorCpf || '').trim()
 
-            <div className="p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/50 text-xs text-emerald-900 dark:text-emerald-300">
-              <div className="font-bold text-xs mb-1">Prerrogativa Administrativa:</div>
-              Você está aprovando esta operação diretamente como Administrador/Direção. A autorização de desconto em folha e contrato de mútuo serão formalizados com carimbo administrativo, <strong>dispensando a necessidade de autorização ou assinatura prévia do colaborador</strong>.
-            </div>
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in">
+            <div className="bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-2xl max-w-xl w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+              <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-3">
+                <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  <CheckCircle2 size={18} className="text-emerald-600 dark:text-emerald-400" />
+                  <span>Aprovação Direta de Empréstimo</span>
+                </h3>
+                <button onClick={() => setApprovingDirectLoan(null)} className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors">✕</button>
+              </div>
 
-            {/* DADOS DA OPERAÇÃO */}
-            <div className="bg-slate-50 dark:bg-slate-800/60 rounded-xl p-3.5 border border-slate-200/80 dark:border-slate-700/60 text-xs space-y-2">
-              <div className="flex justify-between">
-                <span className="text-slate-500 dark:text-slate-400">Operação:</span>
-                <span className="font-mono font-bold text-slate-900 dark:text-white">{approvingDirectLoan.codigoOperacao}</span>
+              <div className="p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/50 text-xs text-emerald-900 dark:text-emerald-300">
+                <div className="font-bold text-xs mb-1">Prerrogativa Administrativa:</div>
+                Você está aprovando esta operação diretamente como Administrador/Direção. A autorização de desconto em folha e contrato de mútuo serão formalizados com carimbo administrativo, <strong>dispensando a necessidade de autorização ou assinatura prévia do colaborador</strong>.
               </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500 dark:text-slate-400">Colaborador:</span>
-                <span className="font-bold text-slate-900 dark:text-white">{approvingDirectLoan.colaboradorNome}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500 dark:text-slate-400">CPF:</span>
-                <span className="font-mono text-slate-700 dark:text-slate-300">{approvingDirectLoan.colaboradorCpf || 'Não informado'}</span>
-              </div>
-              <div className="flex justify-between pt-1 border-t border-slate-200/60 dark:border-slate-700/60">
-                <span className="text-slate-500 dark:text-slate-400">Valor / Parcelas:</span>
-                <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
-                  {formatBrl(approvingDirectLoan.valorAprovado || approvingDirectLoan.valorSolicitado)} em {approvingDirectLoan.quantidadeParcelas}x
-                </span>
-              </div>
-            </div>
 
-            {/* ESCOLHA DE DESTINO */}
-            <div className="space-y-2">
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
-                Como deseja prosseguir com a aprovação?
-              </label>
+              {/* DADOS DA OPERAÇÃO */}
+              <div className="bg-slate-50 dark:bg-slate-800/60 rounded-xl p-3.5 border border-slate-200/80 dark:border-slate-700/60 text-xs space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-slate-500 dark:text-slate-400">Operação:</span>
+                  <span className="font-mono font-bold text-slate-900 dark:text-white">{approvingDirectLoan.codigoOperacao}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500 dark:text-slate-400">Colaborador:</span>
+                  <span className="font-bold text-slate-900 dark:text-white">{approvingDirectLoan.colaboradorNome}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500 dark:text-slate-400">CPF:</span>
+                  <span className="font-mono text-slate-700 dark:text-slate-300">{approvingDirectLoan.colaboradorCpf || 'Não informado'}</span>
+                </div>
 
+                <div className="pt-2 border-t border-slate-200/60 dark:border-slate-700/60 space-y-1.5">
+                  <div className="flex justify-between">
+                    <span className="text-slate-500 dark:text-slate-400">Valor / Parcelas:</span>
+                    <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                      {formatBrl(valorPrincipalDireto)} em {approvingDirectLoan.quantidadeParcelas}x
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500 dark:text-slate-400">Taxa de Juros (%):</span>
+                    <span className="font-mono font-bold text-cyan-700 dark:text-cyan-400">
+                      {Number(approvingDirectLoan.taxaMensal || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}% {approvingDirectLoan.metodoCalculo === 'ACRESCIMO_UNICO' ? '(Taxa Única)' : 'a.m.'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500 dark:text-slate-400">Valor Total dos Juros:</span>
+                    <span className="font-mono font-bold text-amber-600 dark:text-amber-400">
+                      {formatBrl(totalJurosDireto)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500 dark:text-slate-400">Total a Pagar:</span>
+                    <span className="font-mono font-black text-slate-900 dark:text-white">
+                      {formatBrl(totalAPagarDireto)}
+                    </span>
+                  </div>
+                </div>
+
+                {/* EXPANDIR / RECOLHER CRONOGRAMA DE PARCELAS */}
+                <div className="pt-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setShowDirectApproveSchedule((prev) => !prev)}
+                    className="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-slate-100/90 hover:bg-slate-200/70 dark:bg-slate-800 dark:hover:bg-slate-700/80 border border-slate-200/80 dark:border-slate-700 text-slate-700 dark:text-slate-200 font-bold text-[11px] transition-all"
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <Calendar size={13} className="text-emerald-600 dark:text-emerald-400" />
+                      <span>Cronograma das Parcelas ({parcelasDireto.length}x)</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-emerald-700 dark:text-emerald-400">
+                      <span>{showDirectApproveSchedule ? 'Recolher' : 'Expandir parcelas'}</span>
+                      {showDirectApproveSchedule ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                    </div>
+                  </button>
+
+                  {showDirectApproveSchedule && (
+                    <div className="mt-2 rounded-lg border border-slate-200/90 dark:border-slate-700 overflow-hidden bg-white dark:bg-slate-900 animate-in fade-in">
+                      <div className="overflow-x-auto max-h-56 overflow-y-auto">
+                        <table className="w-full text-[11px] text-left">
+                          <thead className="bg-slate-100 dark:bg-slate-800/90 text-[9px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider border-b border-slate-200 dark:border-slate-700 sticky top-0">
+                            <tr>
+                              <th className="py-1.5 px-2 text-center">Nº</th>
+                              <th className="py-1.5 px-2 text-center">Vencimento</th>
+                              <th className="py-1.5 px-2 text-right">Principal</th>
+                              <th className="py-1.5 px-2 text-right">Juros</th>
+                              <th className="py-1.5 px-2 text-right">Valor Parcela</th>
+                              <th className="py-1.5 px-2 text-right">Saldo Após</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-mono">
+                            {parcelasDireto.map((p) => (
+                              <tr key={p.numero} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
+                                <td className="py-1.5 px-2 text-center font-bold text-slate-600 dark:text-slate-400">
+                                  {String(p.numero).padStart(2, '0')}
+                                </td>
+                                <td className="py-1.5 px-2 text-center text-slate-700 dark:text-slate-300 whitespace-nowrap font-sans">
+                                  {new Date(p.dataVencimento + 'T12:00:00Z').toLocaleDateString('pt-BR')}
+                                </td>
+                                <td className="py-1.5 px-2 text-right text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                                  {formatBrl(p.valorAmortizacao)}
+                                </td>
+                                <td className="py-1.5 px-2 text-right text-amber-600 dark:text-amber-400 whitespace-nowrap">
+                                  {formatBrl(p.valorJuros)}
+                                </td>
+                                <td className="py-1.5 px-2 text-right font-bold text-emerald-700 dark:text-emerald-400 whitespace-nowrap">
+                                  {formatBrl(p.valorTotal)}
+                                </td>
+                                <td className="py-1.5 px-2 text-right text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                                  {formatBrl(p.saldoDevedorApos)}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                          <tfoot className="bg-slate-50 dark:bg-slate-800/80 border-t border-slate-200 dark:border-slate-700 font-mono font-bold text-[10px]">
+                            <tr>
+                              <td colSpan={2} className="py-1.5 px-2 text-left font-sans uppercase text-slate-500 dark:text-slate-400">
+                                Total Discriminado
+                              </td>
+                              <td className="py-1.5 px-2 text-right text-slate-800 dark:text-slate-200 whitespace-nowrap">
+                                {formatBrl(valorPrincipalDireto)}
+                              </td>
+                              <td className="py-1.5 px-2 text-right text-amber-600 dark:text-amber-400 whitespace-nowrap">
+                                {formatBrl(totalJurosDireto)}
+                              </td>
+                              <td className="py-1.5 px-2 text-right text-emerald-700 dark:text-emerald-400 whitespace-nowrap">
+                                {formatBrl(totalAPagarDireto)}
+                              </td>
+                              <td className="py-1.5 px-2 text-right text-slate-400">—</td>
+                            </tr>
+                          </tfoot>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* ESCOLHA DE DESTINO */}
               <div className="space-y-2">
-                <label className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
-                  directApproveDestination === 'aguardando_liberacao'
-                    ? 'bg-cyan-50/70 dark:bg-cyan-950/30 border-cyan-300 dark:border-cyan-700/70'
-                    : 'bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800'
-                }`}>
-                  <input
-                    type="radio"
-                    name="directDest"
-                    checked={directApproveDestination === 'aguardando_liberacao'}
-                    onChange={() => setDirectApproveDestination('aguardando_liberacao')}
-                    className="mt-0.5 text-cyan-600 focus:ring-cyan-500"
-                  />
-                  <div>
-                    <div className="font-bold text-slate-900 dark:text-white text-xs">
-                      1. Aprovar e Enviar para Liberações TED (Recomendado)
-                    </div>
-                    <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                      Formaliza o contrato imediatamente e move o empréstimo para a aba <strong>Liberações TED</strong>, onde a tesouraria pode efetuar o PIX/transferência e anexar o comprovante.
-                    </div>
-                  </div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+                  Como deseja prosseguir com a aprovação?
                 </label>
 
-                <label className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
-                  directApproveDestination === 'ativo'
-                    ? 'bg-emerald-50/70 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-700/70'
-                    : 'bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800'
-                }`}>
-                  <input
-                    type="radio"
-                    name="directDest"
-                    checked={directApproveDestination === 'ativo'}
-                    onChange={() => setDirectApproveDestination('ativo')}
-                    className="mt-0.5 text-emerald-600 focus:ring-emerald-500"
-                  />
-                  <div>
-                    <div className="font-bold text-slate-900 dark:text-white text-xs">
-                      2. Aprovar e Ativar Imediatamente
+                <div className="space-y-2">
+                  <label className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
+                    directApproveDestination === 'aguardando_liberacao'
+                      ? 'bg-cyan-50/70 dark:bg-cyan-950/30 border-cyan-300 dark:border-cyan-700/70'
+                      : 'bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800'
+                  }`}>
+                    <input
+                      type="radio"
+                      name="directDest"
+                      checked={directApproveDestination === 'aguardando_liberacao'}
+                      onChange={() => setDirectApproveDestination('aguardando_liberacao')}
+                      className="mt-0.5 text-cyan-600 focus:ring-cyan-500"
+                    />
+                    <div>
+                      <div className="font-bold text-slate-900 dark:text-white text-xs">
+                        1. Aprovar e Enviar para Liberações TED (Recomendado)
+                      </div>
+                      <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                        Formaliza o contrato imediatamente e move o empréstimo para a aba <strong>Liberações TED</strong>, onde a tesouraria pode efetuar o PIX/transferência e anexar o comprovante.
+                      </div>
                     </div>
-                    <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                      Utilize se o valor já foi creditado/entregue ao colaborador. A operação ficará ativa de imediato no saldo a receber e no controle de folha.
+                  </label>
+
+                  <label className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
+                    directApproveDestination === 'ativo'
+                      ? 'bg-emerald-50/70 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-700/70'
+                      : 'bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800'
+                  }`}>
+                    <input
+                      type="radio"
+                      name="directDest"
+                      checked={directApproveDestination === 'ativo'}
+                      onChange={() => setDirectApproveDestination('ativo')}
+                      className="mt-0.5 text-emerald-600 focus:ring-emerald-500"
+                    />
+                    <div>
+                      <div className="font-bold text-slate-900 dark:text-white text-xs">
+                        2. Aprovar e Ativar Imediatamente
+                      </div>
+                      <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                        Utilize se o valor já foi creditado/entregue ao colaborador. A operação ficará ativa de imediato no saldo a receber e no controle de folha.
+                      </div>
                     </div>
-                  </div>
-                </label>
+                  </label>
+                </div>
               </div>
-            </div>
 
-            {/* DADOS BANCÁRIOS / PIX (OPCIONAL) */}
-            <div className="space-y-2 bg-slate-50 dark:bg-slate-800/40 p-3.5 rounded-xl border border-slate-200/80 dark:border-slate-700/60 text-xs">
-              <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300">
-                Chave PIX do Colaborador (opcional, pode ser preenchida ou editada depois)
-              </label>
-              <div className="grid grid-cols-3 gap-2">
-                <select
-                  value={directApprovePixType}
-                  onChange={(e) => setDirectApprovePixType(e.target.value as any)}
-                  className="bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-2.5 py-2 text-xs text-slate-800 dark:text-slate-200"
-                >
-                  <option value="cpf">CPF</option>
-                  <option value="email">E-mail</option>
-                  <option value="telefone">Telefone</option>
-                  <option value="aleatoria">Aleatória</option>
-                </select>
+              {/* DADOS BANCÁRIOS / PIX (OPCIONAL) */}
+              <div className="space-y-2 bg-slate-50 dark:bg-slate-800/40 p-3.5 rounded-xl border border-slate-200/80 dark:border-slate-700/60 text-xs">
+                <div className="flex items-center justify-between gap-2">
+                  <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                    Chave PIX do Colaborador
+                  </label>
+                  {pixKeyDireto && !pixKeyDireto.toLowerCase().includes('definir') && (
+                    <button
+                      type="button"
+                      onClick={() => copyToClipboard(pixKeyDireto, 'Chave PIX')}
+                      className="px-2 py-0.5 rounded-md bg-cyan-50 hover:bg-cyan-100 dark:bg-cyan-950/60 dark:hover:bg-cyan-900/60 text-cyan-700 dark:text-cyan-300 border border-cyan-200/70 dark:border-cyan-800/60 font-bold text-[10px] flex items-center gap-1 transition-colors"
+                      title="Copiar Chave PIX"
+                    >
+                      <Copy size={11} />
+                      <span>Copiar PIX</span>
+                    </button>
+                  )}
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  <select
+                    value={directApprovePixType}
+                    onChange={(e) => setDirectApprovePixType(e.target.value as any)}
+                    className="bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-2.5 py-2 text-xs text-slate-800 dark:text-slate-200"
+                  >
+                    <option value="cpf">CPF</option>
+                    <option value="email">E-mail</option>
+                    <option value="telefone">Telefone</option>
+                    <option value="aleatoria">Aleatória</option>
+                  </select>
+                  <input
+                    type="text"
+                    placeholder="Chave PIX..."
+                    value={directApprovePixKey}
+                    onChange={(e) => setDirectApprovePixKey(e.target.value)}
+                    className="col-span-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-mono text-slate-900 dark:text-white placeholder:text-slate-400"
+                  />
+                </div>
+              </div>
+
+              <label className="flex items-center gap-2.5 p-3 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200/80 dark:border-emerald-800/50 cursor-pointer">
                 <input
-                  type="text"
-                  placeholder="Chave PIX..."
-                  value={directApprovePixKey}
-                  onChange={(e) => setDirectApprovePixKey(e.target.value)}
-                  className="col-span-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-mono text-slate-900 dark:text-white placeholder:text-slate-400"
+                  type="checkbox"
+                  checked={notifyWhatsAppOnAction}
+                  onChange={(e) => setNotifyWhatsAppOnAction(e.target.checked)}
+                  className="rounded text-emerald-600 focus:ring-emerald-500 w-4 h-4"
                 />
+                <div className="flex items-center gap-2 text-xs text-emerald-900 dark:text-emerald-200 font-semibold">
+                  <MessageCircle size={15} className="text-emerald-600 dark:text-emerald-400 shrink-0" />
+                  <span>
+                    Abrir mensagem de WhatsApp para o colaborador após aprovar ({directApproveDestination === 'ativo' ? 'Valor Depositado' : 'Empréstimo Aprovado'})
+                  </span>
+                </div>
+              </label>
+
+              <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setApprovingDirectLoan(null)}
+                  className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  disabled={isSubmittingDirectApproval}
+                  onClick={handleConfirmDirectApproval}
+                  className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white shadow-sm shadow-emerald-600/30 disabled:opacity-50 transition-colors flex items-center gap-1.5"
+                >
+                  <CheckCircle2 size={14} />
+                  <span>{isSubmittingDirectApproval ? 'Aprovando...' : 'Confirmar Aprovação Direta'}</span>
+                </button>
               </div>
             </div>
+          </div>
+        )
+      })()}
 
-            <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-2">
+      {/* MODAL DE ENVIO DE MENSAGEM WHATSAPP AO COLABORADOR */}
+      {whatsappModalLoan && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-white dark:bg-slate-900 border border-emerald-200/90 dark:border-emerald-800/60 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-start border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+                  <MessageCircle size={20} />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                    Notificar Colaborador no WhatsApp
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    {whatsappModalLoan.colaboradorNome} • Operação <span className="font-mono font-bold">{whatsappModalLoan.codigoOperacao}</span>
+                  </p>
+                </div>
+              </div>
               <button
                 type="button"
-                onClick={() => setApprovingDirectLoan(null)}
+                onClick={() => setWhatsappModalLoan(null)}
+                className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors text-sm p-1"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* SELETOR DE MODELO DE MENSAGEM */}
+            <div className="space-y-1.5">
+              <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider">
+                Tipo de Notificação / Mensagem Organizada
+              </label>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleChangeWhatsAppEventType('contrato_cronograma')}
+                  className={`py-2 px-2 rounded-xl border text-[11px] font-bold flex items-center justify-center gap-1.5 transition-all ${
+                    whatsappEventType === 'contrato_cronograma'
+                      ? 'bg-emerald-50 dark:bg-emerald-950/50 border-emerald-400 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300 shadow-xs'
+                      : 'bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-100'
+                  }`}
+                >
+                  <FileText size={13} />
+                  <span>Contrato & Parcelas</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleChangeWhatsAppEventType('aprovado')}
+                  className={`py-2 px-2 rounded-xl border text-[11px] font-bold flex items-center justify-center gap-1.5 transition-all ${
+                    whatsappEventType === 'aprovado'
+                      ? 'bg-emerald-50 dark:bg-emerald-950/50 border-emerald-400 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300 shadow-xs'
+                      : 'bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-100'
+                  }`}
+                >
+                  <CheckCircle2 size={13} />
+                  <span>Aprovado</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleChangeWhatsAppEventType('depositado')}
+                  className={`py-2 px-2 rounded-xl border text-[11px] font-bold flex items-center justify-center gap-1.5 transition-all ${
+                    whatsappEventType === 'depositado'
+                      ? 'bg-cyan-50 dark:bg-cyan-950/50 border-cyan-400 dark:border-cyan-700 text-cyan-700 dark:text-cyan-300 shadow-xs'
+                      : 'bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-100'
+                  }`}
+                >
+                  <Banknote size={13} />
+                  <span>Depositado</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleChangeWhatsAppEventType('recusado')}
+                  className={`py-2 px-2 rounded-xl border text-[11px] font-bold flex items-center justify-center gap-1.5 transition-all ${
+                    whatsappEventType === 'recusado'
+                      ? 'bg-rose-50 dark:bg-rose-950/50 border-rose-400 dark:border-rose-700 text-rose-700 dark:text-rose-300 shadow-xs'
+                      : 'bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-100'
+                  }`}
+                >
+                  <AlertTriangle size={13} />
+                  <span>Recusado</span>
+                </button>
+              </div>
+            </div>
+
+            {/* TELEFONE / WHATSAPP DO COLABORADOR */}
+            <div className="space-y-1.5 bg-slate-50 dark:bg-slate-800/50 p-3.5 rounded-xl border border-slate-200/80 dark:border-slate-700/60">
+              <div className="flex items-center justify-between">
+                <label className="text-[11px] font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                  <Phone size={13} className="text-emerald-600 dark:text-emerald-400" />
+                  <span>WhatsApp do Colaborador (com DDD)</span>
+                </label>
+                {!whatsappPhone.trim() && (
+                  <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400">
+                    ⚠️ Telefone não cadastrado — informe abaixo
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="tel"
+                  value={whatsappPhone}
+                  onChange={(e) => setWhatsappPhone(e.target.value)}
+                  placeholder="Ex: (92) 99999-9999"
+                  className="flex-1 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-mono font-bold text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                />
+                <button
+                  type="button"
+                  disabled={isSavingWhatsappPhone || !whatsappPhone.trim()}
+                  onClick={() => handleSaveWhatsAppPhone(false)}
+                  className="px-3 py-2 rounded-xl bg-slate-200/80 hover:bg-slate-300/80 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-[11px] font-bold transition-colors disabled:opacity-50 shrink-0"
+                  title="Salvar número no cadastro do colaborador"
+                >
+                  {isSavingWhatsappPhone ? 'Salvando...' : 'Salvar Nº'}
+                </button>
+              </div>
+            </div>
+
+            {/* TEXTO DA MENSAGEM (EDITÁVEL) */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="text-[11px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider">
+                  Mensagem que será enviada
+                </label>
+                <button
+                  type="button"
+                  onClick={() => copyToClipboard(whatsappMessage, 'Mensagem do WhatsApp')}
+                  className="text-[11px] font-bold text-cyan-600 dark:text-cyan-400 hover:underline flex items-center gap-1"
+                >
+                  <Copy size={12} />
+                  <span>Copiar Texto</span>
+                </button>
+              </div>
+              <textarea
+                rows={9}
+                value={whatsappMessage}
+                onChange={(e) => setWhatsappMessage(e.target.value)}
+                className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl p-3 text-xs text-slate-800 dark:text-slate-200 font-sans leading-relaxed focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+              />
+            </div>
+
+            <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2">
+              <button
+                type="button"
+                onClick={() => setWhatsappModalLoan(null)}
                 className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 transition-colors"
               >
-                Cancelar
+                Fechar
               </button>
               <button
                 type="button"
-                disabled={isSubmittingDirectApproval}
-                onClick={handleConfirmDirectApproval}
-                className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white shadow-sm shadow-emerald-600/30 disabled:opacity-50 transition-colors flex items-center gap-1.5"
+                disabled={!whatsappMessage.trim()}
+                onClick={handleSendWhatsAppNow}
+                className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white shadow-sm shadow-emerald-600/30 disabled:opacity-50 transition-all flex items-center gap-2"
               >
-                <CheckCircle2 size={14} />
-                <span>{isSubmittingDirectApproval ? 'Aprovando...' : 'Confirmar Aprovação Direta'}</span>
+                <MessageCircle size={15} />
+                <span>Enviar no WhatsApp</span>
               </button>
             </div>
           </div>
@@ -1996,3 +2916,4 @@ export function AdminDashboard({
     </div>
   )
 }
+

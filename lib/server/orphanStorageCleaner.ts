@@ -477,6 +477,28 @@ export async function fetchAllDbReferences(supabase: any): Promise<DbRef[]> {
         refs.push({ url, table: 'boletins', id: row.id, label: `Boletim: ${row.id}` })
       }
     }),
+
+    // 18. Tabela Dedicada de Contratos Digitais (matriculas_digitais)
+    () => safeQueryPaged('matriculas_digitais', 'id, protocolo, aluno_nome, documento_pdf_storage_path, documento_assinado_storage_path', (row) => {
+      const origPath = row.documento_pdf_storage_path || (row.id ? `contratos/${row.id}/original.pdf` : null)
+      const assPath = row.documento_assinado_storage_path || (row.id ? `contratos/${row.id}/assinado.pdf` : null)
+      if (origPath) {
+        refs.push({
+          url: origPath,
+          table: 'matriculas_digitais',
+          id: row.id || row.protocolo || 'contrato',
+          label: `Contrato Original: ${row.aluno_nome || row.protocolo || row.id}`,
+        })
+      }
+      if (assPath) {
+        refs.push({
+          url: assPath,
+          table: 'matriculas_digitais',
+          id: row.id || row.protocolo || 'contrato',
+          label: `Contrato Assinado: ${row.aluno_nome || row.protocolo || row.id}`,
+        })
+      }
+    }),
   ]
 
   for (const task of tasks) {

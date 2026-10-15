@@ -134,6 +134,7 @@ export interface CredImpactoEmprestimo {
   colaboradorMatricula?: string
   colaboradorSalarioBase?: number
   colaboradorUnidade?: string
+  colaboradorTelefone?: string
   
   // Parâmetros Contratuais
   valorSolicitado: number

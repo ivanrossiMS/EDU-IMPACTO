@@ -345,6 +345,7 @@ function CredImpactoContent() {
                 <AdminDashboard
                   viewModeTab="dashboard"
                   emprestimos={emprestimos}
+                  colaboradoresList={colaboradoresList}
                   onOpenDetails={setSelectedLoanForDetails}
                   onRefresh={loadData}
                   onOpenFichaColaborador={handleOpenFichaColaborador}
@@ -356,6 +357,7 @@ function CredImpactoContent() {
                 <AdminDashboard
                   viewModeTab="emprestimos"
                   emprestimos={emprestimos}
+                  colaboradoresList={colaboradoresList}
                   onOpenDetails={setSelectedLoanForDetails}
                   onRefresh={loadData}
                   onOpenFichaColaborador={handleOpenFichaColaborador}
@@ -367,6 +369,7 @@ function CredImpactoContent() {
                 <AdminDashboard
                   viewModeTab="analise"
                   emprestimos={emprestimos}
+                  colaboradoresList={colaboradoresList}
                   onOpenDetails={setSelectedLoanForDetails}
                   onRefresh={loadData}
                   onOpenFichaColaborador={handleOpenFichaColaborador}
@@ -378,6 +381,7 @@ function CredImpactoContent() {
                 <AdminDashboard
                   viewModeTab="liberacoes"
                   emprestimos={emprestimos}
+                  colaboradoresList={colaboradoresList}
                   onOpenDetails={setSelectedLoanForDetails}
                   onRefresh={loadData}
                   onOpenFichaColaborador={handleOpenFichaColaborador}

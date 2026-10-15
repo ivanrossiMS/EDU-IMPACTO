@@ -115,6 +115,7 @@ export async function POST(request: Request) {
     let colabMatricula = resolved.matricula
     let colabSalario = resolved.salarioBase
     let colabUnidade = resolved.unidade || ''
+    let colabTelefone = body.colaboradorTelefone || resolved.telefone || ''
 
     // Se admin estiver cadastrando para outro colaborador
     if (criadoPorFinanceiro && resolved.isAdminOrFinance && targetColaboradorId) {
@@ -134,8 +135,19 @@ export async function POST(request: Request) {
           colabMatricula = targetColaboradorMatricula || targetFunc.codigo || colabMatricula
           colabSalario = targetSalarioBase ? Number(targetSalarioBase) : (targetFunc.salario ? Number(targetFunc.salario) : colabSalario)
           colabUnidade = targetFunc.unidade || colabUnidade
+          colabTelefone =
+            body.colaboradorTelefone ||
+            targetFunc.celular ||
+            targetFunc.telefone ||
+            targetFunc.dados?.celular ||
+            targetFunc.dados?.telefone ||
+            colabTelefone
         }
       } catch (e) {}
+    }
+
+    if (!colabTelefone && dadosBancarios?.tipoChavePix === 'telefone' && dadosBancarios?.chavePix) {
+      colabTelefone = dadosBancarios.chavePix
     }
 
     // Valida CPF obrigatório com 11 dígitos (apenas para colaborador solicitando por conta própria; admin pode enviar sem CPF para o colaborador completar na assinatura)
@@ -254,6 +266,7 @@ export async function POST(request: Request) {
       colaboradorMatricula: colabMatricula,
       colaboradorSalarioBase: colabSalario,
       colaboradorUnidade: colabUnidade,
+      colaboradorTelefone: colabTelefone || undefined,
       valorSolicitado: valor,
       valorAprovado: valor,
       quantidadeParcelas: parcelasCount,

@@ -6,8 +6,9 @@ import {
   X, Check, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
   Sparkles, PenTool, Move, Trash2, FileText, AlertCircle, RefreshCw,
   ZoomIn, ZoomOut, Maximize2, Minus, Plus, Building2, User,
-  CheckCircle2, RotateCcw, MousePointerClick, Layers
+  CheckCircle2, RotateCcw, MousePointerClick, Layers, Lock, AlertTriangle, ArrowRight
 } from 'lucide-react'
+import { toast } from 'sonner'
 import {
   formatAbbreviatedSignerName,
   sanitizeSignerName,
@@ -183,6 +184,155 @@ export function gerarPosicionamentoDocumentos(
   return resultado
 }
 
+export interface DiagnosticoDocumentoPosicionamento {
+  doc: {
+    id: string
+    nome: string
+    totalPaginas: number
+    paginaInicioGlobal?: number
+    paginaFimGlobal?: number
+  }
+  docIdx: number
+  posicionados: SignatarioPosicionavel[]
+  faltantes: SignatarioPosicionavel[]
+  completo: boolean
+}
+
+export interface DiagnosticoSignatarioPosicionamento {
+  sig: SignatarioPosicionavel
+  docsPosicionados: Array<{ id: string; nome: string; docIdx: number }>
+  docsFaltantes: Array<{ id: string; nome: string; docIdx: number }>
+  completoEmTodosDocs: boolean
+}
+
+export interface ResultadoValidacaoPosicionamento {
+  porDocumento: DiagnosticoDocumentoPosicionamento[]
+  porSignatario: DiagnosticoSignatarioPosicionamento[]
+  totalDocumentos: number
+  totalSignatarios: number
+  totalEsperado: number
+  totalPosicionado: number
+  totalFaltante: number
+  docsCompletosCount: number
+  docsIncompletos: DiagnosticoDocumentoPosicionamento[]
+  sigsCompletosEmTodosDocsCount: number
+  sigsComAlgumaPosicaoCount: number
+  tudoPosicionado: boolean
+}
+
+export function verificarPosicaoSignatarioNoDoc(
+  pos: PosicaoAssinatura,
+  sigId: string,
+  doc: { id: string; paginaInicioGlobal?: number; paginaFimGlobal?: number },
+  docIdx: number,
+  totalDocs: number
+): boolean {
+  if (pos.signatarioId !== sigId) return false
+  if (pos.documentoId) {
+    return pos.documentoId === doc.id
+  }
+  if (totalDocs <= 1) return true
+  if (
+    typeof doc.paginaInicioGlobal === 'number' &&
+    typeof doc.paginaFimGlobal === 'number' &&
+    pos.pagina >= doc.paginaInicioGlobal &&
+    pos.pagina <= doc.paginaFimGlobal
+  ) {
+    return true
+  }
+  return docIdx === 0
+}
+
+export function validarPosicionamentoCompleto(
+  signatarios: SignatarioPosicionavel[],
+  documentos: Array<{
+    id: string
+    nome: string
+    totalPaginas: number
+    paginaInicioGlobal?: number
+    paginaFimGlobal?: number
+  }>,
+  posicoes: Record<string, PosicaoAssinatura>
+): ResultadoValidacaoPosicionamento {
+  const listaPosicoes = Object.values(posicoes || {})
+  const totalDocs = documentos.length
+
+  const porDocumento: DiagnosticoDocumentoPosicionamento[] = documentos.map((doc, docIdx) => {
+    const posicionados: SignatarioPosicionavel[] = []
+    const faltantes: SignatarioPosicionavel[] = []
+
+    signatarios.forEach((sig) => {
+      const encontrado = listaPosicoes.some((p) =>
+        verificarPosicaoSignatarioNoDoc(p, sig.id, doc, docIdx, totalDocs)
+      )
+      if (encontrado) {
+        posicionados.push(sig)
+      } else {
+        faltantes.push(sig)
+      }
+    })
+
+    return {
+      doc,
+      docIdx,
+      posicionados,
+      faltantes,
+      completo: signatarios.length > 0 && faltantes.length === 0,
+    }
+  })
+
+  const porSignatario: DiagnosticoSignatarioPosicionamento[] = signatarios.map((sig) => {
+    const docsPosicionados: Array<{ id: string; nome: string; docIdx: number }> = []
+    const docsFaltantes: Array<{ id: string; nome: string; docIdx: number }> = []
+
+    documentos.forEach((doc, docIdx) => {
+      const encontrado = listaPosicoes.some((p) =>
+        verificarPosicaoSignatarioNoDoc(p, sig.id, doc, docIdx, totalDocs)
+      )
+      if (encontrado) {
+        docsPosicionados.push({ id: doc.id, nome: doc.nome, docIdx })
+      } else {
+        docsFaltantes.push({ id: doc.id, nome: doc.nome, docIdx })
+      }
+    })
+
+    return {
+      sig,
+      docsPosicionados,
+      docsFaltantes,
+      completoEmTodosDocs: totalDocs > 0 && docsFaltantes.length === 0,
+    }
+  })
+
+  const totalEsperado = totalDocs * signatarios.length
+  const totalPosicionado = porDocumento.reduce((acc, item) => acc + item.posicionados.length, 0)
+  const totalFaltante = Math.max(0, totalEsperado - totalPosicionado)
+  const docsIncompletos = porDocumento.filter((d) => !d.completo)
+  const docsCompletosCount = porDocumento.length - docsIncompletos.length
+  const sigsCompletosEmTodosDocsCount = porSignatario.filter((s) => s.completoEmTodosDocs).length
+  const sigsComAlgumaPosicaoCount = porSignatario.filter((s) => s.docsPosicionados.length > 0).length
+  const tudoPosicionado =
+    signatarios.length > 0 &&
+    totalDocs > 0 &&
+    totalFaltante === 0 &&
+    docsIncompletos.length === 0
+
+  return {
+    porDocumento,
+    porSignatario,
+    totalDocumentos: totalDocs,
+    totalSignatarios: signatarios.length,
+    totalEsperado,
+    totalPosicionado,
+    totalFaltante,
+    docsCompletosCount,
+    docsIncompletos,
+    sigsCompletosEmTodosDocsCount,
+    sigsComAlgumaPosicaoCount,
+    tudoPosicionado,
+  }
+}
+
 interface PosicionadorAssinaturasModalProps {
   aberto: boolean
   onClose: () => void
@@ -254,6 +404,8 @@ export function PosicionadorAssinaturasModal({
   const [zoom, setZoom] = useState<number>(100)
   const [carregandoPdf, setCarregandoPdf] = useState<boolean>(true)
   const [erroPdf, setErroPdf] = useState<string | null>(null)
+  const [tentouSalvarIncompleto, setTentouSalvarIncompleto] = useState<boolean>(false)
+  const [shakeTrigger, setShakeTrigger] = useState<number>(0)
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const overlayRef = useRef<HTMLDivElement | null>(null)
@@ -282,6 +434,7 @@ export function PosicionadorAssinaturasModal({
       setPosicoes({ ...posicoesAtuais })
       setDocAtivoIndex(0)
       setPaginaAtualNoDoc(1)
+      setTentouSalvarIncompleto(false)
       if (signatarioInicialId) {
         setSignatarioAtivoId(signatarioInicialId)
       } else if (signatarios.length > 0 && !signatarioAtivoId) {
@@ -417,6 +570,18 @@ export function PosicionadorAssinaturasModal({
     }
   }, [carregandoPdf, paginaAtualNoDoc, zoom, renderizarPagina])
 
+  // Diagnóstico completo de validação (todos os signatários em todos os documentos)
+  const diagnostico = useMemo(() => {
+    return validarPosicionamentoCompleto(signatarios, docsProcessados, posicoes)
+  }, [signatarios, docsProcessados, posicoes])
+
+  // Limpa o estado de alerta de tentativa inválida assim que tudo estiver posicionado
+  useEffect(() => {
+    if (diagnostico.tudoPosicionado && tentouSalvarIncompleto) {
+      setTentouSalvarIncompleto(false)
+    }
+  }, [diagnostico.tudoPosicionado, tentouSalvarIncompleto])
+
   // Clique no overlay da página para posicionar o signatário ativo
   const handleOverlayClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (arrastandoId || redimensionandoId) return // Não reposiciona se acabou de arrastar ou redimensionar
@@ -432,7 +597,12 @@ export function PosicionadorAssinaturasModal({
       ? `${sigAtivo.id}_doc_${docAtivo.id}`
       : sigAtivo.id
 
-    const posExistente = posicoes[posKey]
+    // Verifica se já existia posição para este signatário neste documento
+    const entryExistenteNoDoc = Object.entries(posicoes).find(([_, p]) =>
+      verificarPosicaoSignatarioNoDoc(p, sigAtivo.id, docAtivo, docAtivoIndex, docsProcessados.length)
+    )
+    const keyReal = entryExistenteNoDoc?.[0] || posKey
+    const posExistente = entryExistenteNoDoc?.[1] || posicoes[posKey]
     const larguraPt = posExistente?.larguraPt || 190
     const alturaPt = posExistente?.alturaPt || 45
 
@@ -445,8 +615,8 @@ export function PosicionadorAssinaturasModal({
 
     setPosicoes(prev => ({
       ...prev,
-      [posKey]: {
-        id: posKey,
+      [keyReal]: {
+        id: keyReal,
         signatarioId: sigAtivo.id,
         nome: sigAtivo.nome,
         cargo: sigAtivo.cargo,
@@ -464,6 +634,16 @@ export function PosicionadorAssinaturasModal({
         assinaturaBase64: sigAtivo.assinaturaBase64 || undefined,
       },
     }))
+
+    // Se este signatário ainda não estava posicionado neste documento, avança automaticamente
+    // a seleção para o próximo signatário pendente neste mesmo documento para agilizar os cliques
+    if (!posExistente) {
+      const diagDocAtual = diagnostico.porDocumento[docAtivoIndex]
+      const proximoPendenteNoDoc = diagDocAtual?.faltantes.find(f => f.id !== sigAtivo.id)
+      if (proximoPendenteNoDoc) {
+        setSignatarioAtivoId(proximoPendenteNoDoc.id)
+      }
+    }
   }
 
   // Manipulação de Arrastar (Drag and drop) das caixinhas
@@ -635,6 +815,7 @@ export function PosicionadorAssinaturasModal({
       return copy
     })
     setPaginaAtualNoDoc(totalPagsDoc)
+    toast.success(`Todas as ${signatarios.length} assinaturas posicionadas no rodapé de "${docAtivo.nome}".`)
   }
 
   // Auto-posiciona signatários no rodapé de TODOS os documentos
@@ -642,15 +823,134 @@ export function PosicionadorAssinaturasModal({
     const novas = gerarPosicionamentoDocumentos(signatarios, docsProcessados)
     if (Object.keys(novas).length === 0) return
     setPosicoes(novas)
+    setPaginaAtualNoDoc(Math.max(1, docAtivo.totalPaginas || 1))
+    toast.success(
+      `Todas as ${signatarios.length} assinaturas foram posicionadas nos ${docsProcessados.length} documentos!`
+    )
+  }
+
+  // Auto-posiciona APENAS as assinaturas que ainda estão faltando (preservando as já posicionadas manualmente)
+  const handleAutoPosicionarPendentes = () => {
+    if (diagnostico.tudoPosicionado) return
+    const qtdFaltantes = diagnostico.totalFaltante
+
+    setPosicoes(prev => {
+      const copy = { ...prev }
+      diagnostico.docsIncompletos.forEach((diagDoc) => {
+        const doc = diagDoc.doc
+        const totalPagsDoc = Math.max(1, doc.totalPaginas || 1)
+        const paginaFimGlobal = (doc.paginaInicioGlobal || 1) + totalPagsDoc - 1
+        const padrao = gerarPosicionamentoPadrao(signatarios, paginaFimGlobal)
+
+        diagDoc.faltantes.forEach((sigFaltante) => {
+          const p = padrao[sigFaltante.id]
+          if (!p) return
+          const key = docsProcessados.length > 1 ? `${sigFaltante.id}_doc_${doc.id}` : sigFaltante.id
+          copy[key] = {
+            ...p,
+            id: key,
+            documentoId: doc.id,
+            documentoNome: doc.nome,
+            pagina: paginaFimGlobal,
+            paginaRelativa: totalPagsDoc,
+          }
+        })
+      })
+      return copy
+    })
+
+    setPaginaAtualNoDoc(Math.max(1, docAtivo.totalPaginas || 1))
+    toast.success(
+      `${qtdFaltantes} ${qtdFaltantes === 1 ? 'assinatura pendente foi posicionada' : 'assinaturas pendentes foram posicionadas'} automaticamente no rodapé!`
+    )
   }
 
   // Auto-posiciona todos os signatários no rodapé da última página (modo documento único)
   const handleAutoPosicionarUltimaPagina = () => {
     const totalPags = Math.max(1, totalPaginas || pdfDocRef.current?.numPages || 1)
-    const novas = gerarPosicionamentoPadrao(signatarios, totalPags)
-    if (Object.keys(novas).length === 0) return
+    const padrao = gerarPosicionamentoPadrao(signatarios, totalPags)
+    if (Object.keys(padrao).length === 0) return
+    const novas: Record<string, PosicaoAssinatura> = {}
+    for (const [sigId, p] of Object.entries(padrao)) {
+      novas[sigId] = {
+        ...p,
+        id: sigId,
+        documentoId: docAtivo.id,
+        documentoNome: docAtivo.nome,
+        pagina: totalPags,
+        paginaRelativa: totalPags,
+      }
+    }
     setPosicoes(novas)
     setPaginaAtualNoDoc(totalPags)
+    toast.success(`Todas as ${signatarios.length} assinaturas posicionadas no rodapé da página ${totalPags}.`)
+  }
+
+  // Navega diretamente para uma pendência específica (ou para a primeira pendência encontrada)
+  const handleIrParaPendencia = (targetDocIdx?: number, targetSigId?: string) => {
+    const diagDocAtual = diagnostico.porDocumento[docAtivoIndex]
+    const docDestino =
+      typeof targetDocIdx === 'number'
+        ? diagnostico.porDocumento[targetDocIdx]
+        : diagDocAtual && !diagDocAtual.completo
+        ? diagDocAtual
+        : diagnostico.docsIncompletos[0]
+
+    if (!docDestino) return
+
+    const sigDestinoId = targetSigId || docDestino.faltantes[0]?.id || signatarioAtivoId
+    if (docDestino.docIdx !== docAtivoIndex) {
+      setDocAtivoIndex(docDestino.docIdx)
+      setPaginaAtualNoDoc(Math.max(1, docDestino.doc.totalPaginas || 1))
+    }
+    if (sigDestinoId) {
+      setSignatarioAtivoId(sigDestinoId)
+    }
+  }
+
+  // Validação estrita antes de confirmar e salvar
+  const handleConfirmarESalvar = () => {
+    if (!diagnostico.tudoPosicionado) {
+      setTentouSalvarIncompleto(true)
+      setShakeTrigger(prev => prev + 1)
+
+      const diagDocAtual = diagnostico.porDocumento[docAtivoIndex]
+      const alvoDocDiag = diagDocAtual && !diagDocAtual.completo
+        ? diagDocAtual
+        : diagnostico.docsIncompletos[0]
+
+      if (alvoDocDiag) {
+        if (alvoDocDiag.docIdx !== docAtivoIndex) {
+          setDocAtivoIndex(alvoDocDiag.docIdx)
+          setPaginaAtualNoDoc(Math.max(1, alvoDocDiag.doc.totalPaginas || 1))
+        }
+        if (alvoDocDiag.faltantes[0]) {
+          setSignatarioAtivoId(alvoDocDiag.faltantes[0].id)
+        }
+      }
+
+      if (docsProcessados.length > 1) {
+        const resumoDocs = diagnostico.docsIncompletos
+          .map(d => `Doc ${d.docIdx + 1} (faltam ${d.faltantes.length})`)
+          .join(', ')
+        toast.warning(
+          `Ação bloqueada: posicione todas as assinaturas em todos os documentos! Faltam ${diagnostico.totalFaltante} de ${diagnostico.totalEsperado} assinaturas (${resumoDocs}).`,
+          { duration: 6000 }
+        )
+      } else {
+        const nomesFaltantes = alvoDocDiag
+          ? alvoDocDiag.faltantes.map(f => f.nome.split(' ')[0]).join(', ')
+          : ''
+        toast.warning(
+          `Ação bloqueada: posicione todas as ${signatarios.length} assinaturas antes de salvar! Faltam ${diagnostico.totalFaltante}: ${nomesFaltantes}.`,
+          { duration: 5500 }
+        )
+      }
+      return
+    }
+
+    onSalvar(posicoes)
+    onClose()
   }
 
   // Navegação entre páginas com transição contínua entre múltiplos documentos
@@ -675,23 +975,15 @@ export function PosicionadorAssinaturasModal({
     }
   }
 
-  // Contagem de signatários posicionados
-  const totalSignatariosComPosicao = signatarios.filter(s =>
-    Object.values(posicoes).some(p => p.signatarioId === s.id)
-  ).length
-  const todosPosicionados = totalSignatariosComPosicao === signatarios.length && signatarios.length > 0
+  const todosPosicionados = diagnostico.tudoPosicionado
+  const diagDocAtivo = diagnostico.porDocumento[docAtivoIndex]
+  const assinaturasNoDocAtivo = diagDocAtivo?.posicionados.length || 0
 
   const sigAtivoObj = signatarios.find(s => s.id === signatarioAtivoId) || signatarios[0]
   const keyAtivoNoDoc = docsProcessados.length > 1 && sigAtivoObj
     ? `${sigAtivoObj.id}_doc_${docAtivo.id}`
     : sigAtivoObj?.id || ''
   const larguraAtivaPt = posicoes[keyAtivoNoDoc]?.larguraPt || 190
-
-  const assinaturasNoDocAtivo = signatarios.filter(s =>
-    Object.values(posicoes).some(p =>
-      p.signatarioId === s.id && (p.documentoId === docAtivo.id || (!p.documentoId && docsProcessados.length <= 1))
-    )
-  ).length
 
   if (!aberto) return null
 
@@ -773,9 +1065,21 @@ export function PosicionadorAssinaturasModal({
                     fontWeight: 700,
                     padding: '3px 10px',
                     borderRadius: 999,
-                    background: todosPosicionados ? '#ecfdf5' : '#fffbeb',
-                    color: todosPosicionados ? '#047857' : '#b45309',
-                    border: todosPosicionados ? '1px solid #a7f3d0' : '1px solid #fde68a',
+                    background: todosPosicionados
+                      ? '#ecfdf5'
+                      : tentouSalvarIncompleto
+                      ? '#fef2f2'
+                      : '#fffbeb',
+                    color: todosPosicionados
+                      ? '#047857'
+                      : tentouSalvarIncompleto
+                      ? '#b91c1c'
+                      : '#b45309',
+                    border: todosPosicionados
+                      ? '1px solid #a7f3d0'
+                      : tentouSalvarIncompleto
+                      ? '1px solid #fca5a5'
+                      : '1px solid #fde68a',
                     display: 'inline-flex',
                     alignItems: 'center',
                     gap: 4,
@@ -784,9 +1088,16 @@ export function PosicionadorAssinaturasModal({
                   {todosPosicionados ? (
                     <>
                       <CheckCircle2 size={12} /> Todas as {signatarios.length} pessoas posicionadas
+                      {docsProcessados.length > 1 && ` em todos os ${docsProcessados.length} docs`}
+                    </>
+                  ) : docsProcessados.length > 1 ? (
+                    <>
+                      <AlertTriangle size={12} /> {diagnostico.sigsCompletosEmTodosDocsCount} de {signatarios.length} pessoas completas • {diagnostico.totalPosicionado}/{diagnostico.totalEsperado} posições
                     </>
                   ) : (
-                    `${totalSignatariosComPosicao} de ${signatarios.length} posicionadas`
+                    <>
+                      <AlertTriangle size={12} /> {diagnostico.totalPosicionado} de {signatarios.length} posicionadas
+                    </>
                   )}
                 </span>
                 {docsProcessados.length > 1 && (
@@ -796,26 +1107,53 @@ export function PosicionadorAssinaturasModal({
                       fontWeight: 700,
                       padding: '3px 10px',
                       borderRadius: 999,
-                      background: '#eff6ff',
-                      color: '#1d4ed8',
-                      border: '1px solid #bfdbfe',
+                      background: todosPosicionados ? '#ecfdf5' : '#eff6ff',
+                      color: todosPosicionados ? '#047857' : '#1d4ed8',
+                      border: todosPosicionados ? '1px solid #a7f3d0' : '1px solid #bfdbfe',
                       display: 'inline-flex',
                       alignItems: 'center',
                       gap: 4,
                     }}
                   >
-                    <Layers size={11} /> {docsProcessados.length} documentos anexados
+                    <Layers size={11} /> {diagnostico.docsCompletosCount} de {docsProcessados.length} documentos concluídos
                   </span>
                 )}
               </div>
               <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
-                Siga o passo a passo à esquerda ou use o posicionamento automático inteligente no rodapé.
+                {docsProcessados.length > 1
+                  ? 'Obrigatório: todas as pessoas listadas precisam ter sua assinatura posicionada em cada um dos documentos anexados.'
+                  : 'Obrigatório: todas as pessoas listadas precisam ter sua assinatura posicionada no documento para confirmar e salvar.'}
               </div>
             </div>
           </div>
 
           {/* Botões de Ação Rápida no Topo */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            {!todosPosicionados && diagnostico.totalPosicionado > 0 && (
+              <button
+                type="button"
+                onClick={handleAutoPosicionarPendentes}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  background: '#fffbeb',
+                  border: '1px solid #fcd34d',
+                  color: '#b45309',
+                  fontSize: 12,
+                  fontWeight: 700,
+                  padding: '8px 13px',
+                  borderRadius: 10,
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                  boxShadow: '0 1px 3px rgba(245, 158, 11, 0.12)',
+                }}
+                title="Preenche automaticamente no rodapé apenas as assinaturas que ainda estão faltando, mantendo intactas as que você já posicionou"
+              >
+                <Sparkles size={14} color="#d97706" /> Completar Pendentes ({diagnostico.totalFaltante})
+              </button>
+            )}
+
             {docsProcessados.length > 1 ? (
               <>
                 <button
@@ -1079,10 +1417,11 @@ export function PosicionadorAssinaturasModal({
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {docsProcessados.map((doc, idx) => {
                   const isAtivo = docAtivoIndex === idx
-                  const sigsNesteDoc = Object.values(posicoes).filter(
-                    p => p.documentoId === doc.id || (!p.documentoId && idx === 0)
-                  ).length
-                  const completoNesteDoc = sigsNesteDoc >= signatarios.length && signatarios.length > 0
+                  const diagDoc = diagnostico.porDocumento[idx]
+                  const sigsNesteDoc = diagDoc?.posicionados.length || 0
+                  const faltantesNesteDoc = diagDoc?.faltantes || []
+                  const completoNesteDoc = Boolean(diagDoc?.completo)
+                  const destacarAlertaDoc = tentouSalvarIncompleto && !completoNesteDoc
 
                   return (
                     <div
@@ -1091,15 +1430,32 @@ export function PosicionadorAssinaturasModal({
                         if (docAtivoIndex !== idx) {
                           setDocAtivoIndex(idx)
                           setPaginaAtualNoDoc(1)
+                          if (faltantesNesteDoc.length > 0 && !faltantesNesteDoc.some(f => f.id === signatarioAtivoId)) {
+                            setSignatarioAtivoId(faltantesNesteDoc[0].id)
+                          }
                         }
                       }}
                       style={{
                         padding: '10px 12px',
                         borderRadius: 12,
                         cursor: 'pointer',
-                        background: isAtivo ? '#ffffff' : '#f1f5f9',
-                        border: isAtivo ? '2px solid #2563eb' : '1px solid #e2e8f0',
-                        boxShadow: isAtivo ? '0 4px 12px rgba(37, 99, 235, 0.08)' : 'none',
+                        background: isAtivo
+                          ? '#ffffff'
+                          : destacarAlertaDoc
+                          ? '#fff1f2'
+                          : '#f1f5f9',
+                        border: isAtivo
+                          ? '2px solid #2563eb'
+                          : destacarAlertaDoc
+                          ? '1.5px solid #fca5a5'
+                          : completoNesteDoc
+                          ? '1px solid #a7f3d0'
+                          : '1px solid #e2e8f0',
+                        boxShadow: isAtivo
+                          ? '0 4px 12px rgba(37, 99, 235, 0.08)'
+                          : destacarAlertaDoc
+                          ? '0 2px 8px rgba(225, 29, 72, 0.08)'
+                          : 'none',
                         transition: 'all 0.15s ease',
                         display: 'flex',
                         flexDirection: 'column',
@@ -1113,8 +1469,20 @@ export function PosicionadorAssinaturasModal({
                               width: 22,
                               height: 22,
                               borderRadius: 6,
-                              background: isAtivo ? '#eff6ff' : '#e2e8f0',
-                              color: isAtivo ? '#2563eb' : '#475569',
+                              background: completoNesteDoc
+                                ? '#d1fae5'
+                                : isAtivo
+                                ? '#eff6ff'
+                                : destacarAlertaDoc
+                                ? '#ffe4e6'
+                                : '#e2e8f0',
+                              color: completoNesteDoc
+                                ? '#047857'
+                                : isAtivo
+                                ? '#2563eb'
+                                : destacarAlertaDoc
+                                ? '#be123c'
+                                : '#475569',
                               fontSize: 11,
                               fontWeight: 800,
                               display: 'flex',
@@ -1123,7 +1491,7 @@ export function PosicionadorAssinaturasModal({
                               flexShrink: 0,
                             }}
                           >
-                            {idx + 1}
+                            {completoNesteDoc ? <Check size={12} strokeWidth={3} /> : idx + 1}
                           </div>
                           <span
                             style={{
@@ -1152,16 +1520,51 @@ export function PosicionadorAssinaturasModal({
                             fontWeight: 700,
                             padding: '2px 8px',
                             borderRadius: 999,
-                            background: completoNesteDoc ? '#ecfdf5' : sigsNesteDoc > 0 ? '#eff6ff' : '#fffbeb',
-                            color: completoNesteDoc ? '#047857' : sigsNesteDoc > 0 ? '#1d4ed8' : '#b45309',
-                            border: completoNesteDoc ? '1px solid #a7f3d0' : sigsNesteDoc > 0 ? '1px solid #bfdbfe' : '1px solid #fde68a',
+                            background: completoNesteDoc
+                              ? '#ecfdf5'
+                              : destacarAlertaDoc
+                              ? '#fef2f2'
+                              : sigsNesteDoc > 0
+                              ? '#eff6ff'
+                              : '#fffbeb',
+                            color: completoNesteDoc
+                              ? '#047857'
+                              : destacarAlertaDoc
+                              ? '#b91c1c'
+                              : sigsNesteDoc > 0
+                              ? '#1d4ed8'
+                              : '#b45309',
+                            border: completoNesteDoc
+                              ? '1px solid #a7f3d0'
+                              : destacarAlertaDoc
+                              ? '1px solid #fca5a5'
+                              : sigsNesteDoc > 0
+                              ? '1px solid #bfdbfe'
+                              : '1px solid #fde68a',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 3,
                           }}
                         >
                           {completoNesteDoc
                             ? `✓ ${sigsNesteDoc}/${signatarios.length} assinaturas`
-                            : `${sigsNesteDoc}/${signatarios.length} assinaturas`}
+                            : `${sigsNesteDoc}/${signatarios.length} assinaturas (faltam ${faltantesNesteDoc.length})`}
                         </span>
                       </div>
+
+                      {!completoNesteDoc && faltantesNesteDoc.length > 0 && (
+                        <div
+                          style={{
+                            paddingLeft: 29,
+                            fontSize: 10,
+                            color: destacarAlertaDoc ? '#be123c' : '#b45309',
+                            fontWeight: 600,
+                            lineHeight: 1.35,
+                          }}
+                        >
+                          Faltam: {faltantesNesteDoc.map(f => f.nome.split(' ')[0]).join(', ')}
+                        </div>
+                      )}
 
                       {isAtivo && doc.totalPaginas > 1 && paginaAtualNoDoc !== doc.totalPaginas && (
                         <div style={{ paddingLeft: 29, paddingTop: 2 }}>
@@ -1219,7 +1622,13 @@ export function PosicionadorAssinaturasModal({
                     Pessoas para Assinar
                   </span>
                 </div>
-                <span style={{ fontSize: 10.5, fontWeight: 600, color: '#64748b' }}>
+                <span
+                  style={{
+                    fontSize: 10.5,
+                    fontWeight: 700,
+                    color: assinaturasNoDocAtivo === signatarios.length && signatarios.length > 0 ? '#047857' : '#b45309',
+                  }}
+                >
                   {assinaturasNoDocAtivo}/{signatarios.length} neste doc
                 </span>
               </div>
@@ -1229,14 +1638,18 @@ export function PosicionadorAssinaturasModal({
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {signatarios.map((sig) => {
+                {signatarios.map((sig, sigIdx) => {
                   const isAtivo = signatarioAtivoId === sig.id
                   const posEntryNesteDoc = Object.entries(posicoes).find(([_, p]) =>
-                    p.signatarioId === sig.id && (p.documentoId === docAtivo.id || (!p.documentoId && docsProcessados.length <= 1))
+                    verificarPosicaoSignatarioNoDoc(p, sig.id, docAtivo, docAtivoIndex, docsProcessados.length)
                   )
                   const posNesteDoc = posEntryNesteDoc?.[1]
                   const posKeyNesteDoc = posEntryNesteDoc?.[0]
-                  const todasPosicoesSig = Object.values(posicoes).filter(p => p.signatarioId === sig.id)
+                  const diagSig = diagnostico.porSignatario[sigIdx]
+                  const docsPosicionadosCount = diagSig?.docsPosicionados.length || 0
+                  const docsFaltantesSig = diagSig?.docsFaltantes || []
+                  const completoEmTodosDocsSig = Boolean(diagSig?.completoEmTodosDocs)
+                  const destacarAlertaSig = tentouSalvarIncompleto && (!posNesteDoc || !completoEmTodosDocsSig)
 
                   return (
                     <div
@@ -1246,8 +1659,14 @@ export function PosicionadorAssinaturasModal({
                         padding: '10px 12px',
                         borderRadius: 12,
                         cursor: 'pointer',
-                        background: '#ffffff',
-                        border: isAtivo ? `2px solid ${sig.cor}` : '1px solid #e2e8f0',
+                        background: destacarAlertaSig && !posNesteDoc ? '#fff1f2' : '#ffffff',
+                        border: isAtivo
+                          ? `2px solid ${sig.cor}`
+                          : destacarAlertaSig
+                          ? '1.5px solid #fca5a5'
+                          : posNesteDoc && completoEmTodosDocsSig
+                          ? '1px solid #a7f3d0'
+                          : '1px solid #e2e8f0',
                         boxShadow: isAtivo ? `0 4px 14px ${sig.cor}22` : '0 1px 2px rgba(15, 23, 42, 0.03)',
                         transition: 'all 0.15s ease',
                         display: 'flex',
@@ -1302,7 +1721,7 @@ export function PosicionadorAssinaturasModal({
                         </div>
                       </div>
 
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, borderTop: '1px solid #f1f5f9', paddingTop: 6 }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 5, borderTop: '1px solid #f1f5f9', paddingTop: 6 }}>
                         {posNesteDoc ? (
                           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', width: '100%', justifyContent: 'space-between' }}>
                             <button
@@ -1327,14 +1746,52 @@ export function PosicionadorAssinaturasModal({
                               }}
                               title="Clique para ir até a página onde esta assinatura está posicionada"
                             >
-                              <Check size={11} strokeWidth={3} /> Posicionado • Pág. {posNesteDoc.paginaRelativa || posNesteDoc.pagina}
+                              <Check size={11} strokeWidth={3} /> Neste doc • Pág. {posNesteDoc.paginaRelativa || posNesteDoc.pagina}
                             </button>
 
                             <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                               {docsProcessados.length > 1 && (
-                                <span style={{ fontSize: 10, color: '#64748b', fontWeight: 600 }}>
-                                  ({todasPosicoesSig.length}/{docsProcessados.length} docs)
-                                </span>
+                                completoEmTodosDocsSig ? (
+                                  <span
+                                    style={{
+                                      fontSize: 10,
+                                      color: '#047857',
+                                      background: '#ecfdf5',
+                                      border: '1px solid #a7f3d0',
+                                      padding: '1px 6px',
+                                      borderRadius: 999,
+                                      fontWeight: 700,
+                                    }}
+                                  >
+                                    ✓ {docsPosicionadosCount}/{docsProcessados.length} docs
+                                  </span>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      if (docsFaltantesSig[0]) {
+                                        handleIrParaPendencia(docsFaltantesSig[0].docIdx, sig.id)
+                                      }
+                                    }}
+                                    style={{
+                                      fontSize: 10,
+                                      color: '#b45309',
+                                      background: '#fffbeb',
+                                      border: '1px solid #fde68a',
+                                      padding: '2px 6px',
+                                      borderRadius: 6,
+                                      fontWeight: 700,
+                                      cursor: 'pointer',
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: 3,
+                                    }}
+                                    title={`Falta posicionar nos documentos: ${docsFaltantesSig.map(d => `Doc ${d.docIdx + 1}`).join(', ')}. Clique para ir até lá.`}
+                                  >
+                                    Falta em {docsFaltantesSig.length} doc(s) →
+                                  </button>
+                                )
                               )}
                               {posKeyNesteDoc && (
                                 <button
@@ -1358,19 +1815,23 @@ export function PosicionadorAssinaturasModal({
                             </div>
                           </div>
                         ) : (
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: 4, flexWrap: 'wrap' }}>
                             <span
                               style={{
                                 fontSize: 10.5,
                                 fontWeight: 700,
-                                color: '#b45309',
-                                background: '#fffbeb',
-                                border: '1px solid #fde68a',
+                                color: destacarAlertaSig ? '#b91c1c' : '#b45309',
+                                background: destacarAlertaSig ? '#fef2f2' : '#fffbeb',
+                                border: destacarAlertaSig ? '1px solid #fca5a5' : '1px solid #fde68a',
                                 padding: '2px 8px',
                                 borderRadius: 6,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 4,
                               }}
                             >
-                              Pendente neste doc
+                              <AlertTriangle size={11} /> Pendente neste doc
+                              {docsProcessados.length > 1 && ` (${docsPosicionadosCount}/${docsProcessados.length})`}
                             </span>
                             {isAtivo ? (
                               <span
@@ -2041,6 +2502,128 @@ export function PosicionadorAssinaturasModal({
           </div>
         </div>
 
+        {/* ── BANNER DE AVISO DETALHADO DE PENDÊNCIAS (QUANDO INCOMPLETO) ── */}
+        <AnimatePresence>
+          {!todosPosicionados && tentouSalvarIncompleto && (
+            <motion.div
+              key={`alerta-incompleto-${shakeTrigger}`}
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0, x: [0, -7, 7, -5, 5, -2, 2, 0] }}
+              exit={{ opacity: 0, y: 6 }}
+              transition={{ duration: 0.35 }}
+              role="alert"
+              aria-live="assertive"
+              style={{
+                padding: '12px 24px',
+                background: 'linear-gradient(90deg, #fef2f2 0%, #fffbeb 100%)',
+                borderTop: '1.5px solid #fca5a5',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 8,
+              }}
+            >
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 12,
+                  flexWrap: 'wrap',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 9, color: '#991b1b', fontSize: 12.5, fontWeight: 700 }}>
+                  <AlertCircle size={17} color="#dc2626" style={{ flexShrink: 0 }} />
+                  <span>
+                    Atenção: Só é permitido confirmar e salvar após posicionar <strong>todas as {signatarios.length} assinaturas</strong> em{' '}
+                    <strong>{docsProcessados.length > 1 ? `todos os ${docsProcessados.length} documentos` : 'todo o documento'}</strong>!{' '}
+                    <span style={{ color: '#b45309', fontWeight: 800 }}>
+                      (Faltam {diagnostico.totalFaltante} de {diagnostico.totalEsperado} posições)
+                    </span>
+                  </span>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    onClick={() => handleIrParaPendencia()}
+                    style={{
+                      background: '#ffffff',
+                      border: '1px solid #fca5a5',
+                      color: '#b91c1c',
+                      padding: '5px 11px',
+                      borderRadius: 8,
+                      fontSize: 11.5,
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 5,
+                    }}
+                  >
+                    Ir para próxima pendência <ArrowRight size={13} />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleAutoPosicionarPendentes}
+                    style={{
+                      background: '#dc2626',
+                      border: 'none',
+                      color: '#ffffff',
+                      padding: '5px 12px',
+                      borderRadius: 8,
+                      fontSize: 11.5,
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 5,
+                      boxShadow: '0 2px 6px rgba(220, 38, 38, 0.25)',
+                    }}
+                  >
+                    <Sparkles size={12} /> Auto-Posicionar {diagnostico.totalFaltante} Pendente(s) no Rodapé
+                  </button>
+                </div>
+              </div>
+
+              {/* Detalhamento de quais documentos e pessoas estão pendentes */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: '#7f1d1d' }}>Pendências por documento:</span>
+                {diagnostico.docsIncompletos.map((d) => {
+                  const isDocAtual = d.docIdx === docAtivoIndex
+                  const nomesCurto = d.faltantes.map(f => f.nome.split(' ')[0]).join(', ')
+                  return (
+                    <button
+                      key={d.doc.id}
+                      type="button"
+                      onClick={() => handleIrParaPendencia(d.docIdx, d.faltantes[0]?.id)}
+                      style={{
+                        fontSize: 11,
+                        fontWeight: 700,
+                        padding: '3px 9px',
+                        borderRadius: 999,
+                        background: isDocAtual ? '#fee2e2' : '#ffffff',
+                        color: '#991b1b',
+                        border: isDocAtual ? '1.5px solid #ef4444' : '1px solid #fecaca',
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 4,
+                      }}
+                      title={`Clique para ir ao Documento ${d.docIdx + 1} (${d.doc.nome}) — Faltam: ${d.faltantes.map(f => f.nome).join(', ')}`}
+                    >
+                      <span>
+                        Doc {d.docIdx + 1}: faltam {d.faltantes.length}/{signatarios.length} ({nomesCurto})
+                      </span>
+                      <ArrowRight size={10} />
+                    </button>
+                  )
+                })}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {/* ── FOOTER CLARO COM RESUMO E CONFIRMAÇÃO ── */}
         <div
           style={{
@@ -2054,28 +2637,96 @@ export function PosicionadorAssinaturasModal({
             flexWrap: 'wrap',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12.5, color: '#475569' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12.5, color: '#475569', flexWrap: 'wrap' }}>
             <span
               style={{
-                color: todosPosicionados ? '#047857' : '#b45309',
-                background: todosPosicionados ? '#ecfdf5' : '#fffbeb',
-                border: todosPosicionados ? '1px solid #a7f3d0' : '1px solid #fde68a',
+                color: todosPosicionados
+                  ? '#047857'
+                  : tentouSalvarIncompleto
+                  ? '#b91c1c'
+                  : '#b45309',
+                background: todosPosicionados
+                  ? '#ecfdf5'
+                  : tentouSalvarIncompleto
+                  ? '#fef2f2'
+                  : '#fffbeb',
+                border: todosPosicionados
+                  ? '1px solid #a7f3d0'
+                  : tentouSalvarIncompleto
+                  ? '1px solid #fca5a5'
+                  : '1px solid #fde68a',
                 padding: '4px 10px',
                 borderRadius: 8,
                 fontWeight: 700,
                 fontSize: 12,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 5,
               }}
             >
-              {totalSignatariosComPosicao} de {signatarios.length} pessoas posicionadas
-              {docsProcessados.length > 1 && ` • ${Object.keys(posicoes).length} posições em ${docsProcessados.length} documentos`}
+              {todosPosicionados ? (
+                <>
+                  <CheckCircle2 size={13} />
+                  {signatarios.length} de {signatarios.length} pessoas posicionadas
+                  {docsProcessados.length > 1 && ` • ${diagnostico.totalPosicionado}/${diagnostico.totalEsperado} posições em ${docsProcessados.length} documentos`}
+                </>
+              ) : (
+                <>
+                  <AlertTriangle size={13} />
+                  {diagnostico.sigsCompletosEmTodosDocsCount} de {signatarios.length} pessoas posicionadas
+                  {docsProcessados.length > 1
+                    ? ` • ${diagnostico.totalPosicionado}/${diagnostico.totalEsperado} posições em ${docsProcessados.length} documentos (faltam ${diagnostico.totalFaltante})`
+                    : ` (faltam ${diagnostico.totalFaltante})`}
+                </>
+              )}
             </span>
-            <span style={{ color: '#64748b', fontSize: 12 }}>
-              As assinaturas serão aplicadas exatamente nas posições definidas acima.
+            <span style={{ color: todosPosicionados ? '#047857' : '#64748b', fontSize: 12, fontWeight: todosPosicionados ? 600 : 400 }}>
+              {todosPosicionados
+                ? 'Tudo pronto! Todas as assinaturas foram posicionadas em todos os documentos.'
+                : docsProcessados.length > 1
+                ? `Posicione todas as ${signatarios.length} pessoas nos ${docsProcessados.length} documentos para liberar a confirmação.`
+                : `Posicione todas as ${signatarios.length} pessoas na folha para liberar a confirmação.`}
             </span>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            {docsProcessados.length > 1 && docAtivoIndex < docsProcessados.length - 1 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            {docsProcessados.length > 1 && (!todosPosicionados && diagnostico.docsIncompletos.some(d => d.docIdx !== docAtivoIndex) ? (
+              <button
+                type="button"
+                onClick={() => {
+                  const proxIncompleto =
+                    diagnostico.docsIncompletos.find(d => d.docIdx > docAtivoIndex) ||
+                    diagnostico.docsIncompletos.find(d => d.docIdx !== docAtivoIndex)
+                  if (proxIncompleto) {
+                    handleIrParaPendencia(proxIncompleto.docIdx, proxIncompleto.faltantes[0]?.id)
+                  }
+                }}
+                style={{
+                  background: '#eff6ff',
+                  border: '1px solid #93c5fd',
+                  color: '#1d4ed8',
+                  padding: '9px 16px',
+                  borderRadius: 10,
+                  fontSize: 12.5,
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                }}
+                title="Avançar para o próximo documento que ainda possui assinaturas pendentes"
+              >
+                {(() => {
+                  const prox =
+                    diagnostico.docsIncompletos.find(d => d.docIdx > docAtivoIndex) ||
+                    diagnostico.docsIncompletos.find(d => d.docIdx !== docAtivoIndex)
+                  return prox
+                    ? `Próximo Documento (${prox.docIdx + 1}/${docsProcessados.length}) • Faltam ${prox.faltantes.length}`
+                    : `Próximo Documento (${docAtivoIndex + 2}/${docsProcessados.length})`
+                })()}{' '}
+                <ChevronRight size={15} />
+              </button>
+            ) : docAtivoIndex < docsProcessados.length - 1 ? (
               <button
                 type="button"
                 onClick={() => {
@@ -2098,7 +2749,7 @@ export function PosicionadorAssinaturasModal({
               >
                 Próximo Documento ({docAtivoIndex + 2}/{docsProcessados.length}) <ChevronRight size={15} />
               </button>
-            )}
+            ) : null)}
 
             <button
               type="button"
@@ -2126,30 +2777,75 @@ export function PosicionadorAssinaturasModal({
               Cancelar
             </button>
 
-            <button
+            <motion.button
+              key={`btn-salvar-${shakeTrigger}`}
               type="button"
-              onClick={() => {
-                onSalvar(posicoes)
-                onClose()
-              }}
+              aria-disabled={!todosPosicionados}
+              onClick={handleConfirmarESalvar}
+              animate={
+                !todosPosicionados && shakeTrigger > 0
+                  ? { x: [0, -8, 8, -6, 6, -3, 3, 0] }
+                  : { x: 0 }
+              }
+              transition={{ duration: 0.35 }}
+              title={
+                todosPosicionados
+                  ? 'Confirmar e salvar todas as posições definidas'
+                  : `Bloqueado: Posicione todas as assinaturas em todos os documentos antes de salvar (faltam ${diagnostico.totalFaltante} de ${diagnostico.totalEsperado})`
+              }
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
-                gap: 7,
-                background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-                border: 'none',
-                color: '#ffffff',
-                padding: '9px 22px',
+                gap: 8,
+                background: todosPosicionados
+                  ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)'
+                  : tentouSalvarIncompleto
+                  ? '#fef2f2'
+                  : '#f1f5f9',
+                border: todosPosicionados
+                  ? 'none'
+                  : tentouSalvarIncompleto
+                  ? '1.5px solid #fca5a5'
+                  : '1.5px solid #cbd5e1',
+                color: todosPosicionados
+                  ? '#ffffff'
+                  : tentouSalvarIncompleto
+                  ? '#b91c1c'
+                  : '#64748b',
+                padding: '9px 20px',
                 borderRadius: 10,
                 fontSize: 13,
                 fontWeight: 700,
-                cursor: 'pointer',
-                boxShadow: '0 4px 12px rgba(16, 185, 129, 0.30)',
-                transition: 'all 0.15s ease',
+                cursor: todosPosicionados ? 'pointer' : 'not-allowed',
+                boxShadow: todosPosicionados
+                  ? '0 4px 12px rgba(16, 185, 129, 0.30)'
+                  : 'none',
+                transition: 'background 0.15s ease, color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease',
               }}
             >
-              <Check size={16} strokeWidth={2.5} /> Confirmar e Salvar Posições
-            </button>
+              {todosPosicionados ? (
+                <>
+                  <Check size={16} strokeWidth={2.5} /> Confirmar e Salvar Posições
+                </>
+              ) : (
+                <>
+                  <Lock size={15} strokeWidth={2.2} />
+                  <span>Confirmar e Salvar Posições</span>
+                  <span
+                    style={{
+                      fontSize: 10.5,
+                      fontWeight: 800,
+                      padding: '2px 7px',
+                      borderRadius: 999,
+                      background: tentouSalvarIncompleto ? '#fee2e2' : '#e2e8f0',
+                      color: tentouSalvarIncompleto ? '#991b1b' : '#475569',
+                    }}
+                  >
+                    Faltam {diagnostico.totalFaltante}
+                  </span>
+                </>
+              )}
+            </motion.button>
           </div>
         </div>
       </motion.div>

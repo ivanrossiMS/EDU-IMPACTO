@@ -245,33 +245,41 @@ export async function obterPdfBytes(
   const supabase = getAdminClient()
   const customPath = tipo === 'assinado' ? contrato.documento_assinado_storage_path : contrato.documento_pdf_storage_path
   const fallbackPath = `contratos/${contrato.id}/${tipo === 'assinado' ? 'assinado' : 'original'}.pdf`
-  const path = customPath || fallbackPath
+  const pathsToTry = Array.from(new Set([customPath, fallbackPath].filter(Boolean) as string[]))
+  const isUploadProprio = Boolean(
+    contrato.evidencias?.isUploadProprio || contrato.tipo_documento === 'documento_upload'
+  )
 
-  try {
-    const { data, error } = await supabase.storage.from(STORAGE_BUCKET).download(path)
-    if (!error && data) {
-      const arrayBuf = await data.arrayBuffer()
-      const buf = Buffer.from(arrayBuf)
+  for (const path of pathsToTry) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const { data, error } = await supabase.storage.from(STORAGE_BUCKET).download(path)
+        if (!error && data) {
+          const arrayBuf = await data.arrayBuffer()
+          const buf = Buffer.from(arrayBuf)
 
-      // Auto-cura de placeholders legados: se o arquivo no storage tiver apenas <= 2 páginas
-      // mas as evidências do contrato indicarem um pacote com mais páginas (ex: 8, 11, 14 págs),
-      // regenera o documento completo automaticamente!
-      const totalEsperado = Number(contrato.evidencias?.totalPaginas || 1)
-      if (totalEsperado > 3) {
-        try {
-          const { PDFDocument } = await import('pdf-lib')
-          const doc = await PDFDocument.load(buf, { ignoreEncryption: true })
-          if (doc.getPageCount() <= 2) {
-            console.warn(`[Repository] PDF no storage para ${contrato.protocolo} tem apenas ${doc.getPageCount()} págs (esperado >= ${totalEsperado}). Regenerando documento completo...`)
-            return await gerarPdfEvidenciasFallback(contrato, tipo)
+          // Auto-cura de placeholders legados (apenas para contratos gerados por modelo nativo, nunca uploads próprios):
+          const totalEsperado = Number(contrato.evidencias?.totalPaginas || 1)
+          if (totalEsperado > 3 && !isUploadProprio) {
+            try {
+              const { PDFDocument } = await import('pdf-lib')
+              const doc = await PDFDocument.load(buf, { ignoreEncryption: true })
+              if (doc.getPageCount() <= 2) {
+                console.warn(`[Repository] PDF no storage para ${contrato.protocolo} tem apenas ${doc.getPageCount()} págs (esperado >= ${totalEsperado}). Regenerando documento completo...`)
+                return await gerarPdfEvidenciasFallback(contrato, tipo)
+              }
+            } catch {}
           }
-        } catch {}
-      }
 
-      return buf
+          return buf
+        }
+      } catch (e) {
+        console.warn(`[Repository] Erro ao baixar PDF (${tipo}) do storage (tentativa ${attempt + 1}):`, e)
+      }
+      if (attempt === 0) {
+        await new Promise((r) => setTimeout(r, 250))
+      }
     }
-  } catch (e) {
-    console.warn(`[Repository] Erro ao baixar PDF (${tipo}) do storage:`, e)
   }
 
   // Fallback em chave dedicada em configuracoes
@@ -303,6 +311,9 @@ export async function gerarPdfEvidenciasFallback(
 ): Promise<Buffer> {
   const { gerarContratoPdf } = await import('../contracts/contractPdfGenerator')
   const { anexarCertificadoEvidencias } = await import('../contracts/digitalEvidenceCertificate')
+  const isUploadProprio = Boolean(
+    contrato.evidencias?.isUploadProprio || contrato.tipo_documento === 'documento_upload'
+  )
 
   const rep = contrato.evidencias?.escolaRepresentante || {
     nome: 'IVAN ROSSI SAMBRANA',
@@ -392,12 +403,16 @@ export async function gerarPdfEvidenciasFallback(
     })
 
     const finalBuf = Buffer.from(sealed.pdfBytes)
-    salvarPdfBytes(contrato.id, 'assinado', finalBuf).catch(() => {})
+    if (!isUploadProprio) {
+      salvarPdfBytes(contrato.id, 'assinado', finalBuf).catch(() => {})
+    }
     return finalBuf
   }
 
   const origBuf = Buffer.from(basePdfBytes)
-  salvarPdfBytes(contrato.id, 'original', origBuf).catch(() => {})
+  if (!isUploadProprio) {
+    salvarPdfBytes(contrato.id, 'original', origBuf).catch(() => {})
+  }
   return origBuf
 }
 

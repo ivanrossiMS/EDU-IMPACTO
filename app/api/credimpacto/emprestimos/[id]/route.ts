@@ -433,6 +433,43 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
       return NextResponse.json(updated)
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // 6. AÇÃO: ATUALIZAR TELEFONE / WHATSAPP DO COLABORADOR
+    // ─────────────────────────────────────────────────────────────────────────
+    if (acao === 'atualizar_telefone_colaborador') {
+      const isOwner = loan.colaboradorId === resolved.id || loan.colaboradorEmail === resolved.email
+      if (!isOwner && !resolved.isAdminOrFinance) {
+        return NextResponse.json({ error: 'Acesso não autorizado.' }, { status: 403 })
+      }
+
+      const cleanTel = String(body.telefone || '').trim()
+      loan.colaboradorTelefone = cleanTel
+
+      try {
+        const { getAdminClient } = await import('@/lib/server/supabaseAdminSingleton')
+        const sb = getAdminClient()
+        if (loan.colaboradorId) {
+          await sb
+            .from('funcionarios')
+            .update({ celular: cleanTel, telefone: cleanTel, updated_at: new Date().toISOString() })
+            .eq('id', loan.colaboradorId)
+        } else if (loan.colaboradorCpf) {
+          await sb
+            .from('funcionarios')
+            .update({ celular: cleanTel, telefone: cleanTel, updated_at: new Date().toISOString() })
+            .eq('cpf', loan.colaboradorCpf)
+        }
+      } catch (e) {}
+
+      const updated = await dbSaveEmprestimo(
+        loan,
+        { id: resolved.id, nome: resolved.nome, perfil: resolved.perfil },
+        'EDICAO',
+        `WhatsApp do colaborador atualizado para: ${cleanTel}`
+      )
+      return NextResponse.json(updated)
+    }
+
     return NextResponse.json({ error: 'Ação não reconhecida.' }, { status: 400 })
   } catch (err: any) {
     return NextResponse.json({ error: err.message || 'Erro ao processar alteração do empréstimo' }, { status: 400 })

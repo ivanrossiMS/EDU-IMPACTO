@@ -9,6 +9,7 @@ interface PdfCanvasViewerProps {
   renderAllPages?: boolean
   zoomPercent?: number
   enableGestures?: boolean
+  externalPdfDoc?: any
   onZoomChange?: (newZoom: number) => void
   onPageChange?: (newPage: number) => void
   onTotalPagesLoaded?: (total: number) => void
@@ -20,12 +21,20 @@ interface PdfCanvasViewerProps {
   footerAction?: React.ReactNode
 }
 
+// Cache em memória de documentos PDF já carregados na sessão para abertura instantânea (0ms) no modal Expandir/Zoom
+const pdfMemoryCache = new Map<string, { doc: any; data?: Uint8Array; blobUrl?: string }>()
+
+export function getCachedPdfBlobUrl(pdfUrl: string): string | null {
+  return pdfMemoryCache.get(pdfUrl)?.blobUrl || null
+}
+
 export function PdfCanvasViewer({
   pdfUrl,
   pageNumber,
   renderAllPages = false,
   zoomPercent = 100,
   enableGestures = false,
+  externalPdfDoc,
   onZoomChange,
   onPageChange,
   onTotalPagesLoaded,
@@ -43,45 +52,100 @@ export function PdfCanvasViewer({
   const pageContainersRef = useRef<{ [key: number]: HTMLDivElement | null }>({})
   const renderTasksRef = useRef<{ [key: number]: any }>({})
 
-  const [loading, setLoading] = useState(true)
+  const cachedEntry = pdfMemoryCache.get(pdfUrl)
+  const initialDoc = externalPdfDoc || cachedEntry?.doc || null
+
+  const [loading, setLoading] = useState(!initialDoc)
   const [error, setError] = useState<string | null>(null)
-  const [pdfDoc, setPdfDoc] = useState<any>(null)
-  const [totalPages, setTotalPages] = useState<number>(1)
+  const [pdfDoc, setPdfDoc] = useState<any>(initialDoc)
+  const [totalPages, setTotalPages] = useState<number>(initialDoc?.numPages || 1)
   const [containerWidth, setContainerWidth] = useState<number>(0)
   const [reloadKey, setReloadKey] = useState(0)
 
   const activePageRef = useRef<number>(pageNumber)
+  const hasInitialScrolledRef = useRef<boolean>(false)
   const isMouseDownRef = useRef(false)
   const mouseStartRef = useRef({ x: 0, y: 0, scrollLeft: 0, scrollTop: 0 })
   const isTouchPanningRef = useRef(false)
   const touchStartRef = useRef({ x: 0, y: 0, scrollLeft: 0, scrollTop: 0 })
 
-  // 1. Carrega o documento PDF com PDF.js usando dados binários via fetch para máxima estabilidade
+  // 1. Carrega o documento PDF com PDF.js reutilizando instância em memória quando disponível
   useEffect(() => {
     let isCancelled = false
 
     async function loadPdf() {
       if (typeof window === 'undefined') return
+
+      // Se não for um reload manual forçado, reutiliza imediatamente o documento já carregado em memória
+      if (reloadKey === 0) {
+        const readyDoc = externalPdfDoc || pdfMemoryCache.get(pdfUrl)?.doc
+        if (readyDoc) {
+          setPdfDoc(readyDoc)
+          const count = readyDoc.numPages || 1
+          setTotalPages(count)
+          onTotalPagesLoaded?.(count)
+          onPdfDocLoaded?.(readyDoc)
+          setError(null)
+          setLoading(false)
+          if (!pdfMemoryCache.has(pdfUrl)) {
+            pdfMemoryCache.set(pdfUrl, { doc: readyDoc })
+          }
+          return
+        }
+      }
+
       try {
         setLoading(true)
         setError(null)
 
         const origin = window.location.origin
 
-        // Baixa o binário primeiro via fetch padrão da janela (mais confiável com cookies e CSP)
-        const res = await fetch(pdfUrl, { cache: 'no-store' })
-        if (!res.ok) {
-          throw new Error(`Não foi possível carregar o PDF (HTTP ${res.status})`)
+        // Faz o fetch com retry automático para evitar falhas por oscilação momentânea de rede mobile
+        let res: Response | null = null
+        let lastStatus = 0
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try {
+            res = await fetch(pdfUrl, { cache: 'no-store' })
+            lastStatus = res.status
+            if (res.ok) break
+          } catch (fetchErr) {
+            if (attempt === 2) throw fetchErr
+          }
+          if (attempt < 2) {
+            await new Promise((r) => setTimeout(r, 500 * (attempt + 1)))
+          }
         }
+
+        if (!res || !res.ok) {
+          // Último recurso: verifica se existe instância carregada anteriormente em qualquer chave
+          const fallbackDoc = externalPdfDoc || pdfMemoryCache.get(pdfUrl)?.doc
+          if (fallbackDoc) {
+            if (isCancelled) return
+            setPdfDoc(fallbackDoc)
+            const count = fallbackDoc.numPages || 1
+            setTotalPages(count)
+            onTotalPagesLoaded?.(count)
+            setLoading(false)
+            return
+          }
+          throw new Error(`Não foi possível carregar o PDF (HTTP ${lastStatus || 'Erro de Rede'})`)
+        }
+
         const buffer = await res.arrayBuffer()
         const data = new Uint8Array(buffer)
+
+        let blobUrl: string | undefined
+        try {
+          const blob = new Blob([buffer], { type: 'application/pdf' })
+          blobUrl = URL.createObjectURL(blob)
+        } catch {}
 
         // @ts-ignore
         const pdfjs: any = await import('pdfjs-dist/build/pdf.min.mjs')
         pdfjs.GlobalWorkerOptions.workerSrc = `${origin}/pdf.worker.min.mjs`
 
         const loadingTask = pdfjs.getDocument({
-          data,
+          data: data.slice(0),
           cMapUrl: `${origin}/cmaps/`,
           cMapPacked: true,
           standardFontDataUrl: `${origin}/standard_fonts/`,
@@ -90,6 +154,7 @@ export function PdfCanvasViewer({
         const doc = await loadingTask.promise
         if (isCancelled) return
 
+        pdfMemoryCache.set(pdfUrl, { doc, data, blobUrl })
         setPdfDoc(doc)
         const count = doc.numPages || 1
         setTotalPages(count)
@@ -110,7 +175,7 @@ export function PdfCanvasViewer({
     return () => {
       isCancelled = true
     }
-  }, [pdfUrl, reloadKey, onTotalPagesLoaded, onPdfDocLoaded])
+  }, [pdfUrl, reloadKey, externalPdfDoc, onTotalPagesLoaded, onPdfDocLoaded])
 
   // 2. Medir largura disponível no container
   const updateDimensions = useCallback(() => {
@@ -150,13 +215,46 @@ export function PdfCanvasViewer({
     renderTasksRef.current = {}
 
     try {
+      const allPageNums = Array.from({ length: totalPages }, (_, i) => i + 1)
+
+      // No modo renderAllPages (modal Expandir), pré-dimensiona os canvases para evitar pulo de layout
+      // e prioriza a renderização imediata da página ativa (pageNumber)
+      if (renderAllPages && totalPages > 1) {
+        try {
+          const refPage = await pdfDoc.getPage(Math.min(Math.max(1, pageNumber), totalPages))
+          const refViewport = refPage.getViewport({ scale: 1 })
+          const defaultRatio = refViewport.height / refViewport.width
+          const estimatedHeight = Math.round(displayWidth * defaultRatio)
+
+          for (const pNum of allPageNums) {
+            const c = canvasRefs.current[pNum]
+            if (c && (!c.style.height || c.style.width !== `${displayWidth}px`)) {
+              c.style.width = `${displayWidth}px`
+              c.style.height = `${estimatedHeight}px`
+            }
+          }
+
+          // Posiciona imediatamente na página que o usuário estava lendo ao abrir o modal Expandir
+          if (!hasInitialScrolledRef.current && pageNumber > 1 && pageContainersRef.current[pageNumber]) {
+            hasInitialScrolledRef.current = true
+            activePageRef.current = pageNumber
+            pageContainersRef.current[pageNumber]?.scrollIntoView({
+              behavior: 'auto',
+              block: 'start',
+            })
+          }
+        } catch {}
+      }
+
+      // Ordena páginas para renderizar a página atual primeiro no modo contínuo
       const pagesToRender = renderAllPages
-        ? Array.from({ length: totalPages }, (_, i) => i + 1)
+        ? [pageNumber, ...allPageNums.filter((p) => p !== pageNumber)]
         : [pageNumber]
 
       const dpr = typeof window !== 'undefined' ? Math.min(window.devicePixelRatio || 1, 2.5) : 1
 
       for (const pNum of pagesToRender) {
+        if (pNum < 1 || pNum > totalPages) continue
         const canvas = renderAllPages ? canvasRefs.current[pNum] : singleCanvasRef.current
         if (!canvas) continue
 
