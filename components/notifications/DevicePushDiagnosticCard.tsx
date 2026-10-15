@@ -242,6 +242,28 @@ ${(diagnostic.auditLogs || []).map(l => `[${l.timestamp}] ${l.action} -> ${l.sta
     }
   }
 
+  const handlePurgeWebCache = async () => {
+    setActionLoading('purge')
+    setActionFeedback(null)
+    try {
+      const ok = await notificationService.purgeOneSignalWebStorage()
+      if (ok) {
+        toast.success('Cache Web do OneSignal purgado com sucesso!')
+        setActionFeedback({
+          type: 'success',
+          message: 'Cache Web do OneSignal (IndexedDB e fila de operações) purgado com sucesso! As filas travadas foram limpas.',
+        })
+      } else {
+        toast.error('Não foi possível purgar o cache web.')
+      }
+    } catch (e: any) {
+      setActionFeedback({ type: 'error', message: 'Erro ao purgar: ' + (e?.message || String(e)) })
+    } finally {
+      setActionLoading(null)
+      await loadDiagnostic()
+    }
+  }
+
   const isIos = diagnostic?.platform === 'ios'
   const isPermAuthorized = diagnostic?.permission.permissionStatus === 'authorized'
   const isPermDenied = diagnostic?.permission.permissionStatus === 'denied'
@@ -615,6 +637,19 @@ ${(diagnostic.auditLogs || []).map(l => `[${l.timestamp}] ${l.action} -> ${l.sta
                 <Send className="h-4 w-4 text-purple-400" />
                 {actionLoading === 'testpush' ? 'Enviando...' : 'Disparar Push p/ Este Aparelho'}
               </button>
+
+              {/* Reparar OneSignal Web (Apenas Web / Desktop) */}
+              {!diagnostic?.isNative && (
+                <button
+                  onClick={handlePurgeWebCache}
+                  disabled={Boolean(actionLoading)}
+                  className="flex items-center justify-center gap-2 rounded-xl border border-rose-500/30 bg-rose-950/30 hover:bg-rose-900/50 p-3 text-xs font-semibold text-rose-200 transition disabled:opacity-50"
+                  title="Purga filas travadas (404/409) e IndexedDB do OneSignal Web"
+                >
+                  <RefreshCw className={`h-4 w-4 text-rose-400 ${actionLoading === 'purge' ? 'animate-spin' : ''}`} />
+                  {actionLoading === 'purge' ? 'Purgando...' : 'Reparar OneSignal Web'}
+                </button>
+              )}
             </div>
           </div>
         )}

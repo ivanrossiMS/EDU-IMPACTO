@@ -878,27 +878,46 @@ class NotificationService {
             }
 
             // Verificação pós-login: se o externalId não foi vinculado (devido a operação pausada na fila
-            // ou conflito 409 com ID órfão), força OS.logout() para purgar a fila e refaz a identificação
-            await new Promise(r => setTimeout(r, 250))
-            const verifiedExtId = OS.User?.externalId
+            // ou conflito 409 com ID órfão), purga storage corrompido e tenta recuperação limpa
+            await new Promise(r => setTimeout(r, 300))
+            let verifiedExtId = OS.User?.externalId
             if (verifiedExtId !== userId) {
-              console.warn(`⚠️ [NotificationService] OneSignal Web externalId (${verifiedExtId}) diverge do usuário atual (${userId}). Purgando fila órfã com OS.logout()...`)
-              try {
-                if (typeof OS.logout === 'function') {
-                  await OS.logout()
-                  await new Promise(r => setTimeout(r, 250))
-                  await OS.login(userId)
-                  console.log(`✅ [NotificationService] Usuário recuperado e associado ao OneSignal Web (External ID: ${userId})`)
+              console.warn(`⚠️ [NotificationService] OneSignal Web externalId (${verifiedExtId}) diverge do usuário atual (${userId}).`)
+
+              const repairKey = `__os_repaired_${userId}__`
+              const alreadyRepaired = typeof sessionStorage !== 'undefined' && sessionStorage.getItem(repairKey)
+
+              if (!alreadyRepaired) {
+                if (typeof sessionStorage !== 'undefined') {
+                  sessionStorage.setItem(repairKey, 'true')
                 }
-              } catch (recoverErr) {
-                console.warn('[NotificationService] Falha na recuperação limpa do login web:', recoverErr)
+                console.warn('⚠️ [NotificationService] Detectado conflito de fila no OneSignal Web. Purgando IndexedDB...')
+                await this.purgeOneSignalWebStorage()
+                try {
+                  if (typeof OS.logout === 'function') {
+                    await OS.logout().catch(() => {})
+                  }
+                  await new Promise(r => setTimeout(r, 200))
+                  await OS.login(userId)
+                  await new Promise(r => setTimeout(r, 300))
+                  verifiedExtId = OS.User?.externalId
+                  if (verifiedExtId === userId) {
+                    console.log(`✅ [NotificationService] Usuário recuperado e associado ao OneSignal Web após purga (External ID: ${userId})`)
+                  }
+                } catch (recoverErr) {
+                  console.warn('[NotificationService] Falha na recuperação limpa do login web:', recoverErr)
+                }
               }
             } else {
               console.log(`✅ [NotificationService] Usuário associado ao OneSignal Web (External ID: ${userId})`)
             }
 
-            this.currentUserId = userId
-            this.loggedInToOneSignal = true
+            if (verifiedExtId === userId) {
+              this.currentUserId = userId
+              this.loggedInToOneSignal = true
+            } else {
+              this.loggedInToOneSignal = false
+            }
           }
 
           // Apenas tenta optIn se o navegador já concedeu permissão (granted).
@@ -925,7 +944,7 @@ class NotificationService {
             }
           }
 
-          if (Object.keys(aliasMap).length > 0) {
+          if (this.loggedInToOneSignal && Object.keys(aliasMap).length > 0) {
             try {
               if (OS.User?.addAliases) {
                 await OS.User.addAliases(aliasMap)
@@ -943,7 +962,7 @@ class NotificationService {
             }
           }
 
-          if (OS.User?.addTags) {
+          if (this.loggedInToOneSignal && OS.User?.addTags) {
             try {
               await OS.User.addTags(tags)
             } catch {}
@@ -1118,6 +1137,91 @@ class NotificationService {
       }
 
       await this.refresh().catch(() => {})
+    }
+  }
+
+  /**
+   * Purga operações travadas e IndexedDB corrompido do OneSignal Web.
+   * Evita bloqueios persistentes de fila ("Op failed, pausing" com 404/409).
+   */
+  public async purgeOneSignalWebStorage(): Promise<boolean> {
+    if (typeof window === 'undefined') return false
+    try {
+      console.warn('🧹 [NotificationService] Purgando armazenamento do OneSignal Web (IndexedDB / LocalStorage)...')
+
+      // 1. Limpa todas as objectStores do banco ONE_SIGNAL_SDK_DB sem precisar fechar conexões
+      if ('indexedDB' in window) {
+        await new Promise<void>((resolve) => {
+          try {
+            const req = window.indexedDB.open('ONE_SIGNAL_SDK_DB')
+            req.onsuccess = () => {
+              const db = req.result
+              try {
+                const storeNames = Array.from(db.objectStoreNames)
+                if (storeNames.length > 0) {
+                  const tx = db.transaction(storeNames, 'readwrite')
+                  storeNames.forEach((s) => {
+                    try { tx.objectStore(s).clear() } catch {}
+                  })
+                  tx.oncomplete = () => {
+                    db.close()
+                    resolve()
+                  }
+                  tx.onerror = () => {
+                    db.close()
+                    resolve()
+                  }
+                } else {
+                  db.close()
+                  resolve()
+                }
+              } catch {
+                db.close()
+                resolve()
+              }
+            }
+            req.onerror = () => resolve()
+            req.onblocked = () => resolve()
+            setTimeout(resolve, 500)
+          } catch {
+            resolve()
+          }
+        })
+
+        // 2. Tenta deletar o banco definitivamente
+        try {
+          const delReq = window.indexedDB.deleteDatabase('ONE_SIGNAL_SDK_DB')
+          await new Promise<void>((resolve) => {
+            delReq.onsuccess = () => resolve()
+            delReq.onerror = () => resolve()
+            delReq.onblocked = () => resolve()
+            setTimeout(resolve, 300)
+          })
+        } catch {}
+      }
+
+      // 3. Limpa storage local e session do OneSignal
+      try {
+        for (let i = localStorage.length - 1; i >= 0; i--) {
+          const key = localStorage.key(i)
+          if (key && (key.startsWith('onesignal') || key.startsWith('OneSignal') || key.startsWith('os_'))) {
+            localStorage.removeItem(key)
+          }
+        }
+        for (let i = sessionStorage.length - 1; i >= 0; i--) {
+          const key = sessionStorage.key(i)
+          if (key && (key.startsWith('onesignal') || key.startsWith('OneSignal'))) {
+            sessionStorage.removeItem(key)
+          }
+        }
+      } catch {}
+
+      this.logAudit('purgeOneSignalWebStorage', 'ok')
+      return true
+    } catch (err) {
+      console.warn('[NotificationService] Falha ao purgar OneSignal Web Storage:', err)
+      this.logAudit('purgeOneSignalWebStorage', 'error', null, err)
+      return false
     }
   }
 
@@ -1460,15 +1564,29 @@ class NotificationService {
         return { success: true, externalIdFound: found }
       } else {
         const OS = (window as any).OneSignal
+        let extId: string | null = null
         if (OS && typeof OS.login === 'function' && (window as any).__OS_INIT__) {
           try {
             await OS.login(userId)
           } catch (webLoginErr) {
             console.warn('[NotificationService] Aviso no forceUserLogin web:', webLoginErr)
           }
+          await new Promise(r => setTimeout(r, 300))
+          extId = OS.User?.externalId || null
+          if (extId !== userId) {
+            await this.purgeOneSignalWebStorage()
+            try {
+              if (typeof OS.logout === 'function') await OS.logout().catch(() => {})
+              await new Promise(r => setTimeout(r, 200))
+              await OS.login(userId)
+              await new Promise(r => setTimeout(r, 300))
+              extId = OS.User?.externalId || null
+            } catch {}
+          }
         }
         await this.refresh()
-        return { success: true, externalIdFound: userId }
+        const isSuccess = extId === userId
+        return { success: isSuccess, externalIdFound: extId }
       }
     } catch (err: any) {
       this.logAudit('forceUserLogin', 'error', { userId }, err)

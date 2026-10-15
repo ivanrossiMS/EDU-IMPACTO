@@ -56,18 +56,69 @@ export async function GET(request: Request) {
     const limitParam = url.searchParams.get('limit')
     const limit = limitParam ? parseInt(limitParam, 10) : 500
 
-    // Consultas históricas de relatórios exigem autenticação de staff; o painel operacional do dia (Monitor TV / Tablet) é público na rede escolar
-    if (fromDate || toDate) {
+    const supabase = getAdminClient()
+
+    let studentIdsToMatch = studentId ? [String(studentId).trim()] : []
+    if (studentId) {
+      // Obter id e matricula para filtrar de forma completa e resiliente
+      const { data: dbAluno } = await supabase
+        .from('alunos')
+        .select('id, matricula')
+        .or(`id.eq.${studentId},matricula.eq.${studentId}`)
+        .limit(1)
+        .maybeSingle()
+
+      if (dbAluno) {
+        if (dbAluno.id) studentIdsToMatch.push(String(dbAluno.id).trim())
+        if (dbAluno.matricula) studentIdsToMatch.push(String(dbAluno.matricula).trim())
+      }
+      studentIdsToMatch = Array.from(new Set(studentIdsToMatch.filter(Boolean)))
+    }
+
+    // Autorização de acesso:
+    // 1. Se studentId for fornecido:
+    //    - Staff tem acesso irrestrito.
+    //    - Família/Aluno autenticado só tem acesso se vinculado ao aluno (proteção IDOR).
+    // 2. Se studentId NÃO for fornecido, mas fromDate ou toDate foram informados:
+    //    - Consulta histórica de relatórios gerais da escola inteira exige perfil de Staff.
+    // 3. Sem studentId e sem período histórico (ou apenas date=hoje):
+    //    - Painel operacional do dia a dia da escola (Monitor TV / Portaria / Tablet), público na rede interna.
+    if (studentId) {
+      const { resolveUserRole } = await import('@/lib/server/authGuard')
+      const { user, isStaff, errorResponse } = await resolveUserRole(request)
+      if (errorResponse) return errorResponse
+
+      if (!isStaff) {
+        if (!user) {
+          return NextResponse.json({ error: 'Autenticação necessária para consultar chamadas deste aluno.' }, { status: 401 })
+        }
+        const { checkResponsavelRelationship } = await import('@/lib/server/notificationHelper')
+        const checkId = user.user_metadata?.responsavel_id || user.user_metadata?.aluno_id || user.id
+        
+        let hasAccess = false
+        for (const targetId of studentIdsToMatch) {
+          if (await checkResponsavelRelationship(String(checkId), targetId, user.email)) {
+            hasAccess = true
+            break
+          }
+        }
+
+        if (!hasAccess) {
+          return NextResponse.json({ error: 'Acesso negado às chamadas de saída deste aluno.' }, { status: 403 })
+        }
+      }
+    } else if (fromDate || toDate) {
       const { requireStaff } = await import('@/lib/server/authGuard')
       const { errorResponse } = await requireStaff(request)
       if (errorResponse) return errorResponse
     }
 
-    const supabase = getAdminClient()
     let query = supabase.from('saida_calls').select('id, dados, created_at').order('created_at', { ascending: false }).limit(limit)
     
-    if (studentId) {
-      query = query.eq('dados->>studentId', studentId)
+    if (studentIdsToMatch.length === 1) {
+      query = query.eq('dados->>studentId', studentIdsToMatch[0])
+    } else if (studentIdsToMatch.length > 1) {
+      query = query.or(studentIdsToMatch.map(id => `dados->>studentId.eq.${id}`).join(','))
     }
     
     const dateParam = url.searchParams.get('date')
@@ -95,6 +146,12 @@ export async function GET(request: Request) {
       .from('frequencias')
       .select('id, aluno_id, turma_id, data, dados, created_at')
 
+    if (studentIdsToMatch.length === 1) {
+      freqQuery = freqQuery.eq('aluno_id', studentIdsToMatch[0])
+    } else if (studentIdsToMatch.length > 1) {
+      freqQuery = freqQuery.in('aluno_id', studentIdsToMatch)
+    }
+
     if (effectiveFrom) {
       freqQuery = freqQuery.gte('data', effectiveFrom)
     }
@@ -110,6 +167,12 @@ export async function GET(request: Request) {
       .select('id, aluno_id, aluno_nome, data_hora, dispositivo_nome, status, tipo')
       .eq('tipo', 'saida')
       .eq('status', 'sucesso')
+
+    if (studentIdsToMatch.length === 1) {
+      eventosQuery = eventosQuery.eq('aluno_id', studentIdsToMatch[0])
+    } else if (studentIdsToMatch.length > 1) {
+      eventosQuery = eventosQuery.in('aluno_id', studentIdsToMatch)
+    }
 
     if (effectiveFrom) {
       eventosQuery = eventosQuery.gte('data_hora', `${effectiveFrom}T00:00:00-04:00`)
@@ -254,6 +317,11 @@ export async function GET(request: Request) {
           })
         }
       }
+    }
+
+    if (studentIdsToMatch.length > 0) {
+      const matchSet = new Set(studentIdsToMatch)
+      rawResult = rawResult.filter((c: any) => matchSet.has(String(c.studentId || '').trim()))
     }
 
     // Deduplicação final por chave de minuto para evitar duplicidade de chamada entre tabelas
