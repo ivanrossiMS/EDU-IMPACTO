@@ -292,6 +292,47 @@ export async function DELETE(request: Request) {
                 const { data: r } = await supabase.from('responsaveis').select('dados').eq('id', ref.id).single()
                 const newDados = { ...(r?.dados || {}), foto: null, fotoUrl: null, avatarUrl: null, avatar: null }
                 await supabase.from('responsaveis').update({ dados: newDados }).eq('id', ref.id)
+              } else if (ref.table === 'momentos') {
+                const { data: m } = await supabase.from('momentos').select('dados').eq('id', ref.id).maybeSingle()
+                if (m?.dados) {
+                  const filterMedia = (arr: any[]) => arr.filter((item: any) => {
+                    const u = typeof item === 'string' ? item : item?.url
+                    if (!u) return false
+                    const dec = cleanStoragePath(u)
+                    return !(dec === cleanUrl || dec.endsWith(path) || dec.includes(`/${bucket}/${path}`))
+                  })
+                  const newDados = { ...m.dados }
+                  if (Array.isArray(newDados.media)) newDados.media = filterMedia(newDados.media)
+                  if (Array.isArray(newDados.midias)) newDados.midias = filterMedia(newDados.midias)
+                  const remaining = (newDados.media?.length || 0) + (newDados.midias?.length || 0)
+                  if (remaining === 0) {
+                    await supabase.from('momentos').delete().eq('id', ref.id)
+                  } else {
+                    await supabase.from('momentos').update({ dados: newDados }).eq('id', ref.id)
+                  }
+                }
+              } else if (ref.table === 'comunicados') {
+                const { data: c } = await supabase.from('comunicados').select('dados').eq('id', ref.id).maybeSingle()
+                if (c?.dados) {
+                  const newDados = { ...c.dados }
+                  if (Array.isArray(newDados.anexos)) {
+                    newDados.anexos = newDados.anexos.filter((item: any) => {
+                      const rawU = typeof item === 'string' ? (item.includes('|') ? item.split('|')[1] : item) : item?.url
+                      if (!rawU) return true
+                      const dec = cleanStoragePath(rawU)
+                      return !(dec === cleanUrl || dec.endsWith(path) || dec.includes(`/${bucket}/${path}`))
+                    })
+                  }
+                  for (const key of ['imagem', 'audioUrl', 'autorFoto']) {
+                    if (typeof newDados[key] === 'string' && newDados[key]) {
+                      const dec = cleanStoragePath(newDados[key])
+                      if (dec === cleanUrl || dec.endsWith(path) || dec.includes(`/${bucket}/${path}`)) {
+                        newDados[key] = null
+                      }
+                    }
+                  }
+                  await supabase.from('comunicados').update({ dados: newDados }).eq('id', ref.id)
+                }
               }
               deletedRefs.push(ref)
             } catch (dbDelErr: any) {

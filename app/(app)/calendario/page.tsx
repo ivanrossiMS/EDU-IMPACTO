@@ -626,7 +626,10 @@ function TurmasBadgeList({ turmas }: { turmas: string[] }) {
 }
 
   const renderEventCard = (ev: EventoAgenda, idx: number) => {
-    const evColor = ev.cor ?? TIPO_CORES[ev.tipo] ?? '#6366f1'
+    const isPast = Boolean(ev.data && ev.data < today)
+    const rawColor = ev.cor ?? TIPO_CORES[ev.tipo] ?? '#6366f1'
+    const realColor = String(rawColor).toLowerCase() === '#6b7280' ? '#06b6d4' : rawColor
+    const evColor = isPast ? '#64748b' : realColor
     
     const getLeftIcon = () => {
       switch(ev.tipo) {
@@ -646,7 +649,9 @@ function TurmasBadgeList({ turmas }: { turmas: string[] }) {
         transition={{ delay: idx * 0.04 }}
         key={ev.id} 
         style={{ 
-          background: '#ffffff',
+          background: isPast
+            ? '#f8fafc'
+            : `linear-gradient(135deg, #ffffff 0%, ${evColor}0D 100%)`,
           borderRadius: '16px',
           display: 'flex',
           alignItems: 'center',
@@ -654,8 +659,17 @@ function TurmasBadgeList({ turmas }: { turmas: string[] }) {
           padding: '24px',
           position: 'relative',
           transition: 'all 0.2s ease',
-          boxShadow: '0 4px 16px rgba(0,0,0,0.03)',
-          border: '1px solid #f1f5f9'
+          boxShadow: isPast
+            ? 'none'
+            : `0 0 18px ${evColor}50, 0 0 5px ${evColor}80, inset 0 0 12px ${evColor}10`,
+          border: isPast
+            ? '1.5px solid #cbd5e1'
+            : `2px solid ${evColor}`,
+          borderLeft: isPast
+            ? '5px solid #94a3b8'
+            : `6px solid ${evColor}`,
+          opacity: isPast ? 0.72 : 1,
+          filter: isPast ? 'grayscale(0.65)' : 'none'
         }}
       >
         {/* Left Icon Area */}
@@ -663,7 +677,9 @@ function TurmasBadgeList({ turmas }: { turmas: string[] }) {
           width: '64px', 
           height: '64px',
           borderRadius: '16px',
-          background: `${evColor}15`, 
+          background: isPast ? '#e2e8f0' : `${evColor}18`, 
+          border: isPast ? '1px solid #cbd5e1' : `1px solid ${evColor}55`,
+          boxShadow: isPast ? 'none' : `0 0 12px ${evColor}30`,
           display: 'flex', 
           alignItems: 'center', 
           justifyContent: 'center',
@@ -676,27 +692,36 @@ function TurmasBadgeList({ turmas }: { turmas: string[] }) {
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px' }}>
           
           {/* Header Row */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <div style={{ fontSize: '18px', fontWeight: 900, color: '#0f172a', fontFamily: 'Outfit, sans-serif' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
+            <div style={{ fontSize: '18px', fontWeight: isPast ? 700 : 900, color: isPast ? '#64748b' : '#0f172a', fontFamily: 'Outfit, sans-serif' }}>
               {ev.titulo}
             </div>
             {/* Tags on top right */}
-            <div style={{ display: 'flex', gap: '8px' }}>
+            <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
               {(ev as any).diaTodo && (
-                <div style={{ fontSize: '11px', fontWeight: 800, color: '#6366f1', background: '#e0e7ff', padding: '6px 12px', borderRadius: '10px' }}>
+                <div style={{ fontSize: '11px', fontWeight: 800, color: isPast ? '#64748b' : '#6366f1', background: isPast ? '#e2e8f0' : '#e0e7ff', padding: '6px 12px', borderRadius: '10px' }}>
                   Dia todo
                 </div>
               )}
-              <div style={{ fontSize: '11px', fontWeight: 800, color: evColor, background: `${evColor}15`, padding: '6px 12px', borderRadius: '10px' }}>
-                {TIPO_LABELS[ev.tipo]}
+              <div style={{
+                fontSize: '11px',
+                fontWeight: 800,
+                color: evColor,
+                background: isPast ? '#e2e8f0' : `${evColor}18`,
+                border: isPast ? '1px solid #cbd5e1' : `1px solid ${evColor}55`,
+                boxShadow: isPast ? 'none' : `0 0 8px ${evColor}25`,
+                padding: '6px 12px',
+                borderRadius: '10px'
+              }}>
+                {isPast ? 'Realizado' : TIPO_LABELS[ev.tipo]}
               </div>
             </div>
           </div>
           
           {/* Details Row */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px' }}>
-               <Clock size={14} style={{ color: '#94a3b8' }} /> {(ev as any).diaTodo ? 'Todo o dia • Sem horário definido' : `${ev.horaInicio || ''}${ev.horaFim ? ` - ${ev.horaFim}` : ''}`}
+            <div style={{ fontSize: '12px', color: isPast ? '#94a3b8' : '#64748b', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px' }}>
+               <Clock size={14} style={{ color: isPast ? '#94a3b8' : evColor }} /> {(ev as any).diaTodo ? 'Todo o dia • Sem horário definido' : `${ev.horaInicio || ''}${ev.horaFim ? ` - ${ev.horaFim}` : ''}`}
             </div>
             
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 6, flexWrap: 'wrap', gap: 8 }}>

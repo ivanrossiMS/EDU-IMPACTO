@@ -999,6 +999,7 @@ export default function AlunosPage() {
       status: statusFiltro,
       sortField,
       sortOrder,
+      withPhoto: 'true',
       ...(filtrosAvancados.dataCadastroInicio ? { dataCadastroInicio: filtrosAvancados.dataCadastroInicio } : {}),
       ...(filtrosAvancados.dataCadastroFim ? { dataCadastroFim: filtrosAvancados.dataCadastroFim } : {}),
       ...(filtrosAvancados.inadimplente !== 'todos' ? { inadimplente: filtrosAvancados.inadimplente } : {}),

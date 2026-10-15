@@ -98,13 +98,11 @@ export async function GET(request: Request) {
     const from = (page - 1) * limit
     const to = from + limit - 1
 
-    const isBulk = (limit > 50 || all || (!pageParam && !limitParam)) && !search && !withPhoto
+    const isBulk = lightweight && !withPhoto
 
-    const queryFields = lightweight
+    const queryFields = (lightweight && !withPhoto)
       ? 'id, nome, matricula, turma, status, email, telefone, responsavel, responsavel_financeiro, responsavel_pedagogico, dados'
-      : (isBulk
-          ? 'id, nome, matricula, turma, serie, turno, status, email, data_nascimento, responsavel, responsavel_financeiro, responsavel_pedagogico, telefone, inadimplente, risco_evasao, media, frequencia, obs, unidade, dados, updated_at, created_at'
-          : 'id, nome, matricula, turma, serie, turno, status, email, data_nascimento, responsavel, responsavel_financeiro, responsavel_pedagogico, telefone, inadimplente, risco_evasao, media, frequencia, obs, unidade, foto, foto_url, dados, updated_at, created_at')
+      : 'id, nome, matricula, turma, serie, turno, status, email, data_nascimento, responsavel, responsavel_financeiro, responsavel_pedagogico, telefone, inadimplente, risco_evasao, media, frequencia, obs, unidade, foto, foto_url, dados, updated_at, created_at'
 
     let query = supabase
       .from('alunos')

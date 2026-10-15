@@ -38,7 +38,9 @@ export async function POST(request: Request) {
         }
         isFamily = dbUser.perfil === 'Família' || dbUser.perfil === 'Responsável' || dbUser.cargo === 'Responsável'
       } else {
-        const { data: respUser } = await supabase.from('responsaveis').select('id').or(`id.eq.${user.id},auth_id.eq.${user.id}`).maybeSingle();
+        const respConds = [`id.eq.${user.id}`, `dados->>auth_id.eq.${user.id}`, `dados->>user_id.eq.${user.id}`]
+        if (user.email) respConds.push(`email.ilike.${user.email.trim().toLowerCase()}`)
+        const { data: respUser } = await supabase.from('responsaveis').select('id').or(respConds.join(',')).limit(1).maybeSingle();
         if (respUser) {
           isFamily = true;
         } else {

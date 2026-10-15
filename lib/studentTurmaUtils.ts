@@ -826,8 +826,9 @@ export function isTurmaOrGroupMatch(
   if (rawTarget.toLowerCase().startsWith('todos:')) {
     const targetAno = rawTarget.split(':')[1]?.trim()
     if (targetAno) {
-      const studentAno = String(anoLetivo || aluno.anoLetivo || aluno.ano_letivo || aluno.dados?.anoLetivo || '').trim()
+      const studentAno = String(anoLetivo || aluno.anoLetivo || aluno.ano_letivo || aluno.dados?.anoLetivo || aluno.dados?.ano_letivo || '').trim()
       if (studentAno && studentAno === targetAno) return true
+      if (getAlunoVinculosAtivos(aluno, targetAno).length > 0) return true
       const studentTurmasList = Array.isArray(turmas)
         ? turmas.filter(t => t && isAlunoCursandoTurma(aluno, t, t.ano || anoLetivo, turmas))
         : []

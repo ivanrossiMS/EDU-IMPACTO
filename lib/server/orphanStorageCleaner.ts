@@ -57,7 +57,7 @@ export function safeDecode(str: string): string {
 export function cleanStoragePath(str: string): string {
   if (!str || typeof str !== 'string') return ''
   const decoded = safeDecode(str)
-  return decoded.split('?')[0].split('#')[0].trim()
+  return decoded.split('|')[0].split('?')[0].split('#')[0].trim()
 }
 
 export function formatBytes(bytes: number): string {
@@ -74,7 +74,7 @@ export function formatBytes(bytes: number): string {
 export function extractUrlsFromText(text: string): string[] {
   if (!text || typeof text !== 'string') return []
   const urls: string[] = []
-  const regex = /https?:\/\/[^\s"'<>]+\/storage\/v1\/object\/(?:public|sign)\/[^\s"'<>]+/gi
+  const regex = /https?:\/\/[^\s"'<>|]+\/storage\/v1\/object\/(?:public|sign)\/[^\s"'<>|]+/gi
   let match: RegExpExecArray | null
   while ((match = regex.exec(text)) !== null) {
     urls.push(match[0])
@@ -187,28 +187,45 @@ export async function updateStorageAutoCleanConfig(
  * Varre exaustivamente todas as tabelas e campos do banco em busca de referências a arquivos,
  * utilizando paginação por faixas para contornar com segurança o limite padrão de 1000 linhas do PostgREST.
  */
-export async function fetchAllDbReferences(supabase: any): Promise<DbRef[]> {
+export async function fetchAllDbReferences(
+  supabase: any,
+  options: { strict?: boolean } = {}
+): Promise<DbRef[]> {
   const refs: DbRef[] = []
+  const { strict = false } = options
 
   // Helper com paginação automática de registros e tamanho de lote configurável
   const safeQueryPaged = async (
     table: string,
     select: string,
     mapFn: (row: any) => void,
-    chunkSize = 1000
+    chunkSize = 1000,
+    customizeQuery?: (q: any) => any
   ) => {
     let from = 0
 
     while (true) {
       try {
-        const { data, error } = await supabase
-          .from(table)
-          .select(select)
-          .range(from, from + chunkSize - 1)
+        let q = supabase.from(table).select(select)
+        if (customizeQuery) {
+          q = customizeQuery(q)
+        }
+        const { data, error } = await q.range(from, from + chunkSize - 1)
 
         if (error) {
-          // Se a tabela ou coluna não existir, registra aviso limpo e interrompe
-          console.warn(`[orphanStorageCleaner] Aviso ao consultar ${table} (offset ${from}):`, error.message)
+          const code = String(error.code || '')
+          const msg = String(error.message || '')
+          const isSchemaMissing =
+            code === '42P01' ||
+            code === '42703' ||
+            code.startsWith('PGRST2') ||
+            msg.includes('does not exist') ||
+            msg.includes('schema cache')
+
+          console.warn(`[orphanStorageCleaner] Aviso ao consultar ${table} (offset ${from}, code ${code}):`, msg)
+          if (strict && !isSchemaMissing) {
+            throw new Error(`Falha ao varrer referências da tabela "${table}" (offset ${from}): ${msg}`)
+          }
           break
         }
 
@@ -222,6 +239,7 @@ export async function fetchAllDbReferences(supabase: any): Promise<DbRef[]> {
         from += chunkSize
       } catch (err: any) {
         console.warn(`[orphanStorageCleaner] Erro inesperado ao consultar ${table}:`, err.message)
+        if (strict) throw err
         break
       }
     }
@@ -295,8 +313,8 @@ export async function fetchAllDbReferences(supabase: any): Promise<DbRef[]> {
     }),
 
     // 10. Comunicados e Mensagens da Agenda Digital (Anexos, imagens de capa, áudios e avatar do autor)
-    // Usamos projeção de campos JSONB (anexos, imagem, audioUrl, autorFoto) e chunk de 500 para evitar
-    // transferir centenas de MB de leituras/ciências e prevenir statement timeouts (57014).
+    // Excluímos AD-COM-REL-STU-% e AD-COM-REL-COLAB-% da leitura de dados->anexos (que contêm apenas JSON inline de 40KB-735KB)
+    // para evitar descompressão TOAST de ~500MB e eliminar statement timeouts (57014).
     () => safeQueryPaged(
       'comunicados',
       'id, titulo, texto, anexos:dados->anexos, imagem:dados->imagem, audioUrl:dados->audioUrl, autorFoto:dados->autorFoto',
@@ -339,7 +357,22 @@ export async function fetchAllDbReferences(supabase: any): Promise<DbRef[]> {
           }
         }
       },
-      500
+      500,
+      (q) => q.not('id', 'like', 'AD-COM-REL-STU-%').not('id', 'like', 'AD-COM-REL-COLAB-%')
+    ),
+
+    // 10b. Fotos de autor nos relatórios consolidados de colaboradores (sem ler dados->anexos)
+    () => safeQueryPaged(
+      'comunicados',
+      'id, titulo, autorFoto:dados->autorFoto',
+      (row) => {
+        const autorFoto = row.autorFoto || row.dados?.autorFoto
+        if (autorFoto && typeof autorFoto === 'string') {
+          refs.push({ url: autorFoto, table: 'comunicados', id: row.id, label: `Foto de Autor: ${row.titulo || 'Relatório'}` })
+        }
+      },
+      500,
+      (q) => q.like('id', 'AD-COM-REL-COLAB-%')
     ),
 
     // 11. Respostas de Comunicados com anexos
@@ -647,8 +680,8 @@ export async function runOrphanCleanup(options: {
     const storageFilesResults = await Promise.all(storageFilesPromises)
     const rawFiles = storageFilesResults.flat()
 
-    // 5. Buscar referências em todas as tabelas do banco
-    const dbRefs = await fetchAllDbReferences(supabase)
+    // 5. Buscar referências em todas as tabelas do banco (modo estrito para abortar caso qualquer consulta falhe)
+    const dbRefs = await fetchAllDbReferences(supabase, { strict: true })
 
     // 6. Indexar referências do BD para busca ultrarrápida O(1)
     const refIndex = new Map<string, DbRef[]>()

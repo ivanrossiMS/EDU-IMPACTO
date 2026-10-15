@@ -55,10 +55,9 @@ export async function GET(request: Request) {
   const { user, errorResponse } = await requireAuth(request)
   if (errorResponse) return errorResponse
 
-  const authHeader = request.headers.get('authorization') || ''
-  const bearerToken = authHeader.toLowerCase().startsWith('bearer ') ? authHeader.substring(7).trim() : undefined
-  const authClient = await createProtectedClient(bearerToken)
-  const supabase = authClient;
+  // Usa supabaseServer pois a rota aplica validação estrita de autenticação (requireAuth) e blindagem anti-IDOR abaixo,
+  // evitando overhead de avaliação de RLS linha a linha e statement timeout (57014) em tabelas grandes.
+  const supabase = supabaseServer;
   const { searchParams } = new URL(request.url);
   const limitParam = searchParams.get('limit');
   const offsetParam = searchParams.get('offset');

@@ -86,18 +86,23 @@ export async function POST(request: NextRequest) {
     const userEmail = (user.email || dbUser?.email || '').trim().toLowerCase()
 
     // Resolver vínculos reais no banco para responsáveis, alunos e colaboradores
-    const orFilters = [`id.eq.${user.id}`, `auth_id.eq.${user.id}`]
+    const orFilters = [
+      `id.eq.${user.id}`,
+      `dados->>auth_id.eq.${user.id}`,
+      `dados->>user_id.eq.${user.id}`,
+    ]
     if (userEmail) orFilters.push(`email.ilike.${userEmail}`)
 
     const [{ data: respRows }, { data: alunoRows }] = await Promise.all([
-      supabase.from('responsaveis').select('id, auth_id, email, dados').or(orFilters.join(',')),
+      supabase.from('responsaveis').select('id, email, dados').or(orFilters.join(',')),
       supabase.from('alunos').select('id, dados').or(`id.eq.${user.id},dados->>email.ilike.${userEmail || '__none__'}`),
     ])
 
     const respIds: string[] = []
     for (const r of respRows || []) {
       addId(r.id)
-      addId(r.auth_id)
+      addId(r.dados?.auth_id)
+      addId(r.dados?.user_id)
       addEmail(r.email || r.dados?.email)
       if (r.id) respIds.push(String(r.id))
       if (Array.isArray(r.dados?.alunosVinculados)) {

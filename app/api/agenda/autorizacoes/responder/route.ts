@@ -54,8 +54,10 @@ export async function POST(request: Request) {
     }
 
     if (!isStaff && !user.user_metadata?.responsavel_id) {
+      const respConds = [`id.eq.${user.id}`, `dados->>auth_id.eq.${user.id}`, `dados->>user_id.eq.${user.id}`]
+      if (user.email) respConds.push(`email.ilike.${user.email.trim().toLowerCase()}`)
       const { data: alunoRow } = await adminClient.from('alunos').select('id').eq('id', user.id).maybeSingle()
-      const { data: respRow } = await adminClient.from('responsaveis').select('id').or(`id.eq.${user.id},auth_id.eq.${user.id}`).maybeSingle()
+      const { data: respRow } = await adminClient.from('responsaveis').select('id').or(respConds.join(',')).limit(1).maybeSingle()
       if (alunoRow && !respRow) {
         return NextResponse.json(
           { error: 'Apenas responsáveis podem assinar autorizações escolares.' },
@@ -85,15 +87,20 @@ export async function POST(request: Request) {
 
       if (!allowedIds.has(String(requestedUserId))) {
         const userEmail = (user.email || dbUser?.email || '').trim().toLowerCase()
-        const orFilters = [`id.eq.${user.id}`, `auth_id.eq.${user.id}`]
+        const orFilters = [
+          `id.eq.${user.id}`,
+          `dados->>auth_id.eq.${user.id}`,
+          `dados->>user_id.eq.${user.id}`,
+        ]
         if (userEmail) orFilters.push(`email.ilike.${userEmail}`)
         const { data: respRows } = await adminClient
           .from('responsaveis')
-          .select('id, auth_id')
+          .select('id, dados')
           .or(orFilters.join(','))
         for (const r of respRows || []) {
           if (r.id) allowedIds.add(String(r.id))
-          if (r.auth_id) allowedIds.add(String(r.auth_id))
+          if (r.dados?.auth_id) allowedIds.add(String(r.dados.auth_id))
+          if (r.dados?.user_id) allowedIds.add(String(r.dados.user_id))
         }
       }
 

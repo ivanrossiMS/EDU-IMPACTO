@@ -10,7 +10,7 @@ import { UserAvatar } from '@/components/UserAvatar'
 
 export default function ADAdminPessoas() {
   const { turmas = [] } = useData();
-  const [alunos, setAlunos, { loading: isAlunosLoading }] = useSupabaseArray<any>('alunos?limit=10000&lightweight=true');
+  const [alunos, setAlunos, { loading: isAlunosLoading }] = useSupabaseArray<any>('alunos?limit=10000&lightweight=true&withPhoto=true');
   const { adAlert, adConfirm, comunicados = [] } = useAgendaDigital()
   const [search, setSearch] = useState('')
   const [filterType, setFilterType] = useState('todos')
@@ -24,7 +24,7 @@ export default function ADAdminPessoas() {
 
   // Force fresh data every time this page is opened (bust the stale cache)
   useEffect(() => {
-    invalidateCache('alunos?limit=10000&lightweight=true')
+    invalidateCache('alunos?limit=10000&lightweight=true&withPhoto=true')
   }, [])
 
   // Reset pagination to first page when any filters or search queries change

@@ -2,15 +2,16 @@ import { NextResponse } from 'next/server'
 import { requireAuth, requireStaff, resolveUserRole } from '@/lib/server/authGuard'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 import { createClient } from '@supabase/supabase-js'
-import { getLoggedUserAccessStartDate } from '@/lib/server/visibility'
 import { sendAgendaPushNotification } from '@/lib/server/agendaNotifications'
 import { getStudentTargetsForComunicados } from '@/lib/server/notificationHelper'
 import { formatFriendlyStudentName } from '@/lib/studentNameHelper'
+import { getCachedTurmasAndGrupos } from '@/lib/server/turmasGruposCache'
+import { isTurmaOrGroupMatch } from '@/lib/studentTurmaUtils'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: Request) {
-  const { user, isFamilyOrStudent: resolvedIsFamily, errorResponse } = await resolveUserRole(request)
+  const { user, isStaff, isFamilyOrStudent: resolvedIsFamily, errorResponse } = await resolveUserRole(request)
   if (errorResponse || !user) return errorResponse || NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
 
   try {
@@ -18,7 +19,6 @@ export async function GET(request: Request) {
     const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
     const supabase = createClient(supabaseUrl, supabaseKey)
     
-    let accessStartDate = await getLoggedUserAccessStartDate()
     const url = new URL(request.url)
     const limitParam = url.searchParams.get('limit')
     const offsetParam = url.searchParams.get('offset')
@@ -26,66 +26,9 @@ export async function GET(request: Request) {
     const idParam = url.searchParams.get('id')
     
     let query = supabase.from('eventos_agenda').select('*')
-    
-    if (accessStartDate && !alunoId) {
-      const accessStartDateStr = accessStartDate.toISOString().substring(0, 10)
-      query = query.gte('data', accessStartDateStr)
-    }
 
-    // Filtragem Segura no Backend para Família/Aluno
-    const perfil = user.user_metadata?.perfil || '';
-    const cargo = user.user_metadata?.cargo || '';
-    const hasDualRole = Boolean(user.user_metadata?.hasDualRole || user.user_metadata?.responsavel_id);
-    const isFamilyOrStudent = resolvedIsFamily || ['Família', 'Responsável', 'Aluno'].includes(perfil) || ['Responsável', 'Aluno'].includes(cargo) || hasDualRole;
-    
-    if (isFamilyOrStudent && alunoId) {
-      let resolvedTurma = null;
-      let alunoNome = null;
-      let responsaveis = [];
-      const { data: alunoRes } = await supabase.from('alunos').select('id, nome, turma').eq('id', alunoId).maybeSingle();
-      
-      if (alunoRes) {
-        alunoNome = alunoRes.nome;
-        if (alunoRes.turma) {
-          const { data: tData } = await supabase.from('turmas').select('nome').or(`id.eq."${alunoRes.turma}",codigo.eq."${alunoRes.turma}",nome.eq."${alunoRes.turma}"`).maybeSingle();
-          resolvedTurma = tData?.nome || alunoRes.turma;
-        }
-        const { data: vincs } = await supabase.from('aluno_responsavel').select('responsaveis(id, nome)').eq('aluno_id', alunoRes.id);
-        if (vincs) {
-           responsaveis = vincs.map((v: any) => v.responsaveis?.nome).filter(Boolean);
-        }
-      }
-
-      const conditions = [];
-      conditions.push(`turmas.eq."[]"`);
-      conditions.push(`turmas.is.null`);
-      conditions.push(`turmas.cs.["Todos"]`);
-      conditions.push(`turmas.cs.["Toda a escola"]`);
-      conditions.push(`turmas.cs.["Todas"]`);
-      
-      if (resolvedTurma) {
-        conditions.push(`turmas.cs.["${resolvedTurma}"]`);
-      }
-      
-      // visibilidadeUsuario = Nome do aluno ou Nome de um dos responsaveis
-      if (alunoNome) {
-         conditions.push(`dados->>visibilidadeUsuario.ilike."%${alunoNome}%"`);
-      }
-      for (const resp of responsaveis) {
-         conditions.push(`dados->>visibilidadeUsuario.ilike."%${resp}%"`);
-      }
-      
-      query = query.or(conditions.join(','));
-    } else if (isFamilyOrStudent && !alunoId) {
-      // Sem aluno_id informado por perfil familiar/aluno: retornar apenas eventos públicos/globais da escola
-      const publicConditions = [
-        `turmas.eq."[]"`,
-        `turmas.is.null`,
-        `turmas.cs.["Todos"]`,
-        `turmas.cs.["Toda a escola"]`,
-        `turmas.cs.["Todas"]`,
-      ]
-      query = query.or(publicConditions.join(','))
+    if (idParam) {
+      query = query.eq('id', idParam)
     }
 
     if (limitParam) {
@@ -93,25 +36,164 @@ export async function GET(request: Request) {
       const offset = offsetParam ? parseInt(offsetParam) : 0
       query = query.range(offset, offset + limit - 1)
     } else {
-      query = query.limit(30)
-    }
-
-    if (idParam) {
-      query = query.eq('id', idParam)
+      query = query.limit(1000)
     }
 
     query = query.order('data', { ascending: false })
 
     const { data, error } = await query
-
     if (error) throw new Error(error.message)
-    const result = (data || []).map(row => ({ 
-      ...row, 
-      horaInicio: row.hora_inicio,
-      horaFim: row.hora_fim,
-      criadoPor: row.criado_por,
-      ...(row.dados || {}) 
-    }))
+
+    let rows = data || []
+
+    // Filtragem Segura no Backend para contas exclusivas de Família/Aluno (!isStaff)
+    const isRestrictedFamilyOrStudent = !isStaff && resolvedIsFamily
+    if (isRestrictedFamilyOrStudent && !idParam) {
+      const norm = (s: any) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
+
+      const [{ allTurmas, allGrupos }] = await Promise.all([
+        getCachedTurmasAndGrupos()
+      ])
+
+      const candidateStudentIds = new Set<string>()
+      const candidateRespIds = new Set<string>()
+      const familyNamesNorm = new Set<string>()
+
+      if (alunoId) candidateStudentIds.add(String(alunoId).trim())
+      if (user.user_metadata?.aluno_id) candidateStudentIds.add(String(user.user_metadata.aluno_id).trim())
+      if (user.user_metadata?.nome) familyNamesNorm.add(norm(user.user_metadata.nome))
+
+      if (user.id) candidateRespIds.add(String(user.id).trim())
+      if (user.user_metadata?.responsavel_id) candidateRespIds.add(String(user.user_metadata.responsavel_id).trim())
+      if (user.user_metadata?.uid_legacy) candidateRespIds.add(String(user.user_metadata.uid_legacy).trim())
+
+      const respOrConds: string[] = []
+      if (user.id) {
+        respOrConds.push(`dados->>auth_id.eq.${user.id}`)
+        respOrConds.push(`dados->>user_id.eq.${user.id}`)
+      }
+      const userEmail = String(user.email || '').trim().toLowerCase()
+      if (userEmail) {
+        respOrConds.push(`email.ilike.${userEmail}`)
+      }
+      const nomeUser = user.user_metadata?.nome
+      if (nomeUser) {
+        const safeNome = String(nomeUser).replace(/["%,]/g, '').trim()
+        if (safeNome.length >= 3) {
+          respOrConds.push(`nome.ilike."%${safeNome}%"`)
+        }
+      }
+
+      const sysConds: string[] = []
+      if (user.id) sysConds.push(`id.eq.${user.id}`, `auth_id.eq.${user.id}`)
+      if (userEmail) sysConds.push(`email.ilike.${userEmail}`)
+
+      const [respRowsRes, sysDataRes] = await Promise.all([
+        respOrConds.length > 0
+          ? supabase.from('responsaveis').select('id, nome').or(respOrConds.join(',')).limit(10)
+          : Promise.resolve({ data: [] }),
+        sysConds.length > 0
+          ? supabase.from('system_users').select('id, nome, dados').or(sysConds.join(',')).limit(5)
+          : Promise.resolve({ data: [] })
+      ])
+
+      if (respRowsRes.data) {
+        for (const r of respRowsRes.data as any[]) {
+          if (r.id) candidateRespIds.add(String(r.id).trim())
+          if (r.nome) familyNamesNorm.add(norm(r.nome))
+        }
+      }
+      if (sysDataRes.data) {
+        for (const s of sysDataRes.data as any[]) {
+          const rId = s.dados?.responsavel_id || s.dados?.responsavelId
+          if (rId) candidateRespIds.add(String(rId).trim())
+          if (s.nome) familyNamesNorm.add(norm(s.nome))
+        }
+      }
+
+      if (candidateRespIds.size > 0) {
+        const { data: vincsByResp } = await supabase
+          .from('aluno_responsavel')
+          .select('aluno_id')
+          .in('responsavel_id', Array.from(candidateRespIds))
+        if (vincsByResp) {
+          for (const v of vincsByResp as any[]) {
+            if (v.aluno_id) candidateStudentIds.add(String(v.aluno_id).trim())
+          }
+        }
+      }
+
+      let studentsList: any[] = []
+      if (candidateStudentIds.size > 0) {
+        const { data: alunosRows } = await supabase
+          .from('alunos')
+          .select('id, nome, turma, serie, turno, status, dados')
+          .in('id', Array.from(candidateStudentIds))
+        if (alunosRows && alunosRows.length > 0) {
+          studentsList = alunosRows.map((a: any) => {
+            if (a.nome) familyNamesNorm.add(norm(a.nome))
+            const tObj = (allTurmas || []).find((t: any) =>
+              t && (String(t.id) === String(a.turma) || String(t.codigo) === String(a.turma) || t.nome === a.turma)
+            )
+            return {
+              ...a,
+              turma_nome: tObj?.nome || a.turma_nome || a.turma || '',
+              turno_nome: tObj?.turno || a.turno_nome || a.turno || ''
+            }
+          })
+        }
+      }
+
+      rows = rows.filter((row: any) => {
+        const rawDados = row.dados && typeof row.dados === 'object' ? row.dados : {}
+        const visUser = rawDados.visibilidadeUsuario || row.visibilidadeUsuario
+        if (visUser && norm(visUser) !== 'todos') {
+          const visNorm = norm(visUser)
+          for (const fn of familyNamesNorm) {
+            if (fn && (visNorm === fn || visNorm.includes(fn) || fn.includes(visNorm))) {
+              return true
+            }
+          }
+          return false
+        }
+
+        let targets: any = row.turmas || []
+        if (typeof targets === 'string') {
+          try { targets = JSON.parse(targets) } catch { targets = [targets] }
+        }
+        if (!Array.isArray(targets)) targets = []
+
+        if (targets.length === 0) return true
+
+        const isGlobal = targets.some((t: any) => {
+          const tl = norm(t)
+          return tl === 'todos' || tl === 'toda a escola' || tl === 'todas'
+        })
+        if (isGlobal) return true
+
+        if (studentsList.length > 0) {
+          return studentsList.some(student =>
+            targets.some((t: any) => isTurmaOrGroupMatch(t, student, allTurmas || [], allGrupos || []))
+          )
+        }
+
+        // Fallback se nenhum aluno foi resolvido ainda: permitir eventos universais do ano (ex: TODOS:2026)
+        return targets.some((t: any) => String(t || '').trim().toLowerCase().startsWith('todos:'))
+      })
+    }
+
+    const result = rows.map(row => {
+      const rawDados = (row.dados && typeof row.dados === 'object') ? { ...row.dados } : {}
+      delete rawDados.dados
+      return {
+        ...rawDados,
+        ...row,
+        dados: rawDados,
+        horaInicio: row.hora_inicio || rawDados.horaInicio || rawDados.hora_inicio || '',
+        horaFim: row.hora_fim || rawDados.horaFim || rawDados.hora_fim || '',
+        criadoPor: row.criado_por || rawDados.criadoPor || rawDados.criado_por || '',
+      }
+    })
     return NextResponse.json(result)
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 400 })
@@ -314,22 +396,33 @@ export async function PUT(request: Request) {
 }
 
 function buildRowAuth(body: any) {
-  const { id, titulo, descricao, tipo, data, horaInicio, horaFim, turmas, local, cor, recorrente, criadoPor, unidade, ...rest } = body
+  const {
+    id, titulo, descricao, tipo, data,
+    horaInicio, hora_inicio,
+    horaFim, hora_fim,
+    turmas, local, cor, recorrente,
+    criadoPor, criado_por,
+    unidade, created_at, updated_at,
+    dados,
+    ...rest
+  } = body
+  const baseDados = (dados && typeof dados === 'object') ? { ...dados } : {}
+  delete baseDados.dados
   return {
     id: id || crypto.randomUUID(),
     titulo: titulo || 'Evento sem título',
     descricao: descricao || '',
     tipo: tipo || 'evento',
     data: data || '',
-    hora_inicio: horaInicio || '',
-    hora_fim: horaFim || '',
+    hora_inicio: horaInicio ?? hora_inicio ?? '',
+    hora_fim: horaFim ?? hora_fim ?? '',
     turmas: Array.isArray(turmas) ? turmas : [],
     local: local || '',
     cor: cor || '#f59e0b',
     recorrente: recorrente || false,
-    criado_por: criadoPor || '',
+    criado_por: criadoPor ?? criado_por ?? '',
     unidade: unidade || '',
-    dados: rest,
+    dados: { ...baseDados, ...rest },
   }
 }
 

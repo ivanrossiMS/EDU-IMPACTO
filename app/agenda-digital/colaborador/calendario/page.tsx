@@ -214,7 +214,7 @@ export default function ADCalendarioPage() {
 
   const hoje = new Date()
   const [viewDate, setViewDate] = useState(new Date(hoje.getFullYear(), hoje.getMonth(), 1))
-  const [selectedDay, setSelectedDay] = useState<string | null>(todayStr())
+  const [selectedDay, setSelectedDay] = useState<string | null>(null)
   const [filtroTipo, setFiltroTipo] = useState<TipoEvento | 'todos'>('todos')
   const [showModal, setShowModal] = useState(false)
   const [showSelectionModal, setShowSelectionModal] = useState<{ open: boolean, type: 'turmas' | 'usuario' }>({ open: false, type: 'turmas' })
@@ -988,9 +988,17 @@ export default function ADCalendarioPage() {
             Object.entries(meventosAgrupados).map(([dateStr, eventsList]) => {
               const [y, m, d] = dateStr.split('-')
               const isToday = dateStr === today
+              const isPast = dateStr < today
               const dateObj = new Date(parseInt(y), parseInt(m) - 1, parseInt(d))
               const weekDayShort = dateObj.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '').toUpperCase()
               const monthAbbr = MESES[parseInt(m) - 1].slice(0, 3).toUpperCase()
+
+              const resolveRealColor = (evItem: any) => {
+                const raw = evItem?.cor ?? TIPO_CORES[evItem?.tipo as TipoEvento] ?? '#6366f1'
+                return String(raw).toLowerCase() === '#6b7280' ? '#06b6d4' : raw
+              }
+              const primaryColor = isPast ? '#94a3b8' : resolveRealColor(eventsList[0])
+              const dateAccentColor = isPast ? '#94a3b8' : (isToday ? '#6366f1' : primaryColor)
 
               return (
                 <motion.div
@@ -998,7 +1006,18 @@ export default function ADCalendarioPage() {
                   animate={{ opacity: 1, y: 0 }}
                   key={dateStr}
                   className="ad-calendar-timeline-row"
-                  style={{ display: 'flex', gap: 14, alignItems: 'stretch', width: '100%', maxWidth: '100%', minWidth: 0, boxSizing: 'border-box' }}
+                  style={{
+                    display: 'flex',
+                    gap: 14,
+                    alignItems: 'stretch',
+                    width: '100%',
+                    maxWidth: '100%',
+                    minWidth: 0,
+                    boxSizing: 'border-box',
+                    opacity: isPast ? 0.72 : 1,
+                    filter: isPast ? 'grayscale(0.65)' : 'none',
+                    transition: 'all 0.25s ease'
+                  }}
                 >
                   {/* 🗓️ LEFT DATE CARD */}
                   <div 
@@ -1007,11 +1026,17 @@ export default function ADCalendarioPage() {
                       width: 82,
                       minWidth: 82,
                       maxWidth: 82,
-                      background: '#fff',
+                      background: isPast
+                        ? '#f1f5f9'
+                        : `linear-gradient(155deg, #ffffff 0%, ${dateAccentColor}14 100%)`,
                       borderRadius: 20,
                       padding: '16px 8px',
-                      border: isToday ? '1.5px solid #6366f1' : '1px solid #eef2f6',
-                      boxShadow: isToday ? '0 6px 20px rgba(99,102,241,0.12)' : '0 2px 10px rgba(15, 23, 42, 0.02)',
+                      border: isPast
+                        ? '1.5px solid #cbd5e1'
+                        : `2px solid ${dateAccentColor}`,
+                      boxShadow: isPast
+                        ? 'none'
+                        : `0 0 16px ${dateAccentColor}50, 0 0 4px ${dateAccentColor}75, inset 0 0 10px ${dateAccentColor}10`,
                       display: 'flex',
                       flexDirection: 'column',
                       alignItems: 'center',
@@ -1032,7 +1057,7 @@ export default function ADCalendarioPage() {
                         fontSize: 9,
                         fontWeight: 800,
                         letterSpacing: '0.04em',
-                        boxShadow: '0 2px 6px rgba(99,102,241,0.3)'
+                        boxShadow: '0 0 10px rgba(99,102,241,0.6)'
                       }}>
                         HOJE
                       </span>
@@ -1042,7 +1067,8 @@ export default function ADCalendarioPage() {
                       style={{
                         fontSize: 28,
                         fontWeight: 800,
-                        color: isToday ? '#4f46e5' : '#0f172a',
+                        color: isPast ? '#64748b' : dateAccentColor,
+                        textShadow: isPast ? 'none' : `0 0 10px ${dateAccentColor}35`,
                         lineHeight: 1,
                         letterSpacing: '-0.02em',
                         fontFamily: 'Outfit, sans-serif'
@@ -1053,7 +1079,7 @@ export default function ADCalendarioPage() {
                     <span style={{
                       fontSize: 11.5,
                       fontWeight: 700,
-                      color: isToday ? '#6366f1' : '#64748b',
+                      color: isPast ? '#94a3b8' : dateAccentColor,
                       marginTop: 4,
                       letterSpacing: '0.05em',
                       textTransform: 'uppercase'
@@ -1063,7 +1089,7 @@ export default function ADCalendarioPage() {
                     <span style={{
                       fontSize: 10,
                       fontWeight: 600,
-                      color: '#94a3b8',
+                      color: isPast ? '#94a3b8' : '#64748b',
                       marginTop: 2,
                       textTransform: 'uppercase'
                     }}>
@@ -1078,11 +1104,20 @@ export default function ADCalendarioPage() {
                       flex: '1 1 0%',
                       minWidth: 0,
                       maxWidth: '100%',
-                      background: '#fff',
+                      background: isPast
+                        ? '#f8fafc'
+                        : `linear-gradient(135deg, #ffffff 0%, ${primaryColor}0F 100%)`,
                       borderRadius: 20,
                       padding: '16px 20px',
-                      border: '1px solid #eef2f6',
-                      boxShadow: '0 2px 10px rgba(15, 23, 42, 0.02)',
+                      border: isPast
+                        ? '1.5px solid #cbd5e1'
+                        : `2px solid ${primaryColor}`,
+                      borderLeft: isPast
+                        ? '5px solid #94a3b8'
+                        : `6px solid ${primaryColor}`,
+                      boxShadow: isPast
+                        ? 'none'
+                        : `0 0 18px ${primaryColor}55, 0 0 5px ${primaryColor}85, inset 0 0 14px ${primaryColor}12`,
                       display: 'flex',
                       flexDirection: 'column',
                       justifyContent: 'center',
@@ -1094,7 +1129,7 @@ export default function ADCalendarioPage() {
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 14, width: '100%', minWidth: 0, boxSizing: 'border-box' }}>
                       {eventsList.map((ev, idx) => {
                         const isHighlighted = highlightedEventId === String(ev.id)
-                        const color = ev.cor ?? TIPO_CORES[ev.tipo] ?? '#6366f1'
+                        const color = isPast ? '#64748b' : resolveRealColor(ev)
                         return (
                           <div
                             key={ev.id}
@@ -1104,7 +1139,11 @@ export default function ADCalendarioPage() {
                               flexDirection: 'column',
                               gap: 6,
                               paddingBottom: idx < eventsList.length - 1 ? 14 : 0,
-                              borderBottom: idx < eventsList.length - 1 ? '1px solid #f1f5f9' : 'none',
+                              borderBottom: idx < eventsList.length - 1 ? (isPast ? '1px solid #e2e8f0' : `1px dashed ${color}40`) : 'none',
+                              ...(eventsList.length > 1 && !isPast ? {
+                                borderLeft: `3.5px solid ${color}`,
+                                paddingLeft: 10
+                              } : {}),
                               position: 'relative',
                               zIndex: 2,
                               transition: 'all 0.3s ease',
@@ -1118,14 +1157,15 @@ export default function ADCalendarioPage() {
                             }}
                           >
                             {/* Top Row: Time Badge + Edit/Delete Actions */}
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+                              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                                 {eventsList.length > 1 && (
                                   <div style={{
                                     width: 7,
                                     height: 7,
                                     borderRadius: '50%',
                                     background: color,
+                                    boxShadow: isPast ? 'none' : `0 0 8px ${color}`,
                                     flexShrink: 0
                                   }} />
                                 )}
@@ -1136,8 +1176,10 @@ export default function ADCalendarioPage() {
                                   gap: 5,
                                   padding: '4px 10px',
                                   borderRadius: 10,
-                                  background: color + '15',
-                                  color: color,
+                                  background: isPast ? '#e2e8f0' : `${color}1F`,
+                                  color: isPast ? '#64748b' : color,
+                                  border: isPast ? '1px solid #cbd5e1' : `1px solid ${color}66`,
+                                  boxShadow: isPast ? 'none' : `0 0 10px ${color}30`,
                                   fontSize: 11.5,
                                   fontWeight: 700,
                                   letterSpacing: '0.01em'
@@ -1148,6 +1190,21 @@ export default function ADCalendarioPage() {
                                     <span style={{ opacity: 0.8 }}> - {ev.horaFim}</span>
                                   )}
                                 </div>
+
+                                <span style={{
+                                  fontSize: 10,
+                                  fontWeight: 800,
+                                  padding: '3px 8px',
+                                  borderRadius: 999,
+                                  textTransform: 'uppercase',
+                                  letterSpacing: '0.04em',
+                                  background: isPast ? '#f1f5f9' : `${color}18`,
+                                  color: isPast ? '#64748b' : color,
+                                  border: isPast ? '1px solid #cbd5e1' : `1px solid ${color}55`,
+                                  boxShadow: isPast ? 'none' : `0 0 8px ${color}25`
+                                }}>
+                                  {isPast ? 'Realizado' : (isToday ? 'Hoje' : TIPO_LABELS[ev.tipo] || 'Próximo')}
+                                </span>
                               </div>
 
                               {/* Action Buttons for Collaborator */}
@@ -1197,8 +1254,8 @@ export default function ADCalendarioPage() {
                             <div>
                               <h4 style={{
                                 fontSize: 14.5,
-                                fontWeight: 700,
-                                color: '#0f172a',
+                                fontWeight: isPast ? 600 : 800,
+                                color: isPast ? '#64748b' : '#0f172a',
                                 margin: 0,
                                 lineHeight: 1.4,
                                 letterSpacing: '-0.01em',
@@ -1209,7 +1266,7 @@ export default function ADCalendarioPage() {
                               {ev.descricao && (
                                 <p style={{
                                   fontSize: 12.5,
-                                  color: '#64748b',
+                                  color: isPast ? '#94a3b8' : '#475569',
                                   margin: '3px 0 0 0',
                                   lineHeight: 1.45,
                                   fontWeight: 400
@@ -1224,7 +1281,7 @@ export default function ADCalendarioPage() {
                                   gap: 4,
                                   fontSize: 11.5,
                                   fontWeight: 600,
-                                  color: '#64748b',
+                                  color: isPast ? '#94a3b8' : '#475569',
                                   marginTop: 4
                                 }}>
                                   <MapPin size={12} color={color} />
