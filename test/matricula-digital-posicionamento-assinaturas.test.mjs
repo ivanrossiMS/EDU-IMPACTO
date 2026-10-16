@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { PDFDocument } from 'pdf-lib'
 import {
   gerarPosicionamentoPadrao,
+  validarPosicionamentoCompleto,
 } from '../components/matriculas/PosicionadorAssinaturasModal.tsx'
 import {
   anexarCertificadoEvidencias,
@@ -182,5 +183,113 @@ test('Sistema de Posicionamento Visual de Assinaturas e Supressão de Rubrica de
     assert.ok(resultado.pdfBytes.length > 1000)
     const docGerado2 = await PDFDocument.load(resultado.pdfBytes)
     assert.equal(docGerado2.getPageCount(), 2, '1 página do contrato com assinatura posicionada + 1 folha de evidências')
+  })
+
+  await t.test('6. Posicionamento flexível multi-documentos: não é obrigatório posicionar todas as assinaturas em todos os documentos', async () => {
+    const signatarios = [
+      { id: 'sig-escola', nome: 'IVAN ROSSI SAMBRANA', cargo: 'Diretor', cpf: '00130220167', tipo: 'escola', cor: '#2563eb' },
+      { id: 'sig-resp', nome: 'MARIA APARECIDA DA SILVA', cargo: 'Mãe', cpf: '12345678901', tipo: 'responsavel', cor: '#10b981' }
+    ]
+
+    const documentos = [
+      { id: 'doc-1', nome: 'Contrato_Prestacao_2026.pdf', totalPaginas: 2, paginaInicioGlobal: 1, paginaFimGlobal: 2 },
+      { id: 'doc-2', nome: 'Termo_Autorizacao_Imagem.pdf', totalPaginas: 1, paginaInicioGlobal: 3, paginaFimGlobal: 3 },
+      { id: 'doc-3', nome: 'Regimento_Escolar.pdf', totalPaginas: 2, paginaInicioGlobal: 4, paginaFimGlobal: 5 },
+    ]
+
+    // Usuário posicionou:
+    // - Ambos no Documento 1 (Contrato)
+    // - Apenas a mãe no Documento 2 (Termo de Imagem)
+    // - NENHUM no Documento 3 (Regimento - coberto pelo certificado final)
+    const posicoesCustomizadas = {
+      'sig-escola_doc_doc-1': {
+        id: 'sig-escola_doc_doc-1',
+        signatarioId: 'sig-escola',
+        nome: 'IVAN ROSSI SAMBRANA',
+        cargo: 'Diretor',
+        tipo: 'escola',
+        documentoId: 'doc-1',
+        documentoNome: 'Contrato_Prestacao_2026.pdf',
+        pagina: 2,
+        paginaRelativa: 2,
+        xPercent: 8,
+        yPercent: 80,
+      },
+      'sig-resp_doc_doc-1': {
+        id: 'sig-resp_doc_doc-1',
+        signatarioId: 'sig-resp',
+        nome: 'MARIA APARECIDA DA SILVA',
+        cargo: 'Mãe',
+        tipo: 'responsavel',
+        documentoId: 'doc-1',
+        documentoNome: 'Contrato_Prestacao_2026.pdf',
+        pagina: 2,
+        paginaRelativa: 2,
+        xPercent: 54,
+        yPercent: 80,
+      },
+      'sig-resp_doc_doc-2': {
+        id: 'sig-resp_doc_doc-2',
+        signatarioId: 'sig-resp',
+        nome: 'MARIA APARECIDA DA SILVA',
+        cargo: 'Mãe',
+        tipo: 'responsavel',
+        documentoId: 'doc-2',
+        documentoNome: 'Termo_Autorizacao_Imagem.pdf',
+        pagina: 3,
+        paginaRelativa: 1,
+        xPercent: 32,
+        yPercent: 85,
+      },
+    }
+
+    // 1. Diagnóstico de validação
+    const diag = validarPosicionamentoCompleto(signatarios, documentos, posicoesCustomizadas)
+    assert.equal(diag.totalPosicionado, 3, 'Total de posições definidas deve ser 3')
+    assert.equal(diag.porDocumento[0].posicionados.length, 2, 'Doc 1 deve ter 2 signatários')
+    assert.equal(diag.porDocumento[1].posicionados.length, 1, 'Doc 2 deve ter apenas 1 signatário')
+    assert.equal(diag.porDocumento[2].posicionados.length, 0, 'Doc 3 não possui signatários visuais')
+    assert.equal(diag.tudoPosicionado, false, 'tudoPosicionado é false mas isso NÃO impede o salvamento')
+
+    // 2. Estampagem real no PDF consolidado (5 páginas de documento + 1 de certificado)
+    const doc = await PDFDocument.create()
+    for (let i = 0; i < 5; i++) {
+      doc.addPage([595.28, 841.89])
+    }
+    const pdfBytes = await doc.save()
+
+    const resultado = await anexarCertificadoEvidencias({
+      originalPdfBytes: pdfBytes,
+      protocolo: 'IMP-MULTI-FLEX-2026',
+      tokenAssinatura: 'token_multi_flex',
+      documentoTitulo: 'Pacote Multi-Documentos Flexível',
+      documentoOriginalHash: 'd'.repeat(64),
+      alunoNome: 'ALUNO TESTE FLEXIVEL',
+      anoLetivo: '2026',
+      signatario: {
+        nome: 'MARIA APARECIDA DA SILVA',
+        cpf: '12345678901',
+        email: 'maria@email.com',
+        parentesco: 'Mãe',
+        dataHoraAssinatura: '2026-10-13T12:00:00.000Z',
+        tipoAssinatura: 'manual',
+      },
+      posicoesAssinaturas: Object.values(posicoesCustomizadas),
+      suprimirRubricaRodape: true,
+      historicoEventos: [
+        {
+          id: 'ev-1',
+          timestamp: new Date().toISOString(),
+          evento: 'EMISSAO',
+          descricao: 'Emissão flexível multi-documentos',
+          hash: 'hash-flex-abc',
+        }
+      ]
+    })
+
+    assert.ok(resultado.pdfBytes, 'PDF multi-documentos flexível gerado com sucesso')
+    assert.ok(resultado.documentoFinalHash, 'Hash final de integridade gerado')
+    const docCarregado = await PDFDocument.load(resultado.pdfBytes)
+    assert.equal(docCarregado.getPageCount(), 6, '5 páginas originais + 1 página de Certificado de Evidências')
   })
 })

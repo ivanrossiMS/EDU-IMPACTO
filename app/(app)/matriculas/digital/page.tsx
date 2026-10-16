@@ -6974,20 +6974,23 @@ export default function MatriculaDigitalPage() {
                                 style={{
                                   fontSize: 10,
                                   fontWeight: 700,
-                                  color: diagnosticoPosicionamento.tudoPosicionado ? '#059669' : '#d97706',
-                                  background: diagnosticoPosicionamento.tudoPosicionado ? 'rgba(16, 185, 129, 0.12)' : 'rgba(245, 158, 11, 0.12)',
+                                  color: diagnosticoPosicionamento.totalPosicionado > 0 ? '#059669' : '#64748b',
+                                  background: diagnosticoPosicionamento.totalPosicionado > 0 ? 'rgba(16, 185, 129, 0.12)' : 'rgba(100, 116, 139, 0.12)',
                                   padding: '2px 8px',
                                   borderRadius: 999,
-                                  border: `1px solid ${diagnosticoPosicionamento.tudoPosicionado ? 'rgba(16, 185, 129, 0.3)' : 'rgba(245, 158, 11, 0.3)'}`,
+                                  border: `1px solid ${diagnosticoPosicionamento.totalPosicionado > 0 ? 'rgba(16, 185, 129, 0.3)' : 'rgba(100, 116, 139, 0.2)'}`,
                                 }}
                               >
-                                {diagnosticoPosicionamento.sigsCompletosEmTodosDocsCount} de {signatariosPosicionaveis.length} pessoas posicionadas
-                                {documentosUpload.length > 1 && ` • ${diagnosticoPosicionamento.totalPosicionado}/${diagnosticoPosicionamento.totalEsperado} posições em ${documentosUpload.length} docs`}
+                                {diagnosticoPosicionamento.totalPosicionado === 0
+                                  ? 'Nenhuma posição definida'
+                                  : `${diagnosticoPosicionamento.totalPosicionado} ${diagnosticoPosicionamento.totalPosicionado === 1 ? 'posição configurada' : 'posições configuradas'}`}
+                                {diagnosticoPosicionamento.totalPosicionado > 0 && ` (${diagnosticoPosicionamento.sigsComAlgumaPosicaoCount} de ${signatariosPosicionaveis.length} pessoas)`}
+                                {documentosUpload.length > 1 && diagnosticoPosicionamento.totalPosicionado > 0 && ` em ${documentosUpload.length} docs`}
                               </span>
                             )}
                           </div>
                           <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', marginTop: 1 }}>
-                            Defina o local exato onde cada pessoa irá assinar na folha. A rubrica repetitiva de rodapé com QR Code foi suprimida.
+                            Defina o local exato onde cada pessoa irá assinar na folha. O posicionamento é flexível: não é obrigatório assinar em todos os documentos.
                           </div>
                         </div>
                       </div>
@@ -7092,27 +7095,20 @@ export default function MatriculaDigitalPage() {
                       </div>
                     ) : (
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 10 }}>
-                        {signatariosPosicionaveis.map((sig, sigIdx) => {
+                        {signatariosPosicionaveis.map((sig) => {
                           const posicoesDoSig = Object.values(posicoesAssinaturas).filter(p => p.signatarioId === sig.id)
                           const temPosicoes = posicoesDoSig.length > 0
-                          const diagSig = diagnosticoPosicionamento.porSignatario[sigIdx]
-                          const completoSig = Boolean(diagSig?.completoEmTodosDocs)
-                          const faltamDocsCount = diagSig?.docsFaltantes.length || 0
                           return (
                             <div
                               key={sig.id}
                               style={{
                                 padding: '10px 12px',
                                 borderRadius: 10,
-                                background: completoSig
-                                  ? 'rgba(16, 185, 129, 0.03)'
-                                  : temPosicoes
-                                  ? 'rgba(245, 158, 11, 0.04)'
+                                background: temPosicoes
+                                  ? 'rgba(16, 185, 129, 0.04)'
                                   : 'hsl(var(--bg-surface))',
-                                border: completoSig
+                                border: temPosicoes
                                   ? '1px solid rgba(16, 185, 129, 0.35)'
-                                  : temPosicoes
-                                  ? '1px solid rgba(245, 158, 11, 0.4)'
                                   : '1px solid hsl(var(--border-subtle))',
                                 display: 'flex',
                                 alignItems: 'center',
@@ -7196,21 +7192,6 @@ export default function MatriculaDigitalPage() {
                                         </span>
                                       )
                                     })}
-                                    {faltamDocsCount > 0 && (
-                                      <span
-                                        style={{
-                                          fontSize: 10,
-                                          fontWeight: 700,
-                                          color: '#b45309',
-                                          background: 'rgba(245, 158, 11, 0.15)',
-                                          border: '1px solid rgba(245, 158, 11, 0.35)',
-                                          padding: '2px 7px',
-                                          borderRadius: 6,
-                                        }}
-                                      >
-                                        Falta em {faltamDocsCount} doc(s)
-                                      </span>
-                                    )}
                                     <button
                                       type="button"
                                       onClick={() => {
@@ -7232,7 +7213,7 @@ export default function MatriculaDigitalPage() {
                                       }}
                                       title="Editar ou adicionar posições em outros documentos"
                                     >
-                                      <Move size={10} /> {faltamDocsCount > 0 ? 'Completar' : 'Ajustar'}
+                                      <Move size={10} /> Ajustar
                                     </button>
                                   </>
                                 ) : (
