@@ -34,7 +34,7 @@ import {
 } from '@/lib/auth/moduleRouting'
 import { notificationService } from '@/lib/notifications/notificationService'
 
-type Step = 'login' | 'first_access_verify' | 'first_access_create' | 'setup_master' | 'choose_system' | 'choose_agenda_role'
+type Step = 'login' | 'first_access_verify' | 'first_access_otp' | 'first_access_create' | 'setup_master' | 'choose_system' | 'choose_agenda_role'
 const FEATURES = [
   { icon: '🎓', label: 'Gestão Acadêmica', desc: 'Turmas, notas, frequência e ocorrências em tempo real' },
   { icon: '💰', label: 'Financeiro Completo', desc: 'Mensalidades, inadimplência e fluxo de caixa' },
@@ -88,7 +88,7 @@ export default function LoginPage() {
     if (typeof window !== 'undefined') {
       try {
         const s = new URLSearchParams(window.location.search).get('step') as Step
-        if (s && ['login', 'first_access_verify', 'first_access_create', 'setup_master', 'choose_system', 'choose_agenda_role'].includes(s)) {
+        if (s && ['login', 'first_access_verify', 'first_access_otp', 'first_access_create', 'setup_master', 'choose_system', 'choose_agenda_role'].includes(s)) {
           return s
         }
       } catch {}
@@ -158,6 +158,29 @@ export default function LoginPage() {
   const [faError, setFaError]     = useState('')
   const [faUser, setFaUser]       = useState<FoundUser | null>(null)
   const [faAlreadyConfiguredUser, setFaAlreadyConfiguredUser] = useState<FoundUser | null>(null)
+
+  // ── primeiro acesso — OTP (código de 6 dígitos)
+  const [faOtpToken, setFaOtpToken] = useState('')
+  const [faCreationToken, setFaCreationToken] = useState('')
+  const [faEmailMasked, setFaEmailMasked] = useState('')
+  const [faIsParentEmail, setFaIsParentEmail] = useState(false)
+  const [faParentName, setFaParentName] = useState('')
+  const [faOtpDigits, setFaOtpDigits] = useState<string[]>(['', '', '', '', '', ''])
+  const [faOtpCooldown, setFaOtpCooldown] = useState(0)
+  const [faOtpLoading, setFaOtpLoading] = useState(false)
+  const [faOtpError, setFaOtpError] = useState('')
+  const [faResendLoading, setFaResendLoading] = useState(false)
+  const [faResendSuccess, setFaResendSuccess] = useState('')
+  const otpInputRefs = useRef<(HTMLInputElement | null)[]>([])
+
+  // Contador regressivo para reenvio de OTP
+  useEffect(() => {
+    if (faOtpCooldown <= 0) return
+    const timer = setInterval(() => {
+      setFaOtpCooldown(prev => (prev > 0 ? prev - 1 : 0))
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [faOtpCooldown])
 
   // ── primeiro acesso — criar senha
   const [newPass, setNewPass]       = useState('')
@@ -268,7 +291,7 @@ export default function LoginPage() {
 
         try {
           // Se o usuário veio para um fluxo específico de primeiro acesso ou configuração master:
-          if (stepParam && ['first_access_verify', 'first_access_create', 'setup_master'].includes(stepParam)) {
+          if (stepParam && ['first_access_verify', 'first_access_otp', 'first_access_create', 'setup_master'].includes(stepParam)) {
             finishSessionCheck(undefined, stepParam)
             return
           }
@@ -536,9 +559,14 @@ export default function LoginPage() {
   // ── handlers
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
-    const cleanEmail = email.trim()
+    const cleanEmail = email.trim().toLowerCase()
     const cleanPassword = password
     if (!cleanEmail || !cleanPassword) { setLoginError('Preencha e-mail e senha.'); return }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
+    if (!emailRegex.test(cleanEmail)) {
+      setLoginError('Informe um e-mail válido (ex: seu.nome@exemplo.com).')
+      return
+    }
     setLoginLoading(true); setLoginError('')
     
     // Purga imediata síncrona de qualquer barreira residual antes da requisição
@@ -787,13 +815,17 @@ export default function LoginPage() {
 
   const handleVerify = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!faQuery.trim()) { setFaError('Informe seu e-mail ou código.'); return }
-    setFaLoading(true); setFaError(''); setFaAlreadyConfiguredUser(null)
-    await new Promise(r => setTimeout(r, 600))
     const q = faQuery.trim().toLowerCase()
+    if (!q) { setFaError('Informe seu e-mail cadastrado.'); return }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
+    if (!emailRegex.test(q)) {
+      setFaError('Informe um e-mail válido (ex: seu.nome@exemplo.com).')
+      return
+    }
+    setFaLoading(true); setFaError(''); setFaAlreadyConfiguredUser(null)
     
     try {
-      const res = await fetch('/api/auth/verify-first-access', {
+      const res = await fetch('/api/auth/first-access/send-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query: q })
@@ -807,12 +839,22 @@ export default function LoginPage() {
           setFaError(data.error || 'Sua senha já foi configurada para este cadastro.')
           return
         }
-        throw new Error(data.error || 'Nenhum cadastro encontrado. Verifique com a administração.')
+        throw new Error(data.error || 'Nenhum cadastro encontrado. Verifique com a secretaria escolar.')
       }
 
       setFaUser(data.user)
-      setStep('first_access_create')
-      setFaRegEmail(data.user.email || (q.includes('@') ? q : '')) 
+      setFaOtpToken(data.otpToken || '')
+      setFaEmailMasked(data.emailMasked || '')
+      setFaIsParentEmail(Boolean(data.isParentEmail))
+      setFaParentName(data.parentName || '')
+      setFaOtpDigits(['', '', '', '', '', ''])
+      setFaOtpCooldown(data.cooldownSeconds || 60)
+      setFaOtpError('')
+      setFaResendSuccess('')
+      setStep('first_access_otp')
+      setTimeout(() => {
+        otpInputRefs.current[0]?.focus()
+      }, 250)
     } catch (err: any) {
       setFaError(err.message)
     } finally {
@@ -820,41 +862,180 @@ export default function LoginPage() {
     }
   }
 
+  const handleOtpDigitChange = (index: number, val: string) => {
+    const clean = val.replace(/\D/g, '')
+
+    // Se o usuário colou múltiplos dígitos de uma vez (ex: colou os 6 dígitos do e-mail)
+    if (clean.length > 1) {
+      const pasted = clean.slice(0, 6).split('')
+      const nextArr = [...faOtpDigits]
+      pasted.forEach((ch, idx) => {
+        if (index + idx < 6) nextArr[index + idx] = ch
+      })
+      setFaOtpDigits(nextArr)
+      setFaOtpError('')
+      const nextIdx = Math.min(5, index + pasted.length)
+      otpInputRefs.current[nextIdx]?.focus()
+      if (nextArr.every(d => d !== '')) {
+        handleVerifyOtpDirect(nextArr.join(''))
+      }
+      return
+    }
+
+    const nextArr = [...faOtpDigits]
+    nextArr[index] = clean ? clean[clean.length - 1] : ''
+    setFaOtpDigits(nextArr)
+    setFaOtpError('')
+
+    if (clean && index < 5) {
+      otpInputRefs.current[index + 1]?.focus()
+    }
+
+    if (clean && index === 5 && nextArr.every(d => d !== '')) {
+      handleVerifyOtpDirect(nextArr.join(''))
+    }
+  }
+
+  const handleOtpKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Backspace') {
+      if (!faOtpDigits[index] && index > 0) {
+        otpInputRefs.current[index - 1]?.focus()
+      }
+    } else if (e.key === 'ArrowLeft' && index > 0) {
+      otpInputRefs.current[index - 1]?.focus()
+    } else if (e.key === 'ArrowRight' && index < 5) {
+      otpInputRefs.current[index + 1]?.focus()
+    }
+  }
+
+  const handleOtpPaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    e.preventDefault()
+    const text = e.clipboardData.getData('text/plain')
+    const digits = text.replace(/\D/g, '').slice(0, 6).split('')
+    if (digits.length === 0) return
+
+    const nextArr = [...faOtpDigits]
+    digits.forEach((d, idx) => {
+      if (idx < 6) nextArr[idx] = d
+    })
+    setFaOtpDigits(nextArr)
+    setFaOtpError('')
+    const nextIdx = Math.min(5, digits.length)
+    otpInputRefs.current[nextIdx]?.focus()
+
+    if (nextArr.every(d => d !== '')) {
+      handleVerifyOtpDirect(nextArr.join(''))
+    }
+  }
+
+  const handleVerifyOtpDirect = async (codeOverride?: string) => {
+    const code = codeOverride || faOtpDigits.join('')
+    if (code.length < 6) {
+      setFaOtpError('Digite o código de 6 dígitos completo.')
+      return
+    }
+
+    setFaOtpLoading(true)
+    setFaOtpError('')
+
+    try {
+      const res = await fetch('/api/auth/first-access/verify-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          otpToken: faOtpToken,
+          code,
+        }),
+      })
+
+      const data = await res.json().catch(() => ({}))
+
+      if (!res.ok) {
+        if (data.nextOtpToken) {
+          setFaOtpToken(data.nextOtpToken)
+        }
+        throw new Error(data.error || 'Código incorreto ou expirado.')
+      }
+
+      setFaCreationToken(data.creationToken)
+      if (data.user) setFaUser(data.user)
+      setStep('first_access_create')
+      setNewPass('')
+      setConfirmPass('')
+      setCreateError('')
+    } catch (err: any) {
+      setFaOtpError(err.message)
+    } finally {
+      setFaOtpLoading(false)
+    }
+  }
+
+  const handleResendOtp = async () => {
+    if (faOtpCooldown > 0 || faResendLoading) return
+    setFaResendLoading(true)
+    setFaOtpError('')
+    setFaResendSuccess('')
+
+    try {
+      const res = await fetch('/api/auth/first-access/send-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: faQuery.trim().toLowerCase() }),
+      })
+
+      const data = await res.json().catch(() => ({}))
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Falha ao reenviar código.')
+      }
+
+      setFaOtpToken(data.otpToken)
+      setFaOtpDigits(['', '', '', '', '', ''])
+      setFaOtpCooldown(data.cooldownSeconds || 60)
+      setFaResendSuccess('Novo código enviado com sucesso para seu e-mail!')
+      setTimeout(() => setFaResendSuccess(''), 4000)
+      setTimeout(() => otpInputRefs.current[0]?.focus(), 150)
+    } catch (err: any) {
+      setFaOtpError(err.message)
+    } finally {
+      setFaResendLoading(false)
+    }
+  }
+
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!faRegEmail.trim()) { setCreateError('Informe seu e-mail para continuar.'); return }
     if (newPass.length < 6) { setCreateError('Mínimo 6 caracteres.'); return }
     if (newPass !== confirmPass) { setCreateError('As senhas não coincidem.'); return }
     setCreateLoading(true); setCreateError('')
     
     try {
-        const passRes = await fetch('/api/auth/update-password', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            userIdLegacy: faUser!.id, 
-            newPass,
-            registeredEmail: faRegEmail.trim() || faUser!.email || ''
-          })
+      const passRes = await fetch('/api/auth/first-access/create-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          creationToken: faCreationToken, 
+          newPass,
         })
-        
-        if (!passRes.ok) {
-           const errData = await passRes.json().catch(() => ({}))
-           throw new Error(errData.error || 'Erro ao sincronizar senha com servidor.')
-        }
+      })
+      
+      const passData = await passRes.json().catch(() => ({}))
+      if (!passRes.ok) {
+        throw new Error(passData.error || 'Erro ao sincronizar senha com servidor.')
+      }
 
-        setCreateLoading(false); setCreateSuccess(true)
-       await new Promise(r => setTimeout(r, 2000))
-       setStep('login')
-       // Preenche com o e-mail cadastrado no primeiro acesso (ou fallback para matrícula/código)
-       const loginEmail = (faRegEmail || faUser?.email || '').trim()
-       const fallbackCode = faUser?.matricula || faUser?.realId || faUser?.id?.replace(/^aluno-/, '')
-       setEmail(loginEmail || fallbackCode || '')
-       setFaQuery(''); setFaUser(null); setNewPass(''); setConfirmPass(''); setCreateSuccess(false); setFaAlreadyConfiguredUser(null)
+      setCreateLoading(false)
+      setCreateSuccess(true)
+      await new Promise(r => setTimeout(r, 2200))
+      
+      setStep('login')
+      const loginId = passData.loginIdentifier || faUser?.email || faUser?.matricula || ''
+      setEmail(loginId)
+      setPassword('')
+      goLogin()
     } catch (err: any) {
-       console.error("Setup erro:", err)
-       setCreateLoading(false)
-       setCreateError(err.message || 'Erro ao sincronizar senha com servidor.')
+      console.error("Setup erro:", err)
+      setCreateLoading(false)
+      setCreateError(err.message || 'Erro ao sincronizar senha com servidor.')
     }
   }
 
@@ -869,6 +1050,16 @@ export default function LoginPage() {
     setCreateSuccess(false); 
     setFaRegEmail(''); 
     setFaAlreadyConfiguredUser(null);
+    setFaOtpToken('');
+    setFaCreationToken('');
+    setFaEmailMasked('');
+    setFaIsParentEmail(false);
+    setFaParentName('');
+    setFaOtpDigits(['', '', '', '', '', '']);
+    setFaOtpCooldown(0);
+    setFaOtpError('');
+    setFaResendLoading(false);
+    setFaResendSuccess('');
   }
 
   const handleSetupMaster = async (e: React.FormEvent) => {
@@ -954,10 +1145,10 @@ export default function LoginPage() {
       <div className="login-card" style={cardStyle}>
         <form onSubmit={handleLogin} style={{ display:'flex', flexDirection:'column', gap:22 }}>
           <div>
-            <Label text="E-mail, Código ou Celular" />
+            <Label text="E-mail" />
             <div style={{ position:'relative' }} suppressHydrationWarning>
-              <span style={{ position:'absolute', left:16, top:'50%', transform:'translateY(-50%)', fontSize:16, color: '#a78bfa', pointerEvents:'none' }}>👤</span>
-              <input type="text" value={email} onChange={e=>{setEmail(e.target.value);setLoginError('')}} placeholder="Digite seu e-mail, código ou celular" autoComplete="username"
+              <span style={{ position:'absolute', left:16, top:'50%', transform:'translateY(-50%)', fontSize:16, color: '#a78bfa', pointerEvents:'none' }}>✉️</span>
+              <input type="email" value={email} onChange={e=>{setEmail(e.target.value);setLoginError('')}} placeholder="seu.email@exemplo.com" autoComplete="email" inputMode="email"
                 suppressHydrationWarning
                 className="login-input"
                 style={{ ...baseInputStyle, paddingLeft: 46, borderColor: loginError&&!email?'rgba(239,68,68,0.5)':'rgba(255,255,255,0.12)' }} onFocus={focusOn} onBlur={focusOff} />
@@ -1125,20 +1316,20 @@ export default function LoginPage() {
         <div style={{ display:'inline-flex', alignItems:'center', gap:8, padding:'5px 14px', borderRadius:100, background: 'rgba(139,92,246,0.1)', border: '1px solid rgba(139,92,246,0.25)', marginBottom:20 }}>
           <span>🔑</span><span style={{ fontSize:11, fontWeight:700, color: '#a78bfa', letterSpacing:'0.06em' }}>PRIMEIRO ACESSO</span>
         </div>
-        <h2 style={{ fontFamily:"'Outfit',sans-serif", fontSize:30, fontWeight:900, color:'#fff', letterSpacing:'-0.02em', marginBottom:8 }}>Identificação</h2>
-        <p style={{ fontSize:14, color:'rgba(255,255,255,0.35)', lineHeight:1.6 }}>Informe o <strong style={{ color:'rgba(255,255,255,0.6)' }}>e-mail cadastrado</strong>, <strong style={{ color:'rgba(255,255,255,0.6)' }}>código do aluno</strong> ou <strong style={{ color:'rgba(255,255,255,0.6)' }}>celular do usuário</strong> para verificar seu acesso.</p>
+        <h2 style={{ fontFamily:"'Outfit',sans-serif", fontSize:30, fontWeight:900, color:'#fff', letterSpacing:'-0.02em', marginBottom:8 }}>Primeiro Acesso</h2>
+        <p style={{ fontSize:14, color:'rgba(255,255,255,0.35)', lineHeight:1.6 }}>Informe seu <strong style={{ color:'rgba(255,255,255,0.6)' }}>e-mail cadastrado</strong> na escola para receber o código seguro de ativação.</p>
       </div>
       <div className="login-card" style={cardStyle}>
         <form onSubmit={handleVerify} style={{ display:'flex', flexDirection:'column', gap:20 }}>
           <div>
-            <Label text="E-mail, Celular ou Código" />
+            <Label text="E-mail Cadastrado" />
             <div style={{ position:'relative' }} suppressHydrationWarning>
-              <span style={{ position:'absolute', left:14, top:'50%', transform:'translateY(-50%)', fontSize:15, opacity:0.4, pointerEvents:'none' }}>👤</span>
-              <input type="text" value={faQuery} onChange={e=>{setFaQuery(e.target.value);setFaError('');setFaAlreadyConfiguredUser(null)}} placeholder="E-mail, Celular, ou Código do Aluno" autoFocus suppressHydrationWarning
+              <span style={{ position:'absolute', left:14, top:'50%', transform:'translateY(-50%)', fontSize:15, opacity:0.4, pointerEvents:'none' }}>✉️</span>
+              <input type="email" value={faQuery} onChange={e=>{setFaQuery(e.target.value);setFaError('');setFaAlreadyConfiguredUser(null)}} placeholder="seu.email@exemplo.com" autoFocus autoComplete="email" inputMode="email" suppressHydrationWarning
                 className="login-input"
                 style={baseInputStyle} onFocus={focusOn} onBlur={focusOff} />
             </div>
-            <p style={{ fontSize:11, color:'rgba(255,255,255,0.2)', marginTop:8 }}>Use o e-mail ou código/login vinculado ao seu cadastro escolar.</p>
+            <p style={{ fontSize:11, color:'rgba(255,255,255,0.2)', marginTop:8 }}>O código de ativação de 6 dígitos será enviado para este e-mail registrado na escola.</p>
           </div>
           {faAlreadyConfiguredUser ? (
             <div style={{ padding: '14px 16px', borderRadius: 14, background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -1191,15 +1382,15 @@ export default function LoginPage() {
             onMouseLeave={e=>{e.currentTarget.style.transform=''}}>
             {!(faLoading||!faQuery.trim()) && <ShimmerOverlay />}
             <div style={{ position:'relative', display:'flex', alignItems:'center', justifyContent:'center', gap:10 }}>
-              {faLoading ? <><Spinner /><span>Verificando...</span></> : <><span>Verificar Cadastro</span><span>→</span></>}
+              {faLoading ? <><Spinner /><span>Enviando código...</span></> : <><span>Enviar Código de Acesso</span><span>→</span></>}
             </div>
           </button>
         </form>
-        {/* Hint para admin */}
+        {/* Hint para segurança */}
         <div style={{ marginTop:20, padding:'12px 16px', borderRadius:12, background:'rgba(59,130,246,0.05)', border:'1px solid rgba(59,130,246,0.15)' }}>
-          <div style={{ fontSize:11, fontWeight:700, color:'rgba(59,130,246,0.7)', marginBottom:4, letterSpacing:'0.06em' }}>ℹ PRIMEIRO ACESSO</div>
-          <div style={{ fontSize:12, color:'rgba(255,255,255,0.3)' }}>
-            Este fluxo é destinado para criação da primeira senha no app.
+          <div style={{ fontSize:11, fontWeight:700, color:'rgba(59,130,246,0.7)', marginBottom:4, letterSpacing:'0.06em' }}>🛡️ ATIVAÇÃO SEGURA COM OTP</div>
+          <div style={{ fontSize:12, color:'rgba(255,255,255,0.35)', lineHeight:1.5 }}>
+            Um código numérico de 6 dígitos será despachado ao e-mail cadastrado para garantir que apenas o titular crie a senha.
           </div>
         </div>
       </div>
@@ -1210,22 +1401,199 @@ export default function LoginPage() {
   )
 
   // ────────────────────────────────────────────────────────────────
+  // STEP: Primeiro Acesso — Validação OTP (Código de 6 Dígitos)
+  // ────────────────────────────────────────────────────────────────
+  const FirstAccessOtp = (
+    <div className="login-form-wrapper" style={{ width:'100%', maxWidth:440, position:'relative', zIndex:1, animation:'fadeSlideIn 0.35s ease-out both' }}>
+      <button 
+        type="button" 
+        onClick={() => { setStep('first_access_verify'); setFaOtpError(''); }} 
+        style={{ display:'inline-flex', alignItems:'center', gap:6, fontSize:13, color:'rgba(255,255,255,0.4)', background:'none', border:'none', cursor:'pointer', marginBottom:28, fontWeight:600 }}
+        onMouseEnter={e=>(e.currentTarget.style.color='rgba(255,255,255,0.75)')} 
+        onMouseLeave={e=>(e.currentTarget.style.color='rgba(255,255,255,0.4)')}
+      >
+        ← Alterar e-mail ou código
+      </button>
+
+      <div style={{ marginBottom:28 }}>
+        <div style={{ display:'inline-flex', alignItems:'center', gap:8, padding:'5px 14px', borderRadius:100, background: 'rgba(59,130,246,0.1)', border: '1px solid rgba(59,130,246,0.25)', marginBottom:16 }}>
+          <span>✉️</span>
+          <span style={{ fontSize:11, fontWeight:700, color: '#60a5fa', letterSpacing:'0.06em' }}>CÓDIGO DE SEGURANÇA</span>
+        </div>
+        <h2 style={{ fontFamily:"'Outfit',sans-serif", fontSize:28, fontWeight:900, color:'#fff', letterSpacing:'-0.02em', marginBottom:8 }}>
+          Verifique seu e-mail
+        </h2>
+        <p style={{ fontSize:14, color:'rgba(255,255,255,0.45)', lineHeight:1.6, margin:0 }}>
+          Enviamos um código de segurança de 6 dígitos para:
+        </p>
+        <div style={{ marginTop:8, display:'inline-flex', alignItems:'center', gap:8, padding:'6px 14px', borderRadius:10, background:'rgba(59,130,246,0.1)', border: '1px solid rgba(59,130,246,0.25)' }}>
+          <span style={{ fontSize:14 }}>📬</span>
+          <strong style={{ color:'#93c5fd', fontSize:14, letterSpacing:'0.02em' }}>{faEmailMasked || faUser?.email}</strong>
+        </div>
+        {faIsParentEmail && (
+          <div style={{ marginTop:8, display:'flex', alignItems:'center', gap:6, fontSize:12, color:'rgba(255,255,255,0.5)' }}>
+            <span>👨‍👩‍👧</span>
+            <span>E-mail do responsável: <strong style={{ color:'rgba(255,255,255,0.8)' }}>{faParentName}</strong></span>
+          </div>
+        )}
+      </div>
+
+      <div className="login-card" style={cardStyle}>
+        <form onSubmit={(e) => { e.preventDefault(); handleVerifyOtpDirect(); }} style={{ display:'flex', flexDirection:'column', gap:20 }}>
+          <div>
+            <Label text="Código de Confirmação (6 dígitos)" />
+            
+            {/* 6 Inputs Modernos */}
+            <div style={{ display:'flex', gap:8, justifyContent:'space-between', marginTop:10 }} onPaste={handleOtpPaste}>
+              {faOtpDigits.map((digit, idx) => {
+                const isFilled = digit !== ''
+                return (
+                  <input
+                    key={idx}
+                    ref={el => { otpInputRefs.current[idx] = el }}
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    maxLength={1}
+                    value={digit}
+                    onChange={e => handleOtpDigitChange(idx, e.target.value)}
+                    onKeyDown={e => handleOtpKeyDown(idx, e)}
+                    disabled={faOtpLoading}
+                    autoComplete="one-time-code"
+                    style={{
+                      flex: 1,
+                      maxWidth: 54,
+                      height: 60,
+                      borderRadius: 14,
+                      textAlign: 'center',
+                      fontSize: 24,
+                      fontWeight: 800,
+                      fontFamily: 'monospace',
+                      color: '#ffffff',
+                      background: isFilled ? 'rgba(59,130,246,0.12)' : 'rgba(255,255,255,0.04)',
+                      border: isFilled ? '1.5px solid rgba(59,130,246,0.6)' : '1.5px solid rgba(255,255,255,0.12)',
+                      outline: 'none',
+                      transition: 'all 0.2s',
+                      boxShadow: isFilled ? '0 0 14px rgba(59,130,246,0.2)' : 'none',
+                    }}
+                    onFocus={e => {
+                      e.currentTarget.style.borderColor = '#3b82f6'
+                      e.currentTarget.style.boxShadow = '0 0 16px rgba(59,130,246,0.4)'
+                      e.currentTarget.select()
+                    }}
+                    onBlur={e => {
+                      e.currentTarget.style.borderColor = isFilled ? 'rgba(59,130,246,0.6)' : 'rgba(255,255,255,0.12)'
+                      e.currentTarget.style.boxShadow = isFilled ? '0 0 14px rgba(59,130,246,0.2)' : 'none'
+                    }}
+                  />
+                )
+              })}
+            </div>
+            
+            <p style={{ fontSize:11, color:'rgba(255,255,255,0.3)', marginTop:10, textAlign:'center' }}>
+              Dica: você pode colar os 6 dígitos diretamente do seu e-mail.
+            </p>
+          </div>
+
+          {faResendSuccess && (
+            <div style={{ padding:'10px 14px', borderRadius:10, background:'rgba(16,185,129,0.1)', border:'1px solid rgba(16,185,129,0.25)', color:'#34d399', fontSize:12, fontWeight:600, display:'flex', alignItems:'center', gap:8 }}>
+              <span>✓</span>
+              <span>{faResendSuccess}</span>
+            </div>
+          )}
+
+          <ErrorBox msg={faOtpError} />
+
+          <button
+            type="submit"
+            disabled={faOtpLoading || faOtpDigits.some(d => d === '')}
+            style={btnBase(faOtpLoading || faOtpDigits.some(d => d === ''))}
+            onMouseEnter={e => { if (!faOtpLoading && faOtpDigits.every(d => d !== '')) e.currentTarget.style.transform = 'translateY(-2px)' }}
+            onMouseLeave={e => { e.currentTarget.style.transform = '' }}
+          >
+            {!(faOtpLoading || faOtpDigits.some(d => d === '')) && <ShimmerOverlay />}
+            <div style={{ position:'relative', display:'flex', alignItems:'center', justifyContent:'center', gap:10 }}>
+              {faOtpLoading ? (
+                <>
+                  <Spinner />
+                  <span>Validando Código...</span>
+                </>
+              ) : (
+                <>
+                  <span>Validar Código</span>
+                  <span>→</span>
+                </>
+              )}
+            </div>
+          </button>
+
+          {/* Reenviar código */}
+          <div style={{ textAlign:'center', marginTop:4 }}>
+            {faOtpCooldown > 0 ? (
+              <span style={{ fontSize:12, color:'rgba(255,255,255,0.35)', fontWeight:500, display:'inline-flex', alignItems:'center', gap:6 }}>
+                <span>⏱️</span>
+                <span>Reenviar novo código em <strong style={{ color:'rgba(255,255,255,0.65)' }}>{faOtpCooldown}s</strong></span>
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={handleResendOtp}
+                disabled={faResendLoading}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#60a5fa',
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '6px 12px',
+                  borderRadius: 8,
+                  transition: 'all 0.2s',
+                }}
+                onMouseEnter={e => (e.currentTarget.style.background = 'rgba(59,130,246,0.1)')}
+                onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+              >
+                {faResendLoading ? <Spinner /> : <span>🔄</span>}
+                <span>Não recebeu? Reenviar código</span>
+              </button>
+            )}
+          </div>
+        </form>
+
+        {/* Dica de entregabilidade */}
+        <div style={{ marginTop:20, padding:'12px 14px', borderRadius:12, background:'rgba(255,255,255,0.02)', border:'1px solid rgba(255,255,255,0.06)' }}>
+          <div style={{ fontSize:11, fontWeight:700, color:'rgba(255,255,255,0.5)', marginBottom:4, display:'flex', alignItems:'center', gap:6 }}>
+            <span>💡</span>
+            <span>NÃO ENCONTROU O E-MAIL?</span>
+          </div>
+          <p style={{ margin:0, fontSize:12, color:'rgba(255,255,255,0.3)', lineHeight:1.5 }}>
+            Verifique também a sua caixa de <strong>Spam</strong> ou <strong>Lixo Eletrônico</strong>. Se seu e-mail mudou, procure a secretaria escolar.
+          </p>
+        </div>
+      </div>
+    </div>
+  )
+
+  // ────────────────────────────────────────────────────────────────
   // STEP: Primeiro Acesso — Criar Senha
   // ────────────────────────────────────────────────────────────────
   const FirstAccessCreate = (
     <div className="login-form-wrapper" style={{ width:'100%', maxWidth:440, position:'relative', zIndex:1, animation:'fadeSlideIn 0.35s ease-out both' }}>
-      <button type="button" onClick={()=>setStep('first_access_verify')} style={{ display:'inline-flex', alignItems:'center', gap:6, fontSize:13, color:'rgba(255,255,255,0.4)', background:'none', border:'none', cursor:'pointer', marginBottom:32, fontWeight:600 }}
-        onMouseEnter={e=>(e.currentTarget.style.color='rgba(255,255,255,0.75)')} onMouseLeave={e=>(e.currentTarget.style.color='rgba(255,255,255,0.4)')}>← Voltar</button>
+      <button type="button" onClick={()=>setStep('first_access_otp')} style={{ display:'inline-flex', alignItems:'center', gap:6, fontSize:13, color:'rgba(255,255,255,0.4)', background:'none', border:'none', cursor:'pointer', marginBottom:32, fontWeight:600 }}
+        onMouseEnter={e=>(e.currentTarget.style.color='rgba(255,255,255,0.75)')} onMouseLeave={e=>(e.currentTarget.style.color='rgba(255,255,255,0.4)')}>← Voltar ao código</button>
       <div style={{ marginBottom:28 }}>
         <div style={{ display:'inline-flex', alignItems:'center', gap:8, padding:'5px 14px', borderRadius:100, background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.25)', marginBottom:20 }}>
-          <span>✅</span><span style={{ fontSize:11, fontWeight:700, color: '#34d399', letterSpacing:'0.06em' }}>CADASTRO ENCONTRADO</span>
+          <span>✅</span><span style={{ fontSize:11, fontWeight:700, color: '#34d399', letterSpacing:'0.06em' }}>IDENTIDADE CONFIRMADA</span>
         </div>
-        {/* Usuário encontrado */}
+        {/* Usuário autenticado */}
         <div style={{ display:'flex', alignItems:'center', gap:14, padding:'16px 18px', borderRadius:14, background:'rgba(16,185,129,0.05)', border:'1px solid rgba(16,185,129,0.15)', marginBottom:20 }}>
-          <div style={{ width:44, height:44, borderRadius:13, background:'linear-gradient(135deg,#10b981,#059669)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, fontWeight:900, color:'#fff', flexShrink:0 }}>{faUser?.nome[0]}</div>
+          <div style={{ width:44, height:44, borderRadius:13, background:'linear-gradient(135deg,#10b981,#059669)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, fontWeight:900, color:'#fff', flexShrink:0 }}>{faUser?.nome?.[0] || 'U'}</div>
           <div>
             <div style={{ fontSize:15, fontWeight:800, color:'#fff' }}>{faUser?.nome}</div>
-            <div style={{ fontSize:12, color:'rgba(255,255,255,0.4)' }}>{faUser?.cargo} • {faUser?.email}</div>
+            <div style={{ fontSize:12, color:'rgba(255,255,255,0.4)' }}>{faUser?.cargo} • {faEmailMasked || faUser?.email}</div>
           </div>
           <span style={{ marginLeft:'auto', fontSize:20 }}>👍</span>
         </div>
@@ -1238,26 +1606,18 @@ export default function LoginPage() {
           <div style={{ textAlign:'center', padding:'20px 0' }}>
             <div style={{ fontSize:52, marginBottom:16 }}>🎉</div>
             <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:22, fontWeight:900, color:'#fff', marginBottom:8 }}>Senha criada com sucesso!</div>
-            <p style={{ fontSize:14, color:'rgba(255,255,255,0.4)' }}>Pode demorar alguns minutinhos para o e-mail chegar. Redirecionando...</p>
+            <p style={{ fontSize:14, color:'rgba(255,255,255,0.4)' }}>Redirecionando para o login seguro...</p>
             <div style={{ marginTop:20, height:3, borderRadius:2, background:'rgba(255,255,255,0.1)', overflow:'hidden' }}>
               <div style={{ height:'100%', borderRadius:2, background:'linear-gradient(90deg,#10b981,#3b82f6)', width:'100%', animation:'progressFill 2.2s linear forwards' }} />
             </div>
           </div>
         ) : (
           <form onSubmit={handleCreate} style={{ display:'flex', flexDirection:'column', gap:18 }}>
-            {/* E-mail de Registro */}
-            <div>
-              <Label text="E-mail de Cadastro *" />
-              <div style={{ position:'relative' }} suppressHydrationWarning>
-                <span style={{ position:'absolute', left:14, top:'50%', transform:'translateY(-50%)', fontSize:15, opacity:0.4, pointerEvents:'none' }}>✉</span>
-                <input type="email" value={faRegEmail} onChange={e=>{setFaRegEmail(e.target.value);setCreateError('')}} placeholder="Preencha seu e-mail principal" required suppressHydrationWarning
-                  className="login-input"
-                  style={{ ...baseInputStyle }} onFocus={focusOn} onBlur={focusOff} />
+            {faUser?.email && (
+              <div style={{ padding:'10px 14px', borderRadius:10, background:'rgba(59,130,246,0.08)', border:'1px solid rgba(59,130,246,0.2)', fontSize:12, color:'rgba(255,255,255,0.6)' }}>
+                Seu login será realizado com o seu e-mail: <strong style={{ color:'#93c5fd' }}>{faUser.email}</strong>
               </div>
-              {faUser?.cargo === 'Aluno' && (
-                <p style={{ fontSize:11, color:'rgba(255,255,255,0.3)', marginTop:6 }}>Seu login pode ser este e-mail ou sua matrícula: <strong style={{color:'rgba(255,255,255,0.6)'}}>{faUser?.matricula || faUser?.id}</strong></p>
-              )}
-            </div>
+            )}
             {/* Nova senha */}
             <div>
               <Label text="Nova Senha" />
@@ -1372,10 +1732,10 @@ export default function LoginPage() {
               </div>
             </div>
             <ErrorBox msg={createError} />
-            <button type="submit" disabled={createLoading||newPass.length<6||newPass!==confirmPass||!faRegEmail} style={btnBase(createLoading||newPass.length<6||newPass!==confirmPass||!faRegEmail)}
+            <button type="submit" disabled={createLoading||newPass.length<6||newPass!==confirmPass||!faCreationToken} style={btnBase(createLoading||newPass.length<6||newPass!==confirmPass||!faCreationToken)}
               onMouseEnter={e=>{if(!createLoading){e.currentTarget.style.transform='translateY(-2px)'}}}
               onMouseLeave={e=>{e.currentTarget.style.transform=''}}>
-              {!(createLoading||newPass.length<6||newPass!==confirmPass||!faRegEmail) && <ShimmerOverlay />}
+              {!(createLoading||newPass.length<6||newPass!==confirmPass||!faCreationToken) && <ShimmerOverlay />}
               <div style={{ position:'relative', display:'flex', alignItems:'center', justifyContent:'center', gap:10 }}>
                 {createLoading ? (
                   <><Spinner /><span>Criando acesso...</span></>
@@ -1881,6 +2241,7 @@ export default function LoginPage() {
           <>
             {step === 'login' && LoginContent}
             {step === 'first_access_verify' && FirstAccessVerify}
+            {step === 'first_access_otp' && FirstAccessOtp}
             {step === 'first_access_create' && FirstAccessCreate}
             {step === 'setup_master' && SetupMasterContent}
             {step === 'choose_system' && ChooseSystemContent}

@@ -520,6 +520,189 @@ export async function enviarCodigoOtpEmail(params: {
 }
 
 /**
+ * Dispara o e-mail contendo o código de confirmação OTP para Primeiro Acesso / Criação de Senha
+ */
+export async function enviarCodigoOtpPrimeiroAcesso(params: {
+  destinatario: string
+  nomeDestinatario: string
+  codigoOtp: string
+  perfilOuCargo?: string
+  alunoNome?: string
+}): Promise<{ success: boolean; simulated?: boolean; messageId?: string; error?: string }> {
+  // Se o destinatário pertencer a domínio reservado/fictício, simula com sucesso e não abre socket SMTP nem consulta DB
+  if (isNonDeliverableTestEmail(params.destinatario)) {
+    console.warn(`[EmailService] [SUPRIMIDO OTP PRIMEIRO ACESSO] Destinatário fictício interceptado: ${params.destinatario}. Conexão com Locaweb prevenida.`)
+    return {
+      success: true,
+      simulated: true,
+      messageId: `suppressed-fa-otp-${Date.now()}`,
+    }
+  }
+
+  const cfg = await getSmtpConfig()
+
+  const contextoAluno = params.alunoNome
+    ? `<div style="background-color: #f1f5f9; border-radius: 8px; padding: 10px 14px; margin-bottom: 20px; font-size: 13px; color: #334155;">
+        Acesso vinculado ao(à) estudante: <strong style="color: #0f172a;">${params.alunoNome}</strong>
+       </div>`
+    : ''
+
+  const cargoTexto = params.perfilOuCargo ? ` (${params.perfilOuCargo})` : ''
+
+  const htmlContent = `
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" lang="pt-BR">
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="light dark" />
+  <meta name="supported-color-schemes" content="light dark" />
+  <title>Primeiro Acesso - Colégio Impacto</title>
+  <!--[if mso]>
+  <style type="text/css">
+    body, table, td, h1, p, div, span, a { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif !important; }
+  </style>
+  <![endif]-->
+</head>
+<body style="margin: 0; padding: 0; background-color: #f1f5f9; -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1e293b;">
+  <table role="presentation" width="100%" border="0" cellpadding="0" cellspacing="0" style="background-color: #f1f5f9; width: 100%; margin: 0; padding: 28px 0;">
+    <tr>
+      <td align="center" style="padding: 0 12px;">
+        <!-- Container Card Principal (560px) -->
+        <table role="presentation" width="100%" border="0" cellpadding="0" cellspacing="0" style="max-width: 560px; width: 100%; background-color: #ffffff; border-radius: 16px; border: 1px solid #e2e8f0; border-collapse: separate; overflow: hidden; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);">
+          
+          <!-- CABEÇALHO OFICIAL COM IDENTIDADE VISUAL -->
+          <tr>
+            <td align="center" bgcolor="#0b1f48" style="background-color: #0b1f48; background-image: linear-gradient(135deg, #0b1f48 0%, #1e3a8a 100%); padding: 32px 20px; text-align: center; border-top-left-radius: 15px; border-top-right-radius: 15px;">
+              
+              <!-- Badge Circular com a Logomarca Oficial -->
+              <table role="presentation" border="0" cellpadding="0" cellspacing="0" align="center" style="margin: 0 auto 12px auto;">
+                <tr>
+                  <td align="center" bgcolor="#ffffff" style="background-color: #ffffff; width: 56px; height: 56px; border-radius: 50%; padding: 4px; text-align: center; vertical-align: middle; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);">
+                    <img src="https://impacto-edu.net/logo-impacto-clean.png" alt="Colégio Impacto" width="48" height="48" style="display: block; margin: 0 auto; width: 48px; height: 48px; border: 0; outline: none; text-decoration: none;" />
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Nome da Instituição -->
+              <h1 style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 22px; font-weight: 800; color: #ffffff !important; letter-spacing: 0.8px; line-height: 1.2; text-transform: uppercase;">
+                COLÉGIO IMPACTO
+              </h1>
+
+              <!-- Subtítulo Contextual -->
+              <p style="margin: 8px 0 0 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 13px; font-weight: 600; color: #93c5fd !important; letter-spacing: 0.5px; line-height: 1.4; text-transform: uppercase;">
+                Portal de Acesso • Ativação de Senha
+              </p>
+
+            </td>
+          </tr>
+
+          <!-- CORPO DA MENSAGEM -->
+          <tr>
+            <td style="padding: 32px 28px; text-align: left; font-size: 14px; line-height: 1.6; color: #475569;">
+              <div style="font-size: 17px; font-weight: 700; margin-bottom: 12px; color: #0f172a;">
+                Olá, ${params.nomeDestinatario}${cargoTexto}!
+              </div>
+              
+              <div style="margin-bottom: 18px; font-size: 14px; line-height: 1.6;">
+                Você iniciou o procedimento de <strong style="color: #0f172a;">Primeiro Acesso</strong> para criação de senha na plataforma <strong style="color: #1e3a8a;">Impacto EDU</strong>.
+              </div>
+
+              ${contextoAluno}
+
+              <!-- Cartão do Código OTP -->
+              <table role="presentation" width="100%" border="0" cellpadding="0" cellspacing="0" style="margin: 24px 0;">
+                <tr>
+                  <td align="center" style="background-color: #f8fafc; border: 2px dashed #3b82f6; border-radius: 12px; padding: 26px 20px;">
+                    <div style="font-size: 12px; font-weight: 800; text-transform: uppercase; color: #64748b; letter-spacing: 0.08em; margin-bottom: 10px;">
+                      Seu Código de Ativação
+                    </div>
+                    <div style="font-family: 'Courier New', Courier, monospace; font-size: 42px; font-weight: 800; letter-spacing: 10px; color: #1e3a8a; margin: 6px 0;">
+                      ${params.codigoOtp}
+                    </div>
+                    <div style="font-size: 12px; color: #94a3b8; margin-top: 10px; font-weight: 500;">
+                      ⏱️ Válido pelos próximos <strong>15 minutos</strong>
+                    </div>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Box de Segurança -->
+              <div style="background-color: #eff6ff; border-left: 4px solid #3b82f6; padding: 14px 16px; border-radius: 6px; font-size: 13px; color: #1e40af; line-height: 1.5; margin-bottom: 24px;">
+                <strong style="color: #1e3a8a;">🔒 Aviso de Segurança:</strong> Nunca compartilhe este código com terceiros. A equipe do Colégio Impacto nunca solicitará este código por telefone, WhatsApp ou SMS.
+              </div>
+
+              <div style="font-size: 12px; line-height: 1.5; color: #94a3b8;">
+                Se você não solicitou este primeiro acesso, não se preocupe: sua conta permanece segura e você pode desconsiderar esta mensagem.
+              </div>
+            </td>
+          </tr>
+
+          <!-- RODAPÉ INSTITUCIONAL -->
+          <tr>
+            <td align="center" bgcolor="#f8fafc" style="background-color: #f8fafc; border-top: 1px solid #e2e8f0; padding: 20px 24px; text-align: center; font-size: 11px; color: #94a3b8; line-height: 1.5; border-bottom-left-radius: 15px; border-bottom-right-radius: 15px;">
+              COLÉGIO IMPACTO CENTRO DE ENSINO LTDA • CNPJ: 04.395.789/0001-88<br>
+              Campo Grande - MS • Mensagem gerada automaticamente pelo Sistema Impacto EDU.
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+`
+
+  // Se não houver SMTP configurado, registra no log do servidor e permite fluxo de homologação
+  if (!cfg) {
+    console.info(`[EmailService] [SIMULAÇÃO OTP PRIMEIRO ACESSO] Para: ${params.destinatario} | Código OTP: ${params.codigoOtp}`)
+    return {
+      success: true,
+      simulated: true,
+      messageId: `simulated-fa-otp-${Date.now()}`,
+    }
+  }
+
+  try {
+    const plainText = `Olá, ${params.nomeDestinatario}!\n\nSeu código de ativação para o Primeiro Acesso no Sistema Impacto EDU é:\n\n${params.codigoOtp}\n\n(Válido por 15 minutos)\n\nPor sua segurança, nunca compartilhe este código com terceiros.\nColégio Impacto`
+
+    const antiThreadToken = Date.now().toString().slice(-4)
+    const msgId = `<fa-otp-${Date.now()}-${Math.random().toString(36).substring(2, 7)}@colegioimpacto.net>`
+
+    const info = await sendMailWithResilience(
+      cfg,
+      {
+        messageId: msgId,
+        from: `"${cfg.fromName}" <${cfg.fromEmail}>`,
+        to: params.destinatario,
+        subject: `Código de Ativação: ${params.codigoOtp} • Primeiro Acesso Colégio Impacto [${antiThreadToken}]`,
+        text: plainText,
+        html: htmlContent,
+        headers: {
+          Importance: 'high',
+          'X-Entity-Ref-ID': `fa-otp-${Date.now()}`,
+        },
+      },
+      3,
+      { useFreshConnection: true }
+    )
+
+    return {
+      success: true,
+      simulated: false,
+      messageId: info.messageId,
+    }
+  } catch (err: any) {
+    console.error('[EmailService] Erro ao enviar e-mail OTP de Primeiro Acesso:', err)
+    return {
+      success: false,
+      error: err.message,
+    }
+  }
+}
+
+/**
  * Dispara a cópia final do contrato assinado com o Certificado de Evidências em PDF
  */
 export async function enviarCopiaContratoAssinadoEmail(params: {

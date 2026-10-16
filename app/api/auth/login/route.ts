@@ -15,113 +15,25 @@ export async function POST(request: NextRequest) {
     const { email: rawLogin, password, keepConnected } = await request.json()
     
     if (!rawLogin || !password) {
-      return NextResponse.json({ error: 'E-mail/matrícula e senha são obrigatórios' }, { status: 200 })
+      return NextResponse.json({ error: 'E-mail e senha são obrigatórios' }, { status: 400 })
     }
 
     const loginInput = rawLogin.trim().toLowerCase()
 
+    if (!isValidEmail(loginInput)) {
+      return NextResponse.json(
+        { error: 'O login deve ser realizado com seu e-mail cadastrado.' },
+        { status: 400 }
+      )
+    }
+
     const supabaseAdmin = getAdminClient()
 
     // ── Resolve the actual email for Supabase Auth ──────────────────
-    // If it's NOT an email format or internal, it might be a matrícula, CPF, or student email
     let resolvedEmail = loginInput
     let userType: 'system_user' | 'aluno' | 'responsavel' = 'system_user'
     let alunoRecord: any = null
     let responsavelRecord: any = null
-
-    const isVirtualEmail = loginInput.endsWith('@impactoedu.local')
-    const hasValidEmailSyntax = isValidEmail(loginInput)
-
-    if (isVirtualEmail) {
-      resolvedEmail = loginInput
-      if (loginInput.startsWith('aluno.')) {
-        userType = 'aluno'
-        const matricula = loginInput.replace('aluno.', '').replace('@impactoedu.local', '')
-        const isMatriculaUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(matricula)
-        const orConditions = [`matricula.eq.${matricula}`, `dados->>codigo.eq.${matricula}`]
-        if (isMatriculaUuid) orConditions.push(`id.eq.${matricula}`)
-        const { data: aData } = await supabaseAdmin
-          .from('alunos')
-          .select('id, nome, email, matricula, dados, status, foto')
-          .or(orConditions.join(','))
-          .limit(1)
-        alunoRecord = aData?.[0] || null
-      }
-    } else if (!hasValidEmailSyntax) {
-      // ── Entrada é Matrícula, CPF, Código, Telefone ou E-mail sem domínio padrão (ex: aluno@aluno) ──
-      const loginDigits = loginInput.replace(/\D/g, '')
-      const isLoginUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(loginInput)
-
-      let alunoConditions = [
-        `matricula.eq.${loginInput}`,
-        `dados->>codigo.eq.${loginInput}`,
-        `email.ilike.${loginInput}`,
-        `dados->>email.ilike.${loginInput}`
-      ]
-      if (isLoginUuid) alunoConditions.push(`id.eq.${loginInput}`)
-      if (loginDigits.length >= 11) alunoConditions.push(`dados->>cpf.eq.${loginDigits}`)
-      if (loginDigits.length >= 8) alunoConditions.push(`telefone.ilike.%${loginDigits}%`)
-
-      let respConditions = [
-        `codigo.eq.${loginInput}`,
-        `email.ilike.${loginInput}`
-      ]
-      if (loginDigits.length >= 11) respConditions.push(`dados->>cpf.eq.${loginDigits}`)
-      if (loginDigits.length >= 8) respConditions.push(`celular.ilike.%${loginDigits}%`, `telefone.ilike.%${loginDigits}%`)
-
-      const alunoPromise = supabaseAdmin
-        .from('alunos')
-        .select('id, nome, email, matricula, dados, status, foto')
-        .or(alunoConditions.join(','))
-        .limit(1)
-        .then(r => r.data?.[0] || null)
-
-      const responsavelPromise = supabaseAdmin
-        .from('responsaveis')
-        .select('id, nome, email, celular, codigo, telefone, dados')
-        .or(respConditions.join(','))
-        .limit(1)
-        .then(r => r.data?.[0] || null)
-
-      const [alunoResult, responsavelResult] = await Promise.all([alunoPromise, responsavelPromise])
-
-      if (alunoResult) {
-        alunoRecord = alunoResult
-        const matricula   = alunoRecord.matricula || alunoRecord.dados?.codigo || alunoRecord.id
-        const storedEmail = (alunoRecord.email || '').trim().toLowerCase()
-        resolvedEmail = isValidEmail(storedEmail)
-          ? storedEmail
-          : `aluno.${matricula}@impactoedu.local`
-        userType = 'aluno'
-      } else if (responsavelResult) {
-        responsavelRecord = responsavelResult
-        resolvedEmail   = (responsavelRecord.email || '').trim().toLowerCase()
-        userType        = 'responsavel'
-        if (!resolvedEmail || !resolvedEmail.includes('@')) {
-          return NextResponse.json({ error: 'Responsável sem e-mail cadastrado. Faça o Primeiro Acesso primeiro.' }, { status: 200 })
-        }
-      }
-    } else {
-      // ── Entrada já é um e-mail válido com domínio: autentica diretamente sem table scans prévios ──
-      resolvedEmail = loginInput
-    }
-
-    if (userType === 'responsavel' && responsavelRecord) {
-      const { data: links } = await supabaseAdmin
-        .from('aluno_responsavel')
-        .select('resp_financeiro, resp_pedagogico')
-        .eq('responsavel_id', responsavelRecord.id)
-
-      const isAllowed = (links || []).some(
-        (l: any) => l.resp_financeiro === true || l.resp_pedagogico === true
-      )
-
-      if (!isAllowed) {
-        return NextResponse.json({ 
-          error: 'Acesso não autorizado. Apenas responsáveis Financeiro ou Pedagógico possuem login no sistema.' 
-        }, { status: 200 })
-      }
-    }
 
     const cookieStore = await cookies()
     const INFINITE_SESSION_SECONDS = 31536000 // 1 ano (365 dias) — seguro contra overflow de 32 bits (RFC 6265bis)
@@ -200,12 +112,12 @@ export async function POST(request: NextRequest) {
 
     // FALLBACK for students: If login failed, their Auth user might still be on their virtual email
     if (error) {
-      let studentToTry = (userType === 'aluno' && alunoRecord) ? alunoRecord : null
+      let studentToTry = alunoRecord
       if (!studentToTry) {
         const { data: matchAlunos } = await supabaseAdmin
           .from('alunos')
           .select('id, nome, email, matricula, dados, status, foto')
-          .or(`email.ilike.${loginInput},dados->>email.ilike.${loginInput},matricula.eq.${loginInput},id.eq.${loginInput}`)
+          .or(`email.ilike.${loginInput},dados->>email.ilike.${loginInput}`)
           .limit(1)
         studentToTry = matchAlunos?.[0] || null
       }
@@ -250,7 +162,7 @@ export async function POST(request: NextRequest) {
 
       // Friendly messages per user type
       if (userType === 'aluno') {
-        return NextResponse.json({ error: 'Matrícula ou senha incorreta. Se nunca acessou, clique em "Primeiro Acesso".' }, { status: 200 })
+        return NextResponse.json({ error: 'E-mail ou senha incorreta. Se nunca acessou, clique em "Primeiro Acesso".' }, { status: 200 })
       }
       return NextResponse.json({ error: 'Credenciais inválidas.' }, { status: 200 })
     }
@@ -323,7 +235,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (!dbRecordExists) {
-      if (userType === 'responsavel' && responsavelRecord) {
+      if (responsavelRecord) {
         dbRecordExists = true
         respFoundRecord = responsavelRecord
         responsavel_id = responsavelRecord.id

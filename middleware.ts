@@ -25,6 +25,7 @@ const PUBLIC_PATHS = [
   '/api/auth/me',
   '/api/auth/verify-first-access',
   '/api/auth/update-password',
+  '/api/auth/first-access',
   '/api/push/sync-subscription', // Sincronização direta de push OneSignal (App Móvel / WebView)
   '/monitor-tv',        // painel TV da portaria
   '/painel-tablet',     // tablet da portaria
