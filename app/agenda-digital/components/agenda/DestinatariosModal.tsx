@@ -83,6 +83,19 @@ const DEST_MODAL_STYLES = `
     font-weight: 800;
     color: #FFFFFF;
   }
+  .dest-modal-header {
+    padding: max(54px, calc(env(safe-area-inset-top, 0px) + 16px)) 16px 16px 16px;
+    min-height: 72px;
+    flex-shrink: 0;
+    background: linear-gradient(135deg, #6D5DF6 0%, #4F46E5 50%, #7C3AED 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    box-sizing: border-box;
+  }
   @media (min-width: 1024px) {
     .dest-modal-container {
       width: 90%;
@@ -93,6 +106,10 @@ const DEST_MODAL_STYLES = `
       border-radius: 28px;
       box-shadow: 0 25px 60px -15px rgba(15, 23, 42, 0.35);
       border: 1px solid rgba(255, 255, 255, 0.25);
+    }
+    .dest-modal-header {
+      height: 72px;
+      padding: 0 16px;
     }
     .dest-modal-footer {
       justify-content: flex-end;
@@ -172,7 +189,11 @@ const DEST_MODAL_STYLES = `
 
 function ensureDestStyles() {
   if (typeof document === 'undefined') return
-  if (document.getElementById('dest-modal-global-styles')) return
+  const existing = document.getElementById('dest-modal-global-styles')
+  if (existing) {
+    existing.innerHTML = DEST_MODAL_STYLES
+    return
+  }
   const style = document.createElement('style')
   style.id = 'dest-modal-global-styles'
   style.innerHTML = DEST_MODAL_STYLES
@@ -1724,28 +1745,25 @@ export function DestinatariosModal({
             style={{ zIndex: 2147483647 }}
           >
             {/* ── HEADER ULTRA MODERNO COM GRADIENTE ────────────────────── */}
-            <header style={{ 
-              height: 72, flexShrink: 0, 
-              background: 'linear-gradient(135deg, #6D5DF6 0%, #4F46E5 50%, #7C3AED 100%)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'sticky', top: 0, zIndex: 20 
-            }}>
-              
-              <motion.button 
-                whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-                onClick={onClose}
-                style={{ 
-                  width: 44, height: 44, position: 'absolute', right: 16, borderRadius: '50%', 
-                  background: 'rgba(255,255,255,0.2)', backdropFilter: 'none', 
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', 
-                  border: 'none', cursor: 'pointer' 
-                }}
-              >
-                <X size={22} />
-              </motion.button>
+            <header className="dest-modal-header">
+              <div style={{ width: '100%', minHeight: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
+                <motion.button 
+                  whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+                  onClick={onClose}
+                  style={{ 
+                    width: 40, height: 40, position: 'absolute', right: 0, borderRadius: '50%', 
+                    background: 'rgba(255,255,255,0.2)', backdropFilter: 'none', 
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', 
+                    border: 'none', cursor: 'pointer' 
+                  }}
+                >
+                  <X size={20} />
+                </motion.button>
 
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                <h2 style={{ fontSize: 17, fontWeight: 700, color: '#fff', margin: 0, lineHeight: 1.2 }}>Destinatários</h2>
-                <span style={{ fontSize: 13, fontWeight: 500, color: 'rgba(255,255,255,0.88)' }}>Selecione quem receberá o comunicado</span>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '0 48px', textAlign: 'center' }}>
+                  <h2 style={{ fontSize: 17, fontWeight: 700, color: '#fff', margin: 0, lineHeight: 1.2 }}>Destinatários</h2>
+                  <span style={{ fontSize: 13, fontWeight: 500, color: 'rgba(255,255,255,0.88)' }}>Selecione quem receberá o comunicado</span>
+                </div>
               </div>
             </header>
 

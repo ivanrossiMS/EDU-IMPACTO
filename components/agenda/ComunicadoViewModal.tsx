@@ -1013,6 +1013,10 @@ export function ComunicadoViewModal({
               border-radius: 0 !important;
               margin: 0 !important;
             }
+            .cvm-header {
+              padding: 18px 20px !important;
+              padding-top: max(54px, calc(env(safe-area-inset-top, 0px) + 18px)) !important;
+            }
           }
           .cvm-header {
             flex-shrink: 0;

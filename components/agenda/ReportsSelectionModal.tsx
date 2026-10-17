@@ -762,6 +762,7 @@ export function ReportsSelectionModal({
           .ad-reports-header-inner {
             max-width: 760px;
             width: 100%;
+            min-height: 36px;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -834,10 +835,16 @@ export function ReportsSelectionModal({
             gap: 10px;
             align-items: center;
           }
+          @media (max-width: 1023px) {
+            .ad-reports-header-box {
+              padding: 18px 20px !important;
+              padding-top: max(54px, calc(env(safe-area-inset-top, 0px) + 18px)) !important;
+            }
+          }
           @media (max-width: 480px) {
             .ad-reports-header-box {
-              padding: 20px 16px !important;
-              padding-top: max(20px, env(safe-area-inset-top)) !important;
+              padding: 18px 16px !important;
+              padding-top: max(54px, calc(env(safe-area-inset-top, 0px) + 18px)) !important;
             }
             .ad-reports-content-body {
               padding: 14px 14px !important;

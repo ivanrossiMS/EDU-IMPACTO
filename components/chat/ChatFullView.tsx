@@ -64,7 +64,8 @@ import {
   compressVideo, 
   compressPDF, 
   extractVideoThumbnail, 
-  thumbnailDataUrlToFile 
+  thumbnailDataUrlToFile,
+  formatFileSize
 } from '@/lib/mediaCompressor'
 
 function getSectorMeta(setor?: string) {
@@ -954,6 +955,12 @@ export function ChatFullView({ alunoId }: { alunoId?: string }) {
         ? 'No Modo Família, o envio em grupos da turma é desativado.'
         : 'Você não tem permissão para enviar mensagens neste grupo.'
       )
+      return
+    }
+
+    if (rawFile.size > 100 * 1024 * 1024) {
+      toast.error(`O arquivo "${rawFile.name}" (${formatFileSize(rawFile.size)}) excede o limite máximo de 100MB.`)
+      e.target.value = ''
       return
     }
 

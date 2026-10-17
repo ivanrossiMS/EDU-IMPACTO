@@ -770,6 +770,9 @@ export function ReportFillerModal({ isOpen, anexoStr, onClose, onBack, currentUs
               .ad-report-filler-overlay {
                 padding: 0 !important;
               }
+              .ad-report-filler-header {
+                padding: max(54px, calc(env(safe-area-inset-top, 0px) + 16px)) 20px 16px 20px !important;
+              }
             }
           `}</style>
           <motion.div 
@@ -781,12 +784,11 @@ export function ReportFillerModal({ isOpen, anexoStr, onClose, onBack, currentUs
         style={{ 
           background: '#fff', width: '100%', flex: 1,
           display: 'flex', flexDirection: 'column', overflow: 'hidden',
-          paddingTop: 'env(safe-area-inset-top)', // Ensure iOS notch is covered
           paddingBottom: 'env(safe-area-inset-bottom)'
         }}
       >
         {/* Header (Appears in both Step 0 and Step 1) */}
-        <div style={{ padding: '16px 20px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fff', flexShrink: 0 }}>
+        <div className="ad-report-filler-header" style={{ padding: '16px 20px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fff', flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <div style={{ width: 40, height: 40, borderRadius: 10, background: 'rgba(16, 185, 129, 0.1)', color: '#10b981', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <ClipboardList size={20} />

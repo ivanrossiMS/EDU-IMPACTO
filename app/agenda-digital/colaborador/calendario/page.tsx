@@ -58,85 +58,142 @@ function VisibilidadeSelector({
   onOpenModal: (type: 'turmas' | 'usuario') => void
   onChangeTipo: (tipo: 'todos' | 'turmas' | 'usuario') => void
 }) {
+  const options = [
+    { v: 'todos', label: 'Toda a instituição', shortLabel: 'Instituição', icon: Globe },
+    { v: 'turmas', label: 'Grupos específicos', shortLabel: 'Grupos / Turmas', icon: Users },
+    { v: 'usuario', label: 'Usuário do sistema', shortLabel: 'Usuário', icon: UserCheck },
+  ] as const
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, width: '100%', minWidth: 0, boxSizing: 'border-box' }}>
       {/* Abas de Tipo */}
-      <div style={{ display: 'flex', gap: 8, background: '#f1f5f9', padding: 4, borderRadius: 12 }}>
-        {[
-          { v: 'todos', label: 'Toda a instituição', icon: Globe },
-          { v: 'turmas', label: 'Grupos específicos', icon: Users },
-          { v: 'usuario', label: 'Usuário do sistema', icon: UserCheck },
-        ].map(opt => (
-          <button key={opt.v} type="button"
-            onClick={() => onChangeTipo(opt.v as any)}
-            style={{
-              flex: 1, padding: '8px 4px', borderRadius: 10, fontSize: 11, fontWeight: 700,
-              background: tipo === opt.v ? '#fff' : 'transparent',
-              boxShadow: tipo === opt.v ? '0 2px 8px rgba(0,0,0,0.05)' : 'none',
-              border: 'none',
-              color: tipo === opt.v ? '#6366f1' : '#64748b', cursor: 'pointer',
-              transition: 'all 0.2s',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6
-            }}>
-            <opt.icon size={13} /> {opt.label}
-          </button>
-        ))}
+      <div className="ad-vis-tabs">
+        {options.map(opt => {
+          const isActive = tipo === opt.v
+          const IconComp = opt.icon
+          return (
+            <button
+              key={opt.v}
+              type="button"
+              onClick={() => onChangeTipo(opt.v)}
+              className={`ad-vis-tab-btn ${isActive ? 'active' : ''}`}
+            >
+              <span className="ad-vis-tab-icon">
+                <IconComp size={15} strokeWidth={isActive ? 2.4 : 2} />
+              </span>
+              <span className="ad-vis-tab-label-desktop">{opt.label}</span>
+              <span className="ad-vis-tab-label-mobile">{opt.shortLabel}</span>
+            </button>
+          )
+        })}
       </div>
 
       {/* Conteúdo Dinâmico */}
       {tipo === 'todos' && (
-        <div style={{ padding: '16px', textAlign: 'center', background: 'rgba(16, 185, 129, 0.05)', borderRadius: 12, border: '1.5px dashed rgba(16, 185, 129, 0.2)', display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center' }}>
-          <span style={{ fontSize: 12, color: '#10b981', fontWeight: 600 }}>🌐 Evento visível para todos os usuários matriculados/ativos no ano letivo selecionado.</span>
+        <div style={{
+          padding: '14px 16px',
+          textAlign: 'center',
+          background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.06) 0%, rgba(5, 150, 105, 0.03) 100%)',
+          borderRadius: 14,
+          border: '1.5px dashed rgba(16, 185, 129, 0.3)',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 10,
+          alignItems: 'center',
+          width: '100%',
+          minWidth: 0,
+          boxSizing: 'border-box'
+        }}>
+          <span style={{ fontSize: 12, color: '#059669', fontWeight: 600, lineHeight: 1.4 }}>
+            🌐 Visível para todos os usuários ativos no ano letivo selecionado.
+          </span>
           {anosLetivos && anosLetivos.length > 0 && onChangeAnoTodos && (
-            <select 
-              className="form-select" 
-              style={{ width: '100%', maxWidth: 300, padding: '8px 12px', borderRadius: 8, fontSize: 13, fontWeight: 600, border: '1px solid rgba(16, 185, 129, 0.3)', background: '#fff', color: '#047857', cursor: 'pointer' }}
+            <select
+              id="ev-ano-letivo-todos"
+              aria-label="Ano Letivo"
+              className="ad-ev-select"
+              style={{
+                width: '100%',
+                maxWidth: 320,
+                padding: '0 12px',
+                borderRadius: 10,
+                fontSize: 13,
+                fontWeight: 700,
+                border: '1.5px solid rgba(16, 185, 129, 0.35)',
+                background: '#fff',
+                color: '#047857',
+                cursor: 'pointer'
+              }}
               value={anoTodos || ''}
               onChange={(e) => onChangeAnoTodos(e.target.value)}
             >
               <option value="">Selecione o Ano Letivo (Obrigatório)</option>
-              {anosLetivos.map(a => <option key={a} value={a}>{a}</option>)}
+              {anosLetivos.map(a => <option key={a} value={a}>Ano Letivo {a}</option>)}
             </select>
           )}
         </div>
       )}
 
       {tipo === 'turmas' && (
-        <div 
+        <button
+          type="button"
           onClick={() => onOpenModal('turmas')}
-          style={{ padding: '12px 16px', background: '#fff', borderRadius: 12, border: '1.5px solid #e2e8f0', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+          className="ad-vis-picker-card"
         >
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <span style={{ fontSize: 13, fontWeight: 800, color: '#1e293b' }}>
-              {turmasSel.length === 0 ? 'Nenhum grupo selecionado' : `${turmasSel.length} Grupos Selecionados`}
-            </span>
-            <span style={{ fontSize: 11, color: '#64748b' }}>
-              {turmasSel.length === 0 ? 'Clique para buscar e selecionar os grupos' : turmasSel.join(', ').slice(0, 50) + (turmasSel.length > 50 ? '...' : '')}
-            </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: 1 }}>
+            <div style={{
+              width: 36, height: 36, borderRadius: 10,
+              background: turmasSel.length > 0 ? '#eef2ff' : '#f1f5f9',
+              color: turmasSel.length > 0 ? '#4f46e5' : '#64748b',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
+            }}>
+              <Users size={16} />
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1, textAlign: 'left' }}>
+              <span style={{ fontSize: 13, fontWeight: 800, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {turmasSel.length === 0 ? 'Nenhum grupo selecionado' : `${turmasSel.length} grupo(s) selecionado(s)`}
+              </span>
+              <span style={{ fontSize: 11.5, color: '#64748b', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {turmasSel.length === 0 ? 'Toque para buscar e selecionar turmas ou equipes' : turmasSel.join(', ')}
+              </span>
+            </div>
           </div>
-          <div style={{ width: 32, height: 32, borderRadius: 8, background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6366f1' }}>
-             <Search size={16} />
+          <div className="ad-vis-picker-action">
+            <Search size={14} />
+            <span>Selecionar</span>
           </div>
-        </div>
+        </button>
       )}
 
       {tipo === 'usuario' && (
-        <div 
+        <button
+          type="button"
           onClick={() => onOpenModal('usuario')}
-          style={{ padding: '12px 16px', background: '#fff', borderRadius: 12, border: '1.5px solid #e2e8f0', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+          className="ad-vis-picker-card"
         >
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <span style={{ fontSize: 13, fontWeight: 800, color: '#1e293b' }}>
-              {usuarioSel === 'Todos' || !usuarioSel ? 'Selecionar Usuário' : usuarioSel}
-            </span>
-            <span style={{ fontSize: 11, color: '#64748b' }}>
-              {usuarioSel === 'Todos' || !usuarioSel ? 'Clique para buscar um usuário específico' : 'Usuário destino deste evento'}
-            </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: 1 }}>
+            <div style={{
+              width: 36, height: 36, borderRadius: 10,
+              background: usuarioSel && usuarioSel !== 'Todos' ? '#eef2ff' : '#f1f5f9',
+              color: usuarioSel && usuarioSel !== 'Todos' ? '#4f46e5' : '#64748b',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
+            }}>
+              <UserCheck size={16} />
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1, textAlign: 'left' }}>
+              <span style={{ fontSize: 13, fontWeight: 800, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {usuarioSel === 'Todos' || !usuarioSel ? 'Selecionar Usuário' : usuarioSel}
+              </span>
+              <span style={{ fontSize: 11.5, color: '#64748b', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {usuarioSel === 'Todos' || !usuarioSel ? 'Toque para buscar um colaborador específico' : 'Usuário destinatário deste evento'}
+              </span>
+            </div>
           </div>
-          <div style={{ width: 32, height: 32, borderRadius: 8, background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6366f1' }}>
-             <Search size={16} />
+          <div className="ad-vis-picker-action">
+            <Search size={14} />
+            <span>Buscar</span>
           </div>
-        </div>
+        </button>
       )}
     </div>
   )
@@ -760,6 +817,440 @@ export default function ADCalendarioPage() {
         @media (max-width: 380px) {
           .ad-calendar-new-btn-text {
             display: none !important;
+          }
+        }
+
+        /* ── Modal Novo / Editar Evento (Desktop & Mobile) ── */
+        .ad-ev-modal-overlay {
+          position: fixed !important;
+          inset: 0 !important;
+          background: rgba(15, 23, 42, 0.72) !important;
+          backdrop-filter: blur(8px) !important;
+          -webkit-backdrop-filter: blur(8px) !important;
+          z-index: 100000 !important;
+          display: flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          padding: 20px !important;
+          overflow: hidden !important;
+          overscroll-behavior: contain !important;
+          box-sizing: border-box !important;
+        }
+        .ad-ev-modal-card {
+          background: #ffffff !important;
+          border-radius: 24px !important;
+          width: 100% !important;
+          max-width: 560px !important;
+          max-height: min(88dvh, 760px) !important;
+          display: flex !important;
+          flex-direction: column !important;
+          overflow: hidden !important;
+          box-shadow: 0 28px 64px -12px rgba(15, 23, 42, 0.38), 0 0 0 1px rgba(226, 232, 240, 0.85) !important;
+          box-sizing: border-box !important;
+          min-width: 0 !important;
+          font-family: 'Outfit', sans-serif !important;
+        }
+        .ad-ev-modal-header {
+          padding: 18px 22px !important;
+          background: #ffffff !important;
+          border-bottom: 1px solid #f1f5f9 !important;
+          display: flex !important;
+          align-items: center !important;
+          justify-content: space-between !important;
+          gap: 12px !important;
+          flex-shrink: 0 !important;
+          box-sizing: border-box !important;
+        }
+        .ad-ev-modal-close {
+          width: 36px !important;
+          height: 36px !important;
+          min-width: 36px !important;
+          min-height: 36px !important;
+          padding: 0 !important;
+          border-radius: 12px !important;
+          background: #f8fafc !important;
+          border: 1px solid #e2e8f0 !important;
+          color: #64748b !important;
+          display: inline-flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          cursor: pointer !important;
+          flex-shrink: 0 !important;
+          transition: all 0.18s ease !important;
+        }
+        .ad-ev-modal-close:hover:not(:disabled) {
+          background: #f1f5f9 !important;
+          color: #0f172a !important;
+          border-color: #cbd5e1 !important;
+        }
+        .ad-ev-modal-body {
+          padding: 20px 22px !important;
+          overflow-y: auto !important;
+          overflow-x: hidden !important;
+          overscroll-behavior: contain !important;
+          display: flex !important;
+          flex-direction: column !important;
+          gap: 16px !important;
+          flex: 1 1 auto !important;
+          min-width: 0 !important;
+          width: 100% !important;
+          box-sizing: border-box !important;
+        }
+        .ad-ev-modal-footer {
+          padding: 14px 22px !important;
+          background: #f8fafc !important;
+          border-top: 1px solid #e2e8f0 !important;
+          display: flex !important;
+          align-items: center !important;
+          justify-content: flex-end !important;
+          gap: 10px !important;
+          flex-shrink: 0 !important;
+          width: 100% !important;
+          box-sizing: border-box !important;
+        }
+        .ad-ev-field {
+          display: flex !important;
+          flex-direction: column !important;
+          min-width: 0 !important;
+          width: 100% !important;
+          box-sizing: border-box !important;
+        }
+        .ad-ev-label {
+          display: flex !important;
+          align-items: center !important;
+          gap: 5px !important;
+          font-family: 'Outfit', sans-serif !important;
+          font-size: 11px !important;
+          font-weight: 800 !important;
+          color: #475569 !important;
+          text-transform: uppercase !important;
+          letter-spacing: 0.05em !important;
+          margin: 0 0 6px 0 !important;
+          line-height: 1.2 !important;
+          white-space: nowrap !important;
+          overflow: hidden !important;
+          text-overflow: ellipsis !important;
+        }
+        .ad-ev-input,
+        .ad-ev-select {
+          width: 100% !important;
+          min-width: 0 !important;
+          max-width: 100% !important;
+          box-sizing: border-box !important;
+          height: 44px !important;
+          min-height: 44px !important;
+          padding: 0 12px !important;
+          border-radius: 12px !important;
+          border: 1.5px solid #e2e8f0 !important;
+          background: #f8fafc !important;
+          color: #0f172a !important;
+          font-family: 'Outfit', 'Inter', sans-serif !important;
+          font-size: 13.5px !important;
+          font-weight: 600 !important;
+          transition: all 0.18s ease !important;
+          outline: none !important;
+          margin: 0 !important;
+        }
+        .ad-ev-select.ad-ev-select-dot {
+          padding-left: 32px !important;
+        }
+        .ad-ev-input.ad-ev-input-icon {
+          padding-left: 34px !important;
+        }
+        .ad-ev-input::placeholder {
+          color: #94a3b8 !important;
+          font-weight: 500 !important;
+        }
+        .ad-ev-input:focus,
+        .ad-ev-select:focus {
+          background: #ffffff !important;
+          border-color: #6366f1 !important;
+          box-shadow: 0 0 0 3.5px rgba(99, 102, 241, 0.14) !important;
+        }
+        .ad-ev-input:disabled,
+        .ad-ev-select:disabled {
+          opacity: 0.55 !important;
+          cursor: not-allowed !important;
+          background: #f1f5f9 !important;
+        }
+        .ad-ev-grid-2 {
+          display: grid !important;
+          grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+          gap: 12px !important;
+          width: 100% !important;
+          min-width: 0 !important;
+          box-sizing: border-box !important;
+        }
+        .ad-ev-allday-card {
+          display: flex !important;
+          align-items: center !important;
+          justify-content: space-between !important;
+          gap: 12px !important;
+          padding: 11px 14px !important;
+          background: #f8fafc !important;
+          border-radius: 14px !important;
+          border: 1.5px solid #e2e8f0 !important;
+          cursor: pointer !important;
+          transition: all 0.2s ease !important;
+          user-select: none !important;
+          width: 100% !important;
+          box-sizing: border-box !important;
+        }
+        .ad-ev-allday-card:hover {
+          border-color: #cbd5e1 !important;
+          background: #f1f5f9 !important;
+        }
+        .ad-ev-allday-card:has(input:checked) {
+          background: #eef2ff !important;
+          border-color: #818cf8 !important;
+          box-shadow: 0 2px 10px rgba(99, 102, 241, 0.08) !important;
+        }
+        .ad-ev-switch-track {
+          width: 40px !important;
+          height: 22px !important;
+          border-radius: 999px !important;
+          background: #cbd5e1 !important;
+          position: relative !important;
+          transition: background 0.2s ease !important;
+          flex-shrink: 0 !important;
+        }
+        .ad-ev-switch-thumb {
+          width: 18px !important;
+          height: 18px !important;
+          border-radius: 50% !important;
+          background: #ffffff !important;
+          position: absolute !important;
+          top: 2px !important;
+          left: 2px !important;
+          transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2) !important;
+        }
+        .ad-ev-allday-card:has(input:checked) .ad-ev-switch-track {
+          background: #6366f1 !important;
+        }
+        .ad-ev-allday-card:has(input:checked) .ad-ev-switch-thumb {
+          transform: translateX(18px) !important;
+        }
+
+        /* ── Visibilidade Selector Tabs & Picker Cards ── */
+        .ad-vis-tabs {
+          display: grid !important;
+          grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+          gap: 6px !important;
+          background: #eef2f6 !important;
+          padding: 5px !important;
+          border-radius: 14px !important;
+          border: 1px solid #e2e8f0 !important;
+          width: 100% !important;
+          min-width: 0 !important;
+          box-sizing: border-box !important;
+        }
+        .ad-vis-tab-btn {
+          display: flex !important;
+          flex-direction: column !important;
+          align-items: center !important;
+          justify-content: center !important;
+          gap: 5px !important;
+          padding: 9px 6px !important;
+          border-radius: 10px !important;
+          border: 1px solid transparent !important;
+          background: transparent !important;
+          color: #64748b !important;
+          cursor: pointer !important;
+          transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+          min-width: 0 !important;
+          width: 100% !important;
+          min-height: 56px !important;
+          box-sizing: border-box !important;
+          text-align: center !important;
+          font-family: 'Outfit', sans-serif !important;
+          font-size: 11.5px !important;
+          font-weight: 700 !important;
+          line-height: 1.15 !important;
+        }
+        .ad-vis-tab-btn:hover:not(.active) {
+          background: rgba(255, 255, 255, 0.5) !important;
+          color: #334155 !important;
+        }
+        .ad-vis-tab-btn.active {
+          background: #ffffff !important;
+          color: #4f46e5 !important;
+          border-color: rgba(99, 102, 241, 0.24) !important;
+          box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06) !important;
+        }
+        .ad-vis-tab-icon {
+          width: 26px !important;
+          height: 26px !important;
+          border-radius: 8px !important;
+          display: flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          background: rgba(100, 116, 139, 0.1) !important;
+          color: #64748b !important;
+          transition: all 0.2s ease !important;
+          flex-shrink: 0 !important;
+        }
+        .ad-vis-tab-btn.active .ad-vis-tab-icon {
+          background: #eef2ff !important;
+          color: #4f46e5 !important;
+        }
+        .ad-vis-tab-label-desktop {
+          display: block !important;
+          white-space: nowrap !important;
+          overflow: hidden !important;
+          text-overflow: ellipsis !important;
+          max-width: 100% !important;
+        }
+        .ad-vis-tab-label-mobile {
+          display: none !important;
+        }
+        .ad-vis-picker-card {
+          width: 100% !important;
+          min-width: 0 !important;
+          box-sizing: border-box !important;
+          padding: 10px 12px !important;
+          background: #ffffff !important;
+          border-radius: 12px !important;
+          border: 1.5px solid #e2e8f0 !important;
+          cursor: pointer !important;
+          display: flex !important;
+          align-items: center !important;
+          justify-content: space-between !important;
+          gap: 10px !important;
+          transition: all 0.18s ease !important;
+          font-family: 'Outfit', sans-serif !important;
+        }
+        .ad-vis-picker-card:hover {
+          border-color: #818cf8 !important;
+          box-shadow: 0 4px 12px rgba(99, 102, 241, 0.08) !important;
+        }
+        .ad-vis-picker-action {
+          display: inline-flex !important;
+          align-items: center !important;
+          gap: 5px !important;
+          padding: 6px 10px !important;
+          border-radius: 9px !important;
+          background: #eef2ff !important;
+          color: #4f46e5 !important;
+          font-size: 11.5px !important;
+          font-weight: 800 !important;
+          flex-shrink: 0 !important;
+        }
+        .ad-ev-btn-cancel {
+          height: 44px !important;
+          min-height: 44px !important;
+          padding: 0 20px !important;
+          border-radius: 12px !important;
+          font-family: 'Outfit', sans-serif !important;
+          font-size: 13.5px !important;
+          font-weight: 700 !important;
+          background: #ffffff !important;
+          color: #475569 !important;
+          border: 1.5px solid #e2e8f0 !important;
+          cursor: pointer !important;
+          display: inline-flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          transition: all 0.18s ease !important;
+        }
+        .ad-ev-btn-cancel:hover {
+          background: #f1f5f9 !important;
+          color: #0f172a !important;
+          border-color: #cbd5e1 !important;
+        }
+        .ad-ev-btn-submit {
+          height: 44px !important;
+          min-height: 44px !important;
+          padding: 0 24px !important;
+          border-radius: 12px !important;
+          font-family: 'Outfit', sans-serif !important;
+          font-size: 13.5px !important;
+          font-weight: 800 !important;
+          background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%) !important;
+          color: #ffffff !important;
+          border: none !important;
+          box-shadow: 0 6px 16px rgba(99, 102, 241, 0.28) !important;
+          cursor: pointer !important;
+          display: inline-flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          gap: 7px !important;
+          transition: all 0.18s ease !important;
+        }
+
+        @media (max-width: 640px) {
+          .ad-ev-modal-overlay {
+            padding: 10px !important;
+          }
+          .ad-ev-modal-card {
+            border-radius: 22px !important;
+            max-height: 90dvh !important;
+          }
+          .ad-ev-modal-header {
+            padding: 14px 16px !important;
+          }
+          .ad-ev-modal-body {
+            padding: 16px !important;
+            gap: 14px !important;
+          }
+          .ad-ev-modal-footer {
+            padding: 12px 16px !important;
+          }
+          .ad-ev-btn-cancel {
+            flex: 1 1 0% !important;
+            padding: 0 12px !important;
+          }
+          .ad-ev-btn-submit {
+            flex: 1.4 1 0% !important;
+            padding: 0 14px !important;
+          }
+          .ad-ev-grid-2 {
+            gap: 10px !important;
+          }
+          .ad-ev-input,
+          .ad-ev-select {
+            height: 42px !important;
+            min-height: 42px !important;
+            font-size: 13px !important;
+            padding: 0 10px !important;
+            border-radius: 11px !important;
+          }
+          .ad-ev-select.ad-ev-select-dot {
+            padding-left: 30px !important;
+          }
+          .ad-ev-input.ad-ev-input-icon {
+            padding-left: 34px !important;
+          }
+          .ad-ev-label {
+            font-size: 10.5px !important;
+            letter-spacing: 0.04em !important;
+            margin-bottom: 5px !important;
+          }
+          .ad-vis-tab-btn {
+            padding: 8px 4px !important;
+            min-height: 52px !important;
+            font-size: 11px !important;
+          }
+          .ad-vis-tab-label-desktop {
+            display: none !important;
+          }
+          .ad-vis-tab-label-mobile {
+            display: block !important;
+            white-space: nowrap !important;
+            overflow: hidden !important;
+            text-overflow: ellipsis !important;
+            max-width: 100% !important;
+          }
+          .ad-vis-picker-action span {
+            display: none !important;
+          }
+          .ad-vis-picker-action {
+            padding: 7px !important;
+          }
+        }
+        @media (max-width: 345px) {
+          .ad-ev-grid-2 {
+            grid-template-columns: minmax(0, 1fr) !important;
           }
         }
       `}} />
@@ -1446,96 +1937,331 @@ export default function ADCalendarioPage() {
       {typeof document !== 'undefined' && createPortal(
         <AnimatePresence>
           {showModal && (
-          <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.85)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, overflowY: 'auto', backdropFilter: 'none' }}>
-            <motion.div initial={{scale:0.95, y: 10}} animate={{scale:1, y: 0}} exit={{scale:0.95, y: 10}} style={{ background: '#fff', borderRadius: 24, width: '100%', maxWidth: 640, display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 24px 64px rgba(0,0,0,0.15)', maxHeight: '90vh' }}>
-              <div style={{ position: 'sticky', top: 0, background: '#fff', padding: '20px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #e2e8f0', zIndex: 10 }}>
-                <div style={{ fontWeight: 900, fontSize: 20, fontFamily: 'Outfit, sans-serif', color: '#1e293b' }}>{editingId ? '⚡ Editar Evento' : '✨ Novo Evento'}</div>
-                <button className="btn btn-ghost btn-icon" onClick={() => { setShowModal(false); setEditingId(null); }} style={{ background: '#f1f5f9', borderRadius: '50%', border: 'none', cursor: 'pointer', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><X size={18} /></button>
-              </div>
-              
-              <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: 20, overflowY: 'auto' }}>
-                <div>
-                  <label className="form-label" style={{ fontWeight: 700, fontSize: 12, color: '#64748b', marginBottom: 8, display: 'block' }}>Título do Evento</label>
-                  <input className="form-input" style={{ borderRadius: 14, height: 48, fontSize: 14, fontWeight: 600 }} value={form.titulo} onChange={e => setForm(p => ({ ...p, titulo: e.target.value }))} placeholder="Ex: Reunião Pedagógica" />
-                </div>
-                
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-                  <div>
-                    <label className="form-label" style={{ fontWeight: 700, fontSize: 12, color: '#64748b', marginBottom: 8, display: 'block' }}>Data Início</label>
-                    <input className="form-input" style={{ borderRadius: 14, height: 48 }} type="date" value={form.data} onChange={e => setForm(p => ({ ...p, data: e.target.value }))} />
-                  </div>
-                  <div>
-                    <label className="form-label" style={{ fontWeight: 700, fontSize: 12, color: '#64748b', marginBottom: 8, display: 'block' }}>Data Final (Opc.)</label>
-                    <input className="form-input" style={{ borderRadius: 14, height: 48 }} type="date" value={form.dataFim || ''} min={form.data} disabled={!!editingId} onChange={e => setForm(p => ({ ...p, dataFim: e.target.value }))} />
-                  </div>
-                  <div style={{ gridColumn: '1 / -1' }}>
-                    <label className="form-label" style={{ fontWeight: 700, fontSize: 12, color: '#64748b', marginBottom: 8, display: 'block' }}>Tipo</label>
-                    <select className="form-input" style={{ borderRadius: 14, height: 48, fontWeight: 600 }} value={form.tipo} onChange={e => setForm(p => ({ ...p, tipo: e.target.value as any }))}>
-                      {Object.entries(TIPO_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-                    </select>
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', background: '#f8fafc', borderRadius: 16, border: '1.5px solid #e2e8f0' }}>
-                  <input 
-                    type="checkbox" 
-                    id="diaTodo" 
-                    checked={form.diaTodo as any} 
-                    onChange={e => setForm(p => ({ ...p, diaTodo: e.target.checked as any }))}
-                    style={{ width: 18, height: 18, cursor: 'pointer' }}
-                  />
-                  <label htmlFor="diaTodo" style={{ fontSize: 14, fontWeight: 800, color: '#1e293b', cursor: 'pointer' }}>Evento de Dia Inteiro</label>
-                </div>
-
-                {!form.diaTodo && (
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-                    <div>
-                      <label className="form-label" style={{ fontWeight: 700, fontSize: 12, color: '#64748b', marginBottom: 8, display: 'block' }}>Horário Início</label>
-                      <input className="form-input" style={{ borderRadius: 14, height: 48 }} type="time" value={form.horaInicio} onChange={e => setForm(p => ({ ...p, horaInicio: e.target.value }))} />
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="ad-ev-modal-overlay"
+              onClick={(e) => {
+                if (e.target === e.currentTarget) {
+                  setShowModal(false)
+                  setEditingId(null)
+                }
+              }}
+            >
+              <motion.div
+                initial={{ scale: 0.96, y: 12, opacity: 0 }}
+                animate={{ scale: 1, y: 0, opacity: 1 }}
+                exit={{ scale: 0.96, y: 12, opacity: 0 }}
+                transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+                className="ad-ev-modal-card"
+              >
+                {/* ── Sticky Header ── */}
+                <div className="ad-ev-modal-header">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0, flex: 1 }}>
+                    <div style={{
+                      width: 38,
+                      height: 38,
+                      borderRadius: 12,
+                      background: 'linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%)',
+                      border: '1px solid #c7d2fe',
+                      color: '#4f46e5',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                      boxShadow: '0 2px 8px rgba(99, 102, 241, 0.14)'
+                    }}>
+                      {editingId ? <Edit2 size={17} strokeWidth={2.3} /> : <Sparkles size={18} strokeWidth={2.3} />}
                     </div>
-                    <div>
-                      <label className="form-label" style={{ fontWeight: 700, fontSize: 12, color: '#64748b', marginBottom: 8, display: 'block' }}>Horário Término</label>
-                      <input className="form-input" style={{ borderRadius: 14, height: 48 }} type="time" value={form.horaFim} onChange={e => setForm(p => ({ ...p, horaFim: e.target.value }))} />
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <h2 style={{
+                        fontWeight: 800,
+                        fontSize: 'clamp(17px, 2.5vw, 19px)',
+                        fontFamily: 'Outfit, sans-serif',
+                        color: '#0f172a',
+                        margin: 0,
+                        lineHeight: 1.2,
+                        letterSpacing: '-0.02em',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis'
+                      }}>
+                        {editingId ? 'Editar Evento' : 'Novo Evento'}
+                      </h2>
+                      <p style={{
+                        fontSize: 11.5,
+                        fontWeight: 500,
+                        color: '#64748b',
+                        margin: '2px 0 0 0',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis'
+                      }}>
+                        Preencha os detalhes para agendar no calendário
+                      </p>
                     </div>
                   </div>
-                )}
-
-                <div>
-                  <label className="form-label" style={{ fontWeight: 700, fontSize: 12, color: '#64748b', marginBottom: 8, display: 'block' }}>Localização / Link</label>
-                  <input className="form-input" style={{ borderRadius: 14, height: 48, fontSize: 14, fontWeight: 600 }} value={form.local} onChange={e => setForm(p => ({ ...p, local: e.target.value }))} placeholder="Ex: Auditório, Sala 02 ou Google Meet" />
+                  <button
+                    type="button"
+                    aria-label="Fechar modal"
+                    className="ad-ev-modal-close"
+                    onClick={() => { setShowModal(false); setEditingId(null); }}
+                  >
+                    <X size={18} strokeWidth={2.2} />
+                  </button>
                 </div>
 
-                <div style={{ padding: '20px', background: '#f8fafc', borderRadius: 24, border: '1.5px solid #e2e8f0' }}>
-                  <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <Globe size={16} style={{ color: '#6366f1' }} />
-                    <span style={{ fontWeight: 800, fontSize: 13, color: '#1e293b' }}>Público-alvo e Visibilidade</span>
+                {/* ── Scrollable Body ── */}
+                <div className="ad-ev-modal-body">
+                  {/* Título do Evento */}
+                  <div className="ad-ev-field">
+                    <label htmlFor="ev-titulo" className="ad-ev-label">
+                      Título do Evento
+                    </label>
+                    <input
+                      id="ev-titulo"
+                      name="titulo"
+                      type="text"
+                      className="ad-ev-input"
+                      value={form.titulo}
+                      onChange={e => setForm(p => ({ ...p, titulo: e.target.value }))}
+                      placeholder="Ex: Reunião Pedagógica"
+                    />
                   </div>
-                  <VisibilidadeSelector 
-                    tipo={visibilidade.tipo} 
-                    turmasSel={visibilidade.turmasSel} 
-                    usuarioSel={visibilidade.usuario} 
-                    anoTodos={visibilidade.anoTodos}
-                    anosLetivos={anosLetivos}
-                    onChangeAnoTodos={(ano) => setVisibilidade(prev => ({ ...prev, anoTodos: ano }))}
-                    onChangeTipo={(t) => setVisibilidade(prev => ({ ...prev, tipo: t }))} 
-                    onOpenModal={(type) => setShowSelectionModal({ open: true, type })} 
-                  />
+
+                  {/* Datas (Início e Final) */}
+                  <div className="ad-ev-grid-2">
+                    <div className="ad-ev-field">
+                      <label htmlFor="ev-data-inicio" className="ad-ev-label">
+                        Data Início
+                      </label>
+                      <input
+                        id="ev-data-inicio"
+                        name="data"
+                        className="ad-ev-input"
+                        type="date"
+                        value={form.data}
+                        onChange={e => setForm(p => ({ ...p, data: e.target.value }))}
+                      />
+                    </div>
+                    <div className="ad-ev-field">
+                      <label htmlFor="ev-data-fim" className="ad-ev-label">
+                        Data Final (Opc.)
+                      </label>
+                      <input
+                        id="ev-data-fim"
+                        name="dataFim"
+                        className="ad-ev-input"
+                        type="date"
+                        value={form.dataFim || ''}
+                        min={form.data}
+                        disabled={!!editingId}
+                        onChange={e => setForm(p => ({ ...p, dataFim: e.target.value }))}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Tipo de Evento */}
+                  <div className="ad-ev-field">
+                    <label htmlFor="ev-tipo" className="ad-ev-label">
+                      Tipo de Evento
+                    </label>
+                    <div style={{ position: 'relative', width: '100%', minWidth: 0 }}>
+                      <span
+                        aria-hidden="true"
+                        style={{
+                          position: 'absolute',
+                          left: 13,
+                          top: '50%',
+                          transform: 'translateY(-50%)',
+                          width: 10,
+                          height: 10,
+                          borderRadius: '50%',
+                          background: TIPO_CORES[form.tipo] ?? '#f59e0b',
+                          boxShadow: `0 0 8px ${(TIPO_CORES[form.tipo] ?? '#f59e0b')}80`,
+                          pointerEvents: 'none',
+                          zIndex: 2
+                        }}
+                      />
+                      <select
+                        id="ev-tipo"
+                        name="tipo"
+                        className="ad-ev-select ad-ev-select-dot"
+                        style={{ cursor: 'pointer' }}
+                        value={form.tipo}
+                        onChange={e => setForm(p => ({ ...p, tipo: e.target.value as any }))}
+                      >
+                        {Object.entries(TIPO_LABELS).map(([k, v]) => (
+                          <option key={k} value={k}>{v}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Toggle: Evento de Dia Inteiro */}
+                  <label htmlFor="diaTodo" className="ad-ev-allday-card">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: 1 }}>
+                      <div style={{
+                        width: 34,
+                        height: 34,
+                        borderRadius: 10,
+                        background: form.diaTodo ? '#e0e7ff' : '#e2e8f0',
+                        color: form.diaTodo ? '#4f46e5' : '#64748b',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0,
+                        transition: 'all 0.2s ease'
+                      }}>
+                        <Clock size={16} strokeWidth={2.2} />
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1 }}>
+                        <span style={{ fontSize: 13.5, fontWeight: 800, color: '#0f172a', lineHeight: 1.2 }}>
+                          Evento de Dia Inteiro
+                        </span>
+                        <span style={{ fontSize: 11, fontWeight: 500, color: '#64748b', marginTop: 1 }}>
+                          {form.diaTodo ? 'Marcado como duração de dia todo' : 'Definir horário de início e término'}
+                        </span>
+                      </div>
+                    </div>
+                    <input
+                      type="checkbox"
+                      id="diaTodo"
+                      checked={Boolean(form.diaTodo)}
+                      onChange={e => setForm(p => ({ ...p, diaTodo: e.target.checked as any }))}
+                      style={{ position: 'absolute', opacity: 0, width: 1, height: 1, pointerEvents: 'none' }}
+                    />
+                    <div className="ad-ev-switch-track" aria-hidden="true">
+                      <div className="ad-ev-switch-thumb" />
+                    </div>
+                  </label>
+
+                  {/* Horários (Início e Término) */}
+                  {!form.diaTodo && (
+                    <div className="ad-ev-grid-2">
+                      <div className="ad-ev-field">
+                        <label htmlFor="ev-hora-inicio" className="ad-ev-label">
+                          Horário Início
+                        </label>
+                        <input
+                          id="ev-hora-inicio"
+                          name="horaInicio"
+                          className="ad-ev-input"
+                          type="time"
+                          value={form.horaInicio}
+                          onChange={e => setForm(p => ({ ...p, horaInicio: e.target.value }))}
+                        />
+                      </div>
+                      <div className="ad-ev-field">
+                        <label htmlFor="ev-hora-fim" className="ad-ev-label">
+                          Horário Término
+                        </label>
+                        <input
+                          id="ev-hora-fim"
+                          name="horaFim"
+                          className="ad-ev-input"
+                          type="time"
+                          value={form.horaFim}
+                          onChange={e => setForm(p => ({ ...p, horaFim: e.target.value }))}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Localização / Link */}
+                  <div className="ad-ev-field">
+                    <label htmlFor="ev-local" className="ad-ev-label">
+                      Localização / Link
+                    </label>
+                    <div style={{ position: 'relative', width: '100%', minWidth: 0 }}>
+                      <MapPin
+                        size={15}
+                        style={{
+                          position: 'absolute',
+                          left: 12,
+                          top: '50%',
+                          transform: 'translateY(-50%)',
+                          color: '#94a3b8',
+                          pointerEvents: 'none',
+                          zIndex: 2
+                        }}
+                      />
+                      <input
+                        id="ev-local"
+                        name="local"
+                        type="text"
+                        className="ad-ev-input ad-ev-input-icon"
+                        value={form.local}
+                        onChange={e => setForm(p => ({ ...p, local: e.target.value }))}
+                        placeholder="Ex: Auditório, Sala 02 ou Google Meet"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Público-alvo e Visibilidade */}
+                  <div style={{
+                    padding: '14px',
+                    background: '#f8fafc',
+                    borderRadius: 18,
+                    border: '1.5px solid #e2e8f0',
+                    width: '100%',
+                    minWidth: 0,
+                    boxSizing: 'border-box'
+                  }}>
+                    <div style={{ marginBottom: 10, display: 'flex', alignItems: 'center', gap: 7 }}>
+                      <div style={{
+                        width: 24,
+                        height: 24,
+                        borderRadius: 7,
+                        background: '#eef2ff',
+                        color: '#4f46e5',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0
+                      }}>
+                        <Globe size={13} strokeWidth={2.4} />
+                      </div>
+                      <span style={{ fontWeight: 800, fontSize: 12.5, color: '#0f172a', letterSpacing: '-0.01em' }}>
+                        Público-alvo e Visibilidade
+                      </span>
+                    </div>
+                    <VisibilidadeSelector
+                      tipo={visibilidade.tipo}
+                      turmasSel={visibilidade.turmasSel}
+                      usuarioSel={visibilidade.usuario}
+                      anoTodos={visibilidade.anoTodos}
+                      anosLetivos={anosLetivos}
+                      onChangeAnoTodos={(ano) => setVisibilidade(prev => ({ ...prev, anoTodos: ano }))}
+                      onChangeTipo={(t) => setVisibilidade(prev => ({ ...prev, tipo: t }))}
+                      onOpenModal={(type) => setShowSelectionModal({ open: true, type })}
+                    />
+                  </div>
                 </div>
 
-              <div style={{ display: 'flex', gap: 12, marginTop: 'auto', paddingTop: 32, justifyContent: 'flex-end' }}>
-                <button className="btn btn-ghost" style={{ height: 48, padding: '0 24px', borderRadius: 14, fontWeight: 700 }} onClick={() => setShowModal(false)}>Descartar</button>
-                <motion.button 
-                  whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
-                  className="btn btn-primary" 
-                  style={{ height: 48, padding: '0 32px', borderRadius: 14, fontWeight: 800, background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)', border: 'none', boxShadow: '0 8px 20px rgba(99, 102, 241, 0.3)' }}
-                  onClick={handleAdd}
-                >
-                  Confirmar e Salvar
-                </motion.button>
-              </div>
-              </div>
+                {/* ── Sticky Footer ── */}
+                <div className="ad-ev-modal-footer">
+                  <button
+                    type="button"
+                    className="ad-ev-btn-cancel"
+                    onClick={() => { setShowModal(false); setEditingId(null); }}
+                  >
+                    Descartar
+                  </button>
+                  <motion.button
+                    type="button"
+                    whileHover={{ scale: 1.01 }}
+                    whileTap={{ scale: 0.98 }}
+                    className="ad-ev-btn-submit"
+                    onClick={handleAdd}
+                  >
+                    <Check size={16} strokeWidth={2.6} />
+                    <span>Confirmar e Salvar</span>
+                  </motion.button>
+                </div>
+              </motion.div>
             </motion.div>
-          </motion.div>
           )}
         </AnimatePresence>,
         document.body
@@ -1561,36 +2287,105 @@ export default function ADCalendarioPage() {
       {typeof document !== 'undefined' && createPortal(
         <AnimatePresence>
           {showSelectionModal.open && showSelectionModal.type === 'usuario' && (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.85)', zIndex: 10001, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', backdropFilter: 'none' }}>
-              <motion.div initial={{ scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 20 }} style={{ background: '#fff', borderRadius: 32, width: '100%', maxWidth: 460, padding: 32, boxShadow: '0 40px 80px rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.2)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-                  <h3 style={{ fontSize: 18, fontWeight: 900, color: '#1e293b' }}>👤 Selecionar Usuário</h3>
-                  <button onClick={() => setShowSelectionModal({ ...showSelectionModal, open: false })} style={{ border: 'none', background: '#f1f5f9', padding: 8, borderRadius: '50%', cursor: 'pointer', color: '#64748b' }}><X size={18} /></button>
-                </div>
-                
-                <div style={{ position: 'relative', marginBottom: 20 }}>
-                  <Search size={16} style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
-                  <input autoFocus className="form-input" style={{ width: '100%', paddingLeft: 42, height: 50, borderRadius: 16, fontSize: 14, fontWeight: 600, background: '#f8fafc', border: '1.5px solid #e2e8f0' }} placeholder="O que você está procurando?..." value={searchTermSelection} onChange={e => setSearchTermSelection(e.target.value)} />
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="ad-ev-modal-overlay"
+              style={{ zIndex: 100010 }}
+              onClick={(e) => {
+                if (e.target === e.currentTarget) setShowSelectionModal({ ...showSelectionModal, open: false })
+              }}
+            >
+              <motion.div
+                initial={{ scale: 0.95, y: 20 }}
+                animate={{ scale: 1, y: 0 }}
+                exit={{ scale: 0.95, y: 20 }}
+                className="ad-ev-modal-card"
+                style={{ maxWidth: 460 }}
+              >
+                <div className="ad-ev-modal-header">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <div style={{ width: 34, height: 34, borderRadius: 10, background: '#eef2ff', color: '#4f46e5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <UserCheck size={17} />
+                    </div>
+                    <h3 style={{ fontSize: 17, fontWeight: 800, color: '#0f172a', margin: 0 }}>Selecionar Usuário</h3>
+                  </div>
+                  <button
+                    type="button"
+                    aria-label="Fechar seleção de usuário"
+                    className="ad-ev-modal-close"
+                    onClick={() => setShowSelectionModal({ ...showSelectionModal, open: false })}
+                  >
+                    <X size={18} />
+                  </button>
                 </div>
 
-                <div style={{ maxHeight: 340, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6, paddingRight: 4 }}>
-                  {usuariosAtivos.filter((u: any) => (u.nome || '').toLowerCase().includes(searchTermSelection.toLowerCase())).map((u: any) => {
-                    const isSelected = visibilidade.usuario === u.nome
-                    return (
-                      <motion.button 
-                        whileTap={{ scale: 0.98 }}
-                        key={u.id} 
-                        onClick={() => { setVisibilidade(prev => ({ ...prev, usuario: u.nome })); setShowSelectionModal({ ...showSelectionModal, open: false }) }} 
-                        style={{ width: '100%', padding: '12px 16px', textAlign: 'left', background: isSelected ? '#eff6ff' : 'transparent', border: 'none', borderRadius: 16, display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer' }}
-                      >
-                        <div style={{ width: 40, height: 40, borderRadius: '50%', background: isSelected ? '#3b82f6' : '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 900, color: isSelected ? '#fff' : '#6366f1' }}>{(u.nome || 'U').slice(0, 2).toUpperCase()}</div>
-                        <div style={{ flex: 1 }}><div style={{ fontSize: 14, fontWeight: 800, color: isSelected ? '#1e40af' : '#1e293b' }}>{u.nome || 'Sem nome'}</div><div style={{ fontSize: 11, fontWeight: 600, color: '#64748b' }}>{u.cargo || 'Colaborador'}</div></div>
-                        {isSelected && <Check size={18} color="#3b82f6" strokeWidth={3} />}
-                      </motion.button>
-                    )
-                  })}
+                <div className="ad-ev-modal-body" style={{ gap: 12 }}>
+                  <div style={{ position: 'relative', width: '100%' }}>
+                    <Search size={15} style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', pointerEvents: 'none', zIndex: 2 }} />
+                    <input
+                      autoFocus
+                      type="text"
+                      className="ad-ev-input ad-ev-input-icon"
+                      placeholder="Buscar usuário pelo nome..."
+                      value={searchTermSelection}
+                      onChange={e => setSearchTermSelection(e.target.value)}
+                    />
+                  </div>
+
+                  <div style={{ maxHeight: 320, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6, paddingRight: 2 }}>
+                    {usuariosAtivos.filter((u: any) => (u.nome || '').toLowerCase().includes(searchTermSelection.toLowerCase())).map((u: any) => {
+                      const isSelected = visibilidade.usuario === u.nome
+                      return (
+                        <motion.button
+                          type="button"
+                          whileTap={{ scale: 0.98 }}
+                          key={u.id}
+                          onClick={() => { setVisibilidade(prev => ({ ...prev, usuario: u.nome })); setShowSelectionModal({ ...showSelectionModal, open: false }) }}
+                          style={{
+                            width: '100%',
+                            padding: '10px 12px',
+                            textAlign: 'left',
+                            background: isSelected ? '#eef2ff' : '#f8fafc',
+                            border: `1.5px solid ${isSelected ? '#6366f1' : '#f1f5f9'}`,
+                            borderRadius: 12,
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 10,
+                            cursor: 'pointer',
+                            boxSizing: 'border-box'
+                          }}
+                        >
+                          <div style={{ width: 36, height: 36, borderRadius: '50%', background: isSelected ? '#4f46e5' : '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800, color: isSelected ? '#fff' : '#475569', flexShrink: 0 }}>
+                            {(u.nome || 'U').slice(0, 2).toUpperCase()}
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 13.5, fontWeight: 800, color: isSelected ? '#312e81' : '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              {u.nome || 'Sem nome'}
+                            </div>
+                            <div style={{ fontSize: 11, fontWeight: 600, color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              {u.cargo || 'Colaborador'}
+                            </div>
+                          </div>
+                          {isSelected && <Check size={17} color="#4f46e5" strokeWidth={2.8} />}
+                        </motion.button>
+                      )
+                    })}
+                  </div>
                 </div>
-                <button className="btn btn-primary" style={{ width: '100%', marginTop: 24, height: 50, borderRadius: 16, fontWeight: 900, background: '#1e293b', border: 'none', color: '#fff' }} onClick={() => setShowSelectionModal({ ...showSelectionModal, open: false })}>Finalizar Seleção</button>
+
+                <div className="ad-ev-modal-footer">
+                  <button
+                    type="button"
+                    className="ad-ev-btn-submit"
+                    style={{ width: '100%', flex: '1 1 100%' }}
+                    onClick={() => setShowSelectionModal({ ...showSelectionModal, open: false })}
+                  >
+                    <Check size={16} strokeWidth={2.6} />
+                    <span>Finalizar Seleção</span>
+                  </button>
+                </div>
               </motion.div>
             </motion.div>
           )}

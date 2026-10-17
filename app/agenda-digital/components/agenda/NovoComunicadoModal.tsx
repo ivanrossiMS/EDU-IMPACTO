@@ -448,7 +448,7 @@ export default function NovoComunicadoModal({
         }
         
         .ad-nc-header {
-          padding: 16px 20px;
+          padding: max(54px, calc(env(safe-area-inset-top, 0px) + 16px)) 20px 16px 20px;
           display: flex;
           align-items: center;
           justify-content: space-between;
@@ -457,6 +457,11 @@ export default function NovoComunicadoModal({
           flex-shrink: 0;
           z-index: 10;
           color: white;
+        }
+        @media (min-width: 1024px) {
+          .ad-nc-header {
+            padding: 16px 20px;
+          }
         }
         
         .ad-nc-btn-send {

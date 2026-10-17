@@ -705,12 +705,12 @@ export default function ADMomentosPage() {
     const rawFiles = Array.from(e.target.files)
     e.target.value = ''
 
-    const MAX_LIMIT = 50 * 1024 * 1024 // 50MB (limite do servidor/bucket)
+    const MAX_LIMIT = 100 * 1024 * 1024 // 100MB (limite de seleção antes da compressão)
     const validFiles: File[] = []
 
     for (const f of rawFiles) {
       if (f.size > MAX_LIMIT) {
-        adAlert(`O arquivo "${f.name}" (${formatFileSize(f.size)}) excede o limite máximo de 50MB suportado pelo servidor. Escolha um arquivo menor ou reduza a resolução.`, 'Arquivo muito grande')
+        adAlert(`O arquivo "${f.name}" (${formatFileSize(f.size)}) excede o limite máximo de 100MB permitido para seleção. Escolha um arquivo menor ou reduza a resolução.`, 'Arquivo muito grande')
         continue
       }
       validFiles.push(f)
@@ -760,11 +760,11 @@ export default function ADMomentosPage() {
     if (!newPost.mediaFiles.length) return adAlert('Selecione ao menos uma foto ou vídeo para publicar.', 'Atenção')
     if (!newPost.targetClasses.length) return adAlert('Por favor, selecione ao menos um destinatário (Turma, Grupo ou Aluno) para publicar o momento.', 'Destinatários obrigatórios')
     
-    // Validar tamanhos (50MB)
-    const MAX_VIDEO_SIZE = 50 * 1024 * 1024 // 50MB
+    // Validar tamanho máximo antes de comprimir (100MB)
+    const MAX_VIDEO_SIZE = 100 * 1024 * 1024 // 100MB antes da compressão
     for (const f of newPost.mediaFiles) {
       if ((f.type.includes('video') || /\.(mp4|mov|webm|m4v|3gp|mkv|avi)$/i.test(f.name)) && f.size > MAX_VIDEO_SIZE) {
-        return adAlert(`O vídeo "${f.name}" (${formatFileSize(f.size)}) ultrapassa o limite máximo de 50MB suportado pelo servidor. Escolha um vídeo com menor duração ou reduza a resolução na câmera.`, 'Arquivo muito grande')
+        return adAlert(`O vídeo "${f.name}" (${formatFileSize(f.size)}) ultrapassa o limite máximo de 100MB permitido. Escolha um vídeo com menor duração ou reduza a resolução na câmera.`, 'Arquivo muito grande')
       }
     }
 
@@ -796,18 +796,21 @@ export default function ADMomentosPage() {
           }
           setUploadProgress(prev => ({ ...prev, [file.name]: 50 }))
         } else if (isVideo) {
-          // Vídeos <= 50MB são mantidos nativos para máxima fidelidade e fluidez
-          if (file.size > 50 * 1024 * 1024) {
-            fileToUpload = await compressVideo(file, (percent) => {
+          // Vídeos <= 30MB são mantidos nativos; vídeos > 30MB são comprimidos mantendo som e qualidade HD
+          if (file.size > 30 * 1024 * 1024) {
+            const compressed = await compressVideo(file, (percent) => {
               const scaled = Math.round(20 + (percent * 0.30))
               setUploadProgress(prev => ({ ...prev, [file.name]: scaled }))
-            }) as File
+            })
+            fileToUpload = compressed instanceof File
+              ? compressed
+              : new File([compressed], file.name.replace(/\.[^/.]+$/, '') + '_opt.mp4', { type: compressed.type || 'video/mp4' })
           }
           setUploadProgress(prev => ({ ...prev, [file.name]: 50 }))
         }
 
         if (fileToUpload.size > 50 * 1024 * 1024) {
-          throw new Error(`O arquivo "${file.name}" (${formatFileSize(fileToUpload.size)}) ultrapassa o limite de 50MB suportado pelo servidor. Escolha um vídeo menor ou reduza a resolução na câmera.`)
+          throw new Error(`O arquivo "${file.name}" (${formatFileSize(fileToUpload.size)} após otimização) ultrapassa o limite final de 50MB suportado pelo servidor. Escolha um vídeo menor ou reduza a resolução na câmera.`)
         }
 
         setUploadProgress(prev => ({ ...prev, [file.name]: 60 }))
@@ -2189,7 +2192,7 @@ export default function ADMomentosPage() {
               )}
 
               {/* Modal Header: Gradiente Ultra Moderno */}
-              <div style={{ 
+              <div className="ad-momento-modal-header" style={{ 
                 padding: '22px 24px', 
                 flexShrink: 0,
                 background: 'linear-gradient(135deg, #4338ca 0%, #6366f1 45%, #8b5cf6 75%, #ec4899 100%)',

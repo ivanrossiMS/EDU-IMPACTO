@@ -704,6 +704,12 @@ export function ChatConversationModal() {
       return
     }
 
+    if (rawFile.size > 100 * 1024 * 1024) {
+      toast.error(`O arquivo "${rawFile.name}" (${formatFileSize(rawFile.size)}) excede o limite máximo de 100MB.`)
+      e.target.value = ''
+      return
+    }
+
     setUploadingFile(true)
     setShowAttachMenu(false)
     setUploadProgress({ active: true, status: 'Preparando arquivo...', percent: 10 })

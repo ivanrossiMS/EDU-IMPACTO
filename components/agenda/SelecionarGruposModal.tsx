@@ -167,74 +167,116 @@ export function SelecionarGruposModal({
           initial={{ opacity: 0 }} 
           animate={{ opacity: 1 }} 
           exit={{ opacity: 0 }} 
+          className="ad-sel-grupos-overlay"
           style={{ 
             position: 'fixed', 
             inset: 0, 
-            background: 'rgba(15,23,42,0.82)', 
-            zIndex: 100005, 
+            background: 'rgba(15,23,42,0.75)', 
+            zIndex: 100010, 
             display: 'flex', 
             alignItems: 'center', 
             justifyContent: 'center', 
-            padding: '20px', 
-            backdropFilter: 'blur(8px)' 
+            padding: '16px', 
+            backdropFilter: 'blur(8px)',
+            WebkitBackdropFilter: 'blur(8px)',
+            overscrollBehavior: 'contain'
           }}
           onClick={(e) => {
             if (e.target === e.currentTarget) onClose()
           }}
         >
+          <style dangerouslySetInnerHTML={{ __html: `
+            .ad-sel-grupos-card {
+              background: #fff;
+              border-radius: 26px;
+              width: 100%;
+              max-width: 520px;
+              padding: 24px 22px;
+              box-shadow: 0 32px 70px -12px rgba(15,23,42,0.38);
+              border: 1px solid rgba(226,232,240,0.85);
+              max-height: 90dvh;
+              display: flex;
+              flex-direction: column;
+              overscroll-behavior: contain;
+            }
+            @media (max-width: 640px) {
+              .ad-sel-grupos-overlay {
+                padding: 10px !important;
+              }
+              .ad-sel-grupos-card {
+                border-radius: 22px;
+                padding: 18px 16px;
+                max-height: 92dvh;
+              }
+              .ad-sel-grupos-tabs {
+                gap: 4px !important;
+              }
+              .ad-sel-grupos-tab-btn {
+                padding: 7px 6px !important;
+                font-size: 11px !important;
+                gap: 4px !important;
+              }
+              .ad-sel-grupos-filter-row .form-select {
+                min-height: 42px !important;
+                height: 42px !important;
+                font-size: 12.5px !important;
+                min-width: 104px !important;
+                padding: 0 26px 0 10px !important;
+              }
+              .ad-sel-grupos-filter-row .form-input {
+                min-height: 42px !important;
+                height: 42px !important;
+                font-size: 13px !important;
+              }
+            }
+          ` }} />
           <motion.div 
             initial={{ scale: 0.95, y: 20 }} 
             animate={{ scale: 1, y: 0 }} 
             exit={{ scale: 0.95, y: 20 }} 
-            style={{ 
-              background: '#fff', 
-              borderRadius: 32, 
-              width: '100%', 
-              maxWidth: 520, 
-              padding: '28px 24px', 
-              boxShadow: '0 40px 80px rgba(0,0,0,0.35)', 
-              border: '1px solid rgba(255,255,255,0.2)',
-              maxHeight: '92vh',
-              display: 'flex',
-              flexDirection: 'column'
-            }}
+            className="ad-sel-grupos-card"
           >
             {/* ─── Header ──────────────────────────────────────────────────────── */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
-              <div>
-                <h3 style={{ fontSize: 20, fontWeight: 900, color: '#1e293b', margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14, gap: 10 }}>
+              <div style={{ minWidth: 0 }}>
+                <h3 style={{ fontSize: 18, fontWeight: 900, color: '#0f172a', margin: 0, display: 'flex', alignItems: 'center', gap: 8, letterSpacing: '-0.02em' }}>
                   <span>🎯</span> Selecionar Grupos
                 </h3>
-                <p style={{ fontSize: 13, color: '#64748b', margin: '4px 0 0 0', fontWeight: 500 }}>
+                <p style={{ fontSize: 12, color: '#64748b', margin: '3px 0 0 0', fontWeight: 500 }}>
                   Defina quais equipes ou turmas participarão deste evento.
                 </p>
               </div>
               <button 
+                type="button"
                 onClick={onClose} 
                 style={{ 
-                  border: 'none', 
-                  background: '#f1f5f9', 
-                  padding: 8, 
-                  borderRadius: '50%', 
+                  width: 34,
+                  height: 34,
+                  minHeight: 34,
+                  flexShrink: 0,
+                  border: '1px solid #e2e8f0', 
+                  background: '#f8fafc', 
+                  padding: 0, 
+                  borderRadius: 11, 
                   cursor: 'pointer', 
                   color: '#64748b',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  transition: 'background 0.2s'
+                  transition: 'all 0.15s'
                 }}
-                onMouseEnter={e => e.currentTarget.style.background = '#e2e8f0'}
-                onMouseLeave={e => e.currentTarget.style.background = '#f1f5f9'}
+                onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'}
+                onMouseLeave={e => e.currentTarget.style.background = '#f8fafc'}
               >
-                <X size={18} />
+                <X size={17} strokeWidth={2.4} />
               </button>
             </div>
 
             {/* ─── Category Filter Tabs ────────────────────────────────────────── */}
-            <div style={{ display: 'flex', gap: 6, background: '#f8fafc', padding: 4, borderRadius: 16, border: '1px solid #e2e8f0', marginBottom: 14 }}>
+            <div className="ad-sel-grupos-tabs" style={{ display: 'flex', gap: 6, background: '#f8fafc', padding: 4, borderRadius: 14, border: '1px solid #e2e8f0', marginBottom: 12 }}>
               {[
                 { id: 'todos', label: 'Todos', count: equipeEscolarGrupos.length + turmasList.length },
-                { id: 'equipe', label: '👥 Equipe Escolar', count: equipeEscolarGrupos.length },
+                { id: 'equipe', label: '👥 Equipe', count: equipeEscolarGrupos.length },
                 { id: 'turmas', label: '🎓 Turmas', count: turmasList.length },
               ].map(t => {
                 const isActive = tab === t.id
@@ -242,11 +284,13 @@ export function SelecionarGruposModal({
                   <button
                     key={t.id}
                     type="button"
+                    className="ad-sel-grupos-tab-btn"
                     onClick={() => setTab(t.id as any)}
                     style={{
                       flex: 1,
+                      minWidth: 0,
                       padding: '8px 10px',
-                      borderRadius: 12,
+                      borderRadius: 10,
                       fontSize: 12,
                       fontWeight: 800,
                       border: 'none',
@@ -258,16 +302,18 @@ export function SelecionarGruposModal({
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      gap: 6
+                      gap: 6,
+                      whiteSpace: 'nowrap'
                     }}
                   >
-                    <span>{t.label}</span>
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.label}</span>
                     <span style={{ 
                       fontSize: 10, 
                       padding: '1px 6px', 
                       borderRadius: 10, 
                       background: isActive ? 'rgba(255,255,255,0.2)' : '#e2e8f0', 
-                      color: isActive ? '#fff' : '#475569' 
+                      color: isActive ? '#fff' : '#475569',
+                      flexShrink: 0
                     }}>
                       {t.count}
                     </span>
@@ -277,19 +323,19 @@ export function SelecionarGruposModal({
             </div>
 
             {/* ─── Filter & Search Bar ─────────────────────────────────────────── */}
-            <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+            <div className="ad-sel-grupos-filter-row" style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
               {tab !== 'equipe' && anosLetivos.length > 0 && (
                 <select 
                   className="form-select" 
                   style={{ 
-                    height: 46, 
-                    borderRadius: 14, 
+                    height: 44, 
+                    borderRadius: 12, 
                     fontSize: 13, 
                     fontWeight: 700, 
                     background: '#f8fafc', 
                     border: '1.5px solid #e2e8f0', 
-                    minWidth: 120,
-                    maxWidth: 150,
+                    minWidth: 115,
+                    maxWidth: 145,
                     cursor: 'pointer',
                     color: '#1e293b'
                   }} 
@@ -301,31 +347,31 @@ export function SelecionarGruposModal({
                 </select>
               )}
 
-              <div style={{ position: 'relative', flex: 1 }}>
-                <Search size={16} style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+              <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
+                <Search size={15} style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
                 <input 
-                  autoFocus 
                   className="form-input" 
                   style={{ 
                     width: '100%', 
-                    paddingLeft: 40, 
-                    paddingRight: searchTerm ? 36 : 14, 
-                    height: 46, 
-                    borderRadius: 14, 
+                    paddingLeft: 38, 
+                    paddingRight: searchTerm ? 34 : 12, 
+                    height: 44, 
+                    borderRadius: 12, 
                     fontSize: 13, 
                     fontWeight: 600, 
                     background: '#f8fafc', 
                     border: '1.5px solid #e2e8f0',
                     outline: 'none'
                   }} 
-                  placeholder={tab === 'equipe' ? 'Buscar equipe escolar...' : 'O que você procura?...'} 
+                  placeholder={tab === 'equipe' ? 'Buscar equipe escolar...' : 'Buscar grupo ou turma...'} 
                   value={searchTerm} 
                   onChange={e => setSearchTerm(e.target.value)} 
                 />
                 {searchTerm && (
                   <button 
+                    type="button"
                     onClick={() => setSearchTerm('')}
-                    style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', border: 'none', background: 'transparent', cursor: 'pointer', color: '#94a3b8', padding: 4 }}
+                    style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', border: 'none', background: 'transparent', cursor: 'pointer', color: '#94a3b8', padding: 4 }}
                   >
                     <X size={14} />
                   </button>
