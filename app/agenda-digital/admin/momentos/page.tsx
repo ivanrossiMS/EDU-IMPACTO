@@ -213,15 +213,19 @@ export default function ADAdminMomentos() {
           }
           setUploadProgress(prev => ({ ...prev, [file.name]: 50 }))
         } else if (isVideo) {
-          // Vídeos <= 30MB são mantidos nativos; vídeos > 30MB são comprimidos mantendo som e qualidade HD
-          if (file.size > 30 * 1024 * 1024) {
+          // Vídeos <= 48.5MB são mantidos 100% nativos (máxima qualidade de câmera e som original, respeitando o teto de 50MB do servidor).
+          // Apenas vídeos > 48.5MB (até 100MB) são otimizados de forma fluida, sem travamentos e com áudio preservado.
+          if (file.size > 48.5 * 1024 * 1024) {
             const compressed = await compressVideo(file, (percent) => {
               const scaled = Math.round(20 + (percent * 0.30))
               setUploadProgress(prev => ({ ...prev, [file.name]: scaled }))
             })
+            const isMp4 = (compressed.type || '').includes('mp4')
+            const ext = isMp4 ? '.mp4' : '.webm'
+            const mime = isMp4 ? 'video/mp4' : 'video/webm'
             fileToUpload = compressed instanceof File
               ? compressed
-              : new File([compressed], file.name.replace(/\.[^/.]+$/, '') + '_opt.mp4', { type: compressed.type || 'video/mp4' })
+              : new File([compressed], file.name.replace(/\.[^/.]+$/, '') + `_opt${ext}`, { type: compressed.type || mime })
           }
           setUploadProgress(prev => ({ ...prev, [file.name]: 50 }))
         }
