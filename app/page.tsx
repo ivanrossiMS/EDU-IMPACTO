@@ -55,6 +55,39 @@ function RootInner() {
   useEffect(() => {
     if (isDemoMode) return
 
+    // ── Interceptação prioritária de fluxo de Recuperação de Senha (Supabase #access_token&type=recovery ou ?token_hash) ──
+    if (typeof window !== 'undefined') {
+      try {
+        const rawHash =
+          window.location.hash ||
+          (window as any).__EDU_INITIAL_RECOVERY_HASH__ ||
+          (window as any).__EDU_INITIAL_AUTH_ERROR_HASH__ ||
+          window.sessionStorage?.getItem('edu_password_recovery_hash') ||
+          window.sessionStorage?.getItem('edu_password_recovery_error_hash') ||
+          ''
+        const rawSearch =
+          window.location.search ||
+          (window as any).__EDU_INITIAL_RECOVERY_SEARCH__ ||
+          window.sessionStorage?.getItem('edu_password_recovery_search') ||
+          ''
+        const hashParams = new URLSearchParams(rawHash.startsWith('#') ? rawHash.substring(1) : rawHash)
+        const searchParamsObj = new URLSearchParams(rawSearch)
+        const isRecoveryFlow =
+          Boolean((window as any).__EDU_IS_PASSWORD_RECOVERY__) ||
+          window.sessionStorage?.getItem('edu_password_recovery_pending') === '1' ||
+          hashParams.get('type') === 'recovery' ||
+          searchParamsObj.get('type') === 'recovery' ||
+          Boolean(searchParamsObj.get('token_hash')) ||
+          Boolean(hashParams.get('error_code') || hashParams.get('error'))
+
+        if (isRecoveryFlow) {
+          isRedirectingRef.current = true
+          window.location.replace(`/atualizar-senha${rawSearch}${rawHash}`)
+          return
+        }
+      } catch {}
+    }
+
     // Escuta evento de navegação por push disparado pelo OneSignal durante o cold start
     const handlePushEvent = (e: any) => {
       const dest = e?.detail?.destination

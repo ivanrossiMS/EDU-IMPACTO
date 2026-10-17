@@ -245,9 +245,21 @@ export default function LoginPage() {
         setEmail(emailParam)
       }
 
-      // Capturar erros vindos do redirecionamento do Supabase (ex: link expirado / otp_expired)
-      const hash = window.location.hash
+      // Capturar redirecionamento de recuperação de senha ou erros do Supabase
+      const hash = window.location.hash || (window as any).__EDU_INITIAL_RECOVERY_HASH__ || ''
       const hashParams = new URLSearchParams(hash.startsWith('#') ? hash.substring(1) : hash)
+      const isRecoveryFlow =
+        hashParams.get('type') === 'recovery' ||
+        params.get('type') === 'recovery' ||
+        Boolean(params.get('token_hash')) ||
+        Boolean((window as any).__EDU_IS_PASSWORD_RECOVERY__) ||
+        window.sessionStorage?.getItem('edu_password_recovery_pending') === '1'
+
+      if (isRecoveryFlow && !stepParam) {
+        window.location.replace(`/atualizar-senha${window.location.search}${hash}`)
+        return
+      }
+
       const err = hashParams.get('error_description') || params.get('error_description') || hashParams.get('error') || params.get('error')
       const errCode = hashParams.get('error_code') || params.get('error_code')
       

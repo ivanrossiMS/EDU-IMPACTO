@@ -38,19 +38,45 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'Responsável não encontrado' }, { status: 404 })
       }
 
+      const idsToDelete: string[] = []
       if (resp.auth_id) {
-        targetAuthUserId = resp.auth_id
-        emailFound = resp.email || null
-      } else if (resp.email) {
-        const cleanEmail = resp.email.trim().toLowerCase()
-        emailFound = cleanEmail
-        targetAuthUserId = await findAuthByEmail(cleanEmail)
+        idsToDelete.push(String(resp.auth_id))
       }
+      if (resp.email) {
+        const cleanEmail = resp.email.trim().toLowerCase()
+        const byEmailId = await findAuthByEmail(cleanEmail)
+        if (byEmailId && !idsToDelete.includes(byEmailId)) {
+          idsToDelete.push(byEmailId)
+        }
+      }
+
+      try {
+        const allUsers = await getAllAuthUsersCached()
+        const matches = allUsers.filter(
+          (u: any) =>
+            String(u.user_metadata?.responsavel_id || '') === String(resp.id) ||
+            String(u.app_metadata?.responsavel_id || '') === String(resp.id)
+        )
+        for (const m of matches) {
+          if (!idsToDelete.includes(m.id)) idsToDelete.push(m.id)
+        }
+      } catch (e) {}
 
       await supabaseAdmin
         .from('responsaveis')
         .update({ auth_id: null })
         .eq('id', id)
+
+      if (idsToDelete.length > 0) {
+        for (const authId of idsToDelete) {
+          const { data: { user } } = await supabaseAdmin.auth.admin.getUserById(authId).catch(() => ({ data: { user: null } }))
+          if (user?.email) emailFound = emailFound ? emailFound + ', ' + user.email : user.email
+          await supabaseAdmin.auth.admin.deleteUser(authId).catch(() => {})
+        }
+        invalidateAuthUsersCache()
+        clearAuthGuardCache()
+        return NextResponse.json({ ok: true, message: `Acesso reiniciado com sucesso para o e-mail: ${emailFound || resp.email || ''}` })
+      }
     } else if (type === 'aluno') {
       // Find the student record
       const { data: aluno, error: dbErr } = await supabaseAdmin

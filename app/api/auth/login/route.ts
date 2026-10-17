@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { cookies } from 'next/headers'
 import { createServerClient } from '@supabase/ssr'
 import { createClient } from '@supabase/supabase-js'
-import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
+import { getAdminClient, invalidateAuthUsersCache } from '@/lib/server/supabaseAdminSingleton'
 
 export const dynamic = 'force-dynamic'
 
@@ -188,7 +188,7 @@ export async function POST(request: NextRequest) {
       const { data: dbSystemUserRows } = await supabaseAdmin
         .from('system_users')
         .select('id, nome, email, cargo, perfil, status, dados')
-        .or(`auth_id.eq.${user?.id || ''},email.ilike.${resolvedEmail}`)
+        .ilike('email', resolvedEmail)
         .limit(1)
 
       dbSystemUser = dbSystemUserRows?.[0] || null
@@ -250,7 +250,7 @@ export async function POST(request: NextRequest) {
           const { data: sysUserMatch } = await supabaseAdmin
             .from('system_users')
             .select('id, cargo, perfil, status')
-            .or(`auth_id.eq.${user?.id || ''},email.ilike.${resolvedEmail}`)
+            .ilike('email', resolvedEmail)
             .eq('status', 'ativo')
             .limit(1)
           if (sysUserMatch && sysUserMatch.length > 0) {
@@ -268,26 +268,20 @@ export async function POST(request: NextRequest) {
         const aFoto = alunoRecord.foto || alunoRecord.dados?.foto
         if (aFoto) resolvedFoto = aFoto
       } else {
-        // Usuário logou com e-mail direto mas não é system_user: verifica se é Responsável ou Aluno
-        const metaAlunoId = user?.user_metadata?.aluno_id || user?.user_metadata?.matricula
-        let alunoLookupQuery = supabaseAdmin.from('alunos').select('id, nome, email, matricula, status, foto, dados')
-        if (metaAlunoId) {
-          alunoLookupQuery = alunoLookupQuery.or(`id.eq.${metaAlunoId},matricula.eq.${metaAlunoId}`)
-        } else {
-          alunoLookupQuery = alunoLookupQuery.ilike('email', resolvedEmail)
-        }
-
-        const metaRespId = user?.user_metadata?.responsavel_id
-        let respLookupQuery = supabaseAdmin.from('responsaveis').select('id, nome, email, dados')
-        if (metaRespId) {
-          respLookupQuery = respLookupQuery.eq('id', metaRespId)
-        } else {
-          respLookupQuery = respLookupQuery.ilike('email', resolvedEmail)
-        }
-
+        // Usuário logou com e-mail direto mas não é system_user: verifica se o e-mail ainda pertence a um Responsável ou Aluno ativo
         const [respLookup, alunoLookup] = await Promise.all([
-          respLookupQuery.limit(1).then(r => r.data?.[0] || null),
-          alunoLookupQuery.limit(1).then(r => r.data?.[0] || null)
+          supabaseAdmin
+            .from('responsaveis')
+            .select('id, nome, email, dados')
+            .ilike('email', resolvedEmail)
+            .limit(1)
+            .then(r => r.data?.[0] || null),
+          supabaseAdmin
+            .from('alunos')
+            .select('id, nome, email, matricula, status, foto, dados')
+            .or(`email.ilike.${resolvedEmail},dados->>email.ilike.${resolvedEmail}`)
+            .limit(1)
+            .then(r => r.data?.[0] || null)
         ])
 
         if (respLookup) {
@@ -360,6 +354,12 @@ export async function POST(request: NextRequest) {
         }
       )
       await supabaseSignOut.auth.signOut()
+
+      // Auto-limpeza: se a credencial do Supabase Auth não corresponde a nenhum registro ativo (ex: e-mail antigo substituído), remove do Auth
+      if (user?.id) {
+        await supabaseAdmin.auth.admin.deleteUser(user.id).catch(() => {})
+        invalidateAuthUsersCache()
+      }
 
       return NextResponse.json({ error: 'Acesso não autorizado. Cadastro não encontrado no sistema escolar.' }, { status: 200 })
     }

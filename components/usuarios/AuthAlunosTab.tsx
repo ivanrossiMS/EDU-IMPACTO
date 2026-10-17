@@ -243,11 +243,18 @@ export function AuthAlunosTab() {
     // 1. Persistir no banco de dados principal (tabela 'alunos')
     if (aluno.id && !String(aluno.id).startsWith('virtual-')) {
       try {
+        const { responsaveis: _r, _responsaveis: _r2, auth: _auth, ...alunoRest } = aluno
         const payload = {
-          ...aluno,
+          ...alunoRest,
           email: newEmail,
           celular: newPhone,
-          telefone: newPhone
+          telefone: newPhone,
+          dados: {
+            ...(aluno.dados || {}),
+            email: newEmail,
+            telefone: newPhone,
+            celular: newPhone,
+          },
         }
         const res = await fetch(`/api/alunos?id=${aluno.id}`, {
           method: 'PUT',

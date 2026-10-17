@@ -703,6 +703,139 @@ export async function enviarCodigoOtpPrimeiroAcesso(params: {
 }
 
 /**
+ * Dispara o e-mail de Recuperação / Redefinição de Senha com link direto para /atualizar-senha
+ */
+export async function enviarEmailRecuperacaoSenha(params: {
+  destinatario: string
+  nomeDestinatario?: string
+  resetUrl: string
+}): Promise<{ success: boolean; simulated?: boolean; messageId?: string; error?: string }> {
+  if (isNonDeliverableTestEmail(params.destinatario)) {
+    console.warn(`[EmailService] [SUPRIMIDO RECUPERAÇÃO SENHA] Destinatário fictício interceptado: ${params.destinatario}.`)
+    return {
+      success: true,
+      simulated: true,
+      messageId: `suppressed-recovery-${Date.now()}`,
+    }
+  }
+
+  const cfg = await getSmtpConfig()
+  const saudacao = params.nomeDestinatario ? `Olá, <strong>${params.nomeDestinatario}</strong>!` : 'Olá!'
+
+  const htmlContent = `
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" lang="pt-BR">
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="light dark" />
+  <meta name="supported-color-schemes" content="light dark" />
+  <title>Recuperação de Senha - IMPACTO EDU</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #f1f5f9; -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1e293b;">
+  <table role="presentation" width="100%" border="0" cellpadding="0" cellspacing="0" style="background-color: #f1f5f9; width: 100%; margin: 0; padding: 32px 0;">
+    <tr>
+      <td align="center" style="padding: 0 12px;">
+        <table role="presentation" width="100%" border="0" cellpadding="0" cellspacing="0" style="max-width: 520px; width: 100%; background-color: #ffffff; border-radius: 16px; border: 1px solid #e2e8f0; border-collapse: separate; overflow: hidden; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);">
+          <tr>
+            <td align="center" style="padding: 36px 32px 16px 32px; text-align: center;">
+              <div style="font-size: 24px; font-weight: 900; letter-spacing: 0.8px; color: #0f172a; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+                IMPACTO <span style="color: #2563eb;">EDU</span>
+              </div>
+              <div style="font-size: 11px; font-weight: 600; color: #64748b; letter-spacing: 1.5px; text-transform: uppercase; margin-top: 4px;">
+                Sistema de Ensino
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 16px 32px 32px 32px; text-align: left; font-size: 14px; line-height: 1.6; color: #475569;">
+              <h1 style="margin: 0 0 16px 0; font-size: 22px; font-weight: 800; color: #0f172a;">
+                Recuperação de Senha
+              </h1>
+              <p style="margin: 0 0 12px 0; color: #334155; font-size: 14px;">
+                ${saudacao}
+              </p>
+              <p style="margin: 0 0 28px 0; color: #475569; font-size: 14px; line-height: 1.6;">
+                Recebemos uma solicitação para redefinir a senha da sua conta no sistema <strong style="color: #0f172a;">IMPACTO EDU</strong>. Se foi você, basta clicar no botão abaixo para criar uma nova senha de forma segura.
+              </p>
+              <table role="presentation" border="0" cellpadding="0" cellspacing="0" align="center" style="margin: 28px auto;">
+                <tr>
+                  <td align="center" bgcolor="#2563eb" style="background-color: #2563eb; border-radius: 10px;">
+                    <a href="${params.resetUrl}" target="_blank" style="display: inline-block; background-color: #2563eb; color: #ffffff !important; text-decoration: none; padding: 14px 32px; border-radius: 10px; font-weight: 700; font-size: 15px; text-align: center;">
+                      Redefinir Minha Senha
+                    </a>
+                  </td>
+                </tr>
+              </table>
+              <p style="margin: 24px 0 16px 0; color: #475569; font-size: 13px; line-height: 1.6;">
+                Se você não fez essa solicitação, pode ignorar este e-mail em segurança. A sua senha atual continuará a mesma.
+              </p>
+              <div style="border-top: 1px solid #e2e8f0; padding-top: 16px; margin-top: 20px; font-size: 12px; color: #94a3b8; line-height: 1.5;">
+                O link expira em 24 horas por motivos de segurança.<br />
+                Precisa de ajuda? Entre em contato com a secretaria.
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td align="center" bgcolor="#f8fafc" style="background-color: #f8fafc; border-top: 1px solid #e2e8f0; padding: 16px 24px; text-align: center; font-size: 11px; color: #94a3b8;">
+              © ${new Date().getFullYear()} Impacto Edu. Todos os direitos reservados.
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+`
+
+  if (!cfg) {
+    console.info(`[EmailService] [SIMULAÇÃO RECUPERAÇÃO SENHA] Para: ${params.destinatario} | Link: ${params.resetUrl}`)
+    return {
+      success: true,
+      simulated: true,
+      messageId: `simulated-recovery-${Date.now()}`,
+    }
+  }
+
+  try {
+    const plainText = `Recuperação de Senha - IMPACTO EDU\n\nRecebemos uma solicitação para redefinir a senha da sua conta no sistema IMPACTO EDU.\n\nAcesse o link abaixo para criar uma nova senha:\n${params.resetUrl}\n\nSe você não fez essa solicitação, ignore este e-mail.\nO link expira em 24 horas.`
+    const antiThreadToken = Date.now().toString().slice(-4)
+    const msgId = `<recovery-${Date.now()}-${Math.random().toString(36).substring(2, 7)}@colegioimpacto.net>`
+
+    const info = await sendMailWithResilience(
+      cfg,
+      {
+        messageId: msgId,
+        from: `"IMPACTO EDU" <${cfg.fromEmail || cfg.user}>`,
+        to: params.destinatario,
+        subject: `Recuperação de Senha • IMPACTO EDU [${antiThreadToken}]`,
+        text: plainText,
+        html: htmlContent,
+        headers: {
+          Importance: 'high',
+          'X-Entity-Ref-ID': `recovery-${Date.now()}`,
+        },
+      },
+      3,
+      { useFreshConnection: true }
+    )
+
+    return {
+      success: true,
+      simulated: false,
+      messageId: info.messageId,
+    }
+  } catch (err: any) {
+    console.error('[EmailService] Erro ao enviar e-mail de recuperação de senha:', err)
+    return {
+      success: false,
+      error: err.message,
+    }
+  }
+}
+
+/**
  * Dispara a cópia final do contrato assinado com o Certificado de Evidências em PDF
  */
 export async function enviarCopiaContratoAssinadoEmail(params: {

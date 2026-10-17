@@ -104,6 +104,9 @@ export async function GET(request: Request) {
 
   // Fetch latest profile data: check system_users, responsaveis, and alunos
   const supabaseAdmin = getAdminClient();
+  const cleanUserEmail = (user.email || '').trim().toLowerCase();
+  const isVirtualStudentEmail = cleanUserEmail.endsWith('@impactoedu.local');
+
   let dbUser = null;
   try {
     const { data } = await supabaseAdmin
@@ -111,7 +114,9 @@ export async function GET(request: Request) {
       .select('*')
       .or(`id.eq.${user.id},auth_id.eq.${user.id},email.eq.${user.email}`)
       .maybeSingle();
-    dbUser = data;
+    if (data && (isVirtualStudentEmail || !data.email || String(data.email).trim().toLowerCase() === cleanUserEmail)) {
+      dbUser = data;
+    }
   } catch (e) {
     if (user.email) {
       const { data } = await supabaseAdmin
@@ -134,9 +139,12 @@ export async function GET(request: Request) {
         .from('responsaveis')
         .select('*')
         .or(respConds.join(','))
-        .limit(1)
-        .maybeSingle();
-      dbResp = data;
+        .limit(5);
+      const rows = Array.isArray(data) ? data : [];
+      dbResp =
+        rows.find((r: any) => String(r.email || '').trim().toLowerCase() === cleanUserEmail) ||
+        rows.find((r: any) => !r.email && String(r.id) === String(targetRespId)) ||
+        null;
     }
   } catch (e) {}
 
@@ -145,17 +153,28 @@ export async function GET(request: Request) {
   try {
     const alunoConds: string[] = [];
     if (targetAlunoId) alunoConds.push(`id.eq.${targetAlunoId}`);
-    if (user.email) alunoConds.push(`email.ilike.${user.email.trim()}`);
+    if (user.email && !isVirtualStudentEmail) alunoConds.push(`email.ilike.${user.email.trim()}`);
     if (alunoConds.length > 0) {
       const { data } = await supabaseAdmin
         .from('alunos')
         .select('*')
         .or(alunoConds.join(','))
-        .limit(1)
-        .maybeSingle();
-      dbAluno = data;
+        .limit(5);
+      const rows = Array.isArray(data) ? data : [];
+      dbAluno =
+        rows.find((a: any) => {
+          const aEmail = String(a.email || a.dados?.email || '').trim().toLowerCase();
+          return isVirtualStudentEmail
+            ? String(a.id) === String(targetAlunoId)
+            : aEmail === cleanUserEmail || (!aEmail && String(a.id) === String(targetAlunoId));
+        }) || null;
     }
   } catch (e) {}
+
+  if (!dbUser && !dbResp && !dbAluno) {
+    await supabase.auth.signOut().catch(() => {});
+    return NextResponse.json({ error: 'Unauthorized', ip }, { status: 401, headers: NO_CACHE_HEADERS });
+  }
 
   // Resolve user photo: prioritize user_metadata, then responsaveis, alunos, or system_users
   const resolvedPhoto = 

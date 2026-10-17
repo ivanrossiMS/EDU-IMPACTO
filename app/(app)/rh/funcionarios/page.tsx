@@ -1,5 +1,6 @@
 'use client'
 import { useSupabaseArray } from '@/lib/useSupabaseCollection';
+import { apiFetch } from '@/lib/api/apiClient';
 import { TableSkeleton } from '@/components/skeletons/TableSkeleton';
 
 import { useState, useMemo } from 'react'
@@ -48,7 +49,7 @@ type FormData = typeof BLANK_FORM
 
 export default function FuncionariosPage() {
   const { mantenedores = [], logSystemAction, perfis } = useData();
-  const [funcionariosRaw, setFuncionarios, { loading: isLoading }] = useSupabaseArray<any>('rh/funcionarios');
+  const [funcionariosRaw, setFuncionarios, { loading: isLoading, setLocal: setLocalFuncionarios }] = useSupabaseArray<any>('rh/funcionarios');
   const funcionarios = funcionariosRaw || [];
 
   // Unidades do sistema (mantenedores + funcionários cadastrados)
@@ -220,17 +221,43 @@ export default function FuncionariosPage() {
     try {
       if (modal === 'add') {
         const generatedId = newId('F')
-        await setFuncionarios(prev => {
-          const safePrev = prev || []
-          // Inner Guard
-          if (safePrev.some(f => f.nome.toLowerCase() === form.nome.trim().toLowerCase() || f.id === generatedId)) return safePrev
-          const next = [...safePrev, { ...payload, id: generatedId } as any]
-          logSystemAction('RH (Funcionários)', 'Cadastro', `Contratação: ${payload.nome} (${payload.cargo})`, { registroId: form.codigo, nomeRelacionado: form.nome, detalhesDepois: payload })
-          return next
+        const newItemPayload = { ...payload, id: generatedId }
+        const res = await apiFetch('/api/rh/funcionarios', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(newItemPayload),
         })
+        const resData = await res.json().catch(() => null)
+        if (!res.ok) {
+          throw new Error(resData?.error || `Erro ${res.status} ao cadastrar em rh/funcionarios`)
+        }
+        const savedFunc = resData && typeof resData === 'object' && !Array.isArray(resData) ? resData : newItemPayload
+        if (setLocalFuncionarios) {
+          setLocalFuncionarios(prev => {
+            const safePrev = prev || []
+            if (safePrev.some(f => f.id === savedFunc.id)) {
+              return safePrev.map(f => f.id === savedFunc.id ? { ...f, ...savedFunc } : f)
+            }
+            return [...safePrev, savedFunc]
+          })
+        }
+        logSystemAction('RH (Funcionários)', 'Cadastro', `Contratação: ${payload.nome} (${payload.cargo})`, { registroId: form.codigo, nomeRelacionado: form.nome, detalhesDepois: payload })
       } else if (editingId) {
         const funcAntigo = funcionarios.find(f => f.id === editingId)
-        await setFuncionarios(prev => prev.map(f => f.id === editingId ? { ...f, ...payload } as any : f))
+        const updatedPayload = { ...(funcAntigo || {}), ...payload, id: editingId }
+        const res = await apiFetch(`/api/rh/funcionarios?id=${encodeURIComponent(editingId)}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updatedPayload),
+        })
+        const resData = await res.json().catch(() => null)
+        if (!res.ok) {
+          throw new Error(resData?.error || `Erro ${res.status} ao salvar em rh/funcionarios`)
+        }
+        const savedFunc = resData && typeof resData === 'object' && !Array.isArray(resData) ? resData : updatedPayload
+        if (setLocalFuncionarios) {
+          setLocalFuncionarios(prev => (prev || []).map(f => f.id === editingId ? { ...f, ...savedFunc } : f))
+        }
         logSystemAction('RH (Funcionários)', 'Edição', `Atualização do cadastro de ${payload.nome}`, { registroId: form.codigo, nomeRelacionado: form.nome, detalhesAntes: funcAntigo, detalhesDepois: payload })
       }
 
@@ -263,13 +290,32 @@ export default function FuncionariosPage() {
     }
   }
 
-  const handleDelete = () => {
-    if (confirmId) {
-      const funcAntigo = funcionarios.find(f => f.id === confirmId)
-      setFuncionarios(prev => prev.filter(f => f.id !== confirmId))
-      logSystemAction('RH (Funcionários)', 'Exclusão', `Exclusão permanente do funcionário`, { registroId: (funcAntigo as any)?.codigo, nomeRelacionado: funcAntigo?.nome, detalhesAntes: funcAntigo })
-    }
+  const handleDelete = async () => {
+    const targetId = confirmId
     setConfirmId(null)
+    if (!targetId) return
+
+    const funcAntigo = funcionarios.find(f => f.id === targetId)
+    if (setLocalFuncionarios) {
+      setLocalFuncionarios(prev => (prev || []).filter(f => f.id !== targetId))
+    }
+
+    try {
+      const res = await apiFetch(`/api/rh/funcionarios?id=${encodeURIComponent(targetId)}`, {
+        method: 'DELETE',
+      })
+      if (!res.ok) {
+        const errData = await res.json().catch(() => null)
+        throw new Error(errData?.error || `Erro ${res.status} ao excluir funcionário`)
+      }
+      logSystemAction('RH (Funcionários)', 'Exclusão', `Exclusão permanente do funcionário`, { registroId: (funcAntigo as any)?.codigo, nomeRelacionado: funcAntigo?.nome, detalhesAntes: funcAntigo })
+    } catch (err: any) {
+      console.error(err)
+      if (funcAntigo && setLocalFuncionarios) {
+        setLocalFuncionarios(prev => [...(prev || []), funcAntigo])
+      }
+      alert(err.message || 'Erro ao excluir funcionário.')
+    }
   }
 
   const downloadModelo = () => {
@@ -673,13 +719,13 @@ export default function FuncionariosPage() {
                   <div>
                     <label className="form-label" style={{ color: '#0f172a' }}>Cargo *</label>
                     <select className="form-input" value={form.cargo} onChange={e => set('cargo', e.target.value)} style={{ color: '#0f172a' }}>
-                      {CARGOS.map(c => <option key={c}>{c}</option>)}
+                      {Array.from(new Set([...CARGOS, ...(form.cargo ? [form.cargo] : [])])).map(c => <option key={c} value={c}>{c}</option>)}
                     </select>
                   </div>
                   <div>
                     <label className="form-label" style={{ color: '#0f172a' }}>Departamento</label>
                     <select className="form-input" value={form.departamento} onChange={e => set('departamento', e.target.value)} style={{ color: '#0f172a' }}>
-                      {DEPARTAMENTOS.map(d => <option key={d}>{d}</option>)}
+                      {Array.from(new Set([...DEPARTAMENTOS, ...(form.departamento ? [form.departamento] : [])])).map(d => <option key={d} value={d}>{d}</option>)}
                     </select>
                   </div>
                   <div style={{ gridColumn: '1/-1', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
@@ -695,7 +741,7 @@ export default function FuncionariosPage() {
                   <div>
                     <label className="form-label" style={{ color: '#0f172a' }}>Tipo de Contrato</label>
                     <select className="form-input" value={form.tipoContrato} onChange={e => set('tipoContrato', e.target.value)} style={{ color: '#0f172a' }}>
-                      {TIPOS_CONTRATO.map(t => <option key={t}>{t}</option>)}
+                      {Array.from(new Set([...TIPOS_CONTRATO, ...(form.tipoContrato ? [form.tipoContrato] : [])])).map(t => <option key={t} value={t}>{t}</option>)}
                     </select>
                   </div>
                   <div>
@@ -863,7 +909,7 @@ export default function FuncionariosPage() {
                   <button className="btn btn-primary" onClick={handleSave} disabled={!form.nome.trim() || isSaving}
                     style={{ opacity: isSaving ? 0.7 : 1 }}>
                     {isSaving
-                      ? <><span style={{ width: 14, height: 14, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 0.8s linear infinite', display: 'inline-block' }} /> Criando acesso...</>
+                      ? <><span style={{ width: 14, height: 14, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 0.8s linear infinite', display: 'inline-block' }} /> {modal === 'add' ? 'Criando acesso...' : 'Salvando alterações...'}</>
                       : <><Check size={14} />{modal === 'add' ? (form as any).perfilSistema ? 'Cadastrar + Criar Acesso' : 'Cadastrar Funcionário' : 'Salvar Alterações'}</>
                     }
                   </button>

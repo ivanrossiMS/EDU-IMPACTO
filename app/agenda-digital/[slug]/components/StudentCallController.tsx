@@ -1410,7 +1410,7 @@ export const StudentCallController = React.memo(function StudentCallController({
               title="Trocar de Aluno"
               className="ad-discreet-btn ad-discreet-switch"
             >
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="8.5" cy="7" r="3.5" />
                 <path d="M2.5 19.5c0-3.3 2.7-6 6-6h2" />
                 <path d="M17 5a3.5 3.5 0 0 1 3.5 3.5" />
@@ -1426,7 +1426,7 @@ export const StudentCallController = React.memo(function StudentCallController({
               title="Sair da Conta"
               className="ad-discreet-btn ad-discreet-logout"
             >
-              <LogOut size={15} strokeWidth={2.2} />
+              <LogOut size={15} strokeWidth={2} />
               <span>Sair</span>
             </button>
           </div>

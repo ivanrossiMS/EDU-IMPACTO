@@ -39,14 +39,33 @@ export default function EsqueciSenha() {
       return;
     }
 
-    const { error } = await supabase.auth.resetPasswordForEmail(emailLimpo, {
-      redirectTo: `${window.location.origin}/atualizar-senha`,
-    });
+    try {
+      const res = await fetch('/api/auth/recover-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: emailLimpo,
+          origin: window.location.origin,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
 
-    if (error) {
-      setMensagem({ tipo: 'erro', texto: error.message });
-    } else {
-      setMensagem({ tipo: 'sucesso', texto: 'Link seguro de recuperação enviado para o seu e-mail! Pode demorar alguns minutos para chegar.' });
+      if (!res.ok || data.error) {
+        setMensagem({
+          tipo: 'erro',
+          texto: data.error || 'Não foi possível enviar o link de recuperação. Tente novamente.',
+        });
+      } else {
+        setMensagem({
+          tipo: 'sucesso',
+          texto: 'Link seguro de recuperação enviado para o seu e-mail! Pode demorar alguns minutos para chegar.',
+        });
+      }
+    } catch (err: any) {
+      setMensagem({
+        tipo: 'erro',
+        texto: err?.message || 'Erro de conexão ao enviar instruções. Tente novamente.',
+      });
     }
     
     setLoading(false);

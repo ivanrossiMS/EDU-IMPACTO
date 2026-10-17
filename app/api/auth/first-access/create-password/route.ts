@@ -1,5 +1,11 @@
 import { NextResponse } from 'next/server'
-import { getAdminClient, findAuthUserByEmail as findAuthUserByEmailFast, invalidateAuthUsersCache } from '@/lib/server/supabaseAdminSingleton'
+import {
+  getAdminClient,
+  findAuthUserByEmail as findAuthUserByEmailFast,
+  invalidateAuthUsersCache,
+  syncAlunoAuthOnEmailChange,
+  syncResponsavelAuthOnEmailChange,
+} from '@/lib/server/supabaseAdminSingleton'
 import { verifyCreationToken } from '@/lib/server/firstAccessSecurity'
 import { clearAuthGuardCache } from '@/lib/server/authGuard'
 
@@ -80,11 +86,20 @@ export async function POST(request: Request) {
 
       loginIdentifier = isValidEmail(targetEmail) ? targetEmail : matricula
 
+      // Migra ou remove qualquer conta Auth antiga vinculada a este aluno antes de definir a senha
+      await syncAlunoAuthOnEmailChange({
+        alunoId: String(aluno.id),
+        matricula: String(matricula || ''),
+        oldEmail: alunoStoredEmail || null,
+        newEmail: isValidEmail(targetEmail) ? targetEmail : null,
+        nome: aluno.nome,
+      })
+
       const existingByVirtual = await findAuthUserByEmail(virtualEmail)
       const existingByRealEmail = isValidEmail(targetEmail)
         ? await findAuthUserByEmail(targetEmail)
         : null
-      const targetUser = existingByVirtual || existingByRealEmail
+      const targetUser = existingByRealEmail || existingByVirtual
 
       if (targetUser) {
         const updatePayload: any = { password: newPass }
@@ -166,6 +181,16 @@ export async function POST(request: Request) {
       }
 
       loginIdentifier = finalEmail
+
+      // Migra ou remove qualquer conta Auth antiga vinculada a este responsável antes de definir a senha
+      await syncResponsavelAuthOnEmailChange({
+        responsavelId: String(resp.id),
+        oldEmail: storedRespEmail || null,
+        newEmail: finalEmail,
+        authId: resp.auth_id || null,
+        nome: resp.nome,
+      })
+
       const existing = await findAuthUserByEmail(finalEmail)
       let resolvedAuthId: string | null = resp.auth_id || null
 

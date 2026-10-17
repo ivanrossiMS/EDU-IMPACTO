@@ -1,7 +1,13 @@
 import { supabaseServer as supabase } from '@/lib/supabaseServer'
 import { createClient } from '@supabase/supabase-js'
 import { syncStudentToDevices } from '@/lib/portariaSync'
-import { getAdminClient, findAuthUserByEmail, invalidateAuthUsersCache } from '@/lib/server/supabaseAdminSingleton'
+import {
+  getAdminClient,
+  findAuthUserByEmail,
+  invalidateAuthUsersCache,
+  syncResponsavelAuthOnEmailChange,
+  syncAlunoAuthOnEmailChange,
+} from '@/lib/server/supabaseAdminSingleton'
 import { v4 as uuidv4 } from 'uuid'
 import { NextResponse } from 'next/server'
 import {
@@ -1076,12 +1082,14 @@ export async function POST(request: Request) {
       
       // Preservar e mesclar com dados existentes no banco
       const dados = { ...(resp.dados || {}) }
+      let prevRespRecord: any = null
       if (!isNewResp) {
         const { data: existingResp } = await supabase
           .from('responsaveis')
-          .select('dados')
+          .select('id, nome, email, auth_id, dados')
           .eq('id', resp.id)
           .maybeSingle()
+        prevRespRecord = existingResp
         if (existingResp?.dados) {
           Object.assign(dados, existingResp.dados)
         }
@@ -1165,7 +1173,7 @@ export async function POST(request: Request) {
       // Verifica duplicidade de E-mail do Responsável
       if (respDataToSave.email && respDataToSave.email.trim()) {
         const emailLower = respDataToSave.email.trim().toLowerCase()
-        let query = supabase.from('responsaveis').select('id, nome').eq('email', emailLower)
+        let query = supabase.from('responsaveis').select('id, nome, email, auth_id, dados').eq('email', emailLower)
         if (!isNewResp && respDataToSave.id) {
           query = query.neq('id', respDataToSave.id)
         }
@@ -1173,6 +1181,7 @@ export async function POST(request: Request) {
         if (existingRespEmail) {
           // Em vez de dar erro, vamos usar o responsável existente e atualizar os dados dele
           respDataToSave.id = existingRespEmail.id
+          prevRespRecord = existingRespEmail
         }
       }
 
@@ -1181,22 +1190,23 @@ export async function POST(request: Request) {
         const nameClean = respDataToSave.nome.trim().replace(/\s+/g, ' ')
         const { data: existingRespName } = await supabase
           .from('responsaveis')
-          .select('id, nome')
+          .select('id, nome, email, auth_id, dados')
           .ilike('nome', nameClean)
           .maybeSingle()
         if (existingRespName) {
           respDataToSave.id = existingRespName.id
+          prevRespRecord = existingRespName
         }
       }
       
-      if (isNewResp) {
+      if (isNewResp && !prevRespRecord?.id) {
         delete respDataToSave.id
       }
       
       let queryData: any[] | null = null
       let respError: any = null
       
-      if (isNewResp) {
+      if (isNewResp && !prevRespRecord?.id) {
         const res = await supabase.from('responsaveis').insert(respDataToSave).select()
         queryData = res.data
         respError = res.error
@@ -1217,6 +1227,16 @@ export async function POST(request: Request) {
       
       const savedResp = queryData && queryData.length > 0 ? queryData[0] : null
       if (!savedResp) throw new Error(`Nenhum dado retornado para o responsável ${resp.nome}`)
+
+      if (prevRespRecord) {
+        await syncResponsavelAuthOnEmailChange({
+          responsavelId: String(savedResp.id),
+          oldEmail: prevRespRecord.email || prevRespRecord.dados?.email || null,
+          newEmail: savedResp.email || savedResp.dados?.email || null,
+          authId: prevRespRecord.auth_id || savedResp.auth_id || null,
+          nome: savedResp.nome || prevRespRecord.nome || '',
+        })
+      }
       
       // Remove vínculo antigo se existir para evitar duplicidade
       await supabase.from('aluno_responsavel').delete().eq('aluno_id', savedStudent.id).eq('responsavel_id', savedResp.id)
@@ -1451,13 +1471,16 @@ export async function PUT(request: Request) {
       }
     }
 
-    if (row.email) {
+    if ('email' in body || row.email) {
       if (!row.dados) row.dados = {}
-      row.dados.email = row.email
+      row.dados.email = row.email || ''
+      if ('emailAluno' in row.dados) row.dados.emailAluno = row.email || ''
+      if ('email_aluno' in row.dados) row.dados.email_aluno = row.email || ''
     }
-    if (row.telefone) {
+    if ('telefone' in body || 'celular' in body || row.telefone) {
       if (!row.dados) row.dados = {}
-      row.dados.telefone = row.telefone
+      row.dados.telefone = row.telefone || ''
+      if ('celular' in row.dados) row.dados.celular = row.telefone || ''
     }
 
     const prevTurma = existingStudent?.turma || existingStudent?.dados?.turma
@@ -1569,6 +1592,28 @@ export async function PUT(request: Request) {
     const savedStudent = studentData?.[0]
     if (!savedStudent) throw new Error('Aluno não encontrado ou não atualizado')
 
+    const oldStudentEmail =
+      existingStudent?.email ||
+      existingStudent?.dados?.email ||
+      existingStudent?.dados?.emailAluno ||
+      existingStudent?.dados?.email_aluno ||
+      null
+    const newStudentEmail = savedStudent.email || savedStudent.dados?.email || null
+
+    await syncAlunoAuthOnEmailChange({
+      alunoId: String(savedStudent.id),
+      matricula:
+        savedStudent.matricula ||
+        savedStudent.dados?.codigo ||
+        existingStudent?.matricula ||
+        existingStudent?.dados?.codigo ||
+        null,
+      oldEmail: oldStudentEmail,
+      newEmail: newStudentEmail,
+      authId: existingStudent?.auth_id || savedStudent.auth_id || null,
+      nome: savedStudent.nome || existingStudent?.nome || '',
+    })
+
     // 2. Salvar responsáveis e vínculos (mesma lógica do POST, restrito a colaboradores)
     const responsaveis = (isStaff && !isFamilyOrStudent)
       ? (body.responsaveis || body._responsaveis || []).filter((r: any) => r.nome && r.nome.trim() !== '')
@@ -1595,12 +1640,14 @@ export async function PUT(request: Request) {
       
       // Preservar e mesclar com dados existentes no banco
       const dados = { ...(resp.dados || {}) }
+      let prevRespRecord: any = null
       if (!isNewResp) {
         const { data: existingResp } = await supabase
           .from('responsaveis')
-          .select('dados')
+          .select('id, nome, email, auth_id, dados')
           .eq('id', resp.id)
           .maybeSingle()
+        prevRespRecord = existingResp
         if (existingResp?.dados) {
           Object.assign(dados, existingResp.dados)
         }
@@ -1684,7 +1731,7 @@ export async function PUT(request: Request) {
       // Verifica duplicidade de E-mail do Responsável
       if (respDataToSave.email && respDataToSave.email.trim()) {
         const emailLower = respDataToSave.email.trim().toLowerCase()
-        let query = supabase.from('responsaveis').select('id, nome').eq('email', emailLower)
+        let query = supabase.from('responsaveis').select('id, nome, email, auth_id, dados').eq('email', emailLower)
         if (!isNewResp && respDataToSave.id) {
           query = query.neq('id', respDataToSave.id)
         }
@@ -1692,6 +1739,7 @@ export async function PUT(request: Request) {
         if (existingRespEmail) {
           // Em vez de dar erro, vamos usar o responsável existente e atualizar os dados dele
           respDataToSave.id = existingRespEmail.id
+          prevRespRecord = existingRespEmail
         }
       }
 
@@ -1700,11 +1748,12 @@ export async function PUT(request: Request) {
         const nameClean = respDataToSave.nome.trim().replace(/\s+/g, ' ')
         const { data: existingRespName } = await supabase
           .from('responsaveis')
-          .select('id, nome')
+          .select('id, nome, email, auth_id, dados')
           .ilike('nome', nameClean)
           .maybeSingle()
         if (existingRespName) {
           respDataToSave.id = existingRespName.id
+          prevRespRecord = existingRespName
         }
       }
       
@@ -1721,6 +1770,16 @@ export async function PUT(request: Request) {
       
       const savedResp = queryData && queryData.length > 0 ? queryData[0] : null
       if (!savedResp) throw new Error(`Nenhum dado retornado para o responsável ${resp.nome}`)
+
+      if (prevRespRecord) {
+        await syncResponsavelAuthOnEmailChange({
+          responsavelId: String(savedResp.id),
+          oldEmail: prevRespRecord.email || prevRespRecord.dados?.email || null,
+          newEmail: savedResp.email || savedResp.dados?.email || null,
+          authId: prevRespRecord.auth_id || savedResp.auth_id || null,
+          nome: savedResp.nome || prevRespRecord.nome || '',
+        })
+      }
       
       savedRespIds.push(savedResp.id)
 
@@ -1800,6 +1859,14 @@ export async function PUT(request: Request) {
                   await supabase.from('system_users').delete().eq('email', guardianEmail)
                 }
                 await supabase.from('system_users').delete().filter('dados->>responsavel_id', 'eq', respId)
+
+                await syncResponsavelAuthOnEmailChange({
+                  responsavelId: String(respId),
+                  oldEmail: guardianEmail || guardian.dados?.email || null,
+                  newEmail: null,
+                  authId: guardian.auth_id || null,
+                  nome: guardian.nome || '',
+                })
               }
             }
           }
@@ -1909,6 +1976,7 @@ export async function PUT(request: Request) {
 
     invalidateAlunosCache()
     invalidateGruposCache()
+    clearAuthGuardCache()
     return NextResponse.json(savedStudent)
   } catch (e: any) {
     console.error(`[${new Date().toISOString()}] Error Alunos PUT: ${e.message}\n`)
@@ -2050,6 +2118,13 @@ export async function DELETE(request: Request) {
           // If no links left at all, OR remaining links are NOT financial or pedagogical (e.g. only 'Outro')
           if (!otherLinks || otherLinks.length === 0 || !hasOtherActiveLink) {
             await deleteAuthUserByEmailOrMeta(guardianEmail, 'responsavel_id', respId)
+            await syncResponsavelAuthOnEmailChange({
+              responsavelId: String(respId),
+              oldEmail: guardianEmail || guardian.dados?.email || null,
+              newEmail: null,
+              authId: guardian.auth_id || null,
+              nome: guardian.nome || '',
+            })
           }
         }
       }
@@ -2211,6 +2286,15 @@ export async function DELETE(request: Request) {
       const { error } = await supabaseAdmin.from('alunos').delete().eq('id', studentId)
       if (error) throw error
 
+      await syncAlunoAuthOnEmailChange({
+        alunoId: String(studentId),
+        matricula: String(matricula || ''),
+        oldEmail: studentEmail || null,
+        newEmail: null,
+        authId: student.auth_id || null,
+        nome: student.nome || '',
+      })
+
       // Remove do leitor iDFace em segundo plano
       syncStudentToDevices(studentId, 'delete').catch(err => 
         console.error('[Portaria Sync Error]', err.message)
@@ -2267,8 +2351,14 @@ function buildRow(a: any) {
   // Map fields from the UI form if they are different
   const mappedNome = nome || a.nomeCompleto || ''
   const mappedMatricula = matricula?.trim() || a.codigo?.trim() || a.dados?.codigo?.trim() || a.dados?.matricula?.trim() || null
-  const mappedEmail = (email || a.dados?.email || a.dados?.emailAluno || a.dados?.email_aluno || '').trim()
-  const mappedTelefone = (telefone || a.dados?.telefone || a.celular || a.dados?.celular || '').trim()
+  const mappedEmail = ('email' in a && a.email !== undefined)
+    ? String(a.email || '').trim()
+    : (email || a.dados?.email || a.dados?.emailAluno || a.dados?.email_aluno || '').trim()
+  const mappedTelefone = ('telefone' in a && a.telefone !== undefined)
+    ? String(a.telefone || '').trim()
+    : ('celular' in a && a.celular !== undefined)
+      ? String(a.celular || '').trim()
+      : (telefone || a.dados?.telefone || a.celular || a.dados?.celular || '').trim()
   const mappedDataNasc = data_nascimento || a.dataNasc || a.dados?.dataNasc || ''
   
   // Handle status: if 'ativo' boolean is passed, map to 'matriculado' or 'inativo'

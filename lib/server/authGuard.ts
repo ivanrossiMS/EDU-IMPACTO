@@ -452,34 +452,36 @@ export async function resolveFamilyScope(user: any): Promise<{ alunoIds: Set<str
   const metaRespId = String(user.user_metadata?.responsavel_id || user.app_metadata?.responsavel_id || '').trim()
   const metaMatricula = String(user.user_metadata?.matricula || user.app_metadata?.matricula || '').trim()
   const rawEmail = String(user.email || '').trim().toLowerCase()
-
-  if (metaAlunoId) alunoIds.add(metaAlunoId)
-  if (metaRespId) responsavelIds.add(metaRespId)
+  const isVirtualStudentEmail = rawEmail.endsWith('@impactoedu.local')
 
   // Se for e-mail virtual de aluno: aluno.{matricula}@impactoedu.local
   let virtualMatricula = metaMatricula
-  if (!virtualMatricula && rawEmail.startsWith('aluno.') && rawEmail.endsWith('@impactoedu.local')) {
+  if (!virtualMatricula && rawEmail.startsWith('aluno.') && isVirtualStudentEmail) {
     virtualMatricula = rawEmail.slice('aluno.'.length, -'@impactoedu.local'.length).trim()
   }
 
   try {
-    // 1. Resolver responsaveis pelo id, auth_id ou email
+    // 1. Resolver responsaveis pelo id, auth_id ou email (exigindo correspondência do e-mail atual)
     const respOrParts: string[] = [`id.eq."${String(user.id).replace(/"/g, '')}"`, `auth_id.eq."${String(user.id).replace(/"/g, '')}"`]
     if (metaRespId) {
       respOrParts.push(`id.eq."${metaRespId.replace(/"/g, '')}"`)
     }
-    if (rawEmail && !rawEmail.endsWith('@impactoedu.local')) {
+    if (rawEmail && !isVirtualStudentEmail) {
       respOrParts.push(`email.ilike."${rawEmail.replace(/"/g, '')}"`)
     }
 
     const { data: respRows } = await supabaseAdmin
       .from('responsaveis')
-      .select('id, dados')
+      .select('id, email, dados')
       .or(respOrParts.join(','))
       .limit(20)
 
     if (Array.isArray(respRows)) {
       for (const r of respRows) {
+        const rEmail = String(r?.email || r?.dados?.email || '').trim().toLowerCase()
+        if (!isVirtualStudentEmail && rEmail && rawEmail && rEmail !== rawEmail) {
+          continue
+        }
         if (r?.id) responsavelIds.add(String(r.id))
         const vincs = r?.dados?.alunosVinculados || r?.dados?.alunos_vinculados
         if (Array.isArray(vincs)) {
@@ -513,18 +515,22 @@ export async function resolveFamilyScope(user: any): Promise<{ alunoIds: Set<str
       const safeMat = virtualMatricula.replace(/"/g, '')
       alunoOrParts.push(`matricula.eq."${safeMat}"`, `dados->>codigo.eq."${safeMat}"`)
     }
-    if (rawEmail && !rawEmail.endsWith('@impactoedu.local')) {
+    if (rawEmail && !isVirtualStudentEmail) {
       alunoOrParts.push(`email.ilike."${rawEmail.replace(/"/g, '')}"`)
     }
 
     const { data: directAlunos } = await supabaseAdmin
       .from('alunos')
-      .select('id, matricula')
+      .select('id, email, matricula, dados')
       .or(alunoOrParts.join(','))
       .limit(20)
 
     if (Array.isArray(directAlunos)) {
       for (const a of directAlunos) {
+        const aEmail = String(a?.email || a?.dados?.email || '').trim().toLowerCase()
+        if (!isVirtualStudentEmail && aEmail && rawEmail && aEmail !== rawEmail) {
+          continue
+        }
         if (a?.id) alunoIds.add(String(a.id).trim())
       }
     }

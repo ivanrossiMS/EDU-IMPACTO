@@ -948,12 +948,18 @@ export default function RegimentoInternoPage() {
     
     if (modalStep === 'forgot_password') {
       try {
-        const { error } = await supabase.auth.resetPasswordForEmail(faQuery.trim(), {
-          redirectTo: `${window.location.origin}/atualizar-senha`,
+        const res = await fetch('/api/auth/recover-password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: faQuery.trim().toLowerCase(),
+            origin: window.location.origin,
+          }),
         });
+        const data = await res.json().catch(() => ({}));
 
-        if (error) {
-          throw new Error(error.message);
+        if (!res.ok || data.error) {
+          throw new Error(data.error || 'Erro ao enviar instruções.');
         }
 
         setCreateSuccess(true);

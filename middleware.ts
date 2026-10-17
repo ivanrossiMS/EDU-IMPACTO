@@ -20,11 +20,13 @@ const PUBLIC_PATHS = [
   '/login',
   '/esqueci-senha',
   '/atualizar-senha',
+  '/auth/callback',
   '/api/auth/login',
   '/api/auth/logout',
   '/api/auth/me',
   '/api/auth/verify-first-access',
   '/api/auth/update-password',
+  '/api/auth/recover-password',
   '/api/auth/first-access',
   '/api/push/sync-subscription', // Sincronização direta de push OneSignal (App Móvel / WebView)
   '/monitor-tv',        // painel TV da portaria
@@ -95,6 +97,20 @@ const NO_CACHE_HEADERS = {
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
+
+  // ── Interceptação de links de recuperação de senha (type=recovery ou token_hash) ──
+  if (
+    !pathname.startsWith('/atualizar-senha') &&
+    !pathname.startsWith('/api/') &&
+    (request.nextUrl.searchParams.get('type') === 'recovery' ||
+      request.nextUrl.searchParams.has('token_hash'))
+  ) {
+    const recoveryUrl = new URL('/atualizar-senha', request.url)
+    request.nextUrl.searchParams.forEach((val, key) => {
+      recoveryUrl.searchParams.set(key, val)
+    })
+    return NextResponse.redirect(recoveryUrl)
+  }
 
   // ── Interceptação de /login para usuários com sessão ativa (Zero Flash) ──────
   if (pathname === '/login') {

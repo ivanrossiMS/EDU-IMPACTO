@@ -720,11 +720,62 @@ export function NotificationPopover({
         >
           <Bell size={17} color="white" />
           {unreadCount > 0 && (
-            <motion.div
-              initial={{ scale: 0 }}
-              animate={{ scale: 1 }}
-              style={{ position: 'absolute', top: 6, right: 6, width: 8, height: 8, borderRadius: '50%', background: '#ef4444', boxShadow: '0 0 8px #ef4444', border: '2px solid #0f172a' }}
-            />
+            <span
+              style={{
+                position: 'absolute',
+                top: 5,
+                right: 5,
+                width: 9,
+                height: 9,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                pointerEvents: 'none'
+              }}
+            >
+              <motion.span
+                animate={{
+                  scale: [1, 2.5],
+                  opacity: [0.85, 0]
+                }}
+                transition={{
+                  duration: 1.4,
+                  repeat: Infinity,
+                  ease: 'easeOut'
+                }}
+                style={{
+                  position: 'absolute',
+                  width: '100%',
+                  height: '100%',
+                  borderRadius: '50%',
+                  background: '#ef4444'
+                }}
+              />
+              <motion.span
+                initial={{ scale: 0 }}
+                animate={{
+                  scale: [1, 1.2, 1],
+                  boxShadow: [
+                    '0 0 6px rgba(239, 68, 68, 0.85)',
+                    '0 0 14px rgba(239, 68, 68, 1)',
+                    '0 0 6px rgba(239, 68, 68, 0.85)'
+                  ]
+                }}
+                transition={{
+                  duration: 1.4,
+                  repeat: Infinity,
+                  ease: 'easeInOut'
+                }}
+                style={{
+                  position: 'relative',
+                  width: 9,
+                  height: 9,
+                  borderRadius: '50%',
+                  background: '#ef4444',
+                  border: '1.5px solid #0f172a'
+                }}
+              />
+            </span>
           )}
         </motion.button>
       </Popover.Trigger>

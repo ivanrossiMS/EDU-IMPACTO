@@ -448,21 +448,30 @@ export function useSupabaseCollection<T>(
     }
   }, [endpoint, lsKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Setter — optimistic update then persist ────────────────────────────────
+  // ── Setter — optimistic update then persist (with rollback on error) ───────
   const set = useCallback(async (valOrFn: T | ((prev: T) => T)) => {
     const safePrev: T = latestState.current !== undefined ? latestState.current : initialValueRef.current;
     const next = typeof valOrFn === 'function'
       ? (valOrFn as (p: T) => T)(safePrev)
       : valOrFn;
     
-    if (safePrev === next || JSON.stringify(safePrev) === JSON.stringify(next)) {
+    if (!hadErrorRef.current && (safePrev === next || JSON.stringify(safePrev) === JSON.stringify(next))) {
       return;
     }
     
     latestState.current = next;
     setState(next);
     setCacheEntry(endpoint, next);
-    await persist(next);
+    try {
+      await persist(next);
+      hadErrorRef.current = false;
+    } catch (err) {
+      hadErrorRef.current = true;
+      latestState.current = safePrev;
+      if (isMounted.current) setState(safePrev);
+      setCacheEntry(endpoint, safePrev);
+      throw err;
+    }
   }, [persist, endpoint]);
 
   const setLocalWrapped = useCallback((valOrFn: any) => {

@@ -130,19 +130,29 @@ export function AuthResponsaveisTab() {
     const usersList: any[] = Array.isArray(usersData) ? usersData : (Array.isArray((usersData as any)?.data) ? (usersData as any).data : [])
     const realUser = usersList.find(u => u.email?.toLowerCase() === searchEmail && u.perfil === 'Família')
 
+    const rawRespEmail = (g.email || '').trim()
+    const rawRespPhone = (g.celular || g.telefone || '').trim()
+    const effectiveEmail = rawRespEmail || (authRecord?.email || '').trim()
+    const effectivePhone = rawRespPhone || (authRecord?.celular || '').trim()
+
     const defaultAuth = {
       id: `virtual-${refKey}`,
       user_type: 'guardian',
       reference_key: refKey,
-      login: g.email || g.celular || g.telefone || '',
-      email: g.email || '',
-      celular: g.celular || g.telefone || '',
+      login: effectiveEmail || effectivePhone || '',
+      email: effectiveEmail,
+      celular: effectivePhone,
       status: 'ATIVO',
       profile_code: 'FAMILIA',
       last_login: realUser ? realUser.ultimoAcesso : null
     }
 
-    const auth = authRecord || defaultAuth
+    const auth = authRecord ? {
+      ...authRecord,
+      login: effectiveEmail || effectivePhone || authRecord.login || '',
+      email: effectiveEmail,
+      celular: effectivePhone
+    } : defaultAuth
     if (realUser && realUser.ultimoAcesso) {
       auth.last_login = realUser.ultimoAcesso === 'Nunca acessou' ? null : realUser.ultimoAcesso
     }
@@ -161,7 +171,7 @@ export function AuthResponsaveisTab() {
 
     const colabUser = searchEmail ? (usersData || []).find((u: any) => u.email && u.email.toLowerCase() === searchEmail && u.cargo !== 'Responsáveis' && u.cargo !== 'Alunos') : null
 
-    return { ...g, auth, colabUser }
+    return { ...g, email: effectiveEmail, celular: effectivePhone, telefone: effectivePhone, auth, colabUser }
   })
 
 
@@ -169,26 +179,20 @@ export function AuthResponsaveisTab() {
     if (!editModal) return
     const { auth, form, guardian } = editModal
 
+    const newEmail = (form.email || '').trim()
+    const newPhone = (form.celular || '').trim()
+
     // 1. Persistir no banco de dados principal (tabela 'responsaveis')
     const respId = guardian.id || guardian.responsavel_id
     if (respId && !String(respId).startsWith('virtual-')) {
       try {
-        const alunos_vinculados = (guardian.alunos || []).map((a: any) => ({
-          aluno_id: a.id,
-          parentesco: guardian.parentesco || 'pai',
-          resp_pedagogico: guardian.isPedagogico || (guardian.tipos && guardian.tipos.has('Pedagógico')) || false,
-          resp_financeiro: guardian.isFinanceiro || (guardian.tipos && guardian.tipos.has('Financeiro')) || false,
-          resp_outro: guardian.isOutro || (guardian.tipos && guardian.tipos.has('Outro')) || false
-        }))
-
         const res = await fetch(`/api/responsaveis?id=${respId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             id: respId,
-            email: form.email,
-            telefone: form.celular,
-            alunos_vinculados
+            email: newEmail,
+            telefone: newPhone,
           })
         })
         if (!res.ok) {
@@ -200,21 +204,27 @@ export function AuthResponsaveisTab() {
     }
 
     if (auth) {
-      const newRefKey = form.email || guardian.cpf || guardian.nome
-      const newLogin = form.email || form.celular || ''
-      setAuthUsers(prev => prev.map(u => u.id === auth.id ? { ...u, email: form.email, celular: form.celular, reference_key: newRefKey, login: newLogin } : u))
+      const newRefKey = newEmail || guardian.cpf || guardian.nome
+      const newLogin = newEmail || newPhone || ''
+      setAuthUsers(prev => prev.map(u => u.id === auth.id ? { ...u, email: newEmail, celular: newPhone, reference_key: newRefKey, login: newLogin } : u))
     } else {
       const newU = handleCreateAuth(guardian)
-      const newRefKey = form.email || guardian.cpf || guardian.nome
-      const newLogin = form.email || form.celular || ''
-      setAuthUsers(prev => prev.map(u => u.id === newU.id ? { ...u, email: form.email, celular: form.celular, reference_key: newRefKey, login: newLogin } : u))
+      const newRefKey = newEmail || guardian.cpf || guardian.nome
+      const newLogin = newEmail || newPhone || ''
+      setAuthUsers(prev => prev.map(u => u.id === newU.id ? { ...u, email: newEmail, celular: newPhone, reference_key: newRefKey, login: newLogin } : u))
     }
 
-    // Sync removed as we are using react-query invalidation now.
+    setLocalResps(prev => prev.map(r => (r.id === respId || r.responsavel_id === respId) ? {
+      ...r,
+      email: newEmail,
+      celular: newPhone,
+      telefone: newPhone,
+    } : r))
 
     logSystemAction('Config (Acessos)', 'Edição', `Atualização de contatos de acesso (Responsável: ${guardian.nome})`, { registroId: guardian.key, detalhesDepois: form })
     
     // Invalidate React Query Cache to force refresh from backend
+    queryClient.invalidateQueries({ queryKey: ['responsaveis_auth_tab'] })
     queryClient.invalidateQueries({ queryKey: ['alunos_auth_tab'] })
     queryClient.invalidateQueries({ queryKey: ['responsaveis'] })
     queryClient.invalidateQueries({ queryKey: ['usuarios'] })

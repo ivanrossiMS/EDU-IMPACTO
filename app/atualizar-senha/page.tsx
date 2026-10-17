@@ -3,7 +3,23 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import { markExplicitLogin, saveSessionSecurely } from '@/lib/auth/secureSession';
 import { KeyRound, Save, AlertCircle, Shield, Lock, BookOpen, CheckCircle2, Eye, EyeOff } from 'lucide-react';
+
+function clearRecoveryTempFlags() {
+  if (typeof window === 'undefined') return;
+  try {
+    delete (window as any).__EDU_IS_PASSWORD_RECOVERY__;
+    delete (window as any).__EDU_INITIAL_RECOVERY_HASH__;
+    delete (window as any).__EDU_INITIAL_RECOVERY_SEARCH__;
+    delete (window as any).__EDU_INITIAL_AUTH_ERROR_HASH__;
+    delete (window as any).__EDU_RECOVERY_VERIFY_PROMISE__;
+    window.sessionStorage.removeItem('edu_password_recovery_pending');
+    window.sessionStorage.removeItem('edu_password_recovery_hash');
+    window.sessionStorage.removeItem('edu_password_recovery_search');
+    window.sessionStorage.removeItem('edu_password_recovery_error_hash');
+  } catch {}
+}
 
 export default function AtualizarSenha() {
   const [novaSenha, setNovaSenha] = useState('');
@@ -14,63 +30,203 @@ export default function AtualizarSenha() {
   const [sucesso, setSucesso] = useState(false);
   const [mantemMesmaSenha, setMantemMesmaSenha] = useState(false);
   const [userEmail, setUserEmail] = useState('');
+  const [recoveryAccessToken, setRecoveryAccessToken] = useState('');
+  const [recoveryTokenHash, setRecoveryTokenHash] = useState('');
   const router = useRouter();
 
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      // 1. Interceptar erros da hash do URL (ex: otp_expired)
-      const hash = window.location.hash;
-      const search = window.location.search;
-      const params = new URLSearchParams(hash.startsWith('#') ? hash.substring(1) : (hash || search));
-      const err = params.get('error_description') || params.get('error');
-      const errCode = params.get('error_code');
+    if (typeof window === 'undefined') return;
 
-      if (err || errCode) {
-        console.error('[Auth Error] Error detected in URL on atualizar-senha:', errCode, err);
-        if (errCode === 'otp_expired' || err?.toLowerCase().includes('expired') || err?.toLowerCase().includes('invalid')) {
-          setErro('O link de recuperação expirou ou já foi utilizado. Por segurança, os links de redefinição são de uso único e expiram após 24 horas. Por favor, solicite um novo link.');
-        } else {
-          setErro(err || 'O link de recuperação de senha é inválido ou expirou.');
-        }
-        setSessionValid(false);
-        return;
+    let isMounted = true;
+    markExplicitLogin();
+
+    const rawHash =
+      window.location.hash ||
+      (window as any).__EDU_INITIAL_RECOVERY_HASH__ ||
+      (window as any).__EDU_INITIAL_AUTH_ERROR_HASH__ ||
+      window.sessionStorage?.getItem('edu_password_recovery_hash') ||
+      window.sessionStorage?.getItem('edu_password_recovery_error_hash') ||
+      '';
+    const rawSearch =
+      window.location.search ||
+      (window as any).__EDU_INITIAL_RECOVERY_SEARCH__ ||
+      window.sessionStorage?.getItem('edu_password_recovery_search') ||
+      '';
+
+    const hashParams = new URLSearchParams(rawHash.startsWith('#') ? rawHash.substring(1) : rawHash);
+    const searchParams = new URLSearchParams(rawSearch.startsWith('?') ? rawSearch.substring(1) : rawSearch);
+
+    const tokenHash =
+      searchParams.get('token_hash') ||
+      searchParams.get('token') ||
+      hashParams.get('token_hash') ||
+      hashParams.get('token') ||
+      '';
+    const accessToken = hashParams.get('access_token') || searchParams.get('access_token') || '';
+    const refreshToken = hashParams.get('refresh_token') || searchParams.get('refresh_token') || '';
+    const code = searchParams.get('code') || '';
+
+    const err =
+      hashParams.get('error_description') ||
+      searchParams.get('error_description') ||
+      hashParams.get('error') ||
+      searchParams.get('error');
+    const errCode = hashParams.get('error_code') || searchParams.get('error_code');
+
+    // 1. Se houver erro explícito na URL e nenhum token válido para validar
+    if ((err || errCode) && !tokenHash && !accessToken && !code) {
+      console.error('[Auth Error] Error detected in URL on atualizar-senha:', errCode, err);
+      clearRecoveryTempFlags();
+      if (window.history && window.history.replaceState) {
+        window.history.replaceState(null, '', '/atualizar-senha');
       }
+      if (
+        errCode === 'otp_expired' ||
+        err?.toLowerCase().includes('expired') ||
+        err?.toLowerCase().includes('invalid')
+      ) {
+        setErro(
+          'O link de recuperação expirou ou já foi utilizado. Por segurança, os links de redefinição são de uso único e expiram após 24 horas. Por favor, solicite um novo link.'
+        );
+      } else {
+        setErro(err || 'O link de recuperação de senha é inválido ou expirou.');
+      }
+      setSessionValid(false);
+      return;
+    }
 
-      // 2. Verificar se há sessão activa ou aguardar Supabase estabelecer
-      const checkAuth = async () => {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session) {
-          if (session.user?.email) setUserEmail(session.user.email);
-          setSessionValid(true);
+    const finalizeValidSession = async (session: any) => {
+      if (!isMounted) return;
+      if (session?.access_token) {
+        setRecoveryAccessToken(session.access_token);
+        await saveSessionSecurely(session, { isExplicitLogin: true }).catch(() => {});
+      }
+      if (session?.user?.email) {
+        setUserEmail(session.user.email);
+      }
+      try {
+        window.sessionStorage.removeItem('edu_password_recovery_hash');
+        window.sessionStorage.removeItem('edu_password_recovery_search');
+        window.sessionStorage.removeItem('edu_password_recovery_error_hash');
+        delete (window as any).__EDU_INITIAL_RECOVERY_HASH__;
+        delete (window as any).__EDU_INITIAL_RECOVERY_SEARCH__;
+        delete (window as any).__EDU_INITIAL_AUTH_ERROR_HASH__;
+        if (window.history && window.history.replaceState) {
+          window.history.replaceState(null, '', '/atualizar-senha');
+        }
+      } catch {}
+      setSessionValid(true);
+    };
+
+    const checkAuth = async () => {
+      try {
+        // A. Fluxo direto via token_hash (imune a reescrita de redirect_to e com proteção StrictMode)
+        if (tokenHash) {
+          setRecoveryTokenHash(tokenHash);
+          if (!(window as any).__EDU_RECOVERY_VERIFY_PROMISE__) {
+            ;(window as any).__EDU_RECOVERY_VERIFY_PROMISE__ = supabase.auth.verifyOtp({
+              token_hash: tokenHash,
+              type: 'recovery',
+            });
+          }
+          const { data, error } = await (window as any).__EDU_RECOVERY_VERIFY_PROMISE__;
+          if (!error && data?.session) {
+            await finalizeValidSession(data.session);
+            return;
+          }
+          // Se o token já foi consumido milissegundos antes na mesma aba, verifica se a sessão já está ativa
+          const { data: existing } = await supabase.auth.getSession();
+          if (existing?.session) {
+            await finalizeValidSession(existing.session);
+            return;
+          }
+          clearRecoveryTempFlags();
+          setErro(
+            'O link de recuperação expirou ou já foi utilizado. Por segurança, os links de redefinição são de uso único e expiram após 24 horas. Por favor, solicite um novo link.'
+          );
+          if (isMounted) setSessionValid(false);
           return;
         }
 
-        // Se há access_token na URL, aguarda brevemente o Supabase inicializar a sessão
-        if (window.location.hash.includes('access_token=')) {
+        // B. Fluxo Implícito do Supabase (#access_token=...&refresh_token=...&type=recovery)
+        if (accessToken && refreshToken) {
+          const { data: currentData } = await supabase.auth.getSession();
+          if (currentData?.session?.access_token === accessToken) {
+            await finalizeValidSession(currentData.session);
+            return;
+          }
+          const { data, error } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          });
+          if (!error && data?.session) {
+            await finalizeValidSession(data.session);
+            return;
+          }
+        }
+
+        // C. Fluxo PKCE (?code=...)
+        if (code) {
+          const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+          if (!error && data?.session) {
+            await finalizeValidSession(data.session);
+            return;
+          }
+        }
+
+        // D. Sessão já estabelecida no cliente Supabase
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        if (session) {
+          await finalizeValidSession(session);
+          return;
+        }
+
+        // E. Aguarda brevemente caso o GoTrueClient ainda esteja processando o hash em background
+        if (rawHash.includes('access_token=')) {
           let attempts = 0;
           const interval = setInterval(async () => {
-            const { data: { session: currentSession } } = await supabase.auth.getSession();
+            const {
+              data: { session: currentSession },
+            } = await supabase.auth.getSession();
             attempts++;
             if (currentSession) {
-              if (currentSession.user?.email) setUserEmail(currentSession.user.email);
-              setSessionValid(true);
               clearInterval(interval);
+              await finalizeValidSession(currentSession);
             } else if (attempts >= 10) {
               clearInterval(interval);
-              setErro('A validação do token de acesso falhou ou expirou. Solicite um novo link.');
-              setSessionValid(false);
+              clearRecoveryTempFlags();
+              if (isMounted) {
+                setErro('A validação do token de acesso falhou ou expirou. Solicite um novo link.');
+                setSessionValid(false);
+              }
             }
           }, 300);
           return;
         }
 
-        // Caso contrário, bloqueia o acesso
-        setErro('Acesso inválido. Esta página só pode ser acessada através de um link de recuperação de senha válido enviado por e-mail.');
-        setSessionValid(false);
-      };
+        clearRecoveryTempFlags();
+        if (isMounted) {
+          setErro(
+            'Acesso inválido. Esta página só pode ser acessada através de um link de recuperação de senha válido enviado por e-mail.'
+          );
+          setSessionValid(false);
+        }
+      } catch (e: any) {
+        clearRecoveryTempFlags();
+        if (isMounted) {
+          setErro('Não foi possível validar o link de recuperação. Solicite um novo link.');
+          setSessionValid(false);
+        }
+      }
+    };
 
-      checkAuth();
-    }
+    checkAuth();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const isSamePasswordError = (err: any) => {
@@ -97,21 +253,51 @@ export default function AtualizarSenha() {
     setErro('');
 
     try {
+      let currentToken = recoveryAccessToken;
+      if (!currentToken) {
+        const { data: sessionData } = await supabase.auth.getSession();
+        currentToken = sessionData?.session?.access_token || '';
+      }
+
+      // 1. Atualiza via endpoint administrativo seguro (garante atualização no Auth + flag senha_definida em system_users)
+      if (currentToken || recoveryTokenHash) {
+        const apiRes = await fetch('/api/auth/recover-password', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            accessToken: currentToken,
+            tokenHash: recoveryTokenHash,
+            newPassword: novaSenha,
+          }),
+        });
+        const apiData = await apiRes.json().catch(() => ({}));
+        if (apiRes.ok && apiData.ok) {
+          if (apiData.email) setUserEmail(apiData.email);
+          setMantemMesmaSenha(Boolean(apiData.mantemMesmaSenha));
+          clearRecoveryTempFlags();
+          setSucesso(true);
+          setLoading(false);
+          return;
+        }
+      }
+
+      // 2. Fallback direto pelo SDK do cliente
       const { error } = await supabase.auth.updateUser({
-        password: novaSenha
+        password: novaSenha,
       });
 
       if (error) {
         if (isSamePasswordError(error)) {
-          // A senha informada já é exatamente a senha atual do usuário no Supabase.
-          // Atualiza metadados para registrar a confirmação e refrescar a sessão sem disparar erro do GoTrue
-          await supabase.auth.updateUser({
-            data: { 
-              password_confirmed_at: new Date().toISOString() 
-            }
-          }).catch(() => {});
+          await supabase.auth
+            .updateUser({
+              data: {
+                password_confirmed_at: new Date().toISOString(),
+              },
+            })
+            .catch(() => {});
 
           setMantemMesmaSenha(true);
+          clearRecoveryTempFlags();
           setSucesso(true);
           setLoading(false);
           return;
@@ -121,12 +307,14 @@ export default function AtualizarSenha() {
         setLoading(false);
       } else {
         setMantemMesmaSenha(false);
+        clearRecoveryTempFlags();
         setSucesso(true);
         setLoading(false);
       }
     } catch (err: any) {
       if (isSamePasswordError(err)) {
         setMantemMesmaSenha(true);
+        clearRecoveryTempFlags();
         setSucesso(true);
       } else {
         setErro(`Falha ao atualizar: ${err?.message || 'Erro inesperado ao atualizar senha'}`);
@@ -136,6 +324,7 @@ export default function AtualizarSenha() {
   };
 
   const handleGoToLogin = async () => {
+    clearRecoveryTempFlags();
     try {
       await supabase.auth.signOut();
     } catch {}

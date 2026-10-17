@@ -304,9 +304,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
         if (!isMounted) return
 
+        const isPasswordRecoveryMode =
+          typeof window !== 'undefined' &&
+          (window.location.pathname?.startsWith('/atualizar-senha') ||
+            Boolean((window as any).__EDU_IS_PASSWORD_RECOVERY__) ||
+            window.sessionStorage?.getItem('edu_password_recovery_pending') === '1')
+
+        // Se estivermos no fluxo de redefinição de senha, não devemos popular currentUser globalmente
+        // até que o usuário conclua a redefinição e faça login normalmente.
+        if (isPasswordRecoveryMode) {
+          savedUser = null
+        }
+
         // Se savedUser ainda não foi encontrado mas temos uma sessão ativa no Supabase,
         // reconstrói o usuário a partir dos metadados da sessão para garantir continuidade total
-        if (!savedUser) {
+        if (!savedUser && !isPasswordRecoveryMode) {
           try {
             const { data: sessionData } = await supabase.auth.getSession()
             const u = sessionData?.session?.user

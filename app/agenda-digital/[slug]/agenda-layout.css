@@ -371,37 +371,48 @@
         }
 
         .ad-discreet-btn {
-          height: 40px;
-          border-radius: 14px;
+          height: 38px;
+          border-radius: 12px;
           display: flex;
           align-items: center;
           justify-content: center;
           gap: 7px;
           font-size: 12px;
-          font-weight: 700;
+          font-weight: 600;
           cursor: pointer;
           text-decoration: none;
           transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
           user-select: none;
           box-sizing: border-box;
           font-family: 'Outfit', sans-serif;
+          background: #ffffff;
+          box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
           backdrop-filter: blur(8px);
           -webkit-backdrop-filter: blur(8px);
         }
 
         .ad-discreet-switch {
-          background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 52%, #fde68a 100%);
-          border: 1px solid rgba(245, 158, 11, 0.35);
-          color: #b45309;
-          box-shadow: 0 2px 8px rgba(245, 158, 11, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+          border: 1px solid #e2e8f0;
+          color: #475569;
+        }
+
+        .ad-discreet-switch svg {
+          color: #d97706;
+          opacity: 0.85;
+          transition: all 0.2s ease;
         }
 
         .ad-discreet-switch:hover {
-          background: linear-gradient(135deg, #fef3c7 0%, #fde68a 52%, #fcd34d 100%);
-          border-color: rgba(245, 158, 11, 0.5);
-          color: #92400e;
-          box-shadow: 0 4px 12px rgba(245, 158, 11, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.85);
+          background: #f8fafc;
+          border-color: #cbd5e1;
+          color: #0f172a;
+          box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
           transform: translateY(-1px);
+        }
+
+        .ad-discreet-switch:hover svg {
+          color: #b45309;
+          opacity: 1;
         }
 
         .ad-discreet-switch:active {
@@ -409,18 +420,27 @@
         }
 
         .ad-discreet-logout {
-          background: linear-gradient(135deg, #fff5f5 0%, #fee2e2 52%, #fecaca 100%);
-          border: 1px solid rgba(239, 68, 68, 0.34);
-          color: #dc2626;
-          box-shadow: 0 2px 8px rgba(239, 68, 68, 0.09), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+          border: 1px solid #e2e8f0;
+          color: #64748b;
+        }
+
+        .ad-discreet-logout svg {
+          color: #ef4444;
+          opacity: 0.85;
+          transition: all 0.2s ease;
         }
 
         .ad-discreet-logout:hover {
-          background: linear-gradient(135deg, #fee2e2 0%, #fecaca 52%, #fca5a5 100%);
-          border-color: rgba(239, 68, 68, 0.5);
-          color: #b91c1c;
-          box-shadow: 0 4px 12px rgba(239, 68, 68, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.85);
+          background: #fef2f2;
+          border-color: #fecaca;
+          color: #dc2626;
+          box-shadow: 0 2px 6px rgba(239, 68, 68, 0.08);
           transform: translateY(-1px);
+        }
+
+        .ad-discreet-logout:hover svg {
+          color: #dc2626;
+          opacity: 1;
         }
 
         .ad-discreet-logout:active {

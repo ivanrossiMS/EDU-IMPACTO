@@ -2,7 +2,7 @@ import { createClient } from '@supabase/supabase-js'
 import { Preferences } from '@capacitor/preferences'
 import { Capacitor } from '@capacitor/core'
 import { createChunks, combineChunks, stringToBase64URL, stringFromBase64URL, isChunkLike } from '@supabase/ssr'
-import { saveSessionSecurely, clearSessionSecurely, setSecureStorageWithRetry, getSecureStorageWithRetry, withTimeout } from '@/lib/auth/secureSession'
+import { saveSessionSecurely, clearSessionSecurely, setSecureStorageWithRetry, getSecureStorageWithRetry, withTimeout, markExplicitLogin } from '@/lib/auth/secureSession'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://lrpwerkkqrjkcauofhph.supabase.co'
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxycHdlcmtrcXJqa2NhdW9maHBoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU0MDAzMjYsImV4cCI6MjA5MDk3NjMyNn0.1-_0vMiLn0Y9piS90150Ur7qx8ic1Kz64RuhiaVGLhg'
@@ -201,7 +201,12 @@ const customStorage = {
     try {
       const parsed = JSON.parse(value)
       if (parsed?.access_token && parsed?.refresh_token) {
-        await saveSessionSecurely(parsed)
+        const isRecovery = Boolean(
+          (window as any).__EDU_IS_PASSWORD_RECOVERY__ ||
+          window.sessionStorage?.getItem('edu_password_recovery_pending') === '1' ||
+          window.location.pathname?.startsWith('/atualizar-senha')
+        )
+        await saveSessionSecurely(parsed, isRecovery ? { isExplicitLogin: true } : undefined)
       }
     } catch {}
   },
@@ -231,13 +236,57 @@ const isBrowser = typeof window !== 'undefined'
 let client: ReturnType<typeof createClient>
 
 if (isBrowser) {
+  let shouldDeferUrlDetectionForRedirect = false
+
+  try {
+    const rawHash = window.location.hash || ''
+    const rawSearch = window.location.search || ''
+    const hashParams = new URLSearchParams(rawHash.startsWith('#') ? rawHash.substring(1) : rawHash)
+    const searchParams = new URLSearchParams(rawSearch)
+    const isRecoveryUrl =
+      hashParams.get('type') === 'recovery' ||
+      searchParams.get('type') === 'recovery' ||
+      Boolean(searchParams.get('token_hash'))
+    const hasAuthErrorInHash = Boolean(
+      hashParams.get('error') || hashParams.get('error_code') || hashParams.get('error_description')
+    )
+
+    if (isRecoveryUrl) {
+      ;(window as any).__EDU_IS_PASSWORD_RECOVERY__ = true
+      ;(window as any).__EDU_INITIAL_RECOVERY_HASH__ = rawHash
+      ;(window as any).__EDU_INITIAL_RECOVERY_SEARCH__ = rawSearch
+      try {
+        window.sessionStorage.setItem('edu_password_recovery_pending', '1')
+        if (rawHash) window.sessionStorage.setItem('edu_password_recovery_hash', rawHash)
+        if (rawSearch) window.sessionStorage.setItem('edu_password_recovery_search', rawSearch)
+      } catch {}
+      markExplicitLogin()
+
+      if (!window.location.pathname.startsWith('/atualizar-senha')) {
+        shouldDeferUrlDetectionForRedirect = true
+        window.location.replace(`/atualizar-senha${rawSearch}${rawHash}`)
+      }
+    } else if (
+      hasAuthErrorInHash &&
+      !window.location.pathname.startsWith('/atualizar-senha') &&
+      !window.location.pathname.startsWith('/login')
+    ) {
+      ;(window as any).__EDU_INITIAL_AUTH_ERROR_HASH__ = rawHash
+      try {
+        window.sessionStorage.setItem('edu_password_recovery_error_hash', rawHash)
+      } catch {}
+      shouldDeferUrlDetectionForRedirect = true
+      window.location.replace(`/atualizar-senha${rawSearch}${rawHash}`)
+    }
+  } catch {}
+
   if (!(window as any)._supabaseClient) {
     const newClient = createClient(supabaseUrl, supabaseAnonKey, {
       auth: {
         storage: customStorage,
         autoRefreshToken: true,
         persistSession: true,
-        detectSessionInUrl: true,
+        detectSessionInUrl: !shouldDeferUrlDetectionForRedirect,
       },
       realtime: {
         heartbeatIntervalMs: 30000,
@@ -247,9 +296,28 @@ if (isBrowser) {
 
     // Listener automático para salvar sessão no Keychain/Keystore e atualizar cookies
     newClient.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+      if (event === 'PASSWORD_RECOVERY') {
         if (session) {
-          await saveSessionSecurely(session).catch(() => {})
+          await saveSessionSecurely(session, { isExplicitLogin: true }).catch(() => {})
+        }
+        if (typeof window !== 'undefined') {
+          try {
+            ;(window as any).__EDU_IS_PASSWORD_RECOVERY__ = true
+            window.sessionStorage.setItem('edu_password_recovery_pending', '1')
+            if (!window.location.pathname.startsWith('/atualizar-senha')) {
+              window.location.replace('/atualizar-senha')
+            }
+          } catch {}
+        }
+      } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        if (session) {
+          const isRecovery = Boolean(
+            typeof window !== 'undefined' &&
+            ((window as any).__EDU_IS_PASSWORD_RECOVERY__ ||
+              window.sessionStorage?.getItem('edu_password_recovery_pending') === '1' ||
+              window.location.pathname?.startsWith('/atualizar-senha'))
+          )
+          await saveSessionSecurely(session, isRecovery ? { isExplicitLogin: true } : undefined).catch(() => {})
           if (typeof window !== 'undefined') {
             try {
               window.dispatchEvent(new CustomEvent('edu:auth-recovered'))

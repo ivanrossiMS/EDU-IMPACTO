@@ -1,10 +1,11 @@
 import { NextResponse } from 'next/server'
 import { supabaseServer as supabase } from '@/lib/supabaseServer'
-import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
+import { getAdminClient, syncResponsavelAuthOnEmailChange } from '@/lib/server/supabaseAdminSingleton'
 import {
   requireStaff,
   resolveUserRole,
   getAuthorizedResponsavelIdsForUser,
+  clearAuthGuardCache,
 } from '@/lib/server/authGuard'
 
 export const dynamic = 'force-dynamic'
@@ -528,7 +529,7 @@ export async function PUT(request: Request) {
 
     const { data: existingResp } = await supabase
       .from('responsaveis')
-      .select('dados')
+      .select('id, nome, email, auth_id, dados')
       .eq('id', id)
       .maybeSingle()
 
@@ -545,6 +546,15 @@ export async function PUT(request: Request) {
     
     const data = queryData && queryData.length > 0 ? queryData[0] : null
     if (!data) throw new Error('Responsável não encontrado ou não atualizado')
+
+    await syncResponsavelAuthOnEmailChange({
+      responsavelId: String(data.id),
+      oldEmail: existingResp?.email || null,
+      newEmail: data.email || null,
+      nome: data.nome || existingResp?.nome || null,
+      existingAuthId: existingResp?.auth_id || existingResp?.dados?.auth_id || data.auth_id || null,
+    })
+    clearAuthGuardCache()
     
     // Atualizar vínculos
     let links: any[] = []
@@ -571,22 +581,13 @@ export async function PUT(request: Request) {
         const hasActiveLink = links.some((l: any) => l.resp_financeiro === true || l.resp_pedagogico === true)
         
         if (!hasActiveLink) {
-          const emailClean = data.email.trim().toLowerCase()
-          const supabaseAdmin = getAdminClient()
-          const { data: sysUser } = await supabaseAdmin
-            .from('system_users')
-            .select('id, perfil_id, role, dados')
-            .eq('email', emailClean)
-            .maybeSingle()
-          const isGuardianSysUser = sysUser && (
-            String(sysUser.dados?.responsavel_id || '') === String(id) ||
-            ['familia', 'responsavel', 'pai', 'mae'].includes(String(sysUser.role || '').toLowerCase())
-          )
-          if (sysUser?.id && isGuardianSysUser) {
-            await supabaseAdmin.auth.admin.deleteUser(sysUser.id).catch((e: any) => console.error('Erro ao revogar acesso de responsável desvinculado:', e))
-          } else if (!sysUser && data.dados?.auth_id) {
-            await supabaseAdmin.auth.admin.deleteUser(String(data.dados.auth_id)).catch((e: any) => console.error('Erro ao revogar acesso de responsável desvinculado:', e))
-          }
+          await syncResponsavelAuthOnEmailChange({
+            responsavelId: String(data.id),
+            oldEmail: data.email,
+            newEmail: null,
+            existingAuthId: data.auth_id || data.dados?.auth_id || existingResp?.auth_id || null,
+          })
+          clearAuthGuardCache()
         }
       }
     }
@@ -609,7 +610,7 @@ export async function DELETE(request: Request) {
     if (!id) return NextResponse.json({ error: 'ID obrigatório' }, { status: 400 })
 
     // Busca o email do responsável antes de deletar
-    const { data: resp } = await supabase.from('responsaveis').select('email, dados').eq('id', id).maybeSingle()
+    const { data: resp } = await supabase.from('responsaveis').select('email, auth_id, dados').eq('id', id).maybeSingle()
     const email = resp?.email
 
     // Remove vínculos primeiro
@@ -620,25 +621,14 @@ export async function DELETE(request: Request) {
 
     if (error) return NextResponse.json({ error: error.message }, { status: 400 })
 
-    // Se o responsável possuir email, localiza e remove sua credencial no Supabase Auth (apenas se não for colaborador ativo)
-    if (email) {
-      const emailClean = email.trim().toLowerCase()
-      const supabaseAdmin = getAdminClient()
-      const { data: sysUser } = await supabaseAdmin
-        .from('system_users')
-        .select('id, role, dados')
-        .eq('email', emailClean)
-        .maybeSingle()
-      const isGuardianSysUser = sysUser && (
-        String(sysUser.dados?.responsavel_id || '') === String(id) ||
-        ['familia', 'responsavel', 'pai', 'mae'].includes(String(sysUser.role || '').toLowerCase())
-      )
-      if (sysUser?.id && isGuardianSysUser) {
-        await supabaseAdmin.auth.admin.deleteUser(sysUser.id).catch((e: any) => console.error('Erro ao remover usuário de autenticação:', e))
-      } else if (!sysUser && resp?.dados?.auth_id) {
-        await supabaseAdmin.auth.admin.deleteUser(String(resp.dados.auth_id)).catch((e: any) => console.error('Erro ao remover usuário de autenticação:', e))
-      }
-    }
+    // Localiza e remove sua credencial no Supabase Auth (apenas se não for colaborador ativo ou outro cadastro)
+    await syncResponsavelAuthOnEmailChange({
+      responsavelId: String(id),
+      oldEmail: email || null,
+      newEmail: null,
+      existingAuthId: resp?.auth_id || resp?.dados?.auth_id || null,
+    })
+    clearAuthGuardCache()
 
     return NextResponse.json({ ok: true })
   } catch (e: any) {
