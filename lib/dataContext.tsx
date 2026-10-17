@@ -329,7 +329,7 @@ export interface Enquete {
 // ─── OPERACIONAL ──────────────────────────────────────────────────
 export interface Ocorrencia {
   id: string; alunoId: string; alunoNome: string; turma: string
-  tipo: string; descricao: string; gravidade: 'leve' | 'media' | 'grave'
+  tipo?: string; descricao: string; gravidade?: 'leve' | 'media' | 'grave'
   data: string; responsavel: string; ciencia_responsavel: boolean; createdAt: string
   // Anexo (opcional)
   anexoUrl?: string

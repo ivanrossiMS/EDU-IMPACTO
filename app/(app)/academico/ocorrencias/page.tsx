@@ -2,6 +2,7 @@
 import { useSupabaseArray } from '@/lib/useSupabaseCollection';
 import { useData, Ocorrencia, newId } from '@/lib/dataContext'
 import { getInitials } from '@/lib/utils'
+import { isAlunoCursandoTurma, getAlunoTurmaCursando } from '@/lib/studentTurmaUtils'
 import { useState, useRef, useEffect, useMemo } from 'react'
 import { useApiQuery } from '@/hooks/useApi'
 import { useApp } from '@/lib/context'
@@ -19,33 +20,28 @@ import {
   BarChart, Clock, Paperclip, Loader2, ImageIcon, FileArchive
 } from 'lucide-react'
 
-type GravOcorrencia = 'leve' | 'media' | 'grave'
+const cleanAlunoId = (id: any) => String(id || '').replace(/^a_?/, '').trim()
 
-const GRAV_CONFIG: Record<GravOcorrencia, { color: string; bg: string; label: string; border: string; glow: string }> = {
-  leve:  { color: '#f59e0b', bg: '#fef3c7', label: 'Leve',   border: '#fde68a', glow: 'rgba(245, 158, 11, 0.1)' },
-  media: { color: '#ef4444', bg: '#fee2e2', label: 'Média',  border: '#fecaca', glow: 'rgba(239, 68, 68, 0.1)' },
-  grave: { color: '#dc2626', bg: '#fee2e2', label: 'Grave',  border: '#fecaca', glow: 'rgba(220, 38, 38, 0.2)' },
+const doesOcMatchTurma = (o: any, turmaObj: any) => {
+  if (!o || !turmaObj) return false
+  const tId = String(turmaObj.id || '').trim().toLowerCase()
+  const tNome = String(turmaObj.nome || '').trim().toLowerCase()
+  const tCodigo = String(turmaObj.codigo || '').trim().toLowerCase()
+
+  const oTurma = String(o.turma || '').trim().toLowerCase()
+  const oTurmaId = String(o.turma_id || '').trim().toLowerCase().replace(/^sync-/, '')
+  const oTurmaNome = String(o.turmaNome || '').trim().toLowerCase()
+
+  if (tId && (oTurma === tId || oTurmaId === tId || oTurma === `sync-${tId}`)) return true
+  if (tNome && (oTurma === tNome || oTurmaNome === tNome)) return true
+  if (tCodigo && (oTurma === tCodigo || oTurmaId === tCodigo)) return true
+
+  return false
 }
 
-const TIPOS_FALLBACK = [
-  'Indisciplina em sala de aula',
-  'Atraso recorrente',
-  'Bullying / Cyberbullying',
-  'Agressão física (Briga)',
-  'Uso de celular não autorizado',
-  'Desrespeito ao professor/funcionário',
-  'Dano ao patrimônio escolar',
-  'Evasão de aula / Matada',
-  'Linguagem inadequada',
-  'Porte de objetos proibidos',
-  'Advertência Verbal',
-  'Advertência Escrita',
-  'Suspensão'
-]
-
 const BLANK: Omit<Ocorrencia,'id'|'createdAt'> = {
-  alunoId:'', alunoNome:'', turma:'', tipo:'',
-  descricao:'', gravidade:'leve', data:'', responsavel:'', ciencia_responsavel: false,
+  alunoId:'', alunoNome:'', turma:'',
+  descricao:'', data:'', responsavel:'', ciencia_responsavel: false,
   anexoUrl:'', anexoNome:'', anexoTipo:'', anexoTamanho:0
 }
 
@@ -185,13 +181,12 @@ function AlunoSearch({ value, onChange, alunosDaTurma, todosAlunos, hasError, on
   )
 }
 
-function OcorrenciaModal({ form, setForm, onSave, onClose, alunosDaTurma, todosAlunos, tiposOcorrencia, turmas, validationErrors, setValidationErrors, isEditing }: {
+function OcorrenciaModal({ form, setForm, onSave, onClose, alunosDaTurma, todosAlunos, turmas, validationErrors, setValidationErrors, isEditing }: {
   form: Omit<Ocorrencia,'id'|'createdAt'>
   setForm: React.Dispatch<React.SetStateAction<Omit<Ocorrencia,'id'|'createdAt'>>>
   onSave: () => void; onClose: () => void
   alunosDaTurma: { id: string; nome: string; turma: string }[]
   todosAlunos: { id: string; nome: string; turma: string }[]
-  tiposOcorrencia: { label: string; gravidade: 'leve' | 'media' | 'grave' }[]
   turmas: any[]
   validationErrors: { field: string; label: string }[]
   setValidationErrors: React.Dispatch<React.SetStateAction<{ field: string; label: string }[]>>
@@ -251,74 +246,6 @@ function OcorrenciaModal({ form, setForm, onSave, onClose, alunosDaTurma, todosA
             <div>
               <label style={{ fontSize: '11px', fontWeight: 700, color: '#475569', marginBottom: '6px', display: 'block', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Turma</label>
               <input className="form-input" style={{ height: '36px', borderRadius: '10px', background: '#f1f5f9', border: '1px solid #e2e8f0', fontSize: '13px', color: '#475569' }} value={turmas.find((t: any) => t.nome === form.turma || t.id === form.turma)?.nome || form.turma || 'N/A'} readOnly />
-            </div>
-            
-            <div>
-              <label style={{ fontSize: '11px', fontWeight: 700, color: '#475569', marginBottom: '6px', display: 'block', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                Tipo <span style={{ color: '#ef4444' }}>*</span>
-              </label>
-              <select 
-                id="tipo"
-                name="tipo"
-                className="form-input" 
-                style={{ 
-                  height: '36px', 
-                  borderRadius: '10px', 
-                  background: '#f8fafc', 
-                  border: hasError('tipo') ? '1.5px solid #ef4444' : '1px solid #e2e8f0', 
-                  fontSize: '13px',
-                  boxShadow: hasError('tipo') ? '0 0 0 3px rgba(239, 68, 68, 0.1)' : 'none',
-                  outline: 'none',
-                  transition: 'all 0.2s'
-                }} 
-                value={form.tipo} 
-                onChange={e => {
-                  const val = e.target.value
-                  s('tipo', val)
-                  clearError('tipo')
-                  const match = tiposOcorrencia.find(t => t.label === val)
-                  if (match?.gravidade) {
-                    s('gravidade', match.gravidade)
-                    clearError('gravidade')
-                  }
-                }}
-              >
-                {tiposOcorrencia.length > 0 ? (
-                  <>
-                    {tiposOcorrencia.map(t => <option key={t.label} value={t.label}>{t.label}</option>)}
-                    {form.tipo && !tiposOcorrencia.some(t => t.label === form.tipo) && (
-                      <option key={form.tipo} value={form.tipo}>{form.tipo}</option>
-                    )}
-                  </>
-                ) : (
-                  TIPOS_FALLBACK.map(t => <option key={t} value={t}>{t}</option>)
-                )}
-              </select>
-            </div>
-            
-            <div>
-              <label style={{ fontSize: '11px', fontWeight: 700, color: '#475569', marginBottom: '6px', display: 'block', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                Gravidade <span style={{ color: '#ef4444' }}>*</span>
-              </label>
-              <div 
-                id="gravidade"
-                style={{ 
-                  display:'flex', 
-                  gap:6,
-                  border: hasError('gravidade') ? '1.5px solid #ef4444' : 'none',
-                  borderRadius: '10px',
-                  padding: hasError('gravidade') ? '2px' : '0',
-                  boxShadow: hasError('gravidade') ? '0 0 0 3px rgba(239, 68, 68, 0.1)' : 'none',
-                  transition: 'all 0.2s'
-                }}
-              >
-                {(['leve','media','grave'] as GravOcorrencia[]).map(g => (
-                  <button key={g} type="button" onClick={() => { s('gravidade', g); clearError('gravidade') }}
-                    style={{ flex:1, height: '36px', borderRadius:10, fontSize:12, fontWeight:700, cursor:'pointer', border:`1px solid ${form.gravidade===g ? GRAV_CONFIG[g].color : '#e2e8f0'}`, background: form.gravidade===g ? GRAV_CONFIG[g].bg : '#f8fafc', color: form.gravidade===g ? GRAV_CONFIG[g].color : '#64748b', transition: 'all 0.2s' }}>
-                    {GRAV_CONFIG[g].label}
-                  </button>
-                ))}
-              </div>
             </div>
             
             <div>
@@ -505,12 +432,6 @@ export default function OcorrenciasPage() {
   const turmas = (rawTurmas as any)?.data || [];
   const alunos = (rawAlunos as any)?.data || rawAlunos || [];
 
-  const tiposAtivos = useMemo(() => {
-    return (cfgTiposOcorrencia || [])
-      .filter((t: any) => t.situacao === 'ativo')
-      .map((t: any) => ({ label: t.descricao, gravidade: t.gravidade as GravOcorrencia }))
-  }, [cfgTiposOcorrencia])
-
   const [turmaSel, setTurmaSel] = useState<string | null>(null)
   const [modoHome, setModoHome] = useState<'turma'|'aluno'>('turma')
   const [buscaAlunoHome, setBuscaAlunoHome] = useState('')
@@ -537,7 +458,7 @@ export default function OcorrenciasPage() {
     return [...new Set(allSeries.map((s: any) => s.nome))].sort()
   }, [cfgNiveisEnsino, filtroSeg])
 
-  const [filtroGrav, setFiltroGrav] = useState<GravOcorrencia | 'todas'>('todas')
+  const [filtroStatus, setFiltroStatus] = useState<'todas' | 'pendentes' | 'confirmadas'>('todas')
   const [busca, setBusca] = useState('')
 
   const [modalOpen, setModalOpen] = useState(false)
@@ -553,25 +474,47 @@ export default function OcorrenciasPage() {
 
   useEffect(() => {
     setCurrentPage(1)
-  }, [turmaSel, filtroGrav, busca])
+  }, [turmaSel, filtroStatus, busca])
+
+  const selectedTurmaObj = useMemo(() => {
+    if (!turmaSel) return null
+    return (
+      turmas.find((t: any) => t.nome === turmaSel && (filtroAno === 'todos' || String(t.ano) === filtroAno)) ||
+      turmas.find((t: any) => t.nome === turmaSel || String(t.id) === String(turmaSel)) ||
+      null
+    )
+  }, [turmas, turmaSel, filtroAno])
 
   const alunosDaTurmaAtual = useMemo(() => {
-    if (!turmaSel) return alunos.map((a: any) => ({ id: a.id, nome: a.nome, turma: a.turma || '' }))
+    if (!turmaSel) return alunos.map((a: any) => ({ id: a.id, nome: a.nome, turma: getAlunoTurmaCursando(a) || a.turma || '' }))
     return alunos
       .filter((a: any) =>
         a.turma === turmaSel ||
-        (a as any).turmaId === turmas.find((t: any) => t.nome === turmaSel)?.id
+        (selectedTurmaObj && (
+          a.turma === selectedTurmaObj.id ||
+          (a as any).turmaId === selectedTurmaObj.id ||
+          isAlunoCursandoTurma(a, selectedTurmaObj, selectedTurmaObj.ano, turmas)
+        ))
       )
-      .map((a: any) => ({ id: a.id, nome: a.nome, turma: a.turma || '' }))
-  }, [alunos, turmaSel, turmas])
+      .map((a: any) => ({ id: a.id, nome: a.nome, turma: selectedTurmaObj?.nome || getAlunoTurmaCursando(a) || a.turma || '' }))
+  }, [alunos, turmaSel, turmas, selectedTurmaObj])
   
-  const todosAlunosMapped = useMemo(() => alunos.map((a: any) => ({ id: a.id, nome: a.nome, turma: a.turma || '' })), [alunos])
-  const selectedTurmaObj = turmas.find((t: any) => t.nome === turmaSel)
-  const ocDaTurma = turmaSel ? ocorrencias.filter(o => o.turma === turmaSel || o.turma === selectedTurmaObj?.id) : []
+  const todosAlunosMapped = useMemo(() => alunos.map((a: any) => ({ id: a.id, nome: a.nome, turma: getAlunoTurmaCursando(a) || a.turma || '' })), [alunos])
+  const ocDaTurma = turmaSel
+    ? ocorrencias.filter(o =>
+        selectedTurmaObj
+          ? doesOcMatchTurma(o, selectedTurmaObj)
+          : String(o.turma || '').trim().toLowerCase() === String(turmaSel).trim().toLowerCase()
+      )
+    : []
   const filtered = ocDaTurma.filter(o => {
-    const mg = filtroGrav === 'todas' || o.gravidade === filtroGrav
-    const mb = !busca || o.alunoNome?.toLowerCase().includes(busca.toLowerCase()) || o.tipo?.toLowerCase().includes(busca.toLowerCase())
-    return mg && mb
+    const ms = filtroStatus === 'todas'
+      ? true
+      : filtroStatus === 'pendentes'
+        ? !o.ciencia_responsavel
+        : o.ciencia_responsavel
+    const mb = !busca || o.alunoNome?.toLowerCase().includes(busca.toLowerCase()) || o.descricao?.toLowerCase().includes(busca.toLowerCase())
+    return ms && mb
   })
 
   const paginatedOcorrencias = useMemo(() => {
@@ -583,10 +526,7 @@ export default function OcorrenciasPage() {
     setEditingId(null)
     setMetaCriacao('')
     setMetaConfirmacao('')
-    const primeiroTipoObj = tiposAtivos[0]
-    const primeiroTipo = primeiroTipoObj?.label || TIPOS_FALLBACK[0]
-    const primeiraGravidade = (primeiroTipoObj?.gravidade || 'leve') as GravOcorrencia
-    setForm({ ...BLANK, turma: turmaSel ?? '', tipo: primeiroTipo, gravidade: primeiraGravidade })
+    setForm({ ...BLANK, turma: turmaSel ?? '' })
     setValidationErrors([])
     setIsValidationModalOpen(false)
     setModalOpen(true)
@@ -617,9 +557,7 @@ export default function OcorrenciasPage() {
       alunoId: oc.alunoId || oc.aluno_id || '', 
       alunoNome: oc.alunoNome, 
       turma: oc.turma, 
-      tipo: oc.tipo, 
       descricao: resto.join('\n').trim(), 
-      gravidade: oc.gravidade as GravOcorrencia, 
       data: oc.data, 
       responsavel: oc.responsavel, 
       ciencia_responsavel: oc.ciencia_responsavel,
@@ -638,12 +576,6 @@ export default function OcorrenciasPage() {
 
     if (!form.alunoId || !form.alunoNome.trim()) {
       errors.push({ field: 'alunoId', label: 'Aluno' })
-    }
-    if (!form.tipo || !form.tipo.trim()) {
-      errors.push({ field: 'tipo', label: 'Tipo' })
-    }
-    if (!form.gravidade || !form.gravidade.trim()) {
-      errors.push({ field: 'gravidade', label: 'Gravidade' })
     }
     if (!form.data || !form.data.trim()) {
       errors.push({ field: 'data', label: 'Data' })
@@ -773,8 +705,7 @@ export default function OcorrenciasPage() {
   if (!turmaSel) {
     const totalOC = ocorrencias.length
     const pendentes = ocorrencias.filter(o => !o.ciencia_responsavel).length
-    const graves = ocorrencias.filter(o => o.gravidade === 'grave').length
-    const gravesPendentes = ocorrencias.filter(o => o.gravidade === 'grave' && !o.ciencia_responsavel).length
+    const confirmadas = ocorrencias.filter(o => o.ciencia_responsavel).length
     
     const turmasFiltradas = turmas.filter((t: any) => {
       const levelOfTurma = cfgNiveisEnsino.find((n: any) => n.series?.some((s: any) => s.nome === t.serie))
@@ -786,39 +717,29 @@ export default function OcorrenciasPage() {
     })
 
     const reincidentes = (() => {
-      const map: Record<string, { id: string; nome: string; turma: string; count: number; graves: number }> = {}
+      const map: Record<string, { id: string; nome: string; turma: string; count: number }> = {}
       ocorrencias.forEach(o => {
         const aId = o.alunoId || o.aluno_id;
         if (!aId) return;
-        if (!map[aId]) map[aId] = { id: aId, nome: o.alunoNome || 'Sem Nome', turma: o.turma, count: 0, graves: 0 }
+        if (!map[aId]) map[aId] = { id: aId, nome: o.alunoNome || 'Sem Nome', turma: o.turma, count: 0 }
         map[aId].count++
-        if (o.gravidade === 'grave') map[aId].graves++
       })
       return Object.values(map).sort((a, b) => b.count - a.count).slice(0, 5)
     })()
 
-    const tiposCount = (() => {
-      const map: Record<string, number> = {}
-      ocorrencias.forEach(o => { map[o.tipo] = (map[o.tipo] ?? 0) + 1 })
-      return Object.entries(map).sort((a, b) => b[1] - a[1]).slice(0, 6)
-    })()
-    const maxTipo = tiposCount[0]?.[1] ?? 1
     const ultimasOC = [...ocorrencias].sort((a, b) => {
       const dateA = a.createdAt || a.created_at || ''
       const dateB = b.createdAt || b.created_at || ''
       return dateB.localeCompare(dateA)
     }).slice(0, 5)
 
-    const leves = ocorrencias.filter(o => o.gravidade === 'leve').length
-    const medias = ocorrencias.filter(o => o.gravidade === 'media').length
-
     // ── MODO ALUNO ────────────────────────────────────────────────────────
     if (modoHome === 'aluno') {
-      const todosMapped = alunos.map((a: any) => ({ id:a.id, nome:a.nome, turma:a.turma||'' }))
+      const todosMapped = alunos.map((a: any) => ({ id:a.id, nome:a.nome, turma: getAlunoTurmaCursando(a) || a.turma || '' }))
       const filteredAlunos = buscaAlunoHome.trim().length > 0
         ? todosMapped.filter((a: any) => a.nome.toLowerCase().includes(buscaAlunoHome.toLowerCase())).slice(0,12)
         : []
-      const ocDoAluno = alunoSel ? ocorrencias.filter(o => o.alunoId === alunoSel.id || o.aluno_id === alunoSel.id).sort((a,b) => {
+      const ocDoAluno = alunoSel ? ocorrencias.filter(o => cleanAlunoId(o.alunoId || o.aluno_id) === cleanAlunoId(alunoSel.id)).sort((a,b) => {
         const dateA = a.createdAt || a.created_at || ''
         const dateB = b.createdAt || b.created_at || ''
         return dateB.localeCompare(dateA)
@@ -828,12 +749,12 @@ export default function OcorrenciasPage() {
         if (!alunoSel) return
         const win = window.open('', '_blank')
         if (!win) return
-        win.document.write(`<html><head><title>Relatório de Ocorrências — ${alunoSel.nome}</title><style>body{font-family:Arial,sans-serif;padding:20px;color:#1a1a2e}h1{font-size:18px}table{width:100%;border-collapse:collapse;font-size:12px}th,td{border:1px solid #ccc;padding:8px;text-align:left}th{background:#f0f0f0;font-weight:bold}.grave{color:#dc2626}.media{color:#ef4444}.leve{color:#f59e0b}</style></head><body>`)
+        win.document.write(`<html><head><title>Relatório de Ocorrências — ${alunoSel.nome}</title><style>body{font-family:Arial,sans-serif;padding:20px;color:#1a1a2e}h1{font-size:18px}table{width:100%;border-collapse:collapse;font-size:12px}th,td{border:1px solid #ccc;padding:8px;text-align:left}th{background:#f0f0f0;font-weight:bold}</style></head><body>`)
         win.document.write(`<h1>Relatório de Ocorrências Disciplinares</h1>`)
         win.document.write(`<p><strong>Aluno:</strong> ${alunoSel.nome} | <strong>Turma:</strong> ${alunoSel.turma} | <strong>Total:</strong> ${ocDoAluno.length}</p>`)
-        win.document.write(`<table><thead><tr><th>Data</th><th>Tipo</th><th>Gravidade</th><th>Descrição</th><th>Responsável</th><th>Ciência</th></tr></thead><tbody>`)
+        win.document.write(`<table><thead><tr><th>Data</th><th>Descrição</th><th>Responsável</th><th>Ciência</th></tr></thead><tbody>`)
         ocDoAluno.forEach(o => {
-          win.document.write(`<tr><td>${o.data}</td><td>${o.tipo}</td><td class="${o.gravidade}">${o.gravidade.toUpperCase()}</td><td>${o.descricao}</td><td>${o.responsavel}</td><td>${o.ciencia_responsavel?'Sim':'Não'}</td></tr>`)
+          win.document.write(`<tr><td>${o.data}</td><td>${o.descricao}</td><td>${o.responsavel}</td><td>${o.ciencia_responsavel?'Sim':'Não'}</td></tr>`)
         })
         win.document.write(`</tbody></table></body></html>`)
         win.document.close()
@@ -866,7 +787,7 @@ export default function OcorrenciasPage() {
             {isLoadingAlunos ? (
               <div style={{ marginTop:12, display:'flex', flexDirection:'column', gap:8 }}>
                 {[...Array(3)].map((_, i) => (
-                  <div key={i} style={{ display:'flex', alignItems:'center', gap:12, padding:'12px', background:'transparent', border:'1px solid #e2e8f0', borderRadius:12 }}>
+                  <div key={i} style={{ display:'flex', alignItems:'center', gap:12, padding:'12px', background:'transparent', border:'1px solid #e2e8f0', borderRadius: 12 }}>
                     <Skeleton w="40px" h="40px" borderRadius="10px" />
                     <div style={{ flex: 1 }}>
                       <Skeleton w="40%" h="14px" style={{ marginBottom: '4px' }} />
@@ -886,7 +807,7 @@ export default function OcorrenciasPage() {
                     <div style={{ width:40,height:40,borderRadius:10,background:'rgba(37, 99, 235, 0.1)',color:'#2563eb',display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,fontWeight:700 }}>{getInitials(a.nome)}</div>
                     <div>
                       <div style={{ fontSize:14, fontWeight:600, color: '#0f172a' }}>{a.nome}</div>
-                      <div style={{ fontSize:12, color:'#64748b' }}>{a.turma || 'Sem turma'} • {ocorrencias.filter(o=>o.alunoId===a.id).length} ocorrência(s)</div>
+                      <div style={{ fontSize:12, color:'#64748b' }}>{a.turma || 'Sem turma'} • {ocorrencias.filter(o => cleanAlunoId(o.alunoId || o.aluno_id) === cleanAlunoId(a.id)).length} ocorrência(s)</div>
                     </div>
                   </button>
                 ))}
@@ -905,11 +826,15 @@ export default function OcorrenciasPage() {
                     <div style={{ fontSize:13, color:'#64748b' }}>{alunoSel.turma} • {ocDoAluno.length} ocorrência(s) no histórico</div>
                   </div>
                   <div style={{ marginLeft:'auto', display:'flex', gap:8 }}>
-                    {(['leve','media','grave'] as const).map(g => (
-                      <div key={g} style={{ padding:'6px 12px', borderRadius:20, background:GRAV_CONFIG[g].bg, border:`1px solid ${GRAV_CONFIG[g].border}`, fontSize:11, fontWeight:700, color:GRAV_CONFIG[g].color }}>
-                        {GRAV_CONFIG[g].label}: {ocDoAluno.filter(o=>o.gravidade===g).length}
-                      </div>
-                    ))}
+                    <div style={{ padding:'6px 12px', borderRadius:20, background:'rgba(37, 99, 235, 0.1)', border:'1px solid #bfdbfe', fontSize:11, fontWeight:700, color:'#2563eb' }}>
+                      Total: {ocDoAluno.length}
+                    </div>
+                    <div style={{ padding:'6px 12px', borderRadius:20, background:'#fef3c7', border:'1px solid #fde68a', fontSize:11, fontWeight:700, color:'#b45309' }}>
+                      Aguardando: {ocDoAluno.filter(o=>!o.ciencia_responsavel).length}
+                    </div>
+                    <div style={{ padding:'6px 12px', borderRadius:20, background:'#dcfce7', border:'1px solid #bbf7d0', fontSize:11, fontWeight:700, color:'#15803d' }}>
+                      Confirmadas: {ocDoAluno.filter(o=>o.ciencia_responsavel).length}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -930,13 +855,12 @@ export default function OcorrenciasPage() {
               ) : (
                 <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
                   {ocDoAluno.map(oc => {
-                    const cfg = GRAV_CONFIG[oc.gravidade as GravOcorrencia] ?? GRAV_CONFIG.leve
+                    const isConfirmed = oc.ciencia_responsavel
+                    const cardBorderColor = isConfirmed ? '#10b981' : '#f59e0b'
                     return (
-                      <div key={oc.id} style={{ display:'flex', gap:16, padding:'16px 20px', background:'#fff', borderTop: `1px solid #e2e8f0`, borderRight: `1px solid #e2e8f0`, borderBottom: `1px solid #e2e8f0`, borderLeft: `4px solid ${cfg.color}`, borderRadius:12 }}>
+                      <div key={oc.id} style={{ display:'flex', gap:16, padding:'16px 20px', background:'#fff', borderTop: `1px solid #e2e8f0`, borderRight: `1px solid #e2e8f0`, borderBottom: `1px solid #e2e8f0`, borderLeft: `4px solid ${cardBorderColor}`, borderRadius:12 }}>
                         <div style={{ flex:1 }}>
                           <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap', marginBottom:4 }}>
-                            <span style={{ padding: '2px 8px', background: '#f1f5f9', color: '#475569', borderRadius: '4px', fontSize: '11px', fontWeight: 700 }}>{oc.tipo}</span>
-                            <span style={{ fontSize:11, padding:'2px 8px', borderRadius:4, background:cfg.bg, color:cfg.color, fontWeight:700 }}>{cfg.label}</span>
                             {oc.turma && <span style={{ fontSize:12, color:'#64748b' }}>Turma: {oc.turma}</span>}
                             {oc.anexoUrl && <span style={{ display:'flex', alignItems:'center', gap:4, fontSize:11, padding:'2px 8px', borderRadius:4, background:'#f0f9ff', color:'#0284c7', fontWeight:700 }}><Paperclip size={12} />Anexo</span>}
                           </div>
@@ -1039,32 +963,31 @@ export default function OcorrenciasPage() {
           </div>
         </div>
 
-        {/* Alerta urgente: graves pendentes */}
-        {gravesPendentes > 0 && (
-          <div style={{ display:'flex', alignItems:'center', gap:16, padding:'16px 24px', background:'rgba(239, 68, 68, 0.05)', borderTop: '1px solid #fecaca', borderRight: '1px solid #fecaca', borderBottom: '1px solid #fecaca', borderRadius: 16, marginBottom: 24, borderLeft: '4px solid #ef4444' }}>
-            <div style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', padding: '10px', borderRadius: '12px' }}>
+        {/* Alerta de ocorrências aguardando ciência */}
+        {pendentes > 0 && (
+          <div style={{ display:'flex', alignItems:'center', gap:16, padding:'16px 24px', background:'rgba(245, 158, 11, 0.05)', borderTop: '1px solid #fde68a', borderRight: '1px solid #fde68a', borderBottom: '1px solid #fde68a', borderRadius: 16, marginBottom: 24, borderLeft: '4px solid #f59e0b' }}>
+            <div style={{ background: 'rgba(245, 158, 11, 0.1)', color: '#d97706', padding: '10px', borderRadius: '12px' }}>
               <AlertTriangle size={24} />
             </div>
             <div style={{ flex:1 }}>
-              <div style={{ fontWeight:800, fontSize:15, color:'#b91c1c' }}>{gravesPendentes} ocorrência{gravesPendentes > 1 ? 's' : ''} grave{gravesPendentes > 1 ? 's' : ''} aguardando ciência</div>
-              <div style={{ fontSize:13, color:'#7f1d1d', marginTop:2 }}>Ação imediata necessária para garantir o alinhamento com os responsáveis.</div>
+              <div style={{ fontWeight:800, fontSize:15, color:'#b45309' }}>{pendentes} ocorrência{pendentes > 1 ? 's' : ''} aguardando ciência dos responsáveis</div>
+              <div style={{ fontSize:13, color:'#92400e', marginTop:2 }}>Acompanhe os registros pendentes para garantir o alinhamento com as famílias.</div>
             </div>
-            <div style={{ fontSize:11, fontWeight:700, color:'#ef4444', background:'#fee2e2', padding:'4px 12px', borderRadius:20, border:'1px solid #fecaca' }}>ALERTA</div>
+            <div style={{ fontSize:11, fontWeight:700, color:'#d97706', background:'#fef3c7', padding:'4px 12px', borderRadius:20, border:'1px solid #fde68a' }}>PENDÊNCIAS</div>
           </div>
         )}
 
-
-        {/* Segundo nível: tipos + reincidentes */}
+        {/* Segundo nível: status de ciência + reincidentes + recentes */}
         <div className="ocorrencias-cards-grid" style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:20, marginBottom:32 }}>
-          {/* Tipos mais frequentes */}
+          {/* Status de Ciência */}
           <div style={{ background: '#fff', padding: '24px', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
             <div style={{ fontWeight:800, fontSize:14, color: '#0f172a', marginBottom:16, display: 'flex', alignItems: 'center', gap: '8px' }}>
               <BarChart size={16} style={{ color: '#2563eb' }} />
-              <span>Tipos Mais Frequentes</span>
+              <span>Status de Ciência</span>
             </div>
             {isLoadingOcorrencias ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                {[...Array(3)].map((_, i) => (
+                {[...Array(2)].map((_, i) => (
                   <div key={i}>
                     <div style={{ display:'flex', justifyContent:'space-between', marginBottom:4 }}>
                       <Skeleton w="60%" h="12px" />
@@ -1074,48 +997,52 @@ export default function OcorrenciasPage() {
                   </div>
                 ))}
               </div>
-            ) : tiposCount.length === 0 ? (
-              <div style={{ fontSize:13, color:'#94a3b8', textAlign:'center', padding:'20px 0' }}>Sem dados</div>
+            ) : totalOC === 0 ? (
+              <div style={{ fontSize:13, color:'#94a3b8', textAlign:'center', padding:'20px 0' }}>Sem ocorrências registradas</div>
             ) : (
-              <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
-                {tiposCount.map(([tipo, count]) => {
-                  const pct = (count / maxTipo) * 100
-                  return (
-                    <div key={tipo}>
-                      <div style={{ display:'flex', justifyContent:'space-between', marginBottom:4 }}>
-                        <span style={{ fontSize:12, fontWeight:600, color:'#475569' }}>{tipo}</span>
-                        <span style={{ fontSize:12, fontWeight:800, color:'#0f172a' }}>{count}</span>
-                      </div>
-                      <div style={{ height:6, borderRadius:3, background:'#f1f5f9' }}>
-                        <div style={{ width:`${pct}%`, height:'100%', borderRadius:3, background:'linear-gradient(90deg, #2563eb, #3b82f6)' }} />
-                      </div>
-                    </div>
-                  )
-                })}
+              <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+                <div>
+                  <div style={{ display:'flex', justifyContent:'space-between', marginBottom:4 }}>
+                    <span style={{ fontSize:12, fontWeight:600, color:'#15803d' }}>Ciência Confirmada</span>
+                    <span style={{ fontSize:12, fontWeight:800, color:'#0f172a' }}>{confirmadas} ({totalOC ? Math.round((confirmadas/totalOC)*100) : 0}%)</span>
+                  </div>
+                  <div style={{ height:6, borderRadius:3, background:'#f1f5f9' }}>
+                    <div style={{ width:`${totalOC ? (confirmadas/totalOC)*100 : 0}%`, height:'100%', borderRadius:3, background:'linear-gradient(90deg, #10b981, #059669)' }} />
+                  </div>
+                </div>
+                <div>
+                  <div style={{ display:'flex', justifyContent:'space-between', marginBottom:4 }}>
+                    <span style={{ fontSize:12, fontWeight:600, color:'#b45309' }}>Aguardando Ciência</span>
+                    <span style={{ fontSize:12, fontWeight:800, color:'#0f172a' }}>{pendentes} ({totalOC ? Math.round((pendentes/totalOC)*100) : 0}%)</span>
+                  </div>
+                  <div style={{ height:6, borderRadius:3, background:'#f1f5f9' }}>
+                    <div style={{ width:`${totalOC ? (pendentes/totalOC)*100 : 0}%`, height:'100%', borderRadius:3, background:'linear-gradient(90deg, #f59e0b, #d97706)' }} />
+                  </div>
+                </div>
               </div>
             )}
           </div>
 
-            {/* Alunos reincidentes */}
-            <div style={{ background: '#fff', padding: '24px', borderRadius: '16px', borderTop: '1px solid #e2e8f0', borderRight: '1px solid #e2e8f0', borderBottom: '1px solid #e2e8f0', borderLeft: '4px solid #ef4444' }}>
-              <div style={{ fontWeight:800, fontSize:14, color: '#0f172a', marginBottom:16, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <AlertTriangle size={16} style={{ color: '#ef4444' }} />
-                <span>Alunos Reincidentes</span>
-              </div>
-              {isLoadingOcorrencias ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  {[...Array(3)].map((_, i) => (
-                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                      <Skeleton w="24px" h="24px" borderRadius="6px" />
-                      <div style={{ flex: 1 }}>
-                        <Skeleton w="60%" h="12px" style={{ marginBottom: '4px' }} />
-                        <Skeleton w="40%" h="10px" />
-                      </div>
-                      <Skeleton w="20px" h="20px" />
+          {/* Alunos reincidentes */}
+          <div style={{ background: '#fff', padding: '24px', borderRadius: '16px', borderTop: '1px solid #e2e8f0', borderRight: '1px solid #e2e8f0', borderBottom: '1px solid #e2e8f0', borderLeft: '4px solid #ef4444' }}>
+            <div style={{ fontWeight:800, fontSize:14, color: '#0f172a', marginBottom:16, display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <AlertTriangle size={16} style={{ color: '#ef4444' }} />
+              <span>Alunos Reincidentes</span>
+            </div>
+            {isLoadingOcorrencias ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {[...Array(3)].map((_, i) => (
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <Skeleton w="24px" h="24px" borderRadius="6px" />
+                    <div style={{ flex: 1 }}>
+                      <Skeleton w="60%" h="12px" style={{ marginBottom: '4px' }} />
+                      <Skeleton w="40%" h="10px" />
                     </div>
-                  ))}
-                </div>
-              ) : reincidentes.length === 0 ? (
+                    <Skeleton w="20px" h="20px" />
+                  </div>
+                ))}
+              </div>
+            ) : reincidentes.length === 0 ? (
               <div style={{ fontSize:13, color:'#10b981', textAlign:'center', padding:'20px 0', fontWeight:600 }}>✓ Nenhum reincidente</div>
             ) : (
               <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
@@ -1130,7 +1057,6 @@ export default function OcorrenciasPage() {
                     </div>
                     <div style={{ textAlign:'right', flexShrink:0 }}>
                       <div style={{ fontSize:16, fontWeight:900, color: r.count >= 3 ? '#ef4444' : '#f59e0b', fontFamily:'Outfit,sans-serif' }}>{r.count}</div>
-                      {r.graves > 0 && <div style={{ fontSize:10, color:'#dc2626', fontWeight:700 }}>{r.graves} grave{r.graves > 1 ? 's' : ''}</div>}
                     </div>
                   </div>
                 ))}
@@ -1157,16 +1083,16 @@ export default function OcorrenciasPage() {
             ) : (
               <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
                 {ultimasOC.map((oc, idx) => {
-                  const cfg = GRAV_CONFIG[oc.gravidade as GravOcorrencia] ?? GRAV_CONFIG.leve
+                  const isConfirmed = oc.ciencia_responsavel
                   return (
                     <div key={oc.id || idx} style={{ display:'flex', gap:10, alignItems:'center', paddingBottom:10, borderBottom:'1px solid #f1f5f9' }}>
-                      <div style={{ width:8, height:8, borderRadius:'50%', background:cfg.color, flexShrink:0 }} />
+                      <div style={{ width:8, height:8, borderRadius:'50%', background: isConfirmed ? '#10b981' : '#f59e0b', flexShrink:0 }} />
                       <div style={{ flex:1, minWidth:0 }}>
                         <div style={{ fontSize:13, fontWeight:600, color: '#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{oc.alunoNome}</div>
-                        <div style={{ fontSize:11, color:'#64748b' }}>{oc.tipo} • {oc.turma}</div>
+                        <div style={{ fontSize:11, color:'#64748b' }}>{oc.turma || 'Turma'} • {oc.data}</div>
                       </div>
-                      <div style={{ fontSize:10, padding:'2px 6px', borderRadius:4, background:cfg.bg, color:cfg.color, fontWeight:700, flexShrink:0 }}>
-                        {cfg.label}
+                      <div style={{ fontSize:10, padding:'2px 6px', borderRadius:4, background: isConfirmed ? '#dcfce7' : '#fef3c7', color: isConfirmed ? '#15803d' : '#b45309', fontWeight:700, flexShrink:0 }}>
+                        {isConfirmed ? 'Confirmada' : 'Aguardando'}
                       </div>
                     </div>
                   )
@@ -1247,8 +1173,8 @@ export default function OcorrenciasPage() {
                   <th style={{ textAlign: 'left', padding: '12px', fontSize: '12px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Segmento</th>
                   <th style={{ textAlign: 'center', padding: '12px', fontSize: '12px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Alunos</th>
                   <th style={{ textAlign: 'center', padding: '12px', fontSize: '12px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Ocorrências</th>
-                  <th style={{ textAlign: 'center', padding: '12px', fontSize: '12px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Graves</th>
                   <th style={{ textAlign: 'center', padding: '12px', fontSize: '12px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Pendentes</th>
+                  <th style={{ textAlign: 'center', padding: '12px', fontSize: '12px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Confirmadas</th>
                   <th style={{ textAlign: 'center', padding: '12px', fontSize: '12px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Ação</th>
                 </tr>
               </thead>
@@ -1267,13 +1193,12 @@ export default function OcorrenciasPage() {
                 ) : (
                   turmasFiltradas.map((turma: any) => {
                     const color = SEG_COLORS[turma.serie] ?? '#3b82f6'
-                    const ocTurma = ocorrencias.filter(o => o.turma === turma.nome || o.turma === turma.id)
+                    const ocTurma = ocorrencias.filter(o => doesOcMatchTurma(o, turma))
                     const pendTurma = ocTurma.filter(o => !o.ciencia_responsavel).length
-                    const gravesTurma = ocTurma.filter(o => o.gravidade === 'grave').length
-                    const gravesPend = ocTurma.filter(o => o.gravidade === 'grave' && !o.ciencia_responsavel).length
-                    const alunosTurma = alunos.filter((a: any) => a.turma === turma.nome || a.turma === turma.id || a.turmaId === turma.id).length
+                    const confTurma = ocTurma.filter(o => o.ciencia_responsavel).length
+                    const alunosTurma = alunos.filter((a: any) => a.turma === turma.nome || a.turma === turma.id || a.turmaId === turma.id || isAlunoCursandoTurma(a, turma, turma.ano, turmas)).length
                     
-                    const isUrgent = gravesPend > 0
+                    const isUrgent = pendTurma > 0
 
                     return (
                       <tr key={turma.id} style={{ background: '#fff', transition: 'all 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'} onMouseLeave={e => e.currentTarget.style.background = '#fff'}>
@@ -1296,19 +1221,7 @@ export default function OcorrenciasPage() {
                           <span style={{ 
                             fontSize: '13px', 
                             fontWeight: 700, 
-                            color: gravesTurma > 0 ? '#ef4444' : '#64748b',
-                            background: gravesTurma > 0 ? '#fee2e2' : 'transparent',
-                            padding: gravesTurma > 0 ? '2px 6px' : '0',
-                            borderRadius: '4px'
-                          }}>
-                            {gravesTurma}
-                          </span>
-                        </td>
-                        <td style={{ padding: '12px', textAlign: 'center', borderTop: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9' }}>
-                          <span style={{ 
-                            fontSize: '13px', 
-                            fontWeight: 700, 
-                            color: pendTurma > 0 ? '#f59e0b' : '#10b981',
+                            color: pendTurma > 0 ? '#b45309' : '#64748b',
                             background: pendTurma > 0 ? '#fef3c7' : 'transparent',
                             padding: pendTurma > 0 ? '2px 6px' : '0',
                             borderRadius: '4px'
@@ -1316,21 +1229,30 @@ export default function OcorrenciasPage() {
                             {pendTurma}
                           </span>
                         </td>
+                        <td style={{ padding: '12px', textAlign: 'center', borderTop: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9' }}>
+                          <span style={{ 
+                            fontSize: '13px', 
+                            fontWeight: 700, 
+                            color: confTurma > 0 ? '#15803d' : '#64748b',
+                            background: confTurma > 0 ? '#dcfce7' : 'transparent',
+                            padding: confTurma > 0 ? '2px 6px' : '0',
+                            borderRadius: '4px'
+                          }}>
+                            {confTurma}
+                          </span>
+                        </td>
                         <td style={{ padding: '12px', textAlign: 'center', borderTop: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9', borderRight: '1px solid #f1f5f9', borderTopRightRadius: '10px', borderBottomRightRadius: '10px' }}>
                           <div style={{ display: 'flex', gap: '12px', alignItems: 'center', justifyContent: 'center' }}>
                             <button 
-                              onClick={() => { setTurmaSel(turma.nome); setFiltroGrav('todas'); setBusca('') }}
-                              style={{ background: 'transparent', border: 'none', color: isUrgent ? '#ef4444' : '#2563eb', fontWeight: 700, fontSize: '13px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                              onClick={() => { setTurmaSel(turma.nome); setFiltroStatus('todas'); setBusca('') }}
+                              style={{ background: 'transparent', border: 'none', color: isUrgent ? '#d97706' : '#2563eb', fontWeight: 700, fontSize: '13px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
                             >
                               Gerenciar <ChevronRight size={16} />
                             </button>
                             <button 
                               onClick={() => {
                                 setEditingId(null);
-                                const primeiroTipoObj = tiposAtivos[0];
-                                const primeiroTipo = primeiroTipoObj?.label || TIPOS_FALLBACK[0];
-                                const primeiraGravidade = (primeiroTipoObj?.gravidade || 'leve') as GravOcorrencia;
-                                setForm({ ...BLANK, turma: turma.nome, tipo: primeiroTipo, gravidade: primeiraGravidade });
+                                setForm({ ...BLANK, turma: turma.nome });
                                 setValidationErrors([]);
                                 setIsValidationModalOpen(false);
                                 setModalOpen(true);
@@ -1359,7 +1281,6 @@ export default function OcorrenciasPage() {
             onClose={() => setModalOpen(false)} 
             alunosDaTurma={alunosDaTurmaAtual} 
             todosAlunos={todosAlunosMapped} 
-            tiposOcorrencia={tiposAtivos} 
             turmas={turmas} 
             validationErrors={validationErrors}
             setValidationErrors={setValidationErrors}
@@ -1444,11 +1365,11 @@ export default function OcorrenciasPage() {
   const printRelatorioTurma = () => {
     const win = window.open('', '_blank')
     if (!win) return
-    win.document.write(`<html><head><title>Ocorrências — ${turmaSel}</title><style>body{font-family:Arial,sans-serif;padding:20px;font-size:12px}h1{font-size:16px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #ccc;padding:6px;text-align:left}th{background:#f0f0f0}.grave{color:#dc2626}.media{color:#ef4444}.leve{color:#f59e0b}</style></head><body>`)
+    win.document.write(`<html><head><title>Ocorrências — ${turmaSel}</title><style>body{font-family:Arial,sans-serif;padding:20px;font-size:12px}h1{font-size:16px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #ccc;padding:6px;text-align:left}th{background:#f0f0f0}</style></head><body>`)
     win.document.write(`<h1>Ocorrências — ${turmaSel}</h1><p>Gerado em ${new Date().toLocaleDateString('pt-BR')}</p>`)
-    win.document.write(`<table><thead><tr><th>Aluno</th><th>Data</th><th>Tipo</th><th>Gravidade</th><th>Descrição</th><th>Responsável</th><th>Ciência</th></tr></thead><tbody>`)
+    win.document.write(`<table><thead><tr><th>Aluno</th><th>Data</th><th>Descrição</th><th>Responsável</th><th>Ciência</th></tr></thead><tbody>`)
     filtered.forEach(o => {
-      win.document.write(`<tr><td>${o.alunoNome}</td><td>${o.data}</td><td>${o.tipo}</td><td class="${o.gravidade}">${o.gravidade.toUpperCase()}</td><td>${o.descricao}</td><td>${o.responsavel}</td><td>${o.ciencia_responsavel?'Sim':'Não'}</td></tr>`)
+      win.document.write(`<tr><td>${o.alunoNome}</td><td>${o.data}</td><td>${o.descricao}</td><td>${o.responsavel}</td><td>${o.ciencia_responsavel?'Sim':'Não'}</td></tr>`)
     })
     win.document.write(`</tbody></table></body></html>`)
     win.document.close()
@@ -1478,9 +1399,9 @@ export default function OcorrenciasPage() {
       <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:16, marginBottom:24 }}>
         {[
           { label:'Total', value: ocDaTurma.length, color:'#2563eb', bg: 'rgba(37, 99, 235, 0.1)' },
-          { label:'Graves', value: ocDaTurma.filter(o=>o.gravidade==='grave').length, color:'#dc2626', bg: 'rgba(220, 38, 38, 0.1)' },
           { label:'Aguardando Ciência', value: ocDaTurma.filter(o=>!o.ciencia_responsavel).length, color:'#f59e0b', bg: 'rgba(245, 158, 11, 0.1)' },
-          { label:'Resolvidas', value: ocDaTurma.filter(o=>o.ciencia_responsavel).length, color:'#10b981', bg: 'rgba(16, 185, 129, 0.1)' },
+          { label:'Ciência Confirmada', value: ocDaTurma.filter(o=>o.ciencia_responsavel).length, color:'#10b981', bg: 'rgba(16, 185, 129, 0.1)' },
+          { label:'Com Anexo', value: ocDaTurma.filter(o=>!!o.anexoUrl).length, color:'#6366f1', bg: 'rgba(99, 102, 241, 0.1)' },
         ].map(c => (
           <div key={c.label} style={{ background: '#fff', padding: '20px', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
             <div style={{ fontSize:12, color:'#64748b', fontWeight: 600, marginBottom:4 }}>{c.label}</div>
@@ -1493,16 +1414,27 @@ export default function OcorrenciasPage() {
       <div style={{ display:'flex', gap:16, marginBottom:20, alignItems:'center', flexWrap:'wrap' }}>
         <div style={{ position:'relative', flex:1, minWidth:200 }}>
           <Search size={16} style={{ position:'absolute', left:12, top:'50%', transform:'translateY(-50%)', color:'#94a3b8', pointerEvents:'none' }} />
-          <input className="form-input" style={{ paddingLeft:36, height: '40px', borderRadius: '8px', background: '#fff', border: '1px solid #e2e8f0' }} placeholder="Buscar aluno ou tipo..." value={busca} onChange={e => setBusca(e.target.value)} />
+          <input className="form-input" style={{ paddingLeft:36, height: '40px', borderRadius: '8px', background: '#fff', border: '1px solid #e2e8f0' }} placeholder="Buscar aluno ou descrição..." value={busca} onChange={e => setBusca(e.target.value)} />
         </div>
         
         <div style={{ display: 'flex', background: '#fff', padding: '4px', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
-          {(['todas','leve','media','grave'] as const).map(f => (
+          {(['todas','pendentes','confirmadas'] as const).map(f => (
             <button key={f} 
-              onClick={() => setFiltroGrav(f)}
-              style={{ height: '32px', padding: '0 12px', background: filtroGrav === f ? GRAV_CONFIG[f==='todas'?'leve':f].color : 'transparent', color: filtroGrav === f ? '#fff' : '#64748b', border: 'none', borderRadius: '6px', fontSize: '12px', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s' }}
+              onClick={() => setFiltroStatus(f)}
+              style={{
+                height: '32px',
+                padding: '0 12px',
+                background: filtroStatus === f ? (f === 'confirmadas' ? '#10b981' : f === 'pendentes' ? '#f59e0b' : '#2563eb') : 'transparent',
+                color: filtroStatus === f ? '#fff' : '#64748b',
+                border: 'none',
+                borderRadius: '6px',
+                fontSize: '12px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                transition: 'all 0.2s'
+              }}
             >
-              {f==='todas' ? 'Todas' : GRAV_CONFIG[f].label}
+              {f==='todas' ? 'Todas' : f==='pendentes' ? 'Aguardando Ciência' : 'Confirmadas'}
             </button>
           ))}
         </div>
@@ -1520,19 +1452,18 @@ export default function OcorrenciasPage() {
       ) : (
         <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
           {paginatedOcorrencias.map(oc => {
-            const cfg = GRAV_CONFIG[oc.gravidade as GravOcorrencia] ?? GRAV_CONFIG.leve
+            const isConfirmed = oc.ciencia_responsavel
+            const cardBorderColor = isConfirmed ? '#10b981' : '#f59e0b'
             return (
-              <div key={oc.id} style={{ display:'flex', gap:16, padding:'16px 20px', background:'#fff', borderTop: `1px solid #e2e8f0`, borderRight: `1px solid #e2e8f0`, borderBottom: `1px solid #e2e8f0`, borderLeft: `4px solid ${cfg.color}`, borderRadius: 12, transition: 'all 0.2s' }}
+              <div key={oc.id} style={{ display:'flex', gap:16, padding:'16px 20px', background:'#fff', borderTop: `1px solid #e2e8f0`, borderRight: `1px solid #e2e8f0`, borderBottom: `1px solid #e2e8f0`, borderLeft: `4px solid ${cardBorderColor}`, borderRadius: 12, transition: 'all 0.2s' }}
                 onMouseEnter={e => (e.currentTarget.style.boxShadow=`0 4px 6px -1px rgba(0,0,0,0.05)`)}
                 onMouseLeave={e => (e.currentTarget.style.boxShadow='')}>
-                <div style={{ width:40, height:40, borderRadius: 10, background:`${cfg.color}15`, color:cfg.color, flexShrink:0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '14px' }}>
+                <div style={{ width:40, height:40, borderRadius: 10, background: isConfirmed ? 'rgba(16, 185, 129, 0.1)' : 'rgba(245, 158, 11, 0.1)', color: isConfirmed ? '#10b981' : '#f59e0b', flexShrink:0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '14px' }}>
                   {getInitials(oc.alunoNome)}
                 </div>
                 <div style={{ flex:1 }}>
                   <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap', marginBottom:4 }}>
                     <span style={{ fontSize:15, fontWeight:700, color: '#0f172a' }}>{oc.alunoNome}</span>
-                    <span style={{ padding: '2px 8px', background: '#f1f5f9', color: '#475569', borderRadius: '4px', fontSize: '11px', fontWeight: 700 }}>{oc.tipo}</span>
-                    <span style={{ fontSize:11, padding:'2px 8px', borderRadius:4, background:cfg.bg, color:cfg.color, fontWeight:700 }}>{cfg.label}</span>
                     {oc.anexoUrl && <span style={{ display:'flex', alignItems:'center', gap:4, fontSize:11, padding:'2px 8px', borderRadius:4, background:'#f0f9ff', color:'#0284c7', fontWeight:700 }}><Paperclip size={12} />Anexo</span>}
                   </div>
                   
@@ -1659,7 +1590,6 @@ export default function OcorrenciasPage() {
           onClose={() => setModalOpen(false)} 
           alunosDaTurma={alunosDaTurmaAtual} 
           todosAlunos={todosAlunosMapped} 
-          tiposOcorrencia={tiposAtivos} 
           turmas={turmas} 
           validationErrors={validationErrors}
           setValidationErrors={setValidationErrors}

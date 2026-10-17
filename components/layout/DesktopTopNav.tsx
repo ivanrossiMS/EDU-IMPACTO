@@ -279,8 +279,7 @@ export function DesktopTopNav() {
             { id: 'cfg-hor', label: 'Horários', href: '/configuracoes/pedagogico/horario', icon: <Clock3 size={14} /> },
             { id: 'cfg-docs', label: 'Tipos de Documentos', href: '/configuracoes/pedagogico/documentos', icon: <FileText size={14} /> },
             { id: 'cfg-galun', label: 'Grupo Alunos', href: '/configuracoes/pedagogico/grupo-alunos', icon: <Users size={14} /> },
-            { id: 'cfg-sital', label: 'Situação do Aluno', href: '/configuracoes/pedagogico/situacao-aluno', icon: <ShieldCheck size={14} /> },
-            { id: 'cfg-tocor', label: 'Tipo de Ocorrências', href: '/configuracoes/pedagogico/tipo-ocorrencias', icon: <AlertTriangle size={14} /> }
+            { id: 'cfg-sital', label: 'Situação do Aluno', href: '/configuracoes/pedagogico/situacao-aluno', icon: <ShieldCheck size={14} /> }
           ]
         }
       ],

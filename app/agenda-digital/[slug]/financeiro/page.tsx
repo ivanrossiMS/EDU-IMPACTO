@@ -228,7 +228,7 @@ function checkIsOverdue(parcela: Parcela): boolean {
 
 function FinancialSkeletonLoader() {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16, animation: 'pulse 1.5s infinite ease-in-out' }}>
+    <div data-page-loading="true" style={{ display: 'flex', flexDirection: 'column', gap: 16, animation: 'pulse 1.5s infinite ease-in-out' }}>
       <div style={{ height: 140, background: '#ffffff', borderRadius: 24, border: '1.5px solid #edf2f7', padding: 20 }} />
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
         <div style={{ height: 80, background: '#ffffff', borderRadius: 20, border: '1.5px solid #edf2f7' }} />

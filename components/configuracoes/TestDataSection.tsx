@@ -607,18 +607,16 @@ export default function TestDataSection() {
           case 'ocorrencias': {
             const allAlunos = data.alunos.filter(a => genAlunoIds.includes(a.id))
             if (!allAlunos.length) { addLog({ module:'Ocorrências', count:0, ok:false, msg:'Sem alunos' }); break }
-            const TIPOS = ['Atraso','Indisciplina em sala','Uso de celular em sala','Tarefa não realizada','Desrespeito ao professor','Briga com colega','Fardamento incompleto','Dano ao patrimônio']
-            const GRAVS: Array<'leve'|'media'|'grave'> = ['leve','leve','media','media','grave']
+            const MOTIVOS = ['Atraso na entrada da aula','Uso de celular sem autorização','Tarefa não realizada','Desrespeito às normas de convivência','Desentendimento entre colegas','Uniforme incompleto','Dano ao patrimônio escolar']
             const RESP = ['Coordenação','Secretaria','Professor(a)','Diretoria']
             const items: any[] = []
             for (let i=0;i<q;i++) {
               const aluno = rnd(allAlunos)
-              const tipo = rnd(TIPOS)
+              const motivo = rnd(MOTIVOS)
               items.push({
                 id:sid(), alunoId:aluno.id, alunoNome:aluno.nome,
-                turma:aluno.turma, tipo,
-                descricao:`${tipo}. Ocorrência registrada para ${aluno.nome}.`,
-                gravidade:rnd(GRAVS),
+                turma:aluno.turma,
+                descricao:`${motivo}. Registro pedagógico referente a ${aluno.nome}.`,
                 data:dateStr(rndN(0,90)),
                 responsavel:rnd(RESP),
                 ciencia_responsavel:rnd([true,false]),

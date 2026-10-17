@@ -9,6 +9,7 @@ export interface AgendaLuxuryLoaderProps {
   statusText?: string
   subtitle?: string
   minDisplayTimeMs?: number
+  maxDisplayTimeMs?: number
   onFinished?: () => void
   preventExit?: boolean
   className?: string
@@ -21,6 +22,7 @@ export function AgendaLuxuryLoader({
   statusText = 'Carregando página e dados...',
   subtitle = 'AGENDA DIGITAL',
   minDisplayTimeMs = 650,
+  maxDisplayTimeMs = 20000,
   onFinished,
   preventExit = false,
   className,
@@ -68,14 +70,14 @@ export function AgendaLuxuryLoader({
     }, 360) // Matches CSS transition duration
   }, [preventExit])
 
-  // Failsafe mestre: nunca bloqueia o usuário por mais de 4.5s sob nenhuma hipótese
+  // Failsafe de emergência: só encerra após maxDisplayTimeMs (padrão 20s) para nunca cortar o carregamento antes da página trocar
   useEffect(() => {
     if (!isLoading) return
     const failsafe = setTimeout(() => {
       triggerExit()
-    }, 4500)
+    }, maxDisplayTimeMs)
     return () => clearTimeout(failsafe)
-  }, [isLoading, triggerExit])
+  }, [isLoading, statusText, maxDisplayTimeMs, triggerExit])
 
   useEffect(() => {
     if (isLoading) {

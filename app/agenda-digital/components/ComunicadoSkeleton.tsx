@@ -15,7 +15,7 @@ export function ComunicadoSkeleton({
   showHeaderBadge = true
 }: ComunicadoSkeletonProps) {
   return (
-    <div style={{ width: '100%', position: 'relative' }}>
+    <div data-page-loading="true" style={{ width: '100%', position: 'relative' }}>
       <style dangerouslySetInnerHTML={{__html: `
         @keyframes ultraShimmerSweep {
           0% { background-position: -200% 0; }

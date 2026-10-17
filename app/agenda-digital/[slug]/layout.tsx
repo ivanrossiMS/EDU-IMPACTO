@@ -95,6 +95,20 @@ export default function ADInnerLayout({
     }
   }, [hydrated])
 
+  const loadedProfileKeyRef = React.useRef<string>('')
+
+  useEffect(() => {
+    if (!hydrated || !currentUser || !resolvedParams?.slug) return
+    if (isAlunoLogado) {
+      const directId = (currentUser as any).aluno_id || (currentUser as any).user_metadata?.aluno_id
+      if (directId && String(resolvedParams.slug) !== String(directId)) {
+        const currentPath = pathname || ''
+        const newPath = currentPath.replace(`/agenda-digital/${resolvedParams.slug}`, `/agenda-digital/${directId}`)
+        router.replace(newPath)
+      }
+    }
+  }, [hydrated, currentUser, resolvedParams?.slug, isAlunoLogado, pathname, router])
+
   useEffect(() => {
     if (!hydrated || !currentUser) return
     if (!resolvedParams?.slug) return
@@ -102,11 +116,14 @@ export default function ADInnerLayout({
     if (isAlunoLogado) {
       const directId = (currentUser as any).aluno_id || (currentUser as any).user_metadata?.aluno_id
       if (directId && String(resolvedParams.slug) !== String(directId)) {
-        const currentPath = pathname || ''
-        const newPath = currentPath.replace(`/agenda-digital/${resolvedParams.slug}`, `/agenda-digital/${directId}`)
-        router.replace(newPath)
         return
       }
+    }
+
+    const profileKey = `${resolvedParams.slug}_${respId}_${isAlunoLogado}_${isMirrorModeActive}`
+    if (loadedProfileKeyRef.current === profileKey && profileData) {
+      setIsLoading(false)
+      return
     }
 
     setIsLoading(true)
@@ -159,6 +176,7 @@ export default function ADInnerLayout({
             }
           }
         }
+        loadedProfileKeyRef.current = profileKey
         setProfileData(data)
       } catch(e) {
         console.error('Failed to load profile data:', e)
@@ -167,7 +185,7 @@ export default function ADInnerLayout({
       }
     }
     loadProfile()
-  }, [hydrated, currentUser, resolvedParams?.slug, respId, isAlunoLogado, isMirrorMode, isMirrorModeActive, pathname, router])
+  }, [hydrated, currentUser?.id, resolvedParams?.slug, respId, isAlunoLogado, isMirrorMode, isMirrorModeActive, router])
 
   useEffect(() => {
     if (setAdLoading) setAdLoading(isLoading)

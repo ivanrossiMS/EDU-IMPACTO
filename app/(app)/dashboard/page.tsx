@@ -955,10 +955,9 @@ export default function DashboardPage() {
                 <div style={{ fontSize: '13px', color: 'hsl(var(--text-muted))', textAlign: 'center', padding: '16px 0', fontWeight: 600 }}>Nenhuma registrada.</div>
               ) : (
                 ocorrencias.slice(0, 3).map((oc: any) => {
-                  const isGrave = oc.gravidade === 'grave';
-                  const isMedia = oc.gravidade === 'media';
-                  const color = isGrave ? '#ef4444' : isMedia ? '#f59e0b' : '#3b82f6';
-                  const bg = isGrave ? 'rgba(239, 68, 68, 0.08)' : isMedia ? 'rgba(245, 158, 11, 0.08)' : 'rgba(59, 130, 246, 0.08)';
+                  const isConfirmada = !!oc.ciencia_responsavel;
+                  const color = isConfirmada ? '#10b981' : '#f59e0b';
+                  const bg = isConfirmada ? 'rgba(16, 185, 129, 0.08)' : 'rgba(245, 158, 11, 0.08)';
                   
                   // Extract date
                   let dataStr = oc.dataRegistro || oc.data_registro || oc.created_at || '';
@@ -973,14 +972,14 @@ export default function DashboardPage() {
                   return (
                     <div key={oc.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px', borderRadius: '16px', background: bg, borderLeft: `4px solid ${color}` }}>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: '14px', fontWeight: 800, color: 'hsl(var(--text-primary))', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{oc.tipo || oc.titulo || 'Ocorrência'}</div>
+                        <div style={{ fontSize: '14px', fontWeight: 800, color: 'hsl(var(--text-primary))', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{oc.descricao || 'Ocorrência Disciplinar'}</div>
                         <div style={{ fontSize: '12px', color: 'hsl(var(--text-secondary))', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
                           <Users size={12} /> {oc.alunoNome || 'Aluno'}
                         </div>
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, flexShrink: 0 }}>
                         <div style={{ fontSize: '10px', fontWeight: 900, color: color, textTransform: 'uppercase' }}>
-                          {oc.gravidade || 'Leve'}
+                          {isConfirmada ? 'Ciência Confirmada' : 'Aguardando Ciência'}
                         </div>
                         {fmtDate && (
                           <div style={{ fontSize: '10px', fontWeight: 800, color: 'hsl(var(--text-muted))' }}>

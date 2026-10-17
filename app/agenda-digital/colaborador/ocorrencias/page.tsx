@@ -116,10 +116,6 @@ export default function ColaboradorOcorrenciasPage() {
     const list = Array.isArray(rawOcorrencias) ? rawOcorrencias : (rawOcorrencias.data || [])
     return list.map((o: any) => {
       const ano = o.ano || (o.data ? o.data.substring(0, 4) : new Date(o.created_at || Date.now()).getFullYear().toString())
-      const lowerGrav = (o.gravidade || '').toLowerCase()
-      const gravidadeNorm = lowerGrav.includes('grav') ? 'grave' : lowerGrav.includes('med') ? 'media' : 'leve'
-      const lowerTipo = (o.tipo || '').toLowerCase()
-      const isElogio = lowerTipo.includes('elogio') || lowerTipo.includes('parabens') || lowerTipo.includes('parabéns')
 
       // Extrair linhas de lançamento
       const lines = (o.descricao || '').split('\n')
@@ -137,8 +133,6 @@ export default function ColaboradorOcorrenciasPage() {
       return {
         ...o,
         anoStr: String(ano),
-        gravidadeNorm,
-        isElogio,
         cleanedDesc: cleanedDesc || o.descricao || '',
         lancadoPor: lancadoPor || o.responsavel || 'Coordenação',
         alunoIdStr: String(o.aluno_id || o.alunoId || '')
@@ -186,10 +180,8 @@ export default function ColaboradorOcorrenciasPage() {
       )
 
       const total = sortedOcs.length
-      const graves = sortedOcs.filter(o => o.gravidadeNorm === 'grave').length
-      const medias = sortedOcs.filter(o => o.gravidadeNorm === 'media').length
-      const leves = sortedOcs.filter(o => o.gravidadeNorm === 'leve').length
       const pendentesCiencia = sortedOcs.filter(o => !o.ciencia_responsavel).length
+      const confirmadasCiencia = sortedOcs.filter(o => !!o.ciencia_responsavel).length
 
       const latestOc = sortedOcs[0] || null
 
@@ -203,10 +195,8 @@ export default function ColaboradorOcorrenciasPage() {
         ocorrencias: sortedOcs,
         allOcorrencias: studentOcs,
         totalOcorrencias: total,
-        graves,
-        medias,
-        leves,
         pendentesCiencia,
+        confirmadasCiencia,
         latestOc,
         hasOcorrencias: total > 0
       }
@@ -223,7 +213,7 @@ export default function ColaboradorOcorrenciasPage() {
         const matricula = String(st.matricula || '').toLowerCase()
         const turma = (st.turmaDisplay || '').toLowerCase()
         const matchOcDesc = st.ocorrencias.some((o: any) => 
-          (o.descricao || '').toLowerCase().includes(q) || (o.tipo || '').toLowerCase().includes(q)
+          (o.descricao || '').toLowerCase().includes(q)
         )
         if (!name.includes(q) && !matricula.includes(q) && !turma.includes(q) && !matchOcDesc) {
           return false
@@ -265,10 +255,9 @@ export default function ColaboradorOcorrenciasPage() {
       const q = searchTerm.toLowerCase()
       const aluno = allAlunos.find(a => String(a.id) === o.alunoIdStr || String(a.id).replace(/^0+/, '') === o.alunoIdStr)
       const alunoNome = (aluno?.nome || '').toLowerCase()
-      const tipo = (o.tipo || '').toLowerCase()
       const desc = (o.descricao || '').toLowerCase()
       const lanc = (o.lancadoPor || '').toLowerCase()
-      return alunoNome.includes(q) || tipo.includes(q) || desc.includes(q) || lanc.includes(q)
+      return alunoNome.includes(q) || desc.includes(q) || lanc.includes(q)
     })
 
     // Sort by date desc
@@ -310,13 +299,10 @@ export default function ColaboradorOcorrenciasPage() {
       : matchedOcs
 
     const total = yearOcs.length
-    const graves = yearOcs.filter(o => o.gravidadeNorm === 'grave').length
-    const medias = yearOcs.filter(o => o.gravidadeNorm === 'media').length
-    const leves = yearOcs.filter(o => o.gravidadeNorm === 'leve').length
     const pendentes = yearOcs.filter(o => !o.ciencia_responsavel).length
     const exemplares = studentsWithOcorrencias.filter(s => s.totalOcorrencias === 0).length
 
-    return { total, graves, medias, leves, pendentes, exemplares }
+    return { total, pendentes, exemplares }
   }, [filteredTurmaStudents, allOcorrencias, selectedAno, studentsWithOcorrencias])
 
   // Student Drilldown Modal Data
@@ -360,12 +346,9 @@ export default function ColaboradorOcorrenciasPage() {
 
   const modalStats = useMemo(() => {
     const total = modalFilteredOcorrencias.length
-    const graves = modalFilteredOcorrencias.filter(o => o.gravidadeNorm === 'grave').length
-    const medias = modalFilteredOcorrencias.filter(o => o.gravidadeNorm === 'media').length
-    const leves = modalFilteredOcorrencias.filter(o => o.gravidadeNorm === 'leve').length
     const pendentes = modalFilteredOcorrencias.filter(o => !o.ciencia_responsavel).length
     const cientes = modalFilteredOcorrencias.filter(o => o.ciencia_responsavel).length
-    return { total, graves, medias, leves, pendentes, cientes }
+    return { total, pendentes, cientes }
   }, [modalFilteredOcorrencias])
 
   const formatDateSeparator = (dateStr: string) => {
@@ -501,7 +484,7 @@ export default function ColaboradorOcorrenciasPage() {
           <Search size={18} color="#94a3b8" style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)' }} />
           <input
             type="text"
-            placeholder={viewMode === 'alunos' ? "Buscar aluno por nome ou matrícula..." : "Buscar por aluno, tipo ou motivo..."}
+            placeholder={viewMode === 'alunos' ? "Buscar aluno por nome ou matrícula..." : "Buscar por aluno ou motivo..."}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             style={{
@@ -599,10 +582,9 @@ export default function ColaboradorOcorrenciasPage() {
             gap: 16
           }}>
             {displayedStudents.map((st, idx) => {
-              const hasGraves = st.graves > 0
-              const hasMedias = st.medias > 0
-              const badgeBg = hasGraves ? '#fee2e2' : hasMedias ? '#ffedd5' : st.hasOcorrencias ? '#fef3c7' : '#ecfdf5'
-              const badgeColor = hasGraves ? '#dc2626' : hasMedias ? '#ea580c' : st.hasOcorrencias ? '#d97706' : '#059669'
+              const hasPendentes = st.pendentesCiencia > 0
+              const badgeBg = hasPendentes ? '#fee2e2' : st.hasOcorrencias ? '#fef3c7' : '#ecfdf5'
+              const badgeColor = hasPendentes ? '#dc2626' : st.hasOcorrencias ? '#d97706' : '#059669'
 
               return (
                 <motion.div
@@ -786,11 +768,8 @@ export default function ColaboradorOcorrenciasPage() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                   {group.items.map((o) => {
                     const aluno = allAlunos.find(a => String(a.id) === o.alunoIdStr || String(a.id).replace(/^0+/, '') === o.alunoIdStr)
-                    const isGrave = o.gravidadeNorm === 'grave'
-                    const isMedia = o.gravidadeNorm === 'media'
-                    const dotColor = isGrave ? '#ef4444' : isMedia ? '#f97316' : '#f59e0b'
-                    const badgeBg = isGrave ? '#fee2e2' : isMedia ? '#ffedd5' : '#fef3c7'
-                    const badgeColor = isGrave ? '#dc2626' : isMedia ? '#ea580c' : '#d97706'
+                    const isConfirmada = !!o.ciencia_responsavel
+                    const dotColor = isConfirmada ? '#10b981' : '#f59e0b'
                     const isExpanded = !!expandedDescIds[o.id]
                     const descText = o.cleanedDesc || ''
                     const shouldTruncate = descText.length > 120 && !isExpanded
@@ -831,7 +810,7 @@ export default function ColaboradorOcorrenciasPage() {
                           padding: '20px',
                           boxShadow: '0 4px 20px rgba(0,0,0,0.03)'
                         }}>
-                          {/* Header: Aluno + Gravidade */}
+                          {/* Header: Aluno + Status Ciência */}
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, flexWrap: 'wrap', gap: 10 }}>
                             <div 
                               style={{ display: 'flex', alignItems: 'center', cursor: aluno ? 'pointer' : 'default' }}
@@ -848,18 +827,6 @@ export default function ColaboradorOcorrenciasPage() {
                             </div>
 
                             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                              <span style={{
-                                fontSize: 11,
-                                fontWeight: 800,
-                                textTransform: 'uppercase',
-                                padding: '4px 10px',
-                                borderRadius: 8,
-                                background: badgeBg,
-                                color: badgeColor
-                              }}>
-                                {o.gravidade ? o.gravidade.toUpperCase() : (isGrave ? 'GRAVE' : isMedia ? 'MÉDIA' : 'LEVE')}
-                              </span>
-
                               {o.ciencia_responsavel ? (
                                 <span style={{
                                   fontSize: 11,
@@ -894,7 +861,7 @@ export default function ColaboradorOcorrenciasPage() {
                             </div>
                           </div>
 
-                          {/* Tipo e Lançador */}
+                          {/* Registro e Lançador */}
                           <div style={{
                             background: '#f8fafc',
                             borderRadius: 14,
@@ -908,7 +875,7 @@ export default function ColaboradorOcorrenciasPage() {
                           }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                               <FileText size={16} color="#6366f1" />
-                              <strong style={{ fontSize: 13, color: '#0f172a' }}>{o.tipo || 'Ocorrência'}</strong>
+                              <strong style={{ fontSize: 13, color: '#0f172a' }}>Ocorrência Disciplinar</strong>
                             </div>
                             <div style={{ fontSize: 12, color: '#64748b' }}>
                               Registrado por: <strong style={{ color: '#475569' }}>{o.lancadoPor}</strong>
@@ -1129,21 +1096,6 @@ export default function ColaboradorOcorrenciasPage() {
                     <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 6, background: '#e2e8f0', color: '#334155' }}>
                       {modalStats.total} {modalStats.total === 1 ? 'registro' : 'registros'}
                     </span>
-                    {modalStats.graves > 0 && (
-                      <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 6, background: '#fee2e2', color: '#dc2626' }}>
-                        {modalStats.graves} {modalStats.graves === 1 ? 'grave' : 'graves'}
-                      </span>
-                    )}
-                    {modalStats.medias > 0 && (
-                      <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 6, background: '#ffedd5', color: '#ea580c' }}>
-                        {modalStats.medias} {modalStats.medias === 1 ? 'média' : 'médias'}
-                      </span>
-                    )}
-                    {modalStats.leves > 0 && (
-                      <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 6, background: '#fef3c7', color: '#d97706' }}>
-                        {modalStats.leves} {modalStats.leves === 1 ? 'leve' : 'leves'}
-                      </span>
-                    )}
                     {modalStats.pendentes > 0 ? (
                       <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 6, background: '#fef2f2', color: '#ef4444', border: '1px solid #fecaca' }}>
                         {modalStats.pendentes} sem ciência
@@ -1222,11 +1174,8 @@ export default function ColaboradorOcorrenciasPage() {
                     <div style={{ position: 'absolute', top: 20, bottom: 20, left: 14, width: 2, background: '#e2e8f0', zIndex: 0 }} />
 
                     {modalFilteredOcorrencias.map((o) => {
-                      const isGrave = o.gravidadeNorm === 'grave'
-                      const isMedia = o.gravidadeNorm === 'media'
-                      const dotColor = isGrave ? '#ef4444' : isMedia ? '#f97316' : '#f59e0b'
-                      const badgeBg = isGrave ? '#fee2e2' : isMedia ? '#ffedd5' : '#fef3c7'
-                      const badgeColor = isGrave ? '#dc2626' : isMedia ? '#ea580c' : '#d97706'
+                      const isConfirmada = !!o.ciencia_responsavel
+                      const dotColor = isConfirmada ? '#10b981' : '#f59e0b'
                       const isExpanded = !!expandedDescIds[o.id]
                       const descText = o.cleanedDesc || ''
                       const shouldTruncate = descText.length > 140 && !isExpanded
@@ -1268,7 +1217,7 @@ export default function ColaboradorOcorrenciasPage() {
                                   width: 34, 
                                   height: 34, 
                                   borderRadius: 10, 
-                                  background: isGrave ? '#fee2e2' : isMedia ? '#ffedd5' : '#fef3c7', 
+                                  background: isConfirmada ? '#ecfdf5' : '#fffbeb', 
                                   display: 'flex', 
                                   alignItems: 'center', 
                                   justifyContent: 'center',
@@ -1278,7 +1227,7 @@ export default function ColaboradorOcorrenciasPage() {
                                 </div>
                                 <div style={{ minWidth: 0 }}>
                                   <h4 style={{ fontSize: 15, fontWeight: 800, color: '#0f172a', margin: 0, lineHeight: 1.3 }}>
-                                    {o.tipo || 'Ocorrência'}
+                                    Ocorrência Disciplinar
                                   </h4>
                                   <span style={{ fontSize: 11.5, color: '#64748b', display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
                                     <Calendar size={11} />
@@ -1288,18 +1237,6 @@ export default function ColaboradorOcorrenciasPage() {
                               </div>
 
                               <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-                                <span style={{
-                                  fontSize: 10.5,
-                                  fontWeight: 800,
-                                  textTransform: 'uppercase',
-                                  padding: '3px 8px',
-                                  borderRadius: 6,
-                                  background: badgeBg,
-                                  color: badgeColor
-                                }}>
-                                  {o.gravidade ? o.gravidade.toUpperCase() : (isGrave ? 'GRAVE' : isMedia ? 'MÉDIA' : 'LEVE')}
-                                </span>
-
                                 {o.ciencia_responsavel ? (
                                   <span style={{
                                     fontSize: 10.5,

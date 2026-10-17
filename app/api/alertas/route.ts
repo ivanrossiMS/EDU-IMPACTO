@@ -32,7 +32,6 @@ export async function GET() {
       supabase.from('contas_pagar').select('id, valor, vencimento').neq('status', 'pago')
         .lt('vencimento', hojeStr),
       supabase.from('ocorrencias').select('id', { count: 'exact', head: true })
-        .eq('gravidade', 'grave')
         .eq('ciencia_responsavel', false),
     ])
 
@@ -113,14 +112,14 @@ export async function GET() {
       })
     }
 
-    // Ocorrências graves
-    const ocGravesCount = resOcorrencias.count ?? 0
-    if (ocGravesCount > 0) {
+    // Ocorrências sem ciência
+    const ocSemCienciaCount = resOcorrencias.count ?? 0
+    if (ocSemCienciaCount > 0) {
       alertas.push({
         id: 'auto-oc',
         nivel: 'alto',
-        titulo: `${ocGravesCount} ocorrência${ocGravesCount > 1 ? 's' : ''} grave${ocGravesCount > 1 ? 's' : ''} sem ciência`,
-        descricao: 'Responsáveis ainda não foram notificados',
+        titulo: `${ocSemCienciaCount} ocorrência${ocSemCienciaCount > 1 ? 's' : ''} sem ciência`,
+        descricao: 'Responsáveis ainda não confirmaram ciência',
         acao: 'Ver ocorrências',
         link: '/academico/ocorrencias',
       })

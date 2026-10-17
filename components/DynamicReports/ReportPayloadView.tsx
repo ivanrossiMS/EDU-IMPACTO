@@ -119,8 +119,8 @@ export function ReportPayloadView({
     };
   }, [isOpen, payload, targetStudentId, targetStudentAvatar, alunos]);
 
-  const { resolvedStudentInfo, resolvedTemplate, observacaoValue, standardFields } = useMemo(() => {
-    if (!payload) return { resolvedStudentInfo: null, resolvedTemplate: null, observacaoValue: null, standardFields: [] };
+  const { resolvedStudentInfo, resolvedTemplate, observacaoValue, ocorrenciaValue, standardFields } = useMemo(() => {
+    if (!payload) return { resolvedStudentInfo: null, resolvedTemplate: null, observacaoValue: null, ocorrenciaValue: null, standardFields: [] };
     
     // Parse title
     const parts = (attachmentString || '').split('|');
@@ -169,6 +169,7 @@ export function ReportPayloadView({
     const studentValues = studentIdToUse ? payload.values[studentIdToUse] : {};
 
     let obsValue = '';
+    let ocValue = '';
     const fields: { label: string; value: string; id: string }[] = [];
 
     if (temp && studentValues) {
@@ -178,8 +179,11 @@ export function ReportPayloadView({
            const isEmpty = rawVal === undefined || rawVal === null || rawVal === '' || rawVal === 'Não preenchido' || (Array.isArray(rawVal) && rawVal.length === 0);
            
            if (!isEmpty) {
-               if (field.label.toLowerCase().includes('obs') || field.label.toLowerCase().includes('observação')) {
+               const normalizedLabel = String(field.label || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+               if (normalizedLabel.includes('obs') || normalizedLabel.includes('observacao')) {
                   obsValue = rawVal;
+               } else if (normalizedLabel.includes('ocorrencia')) {
+                  ocValue = Array.isArray(rawVal) ? rawVal.join(', ') : String(rawVal);
                } else {
                   let displayVal = rawVal;
                   if (Array.isArray(rawVal)) {
@@ -192,7 +196,7 @@ export function ReportPayloadView({
       });
     }
 
-    return { resolvedStudentInfo: info, resolvedTemplate: temp, observacaoValue: obsValue, standardFields: fields };
+    return { resolvedStudentInfo: info, resolvedTemplate: temp, observacaoValue: obsValue, ocorrenciaValue: ocValue, standardFields: fields };
   }, [payload, attachmentString, turmas, targetStudentId, targetStudentName, targetStudentAvatar, dynamicAvatar, alunos]);
 
   const studentInfo = resolvedStudentInfo || { id: 'unknown', name: 'Aluno(a)', avatarUrl: null, turma: '' };
@@ -410,7 +414,7 @@ export function ReportPayloadView({
                         </div>
                       )}
 
-                      {standardFields.length === 0 && (
+                      {standardFields.length === 0 && !observacaoValue && !ocorrenciaValue && (
                         <div 
                           className="w-full bg-white backdrop-blur-3xl overflow-hidden"
                           style={{ borderRadius: '24px', border: '1px solid #EBE7FF' }}
@@ -421,6 +425,38 @@ export function ReportPayloadView({
                     </>
                   );
                 })()}
+
+                {/* Ocorrências Block */}
+                {ocorrenciaValue && ocorrenciaValue !== 'Não preenchido' && (
+                  <div 
+                    className="w-full bg-white relative flex gap-3"
+                    style={{
+                      borderRadius: '20px',
+                      border: '1px solid #EBE7FF',
+                      boxShadow: '0 8px 30px rgba(113, 101, 245, 0.04)',
+                      marginTop: '12px',
+                      padding: '16px'
+                    }}
+                  >
+                    <div 
+                      className="flex items-center justify-center flex-shrink-0"
+                      style={{
+                        width: '36px', height: '36px',
+                        borderRadius: '12px',
+                        background: '#F9F7FF',
+                        border: '1px solid #F3F0FF'
+                      }}
+                    >
+                      <FileText className="w-4 h-4" style={{ color: '#8B5CF6' }} strokeWidth={2.5} />
+                    </div>
+                    <div className="flex-1 pt-0">
+                      <h4 style={{ color: '#7165F5', fontWeight: 700, fontSize: '14px', margin: '0 0 4px 0' }}>Ocorrências 📋</h4>
+                      <p style={{ color: '#475569', fontSize: '14px', fontWeight: 500, lineHeight: 1.4, margin: 0, paddingRight: '20px', overflowWrap: 'anywhere', whiteSpace: 'pre-wrap' }}>
+                        {ocorrenciaValue}
+                      </p>
+                    </div>
+                  </div>
+                )}
 
                 {/* Observação Block */}
                 {observacaoValue && observacaoValue !== 'Não preenchido' && (

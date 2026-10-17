@@ -670,6 +670,13 @@ export function ReportsSelectionModal({
         ? `${validTurmaNames.length} turmas: ${validTurmaNames.join(', ')}`
         : 'Turma selecionada'
 
+    const studentTurmas: Record<string, string> = {}
+    targetedStudents.forEach(st => {
+      if (st?.id && st._turmaOrigemNome) {
+        studentTurmas[String(st.id)] = String(st._turmaOrigemNome)
+      }
+    })
+
     const payload = {
       type: 'report-assignment',
       templateId: selectedTemplate.id,
@@ -678,6 +685,8 @@ export function ReportsSelectionModal({
       turmaIds: filterTurmaIds,
       turmaName: turmaNameSummary,
       turmaNames: validTurmaNames,
+      anoLetivo: filterYear || new Date().getFullYear().toString(),
+      studentTurmas,
       dataReferencia: new Date().toISOString().split('T')[0],
       studentCount: targetedStudents.length,
       studentIds: targetedStudents.map(st => st.id)

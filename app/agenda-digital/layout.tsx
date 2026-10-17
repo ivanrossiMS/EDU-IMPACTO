@@ -17,7 +17,7 @@ import { AgendaRealtimeProvider } from './components/AgendaRealtimeProvider'
 import { Loader2 } from 'lucide-react'
 import { hideSplashScreen } from '@/lib/capacitor/splash'
 import { AgendaLuxuryLoader } from '@/components/agenda/AgendaLuxuryLoader'
-import { useIsFetching } from '@tanstack/react-query'
+import { isGlobalNavOverlayActive } from '@/lib/navigation/pageReadiness'
 
 
 
@@ -63,7 +63,6 @@ export default function AgendaDigitalLayout({ children }: { children: React.Reac
 
 function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
   const { bannerUrl, adLoading, isLoaded, pageLoading, pageLoadingLabel } = useAgendaDigital()
-  const isFetchingQueries = useIsFetching({ queryKey: ['agenda'] })
   const { currentUser, hydrated, loadingPath, setLoadingPath, moduleTransition } = useApp()
   const { perfis, perfisLoading } = useData()
   const router = useRouter()
@@ -74,11 +73,6 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
   // 'allowed'  = usuário tem acesso
   // 'denied'   = usuário não tem acesso
   const [accessState, setAccessState] = React.useState<'checking' | 'allowed' | 'denied'>('checking')
-
-  const [routeNavigating, setRouteNavigating] = React.useState(false)
-  const [navTargetLabel, setNavTargetLabel] = React.useState('Carregando página e dados...')
-  const targetPathRef = React.useRef<string | null>(null)
-  const currentPathRef = React.useRef(pathname)
   const [initialReady, setInitialReady] = React.useState(false)
 
   const isSelectStudent = pathname?.includes('/agenda-digital/selecionar-aluno') || pathname?.includes('/agenda-digital/selecionar-perfil-admin')
@@ -95,126 +89,25 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
     }
   }, [pathname, loadingPath, setLoadingPath])
 
-  // 1. Interceptar cliques em links da Agenda Digital para saltar o loader na tela imediatamente (0ms de latência)
-  React.useEffect(() => {
-    const handleGlobalClick = (e: MouseEvent) => {
-      const anchor = (e.target as HTMLElement)?.closest('a')
-      if (!anchor) return
-
-      const href = anchor.getAttribute('href')
-      if (!href) return
-
-      if (
-        anchor.target === '_blank' ||
-        href.startsWith('http') ||
-        href.startsWith('#') ||
-        href.startsWith('mailto:') ||
-        href.startsWith('tel:')
-      ) {
-        return
-      }
-
-      if (href.startsWith('/agenda-digital')) {
-        const currentPath = window.location.pathname
-        let url: URL
-        try {
-          url = new URL(href, window.location.origin)
-        } catch {
-          return
-        }
-
-        if (url.pathname !== currentPath) {
-          targetPathRef.current = url.pathname
-          setRouteNavigating(true)
-
-          if (href.includes('comunicados')) setNavTargetLabel('Carregando comunicados...')
-          else if (href.includes('chat')) setNavTargetLabel('Carregando mensagens e conversas...')
-          else if (href.includes('momentos')) setNavTargetLabel('Carregando galeria e mídia...')
-          else if (href.includes('calendario')) setNavTargetLabel('Carregando calendário escolar...')
-          else if (href.includes('financeiro')) setNavTargetLabel('Carregando dados financeiros...')
-          else if (href.includes('frequencia')) setNavTargetLabel('Carregando frequência...')
-          else if (href.includes('notas')) setNavTargetLabel('Carregando boletim escolar...')
-          else if (href.includes('ocorrencias')) setNavTargetLabel('Carregando ocorrências...')
-          else if (href.includes('turmas')) setNavTargetLabel('Carregando turmas e alunos...')
-          else if (href.includes('pessoas')) setNavTargetLabel('Carregando usuários...')
-          else if (href.includes('cobrancas')) setNavTargetLabel('Carregando cobranças...')
-          else if (href.includes('relatorios')) setNavTargetLabel('Carregando relatórios...')
-          else if (href.includes('ajustes')) setNavTargetLabel('Carregando configurações...')
-          else if (href.includes('perfil')) setNavTargetLabel('Carregando perfil...')
-          else setNavTargetLabel('Carregando página e dados...')
-        }
-      }
-    }
-
-    const handlePopState = () => {
-      setRouteNavigating(true)
-      setNavTargetLabel('Carregando página e dados...')
-    }
-
-    document.addEventListener('click', handleGlobalClick, true)
-    window.addEventListener('popstate', handlePopState)
-
-    return () => {
-      document.removeEventListener('click', handleGlobalClick, true)
-      window.removeEventListener('popstate', handlePopState)
-    }
-  }, [])
-
-  // 2. Transição ao trocar pathname
-  React.useEffect(() => {
-    if (currentPathRef.current !== pathname) {
-      currentPathRef.current = pathname
-      setRouteNavigating(true)
-      targetPathRef.current = null
-
-      const timer = setTimeout(() => {
-        setRouteNavigating(false)
-      }, 650)
-      return () => clearTimeout(timer)
-    }
-  }, [pathname])
-
-  // 3. Monitor de prontidão inicial
+  // Monitor de prontidão inicial
   React.useEffect(() => {
     if (accessState === 'allowed' && hydrated && mounted) {
       const timer = setTimeout(() => {
         setInitialReady(true)
-      }, 500)
+      }, 350)
       return () => clearTimeout(timer)
     }
   }, [accessState, hydrated, mounted])
 
-  // 4. Resolver routeNavigating quando estabilizar
-  React.useEffect(() => {
-    if (routeNavigating && !targetPathRef.current && isFetchingQueries === 0) {
-      const settleTimer = setTimeout(() => {
-        setRouteNavigating(false)
-      }, 450)
-      return () => clearTimeout(settleTimer)
-    }
-  }, [routeNavigating, isFetchingQueries])
-
-  // 5. Failsafe de segurança: nunca trava a tela por mais de 4s
-  const [masterFailsafeTimeout, setMasterFailsafeTimeout] = React.useState(false)
+  // Failsafe de segurança para o boot inicial: nunca trava a abertura inicial por mais de 6s
+  const [bootFailsafeReached, setBootFailsafeReached] = React.useState(false)
   React.useEffect(() => {
     const timer = setTimeout(() => {
-      setMasterFailsafeTimeout(true)
+      setBootFailsafeReached(true)
       setInitialReady(true)
-      setRouteNavigating(false)
-      targetPathRef.current = null
-    }, 4000)
+    }, 6000)
     return () => clearTimeout(timer)
   }, [])
-
-  React.useEffect(() => {
-    if (routeNavigating) {
-      const emergencyDismiss = setTimeout(() => {
-        setRouteNavigating(false)
-        targetPathRef.current = null
-      }, 4000)
-      return () => clearTimeout(emergencyDismiss)
-    }
-  }, [routeNavigating])
 
   const isFamily = currentUser?.perfil === 'Família' || currentUser?.cargo === 'Aluno' || currentUser?.cargo === 'Responsável'
 
@@ -270,10 +163,10 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
   }, [hydrated, currentUser, isFamily, pathname, perfisLoading, perfis, loadingPath])
 
   React.useEffect(() => {
-    if (accessState === 'allowed' || masterFailsafeTimeout) {
+    if (accessState === 'allowed' || bootFailsafeReached) {
       hideSplashScreen(300)
     }
-  }, [accessState, masterFailsafeTimeout])
+  }, [accessState, bootFailsafeReached])
 
   // Acesso negado — somente após verificação completa com dados reais
   if (accessState === 'denied' && loadingPath !== 'logout') {
@@ -297,14 +190,17 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
     )
   }
 
+  const isInitialBootLoading = !bootFailsafeReached && (
+    !mounted ||
+    !hydrated ||
+    accessState === 'checking' ||
+    !initialReady
+  )
+
   const isMasterLoading =
-    !masterFailsafeTimeout &&
-    loadingPath !== 'logout' && (
-      !mounted ||
-      !hydrated ||
-      accessState === 'checking' ||
-      !initialReady ||
-      routeNavigating ||
+    loadingPath !== 'logout' &&
+    !isGlobalNavOverlayActive() && (
+      isInitialBootLoading ||
       Boolean(pageLoading) ||
       Boolean(adLoading)
     )
@@ -313,7 +209,6 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
     !hydrated || !mounted ? 'Iniciando Agenda Digital...' :
     accessState === 'checking' ? 'Verificando permissões e dados...' :
     pageLoading && pageLoadingLabel ? pageLoadingLabel :
-    routeNavigating ? navTargetLabel :
     'Carregando página e dados...'
 
   return (

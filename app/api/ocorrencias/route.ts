@@ -82,9 +82,12 @@ export async function GET(request: Request) {
 
   return NextResponse.json(ocorrencias.map(row => {
     const turmaId = row.dados?.turma;
+    const resolvedAlunoId = String(row.aluno_id || row.dados?.alunoId || row.dados?.aluno_id || '').replace(/^a_?/, '').trim();
     return { 
       ...row, 
       ...(row.dados || {}),
+      alunoId: resolvedAlunoId,
+      aluno_id: resolvedAlunoId,
       turmaNome: turmaId && turmasDict[turmaId] ? turmasDict[turmaId] : turmaId
     };
   }))
@@ -111,12 +114,17 @@ export async function POST(request: Request) {
       after(async () => {
         const allPushPromises: Promise<any>[] = []
         const masterAdminIds = await getInstitutionalMasterAdminIds()
+        const { supabaseServer } = await import('@/lib/supabaseServer')
         for (const row of rows) {
           const parentIds = await getResponsavelIdsForTargets({ targetStudents: [row.aluno_id] })
           const targetIds = Array.from(new Set([...parentIds, ...masterAdminIds])).filter(Boolean)
           if (targetIds.length > 0) {
-            const { data: aluno } = await supabase.from('alunos').select('nome').eq('id', row.aluno_id).single()
-            const nomeAluno = aluno?.nome ? aluno.nome : 'o aluno'
+            let nomeAluno = (row.dados as any)?.alunoNome || ''
+            if (!nomeAluno && row.aluno_id) {
+              const { data: aluno } = await supabaseServer.from('alunos').select('nome').eq('id', row.aluno_id).maybeSingle()
+              nomeAluno = aluno?.nome || ''
+            }
+            if (!nomeAluno) nomeAluno = 'o aluno'
             allPushPromises.push(
               sendAgendaPushNotification({
                 type: 'ocorrencias',
@@ -165,12 +173,17 @@ export async function POST(request: Request) {
 
     // Disparar push em background para não bloquear o response (single)
     after(async () => {
+      const { supabaseServer } = await import('@/lib/supabaseServer')
       // Se for apenas registro de ciência da família, não assusta os pais com novo aviso
       if (isCienciaAction) {
         const masterAdminIds = await getInstitutionalMasterAdminIds()
         if (masterAdminIds.length > 0) {
-          const { data: aluno } = await supabase.from('alunos').select('nome').eq('id', data.aluno_id).single()
-          const nomeAluno = aluno?.nome ? aluno.nome : 'o aluno'
+          let nomeAluno = (data.dados as any)?.alunoNome || ''
+          if (!nomeAluno && data.aluno_id) {
+            const { data: aluno } = await supabaseServer.from('alunos').select('nome').eq('id', data.aluno_id).maybeSingle()
+            nomeAluno = aluno?.nome || ''
+          }
+          if (!nomeAluno) nomeAluno = 'o aluno'
           await sendAgendaPushNotification({
             type: 'ocorrencias',
             itemId: String(data.id),
@@ -188,8 +201,12 @@ export async function POST(request: Request) {
       const masterAdminIds = await getInstitutionalMasterAdminIds()
       const targetIds = Array.from(new Set([...parentIds, ...masterAdminIds])).filter(Boolean)
       if (targetIds.length > 0) {
-        const { data: aluno } = await supabase.from('alunos').select('nome').eq('id', data.aluno_id).single()
-        const nomeAluno = aluno?.nome ? aluno.nome : 'o aluno'
+        let nomeAluno = (data.dados as any)?.alunoNome || ''
+        if (!nomeAluno && data.aluno_id) {
+          const { data: aluno } = await supabaseServer.from('alunos').select('nome').eq('id', data.aluno_id).maybeSingle()
+          nomeAluno = aluno?.nome || ''
+        }
+        if (!nomeAluno) nomeAluno = 'o aluno'
         await sendAgendaPushNotification({
           type: 'ocorrencias',
           itemId: String(data.id),
@@ -202,7 +219,8 @@ export async function POST(request: Request) {
       }
     })
 
-    return NextResponse.json({ ...data, ...(data.dados || {}) }, { status: 201 })
+    const resolvedId = String(data.aluno_id || (data.dados as any)?.alunoId || '').replace(/^a_?/, '').trim()
+    return NextResponse.json({ ...data, ...(data.dados || {}), alunoId: resolvedId, aluno_id: resolvedId }, { status: 201 })
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 400 })
   }
@@ -223,14 +241,19 @@ export async function DELETE(request: Request) {
 }
 
 function buildRow(o: any) {
-  const { id, alunoId, tipoId, descricao, data, status, ...rest } = o
+  const { id, alunoId, aluno_id, tipoId, tipo_id, descricao, data, status, ...rest } = o
+  const resolvedAlunoId = String(alunoId || aluno_id || '').replace(/^a_?/, '').trim()
   return {
     id: id || `OC-${Date.now()}-${Math.random().toString(36).slice(2,6)}`,
-    aluno_id: alunoId || '',
-    tipo_id: tipoId || '',
+    aluno_id: resolvedAlunoId,
+    tipo_id: tipoId || tipo_id || '',
     descricao: descricao || '',
     data: data || new Date().toISOString().split('T')[0],
     status: status || 'aberta',
-    dados: rest,
+    dados: {
+      ...rest,
+      alunoId: resolvedAlunoId,
+      aluno_id: resolvedAlunoId,
+    },
   }
 }

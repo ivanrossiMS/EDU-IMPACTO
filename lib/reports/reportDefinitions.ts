@@ -341,16 +341,16 @@ export const REPORT_DEFINITIONS: ReportDefinition[] = [
     availableFilters: [F_BUSCA, F_UNIDADE, F_TURMA, F_DT_INI, F_DT_FIM],
     availableColumns: [
       { key: 'alunoNome', label: 'Aluno', type: 'text', sortable: true },
-      { key: 'tipoNome', label: 'Tipo', type: 'text', sortable: true, width: 120 },
+      { key: 'turma', label: 'Turma', type: 'text', sortable: true, width: 130 },
       { key: 'descricao', label: 'Descrição', type: 'text' },
       { key: 'data', label: 'Data', type: 'date', sortable: true, width: 100 },
-      { key: 'status', label: 'Status', type: 'badge', width: 90, badgeColors: { aberta: '#f59e0b', resolvida: '#10b981', fechada: '#6b7280' } },
+      { key: 'statusCiencia', label: 'Ciência', type: 'badge', width: 120, badgeColors: { confirmada: '#10b981', pendente: '#f59e0b' } },
     ],
-    defaultColumns: ['alunoNome', 'tipoNome', 'descricao', 'data', 'status'],
+    defaultColumns: ['alunoNome', 'turma', 'descricao', 'data', 'statusCiencia'],
     defaultSort: { field: 'data', dir: 'desc' },
     chartType: 'bar',
     chartDataKey: 'count',
-    chartCategoryKey: 'tipoNome',
+    chartCategoryKey: 'turma',
   },
 
   {

@@ -2,8 +2,18 @@
 
 import React, { useEffect, useState, useRef, useCallback } from 'react'
 import { usePathname, useSearchParams } from 'next/navigation'
+import { useIsFetching } from '@tanstack/react-query'
 import { AgendaLuxuryLoader } from '@/components/agenda/AgendaLuxuryLoader'
 import { useApp } from '@/lib/context'
+import {
+  ensureFetchTrackerInstalled,
+  subscribeToNetworkActivity,
+  getActiveApiRequestsCount,
+  getLastApiRequestEndTime,
+  isIntermediateRedirectRoute,
+  isMainContentStillLoading,
+  setGlobalNavOverlayActive,
+} from '@/lib/navigation/pageReadiness'
 
 const ROUTE_INFO: Record<string, { title: string; subtitle: string }> = {
   // Principal
@@ -51,6 +61,28 @@ const ROUTE_INFO: Record<string, { title: string; subtitle: string }> = {
   'relatorios': { title: 'Relatórios', subtitle: 'BUSINESS INTELLIGENCE' },
 }
 
+const AGENDA_SUBROUTE_TITLES: Record<string, string> = {
+  'comunicados': 'Comunicados',
+  'momentos': 'Mídia',
+  'calendario': 'Agenda',
+  'financeiro': 'Financeiro',
+  'frequencia': 'Frequência',
+  'ocorrencias': 'Ocorrências',
+  'notas': 'Notas',
+  'provas-online': 'Provas Online',
+  'perfil': 'Perfil',
+  'turmas': 'Turmas',
+  'pessoas': 'Usuários',
+  'espelhar': 'Espelhar Agenda',
+  'chat': 'Chat',
+  'relatorios': 'Relatórios',
+  'cobrancas': 'Cobranças',
+  'push-teste': 'Testar Notificações',
+  'ajustes': 'Ajustes',
+  'selecionar-aluno': 'Seleção de Aluno',
+  'selecionar-perfil-admin': 'Seleção de Perfil',
+}
+
 function getRouteInfo(pathname: string): { title: string; subtitle: string } {
   const cleanPath = pathname.replace(/^\/+|\/+$/g, '')
   if (!cleanPath || cleanPath === 'dashboard') {
@@ -59,6 +91,16 @@ function getRouteInfo(pathname: string): { title: string; subtitle: string } {
 
   if (ROUTE_INFO[cleanPath]) {
     return ROUTE_INFO[cleanPath]
+  }
+
+  if (cleanPath.startsWith('agenda-digital/')) {
+    const parts = cleanPath.split('/')
+    const lastPart = parts[parts.length - 1]
+    const subPart = parts[2] || parts[1]
+    const matchedTitle = AGENDA_SUBROUTE_TITLES[lastPart] || AGENDA_SUBROUTE_TITLES[subPart]
+    if (matchedTitle) {
+      return { title: matchedTitle, subtitle: 'COMUNICAÇÃO' }
+    }
   }
 
   for (const [key, val] of Object.entries(ROUTE_INFO)) {
@@ -97,9 +139,19 @@ function extractLinkText(anchor: HTMLAnchorElement | null): string | null {
   return null
 }
 
+// Fase 1: Tempo máximo aguardando o Next.js compilar/baixar e trocar a rota (pathname)
+const MAX_WAIT_ROUTE_CHANGE_MS = 18000
+// Fase 2: Tempo máximo aguardando APIs/skeletons após a rota nova já ter montado
+const MAX_WAIT_AFTER_ROUTE_ENTER_MS = 8000
+// Janela mínima após a montagem da nova rota para que todos os useEffects disparem seus fetches
+const MIN_SETTLE_AFTER_ENTER_MS = 240
+// Janela de silêncio após a última requisição /api/ terminar para garantir commit do DOM
+const NETWORK_QUIET_WINDOW_MS = 160
+
 export function GlobalNavigationLoader() {
   const pathname = usePathname()
   const searchParams = useSearchParams()
+  const isFetchingReactQuery = useIsFetching()
   const { moduleTransition, loadingPath } = useApp()
 
   const [isNavigating, setIsNavigating] = useState(false)
@@ -109,16 +161,37 @@ export function GlobalNavigationLoader() {
     subtitle: 'SISTEMA'
   })
 
-  const sourcePathRef = useRef<string>('')
-  const targetPathRef = useRef<string>('')
-  const failsafeRef = useRef<NodeJS.Timeout | null>(null)
+  const currentReactFull = (pathname || '') + (searchParams?.toString() ? '?' + searchParams.toString() : '')
+  const currentReactFullRef = useRef<string>(currentReactFull)
+  currentReactFullRef.current = currentReactFull
+
+  const sourceRouteRef = useRef<string>('')
+  const lastObservedRouteRef = useRef<string>('')
+  const hasRouteEnteredRef = useRef<boolean>(false)
+  const routeEnteredAtRef = useRef<number>(0)
+  const navStartedAtRef = useRef<number>(0)
+  const isFetchingRef = useRef<number>(isFetchingReactQuery)
+  isFetchingRef.current = isFetchingReactQuery
+
+  useEffect(() => {
+    ensureFetchTrackerInstalled()
+  }, [])
+
+  useEffect(() => {
+    setGlobalNavOverlayActive(isNavigating && isLoading)
+    return () => {
+      if (!isNavigating) setGlobalNavOverlayActive(false)
+    }
+  }, [isNavigating, isLoading])
 
   const triggerNav = useCallback((anchor: HTMLAnchorElement | null, targetUrl: URL) => {
     const currentPath = window.location.pathname + window.location.search
     const targetPath = targetUrl.pathname + targetUrl.search
 
     // Se for exatamente o mesmo caminho e query, não recarrega
-    if (currentPath === targetPath) return
+    if (currentPath === targetPath || (targetUrl.pathname === window.location.pathname && targetUrl.search === window.location.search)) {
+      return
+    }
 
     const routeFallback = getRouteInfo(targetUrl.pathname)
     const linkText = extractLinkText(anchor)
@@ -126,11 +199,16 @@ export function GlobalNavigationLoader() {
     const finalTitle = linkText || routeFallback.title
     const finalSubtitle = routeFallback.subtitle
 
-    sourcePathRef.current = currentPath
-    targetPathRef.current = targetPath
+    sourceRouteRef.current = currentReactFullRef.current
+    lastObservedRouteRef.current = currentReactFullRef.current
+    hasRouteEnteredRef.current = false
+    routeEnteredAtRef.current = 0
+    navStartedAtRef.current = Date.now()
+
     setNavInfo({ title: finalTitle, subtitle: finalSubtitle })
     setIsNavigating(true)
     setIsLoading(true)
+    setGlobalNavOverlayActive(true)
   }, [])
 
   // 1. Intercepta cliques imediatos em qualquer tag <a> ou <Link> de todo o sistema
@@ -180,7 +258,6 @@ export function GlobalNavigationLoader() {
     const handlePopState = () => {
       try {
         const dest = new URL(window.location.href)
-        // Usa requestAnimationFrame para nunca disparar síncrono durante render/lifecycle do React
         requestAnimationFrame(() => {
           triggerNav(null, dest)
         })
@@ -193,34 +270,96 @@ export function GlobalNavigationLoader() {
     }
   }, [triggerNav])
 
-  // 3. Monitora quando a nova página é carregada
+  // 3. Detecta quando a rota do Next.js efetivamente mudou para a página de destino
   useEffect(() => {
-    if (!isLoading || !sourcePathRef.current) return
+    if (!isLoading) return
 
-    const currentFull = pathname + (searchParams?.toString() ? '?' + searchParams.toString() : '')
-    if (currentFull !== sourcePathRef.current) {
-      // Nova página entrou e React montou o componente: finaliza o carregamento
+    if (currentReactFull !== sourceRouteRef.current) {
+      // Se ainda estiver em uma rota intermediária de redirecionamento, aguarda o redirect final
+      if (isIntermediateRedirectRoute(pathname)) {
+        lastObservedRouteRef.current = currentReactFull
+        return
+      }
+
+      // Se a rota mudou (ou sofreu um redirect secundário após entrar), reinicia o relógio de prontidão da página nova
+      if (!hasRouteEnteredRef.current || currentReactFull !== lastObservedRouteRef.current) {
+        hasRouteEnteredRef.current = true
+        routeEnteredAtRef.current = Date.now()
+        lastObservedRouteRef.current = currentReactFull
+      }
+    }
+  }, [currentReactFull, pathname, isLoading])
+
+  // 4. Monitora a prontidão completa da nova página (Rede + React Query + Skeletons/Spinners no DOM)
+  useEffect(() => {
+    if (!isLoading) return
+
+    const evaluateReadiness = () => {
+      const now = Date.now()
+      const totalElapsed = now - navStartedAtRef.current
+
+      // Failsafe absoluto de Fase 1 (caso a navegação tenha sido cancelada ou bloqueada)
+      if (totalElapsed >= MAX_WAIT_ROUTE_CHANGE_MS) {
+        setIsLoading(false)
+        return
+      }
+
+      // Enquanto o Next.js ainda não trocou o pathname para a página nova, mantém o loader ativo!
+      if (!hasRouteEnteredRef.current) {
+        return
+      }
+
+      const elapsedSinceEnter = now - routeEnteredAtRef.current
+
+      // Aguarda janela mínima para que os useEffects da nova página iniciem suas buscas de dados
+      if (elapsedSinceEnter < MIN_SETTLE_AFTER_ENTER_MS) {
+        return
+      }
+
+      // Failsafe de Fase 2: se a página já montou há mais de 8s, libera a tela
+      if (elapsedSinceEnter >= MAX_WAIT_AFTER_ROUTE_ENTER_MS) {
+        setIsLoading(false)
+        return
+      }
+
+      // Verifica se ainda há requisições de API ou React Query em andamento
+      const activeApiCount = getActiveApiRequestsCount()
+      if (activeApiCount > 0 || isFetchingRef.current > 0) {
+        return
+      }
+
+      // Aguarda uma curta janela de silêncio após a última requisição de API terminar
+      // para dar tempo ao React de processar o JSON e remover skeletons/spinners
+      const timeSinceLastApi = now - getLastApiRequestEndTime()
+      if (getLastApiRequestEndTime() > navStartedAtRef.current && timeSinceLastApi < NETWORK_QUIET_WINDOW_MS) {
+        return
+      }
+
+      // Verifica se o DOM da página nova ainda exibe esqueletos ou spinners de carregamento
+      if (isMainContentStillLoading()) {
+        return
+      }
+
+      // A página nova entrou, todas as APIs finalizaram e o conteúdo final já está renderizado no DOM!
       setIsLoading(false)
     }
-  }, [pathname, searchParams, isLoading])
 
-  // 4. Failsafe timeout: nunca trava a tela por mais de 5s sob qualquer hipótese
-  useEffect(() => {
-    if (isNavigating) {
-      if (failsafeRef.current) clearTimeout(failsafeRef.current)
-      failsafeRef.current = setTimeout(() => {
-        setIsLoading(false)
-      }, 5000)
-    }
+    const unsubscribe = subscribeToNetworkActivity(evaluateReadiness)
+    const interval = setInterval(evaluateReadiness, 60)
+
     return () => {
-      if (failsafeRef.current) clearTimeout(failsafeRef.current)
+      unsubscribe()
+      clearInterval(interval)
     }
-  }, [isNavigating])
+  }, [isLoading])
 
   const handleFinished = useCallback(() => {
     setIsNavigating(false)
-    targetPathRef.current = ''
-    sourcePathRef.current = ''
+    setGlobalNavOverlayActive(false)
+    sourceRouteRef.current = ''
+    lastObservedRouteRef.current = ''
+    hasRouteEnteredRef.current = false
+    routeEnteredAtRef.current = 0
   }, [])
 
   // Se houver transição de módulo específica ou logout ativo, eles têm prioridade
@@ -237,7 +376,8 @@ export function GlobalNavigationLoader() {
       isLoading={isLoading}
       subtitle={navInfo.subtitle}
       statusText={`Acessando ${navInfo.title}...`}
-      minDisplayTimeMs={480}
+      minDisplayTimeMs={520}
+      maxDisplayTimeMs={MAX_WAIT_ROUTE_CHANGE_MS}
       onFinished={handleFinished}
     />
   )

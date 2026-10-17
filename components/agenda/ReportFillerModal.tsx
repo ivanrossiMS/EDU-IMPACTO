@@ -6,9 +6,10 @@ import { useRelatorios, ReportTemplate, ReportField } from '@/lib/relatoriosCont
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 
 import { useData } from '@/lib/dataContext';
-import { isAlunoCursandoTurma } from '@/lib/studentTurmaUtils';
+import { isAlunoCursandoTurma, getAlunoTurmaCursando } from '@/lib/studentTurmaUtils';
 import { getCachedStudentPhoto, fetchStudentPhotos } from '@/lib/studentPhotoCache';
 import { apiFetch } from '@/lib/api/apiClient';
+import { useQueryClient } from '@tanstack/react-query';
 
 interface ReportFillerModalProps {
   isOpen: boolean
@@ -21,6 +22,7 @@ interface ReportFillerModalProps {
 }
 
 export function ReportFillerModal({ isOpen, anexoStr, onClose, onBack, currentUser, alunos, turmas: propTurmas }: ReportFillerModalProps) {
+  const queryClient = useQueryClient()
   const { templates = [] } = useRelatorios()
   const { adAlert, setComunicadosLocally } = useAgendaDigital()
   const { turmas: contextTurmas = [] } = useData()
@@ -83,13 +85,18 @@ export function ReportFillerModal({ isOpen, anexoStr, onClose, onBack, currentUs
     if (!targetTurmaIds.length || !turmas) return [];
     const setIds = new Set(targetTurmaIds.map((id: string) => id.trim().toLowerCase()));
     const setClean = new Set(targetTurmaIds.map((id: string) => id.trim().replace(/^sync-/, '').toLowerCase()));
+    const setNames = new Set(
+      (Array.isArray(payload?.turmaNames) ? payload.turmaNames : [])
+        .map((n: any) => String(n || '').trim().toLowerCase())
+        .filter(Boolean)
+    );
     return (turmas || []).filter((t: any) => {
       const tid = String(t.id).toLowerCase();
       const tcode = String(t.codigo || '').toLowerCase();
       const tnome = String(t.nome || '').trim().toLowerCase();
-      return setIds.has(tid) || setClean.has(tid) || setIds.has(tcode) || setClean.has(tcode) || setIds.has(tnome);
+      return setIds.has(tid) || setClean.has(tid) || setIds.has(tcode) || setClean.has(tcode) || setIds.has(tnome) || setNames.has(tnome);
     });
-  }, [targetTurmaIds, turmas]);
+  }, [targetTurmaIds, turmas, payload]);
 
   // 3. Helper para obter o objeto de turma de cada aluno (dando prioridade às turmas deste relatório)
   const getAlunoTurmaObj = React.useCallback((aluno: any) => {
@@ -100,25 +107,48 @@ export function ReportFillerModal({ isOpen, anexoStr, onClose, onBack, currentUs
           return tObj;
         }
       }
+      if (targetTurmaObjs.length === 1) {
+        return targetTurmaObjs[0];
+      }
     }
     if (turmas && turmas.length > 0) {
-      const aTurmaRef = String(aluno.turma || aluno.turma_nome || (aluno as any).turmaId || '').trim().toLowerCase();
-      return turmas.find(t => 
-        String(t.id).toLowerCase() === aTurmaRef ||
-        String(t.nome).trim().toLowerCase() === aTurmaRef ||
-        String(t.codigo || '').toLowerCase() === aTurmaRef
-      ) || null;
+      const fromPayloadMap = payload?.studentTurmas?.[String(aluno.id)];
+      const cursandoRef = getAlunoTurmaCursando(aluno, payload?.anoLetivo);
+      const aTurmaRef = aluno.turma || aluno.turma_nome || (aluno as any).turmaId || '';
+      const refsToTry = [fromPayloadMap, cursandoRef, aTurmaRef]
+        .map(r => String(r || '').trim().toLowerCase())
+        .filter(Boolean);
+
+      for (const ref of refsToTry) {
+        const cleanRef = ref.replace(/^sync-/, '');
+        const found = turmas.find(t => 
+          String(t.id).toLowerCase() === ref ||
+          String(t.id).toLowerCase() === cleanRef ||
+          String(t.nome).trim().toLowerCase() === ref ||
+          String(t.codigo || '').toLowerCase() === ref
+        );
+        if (found) return found;
+      }
+
+      const foundByCursando = turmas.find(t => isAlunoCursandoTurma(aluno, t, payload?.anoLetivo || t.ano, turmas));
+      if (foundByCursando) return foundByCursando;
     }
     return null;
-  }, [targetTurmaObjs, turmas]);
+  }, [targetTurmaObjs, turmas, payload]);
 
   // 4. Helper para obter o nome formatado da turma do aluno
   const getTurmaName = React.useCallback((aluno: any) => {
     const tObj = getAlunoTurmaObj(aluno);
     if (tObj?.nome) return tObj.nome;
+    const fromPayloadMap = payload?.studentTurmas?.[String(aluno.id)];
+    if (fromPayloadMap && String(fromPayloadMap).trim() !== '') return String(fromPayloadMap).trim();
+    const cursando = getAlunoTurmaCursando(aluno, payload?.anoLetivo);
+    if (cursando) return cursando;
     if (aluno.turma_nome && String(aluno.turma_nome).trim() !== '') return aluno.turma_nome;
-    return aluno.turma || '';
-  }, [getAlunoTurmaObj]);
+    if (aluno.turma && String(aluno.turma).trim() !== '') return aluno.turma;
+    if (Array.isArray(payload?.turmaNames) && payload.turmaNames.length === 1) return payload.turmaNames[0];
+    return '';
+  }, [getAlunoTurmaObj, payload]);
 
   // 5. Resolução da lista consolidada de alunos participantes
   const targetedStudents = useMemo(() => {
@@ -551,7 +581,81 @@ export function ReportFillerModal({ isOpen, anexoStr, onClose, onBack, currentUs
       console.error('Erro na integração do diário digital:', e);
     }
 
+    // Integração Automática com Ocorrências Disciplinares (/academico/ocorrencias)
+    const newOcorrencias: any[] = [];
+    try {
+      const normalizeLabel = (str: string) =>
+        String(str || '')
+          .toLowerCase()
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .trim();
 
+      const ocorrenciaFields = allFields.filter(f =>
+        normalizeLabel(f.label).includes('ocorrencia')
+      );
+
+      if (ocorrenciaFields.length > 0) {
+        const now = new Date();
+        const dataHora = now.toLocaleDateString('pt-BR') + ' às ' + now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+        const responsavelNome = String(currentUser?.nome || currentUser?.name || currentUser?.dados?.nome || 'Colaborador').trim();
+        const dataOcorrencia = payload.dataReferencia || now.toISOString().split('T')[0];
+
+        activeStudents.forEach(aluno => {
+          const studentAnswers = fillMode === 'igual' ? (answers['GLOBAL'] || {}) : (answers[aluno.id] || {});
+          const textosOcorrencia: string[] = [];
+
+          ocorrenciaFields.forEach(ocField => {
+            const rawVal = studentAnswers[ocField.id];
+            if (rawVal === undefined || rawVal === null) return;
+            const textVal = Array.isArray(rawVal) ? rawVal.join(', ').trim() : String(rawVal).trim();
+            if (
+              textVal !== '' &&
+              textVal.toLowerCase() !== 'não preenchido' &&
+              textVal.toLowerCase() !== 'nao preenchido'
+            ) {
+              textosOcorrencia.push(textVal);
+            }
+          });
+
+          if (textosOcorrencia.length > 0) {
+            const cleanAlunoId = String(aluno.id || '').replace(/^a_?/, '').trim();
+            const tObj = getAlunoTurmaObj(aluno);
+            const turmaNome = getTurmaName(aluno);
+            const turmaAno = String(
+              tObj?.ano ||
+              tObj?.dados?.anoLetivo ||
+              payload.anoLetivo ||
+              aluno.dados?.anoLetivo ||
+              aluno.ano_letivo ||
+              aluno.ano ||
+              now.getFullYear()
+            );
+            const descricaoTexto = textosOcorrencia.join('\n\n');
+            const userInfo = `[Lançado por: ${responsavelNome} em ${dataHora}]`;
+
+            newOcorrencias.push({
+              id: `OC-REL-${Date.now()}-${cleanAlunoId}-${Math.random().toString(36).slice(2, 6)}`,
+              alunoId: cleanAlunoId,
+              aluno_id: cleanAlunoId,
+              alunoNome: String(aluno.nome || '').trim(),
+              turma: turmaNome,
+              turma_id: tObj?.id ? String(tObj.id) : turmaNome,
+              ano: turmaAno,
+              data: dataOcorrencia,
+              responsavel: responsavelNome,
+              descricao: `${userInfo}\n${descricaoTexto}`,
+              ciencia_responsavel: false,
+              status: 'aberta',
+              origem: 'relatorio_agenda',
+              relatorioNome: template.name || 'Relatório de Rotina'
+            });
+          }
+        });
+      }
+    } catch (e) {
+      console.error('Erro ao preparar ocorrências do relatório:', e);
+    }
 
     try {
       // Separa o relatório consolidado da turma e os relatórios individuais de alunos
@@ -576,6 +680,26 @@ export function ReportFillerModal({ isOpen, anexoStr, onClose, onBack, currentUs
         if (!res.ok) {
           const errData = await res.json().catch(() => ({}))
           throw new Error(errData.error || `Erro HTTP ${res.status}`)
+        }
+      }
+
+      // Envia as ocorrências geradas no relatório para /api/ocorrencias (/academico/ocorrencias)
+      if (newOcorrencias.length > 0) {
+        try {
+          const ocRes = await apiFetch('/api/ocorrencias', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(newOcorrencias)
+          })
+          if (ocRes.ok) {
+            queryClient.invalidateQueries({ queryKey: ['ocorrencias'] })
+            queryClient.invalidateQueries({ queryKey: ['ocorrencias-colaborador'] })
+            queryClient.invalidateQueries({ queryKey: ['ocorrencias-familia'] })
+          } else {
+            console.error('Falha ao registrar ocorrências do relatório:', await ocRes.text().catch(() => ''))
+          }
+        } catch (ocErr) {
+          console.error('Erro ao integrar ocorrências do relatório:', ocErr)
         }
       }
 

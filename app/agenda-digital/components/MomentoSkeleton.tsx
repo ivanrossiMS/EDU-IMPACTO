@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 
 export function MomentoSkeleton({ count = 3 }: { count?: number }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 48, padding: '24px 16px', width: '100%' }}>
+    <div data-page-loading="true" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 48, padding: '24px 16px', width: '100%' }}>
       {Array.from({ length: count }).map((_, idx) => {
         const initialRotation = ((idx * 3) % 5) - 2;
         return (

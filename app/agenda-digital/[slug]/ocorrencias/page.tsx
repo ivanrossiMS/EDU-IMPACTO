@@ -377,18 +377,7 @@ export default function ADOcorrenciasPage({ params }: { params: any }) {
             {groupedOcorrencias.map((group, gIdx) => (
               <div key={group.date}>
                 {group.items.map((o, idx) => {
-                  const lowerTipo = (o.tipo || '').toLowerCase()
-                  const isElogio = lowerTipo === 'elogio' || lowerTipo === 'parabéns' || lowerTipo === 'parabens'
-                  const isAdvertencia = lowerTipo.includes('advertencia') || lowerTipo.includes('advertência') || o.gravidade === 'grave' || o.gravidade === 'media'
-                  
-                  const isLeve = !isAdvertencia && !isElogio
-
-                  const gravBg = isLeve ? '#fef3c7' : '#fee2e2'
-                  const gravColor = isLeve ? '#d97706' : '#dc2626'
-                  const gravText = o.gravidade ? (o.gravidade === 'media' ? 'MÉDIA' : o.gravidade === 'grave' ? 'GRAVE' : 'LEVE') : (isLeve ? 'LEVE' : 'MÉDIA')
-
-                  const borderColor = isLeve ? '#fcd34d' : '#fca5a5'
-                  const iconColor = isLeve ? '#f59e0b' : '#ef4444'
+                  const isConfirmada = !!o.ciencia_responsavel
 
                   const lines = (o.descricao || '').split('\n')
                   let lancado = ''
@@ -491,7 +480,7 @@ export default function ADOcorrenciasPage({ params }: { params: any }) {
                           background: 'linear-gradient(90deg, #f59e0b, #ec4899, #8b5cf6)'
                         }} />
 
-                        {/* Card Header: Severity Badge + Title + Time + Collapse */}
+                        {/* Card Header: Status Badge + Title + Time + Collapse */}
                         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginTop: 4, marginBottom: 12 }}>
                           <div>
                             <span style={{ 
@@ -500,15 +489,15 @@ export default function ADOcorrenciasPage({ params }: { params: any }) {
                               textTransform: 'uppercase', 
                               padding: '2.5px 8.5px', 
                               borderRadius: 999, 
-                              background: isLeve ? '#fdf4ff' : '#fef2f2', 
-                              color: isLeve ? '#86198f' : '#dc2626', 
-                              border: isLeve ? '1px solid #f0abfc' : '1px solid #fecaca',
+                              background: isConfirmada ? '#ecfdf5' : '#fef3c7', 
+                              color: isConfirmada ? '#059669' : '#d97706', 
+                              border: isConfirmada ? '1px solid #a7f3d0' : '1px solid #fde68a',
                               letterSpacing: '0.04em'
                             }}>
-                              {gravText}
+                              {isConfirmada ? 'Ciência Confirmada' : 'Aguardando Ciência'}
                             </span>
                             <h3 style={{ fontSize: 18, fontWeight: 800, margin: '4px 0 0 0', color: '#0f172a', letterSpacing: '-0.01em' }}>
-                              {o.tipo}
+                              Ocorrência Disciplinar
                             </h3>
                           </div>
 

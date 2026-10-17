@@ -168,7 +168,6 @@ export const ALL_NAV_GROUPS: NavGroup[] = [
           { label: 'TIPOS DE DOCUMENTOS', href: '/configuracoes/pedagogico/documentos', icon: <FileText size={11} /> },
           { label: 'GRUPO ALUNOS', href: '/configuracoes/pedagogico/grupo-alunos', icon: <Users size={11} /> },
           { label: 'SITUAÇÃO DO ALUNO', href: '/configuracoes/pedagogico/situacao-aluno', icon: <ShieldCheck size={11} /> },
-          { label: 'TIPO DE OCORRÊNCIAS', href: '/configuracoes/pedagogico/tipo-ocorrencias', icon: <AlertTriangle size={11} /> },
         ],
       },
     ],
