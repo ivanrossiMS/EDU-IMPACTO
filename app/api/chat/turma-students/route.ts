@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/server/authGuard'
+import { requireStaff } from '@/lib/server/authGuard'
 import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 
 export const dynamic = 'force-dynamic'
@@ -11,6 +11,10 @@ interface CacheEntry {
   expiresAt: number
 }
 const turmaStudentsCache = new Map<string, CacheEntry>()
+
+function invalidateTurmaStudentsCache() {
+  turmaStudentsCache.clear()
+}
 
 function formatParentesco(p?: string | null): string {
   if (!p) return 'Responsável'
@@ -25,7 +29,7 @@ function formatParentesco(p?: string | null): string {
 }
 
 export async function GET(request: Request) {
-  const { user, errorResponse } = await requireAuth(request)
+  const { user, errorResponse } = await requireStaff(request)
   if (errorResponse) return errorResponse
 
   try {

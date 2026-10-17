@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/server/authGuard'
+import { requireStaff } from '@/lib/server/authGuard'
 import { supabaseServer } from '@/lib/supabaseServer'
 import { sendAgendaPushNotification } from '@/lib/server/agendaNotifications'
 
@@ -13,8 +13,8 @@ const MONTH_NAMES = [
 ]
 
 export async function POST(request: Request) {
-  const { user, errorResponse } = await requireAuth(request)
-  if (errorResponse) return errorResponse
+  const { user, dbUser, cargo, perfil, errorResponse } = await requireStaff(request)
+  if (errorResponse || !user) return errorResponse!
 
   try {
     const body = await request.json()
@@ -65,11 +65,11 @@ export async function POST(request: Request) {
     const finalColabNome = colabUser?.nome || colaboradorNome
     const finalColabCargo = colabUser?.cargo || colabUser?.perfil || 'Colaborador(a)'
 
-    // 2. Dados Oficiais do Administrador Master (Remetente)
-    const masterAdminNome = 'Ivan Rossi'
-    const masterAdminCargo = 'Administrador Master'
-    const masterAdminId = 'master-dziia1l'
-    const masterAdminFoto = 'https://lrpwerkkqrjkcauofhph.supabase.co/storage/v1/object/public/comunicados-midia/avatars/1789438579475_Captura_de_Tela_2026-09-13_a_s_07.57.46.webp'
+    // 2. Dados do Remetente Autenticado (com fallback institucional)
+    const masterAdminNome = dbUser?.nome || user.user_metadata?.nome || 'Ivan Rossi'
+    const masterAdminCargo = cargo || perfil || dbUser?.cargo || dbUser?.perfil || 'Administrador Master'
+    const masterAdminId = dbUser?.id || user.id || 'master-dziia1l'
+    const masterAdminFoto = dbUser?.dados?.foto || dbUser?.dados?.avatar || user.user_metadata?.foto || 'https://lrpwerkkqrjkcauofhph.supabase.co/storage/v1/object/public/comunicados-midia/avatars/1789438579475_Captura_de_Tela_2026-09-13_a_s_07.57.46.webp'
 
     // 3. Upload da Imagem do Infográfico (se fornecida via base64)
     let imageUrl: string | null = null

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/server/authGuard'
+import { requireStaff } from '@/lib/server/authGuard'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 import { z } from 'zod'
 import { randomUUID } from 'crypto'
@@ -58,7 +58,7 @@ async function getNextReceiptNumber(supabase: any): Promise<string> {
 }
 
 export async function POST(request: NextRequest) {
-  const { user, errorResponse } = await requireAuth()
+  const { user, errorResponse } = await requireStaff(request)
   if (errorResponse) return errorResponse
 
   try {

@@ -16,8 +16,10 @@ const PUBLIC_KEYS = ['ad_banner', 'ad_config', 'cfgTurnos', 'cfgTiposOcorrencia'
 // Chaves sensíveis exclusivas da equipe administrativa (nunca expostas a família/aluno)
 const SENSITIVE_STAFF_ONLY_CONFIG_KEYS = new Set([
   'zapsign_api_token',
+  'cfgZapSignInteg',
   'matriculas_digitais_config',
   'matriculas_digitais_list',
+  'matriculas_digitais_registros_v1',
   'matriculas_contratos_list',
   'cfgBackupSnapshots',
   'catraca_ip',
@@ -27,9 +29,18 @@ const SENSITIVE_STAFF_ONLY_CONFIG_KEYS = new Set([
   'portaria_config',
   'totem_pin',
   'import_batches_history',
+  'import_batches_list',
+  'credimpacto_config',
+  'boletos_titulos_emitidos',
   'fin_acordos_renegociacao',
   'rh_folha_processada',
+  'storage_auto_clean',
 ]);
+
+function isSensitiveConfigKey(k: string): boolean {
+  const clean = String(k || '').trim()
+  return SENSITIVE_STAFF_ONLY_CONFIG_KEYS.has(clean) || clean.startsWith('import_batch_')
+}
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
@@ -42,10 +53,10 @@ export async function GET(request: Request) {
   if (chaves) {
     const keys = chaves.split(',').map(k => k.trim()).filter(Boolean);
     isPublicRequest = keys.length > 0 && keys.every(k => PUBLIC_KEYS.includes(k));
-    touchesSensitiveKey = keys.some(k => SENSITIVE_STAFF_ONLY_CONFIG_KEYS.has(k));
+    touchesSensitiveKey = keys.some(k => isSensitiveConfigKey(k));
   } else if (chave) {
     isPublicRequest = PUBLIC_KEYS.includes(chave);
-    touchesSensitiveKey = SENSITIVE_STAFF_ONLY_CONFIG_KEYS.has(chave);
+    touchesSensitiveKey = isSensitiveConfigKey(chave);
   }
 
   // Se não for uma requisição apenas de chaves públicas, exige autenticação
@@ -127,7 +138,7 @@ export async function GET(request: Request) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   const filteredData = isStaff
     ? (data || [])
-    : (data || []).filter((item: any) => !SENSITIVE_STAFF_ONLY_CONFIG_KEYS.has(String(item.chave || '')))
+    : (data || []).filter((item: any) => !isSensitiveConfigKey(String(item.chave || '')))
   return NextResponse.json(filteredData, { headers: cacheHeaders })
 }
 
@@ -140,6 +151,7 @@ export async function POST(request: Request) {
   const supabase = getAdminClient();
   try {
     const body = await request.json()
+    const { clearPerfilAcessoCache } = await import('@/lib/server/perfilAcessoCache')
     
     // Suporte a salvamento em lote de múltiplas configurações de uma só vez
     if (Array.isArray(body?.items) && body.items.length > 0) {
@@ -162,6 +174,7 @@ export async function POST(request: Request) {
 
       if (error) return NextResponse.json({ error: error.message }, { status: 400 })
       globalCache.clear()
+      clearPerfilAcessoCache()
       return NextResponse.json({ ok: true, count: data?.length || rows.length, data })
     }
 
@@ -177,6 +190,9 @@ export async function POST(request: Request) {
     
     // Invalida o cache em memória do servidor ao atualizar qualquer chave
     globalCache.clear();
+    if (chave === 'config_perfis_acesso') {
+      clearPerfilAcessoCache()
+    }
 
     return NextResponse.json(data)
   } catch (e: any) {

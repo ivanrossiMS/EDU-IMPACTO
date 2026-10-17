@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/server/authGuard'
+import { requireHrOrAdmin } from '@/lib/server/authGuard'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET() {
-  const { errorResponse } = await requireAuth()
+export async function GET(request: Request) {
+  const { errorResponse } = await requireHrOrAdmin(request)
   if (errorResponse) return errorResponse
 
   try {
@@ -23,7 +23,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const { user, errorResponse } = await requireAuth()
+  const { user, errorResponse } = await requireHrOrAdmin(request)
   if (errorResponse) return errorResponse
 
   try {

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
-import { requireAuth, requireStaff } from '@/lib/server/authGuard'
+import { requireAuth, requireStaff, requireAdminOrDirecao, clearAuthGuardCache } from '@/lib/server/authGuard'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
+import { clearPerfilAcessoCache } from '@/lib/server/perfilAcessoCache'
 
 export const dynamic = 'force-dynamic'
 
@@ -26,6 +27,8 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const { errorResponse } = await requireStaff(request)
   if (errorResponse) return errorResponse
+  const { errorResponse: adminErr } = await requireAdminOrDirecao(request)
+  if (adminErr) return adminErr
 
   try {
     const body = await request.json()
@@ -33,8 +36,7 @@ export async function POST(request: Request) {
 
     if (Array.isArray(body)) {
       if (body.length === 0) {
-        await supabase.from('perfis').delete().neq('id', '')
-        return NextResponse.json({ ok: true, count: 0 })
+        return NextResponse.json({ error: 'Operação bloqueada: não é permitido apagar todos os perfis de acesso.' }, { status: 400 })
       }
       const rows = body.map(buildRowAuth)
       const incomingIds = new Set(rows.map(r => String(r.id)))
@@ -47,12 +49,17 @@ export async function POST(request: Request) {
       }
       const { error } = await supabase.from('perfis').upsert(rows)
       if (error) throw new Error(error.message)
+      clearPerfilAcessoCache()
+      clearAuthGuardCache()
       return NextResponse.json({ ok: true, count: rows.length })
     }
 
     const row = buildRowAuth(body)
     const { data, error } = await supabase.from('perfis').upsert(row).select().single()
     if (error) throw new Error(error.message)
+
+    clearPerfilAcessoCache()
+    clearAuthGuardCache()
 
     return NextResponse.json({ ...data, ...(data.dados || {}) }, { status: 201 })
   } catch (err: any) {

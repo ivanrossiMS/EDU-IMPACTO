@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { resolveUserRole } from '@/lib/server/authGuard'
 import { createAdminClient } from '@/lib/server/supabaseServerFactory'
+import { findAuthUserByEmail } from '@/lib/server/supabaseAdminSingleton'
 
 export const dynamic = 'force-dynamic'
 
@@ -20,7 +21,7 @@ export async function POST(request: Request) {
     // 1. Buscar o responsável para validar propriedade se não for staff
     const { data: respData, error: fetchErr } = await supabaseAdmin
       .from('responsaveis')
-      .select('id, email, dados')
+      .select('id, email, auth_id, dados')
       .eq('id', responsavelId)
       .single()
 
@@ -29,6 +30,7 @@ export async function POST(request: Request) {
       const respEmail = String(respData?.email || email || '').trim().toLowerCase()
       const isOwnGuardian =
         String(user.id) === String(responsavelId) ||
+        String(respData?.auth_id || '') === String(user.id) ||
         String(user.user_metadata?.responsavel_id || '') === String(responsavelId) ||
         (userEmail && respEmail && userEmail === respEmail)
 
@@ -62,27 +64,27 @@ export async function POST(request: Request) {
     }
 
     // 3. Sincronizar user_metadata do Supabase Auth para o Responsável
-    const emailLower = email ? email.trim().toLowerCase() : ''
-    let authUserIdToUpdate: string | null = null
+    const emailLower = (email || respData?.email || '').trim().toLowerCase()
+    let authUserIdToUpdate: string | null = respData?.auth_id || null
 
     // Caso A: O usuário autenticado na requisição é o próprio responsável
     if (
-      (user.email && emailLower && user.email.toLowerCase() === emailLower) ||
-      user.user_metadata?.responsavel_id === responsavelId
+      !authUserIdToUpdate &&
+      ((user.email && emailLower && user.email.toLowerCase() === emailLower) ||
+       user.user_metadata?.responsavel_id === responsavelId)
     ) {
       authUserIdToUpdate = user.id
     }
 
-    // Caso B: Se ainda não determinou o ID do auth, busca na lista de usuários do Supabase Auth
+    // Caso B: Se ainda não determinou o ID do auth, busca via findAuthUserByEmail (com cache O(1))
     if (!authUserIdToUpdate && emailLower) {
       try {
-        const { data: authUsers } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 1000 })
-        const found = authUsers?.users?.find(u => u.email?.toLowerCase() === emailLower)
+        const found = await findAuthUserByEmail(emailLower)
         if (found) {
           authUserIdToUpdate = found.id
         }
       } catch (e: any) {
-        console.warn('[Avatar Sync] Falha ao listar auth users:', e.message)
+        console.warn('[Avatar Sync] Falha ao buscar auth user:', e.message)
       }
     }
 

@@ -42,17 +42,19 @@ export async function POST(request: Request) {
       cargo.toLowerCase().includes('responsavel')
 
     let allCandidateIds: string[] = []
+    let familyScopeRef: any = null
 
     if (isFamilyContext || overrideAlunoId) {
       const { resolveFamilyScope } = await import('@/lib/server/chatFamilyHelper')
-      const familyScope = await resolveFamilyScope(user, {
+      familyScopeRef = await resolveFamilyScope(user, {
         alunoIdParam: overrideAlunoId ? String(overrideAlunoId) : undefined,
-        context: 'familia'
+        context: 'familia',
+        dbUser
       })
-      allCandidateIds = Array.from(familyScope.candidateUserIds || [])
+      allCandidateIds = Array.from(familyScopeRef.candidateUserIds || [])
     }
 
-    if (overrideAlunoId && !allCandidateIds.includes(String(overrideAlunoId))) {
+    if (isAdmin && overrideAlunoId && !allCandidateIds.includes(String(overrideAlunoId))) {
       allCandidateIds.push(String(overrideAlunoId))
     }
 
@@ -60,12 +62,17 @@ export async function POST(request: Request) {
     const metaRespId = user.user_metadata?.responsavel_id
     const metaAlunoId = user.user_metadata?.aluno_id
 
-    const effectiveUserId = overrideUserId || dbUser?.id || user.id
+    const verifiedOverrideUser = isAdmin ? overrideUserId : null
+    const verifiedOverrideAluno = (isAdmin || (overrideAlunoId && allCandidateIds.includes(String(overrideAlunoId))))
+      ? String(overrideAlunoId)
+      : null
+
+    const effectiveUserId = verifiedOverrideUser || dbUser?.id || user.id
 
     const targetUserIds = Array.from(new Set([
       effectiveUserId,
-      overrideUserId,
-      overrideAlunoId ? String(overrideAlunoId) : null,
+      verifiedOverrideUser,
+      verifiedOverrideAluno,
       dbUser?.id,
       user.id,
       metaColabId,
@@ -86,9 +93,37 @@ export async function POST(request: Request) {
       .select('id')
 
     // Se nenhum participante foi atualizado (ex: primeiro acesso a um grupo de turma pelo aluno/família),
-    // garantir que o participante seja registrado com unread_count: 0
+    // verificar se é um grupo permitido antes de inserir o participante
     if (!updatedParts || updatedParts.length === 0) {
-      const primaryUserId = overrideAlunoId || overrideUserId || dbUser?.id || user.id
+      const { data: convInfo } = await supabase
+        .from('chat_conversations')
+        .select('id, type, grupo_id, turma_id')
+        .eq('id', conversation_id)
+        .maybeSingle()
+
+      if (!convInfo) {
+        return NextResponse.json({ error: 'Conversa não encontrada' }, { status: 404 })
+      }
+
+      if (convInfo.type === 'direct' && !isAdmin) {
+        return NextResponse.json({ error: 'Acesso negado a esta conversa direta' }, { status: 403 })
+      }
+
+      if (convInfo.type === 'group' && !isAdmin && isFamilyContext && familyScopeRef) {
+        const rawGId = convInfo.grupo_id ? String(convInfo.grupo_id) : ''
+        const rawTId = convInfo.turma_id ? String(convInfo.turma_id) : ''
+        const cleanTId = rawTId.replace(/^sync-/, '')
+        const isAllowedGroup =
+          (rawGId && (familyScopeRef.allGroupIds.has(rawGId) || familyScopeRef.historicalGroupIds.has(rawGId))) ||
+          (rawTId && (familyScopeRef.allTurmaIds.has(rawTId) || familyScopeRef.allGroupIds.has(rawTId) || familyScopeRef.historicalGroupIds.has(rawTId))) ||
+          (cleanTId && (familyScopeRef.allTurmaIds.has(cleanTId) || familyScopeRef.allGroupIds.has(cleanTId) || familyScopeRef.historicalGroupIds.has(cleanTId)))
+
+        if (!isAllowedGroup) {
+          return NextResponse.json({ error: 'Acesso negado a este grupo' }, { status: 403 })
+        }
+      }
+
+      const primaryUserId = verifiedOverrideAluno || verifiedOverrideUser || dbUser?.id || user.id
       const userName = user.user_metadata?.nome || dbUser?.nome || 'Usuário'
       const userRole = isAdmin ? 'admin' : 'member'
       const userPerfil = dbUser?.perfil || user.user_metadata?.perfil || (isFamilyContext ? 'Família' : 'Colaborador')

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/server/authGuard'
+import { requireStaff } from '@/lib/server/authGuard'
 import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 import { syncContratoWithZapSign } from '@/lib/zapsign'
 
@@ -14,7 +14,7 @@ const FALLBACK_KEY = 'matriculas_contratos_list'
  * diretamente com a API do ZapSign, atualizando o banco de dados e fallback.
  */
 export async function POST(request: Request) {
-  const { user, errorResponse } = await requireAuth()
+  const { user, errorResponse } = await requireStaff(request)
   if (errorResponse) return errorResponse
 
   try {

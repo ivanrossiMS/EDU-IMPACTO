@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/server/authGuard'
-import { createClient } from '@supabase/supabase-js'
+import { resolveUserRole } from '@/lib/server/authGuard'
+import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 import { resolveMimeType } from '@/lib/upload/mimeUtils'
 
 export const dynamic = 'force-dynamic'
@@ -9,15 +9,18 @@ export const maxDuration = 60
 // Next.js App Router: desabilitar o body parser interno para aceitar streams grandes
 export const runtime = 'nodejs'
 
-export async function POST(request: Request) {
-  const { user, errorResponse } = await requireAuth(request)
-  if (errorResponse) return errorResponse
+const STAFF_ONLY_BUCKETS = new Set(['documentos', 'simulados-arquivos', 'credimpacto'])
+const BLOCKED_EXTENSIONS = new Set([
+  '.html', '.htm', '.xhtml', '.svg', '.xml', '.js', '.mjs', '.cjs', '.ts', '.tsx', '.jsx',
+  '.php', '.phtml', '.sh', '.bash', '.exe', '.dll', '.bat', '.cmd', '.msi', '.vbs', '.ps1'
+])
 
-  // Use service role key to bypass storage RLS (since we already authenticated the user)
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  )
+export async function POST(request: Request) {
+  const { user, isStaff, errorResponse } = await resolveUserRole(request)
+  if (errorResponse || !user) return errorResponse || NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
+
+  // Use singleton admin client to bypass storage RLS after authenticating the user
+  const supabase = getAdminClient()
   
   try {
     // Ler o Content-Type para validar que é multipart
@@ -43,14 +46,26 @@ export async function POST(request: Request) {
     const ALLOWED_BUCKETS = ['comunicados-midia', 'documentos', 'simulados-arquivos', 'credimpacto', 'fotos-perfil']
     const bucket = ALLOWED_BUCKETS.includes(requestedBucket) ? requestedBucket : 'comunicados-midia'
     
+    if (STAFF_ONLY_BUCKETS.has(bucket) && !isStaff) {
+      return NextResponse.json({ error: 'Acesso restrito a colaboradores para este repositório de arquivos.' }, { status: 403 })
+    }
+
     if (!file) {
       return NextResponse.json({ error: 'Nenhum arquivo enviado' }, { status: 400 })
     }
 
-    // VALIDATION: Suporte robusto a imagens, vídeos, áudios, PDFs e documentos de escritório
+    const ext = file.name.includes('.') ? file.name.slice(file.name.lastIndexOf('.')).toLowerCase() : ''
+    if (ext && BLOCKED_EXTENSIONS.has(ext)) {
+      return NextResponse.json({ error: `Extensão de arquivo não permitida por segurança: ${ext}` }, { status: 415 })
+    }
+
+    // VALIDATION: Suporte robusto a imagens, vídeos, áudios, PDFs e documentos de escritório (bloqueando SVG/HTML ativo)
     const mimeType = resolveMimeType(file.name, file.type)
+    if (mimeType === 'image/svg+xml' || mimeType === 'text/html' || mimeType === 'application/xhtml+xml') {
+      return NextResponse.json({ error: `Tipo de arquivo não permitido por segurança: ${mimeType}` }, { status: 415 })
+    }
     const allowedTypes = [
-      'image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/bmp', 'image/svg+xml', 'image/heic', 'image/heif',
+      'image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/bmp', 'image/heic', 'image/heif',
       'application/pdf', 
       'video/mp4', 'video/webm', 'video/quicktime', 'video/x-m4v', 'video/3gpp', 'video/x-matroska', 'video/x-msvideo',
       'audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/ogg', 'audio/webm', 'audio/aac', 'audio/m4a', 'audio/x-m4a',
@@ -73,7 +88,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Arquivo muito grande. O limite suportado pelo servidor é de 100MB.' }, { status: 413 })
     }
 
-    const ext = file.name.includes('.') ? file.name.slice(file.name.lastIndexOf('.')) : ''
     const baseName = file.name.includes('.') ? file.name.slice(0, file.name.lastIndexOf('.')) : file.name
     const safeBaseName = baseName.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 60)
     const safeExt = ext.replace(/[^a-zA-Z0-9.]/g, '').slice(0, 10)

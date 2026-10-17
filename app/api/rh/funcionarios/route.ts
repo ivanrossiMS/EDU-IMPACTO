@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
-import { requireStaff, resolveUserRole } from '@/lib/server/authGuard'
+import { requireStaff, resolveUserRole, clearAuthGuardCache } from '@/lib/server/authGuard'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
-import { getAdminClient, findAuthUserByEmail } from '@/lib/server/supabaseAdminSingleton'
+import { getAdminClient, findAuthUserByEmail, invalidateAuthUsersCache } from '@/lib/server/supabaseAdminSingleton'
 import { invalidateColaboradoresCache } from '@/lib/server/colaboradoresCache'
 
 export const dynamic = 'force-dynamic'
@@ -471,6 +471,9 @@ export async function POST(request: Request) {
           }
         }
       }
+      invalidateColaboradoresCache()
+      clearAuthGuardCache()
+      invalidateAuthUsersCache()
       return NextResponse.json(body, { status: 201 })
     }
 
@@ -531,6 +534,10 @@ export async function POST(request: Request) {
       perfil_sistema: data.perfil_sistema,
       codigo: data.codigo
     }, oldFunc)
+
+    invalidateColaboradoresCache()
+    clearAuthGuardCache()
+    invalidateAuthUsersCache()
 
     return NextResponse.json(data, { status: 201 })
   } catch (e: any) {
@@ -605,6 +612,10 @@ export async function PUT(request: Request) {
       codigo: data.codigo
     }, oldFunc)
 
+    invalidateColaboradoresCache()
+    clearAuthGuardCache()
+    invalidateAuthUsersCache()
+
     return NextResponse.json(data)
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 400 })
@@ -640,6 +651,10 @@ export async function DELETE(request: Request) {
       }
     }
   }
+
+  invalidateColaboradoresCache()
+  clearAuthGuardCache()
+  invalidateAuthUsersCache()
 
   return NextResponse.json({ ok: true })
 }

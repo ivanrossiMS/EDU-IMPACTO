@@ -27,7 +27,7 @@ export async function GET(request: Request) {
       .select('*')
       .eq('conversation_id', conversationId)
       .eq('is_deleted', false)
-      .order('created_at', { ascending: true })
+      .order('created_at', { ascending: false })
       .limit(limit)
 
     if (before) {
@@ -77,11 +77,13 @@ export async function GET(request: Request) {
 
     let hasLeft = false
     let effectiveLeftAt: string | null = null
-    let finalMessages = messagesRes.data || []
+    let finalMessages = (messagesRes.data || []).slice().reverse()
 
     // Verificação de privacidade para conversa direta (1 a 1):
     // Apenas participantes registrados (ou administradores com acesso institucional) podem visualizar mensagens
     if (convInfo?.type === 'direct' && !isAdmin) {
+      const { resolveFamilyScope } = await import('@/lib/server/chatFamilyHelper')
+      const familyScope = await resolveFamilyScope(user, { dbUser, espelharRespId: espelharResp, espelharColabId: espelharColab })
       const userCandidateIds = Array.from(new Set([
         String(user.id),
         dbUser?.id ? String(dbUser.id) : null,
@@ -89,6 +91,7 @@ export async function GET(request: Request) {
         user.user_metadata?.responsavel_id ? String(user.user_metadata.responsavel_id) : null,
         dbUser?.dados?.responsavel_id ? String(dbUser.dados.responsavel_id) : null,
         dbUser?.dados?.colaborador_id ? String(dbUser.dados.colaborador_id) : null,
+        ...(familyScope.candidateUserIds || []),
         espelharResp,
         espelharColab,
       ].filter(Boolean))) as string[]
@@ -114,8 +117,7 @@ export async function GET(request: Request) {
       const userCandidateIds = Array.from(new Set([
         user.id,
         dbUser?.id,
-        espelharColab,
-        searchParams.get('aluno_id')
+        espelharColab
       ].filter(Boolean))) as string[]
 
       const { syncAndResolveGroupMemberships } = await import('@/lib/server/chatGroupMembership')
@@ -156,11 +158,18 @@ export async function GET(request: Request) {
         finalMessages = finalMessages.filter((m: any) => new Date(m.created_at).getTime() <= leftTimestamp)
       }
     } else if (isFamilyUser && convInfo?.type === 'group') {
+      const { resolveFamilyScope } = await import('@/lib/server/chatFamilyHelper')
+      const familyScope = await resolveFamilyScope(user, {
+        alunoIdParam: searchParams.get('aluno_id'),
+        context: 'familia',
+        dbUser
+      })
+
       const userCandidateIds = Array.from(new Set([
         user.id,
         dbUser?.id,
         espelharResp,
-        searchParams.get('aluno_id')
+        ...(familyScope.candidateUserIds || [])
       ].filter(Boolean))) as string[]
 
       // 1. Checa se o participante está registrado ou se o grupo pertence ao escopo familiar
@@ -180,12 +189,6 @@ export async function GET(request: Request) {
       }
 
       try {
-        const { resolveFamilyScope } = await import('@/lib/server/chatFamilyHelper')
-        const familyScope = await resolveFamilyScope(user, {
-          alunoIdParam: searchParams.get('aluno_id'),
-          context: 'familia',
-          dbUser
-        })
         const rawGId = convInfo.grupo_id ? String(convInfo.grupo_id) : ''
         const rawTId = convInfo.turma_id ? String(convInfo.turma_id) : ''
         const cleanTId = rawTId.replace(/^sync-/, '')

@@ -15,6 +15,8 @@
 
 import { supabaseServer } from '@/lib/supabaseServer'
 import { isAlunoCursandoTurma } from '@/lib/studentTurmaUtils'
+import { getAllAuthUsersCached } from '@/lib/server/supabaseAdminSingleton'
+import { getCachedActiveAlunos } from '@/lib/server/turmasGruposCache'
 
 async function fetchInChunks<T>(
   supabase: any,
@@ -149,127 +151,118 @@ export async function getResponsavelIdsForTargets(dados: TargetParams | null | u
         return tl === 'todos' || tl === 'toda a escola' || tl === 'all' || tl === 'todas'
       })
 
-    // ── Modo "Todos" ──────────────────────────────────────────────────────
+    // ── Modo "Todos" ou Selecionados ──────────────────────────────────────
+    let targetAlunosSet = new Set<string>()
+    let allResponsavelIds = new Set<string>()
+
     if (isTodos && !todosAnoMatch) {
       const { data, error } = await supabase
         .from('aluno_responsavel')
-        .select('responsavel_id')
+        .select('responsavel_id, aluno_id')
 
       if (error) {
         console.error('[NotifHelper] Erro ao buscar todos os responsáveis:', error.message)
         return []
       }
 
-      // Usar Set durante toda a construção para eliminar duplicatas desde o início
-      const idsSet = new Set<string>(
-        (data || []).map((d: any) => d.responsavel_id).filter(Boolean).map(String)
-      )
+      ;(data || []).forEach((d: any) => {
+        if (d.responsavel_id) allResponsavelIds.add(String(d.responsavel_id))
+        if (d.aluno_id) targetAlunosSet.add(String(d.aluno_id))
+      })
+      console.log(`[NotifHelper] 'Todos' selecionado. Expandindo aliases para ${allResponsavelIds.size} vínculos.`)
+    } else {
+      alunosIds.forEach(id => {
+        const cleanId = id.replace(/^(a_|_ALU)/, '')
+        if (cleanId) targetAlunosSet.add(cleanId)
+      })
 
-      // Inclui colaboradores diretos (Set garante que não há duplicatas)
-      colaboradoresIds.forEach(id => { if (id) idsSet.add(id) })
+      if (allGroupTerms.length > 0) {
+        // 1. Resolver grupos na tabela agenda_grupos
+        const { data: allGrupos, error: gruposError } = await supabase
+          .from('agenda_grupos')
+          .select('id, dados')
 
-      const ids = Array.from(idsSet)
-      console.log(`[NotifHelper] 'Todos' selecionado. Retornando ${ids.length} destinatários.`)
-      return ids
-    }
-
-    // ── Selecionados ──────────────────────────────────────────────────────
-    let targetAlunosSet = new Set<string>()
-
-    alunosIds.forEach(id => {
-      const cleanId = id.replace(/^(a_|_ALU)/, '')
-      if (cleanId) targetAlunosSet.add(cleanId)
-    })
-
-    if (allGroupTerms.length > 0) {
-      // 1. Resolver grupos na tabela agenda_grupos
-      const { data: allGrupos, error: gruposError } = await supabase
-        .from('agenda_grupos')
-        .select('id, dados')
-
-      if (!gruposError && allGrupos) {
-        const matchedGrupos = allGrupos.filter(g => {
-          const gId = String(g.id).toLowerCase()
-          const gNome = String(g.dados?.nome || (g as any).nome || '').toLowerCase()
-          return allGroupTerms.some(term => {
-            const tl = term.toLowerCase().trim()
-            return tl === gId || tl === gNome || gNome.includes(tl) || tl.includes(gNome)
+        if (!gruposError && allGrupos) {
+          const matchedGrupos = allGrupos.filter(g => {
+            const gId = String(g.id).toLowerCase()
+            const gNome = String(g.dados?.nome || (g as any).nome || '').toLowerCase()
+            return allGroupTerms.some(term => {
+              const tl = term.toLowerCase().trim()
+              return tl === gId || tl === gNome || gNome.includes(tl) || tl.includes(gNome)
+            })
           })
-        })
-        
-        matchedGrupos.forEach(g => {
-          let alunosIdsList = g.dados?.alunosIds || (g as any).alunosIds || [];
-          if (typeof alunosIdsList === 'string') {
-            try { alunosIdsList = JSON.parse(alunosIdsList) } catch { alunosIdsList = [] }
-          }
-          if (Array.isArray(alunosIdsList)) {
-            alunosIdsList.forEach((aId: string) => {
-              const cleanId = String(aId).replace(/^(a_|_ALU)/, '')
-              if (cleanId) targetAlunosSet.add(cleanId)
-            })
-          }
-        })
-      }
-
-      // 2. Resolver nomes/IDs de turmas para IDs reais no banco
-      const { data: allTurmas, error: turmasError } = await supabase
-        .from('turmas')
-        .select('id, codigo, nome, serie, turno, ano, dados')
-        .limit(500) // evitar full-table scan em escolas grandes
-
-      if (turmasError) {
-        console.error('[NotifHelper] Erro ao buscar turmas:', turmasError.message)
-      } else {
-        const matchedTurmas = (allTurmas || []).filter((t: any) => {
-          return allGroupTerms.some(turma => matchesTurmaTerm(t, turma))
-        })
-
-        const matchedTurmaIds = matchedTurmas.map((t: any) => String(t.id))
-        const allSearchTerms = Array.from(new Set([...allGroupTerms.filter(t => !t.toLowerCase().trim().startsWith('todos:')), ...matchedTurmaIds]))
-
-        if (allSearchTerms.length > 0) {
-          const alunosTurma = await fetchInChunks<any>(supabase, 'alunos', 'id', 'turma', allSearchTerms)
-          alunosTurma.forEach((a: any) => targetAlunosSet.add(String(a.id)))
-        }
-
-        // Adicionar alunosIds de grupos sincronizados associados às turmas encontradas
-        if (allGrupos && matchedTurmas.length > 0) {
-          matchedTurmas.forEach((t: any) => {
-            const tIdStr = String(t.id)
-            const syncG = allGrupos.find((g: any) => {
-              const gSync = g.dados?.syncId || (g as any).syncId || (String(g.id).startsWith('sync-') ? g.id : '')
-              return gSync === `sync-${tIdStr}` || g.id === `sync-${tIdStr}` || ((g.nome || g.dados?.nome) && String(g.nome || g.dados?.nome).toLowerCase() === String(t.nome || '').toLowerCase())
-            })
-            if (syncG) {
-              let aList = syncG.dados?.alunosIds || (syncG as any).alunosIds || []
-              if (typeof aList === 'string') {
-                try { aList = JSON.parse(aList) } catch { aList = [] }
-              }
-              if (Array.isArray(aList)) {
-                aList.forEach((aId: string) => {
-                  const cleanId = String(aId).replace(/^(a_|_ALU)/, '')
-                  if (cleanId) targetAlunosSet.add(cleanId)
-                })
-              }
+          
+          matchedGrupos.forEach(g => {
+            let alunosIdsList = g.dados?.alunosIds || (g as any).alunosIds || [];
+            if (typeof alunosIdsList === 'string') {
+              try { alunosIdsList = JSON.parse(alunosIdsList) } catch { alunosIdsList = [] }
+            }
+            if (Array.isArray(alunosIdsList)) {
+              alunosIdsList.forEach((aId: string) => {
+                const cleanId = String(aId).replace(/^(a_|_ALU)/, '')
+                if (cleanId) targetAlunosSet.add(cleanId)
+              })
             }
           })
         }
 
-        // Buscar todos alunos ativos para verificar pertencimento por duplo vínculo Integral/Intermediário
-        if (matchedTurmas.length > 0) {
-          const { data: allStudents } = await supabase
-            .from('alunos')
-            .select('id, turma, status, dados')
-            .or('status.neq.inativo,status.is.null')
+        // 2. Resolver nomes/IDs de turmas para IDs reais no banco
+        const { data: allTurmas, error: turmasError } = await supabase
+          .from('turmas')
+          .select('id, codigo, nome, serie, turno, ano, dados')
+          .limit(500) // evitar full-table scan em escolas grandes
 
-          if (allStudents) {
-            allStudents.forEach((a: any) => {
-              matchedTurmas.forEach((t: any) => {
-                if (isAlunoCursandoTurma(a, t, t.ano)) {
-                  targetAlunosSet.add(String(a.id))
-                }
+        if (turmasError) {
+          console.error('[NotifHelper] Erro ao buscar turmas:', turmasError.message)
+        } else {
+          const matchedTurmas = (allTurmas || []).filter((t: any) => {
+            return allGroupTerms.some(turma => matchesTurmaTerm(t, turma))
+          })
+
+          const matchedTurmaIds = matchedTurmas.map((t: any) => String(t.id))
+          const allSearchTerms = Array.from(new Set([...allGroupTerms.filter(t => !t.toLowerCase().trim().startsWith('todos:')), ...matchedTurmaIds]))
+
+          if (allSearchTerms.length > 0) {
+            const alunosTurma = await fetchInChunks<any>(supabase, 'alunos', 'id', 'turma', allSearchTerms)
+            alunosTurma.forEach((a: any) => targetAlunosSet.add(String(a.id)))
+          }
+
+          // Adicionar alunosIds de grupos sincronizados associados às turmas encontradas
+          if (allGrupos && matchedTurmas.length > 0) {
+            matchedTurmas.forEach((t: any) => {
+              const tIdStr = String(t.id)
+              const syncG = allGrupos.find((g: any) => {
+                const gSync = g.dados?.syncId || (g as any).syncId || (String(g.id).startsWith('sync-') ? g.id : '')
+                return gSync === `sync-${tIdStr}` || g.id === `sync-${tIdStr}` || ((g.nome || g.dados?.nome) && String(g.nome || g.dados?.nome).toLowerCase() === String(t.nome || '').toLowerCase())
               })
+              if (syncG) {
+                let aList = syncG.dados?.alunosIds || (syncG as any).alunosIds || []
+                if (typeof aList === 'string') {
+                  try { aList = JSON.parse(aList) } catch { aList = [] }
+                }
+                if (Array.isArray(aList)) {
+                  aList.forEach((aId: string) => {
+                    const cleanId = String(aId).replace(/^(a_|_ALU)/, '')
+                    if (cleanId) targetAlunosSet.add(cleanId)
+                  })
+                }
+              }
             })
+          }
+
+          // Buscar todos alunos ativos via cache para verificar pertencimento por duplo vínculo Integral/Intermediário
+          if (matchedTurmas.length > 0) {
+            const allStudents = await getCachedActiveAlunos()
+
+            if (allStudents && allStudents.length > 0) {
+              allStudents.forEach((a: any) => {
+                matchedTurmas.forEach((t: any) => {
+                  if (isAlunoCursandoTurma(a, t, t.ano)) {
+                    targetAlunosSet.add(String(a.id))
+                  }
+                })
+              })
+            }
           }
         }
       }
@@ -278,9 +271,7 @@ export async function getResponsavelIdsForTargets(dados: TargetParams | null | u
     const finalAlunosIds = Array.from(targetAlunosSet).filter(Boolean)
 
     // ── Buscar responsáveis dos alunos ────────────────────────────────────
-    let allResponsavelIds = new Set<string>()
-
-    if (finalAlunosIds.length > 0) {
+    if (finalAlunosIds.length > 0 && !(isTodos && !todosAnoMatch)) {
       const vinculados = await fetchInChunks<any>(supabase, 'aluno_responsavel', 'responsavel_id', 'aluno_id', finalAlunosIds)
       vinculados.forEach(v => {
         if (v.responsavel_id) allResponsavelIds.add(String(v.responsavel_id))
@@ -297,14 +288,19 @@ export async function getResponsavelIdsForTargets(dados: TargetParams | null | u
     // ── Mapear IDs de responsáveis com a tabela responsaveis ───────────────────
     const rawIds = Array.from(allResponsavelIds)
     const respEmails = new Set<string>()
+    let anyMissingAuthId = false
 
     if (rawIds.length > 0) {
       try {
-        const respRecords = await fetchInChunks<any>(supabase, 'responsaveis', 'id, email, dados, telefone, celular', 'id', rawIds)
+        const respRecords = await fetchInChunks<any>(supabase, 'responsaveis', 'id, auth_id, email, dados, telefone, celular', 'id', rawIds)
         if (respRecords && respRecords.length > 0) {
           respRecords.forEach((r: any) => {
-            if (r.dados?.auth_id) allResponsavelIds.add(String(r.dados.auth_id))
-            if (r.dados?.user_id) allResponsavelIds.add(String(r.dados.user_id))
+            const directAuthId = r.auth_id || r.dados?.auth_id || r.dados?.user_id
+            if (directAuthId) {
+              allResponsavelIds.add(String(directAuthId))
+            } else {
+              anyMissingAuthId = true
+            }
             if (r.email) {
               const em = String(r.email).toLowerCase().trim()
               if (em) {
@@ -322,6 +318,8 @@ export async function getResponsavelIdsForTargets(dados: TargetParams | null | u
     // ── Mapear IDs de responsáveis/alunos para system_users.id e auth_id ─────────
     const expandedRawIds = Array.from(allResponsavelIds)
     if (expandedRawIds.length > 0) {
+      const expandedSet = new Set(expandedRawIds)
+      const finalAlunosSet = new Set(finalAlunosIds)
       try {
         const { data: sysUsers } = await supabase
           .from('system_users')
@@ -337,11 +335,11 @@ export async function getResponsavelIdsForTargets(dados: TargetParams | null | u
             const aId = u.dados?.aluno_id || u.dados?.alunoId
 
             const matches = 
-              expandedRawIds.includes(uId) ||
-              (suAuthId && expandedRawIds.includes(suAuthId)) ||
-              (suEmail && expandedRawIds.includes(suEmail)) ||
-              (rId && expandedRawIds.includes(String(rId))) ||
-              (aId && expandedRawIds.includes(String(aId)))
+              expandedSet.has(uId) ||
+              (suAuthId && expandedSet.has(suAuthId)) ||
+              (suEmail && expandedSet.has(suEmail)) ||
+              (rId && expandedSet.has(String(rId))) ||
+              (aId && expandedSet.has(String(aId)))
 
             if (matches) {
               allResponsavelIds.add(uId)
@@ -354,31 +352,23 @@ export async function getResponsavelIdsForTargets(dados: TargetParams | null | u
         console.warn('[NotifHelper] Aviso ao expandir IDs via system_users:', sysErr)
       }
 
-      // Buscar Auth UUIDs de responsáveis via admin.listUsers para os emails e IDs encontrados
-      if ((respEmails.size > 0 || expandedRawIds.length > 0) && supabase.auth?.admin) {
+      // Buscar Auth UUIDs de responsáveis via getAllAuthUsersCached para os emails e IDs encontrados
+      if ((anyMissingAuthId || respEmails.size > 0 || finalAlunosSet.size > 0)) {
         try {
-          let page = 1
-          let foundCount = 0
-          while (page <= 5) {
-            const { data: list } = await supabase.auth.admin.listUsers({ page, perPage: 1000 })
-            if (!list?.users || list.users.length === 0) break
-            list.users.forEach((u: any) => {
-              const mail = (u.email || '').toLowerCase().trim()
-              const metaRespId = String(u.user_metadata?.responsavel_id || '').trim()
-              const metaAlunoId = String(u.user_metadata?.aluno_id || '').trim()
-              const isMatch = 
-                (mail && respEmails.has(mail)) ||
-                (metaRespId && expandedRawIds.includes(metaRespId)) ||
-                (metaAlunoId && finalAlunosIds.includes(metaAlunoId))
+          const allAuthUsers = await getAllAuthUsersCached()
+          allAuthUsers.forEach((u: any) => {
+            const mail = (u.email || '').toLowerCase().trim()
+            const metaRespId = String(u.user_metadata?.responsavel_id || '').trim()
+            const metaAlunoId = String(u.user_metadata?.aluno_id || '').trim()
+            const isMatch = 
+              (mail && respEmails.has(mail)) ||
+              (metaRespId && expandedSet.has(metaRespId)) ||
+              (metaAlunoId && finalAlunosSet.has(metaAlunoId))
 
-              if (isMatch) {
-                foundCount++
-                allResponsavelIds.add(String(u.id))
-              }
-            })
-            if (list.users.length < 1000) break
-            page++
-          }
+            if (isMatch) {
+              allResponsavelIds.add(String(u.id))
+            }
+          })
         } catch (authListErr) {
           console.warn('[NotifHelper] Aviso ao listar auth.users para responsáveis:', authListErr)
         }
@@ -881,14 +871,11 @@ export async function getStudentTargetsForComunicados(dados: TargetParams | null
             });
           }
 
-          // Buscar todos alunos ativos para verificar pertencimento por duplo vínculo (Integral/Intermediário)
+          // Buscar todos alunos ativos via cache para verificar pertencimento por duplo vínculo (Integral/Intermediário)
           if (matchedTurmas.length > 0) {
-            const { data: allStudents } = await supabase
-              .from('alunos')
-              .select('id, nome, turma, status, dados')
-              .or('status.neq.inativo,status.is.null');
+            const allStudents = await getCachedActiveAlunos();
 
-            if (allStudents) {
+            if (allStudents && allStudents.length > 0) {
               allStudents.forEach((a: any) => {
                 matchedTurmas.forEach((t: any) => {
                   if (isAlunoCursandoTurma(a, t, t.ano)) {
@@ -958,11 +945,11 @@ export async function getStudentTargetsForComunicados(dados: TargetParams | null
       if (rawIdsArray.length > 0) {
         try {
           const respEmails = new Set<string>()
-          const respRows = await fetchInChunks<any>(supabase, 'responsaveis', 'id, email, dados, telefone, celular', 'id', rawIdsArray)
+          const respRows = await fetchInChunks<any>(supabase, 'responsaveis', 'id, auth_id, email, dados, telefone, celular', 'id', rawIdsArray)
           if (respRows && respRows.length > 0) {
             respRows.forEach((r: any) => {
               const rIdStr = String(r.id)
-              const authId = r.dados?.auth_id ? String(r.dados.auth_id) : (r.dados?.user_id ? String(r.dados.user_id) : '')
+              const authId = r.auth_id ? String(r.auth_id) : (r.dados?.auth_id ? String(r.dados.auth_id) : (r.dados?.user_id ? String(r.dados.user_id) : ''))
               const rEmail = (r.email || '').toLowerCase().trim()
               if (rEmail) respEmails.add(rEmail)
 
@@ -1000,32 +987,26 @@ export async function getStudentTargetsForComunicados(dados: TargetParams | null
             })
           }
 
-          // Se houver emails ou IDs de responsáveis, buscar no Supabase Auth para obter o Auth UUID do OneSignal
-          if ((respEmails.size > 0 || rawIdsArray.length > 0) && supabase.auth?.admin) {
+          // Se houver emails ou IDs de responsáveis, buscar via getAllAuthUsersCached para obter o Auth UUID do OneSignal
+          if ((respEmails.size > 0 || rawIdsArray.length > 0)) {
             try {
-              let page = 1
-              while (page <= 5) {
-                const { data: list } = await supabase.auth.admin.listUsers({ page, perPage: 1000 })
-                if (!list?.users || list.users.length === 0) break
-                list.users.forEach((u: any) => {
-                  const mail = (u.email || '').toLowerCase().trim()
-                  const metaRespId = String(u.user_metadata?.responsavel_id || '').trim()
-                  const metaAlunoId = String(u.user_metadata?.aluno_id || '').trim()
-                  
-                  mapResponsaveis.forEach((set, alunoIdKey) => {
-                    const isDirectMatch = 
-                      (mail && set.has(mail)) ||
-                      (metaRespId && set.has(metaRespId)) ||
-                      (metaAlunoId && (alunoIdKey === metaAlunoId || alunoIdKey.replace(/^0+/, '') === metaAlunoId.replace(/^0+/, '')))
+              const allAuthUsers = await getAllAuthUsersCached()
+              allAuthUsers.forEach((u: any) => {
+                const mail = (u.email || '').toLowerCase().trim()
+                const metaRespId = String(u.user_metadata?.responsavel_id || '').trim()
+                const metaAlunoId = String(u.user_metadata?.aluno_id || '').trim()
+                
+                mapResponsaveis.forEach((set, alunoIdKey) => {
+                  const isDirectMatch = 
+                    (mail && set.has(mail)) ||
+                    (metaRespId && set.has(metaRespId)) ||
+                    (metaAlunoId && (alunoIdKey === metaAlunoId || alunoIdKey.replace(/^0+/, '') === metaAlunoId.replace(/^0+/, '')))
 
-                    if (isDirectMatch) {
-                      set.add(String(u.id))
-                    }
-                  })
+                  if (isDirectMatch) {
+                    set.add(String(u.id))
+                  }
                 })
-                if (list.users.length < 1000) break
-                page++
-              }
+              })
             } catch (authListErr) {
               console.warn('[NotifHelper] Erro ao buscar auth.users para comunicados:', authListErr)
             }
@@ -1175,6 +1156,7 @@ export async function checkResponsavelRelationship(authUserId: string, alunoId: 
     const candidateRespIds = new Set<string>();
     const respOrConds: string[] = [];
     if (authUserId) {
+      respOrConds.push(`auth_id.eq.${authUserId}`);
       respOrConds.push(`dados->>auth_id.eq.${authUserId}`);
       respOrConds.push(`dados->>user_id.eq.${authUserId}`);
     }

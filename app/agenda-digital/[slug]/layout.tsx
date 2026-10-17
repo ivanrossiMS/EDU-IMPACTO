@@ -58,10 +58,21 @@ export default function ADInnerLayout({
   const paramsHook = useParams<{ slug: string }>()
   const resolvedParams = paramsHook || (params as any)
 
-  const isMirroringAluno = searchParams?.get('espelhar_aluno') === 'true'
-  const espelharRespId = searchParams?.get('espelhar_responsavel')
-  const espelharColabId = searchParams?.get('espelhar_colaborador')
-  const isMirrorModeActive = !!isMirroringAluno || !!espelharRespId || !!espelharColabId
+  const isMirrorMode =
+    currentUser?.perfil === 'Administrador' ||
+    currentUser?.perfil === 'Administrador Master' ||
+    currentUser?.perfil === 'Gestor' ||
+    currentUser?.perfil === 'Direção' ||
+    currentUser?.perfil === 'Diretor Geral' ||
+    currentUser?.perfil === 'Coordenador' ||
+    currentUser?.perfil === 'Secretaria' ||
+    currentUser?.cargo === 'Administrador Master' ||
+    currentUser?.cargo === 'Diretor Geral'
+
+  const isMirroringAluno = isMirrorMode && searchParams?.get('espelhar_aluno') === 'true'
+  const espelharRespId = isMirrorMode ? searchParams?.get('espelhar_responsavel') : null
+  const espelharColabId = isMirrorMode ? searchParams?.get('espelhar_colaborador') : null
+  const isMirrorModeActive = isMirrorMode && (!!isMirroringAluno || !!espelharRespId || !!espelharColabId)
 
   // Intercepta rotas genéricas de push notification (ex: /agenda-digital/comunicados)
   const isGenericModule = ['comunicados', 'momentos', 'calendario', 'frequencia', 'ocorrencias', 'notas', 'provas-online'].includes(resolvedParams?.slug || '')
@@ -87,7 +98,6 @@ export default function ADInnerLayout({
     (currentUser as any)?.userType === 'aluno' ||
     ((currentUser as any)?.aluno_id && currentUser?.cargo !== 'Responsável' && !(currentUser as any)?.responsavel_id)
   )
-  const isMirrorMode = currentUser?.perfil === 'Administrador' || currentUser?.perfil === 'Gestor' || currentUser?.perfil === 'Direção' || currentUser?.perfil === 'Secretaria'
 
   useEffect(() => {
     if (hydrated) {
@@ -338,7 +348,7 @@ export default function ADInnerLayout({
                       key={a.id} 
                       className="ad-switcher-item" 
                       onClick={() => {
-                        const newPath = pathname.replace(aluno?.id || '', a.id)
+                        const newPath = (pathname || '').replace(/^\/agenda-digital\/[^/]+/, `/agenda-digital/${a.id}`)
                         router.push(newPath)
                         setSwitcherOpen(false)
                       }} 

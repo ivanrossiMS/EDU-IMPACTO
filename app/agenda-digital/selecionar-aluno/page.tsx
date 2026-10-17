@@ -1267,9 +1267,10 @@ function SelecionarAlunoContent() {
 
   // ─── Fast-path data fetching with localStorage cache to eliminate empty-state flash ───
   const [meusAlunos, setMeusAlunos] = useState<any[]>([])
-  // Track whether we've completed at least one successful fetch
+  // Track whether we've completed at least one successful fetch and whether a fetch is currently in flight
   const [hasFetched, setHasFetched] = useState(false)
-  const isStillLoading = !hydrated || !hasFetched || (currentUser === undefined)
+  const [isFetching, setIsFetching] = useState(true)
+  const isStillLoading = !hydrated || !currentUser || !hasFetched || (isFetching && meusAlunos.length === 0)
 
   const [loadingCardId, setLoadingCardId] = useState<string | null>(null)
   const [isLoggingOut, setIsLoggingOut] = useState(false)
@@ -1277,10 +1278,6 @@ function SelecionarAlunoContent() {
 
   useEffect(() => {
     setMounted(true)
-    const safetyTimer = setTimeout(() => {
-      setHasFetched(true)
-    }, 3500)
-    return () => clearTimeout(safetyTimer)
   }, [])
 
   // 1. Sincronizar dados mais recentes do perfil e foto/avatar via /api/auth/me
@@ -1383,11 +1380,12 @@ function SelecionarAlunoContent() {
     const userCacheKey = `edu-meus-alunos-${currentUser.id}`;
     const keysToCheck = [
       userCacheKey,
-      `edu-meus-alunos-${respId || emailBusca}`,
-      `edu-meus-alunos-${emailBusca}`
-    ];
+      respId ? `edu-meus-alunos-${respId}` : '',
+      emailBusca ? `edu-meus-alunos-${emailBusca}` : ''
+    ].filter(Boolean);
 
     // Step 1: Serve from localStorage cache INSTANTLY (zero latency)
+    let loadedFromCache = false;
     for (const key of keysToCheck) {
       try {
         const cached = localStorage.getItem(key);
@@ -1397,30 +1395,65 @@ function SelecionarAlunoContent() {
           if (list && list.length > 0) {
             setMeusAlunos(list);
             setHasFetched(true); // Show data immediately, no spinner
+            setIsFetching(false);
+            loadedFromCache = true;
             break;
           }
         }
       } catch (_) {}
     }
 
-    // Step 2: Fire deduplicated request (shares active in-flight request if already loading)
-    getMeusAlunosDedup()
-      .then((data) => {
-        if (!Array.isArray(data)) return;
+    let cancelled = false;
+    if (!loadedFromCache) {
+      setIsFetching(true);
+    }
 
-        // Resposta 200 OK válida: atualiza estado e cache da conta específica (mesmo se data for [] vazio de fato)
-        setMeusAlunos(data);
-        try {
-          localStorage.setItem(userCacheKey, JSON.stringify(data));
-          localStorage.setItem(`${userCacheKey}-meta`, JSON.stringify({ data, ts: Date.now() }));
-        } catch (_) {}
-      })
-      .catch((err) => {
+    // Step 2: Fire deduplicated request (shares active in-flight request if already loading)
+    const fetchAlunos = async () => {
+      try {
+        let data = await getMeusAlunosDedup();
+        if (cancelled) return;
+
+        // Se a primeira busca retornou vazio e não havia cache, aguarda brevemente e confirma
+        // para garantir que a sessão/metadados pós-login terminaram de sincronizar antes de exibir vazio
+        if ((!Array.isArray(data) || data.length === 0) && !loadedFromCache) {
+          await new Promise((r) => setTimeout(r, 800));
+          if (cancelled) return;
+          data = await getMeusAlunosDedup({ forceRefresh: true });
+          if (cancelled) return;
+        }
+
+        if (Array.isArray(data)) {
+          setMeusAlunos(data);
+          if (data.length > 0) {
+            try {
+              localStorage.setItem(userCacheKey, JSON.stringify(data));
+              localStorage.setItem(`${userCacheKey}-meta`, JSON.stringify({ data, ts: Date.now() }));
+              if (emailBusca) {
+                localStorage.setItem(`edu-meus-alunos-${emailBusca}`, JSON.stringify(data));
+              }
+              if (respId) {
+                localStorage.setItem(`edu-meus-alunos-${respId}`, JSON.stringify(data));
+              }
+            } catch (_) {}
+          }
+        }
+      } catch (err) {
+        if (cancelled) return;
         console.warn('[selecionar-aluno] Erro de conexão ao buscar alunos:', err);
-      })
-      .finally(() => {
-        setHasFetched(true);
-      });
+      } finally {
+        if (!cancelled) {
+          setIsFetching(false);
+          setHasFetched(true);
+        }
+      }
+    };
+
+    void fetchAlunos();
+
+    return () => {
+      cancelled = true;
+    };
   }, [hydrated, currentUser?.id, respId, emailBusca]);
 
   // Redirecionamento de alunos normais

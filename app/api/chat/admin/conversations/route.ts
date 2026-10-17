@@ -79,20 +79,7 @@ export async function GET(request: Request) {
     const { data: convRows, error: errConv } = await convQuery
     if (errConv) throw errConv
 
-    // Limpar conversas vazias no banco (conversas onde nenhuma mensagem foi enviada)
-    const emptyConvIds = (convRows || [])
-      .filter(c => !c.last_message_text || c.last_message_text.trim() === '')
-      .map(c => c.id)
-
-    if (emptyConvIds.length > 0) {
-      Promise.all([
-        supabase.from('chat_participants').delete().in('conversation_id', emptyConvIds),
-        supabase.from('chat_read_receipts').delete().in('conversation_id', emptyConvIds),
-        supabase.from('chat_conversations').delete().in('id', emptyConvIds)
-      ]).catch(e => console.warn('[Admin Chat] Erro ao limpar conversas vazias:', e))
-    }
-
-    // Apenas conversas com mensagens válidas devem ser exibidas e contabilizadas
+    // Apenas conversas com mensagens válidas devem ser exibidas e contabilizadas (sem apagar conversas recém-criadas em GET)
     const allConvList = (convRows || []).filter(c => !!(c.last_message_text && c.last_message_text.trim() !== ''))
     const convIds = allConvList.map(c => c.id)
 

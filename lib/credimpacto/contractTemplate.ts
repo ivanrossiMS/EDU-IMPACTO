@@ -9,6 +9,15 @@ import { formatBrl, METODOS_LABELS } from './engine'
 export const DEFAULT_TERMO_AUTORIZACAO =
   'Com fulcro no artigo 462, caput, da Consolidação das Leis do Trabalho (CLT) e na Súmula nº 342 do Tribunal Superior do Trabalho (TST), o(a) DEVEDOR(A), de forma livre, espontânea, expressa e irrevogável, AUTORIZA a empregadora a efetuar o desconto mensal das parcelas discriminadas na folha de pagamento de seus salários e/ou remunerações, observada a competência mensal de cada prestação.'
 
+function escapeHtml(value: unknown): string {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
 export function generateContractHtml(
   loan: CredImpactoEmprestimo,
   options?: {
@@ -22,29 +31,41 @@ export function generateContractHtml(
   }
 ): string {
   const escola = {
-    razaoSocial: options?.razaoSocialEscola || 'Colegio Impacto Centro de Ensino LTDA',
-    nomeFantasia: options?.nomeFantasiaEscola || options?.unidadeEscola || loan.colaboradorUnidade || 'Colegio Impacto de Ef',
-    cnpj: options?.cnpjEscola || '04.395.789/0001-88',
-    endereco: options?.enderecoEscola || 'Rua Alagoas, nº 1081, Bairro Jardim dos Estados',
-    cidadeUf: options?.cidadeUfEscola || 'Campo Grande - MS • CEP: 79020-121'
+    razaoSocial: escapeHtml(options?.razaoSocialEscola || 'Colegio Impacto Centro de Ensino LTDA'),
+    nomeFantasia: escapeHtml(options?.nomeFantasiaEscola || options?.unidadeEscola || loan.colaboradorUnidade || 'Colegio Impacto de Ef'),
+    cnpj: escapeHtml(options?.cnpjEscola || '04.395.789/0001-88'),
+    endereco: escapeHtml(options?.enderecoEscola || 'Rua Alagoas, nº 1081, Bairro Jardim dos Estados'),
+    cidadeUf: escapeHtml(options?.cidadeUfEscola || 'Campo Grande - MS • CEP: 79020-121')
   }
 
   const metodoInfo = METODOS_LABELS[loan.metodoCalculo] || {
-    nome: loan.metodoCalculo,
+    nome: escapeHtml(loan.metodoCalculo),
     descricao: ''
   }
 
-  const textoAutorizacao =
+  const textoAutorizacao = escapeHtml(
     loan.termoAutorizacaoDesconto ||
     options?.termoAutorizacaoDesconto ||
     DEFAULT_TERMO_AUTORIZACAO
+  )
+
+  const safeCodigoOperacao = escapeHtml(loan.codigoOperacao)
+  const safeColaboradorNome = escapeHtml(loan.colaboradorNome)
+  const safeColaboradorCpf = escapeHtml(loan.colaboradorCpf || 'Pendente de preenchimento')
+  const safeColaboradorCargo = escapeHtml(loan.colaboradorCargo || 'Colaborador(a)')
+  const safeColaboradorUnidade = loan.colaboradorUnidade ? escapeHtml(loan.colaboradorUnidade) : ''
+  const safeColaboradorMatricula = escapeHtml(loan.colaboradorMatricula || 'N/A')
+  const safeFinalidade = loan.finalidade ? escapeHtml(loan.finalidade) : ''
+  const safeChavePix = loan.dadosBancarios?.chavePix ? escapeHtml(loan.dadosBancarios.chavePix) : ''
+  const safeTipoChavePix = loan.dadosBancarios?.tipoChavePix ? escapeHtml(loan.dadosBancarios.tipoChavePix.toUpperCase()) : ''
+  const safeJustificativa = loan.justificativaSolicitacao ? escapeHtml(loan.justificativaSolicitacao) : ''
 
   const parcelasHtml = (loan.parcelas || [])
     .map(
       (p) => `
     <tr style="border-bottom: 1px solid #e2e8f0; font-size: 12px;">
-      <td style="padding: 6px 10px; text-align: center; font-weight: bold;">${p.numero}/${loan.quantidadeParcelas}</td>
-      <td style="padding: 6px 10px; text-align: center;">${p.competencia}</td>
+      <td style="padding: 6px 10px; text-align: center; font-weight: bold;">${Number(p.numero) || 0}/${Number(loan.quantidadeParcelas) || 0}</td>
+      <td style="padding: 6px 10px; text-align: center;">${escapeHtml(p.competencia)}</td>
       <td style="padding: 6px 10px; text-align: center;">${new Date(p.dataVencimento + 'T12:00:00Z').toLocaleDateString('pt-BR')}</td>
       <td style="padding: 6px 10px; text-align: right;">${formatBrl(p.valorAmortizacao)}</td>
       <td style="padding: 6px 10px; text-align: right; color: #64748b;">${formatBrl(p.valorJuros)}</td>
@@ -75,7 +96,7 @@ export function generateContractHtml(
       INSTRUMENTO PARTICULAR DE MÚTUO FINANCEIRO E AUTORIZAÇÃO DE DESCONTO EM FOLHA
     </div>
     <div style="font-size: 11px; color: #64748b; margin-top: 4px;">
-      OPERACÃO Nº: <strong>${loan.codigoOperacao}</strong>
+      OPERACÃO Nº: <strong>${safeCodigoOperacao}</strong>
     </div>
   </div>
 
@@ -86,7 +107,7 @@ export function generateContractHtml(
       <strong>CREDORA / EMPREGADORA:</strong> <strong>${escola.razaoSocial}</strong>${escola.nomeFantasia && escola.nomeFantasia.toLowerCase() !== escola.razaoSocial.toLowerCase() ? ` (${escola.nomeFantasia})` : ''}, pessoa jurídica de direito privado, inscrita no CNPJ sob o nº <strong>${escola.cnpj}</strong>, com sede em ${escola.endereco}, ${escola.cidadeUf}.
     </p>
     <p style="font-size: 13px; margin: 4px 0;">
-      <strong>DEVEDOR(A) / COLABORADOR(A):</strong> <strong>${loan.colaboradorNome}</strong>, inscrito(a) no CPF/MF sob o nº <strong>${loan.colaboradorCpf || 'Pendente de preenchimento'}</strong>, exercendo na instituição a função de <strong>${loan.colaboradorCargo || 'Colaborador(a)'}</strong>${loan.colaboradorUnidade ? `, lotado(a) na unidade <strong>${loan.colaboradorUnidade}</strong>` : ''}, matrícula <strong>${loan.colaboradorMatricula || 'N/A'}</strong>.
+      <strong>DEVEDOR(A) / COLABORADOR(A):</strong> <strong>${safeColaboradorNome}</strong>, inscrito(a) no CPF/MF sob o nº <strong>${safeColaboradorCpf}</strong>, exercendo na instituição a função de <strong>${safeColaboradorCargo}</strong>${safeColaboradorUnidade ? `, lotado(a) na unidade <strong>${safeColaboradorUnidade}</strong>` : ''}, matrícula <strong>${safeColaboradorMatricula}</strong>.
     </p>
   </div>
 
@@ -94,11 +115,11 @@ export function generateContractHtml(
   <div style="margin-bottom: 18px;">
     <div style="font-weight: bold; font-size: 13px; color: #0f172a; margin-bottom: 6px;">CLÁUSULA PRIMEIRA – DO OBJETO E VALOR CONCEDIDO</div>
     <p style="font-size: 13px; text-align: justify; margin: 0 0 6px 0;">
-      A <strong>CREDORA</strong> concede ao(à) <strong>DEVEDOR(A)</strong>, nesta data, a título de empréstimo financeiro, a quantia líquida de <strong>${formatBrl(loan.valorAprovado)}</strong>${loan.finalidade ? ` (Finalidade declarada: <strong>${loan.finalidade}</strong>)` : ''}, a ser creditada na conta bancária de titularidade do(a) colaborador(a) indicada na proposta${loan.dadosBancarios?.chavePix && !loan.dadosBancarios.chavePix.toLowerCase().includes('definir') ? ` (Chave PIX cadastrada: <strong>${loan.dadosBancarios.chavePix}</strong>${loan.dadosBancarios.tipoChavePix ? ` • ${loan.dadosBancarios.tipoChavePix.toUpperCase()}` : ''})` : ''}.
+      A <strong>CREDORA</strong> concede ao(à) <strong>DEVEDOR(A)</strong>, nesta data, a título de empréstimo financeiro, a quantia líquida de <strong>${formatBrl(loan.valorAprovado)}</strong>${safeFinalidade ? ` (Finalidade declarada: <strong>${safeFinalidade}</strong>)` : ''}, a ser creditada na conta bancária de titularidade do(a) colaborador(a) indicada na proposta${safeChavePix && !safeChavePix.toLowerCase().includes('definir') ? ` (Chave PIX cadastrada: <strong>${safeChavePix}</strong>${safeTipoChavePix ? ` • ${safeTipoChavePix}` : ''})` : ''}.
     </p>
-    ${loan.justificativaSolicitacao ? `
+    ${safeJustificativa ? `
     <p style="font-size: 12px; color: #475569; margin: 4px 0; font-style: italic;">
-      • Justificativa ou Observações: &ldquo;${loan.justificativaSolicitacao}&rdquo;
+      • Justificativa ou Observações: &ldquo;${safeJustificativa}&rdquo;
     </p>
     ` : ''}
   </div>

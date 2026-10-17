@@ -11,7 +11,8 @@ import {
   checkExamAvailabilityForStudent,
   calculateServerDeadline,
   generateVoucherCode,
-  autoGradeTentativa
+  autoGradeTentativa,
+  sanitizeExamForParticipant
 } from '@/lib/provas-online/engine'
 import { TentativaAluno } from '@/types/provas-online'
 
@@ -103,6 +104,11 @@ export async function POST(
   const allTentativas = await dbGetTentativasByProvaId(provaId)
   const myTentativas = allTentativas.filter(t => t.alunoId === alunoId || (alunoMatricula && t.alunoMatricula === alunoMatricula))
 
+  const sanitizedProva = {
+    ...sanitizeExamForParticipant(prova, false),
+    quantidadeQuestoes: (prova as any).quantidadeQuestoes ?? (prova.questoes?.length || 0)
+  }
+
   // 3. IDEMPOTENCY CHECK:
   // If student already has an active attempt, return the existing active attempt!
   // Prevents duplicate attempts from multiple clicks, page reloads, or connection retries.
@@ -115,6 +121,7 @@ export async function POST(
     if (now <= deadline) {
       return NextResponse.json({
         tentativa: existingActive,
+        prova: sanitizedProva,
         retomada: true,
         message: 'Tentativa em andamento recuperada com sucesso.'
       })
@@ -217,6 +224,7 @@ export async function POST(
 
   return NextResponse.json({
     tentativa: saved,
+    prova: sanitizedProva,
     retomada: false,
     message: 'Tentativa iniciada com sucesso. O cronômetro do servidor está ativo.'
   }, { status: 201 })

@@ -63,7 +63,7 @@ const ROUTE_INFO: Record<string, { title: string; subtitle: string }> = {
 
 const AGENDA_SUBROUTE_TITLES: Record<string, string> = {
   'comunicados': 'Comunicados',
-  'momentos': 'Mídia',
+  'momentos': 'Galeria',
   'calendario': 'Agenda',
   'financeiro': 'Financeiro',
   'frequencia': 'Frequência',

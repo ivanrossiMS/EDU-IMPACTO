@@ -385,10 +385,10 @@ export function ChatFullView({ alunoId }: { alunoId?: string }) {
   const [searchedStudents, setSearchedStudents] = useState<any[]>([])
   const [isSearchingStudents, setIsSearchingStudents] = useState(false)
 
-  // Efeito debounced para buscar alunos por nome diretamente no banco
+  // Efeito debounced para buscar alunos por nome diretamente no banco (apenas visão staff/colaborador)
   useEffect(() => {
     const trimmed = searchQuery.trim()
-    if (trimmed.length < 2) {
+    if (!isStaffView || trimmed.length < 2) {
       setSearchedStudents([])
       setIsSearchingStudents(false)
       return
@@ -414,7 +414,7 @@ export function ChatFullView({ alunoId }: { alunoId?: string }) {
     }, 200)
 
     return () => clearTimeout(timer)
-  }, [searchQuery])
+  }, [searchQuery, isStaffView])
 
   // Pré-carregamento em background dos alunos e responsáveis da turma (0ms no clique)
   const prefetchTurma = useCallback(async (grupoId: string, turmaId?: string) => {

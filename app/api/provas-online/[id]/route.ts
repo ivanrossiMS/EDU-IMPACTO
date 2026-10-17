@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { resolveUserRole, requireStaff } from '@/lib/server/authGuard'
+import { resolveUserRole, requireStaff, getAuthorizedAlunoIdsForUser } from '@/lib/server/authGuard'
 import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 import { dbGetProvaById, dbSaveProva, dbDeleteProva, dbGetTentativasByProvaId, dbGetTentativaById } from '@/lib/provas-online/db'
 import { sanitizeExamForParticipant, shouldPublishResults } from '@/lib/provas-online/engine'
@@ -33,10 +33,30 @@ export async function GET(
   const tentativas = await dbGetTentativasByProvaId(prova.id)
 
   if (!isStaff || isFamilyOrStudent) {
-    const alunoId = requestedAlunoId || user.user_metadata?.aluno_id || user.id
-    const matricula = user.user_metadata?.matricula || ''
+    const allowedAlunoIds = await getAuthorizedAlunoIdsForUser(user)
+    const matricula = String(user.user_metadata?.matricula || '')
+    const selfCandidateIds = new Set<string>([
+      String(user.id),
+      String(user.user_metadata?.aluno_id || ''),
+      matricula,
+      ...Array.from(allowedAlunoIds)
+    ].filter(Boolean))
+
+    if (requestedAlunoId && !selfCandidateIds.has(String(requestedAlunoId))) {
+      return NextResponse.json({ error: 'Acesso negado: aluno não vinculado ao usuário autenticado.' }, { status: 403 })
+    }
+
+    if (
+      initialTentativaFromId &&
+      !selfCandidateIds.has(String(initialTentativaFromId.alunoId || '')) &&
+      (!initialTentativaFromId.alunoMatricula || !selfCandidateIds.has(String(initialTentativaFromId.alunoMatricula)))
+    ) {
+      return NextResponse.json({ error: 'Acesso negado: esta tentativa pertence a outro aluno.' }, { status: 403 })
+    }
+
+    const alunoId = requestedAlunoId || user.user_metadata?.aluno_id || Array.from(allowedAlunoIds)[0] || user.id
     const rawTentativa = initialTentativaFromId || tentativas.find(t => 
-      (t.alunoId === alunoId || t.alunoMatricula === alunoId || (matricula && t.alunoMatricula === matricula)) && 
+      (t.alunoId === alunoId || selfCandidateIds.has(String(t.alunoId)) || t.alunoMatricula === alunoId || (matricula && t.alunoMatricula === matricula)) && 
       (t.status === 'em_andamento' || t.status === 'suspensa' || t.status === 'entregue' || t.statusCorrecao === 'corrigida')
     ) || null
     const canView = shouldPublishResults(prova, tentativas)

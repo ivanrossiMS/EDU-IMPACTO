@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/server/authGuard'
+import { requireStaff } from '@/lib/server/authGuard'
 import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 import {
   executarDiagnosticoSmtp,
@@ -17,7 +17,7 @@ const CONFIG_SMTP_KEY = 'cfgEmailSmtp'
  * Retorna JSON estruturado e compatível com todos os navegadores (incluindo Safari/WebKit).
  */
 export async function POST(request: Request) {
-  const { user, errorResponse } = await requireAuth(request)
+  const { user, errorResponse } = await requireStaff(request)
   if (errorResponse) return errorResponse
 
   try {

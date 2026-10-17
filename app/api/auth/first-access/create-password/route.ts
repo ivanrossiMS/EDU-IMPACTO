@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
-import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
+import { getAdminClient, findAuthUserByEmail as findAuthUserByEmailFast, invalidateAuthUsersCache } from '@/lib/server/supabaseAdminSingleton'
 import { verifyCreationToken } from '@/lib/server/firstAccessSecurity'
+import { clearAuthGuardCache } from '@/lib/server/authGuard'
 
 export const dynamic = 'force-dynamic'
 
@@ -50,20 +51,9 @@ export async function POST(request: Request) {
     const { user } = verification
     const supabaseAdmin = getAdminClient()
 
-    // Helper: busca usuário no Supabase Auth por e-mail com paginação
+    // Helper: busca usuário no Supabase Auth por e-mail via cache/índice rápido
     const findAuthUserByEmail = async (em: string) => {
-      let page = 1
-      while (page <= 5) {
-        const { data: list } = await supabaseAdmin.auth.admin
-          .listUsers({ page, perPage: 1000 })
-          .catch(() => ({ data: { users: [] } }))
-        if (!list || !list.users || list.users.length === 0) break
-        const found = list.users.find((u: any) => u.email?.toLowerCase() === em.toLowerCase())
-        if (found) return found
-        if (list.users.length < 1000) break
-        page++
-      }
-      return null
+      return findAuthUserByEmailFast(em)
     }
 
     let loginIdentifier = user.email
@@ -132,6 +122,9 @@ export async function POST(request: Request) {
         if (createErr) throw createErr
       }
 
+      invalidateAuthUsersCache()
+      clearAuthGuardCache()
+
       // Se o aluno não tinha e-mail e não é e-mail de pai, salva na tabela de alunos
       if (isValidEmail(targetEmail) && !user.isParentEmail && !alunoStoredEmail) {
         await supabaseAdmin
@@ -154,7 +147,7 @@ export async function POST(request: Request) {
 
       const { data: resp } = await supabaseAdmin
         .from('responsaveis')
-        .select('id, nome, email, celular')
+        .select('id, nome, email, celular, auth_id')
         .eq('id', realId)
         .maybeSingle()
 
@@ -174,14 +167,16 @@ export async function POST(request: Request) {
 
       loginIdentifier = finalEmail
       const existing = await findAuthUserByEmail(finalEmail)
+      let resolvedAuthId: string | null = resp.auth_id || null
 
       if (existing) {
         const { error: upErr } = await supabaseAdmin.auth.admin.updateUserById(existing.id, {
           password: newPass,
         })
         if (upErr && !isSamePasswordError(upErr)) throw upErr
+        resolvedAuthId = existing.id
       } else {
-        const { error: createErr } = await supabaseAdmin.auth.admin.createUser({
+        const { data: createdAuth, error: createErr } = await supabaseAdmin.auth.admin.createUser({
           email: finalEmail,
           password: newPass,
           email_confirm: true,
@@ -199,11 +194,23 @@ export async function POST(request: Request) {
           },
         })
         if (createErr) throw createErr
+        resolvedAuthId = createdAuth?.user?.id || null
       }
 
-      // Se a tabela de responsáveis estava sem e-mail, persiste o e-mail validado
+      invalidateAuthUsersCache()
+      clearAuthGuardCache()
+
+      // Se a tabela de responsáveis estava sem e-mail, persiste o e-mail validado + auth_id
       if (!storedRespEmail && finalEmail) {
-        await supabaseAdmin.from('responsaveis').update({ email: finalEmail }).eq('id', realId)
+        await supabaseAdmin
+          .from('responsaveis')
+          .update(resolvedAuthId ? { email: finalEmail, auth_id: resolvedAuthId } : { email: finalEmail })
+          .eq('id', realId)
+      } else if (resolvedAuthId && resp.auth_id !== resolvedAuthId) {
+        await supabaseAdmin
+          .from('responsaveis')
+          .update({ auth_id: resolvedAuthId })
+          .eq('id', realId)
       }
 
       return NextResponse.json({
@@ -274,6 +281,9 @@ export async function POST(request: Request) {
         .from('system_users')
         .update({ senha_definida: true })
         .eq('id', realId)
+
+      invalidateAuthUsersCache()
+      clearAuthGuardCache()
 
       return NextResponse.json({
         ok: true,

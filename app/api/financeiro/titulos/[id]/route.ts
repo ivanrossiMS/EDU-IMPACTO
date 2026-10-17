@@ -1,22 +1,38 @@
 import { NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/server/authGuard'
+import { requireStaff, resolveUserRole, getAuthorizedAlunoIdsForUser } from '@/lib/server/authGuard'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
-  const { user, errorResponse } = await requireAuth()
-  if (errorResponse) return errorResponse
+export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const roleCtx = await resolveUserRole(request)
+  if (roleCtx.errorResponse) return roleCtx.errorResponse
+  const { user, isStaff } = roleCtx
 
   const supabase = await createProtectedClient();
   const { id } = await params
   const { data, error } = await supabase.from('titulos').select('*').eq('id', id).single()
-  if (error) return NextResponse.json({ error: error.message }, { status: 404 })
+  if (error || !data) return NextResponse.json({ error: error?.message || 'Não encontrado' }, { status: 404 })
+
+  if (!isStaff) {
+    const allowedAlunoIds = await getAuthorizedAlunoIdsForUser(user)
+    const candidateIds = [
+      data.aluno_id,
+      data.dados?.alunoId,
+      data.dados?.aluno_id,
+      data.aluno,
+    ].map(v => String(v || '').trim()).filter(Boolean)
+
+    if (!candidateIds.some(cid => allowedAlunoIds.has(cid))) {
+      return NextResponse.json({ error: 'Acesso negado a este título.' }, { status: 403 })
+    }
+  }
+
   return NextResponse.json({ ...data, ...(data.dados_bancarios || {}) })
 }
 
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const { user, errorResponse } = await requireAuth()
+  const { user, errorResponse } = await requireStaff(request)
   if (errorResponse) return errorResponse
 
   const supabase = await createProtectedClient();
@@ -49,8 +65,8 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   }
 }
 
-export async function DELETE(_: Request, { params }: { params: Promise<{ id: string }> }) {
-  const { user, errorResponse } = await requireAuth()
+export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { user, errorResponse } = await requireStaff(request)
   if (errorResponse) return errorResponse
 
   const supabase = await createProtectedClient();

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/server/authGuard'
+import { requireAuth, resolveUserRole, isAdminStaff } from '@/lib/server/authGuard'
 import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 
@@ -125,13 +125,14 @@ export async function POST(request: Request) {
     }
 
     const loggedUser = user;
-    const isMasterAdmin = ['Diretor Geral', 'Administrador', 'Administrador Master'].includes(
-      loggedUser.user_metadata?.perfil || loggedUser.user_metadata?.cargo || ''
-    );
+    const roleCtx = await resolveUserRole(request);
+    const isMasterAdmin = roleCtx ? isAdminStaff(roleCtx) : false;
     const isSelf = loggedUser.id === userId ||
-      loggedUser.email?.toLowerCase() === userId.toLowerCase() ||
+      loggedUser.email?.toLowerCase() === String(userId).toLowerCase() ||
       loggedUser.user_metadata?.system_user_id === userId ||
-      loggedUser.user_metadata?.colaborador_id === userId;
+      loggedUser.user_metadata?.colaborador_id === userId ||
+      roleCtx?.dbUser?.id === userId ||
+      roleCtx?.dbUser?.auth_id === userId;
 
     if (!isSelf && !isMasterAdmin) {
       return NextResponse.json({ error: 'Proibido atualizar dados de outro usuário' }, { status: 403 });
@@ -141,9 +142,13 @@ export async function POST(request: Request) {
 
     // 1. Localizar registro correspondente em system_users (por id, auth_id ou email)
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId);
-    const postFilter = isUuid
-      ? `id.eq.${userId},auth_id.eq.${userId},auth_id.eq.${loggedUser.id},email.eq.${loggedUser.email}`
-      : `id.eq.${userId},auth_id.eq.${loggedUser.id},email.eq.${loggedUser.email}`;
+    const postFilter = isSelf
+      ? (isUuid
+          ? `id.eq.${userId},auth_id.eq.${userId},auth_id.eq.${loggedUser.id},email.eq.${loggedUser.email}`
+          : `id.eq.${userId},auth_id.eq.${loggedUser.id},email.eq.${loggedUser.email}`)
+      : (isUuid
+          ? `id.eq.${userId},auth_id.eq.${userId}`
+          : `id.eq.${userId},email.eq.${userId}`);
 
     const { data: currentSysUser } = await supabaseAdmin
       .from('system_users')
@@ -152,7 +157,7 @@ export async function POST(request: Request) {
       .maybeSingle();
 
     // 2. Determinar o authId correto para atualizar auth metadata
-    const targetAuthId = isUuid ? userId : (currentSysUser?.auth_id || loggedUser.id);
+    const targetAuthId = isUuid ? userId : (currentSysUser?.auth_id || (isSelf ? loggedUser.id : null));
 
     if (targetAuthId) {
       const { error: authErr } = await supabaseAdmin.auth.admin.updateUserById(targetAuthId, {
@@ -177,12 +182,23 @@ export async function POST(request: Request) {
       }
     }
 
-    // 4. Se for responsável, sincroniza também em responsaveis
+    // 4. Se for responsável, sincroniza também em responsaveis preservando o JSONB existente
     try {
-      await supabaseAdmin
+      const respFilter = isSelf && loggedUser.email
+        ? `id.eq.${userId},email.eq.${loggedUser.email}`
+        : `id.eq.${userId}`;
+      const { data: respRows } = await supabaseAdmin
         .from('responsaveis')
-        .update({ dados: { foto: fotoUrl } })
-        .or(`id.eq.${userId},email.eq.${loggedUser.email}`);
+        .select('id, dados')
+        .or(respFilter);
+
+      for (const resp of respRows || []) {
+        const mergedRespDados = { ...(resp.dados || {}), foto: fotoUrl, avatar: fotoUrl };
+        await supabaseAdmin
+          .from('responsaveis')
+          .update({ dados: mergedRespDados })
+          .eq('id', resp.id);
+      }
     } catch {}
 
     return NextResponse.json({ ok: true, fotoUrl });

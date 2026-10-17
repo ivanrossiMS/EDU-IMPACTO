@@ -1,10 +1,12 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
+import { clearAuthGuardCache } from '@/lib/server/authGuard'
 
 export const dynamic = 'force-dynamic'
 
 // GET: browser navigation — clears session AND redirects to /login in one atomic response
 export async function GET(request: NextRequest) {
+  clearAuthGuardCache()
   const redirectUrl = new URL('/login', request.url)
   const response = NextResponse.redirect(redirectUrl, { status: 302 })
   response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
@@ -62,6 +64,7 @@ export async function GET(request: NextRequest) {
 
 // POST: programmatic API call — returns JSON OK
 export async function POST(request: NextRequest) {
+  clearAuthGuardCache()
   const response = NextResponse.json({ ok: true })
   response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
   response.headers.set('Pragma', 'no-cache')

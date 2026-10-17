@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
-import { requireAuth, requireStaff } from '@/lib/server/authGuard'
+import { requireAuth, requireStaff, requireAdminOrDirecao, clearAuthGuardCache } from '@/lib/server/authGuard'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
-import { getAdminClient, findAuthUserByEmail } from '@/lib/server/supabaseAdminSingleton'
+import { getAdminClient, findAuthUserByEmail, getAllAuthUsersCached, invalidateAuthUsersCache } from '@/lib/server/supabaseAdminSingleton'
 import { getCachedColaboradores, setCachedColaboradores, invalidateColaboradoresCache } from '@/lib/server/colaboradoresCache'
 
 export const dynamic = 'force-dynamic'
@@ -186,12 +186,9 @@ export async function GET(req: Request) {
 
     // Para o relatório completo (fallback geral), ainda precisamos do mapa de Auth.
     // Carregamos em paralelo com os dados de alunos para minimizar o tempo total.
-    const supabaseAdminFallback = getAdminClient()
-    const { data: authDataFallback } = await supabaseAdminFallback.auth.admin
-      .listUsers({ page: 1, perPage: 10000 })
-      .catch(() => ({ data: { users: [] } }))
+    const allAuthUsers = await getAllAuthUsersCached()
     const authMap = new Map<string, any>()
-    for (const au of (authDataFallback?.users || [])) {
+    for (const au of allAuthUsers) {
       if (au.email) authMap.set(au.email.toLowerCase(), au)
     }
     
@@ -332,6 +329,8 @@ export async function POST(req: Request) {
     if (masterCheck || (count && count > 0 && !isMasterSetup)) {
       const { errorResponse: staffErr } = await requireStaff(req)
       if (staffErr) return staffErr
+      const { errorResponse: adminErr } = await requireAdminOrDirecao(req)
+      if (adminErr) return adminErr
     }
 
     let supabaseClientToUse;
@@ -437,8 +436,10 @@ export async function POST(req: Request) {
     const { data, error } = await supabaseAdmin.from('system_users').upsert(fixedBodyList).select()
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-    // Invalida cache de colaboradores
+    // Invalida caches de colaboradores e permissões
     invalidateColaboradoresCache()
+    clearAuthGuardCache()
+    invalidateAuthUsersCache()
 
     // Sync to funcionarios
     for (const row of (data || [])) {

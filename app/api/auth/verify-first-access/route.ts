@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { getAdminClient, findAuthUserByEmail } from '@/lib/server/supabaseAdminSingleton'
+import { maskEmail } from '@/lib/server/firstAccessSecurity'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,11 +17,9 @@ export async function POST(request: Request) {
     }
 
     const q = query.trim().toLowerCase()
+    const queriedByEmail = q.includes('@')
 
-    const supabaseAdmin = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    )
+    const supabaseAdmin = getAdminClient()
     
     // ── 1. Check system_users by email ──────────────────────────────
     const { data: sysUserRows } = await supabaseAdmin
@@ -37,7 +36,8 @@ export async function POST(request: Request) {
         id: sysUser.id,
         realId: sysUser.id,
         nome: sysUser.nome,
-        email: sysUser.email,
+        email: queriedByEmail ? sysUser.email : '',
+        emailMasked: sysUser.email ? maskEmail(sysUser.email) : '',
         cargo: sysUser.cargo,
         perfil: sysUser.perfil,
         userType: 'system_user'
@@ -53,18 +53,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ user: userPayload })
     }
 
-    // Helper: busca auth user por email
+    // Helper: busca auth user por email usando índice/cache rápido
     const findAuthByEmail = async (email: string) => {
-      let page = 1;
-      while (page <= 5) {
-        const { data: list } = await supabaseAdmin.auth.admin.listUsers({ page, perPage: 1000 }).catch(() => ({ data: { users: [] } }))
-        if (!list || !list.users || list.users.length === 0) break;
-        const found = list.users.find((u: any) => u.email?.toLowerCase() === email.toLowerCase())
-        if (found) return found;
-        if (list.users.length < 1000) break;
-        page++;
-      }
-      return null;
+      return findAuthUserByEmail(email)
     }
 
     // ── 2. Check ALUNOS — by email, matricula or CPF ────────────────
@@ -122,7 +113,8 @@ export async function POST(request: Request) {
         id: `aluno-${aluno.id}`,
         realId: aluno.id,
         nome: aluno.nome,
-        email: finalAlunoEmail,
+        email: queriedByEmail ? finalAlunoEmail : '',
+        emailMasked: finalAlunoEmail ? maskEmail(finalAlunoEmail) : '',
         cargo: 'Aluno',
         perfil: 'Família',
         matricula: aluno.matricula || aluno.dados?.codigo || aluno.id || '',
@@ -194,7 +186,8 @@ export async function POST(request: Request) {
         id: `responsavel-${responsavel.id}`,
         realId: responsavel.id,
         nome: responsavel.nome,
-        email: finalRespEmail,
+        email: queriedByEmail ? finalRespEmail : '',
+        emailMasked: finalRespEmail ? maskEmail(finalRespEmail) : '',
         cargo: 'Responsável',
         perfil: 'Família',
         userType: 'responsavel'

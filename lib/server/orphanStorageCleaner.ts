@@ -116,7 +116,7 @@ export async function getActiveManagedBuckets(supabase: any): Promise<string[]> 
     console.warn('[orphanStorageCleaner] Aviso ao listar buckets dinâmicos:', err.message)
   }
   // Buckets padrão do ecossistema EDU-IMPACTO
-  return ['comunicados-midia', 'documentos', 'simulados-arquivos', 'credimpacto']
+  return ['comunicados-midia', 'documentos', 'simulados-arquivos', 'credimpacto', 'fotos-perfil']
 }
 
 /**
@@ -530,6 +530,73 @@ export async function fetchAllDbReferences(
           id: row.id || row.protocolo || 'contrato',
           label: `Contrato Assinado: ${row.aluno_nome || row.protocolo || row.id}`,
         })
+      }
+    }),
+
+    // 19. CredImpacto — Empréstimos, Parcelas, Solicitações de Quitação e Rescisão
+    () => safeQueryPaged('credimpacto_emprestimos', 'id, colaborador_nome, comprovante_liberacao_url, dados', (row) => {
+      if (row.comprovante_liberacao_url) {
+        refs.push({ url: row.comprovante_liberacao_url, table: 'credimpacto_emprestimos', id: row.id, label: `Comprovante CredImpacto: ${row.colaborador_nome || row.id}` })
+      }
+      const d = row.dados || {}
+      for (const k of ['comprovanteLiberacaoUrl', 'contratoAssinadoUrl', 'contratoPdfUrl', 'documentoUrl']) {
+        if (d[k] && typeof d[k] === 'string') {
+          refs.push({ url: d[k], table: 'credimpacto_emprestimos', id: row.id, label: `Documento CredImpacto: ${row.colaborador_nome || row.id}` })
+        }
+      }
+    }),
+    () => safeQueryPaged('credimpacto_parcelas', 'id, emprestimo_id, comprovante_url', (row) => {
+      if (row.comprovante_url) {
+        refs.push({ url: row.comprovante_url, table: 'credimpacto_parcelas', id: row.id, label: `Parcela CredImpacto: ${row.emprestimo_id || row.id}` })
+      }
+    }),
+    () => safeQueryPaged('credimpacto_solicitacoes_quitacao', 'id, emprestimo_id, comprovante_url', (row) => {
+      if (row.comprovante_url) {
+        refs.push({ url: row.comprovante_url, table: 'credimpacto_solicitacoes_quitacao', id: row.id, label: `Quitação CredImpacto: ${row.emprestimo_id || row.id}` })
+      }
+    }),
+    () => safeQueryPaged('credimpacto_rescisao_simulacoes', 'id, emprestimo_id, termo_confissao_divida_url', (row) => {
+      if (row.termo_confissao_divida_url) {
+        refs.push({ url: row.termo_confissao_divida_url, table: 'credimpacto_rescisao_simulacoes', id: row.id, label: `Termo Rescisão CredImpacto: ${row.emprestimo_id || row.id}` })
+      }
+    }),
+
+    // 20. Simulados Imagens, Provas Online e Materiais de Divulgação (Gestão de Pessoas)
+    () => safeQueryPaged('simulados_imagens', 'id, url', (row) => {
+      if (row.url) {
+        refs.push({ url: row.url, table: 'simulados_imagens', id: row.id, label: `Imagem de Simulado: ${row.id}` })
+      }
+    }),
+    () => safeQueryPaged('provas_online_questoes', 'id, enunciado, dados', (row) => {
+      if (row.enunciado) {
+        for (const u of extractUrlsFromText(row.enunciado)) {
+          refs.push({ url: u, table: 'provas_online_questoes', id: row.id, label: `Questão Prova Online: ${row.id}` })
+        }
+      }
+      if (row.dados) {
+        for (const u of extractUrlsFromText(JSON.stringify(row.dados))) {
+          refs.push({ url: u, table: 'provas_online_questoes', id: row.id, label: `Dados Questão Prova Online: ${row.id}` })
+        }
+      }
+    }),
+    () => safeQueryPaged('provas_online_banco', 'id, enunciado, dados', (row) => {
+      if (row.enunciado) {
+        for (const u of extractUrlsFromText(row.enunciado)) {
+          refs.push({ url: u, table: 'provas_online_banco', id: row.id, label: `Banco Prova Online: ${row.id}` })
+        }
+      }
+      if (row.dados) {
+        for (const u of extractUrlsFromText(JSON.stringify(row.dados))) {
+          refs.push({ url: u, table: 'provas_online_banco', id: row.id, label: `Dados Banco Prova Online: ${row.id}` })
+        }
+      }
+    }),
+    () => safeQueryPaged('gp_materiais_divulgacao', 'id, titulo, arquivo_url, capa_url', (row) => {
+      if (row.arquivo_url) {
+        refs.push({ url: row.arquivo_url, table: 'gp_materiais_divulgacao', id: row.id, label: `Material GP: ${row.titulo || row.id}` })
+      }
+      if (row.capa_url) {
+        refs.push({ url: row.capa_url, table: 'gp_materiais_divulgacao', id: row.id, label: `Capa Material GP: ${row.titulo || row.id}` })
       }
     }),
   ]

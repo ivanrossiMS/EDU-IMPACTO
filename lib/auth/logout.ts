@@ -84,6 +84,11 @@ async function executeLogout(userId?: string): Promise<void> {
         'edu-current-perfil',
         'edu_auth_user',
         'edu-active-modules',
+        'edu-active-unit',
+        'edu-perfis-cache',
+        'impacto_ad_banner',
+        'impacto_ad_config',
+        '__bc_edu-pickup-realtime',
         'edu_push_dismissed_v2',
         'edu_push_dismissed',
         'edu_push_blocked_dismissed_session',
@@ -109,6 +114,8 @@ async function executeLogout(userId?: string): Promise<void> {
             k.startsWith('edu-meus-alunos-') ||
             k.startsWith('edu-user-photo-') ||
             k.startsWith('edu-profile-extra-') ||
+            k.startsWith('edu-active-modules-') ||
+            k.startsWith('edu-active-unit-') ||
             k.startsWith('ad_formularios_'))
         ) {
           window.localStorage.removeItem(k);

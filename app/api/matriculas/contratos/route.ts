@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/server/authGuard'
+import { requireStaff } from '@/lib/server/authGuard'
 import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 import { cancelarDocumentoZapSign } from '@/lib/zapsign'
 import { v4 as uuidv4 } from 'uuid'
@@ -14,7 +14,7 @@ const FALLBACK_KEY = 'matriculas_contratos_list'
  * Lista contratos com filtros e sumário métrico
  */
 export async function GET(request: Request) {
-  const { user, errorResponse } = await requireAuth()
+  const { user, errorResponse } = await requireStaff(request)
   if (errorResponse) return errorResponse
 
   try {
@@ -103,7 +103,7 @@ export async function GET(request: Request) {
  * Criação manual de rascunho de contrato
  */
 export async function POST(request: Request) {
-  const { user, errorResponse } = await requireAuth()
+  const { user, errorResponse } = await requireStaff(request)
   if (errorResponse) return errorResponse
 
   try {
@@ -193,7 +193,7 @@ export async function POST(request: Request) {
  * Exclui totalmente o contrato do sistema e cancela/exclui no ZapSign
  */
 export async function DELETE(request: Request) {
-  const { user, errorResponse } = await requireAuth()
+  const { user, errorResponse } = await requireStaff(request)
   if (errorResponse) return errorResponse
 
   try {

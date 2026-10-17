@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/server/authGuard'
+import { requireStaff, resolveUserRole, getAuthorizedAlunoIdsForUser } from '@/lib/server/authGuard'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 import { APIListQuerySchema, ZodTituloFinanceiro } from '@/lib/server/zodSchemas'
 import { getLoggedUserAccessStartDate } from '@/lib/server/visibility'
@@ -7,8 +7,9 @@ import { getLoggedUserAccessStartDate } from '@/lib/server/visibility'
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: Request) {
-  const { user, errorResponse } = await requireAuth()
-  if (errorResponse) return errorResponse
+  const roleCtx = await resolveUserRole(request)
+  if (roleCtx.errorResponse) return roleCtx.errorResponse
+  const { user, isStaff } = roleCtx
 
   try {
     const { searchParams } = new URL(request.url)
@@ -22,6 +23,17 @@ export async function GET(request: Request) {
       search: searchParams.get('search') || undefined
     }
     const { page, limit, search } = APIListQuerySchema.parse(qParams)
+
+    let allowedAlunoIds: Set<string> | null = null
+    if (!isStaff) {
+      allowedAlunoIds = await getAuthorizedAlunoIdsForUser(user)
+      if (allowedAlunoIds.size === 0) {
+        return NextResponse.json({
+          data: [],
+          meta: { total: 0, page, limit }
+        })
+      }
+    }
     
     // 2. Supabase Authenticated (RLS Enforced)
     const supabase = await createProtectedClient()
@@ -38,7 +50,20 @@ export async function GET(request: Request) {
     if (origemLanca) {
       query = query.filter('dados->>origemLanca', 'eq', origemLanca)
     }
-    if (aluno) {
+    if (allowedAlunoIds) {
+      const safeIds = Array.from(allowedAlunoIds)
+        .map(id => id.replace(/[^A-Za-z0-9_-]/g, ''))
+        .filter(Boolean)
+      if (safeIds.length > 0) {
+        const orParts = safeIds.flatMap(id => [
+          `aluno.eq.${id}`,
+          `aluno_id.eq.${id}`,
+          `dados->>alunoId.eq.${id}`,
+          `dados->>aluno_id.eq.${id}`,
+        ])
+        query = query.or(orParts.join(','))
+      }
+    } else if (aluno) {
       const safeAluno = aluno.replace(/[%_().,]/g, '')
       if (safeAluno) query = query.ilike('aluno', `%${safeAluno}%`)
     }
@@ -56,11 +81,17 @@ export async function GET(request: Request) {
 
     if (error) throw new Error(error.message)
 
-    const result = (data || []).map(row => ({ ...row, ...(row.dados || {}) }))
+    const mapped = (data || []).map(row => ({ ...row, ...(row.dados || {}) }))
+    const result = allowedAlunoIds
+      ? mapped.filter(r => {
+          const candidateId = String(r.aluno_id || r.alunoId || r.aluno || '')
+          return candidateId && allowedAlunoIds!.has(candidateId)
+        })
+      : mapped
     
     return NextResponse.json({
       data: result,
-      meta: { total: count || 0, page, limit }
+      meta: { total: allowedAlunoIds ? result.length : (count || 0), page, limit }
     })
     
   } catch (err: any) {
@@ -69,7 +100,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const { user, errorResponse } = await requireAuth()
+  const { user, errorResponse } = await requireStaff(request)
   if (errorResponse) return errorResponse
 
   try {
@@ -144,7 +175,7 @@ function buildRowAuth(t: any) {
 }
 
 export async function DELETE(request: Request) {
-  const { user, errorResponse } = await requireAuth()
+  const { user, errorResponse } = await requireStaff(request)
   if (errorResponse) return errorResponse
 
   try {

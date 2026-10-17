@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { resolveUserRole } from '@/lib/server/authGuard'
-import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
+import { getAdminClient, getAllAuthUsersCached } from '@/lib/server/supabaseAdminSingleton'
 
 export const dynamic = 'force-dynamic'
 
@@ -57,7 +57,7 @@ export async function GET(request: Request) {
     try {
       const { data: sysUsers } = await supabase
         .from('system_users')
-        .select('id, email, nome, cargo')
+        .select('id, auth_id, email, nome, cargo')
 
       if (sysUsers) {
         sysUsers.forEach(u => {
@@ -67,27 +67,26 @@ export async function GET(request: Request) {
             cargo: u.cargo || 'Colaborador'
           }
           if (u.id) usersMap[String(u.id)] = info
+          if (u.auth_id) usersMap[String(u.auth_id)] = info
           if (u.email) usersMap[u.email.toLowerCase()] = info
         })
       }
 
-      // Complementar com auth listUsers
-      const { data: authUsers } = await supabase.auth.admin.listUsers({ page: 1, perPage: 1000 })
-      if (authUsers?.users) {
-        authUsers.users.forEach(u => {
-          const email = u.email?.toLowerCase() || ''
-          const current = usersMap[String(u.id)] || (email ? usersMap[email] : null)
-          const nome = current?.nome || u.user_metadata?.nome || u.email || 'Colaborador'
-          const cargo = current?.cargo || 'Colaborador'
+      // Complementar com cache de auth users
+      const authUsers = await getAllAuthUsersCached()
+      authUsers.forEach(u => {
+        const email = u.email?.toLowerCase() || ''
+        const current = usersMap[String(u.id)] || (email ? usersMap[email] : null)
+        const nome = current?.nome || u.user_metadata?.nome || u.email || 'Colaborador'
+        const cargo = current?.cargo || 'Colaborador'
 
-          const userObj = { nome, email, cargo }
-          usersMap[String(u.id)] = userObj
-          if (u.user_metadata?.uid_legacy) {
-            usersMap[String(u.user_metadata.uid_legacy)] = userObj
-          }
-          if (email) usersMap[email] = userObj
-        })
-      }
+        const userObj = { nome, email, cargo }
+        usersMap[String(u.id)] = userObj
+        if (u.user_metadata?.uid_legacy) {
+          usersMap[String(u.user_metadata.uid_legacy)] = userObj
+        }
+        if (email) usersMap[email] = userObj
+      })
     } catch (err) {
       console.error('[Checkin Relatorio] Erro ao carregar mapeamento de usuários:', err)
     }

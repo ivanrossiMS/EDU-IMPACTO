@@ -17,9 +17,11 @@ import {
   formatTimeRemaining,
   formatDateTimeBR,
   validarCPF,
-  formatarCPF
+  formatarCPF,
+  sanitizeAutorizacaoForViewer
 } from '@/lib/autorizacoes/autorizacaoUtils'
 import { supabase } from '@/lib/supabase'
+import { apiFetch } from '@/lib/api/apiClient'
 
 interface AutorizacaoWidgetProps {
   autorizacao: AutorizacaoData
@@ -99,17 +101,29 @@ export function AutorizacaoWidget({
     const channelName = `autorizacao_live_${autorizacao.id}`
     const channel = supabase.channel(channelName)
 
+    const applyRemoteAutorizacao = (incoming: AutorizacaoData) => {
+      setAutorizacao(prev => {
+        const ownKey = getAutorizacaoVoterKey(currentUserId, currentAlunoId)
+        const ownResp = getUserAutorizacaoResposta(prev, currentUserId, currentAlunoId)
+        const mergedRespostas = { ...(incoming.respostas || {}) }
+        if (ownResp && ownKey && !mergedRespostas[ownKey]) {
+          mergedRespostas[ownKey] = ownResp
+        }
+        const merged = { ...incoming, respostas: mergedRespostas }
+        if (onUpdateSuccess) onUpdateSuccess(merged)
+        return merged
+      })
+    }
+
     channel
       .on('broadcast', { event: 'resposta_update' }, (payload: any) => {
         if (payload?.payload?.autorizacao) {
-          setAutorizacao(payload.payload.autorizacao)
-          if (onUpdateSuccess) onUpdateSuccess(payload.payload.autorizacao)
+          applyRemoteAutorizacao(payload.payload.autorizacao)
         }
       })
       .on('broadcast', { event: 'status_update' }, (payload: any) => {
         if (payload?.payload?.autorizacao) {
-          setAutorizacao(payload.payload.autorizacao)
-          if (onUpdateSuccess) onUpdateSuccess(payload.payload.autorizacao)
+          applyRemoteAutorizacao(payload.payload.autorizacao)
         }
       })
       .subscribe()
@@ -119,43 +133,26 @@ export function AutorizacaoWidget({
       if (item && String(item.id) === String(comunicadoId)) {
         const remoteAut = item.autorizacao || item.dados?.autorizacao
         if (remoteAut) {
-          setAutorizacao(remoteAut)
+          applyRemoteAutorizacao(remoteAut)
         }
       }
     }
     window.addEventListener('ad:comunicados-update', handleComunicadosUpdate)
 
-    // Polling heartbeat a cada 30 segundos apenas se visível
-    const interval = setInterval(async () => {
-      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return
-      try {
-        const { data } = await supabase
-          .from('comunicados')
-          .select('dados')
-          .eq('id', comunicadoId)
-          .maybeSingle()
-
-        const remoteAut = (data as any)?.dados?.autorizacao
-        if (remoteAut) {
-          setAutorizacao(remoteAut)
-        }
-      } catch (_) {}
-    }, 30000)
-
     return () => {
       try { supabase.removeChannel(channel) } catch (_) {}
       window.removeEventListener('ad:comunicados-update', handleComunicadosUpdate)
-      clearInterval(interval)
     }
-  }, [autorizacao.id, comunicadoId, onUpdateSuccess])
+  }, [autorizacao.id, comunicadoId, currentUserId, currentAlunoId, onUpdateSuccess])
 
   const broadcastUpdate = useCallback(async (updated: AutorizacaoData, eventName = 'resposta_update') => {
     try {
+      const safeAutorizacao = sanitizeAutorizacaoForViewer(updated, []) || updated
       const channel = supabase.channel(`autorizacao_live_${updated.id}`)
       await channel.send({
         type: 'broadcast',
         event: eventName,
-        payload: { autorizacao: updated, comunicadoId }
+        payload: { autorizacao: safeAutorizacao, comunicadoId }
       })
     } catch (_) {}
   }, [comunicadoId])
@@ -198,7 +195,7 @@ export function AutorizacaoWidget({
         documentoResponsavel: cpfResponsavel.trim() ? formatarCPF(cpfResponsavel) : undefined
       }
 
-      const res = await fetch('/api/agenda/autorizacoes/responder', {
+      const res = await apiFetch('/api/agenda/autorizacoes/responder', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -233,7 +230,7 @@ export function AutorizacaoWidget({
     const newStatus = !autorizacao.encerrada
 
     try {
-      const res = await fetch('/api/agenda/autorizacoes/status', {
+      const res = await apiFetch('/api/agenda/autorizacoes/status', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

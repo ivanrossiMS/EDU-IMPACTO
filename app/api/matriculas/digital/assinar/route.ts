@@ -79,8 +79,21 @@ export async function POST(request: Request) {
         console.warn('[API Assinar] Aviso ao consultar fallback de OTP:', errFallback)
       }
 
-      // 2. Se o cliente enviou o código informado no passo anterior, confere o hash criptográfico
+      // 2. Se o cliente enviou o código informado no passo anterior, confere o hash criptográfico com limite de tentativas e expiração
       if (!contrato.otp_confirmado_em && body.otp_codigo) {
+        if ((contrato.otp_tentativas || 0) >= 5) {
+          return NextResponse.json(
+            { error: 'Limite de tentativas do código de segurança excedido. Solicite um novo código.' },
+            { status: 429 }
+          )
+        }
+        if (contrato.otp_expira_em && new Date(contrato.otp_expira_em).getTime() < Date.now()) {
+          return NextResponse.json(
+            { error: 'O código de segurança expirou. Solicite um novo código.' },
+            { status: 400 }
+          )
+        }
+
         const cleanCodigo = String(body.otp_codigo).trim()
         const { calculateSha256 } = await import('@/lib/contracts/cryptoSignature')
         const codigoHash = calculateSha256(cleanCodigo)
@@ -99,6 +112,9 @@ export async function POST(request: Request) {
             'Código de uso único validado no ato da assinatura.',
             clientIp
           )
+          await salvarContrato(contrato)
+        } else {
+          contrato.otp_tentativas = (contrato.otp_tentativas || 0) + 1
           await salvarContrato(contrato)
         }
       }

@@ -93,20 +93,14 @@ export async function GET(request: Request, { params }: Props) {
 
     const clean = decodeURIComponent(token || '').trim()
     let contrato = clean ? await buscarContratoPorToken(clean) : null
-    if (!contrato && clean) {
+    if (!contrato && clean && !UUID_REGEX.test(clean)) {
       contrato = await buscarContratoPorProtocolo(clean)
     }
-    if (!contrato && clean) {
-      contrato = await buscarContratoPorId(clean)
-    }
-    if (!contrato && clean && clean.length >= 8) {
+    if (!contrato && clean && clean.length >= 8 && !UUID_REGEX.test(clean)) {
       contrato = await buscarContratoPorHash(clean)
     }
 
-    // Fallbacks adicionais via query params (id, protocolo, hash)
-    if (!contrato && idParam) {
-      contrato = await buscarContratoPorId(idParam)
-    }
+    // Fallbacks adicionais via query params (protocolo, hash)
     if (!contrato && protocoloParam) {
       contrato = await buscarContratoPorProtocolo(protocoloParam)
     }
@@ -114,35 +108,55 @@ export async function GET(request: Request, { params }: Props) {
       contrato = await buscarContratoPorHash(hashParam)
     }
 
-    // Se o registro foi removido/reemitido no banco enquanto o usuário estava com a tela aberta,
-    // recupera o binário diretamente do Supabase Storage pelo ID
+    // Busca direta por UUID (sem token/protocolo/hash válido) exige sessão autenticada ou prova de protocolo/hash
     if (!contrato) {
-      const candidateUuid = UUID_REGEX.test(idParam)
-        ? idParam
-        : UUID_REGEX.test(clean)
-        ? clean
-        : ''
-      if (candidateUuid) {
-        const directBuf = await recuperarPdfDiretoPorId(
-          candidateUuid,
-          versao === 'assinado' ? 'assinado' : 'original'
-        )
-        if (directBuf) {
-          const disp = isDownload ? 'attachment' : 'inline'
-          return new NextResponse(new Uint8Array(directBuf), {
-            status: 200,
-            headers: {
-              'Content-Type': 'application/pdf',
-              'Content-Disposition': buildContentDisposition(disp, `Documento_${protocoloParam || candidateUuid}.pdf`),
-              'Content-Length': String(directBuf.length),
-              'Cache-Control': 'private, max-age=30',
-              'X-Content-Type-Options': 'nosniff',
-            },
-          })
+      const hasPublicProof = Boolean(protocoloParam || (hashParam && hashParam.length >= 8))
+      let canLookupByUuid = hasPublicProof
+      if (!canLookupByUuid) {
+        const { requireAuth } = await import('@/lib/server/authGuard')
+        const { user } = await requireAuth(request)
+        canLookupByUuid = Boolean(user)
+      }
+
+      if (canLookupByUuid) {
+        if (!contrato && clean && UUID_REGEX.test(clean)) {
+          contrato = await buscarContratoPorId(clean)
+        }
+        if (!contrato && idParam && UUID_REGEX.test(idParam)) {
+          contrato = await buscarContratoPorId(idParam)
         }
       }
 
-      return new NextResponse('Documento não localizado ou expirado.', { status: 404 })
+      if (!contrato && canLookupByUuid) {
+        const candidateUuid = UUID_REGEX.test(idParam)
+          ? idParam
+          : UUID_REGEX.test(clean)
+          ? clean
+          : ''
+        if (candidateUuid) {
+          const directBuf = await recuperarPdfDiretoPorId(
+            candidateUuid,
+            versao === 'assinado' ? 'assinado' : 'original'
+          )
+          if (directBuf) {
+            const disp = isDownload ? 'attachment' : 'inline'
+            return new NextResponse(new Uint8Array(directBuf), {
+              status: 200,
+              headers: {
+                'Content-Type': 'application/pdf',
+                'Content-Disposition': buildContentDisposition(disp, `Documento_${protocoloParam || candidateUuid}.pdf`),
+                'Content-Length': String(directBuf.length),
+                'Cache-Control': 'private, max-age=30',
+                'X-Content-Type-Options': 'nosniff',
+              },
+            })
+          }
+        }
+      }
+
+      if (!contrato) {
+        return new NextResponse('Documento não localizado ou expirado.', { status: 404 })
+      }
     }
 
     const tipoDesejado: 'original' | 'assinado' =

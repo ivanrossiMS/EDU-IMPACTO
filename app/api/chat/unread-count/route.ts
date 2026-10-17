@@ -15,13 +15,13 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url)
     const alunoIdParam = searchParams.get('aluno_id')
     const contextParam = searchParams.get('context') // 'familia' | 'colaborador' | null
-    const espelharRespId = searchParams.get('espelhar_responsavel')
-    const espelharColabId = searchParams.get('espelhar_colaborador')
+    const rawEspelharRespId = searchParams.get('espelhar_responsavel')
+    const rawEspelharColabId = searchParams.get('espelhar_colaborador')
 
     let dbUser: any = null
     const { data: foundUser } = await supabase
       .from('system_users')
-      .select('id, cargo, perfil')
+      .select('id, cargo, perfil, auth_id')
       .or(`id.eq."${user.id}",auth_id.eq."${user.id}"${user.email ? `,email.ilike."${user.email}"` : ''}`)
       .maybeSingle()
 
@@ -30,6 +30,8 @@ export async function GET(request: Request) {
     const perfil = (dbUser?.perfil || user.user_metadata?.perfil || '').trim()
     const cargo = (dbUser?.cargo || user.user_metadata?.cargo || '').trim()
     const isAdmin = checkIsAdmin(perfil, cargo)
+    const espelharRespId = isAdmin ? rawEspelharRespId : null
+    const espelharColabId = isAdmin ? rawEspelharColabId : null
 
     const isColabMode = contextParam === 'colaborador' || (!alunoIdParam && !espelharRespId && !isAdmin && dbUser && contextParam !== 'familia')
 

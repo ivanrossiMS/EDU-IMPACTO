@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/server/authGuard'
+import { requireStaff } from '@/lib/server/authGuard'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 import { z } from 'zod'
 
@@ -8,9 +8,9 @@ export const dynamic = 'force-dynamic'
 const ZodEstorno = z.object({
   aluno_id:        z.string().min(1, 'ID do aluno obrigatório'),
   parcela_nums:    z.array(z.number().int().positive()).min(1, 'Ao menos uma parcela'),
-  cod_baixa_codes: z.array(z.string()).min(1, 'Ao menos um código de baixa'),
+  cod_baixa_codes: z.array(z.string().regex(/^[A-Za-z0-9_-]{2,80}$/, 'Código de baixa inválido')).min(1, 'Ao menos um código de baixa'),
   motivo:          z.string().optional(),
-  parcela_id:      z.string().optional(),
+  parcela_id:      z.string().regex(/^[A-Za-z0-9_-]{1,80}$/, 'ID de parcela inválido').optional(),
 })
 
 /**
@@ -22,7 +22,7 @@ const ZodEstorno = z.object({
  *  3. Marca recibos associados em financial_receipts como 'estornado'
  */
 export async function POST(request: NextRequest) {
-  const { user, errorResponse } = await requireAuth()
+  const { user, errorResponse } = await requireStaff(request)
   if (errorResponse) return errorResponse
 
   try {

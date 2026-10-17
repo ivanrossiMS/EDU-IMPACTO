@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/server/authGuard'
+import { requireAuth, getAuthorizedAlunoIdsForUser, getAuthorizedResponsavelIdsForUser } from '@/lib/server/authGuard'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 import { sendAgendaPushNotification } from '@/lib/server/agendaNotifications'
 import { getColaboradorIds, getInstitutionalMasterAdminIds } from '@/lib/server/notificationHelper'
@@ -54,7 +54,9 @@ async function checkIsStaffOrAuthor({
     Boolean(user.user_metadata?.colaborador_id || user.user_metadata?.system_user_id || user.user_metadata?.uid_legacy)
   );
 
-  if (!isStaff && !isFamilyOrStudent) {
+  let dbUserPerfil = '';
+  let dbUserCargo = '';
+  if (!isFamilyOrStudent) {
     try {
       const { data: dbUser } = await supabase
         .from('system_users')
@@ -63,7 +65,11 @@ async function checkIsStaffOrAuthor({
         .eq('status', 'ativo')
         .maybeSingle();
 
-      if (dbUser) isStaff = true;
+      if (dbUser) {
+        isStaff = true;
+        dbUserPerfil = normalizeRole(dbUser.perfil);
+        dbUserCargo = normalizeRole(dbUser.cargo);
+      }
     } catch (e) {
       console.warn('Erro ao checar system_users:', e);
     }
@@ -71,50 +77,62 @@ async function checkIsStaffOrAuthor({
 
   const perfisAdmin = ['diretor geral', 'administrador', 'admin', 'master'];
   const cargosAdmin = ['administrador master', 'diretor geral'];
-  const isAdmin = perfisAdmin.includes(pNorm) || cargosAdmin.includes(cNorm) || pNorm.includes('administrador master') || cNorm.includes('administrador master') || pNorm.includes('diretor geral') || cNorm.includes('diretor geral');
+  const isAdmin = isStaff && (
+    perfisAdmin.includes(pNorm) ||
+    cargosAdmin.includes(cNorm) ||
+    perfisAdmin.includes(dbUserPerfil) ||
+    cargosAdmin.includes(dbUserCargo) ||
+    pNorm.includes('administrador master') ||
+    cNorm.includes('administrador master') ||
+    pNorm.includes('diretor geral') ||
+    cNorm.includes('diretor geral')
+  );
 
   let isAuthor = false;
-  const userCandidateIds = new Set<string>([
-    String(user.id),
-    String(user.id).replace(/^f_?/, ''),
-    String(user.user_metadata?.colaborador_id || ''),
-    String(user.user_metadata?.colaborador_id || '').replace(/^f_?/, ''),
-    String(user.user_metadata?.system_user_id || ''),
-    String(user.user_metadata?.system_user_id || '').replace(/^f_?/, ''),
-    String(user.user_metadata?.uid_legacy || ''),
-    String(user.user_metadata?.uid_legacy || '').replace(/^f_?/, ''),
-    String(espelharColabId || ''),
-    String(espelharColabId || '').replace(/^f_?/, '')
-  ].filter(Boolean).map(s => s.toLowerCase()));
+  if (isStaff) {
+    const effectiveEspelhar = isAdmin ? espelharColabId : null;
+    const userCandidateIds = new Set<string>([
+      String(user.id),
+      String(user.id).replace(/^f_?/, ''),
+      String(user.user_metadata?.colaborador_id || ''),
+      String(user.user_metadata?.colaborador_id || '').replace(/^f_?/, ''),
+      String(user.user_metadata?.system_user_id || ''),
+      String(user.user_metadata?.system_user_id || '').replace(/^f_?/, ''),
+      String(user.user_metadata?.uid_legacy || ''),
+      String(user.user_metadata?.uid_legacy || '').replace(/^f_?/, ''),
+      String(effectiveEspelhar || ''),
+      String(effectiveEspelhar || '').replace(/^f_?/, '')
+    ].filter(Boolean).map(s => s.toLowerCase()));
 
-  if (groupedAutorId) {
-    const gClean = String(groupedAutorId).replace(/^f_?/, '').toLowerCase();
-    if (userCandidateIds.has(gClean)) {
-      isAuthor = true;
-    }
-  }
-
-  if (comunicadoId && !isAuthor) {
-    try {
-      const { data: comData } = await supabase
-        .from('comunicados')
-        .select('autor, dados')
-        .eq('id', comunicadoId)
-        .maybeSingle();
-
-      if (comData) {
-        const comAutorId = String(comData.dados?.autorId || comData.dados?.autor_id || '').replace(/^f_?/, '').toLowerCase();
-        if (comAutorId && userCandidateIds.has(comAutorId)) {
-          isAuthor = true;
-        }
-        const comAutorNome = normalizeRole(comData.autor || comData.dados?.autor || comData.dados?.autorNome);
-        const userNome = normalizeRole(user.user_metadata?.nome || user.user_metadata?.name);
-        if (comAutorNome && userNome && (comAutorNome === userNome || userNome.includes(comAutorNome) || comAutorNome.includes(userNome))) {
-          isAuthor = true;
-        }
+    if (groupedAutorId) {
+      const gClean = String(groupedAutorId).replace(/^f_?/, '').toLowerCase();
+      if (userCandidateIds.has(gClean)) {
+        isAuthor = true;
       }
-    } catch (e) {
-      console.warn('Erro ao checar autor do comunicado:', e);
+    }
+
+    if (comunicadoId && !isAuthor) {
+      try {
+        const { data: comData } = await supabase
+          .from('comunicados')
+          .select('autor, dados')
+          .eq('id', comunicadoId)
+          .maybeSingle();
+
+        if (comData) {
+          const comAutorId = String(comData.dados?.autorId || comData.dados?.autor_id || '').replace(/^f_?/, '').toLowerCase();
+          if (comAutorId && userCandidateIds.has(comAutorId)) {
+            isAuthor = true;
+          }
+          const comAutorNome = normalizeRole(comData.autor || comData.dados?.autor || comData.dados?.autorNome);
+          const userNome = normalizeRole(user.user_metadata?.nome || user.user_metadata?.name);
+          if (comAutorNome && userNome && comAutorNome === userNome) {
+            isAuthor = true;
+          }
+        }
+      } catch (e) {
+        console.warn('Erro ao checar autor do comunicado:', e);
+      }
     }
   }
 
@@ -157,7 +175,7 @@ export async function GET(request: Request) {
   }
 
   // Verifica permissão institucional (staff) ou autoria do comunicado
-  const { canViewAllThreads } = await checkIsStaffOrAuthor({
+  const { isStaff, canViewAllThreads } = await checkIsStaffOrAuthor({
     user,
     supabase,
     comunicadoId,
@@ -206,6 +224,11 @@ export async function GET(request: Request) {
   // Se não puder ver todas as threads (família/aluno ou colaborador que NÃO é autor):
   // -> Filtra apenas a conversa pertencente ao próprio usuário (remetente ou destinatário).
   if (!canViewAllThreads || (!adminParam && remetenteId)) {
+    const [authAlunoIds, authRespIds] = !isStaff
+      ? await Promise.all([getAuthorizedAlunoIdsForUser(user), getAuthorizedResponsavelIdsForUser(user)])
+      : [new Set<string>(), new Set<string>()];
+
+    const effectiveEspelhar = isStaff ? espelharColabId : null;
     const userCandidateIds = new Set<string>([
       String(user.id),
       String(user.id).replace(/^f_?/, ''),
@@ -213,19 +236,23 @@ export async function GET(request: Request) {
       String(user.user_metadata?.aluno_id || '').replace(/^f_?/, ''),
       String(user.user_metadata?.responsavel_id || ''),
       String(user.user_metadata?.responsavel_id || '').replace(/^f_?/, ''),
-      String(user.user_metadata?.colaborador_id || ''),
-      String(user.user_metadata?.colaborador_id || '').replace(/^f_?/, ''),
-      String(user.user_metadata?.system_user_id || ''),
-      String(user.user_metadata?.system_user_id || '').replace(/^f_?/, ''),
-      String(user.user_metadata?.uid_legacy || ''),
-      String(user.user_metadata?.uid_legacy || '').replace(/^f_?/, ''),
-      String(espelharColabId || ''),
-      String(espelharColabId || '').replace(/^f_?/, '')
+      ...(isStaff ? [
+        String(user.user_metadata?.colaborador_id || ''),
+        String(user.user_metadata?.colaborador_id || '').replace(/^f_?/, ''),
+        String(user.user_metadata?.system_user_id || ''),
+        String(user.user_metadata?.system_user_id || '').replace(/^f_?/, ''),
+        String(user.user_metadata?.uid_legacy || ''),
+        String(user.user_metadata?.uid_legacy || '').replace(/^f_?/, ''),
+        String(effectiveEspelhar || ''),
+        String(effectiveEspelhar || '').replace(/^f_?/, '')
+      ] : []),
+      ...Array.from(authAlunoIds),
+      ...Array.from(authRespIds),
     ].filter(Boolean).map(s => s.toLowerCase()));
 
     let effectiveRemetente = remetenteId;
     if (!effectiveRemetente || (!canViewAllThreads && !userCandidateIds.has(effectiveRemetente.replace(/^f_?/, '').toLowerCase()))) {
-      effectiveRemetente = user.user_metadata?.aluno_id || user.user_metadata?.responsavel_id || user.user_metadata?.colaborador_id || espelharColabId || user.id;
+      effectiveRemetente = user.user_metadata?.aluno_id || user.user_metadata?.responsavel_id || Array.from(authAlunoIds)[0] || Array.from(authRespIds)[0] || (isStaff ? (user.user_metadata?.colaborador_id || effectiveEspelhar) : null) || user.id;
     }
 
     const cleanRemetente = String(effectiveRemetente).replace(/^f_?/, '');

@@ -644,28 +644,27 @@ export default function ADComunicadosPage({ params }: { params: any }) {
     } catch (e) { console.error('Failed to save ciencia', e) }
   }
 
-  const handleDownload = (filename: string) => {
+  const handleDownload = (rawAnexo: string) => {
     try {
-      const isImg = filename.toLowerCase().endsWith('.png') || filename.toLowerCase().endsWith('.jpg') || filename.toLowerCase().endsWith('.jpeg') || filename.toLowerCase().endsWith('.gif') || filename.toLowerCase().endsWith('.webp')
-      let finalName = filename;
-      
-      const a = document.createElement('a')
-      if (isImg) {
-         // Red 1x1 PNG pixel to ensure it's not seen as generic transparent null data by previewers
-         a.href = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
-      } else {
-         const content = `Arquivo simulado para o sistema EDU-IMPACTO.\nNome original do anexo: ${filename}`
-         const blob = new Blob([content], { type: 'text/plain' })
-         a.href = URL.createObjectURL(blob)
-         if (!filename.includes('.txt')) finalName = filename + '.txt'
+      const parts = String(rawAnexo || '').split('|')
+      const filename = parts[0] || 'anexo'
+      const urlCandidate = parts[1] || (rawAnexo.startsWith('http') || rawAnexo.startsWith('/') || rawAnexo.startsWith('data:') ? rawAnexo : '')
+
+      if (urlCandidate) {
+        const a = document.createElement('a')
+        a.href = urlCandidate
+        a.target = '_blank'
+        a.rel = 'noopener noreferrer'
+        a.download = filename
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        return
       }
-      
-      a.download = finalName
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
+
+      adAlert(`O anexo "${filename}" não possui link disponível para download.`, 'Aviso')
     } catch {
-       adAlert(`Falha ao baixar ${filename}`, 'Erro')
+      adAlert(`Falha ao baixar anexo`, 'Erro')
     }
   }
 

@@ -10,6 +10,8 @@ import { deleteStorageFilesByUrls } from '@/lib/upload/storageServer'
 import { isAlunoCursandoTurma, getAlunoTodasTurmasEGruposComHistorico, canStudentReceiveTurmaContent } from '@/lib/studentTurmaUtils'
 import { formatFriendlyStudentName } from '@/lib/studentNameHelper'
 import { getCachedTurmasAndGrupos } from '@/lib/server/turmasGruposCache'
+import { sanitizeAutorizacaoForViewer } from '@/lib/autorizacoes/autorizacaoUtils'
+import { sanitizeEnqueteForViewer } from '@/lib/enquetes/enqueteUtils'
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 export const maxDuration = 30
@@ -933,7 +935,7 @@ export async function GET(request: Request) {
 
         const isAuthorOfRow = Boolean(
           (rowAutorId && userStaffCandidateIds.has(rowAutorId)) ||
-          (rowAutorNome && userStaffName && (rowAutorNome === userStaffName || userStaffName.includes(rowAutorNome) || rowAutorNome.includes(userStaffName)))
+          (rowAutorNome && userStaffName && rowAutorNome === userStaffName)
         );
 
         const canManageConversas = Boolean(isAdmin || isAuthorOfRow || scopeParam === 'admin' || scopeParam === 'true');
@@ -1022,9 +1024,22 @@ export async function GET(request: Request) {
       if (isFamilyOrStudent) {
         const studentKeys = new Set([studentParamId, alunoMetaId, responsavelParamId, currentUserId, userSlugMeta].filter(Boolean));
         merged.respostas = formattedRespostas.filter((r: any) => 
-          studentKeys.has(String(r.remetente_id)) || 
-          (r.is_admin && (!r.destinatario_id || studentKeys.has(String(r.destinatario_id))))
+          studentKeys.has(String(r.remetente_id)) ||
+          studentKeys.has(String(r.remetente_id || '').replace(/^f_?/, '')) ||
+          Boolean(r.destinatario_id && studentKeys.has(String(r.destinatario_id)))
         );
+        if (merged.autorizacao) {
+          merged.autorizacao = sanitizeAutorizacaoForViewer(merged.autorizacao, studentKeys);
+          if (merged.dados?.autorizacao) {
+            merged.dados = { ...merged.dados, autorizacao: merged.autorizacao };
+          }
+        }
+        if (merged.enquete) {
+          merged.enquete = sanitizeEnqueteForViewer(merged.enquete, studentKeys);
+          if (merged.dados?.enquete) {
+            merged.dados = { ...merged.dados, enquete: merged.enquete };
+          }
+        }
       } else {
         const userStaffCandidateIds = new Set<string>([
           currentUserId,
@@ -1045,7 +1060,7 @@ export async function GET(request: Request) {
 
         const isAuthorOfRow = Boolean(
           (rowAutorId && userStaffCandidateIds.has(rowAutorId)) ||
-          (rowAutorNome && userStaffName && (rowAutorNome === userStaffName || userStaffName.includes(rowAutorNome) || rowAutorNome.includes(userStaffName)))
+          (rowAutorNome && userStaffName && rowAutorNome === userStaffName)
         );
 
         if (isAdmin || isAuthorOfRow || scopeParam === 'admin' || scopeParam === 'true') {
@@ -1072,7 +1087,11 @@ export async function GET(request: Request) {
 
   let filtered = normalized;
   if (isFamilyOrStudent) {
-    filtered = normalized.filter((c: any) => c.destino !== 'interno');
+    filtered = normalized.filter((c: any) =>
+      c.destino !== 'interno' &&
+      c.destino !== 'funcionarios' &&
+      (!c.status || c.status === 'enviado')
+    );
   } else if (!isAdmin) {
     filtered = normalized.filter((c: any) => !c.isSaudacao && !c.dados?.isSaudacao && c.titulo !== 'Mensagem de Boas-vindas');
   }
@@ -1140,6 +1159,8 @@ export async function POST(request: Request) {
       after(async () => {
         const allPushPromises = [];
         for (const row of rows) {
+          const rowStatus = row.dados?.status || (row as any).status || 'enviado';
+          if (rowStatus !== 'enviado') continue;
           const isInterno = row.destino === 'interno';
           const isIndividualStudentReport = Boolean(
             (row.id && String(row.id).startsWith('AD-COM-REL-STU-')) ||
@@ -1341,131 +1362,134 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: `Falha ao criar cobrança anexada. O comunicado foi cancelado. Erro: ${cobrancaErrorMessage}` }, { status: 400 });
     }
 
-    // 3. Disparar Push em background apenas se tudo deu certo
-    after(async () => {
-      const isInterno = data.destino === 'interno';
-      const isIndividualStudentReport = Boolean(
-        (data.id && String(data.id).startsWith('AD-COM-REL-STU-')) ||
-        data.tipoRelatorio === 'individual' ||
-        data.dados?.tipoRelatorio === 'individual'
-      );
-      const { students, directColaboradores } = await getStudentTargetsForComunicados({ ...(data.dados || {}), id: data.id, tipoRelatorio: data.tipoRelatorio || data.dados?.tipoRelatorio });
-      console.log(`[Push Comunicado][${data.id}] students=${students.length} colaboradores=${directColaboradores.length} destino=${data.destino} funcionariosIds=${JSON.stringify(data.dados?.funcionariosIds || [])}`);
-      const pushPromises = [];
-      
-      if (!isInterno) {
-        if (isIndividualStudentReport) {
-          for (const student of students) {
-            if (student.responsaveis_ids.length > 0) {
-              pushPromises.push(
-                sendAgendaPushNotification({
-                  type: 'comunicados',
-                  itemId: String(data.id),
-                  title: `📢 ${data.titulo}`,
-                  message: `${data.autor} disponibilizou o relatório diário de ${formatFriendlyStudentName(student.aluno_nome)}. Confira!`,
-                  targetUserIds: student.responsaveis_ids,
-                  targetUrl: `/agenda-digital/${student.aluno_id}/comunicados?id=${data.id}`,
-                  senderUserId: user.id,
-                  metadata: {
-                    aluno_id: student.aluno_id,
-                    perfil_destino: 'familiar',
-                    item_id: String(data.id),
-                    rota: 'comunicados',
-                    author: data.autor || user.user_metadata?.nome,
-                    author_id: data.dados?.autorId || user.id,
-                    author_cargo: data.dados?.autorCargo || user.user_metadata?.cargo,
-                    author_foto: data.dados?.autorFoto || user.user_metadata?.foto,
-                  }
-                }).catch(err => console.error("Push Error Report Single:", err))
-              );
+    // 3. Disparar Push em background apenas se tudo deu certo e o comunicado está enviado
+    const singleStatus = data.dados?.status || data.status || 'enviado';
+    if (singleStatus === 'enviado') {
+      after(async () => {
+        const isInterno = data.destino === 'interno';
+        const isIndividualStudentReport = Boolean(
+          (data.id && String(data.id).startsWith('AD-COM-REL-STU-')) ||
+          data.tipoRelatorio === 'individual' ||
+          data.dados?.tipoRelatorio === 'individual'
+        );
+        const { students, directColaboradores } = await getStudentTargetsForComunicados({ ...(data.dados || {}), id: data.id, tipoRelatorio: data.tipoRelatorio || data.dados?.tipoRelatorio });
+        console.log(`[Push Comunicado][${data.id}] students=${students.length} colaboradores=${directColaboradores.length} destino=${data.destino} funcionariosIds=${JSON.stringify(data.dados?.funcionariosIds || [])}`);
+        const pushPromises = [];
+        
+        if (!isInterno) {
+          if (isIndividualStudentReport) {
+            for (const student of students) {
+              if (student.responsaveis_ids.length > 0) {
+                pushPromises.push(
+                  sendAgendaPushNotification({
+                    type: 'comunicados',
+                    itemId: String(data.id),
+                    title: `📢 ${data.titulo}`,
+                    message: `${data.autor} disponibilizou o relatório diário de ${formatFriendlyStudentName(student.aluno_nome)}. Confira!`,
+                    targetUserIds: student.responsaveis_ids,
+                    targetUrl: `/agenda-digital/${student.aluno_id}/comunicados?id=${data.id}`,
+                    senderUserId: user.id,
+                    metadata: {
+                      aluno_id: student.aluno_id,
+                      perfil_destino: 'familiar',
+                      item_id: String(data.id),
+                      rota: 'comunicados',
+                      author: data.autor || user.user_metadata?.nome,
+                      author_id: data.dados?.autorId || user.id,
+                      author_cargo: data.dados?.autorCargo || user.user_metadata?.cargo,
+                      author_foto: data.dados?.autorFoto || user.user_metadata?.foto,
+                    }
+                  }).catch(err => console.error("Push Error Report Single:", err))
+                );
+              }
             }
-          }
-        } else if (students.length <= 5) {
-          for (const student of students) {
-            if (student.responsaveis_ids.length > 0) {
-              pushPromises.push(
-                sendAgendaPushNotification({
-                  type: 'comunicados',
-                  itemId: String(data.id),
-                  title: `📢 ${data.titulo}`,
-                  message: `${data.autor} enviou uma mensagem para ${student.aluno_nome}`,
-                  targetUserIds: student.responsaveis_ids,
-                  targetUrl: `/agenda-digital/${student.aluno_id}/comunicados?id=${data.id}`,
-                  senderUserId: user.id,
-                  metadata: {
-                    aluno_id: student.aluno_id,
-                    perfil_destino: 'familiar',
-                    item_id: String(data.id),
-                    rota: 'comunicados',
-                    author: data.autor || user.user_metadata?.nome,
-                    author_id: data.dados?.autorId || user.id,
-                    author_cargo: data.dados?.autorCargo || user.user_metadata?.cargo,
-                    author_foto: data.dados?.autorFoto || user.user_metadata?.foto,
-                  }
-                }).catch(err => console.error("Push Error:", err))
-              );
+          } else if (students.length <= 5) {
+            for (const student of students) {
+              if (student.responsaveis_ids.length > 0) {
+                pushPromises.push(
+                  sendAgendaPushNotification({
+                    type: 'comunicados',
+                    itemId: String(data.id),
+                    title: `📢 ${data.titulo}`,
+                    message: `${data.autor} enviou uma mensagem para ${student.aluno_nome}`,
+                    targetUserIds: student.responsaveis_ids,
+                    targetUrl: `/agenda-digital/${student.aluno_id}/comunicados?id=${data.id}`,
+                    senderUserId: user.id,
+                    metadata: {
+                      aluno_id: student.aluno_id,
+                      perfil_destino: 'familiar',
+                      item_id: String(data.id),
+                      rota: 'comunicados',
+                      author: data.autor || user.user_metadata?.nome,
+                      author_id: data.dados?.autorId || user.id,
+                      author_cargo: data.dados?.autorCargo || user.user_metadata?.cargo,
+                      author_foto: data.dados?.autorFoto || user.user_metadata?.foto,
+                    }
+                  }).catch(err => console.error("Push Error:", err))
+                );
+              }
             }
-          }
-        } else {
-          // Comunicado para a turma (> 5 alunos): personalizar com o nome de cada aluno
-          for (const student of students) {
-            if (student.responsaveis_ids && student.responsaveis_ids.length > 0) {
-              const nomeAluno = formatFriendlyStudentName(student.aluno_nome)
-              pushPromises.push(
-                sendAgendaPushNotification({
-                  type: 'comunicados',
-                  itemId: String(data.id),
-                  title: `📢 ${data.titulo}`,
-                  message: `${data.autor} enviou um novo comunicado para a turma de ${nomeAluno}. Confira!`,
-                  targetUserIds: student.responsaveis_ids,
-                  targetUrl: `/agenda-digital/${student.aluno_id}/comunicados?id=${data.id}`,
-                  senderUserId: user.id,
-                  metadata: {
-                    aluno_id: student.aluno_id,
-                    perfil_destino: 'familiar',
-                    item_id: String(data.id),
-                    rota: 'comunicados',
-                    author: data.autor || user.user_metadata?.nome,
-                    author_id: data.dados?.autorId || user.id,
-                    author_cargo: data.dados?.autorCargo || user.user_metadata?.cargo,
-                    author_foto: data.dados?.autorFoto || user.user_metadata?.foto,
-                  }
-                }).catch(err => console.error("Push Error Turma:", err))
-              );
+          } else {
+            // Comunicado para a turma (> 5 alunos): personalizar com o nome de cada aluno
+            for (const student of students) {
+              if (student.responsaveis_ids && student.responsaveis_ids.length > 0) {
+                const nomeAluno = formatFriendlyStudentName(student.aluno_nome)
+                pushPromises.push(
+                  sendAgendaPushNotification({
+                    type: 'comunicados',
+                    itemId: String(data.id),
+                    title: `📢 ${data.titulo}`,
+                    message: `${data.autor} enviou um novo comunicado para a turma de ${nomeAluno}. Confira!`,
+                    targetUserIds: student.responsaveis_ids,
+                    targetUrl: `/agenda-digital/${student.aluno_id}/comunicados?id=${data.id}`,
+                    senderUserId: user.id,
+                    metadata: {
+                      aluno_id: student.aluno_id,
+                      perfil_destino: 'familiar',
+                      item_id: String(data.id),
+                      rota: 'comunicados',
+                      author: data.autor || user.user_metadata?.nome,
+                      author_id: data.dados?.autorId || user.id,
+                      author_cargo: data.dados?.autorCargo || user.user_metadata?.cargo,
+                      author_foto: data.dados?.autorFoto || user.user_metadata?.foto,
+                    }
+                  }).catch(err => console.error("Push Error Turma:", err))
+                );
+              }
             }
           }
         }
-      }
 
-      if (directColaboradores.length > 0 && !isIndividualStudentReport) {
-        console.log(`[Push Comunicado][${data.id}] Enviando push para ${directColaboradores.length} colaboradores:`, directColaboradores.slice(0, 10));
-        pushPromises.push(
-          sendAgendaPushNotification({
-            type: 'comunicados',
-            itemId: String(data.id),
-            title: `📢 ${data.titulo}`,
-            message: `Você tem uma nova mensagem enviada por ${data.autor}.`,
-            targetUserIds: directColaboradores,
-            targetUrl: `/agenda-digital/colaborador/comunicados?id=${data.id}`,
-            senderUserId: user.id,
-            metadata: {
-              perfil_destino: 'colaborador',
-              item_id: String(data.id),
-              rota: 'comunicados',
+        if (directColaboradores.length > 0 && !isIndividualStudentReport) {
+          console.log(`[Push Comunicado][${data.id}] Enviando push para ${directColaboradores.length} colaboradores:`, directColaboradores.slice(0, 10));
+          pushPromises.push(
+            sendAgendaPushNotification({
+              type: 'comunicados',
+              itemId: String(data.id),
+              title: `📢 ${data.titulo}`,
+              message: `Você tem uma nova mensagem enviada por ${data.autor}.`,
+              targetUserIds: directColaboradores,
               targetUrl: `/agenda-digital/colaborador/comunicados?id=${data.id}`,
-              author: data.autor || user.user_metadata?.nome,
-              author_id: data.dados?.autorId || user.id,
-              author_cargo: data.dados?.autorCargo || user.user_metadata?.cargo,
-              author_foto: data.dados?.autorFoto || user.user_metadata?.foto,
-            }
-          }).catch(err => console.error("Push Error Colab:", err))
-        );
-      } else {
-        console.log(`[Push Comunicado][${data.id}] Nenhum colaborador para push. dados.funcionariosIds=${JSON.stringify(data.dados?.funcionariosIds)}, dados.colaboradoresIds=${JSON.stringify(data.dados?.colaboradoresIds)}`);
-      }
-      
-      await Promise.allSettled(pushPromises);
-    });
+              senderUserId: user.id,
+              metadata: {
+                perfil_destino: 'colaborador',
+                item_id: String(data.id),
+                rota: 'comunicados',
+                targetUrl: `/agenda-digital/colaborador/comunicados?id=${data.id}`,
+                author: data.autor || user.user_metadata?.nome,
+                author_id: data.dados?.autorId || user.id,
+                author_cargo: data.dados?.autorCargo || user.user_metadata?.cargo,
+                author_foto: data.dados?.autorFoto || user.user_metadata?.foto,
+              }
+            }).catch(err => console.error("Push Error Colab:", err))
+          );
+        } else {
+          console.log(`[Push Comunicado][${data.id}] Nenhum colaborador para push. dados.funcionariosIds=${JSON.stringify(data.dados?.funcionariosIds)}, dados.colaboradoresIds=${JSON.stringify(data.dados?.colaboradoresIds)}`);
+        }
+        
+        await Promise.allSettled(pushPromises);
+      });
+    }
 
     return NextResponse.json(normalizeRow(data), { status: 201 })
   } catch (e: any) {
@@ -1475,7 +1499,7 @@ export async function POST(request: Request) {
 }
 
 export async function PUT(request: Request) {
-  const { user, errorResponse } = await requireAuth()
+  const { user, errorResponse } = await requireAuth(request)
   if (errorResponse) return errorResponse
 
   const authClient = await createProtectedClient();
@@ -1488,8 +1512,16 @@ export async function PUT(request: Request) {
   }
 
   try {
-    const { id, dados } = await request.json()
-    if (!id || !dados) return NextResponse.json({ error: 'id and dados required' }, { status: 400 })
+    const body = await request.json()
+    const id = body?.id
+    const incomingDados = body?.dados && typeof body.dados === 'object' ? body.dados : body
+    if (!id || !incomingDados) return NextResponse.json({ error: 'id and dados required' }, { status: 400 })
+
+    const { data: existingCom } = await supabaseServer
+      .from('comunicados')
+      .select('id, titulo, texto, autor, data, destino, fixado, dados')
+      .eq('id', id)
+      .maybeSingle()
 
     const normalize = (s?: string) =>
       (s || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
@@ -1506,12 +1538,6 @@ export async function PUT(request: Request) {
     );
 
     if (!isAdmin) {
-      const { data: existingCom } = await supabase
-        .from('comunicados')
-        .select('autor, dados')
-        .eq('id', id)
-        .maybeSingle();
-
       const userCandidateIds = new Set<string>([
         String(user.id),
         String(user.user_metadata?.colaborador_id || ''),
@@ -1525,7 +1551,7 @@ export async function PUT(request: Request) {
 
       const isAuthor = Boolean(
         (comAutorId && userCandidateIds.has(comAutorId)) ||
-        (comAutorNome && userNome && (comAutorNome === userNome || userNome.includes(comAutorNome) || comAutorNome.includes(userNome)))
+        (comAutorNome && userNome && comAutorNome === userNome)
       );
 
       if (!isAuthor) {
@@ -1533,15 +1559,36 @@ export async function PUT(request: Request) {
       }
     }
 
+    const mergedPayload = {
+      ...(existingCom || {}),
+      ...(existingCom?.dados || {}),
+      ...incomingDados,
+      id,
+      leituras: incomingDados.leituras ?? existingCom?.dados?.leituras ?? {},
+      ciencias: incomingDados.ciencias ?? existingCom?.dados?.ciencias ?? {},
+    }
+    const built = await enrichGruposRecipients(buildRow(mergedPayload))
+    const dados = built.dados
+
     if (id && String(id).startsWith('AD-COM-REL-STU-') && dados) {
       if (Array.isArray(dados.turmas) && dados.turmas.length > 0) {
-        if (!dados.turma_nome) dados.turma_nome = dados.turmas[0];
+        if (!(dados as any).turma_nome) (dados as any).turma_nome = dados.turmas[0];
         dados.turmas = [];
       }
       dados.turmasIds = [];
     }
 
-    const { data, error } = await supabase.from('comunicados').update({ dados }).eq('id', id).select().single()
+    const updateFields: Record<string, any> = {
+      titulo: built.titulo,
+      texto: built.texto,
+      autor: built.autor,
+      destino: built.destino,
+      fixado: built.fixado,
+      dados,
+      updated_at: new Date().toISOString()
+    }
+
+    const { data, error } = await supabase.from('comunicados').update(updateFields).eq('id', id).select().single()
     if (error) return NextResponse.json({ error: error.message }, { status: 400 })
 
     return NextResponse.json(normalizeRow(data))
@@ -1551,7 +1598,7 @@ export async function PUT(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  const { user, errorResponse } = await requireAuth()
+  const { user, errorResponse } = await requireAuth(request)
   if (errorResponse) return errorResponse
 
   const perfil = user.user_metadata?.perfil || '';
@@ -1616,7 +1663,7 @@ export async function DELETE(request: Request) {
 
       const isAuthor = Boolean(
         (comAutorId && userCandidateIds.has(comAutorId)) ||
-        (comAutorNome && userNome && (comAutorNome === userNome || userNome.includes(comAutorNome) || comAutorNome.includes(userNome)))
+        (comAutorNome && userNome && comAutorNome === userNome)
       );
 
       if (!isAuthor) {

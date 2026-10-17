@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
+import { requireAdminOrDirecao } from '@/lib/server/authGuard'
 import { createClient } from '@supabase/supabase-js'
 
 export const dynamic = 'force-dynamic'
@@ -93,26 +94,12 @@ export async function POST(request: Request) {
     }
 
     // 2. Authentication & Authorization Check for Administrative Actions (create, update, delete)
-    const authClient = await createProtectedClient()
-    const { data: { user }, error: authError } = await authClient.auth.getUser()
-
-    if (authError || !user) {
-      return NextResponse.json({ success: false, error: 'Não autenticado' }, { status: 401 })
-    }
-
-    // Query system_users table for reliable role check
-    const { data: dbUser } = await systemSupabase
-      .from('system_users')
-      .select('cargo, perfil')
-      .eq('id', user.id)
-      .maybeSingle()
-
-    const cargo = dbUser?.cargo || user.user_metadata?.cargo || ''
-    const perfil = dbUser?.perfil || user.user_metadata?.perfil || ''
-    const isAdmin = cargo === 'Administrador Master' || perfil === 'Administrador'
-
-    if (!isAdmin) {
-      return NextResponse.json({ success: false, error: 'Não autorizado' }, { status: 403 })
+    const { errorResponse } = await requireAdminOrDirecao(request)
+    if (errorResponse) {
+      return NextResponse.json(
+        { success: false, error: errorResponse.status === 401 ? 'Não autenticado' : 'Não autorizado' },
+        { status: errorResponse.status }
+      )
     }
 
     // 3. Create New Material Action

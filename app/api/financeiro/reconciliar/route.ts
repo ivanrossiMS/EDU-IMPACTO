@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/server/authGuard'
+import { requireStaff } from '@/lib/server/authGuard'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 
 export const dynamic = 'force-dynamic'
@@ -11,8 +11,8 @@ export const maxDuration = 60
  * Reconcilia a tabela `movimentacoes` com os dados reais de parcelas dos alunos.
  * Usa MÚLTIPLAS fontes de verdade para identificar codBaixas válidos.
  */
-export async function POST() {
-  const { user, errorResponse } = await requireAuth()
+export async function POST(request: Request) {
+  const { user, errorResponse } = await requireStaff(request)
   if (errorResponse) return errorResponse
 
   const supabase = await createProtectedClient();
@@ -104,8 +104,8 @@ export async function POST() {
  * Opção nuclear: apaga TODAS as movimentacoes de baixa automática.
  * Use somente se a reconciliação normal falhar.
  */
-export async function DELETE() {
-  const { user, errorResponse } = await requireAuth()
+export async function DELETE(request: Request) {
+  const { user, errorResponse } = await requireStaff(request)
   if (errorResponse) return errorResponse
 
   const supabase = await createProtectedClient();

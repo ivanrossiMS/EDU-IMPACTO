@@ -14,33 +14,51 @@ let memoryCache: { data: any[]; timestamp: number } | null = null
 export async function getMeusAlunosDedup(options?: { forceRefresh?: boolean }): Promise<any[]> {
   const now = Date.now()
 
-  if (!options?.forceRefresh && memoryCache && now - memoryCache.timestamp < 4000) {
+  if (!options?.forceRefresh && memoryCache && memoryCache.data.length > 0 && now - memoryCache.timestamp < 4000) {
     return memoryCache.data
   }
 
-  if (inFlightPromise) {
+  if (inFlightPromise && !options?.forceRefresh) {
     return inFlightPromise
   }
 
   inFlightPromise = (async () => {
-    try {
-      const res = await apiFetch('/api/agenda/meus-alunos', { credentials: 'include' })
-      if (!res.ok) {
+    const maxAttempts = 3
+    let lastError: unknown = null
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        const res = await apiFetch('/api/agenda/meus-alunos', { credentials: 'include' })
+        if (!res.ok) {
+          lastError = new Error(`HTTP ${res.status}`)
+          if (attempt < maxAttempts) {
+            await new Promise((r) => setTimeout(r, attempt * 600))
+            continue
+          }
+          throw lastError
+        }
+        const data = await res.json()
+        if (Array.isArray(data)) {
+          if (data.length > 0) {
+            memoryCache = { data, timestamp: Date.now() }
+          }
+          return data
+        }
         return []
+      } catch (err) {
+        lastError = err
+        if (attempt < maxAttempts) {
+          await new Promise((r) => setTimeout(r, attempt * 600))
+          continue
+        }
       }
-      const data = await res.json()
-      if (Array.isArray(data)) {
-        memoryCache = { data, timestamp: Date.now() }
-        return data
-      }
-      return []
-    } catch (err) {
-      console.warn('[meusAlunosClient] Erro ao buscar alunos deduplicado:', err)
-      return []
-    } finally {
-      inFlightPromise = null
     }
-  })()
+
+    console.warn('[meusAlunosClient] Erro ao buscar alunos deduplicado após retentativas:', lastError)
+    throw lastError instanceof Error ? lastError : new Error('Falha ao buscar alunos vinculados')
+  })().finally(() => {
+    inFlightPromise = null
+  })
 
   return inFlightPromise
 }

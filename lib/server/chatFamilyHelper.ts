@@ -82,9 +82,6 @@ export async function resolveFamilyScope(
   const supabase = getAdminClient()
   const alunoIdParam = options?.alunoIdParam || null
   const contextParam = options?.context || null
-  const espelharRespId = options?.espelharRespId || null
-  const espelharColabId = options?.espelharColabId || null
-  const espelharAluno = !!options?.espelharAluno
 
   // 1. Resolver usuário no system_users (reutiliza se já fornecido pelo caller)
   let dbUser: any = options?.dbUser || null
@@ -101,6 +98,9 @@ export async function resolveFamilyScope(
   const perfil = (dbUser?.perfil || user.user_metadata?.perfil || '').trim()
   const cargo = (dbUser?.cargo || user.user_metadata?.cargo || '').trim()
   const isAdmin = checkIsAdmin(perfil, cargo)
+  const espelharRespId = isAdmin ? (options?.espelharRespId || null) : null
+  const espelharColabId = isAdmin ? (options?.espelharColabId || null) : null
+  const espelharAluno = isAdmin ? !!options?.espelharAluno : false
 
   // Se o contexto explícito for colaborador, não carrega escopo familiar
   if (contextParam === 'colaborador') {
@@ -130,7 +130,7 @@ export async function resolveFamilyScope(
   // ATENÇÃO: a tabela responsaveis NÃO possui coluna direta user_id
   const respOrConds: string[] = []
   if (user.id) {
-    respOrConds.push(`dados->>auth_id.eq.${user.id}`, `dados->>user_id.eq.${user.id}`)
+    respOrConds.push(`auth_id.eq.${user.id}`, `dados->>auth_id.eq.${user.id}`, `dados->>user_id.eq.${user.id}`)
   }
   if (user.email) {
     respOrConds.push(`email.ilike.${user.email.toLowerCase().trim()}`)
@@ -203,11 +203,14 @@ export async function resolveFamilyScope(
   if (alunoLogadoRes.data?.id) {
     linkedAlunoIds.add(String(alunoLogadoRes.data.id))
   }
-
-  // Se passou alunoIdParam explícito, garantir presença
-  if (alunoIdParam) linkedAlunoIds.add(String(alunoIdParam))
   if (dbUser?.dados?.aluno_id) linkedAlunoIds.add(String(dbUser.dados.aluno_id))
   if (user.user_metadata?.aluno_id) linkedAlunoIds.add(String(user.user_metadata.aluno_id))
+
+  // Só aceita alunoIdParam arbitrário se o caller for administrador espelhando,
+  // caso contrário valida que pertence aos vínculos verificados do usuário
+  if (alunoIdParam && isAdmin) {
+    linkedAlunoIds.add(String(alunoIdParam))
+  }
 
   const candidateUserIds = Array.from(new Set([
     user.id,

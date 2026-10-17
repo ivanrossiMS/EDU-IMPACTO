@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/server/authGuard'
+import { requireStaff, requireAdminOrDirecao } from '@/lib/server/authGuard'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 import { createClient } from '@supabase/supabase-js'
 import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
@@ -8,7 +8,7 @@ import crypto from 'crypto'
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: Request) {
-  const { errorResponse } = await requireAuth()
+  const { errorResponse } = await requireStaff(request)
   if (errorResponse) return errorResponse
 
   const { searchParams } = new URL(request.url)
@@ -82,7 +82,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const { user, errorResponse } = await requireAuth()
+  const { user, errorResponse } = await requireStaff(request)
   if (errorResponse) return errorResponse
 
   try {
@@ -143,19 +143,8 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  const { user, errorResponse } = await requireAuth()
+  const { errorResponse } = await requireAdminOrDirecao(request)
   if (errorResponse) return errorResponse
-
-  // Verifica se o usuário é administrador ou diretor
-  const meta = user?.user_metadata || {};
-  const isUserAdmin = meta.perfil?.toLowerCase()?.includes('admin') || 
-                      meta.cargo?.toLowerCase()?.includes('admin') || 
-                      meta.cargo?.toLowerCase()?.includes('diret') || 
-                      meta.perfil === 'direcao';
-
-  if (!isUserAdmin) {
-    return NextResponse.json({ error: 'Não autorizado. Apenas administradores podem excluir assinaturas.' }, { status: 403 })
-  }
 
   const { searchParams } = new URL(request.url)
   const id = searchParams.get('id')

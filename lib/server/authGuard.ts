@@ -126,9 +126,19 @@ interface SystemUserCacheEntry {
 const SYSTEM_USER_CACHE_TTL_MS = 15_000
 const systemUserCache = new Map<string, SystemUserCacheEntry>()
 
+interface FamilyScopeCacheEntry {
+  alunoIds: Set<string>
+  responsavelIds: Set<string>
+  expiresAt: number
+}
+
+const FAMILY_SCOPE_CACHE_TTL_MS = 15_000
+const familyScopeCache = new Map<string, FamilyScopeCacheEntry>()
+
 export function clearAuthGuardCache(userId?: string) {
   if (userId) {
     systemUserCache.delete(userId)
+    familyScopeCache.delete(userId)
     for (const [token, entry] of verifiedTokenCache.entries()) {
       if (entry.user?.id === userId) {
         verifiedTokenCache.delete(token)
@@ -136,6 +146,7 @@ export function clearAuthGuardCache(userId?: string) {
     }
   } else {
     systemUserCache.clear()
+    familyScopeCache.clear()
     verifiedTokenCache.clear()
   }
 }
@@ -306,4 +317,241 @@ export async function requireProfile(allowedProfiles: string[], req?: Request) {
 
   return { user, perfil: effectivePerfil, cargo: effectiveCargo, errorResponse: null }
 }
+
+/**
+ * Verifica de forma autoritativa se o contexto resolvido pertence à Administração/Direção/Master.
+ */
+export function isAdminStaff(roleCtx: { isStaff?: boolean; perfil?: string; cargo?: string }): boolean {
+  if (!roleCtx?.isStaff) return false
+  const p = String(roleCtx.perfil || '').toLowerCase()
+  const c = String(roleCtx.cargo || '').toLowerCase()
+  return (
+    p.includes('admin') ||
+    p.includes('master') ||
+    p.includes('diret') ||
+    p.includes('gestor') ||
+    c.includes('admin') ||
+    c.includes('diret')
+  )
+}
+
+/**
+ * Exige que o usuário autenticado seja Administrador, Diretor Geral, Gestor ou Master.
+ */
+export async function requireAdminOrDirecao(req?: Request) {
+  const resolved = await resolveUserRole(req)
+  if (resolved.errorResponse) {
+    return { ...resolved, errorResponse: resolved.errorResponse }
+  }
+  if (!isAdminStaff(resolved)) {
+    return {
+      ...resolved,
+      errorResponse: NextResponse.json(
+        { error: 'Acesso negado. Operação restrita à Direção e Administração.' },
+        { status: 403 }
+      ),
+    }
+  }
+  return resolved
+}
+
+/**
+ * Exige que o usuário autenticado pertença ao RH, Gestão de Pessoas, Psicologia, Direção ou Administração.
+ */
+export async function requireHrOrAdmin(req?: Request) {
+  const resolved = await resolveUserRole(req)
+  if (resolved.errorResponse) {
+    return { ...resolved, errorResponse: resolved.errorResponse }
+  }
+  const p = String(resolved.perfil || '').toLowerCase()
+  const c = String(resolved.cargo || '').toLowerCase()
+  const allowed =
+    isAdminStaff(resolved) ||
+    (resolved.isStaff &&
+      (p.includes('rh') ||
+        p.includes('recursos humanos') ||
+        p.includes('gestao de pessoas') ||
+        p.includes('gestão de pessoas') ||
+        p.includes('psic') ||
+        p.includes('sst') ||
+        p.includes('dp') ||
+        c.includes('rh') ||
+        c.includes('recursos humanos') ||
+        c.includes('gestao de pessoas') ||
+        c.includes('gestão de pessoas') ||
+        c.includes('psic') ||
+        c.includes('departamento pessoal')))
+  if (!allowed) {
+    return {
+      ...resolved,
+      errorResponse: NextResponse.json(
+        { error: 'Acesso restrito ao RH, Gestão de Pessoas e Diretoria.' },
+        { status: 403 }
+      ),
+    }
+  }
+  return resolved
+}
+
+/**
+ * Exige que o usuário autenticado pertença ao Financeiro, Secretaria, Direção ou Administração.
+ */
+export async function requireFinanceOrAdmin(req?: Request) {
+  const resolved = await resolveUserRole(req)
+  if (resolved.errorResponse) {
+    return { ...resolved, errorResponse: resolved.errorResponse }
+  }
+  const p = String(resolved.perfil || '').toLowerCase()
+  const c = String(resolved.cargo || '').toLowerCase()
+  const allowed =
+    isAdminStaff(resolved) ||
+    (resolved.isStaff &&
+      (p.includes('financ') ||
+        p.includes('tesour') ||
+        p.includes('contab') ||
+        p.includes('secret') ||
+        c.includes('financ') ||
+        c.includes('tesour') ||
+        c.includes('contab') ||
+        c.includes('secret')))
+  if (!allowed) {
+    return {
+      ...resolved,
+      errorResponse: NextResponse.json(
+        { error: 'Acesso restrito ao setor Financeiro e Administração.' },
+        { status: 403 }
+      ),
+    }
+  }
+  return resolved
+}
+
+/**
+ * Resolve de forma autoritativa todos os IDs de alunos e responsáveis vinculados
+ * a um usuário autenticado (Família / Responsável / Aluno), com cache curto (15s).
+ */
+export async function resolveFamilyScope(user: any): Promise<{ alunoIds: Set<string>; responsavelIds: Set<string> }> {
+  const empty = { alunoIds: new Set<string>(), responsavelIds: new Set<string>() }
+  if (!user?.id) return empty
+
+  const cacheKey = String(user.id)
+  const now = Date.now()
+  const cached = familyScopeCache.get(cacheKey)
+  if (cached && cached.expiresAt > now) {
+    return {
+      alunoIds: new Set(cached.alunoIds),
+      responsavelIds: new Set(cached.responsavelIds),
+    }
+  }
+
+  const supabaseAdmin = require('./supabaseAdminSingleton').getAdminClient()
+  const alunoIds = new Set<string>()
+  const responsavelIds = new Set<string>()
+
+  const metaAlunoId = String(user.user_metadata?.aluno_id || user.app_metadata?.aluno_id || '').trim()
+  const metaRespId = String(user.user_metadata?.responsavel_id || user.app_metadata?.responsavel_id || '').trim()
+  const metaMatricula = String(user.user_metadata?.matricula || user.app_metadata?.matricula || '').trim()
+  const rawEmail = String(user.email || '').trim().toLowerCase()
+
+  if (metaAlunoId) alunoIds.add(metaAlunoId)
+  if (metaRespId) responsavelIds.add(metaRespId)
+
+  // Se for e-mail virtual de aluno: aluno.{matricula}@impactoedu.local
+  let virtualMatricula = metaMatricula
+  if (!virtualMatricula && rawEmail.startsWith('aluno.') && rawEmail.endsWith('@impactoedu.local')) {
+    virtualMatricula = rawEmail.slice('aluno.'.length, -'@impactoedu.local'.length).trim()
+  }
+
+  try {
+    // 1. Resolver responsaveis pelo id, auth_id ou email
+    const respOrParts: string[] = [`id.eq."${String(user.id).replace(/"/g, '')}"`, `auth_id.eq."${String(user.id).replace(/"/g, '')}"`]
+    if (metaRespId) {
+      respOrParts.push(`id.eq."${metaRespId.replace(/"/g, '')}"`)
+    }
+    if (rawEmail && !rawEmail.endsWith('@impactoedu.local')) {
+      respOrParts.push(`email.ilike."${rawEmail.replace(/"/g, '')}"`)
+    }
+
+    const { data: respRows } = await supabaseAdmin
+      .from('responsaveis')
+      .select('id, dados')
+      .or(respOrParts.join(','))
+      .limit(20)
+
+    if (Array.isArray(respRows)) {
+      for (const r of respRows) {
+        if (r?.id) responsavelIds.add(String(r.id))
+        const vincs = r?.dados?.alunosVinculados || r?.dados?.alunos_vinculados
+        if (Array.isArray(vincs)) {
+          vincs.forEach((aid: any) => {
+            const cleanAid = String(typeof aid === 'object' ? aid?.id || aid?.aluno_id : aid || '').trim()
+            if (cleanAid) alunoIds.add(cleanAid)
+          })
+        }
+      }
+    }
+
+    // 2. Resolver vínculos em aluno_responsavel para todos os responsavelIds encontrados
+    if (responsavelIds.size > 0) {
+      const { data: links } = await supabaseAdmin
+        .from('aluno_responsavel')
+        .select('aluno_id, responsavel_id')
+        .in('responsavel_id', Array.from(responsavelIds))
+      if (Array.isArray(links)) {
+        for (const l of links) {
+          if (l?.aluno_id) alunoIds.add(String(l.aluno_id).trim())
+        }
+      }
+    }
+
+    // 3. Resolver aluno direto por id, email ou matrícula
+    const alunoOrParts: string[] = [`id.eq."${String(user.id).replace(/"/g, '')}"`]
+    if (metaAlunoId) {
+      alunoOrParts.push(`id.eq."${metaAlunoId.replace(/"/g, '')}"`)
+    }
+    if (virtualMatricula) {
+      const safeMat = virtualMatricula.replace(/"/g, '')
+      alunoOrParts.push(`matricula.eq."${safeMat}"`, `dados->>codigo.eq."${safeMat}"`)
+    }
+    if (rawEmail && !rawEmail.endsWith('@impactoedu.local')) {
+      alunoOrParts.push(`email.ilike."${rawEmail.replace(/"/g, '')}"`)
+    }
+
+    const { data: directAlunos } = await supabaseAdmin
+      .from('alunos')
+      .select('id, matricula')
+      .or(alunoOrParts.join(','))
+      .limit(20)
+
+    if (Array.isArray(directAlunos)) {
+      for (const a of directAlunos) {
+        if (a?.id) alunoIds.add(String(a.id).trim())
+      }
+    }
+  } catch (err) {
+    console.warn('[authGuard] Aviso ao resolver familyScope:', err)
+  }
+
+  if (familyScopeCache.size > 500) {
+    familyScopeCache.clear()
+  }
+  familyScopeCache.set(cacheKey, {
+    alunoIds: new Set(alunoIds),
+    responsavelIds: new Set(responsavelIds),
+    expiresAt: now + FAMILY_SCOPE_CACHE_TTL_MS,
+  })
+
+  return { alunoIds, responsavelIds }
+}
+
+export async function getAuthorizedAlunoIdsForUser(user: any): Promise<Set<string>> {
+  const { alunoIds } = await resolveFamilyScope(user)
+  return alunoIds
+}
+
+export async function getAuthorizedResponsavelIdsForUser(user: any): Promise<Set<string>> {
+  const { responsavelIds } = await resolveFamilyScope(user)
+  return responsavelIds
+}
+
 

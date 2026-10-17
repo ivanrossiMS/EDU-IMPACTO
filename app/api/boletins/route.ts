@@ -1,5 +1,5 @@
 import { NextResponse, after } from 'next/server'
-import { requireAuth } from '@/lib/server/authGuard'
+import { resolveUserRole, getAuthorizedAlunoIdsForUser } from '@/lib/server/authGuard'
 import { supabaseServer as supabase } from '@/lib/supabaseServer'
 import { getLoggedUserAccessStartDate } from '@/lib/server/visibility'
 import { sendAgendaPushNotification } from '@/lib/server/agendaNotifications'
@@ -9,8 +9,8 @@ import { getCachedTurmasAndGrupos } from '@/lib/server/turmasGruposCache'
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: Request) {
-  const { user, errorResponse } = await requireAuth()
-  if (errorResponse) return errorResponse
+  const { user, isStaff, errorResponse } = await resolveUserRole(request)
+  if (errorResponse || !user) return errorResponse!
 
   try {
     const { searchParams } = new URL(request.url)
@@ -20,6 +20,20 @@ export async function GET(request: Request) {
     const limit = limitParam 
       ? Math.min(Math.max(parseInt(limitParam, 10) || 50, 1), 5000) 
       : (aluno_id ? 100 : 5000)
+
+    const allowedAlunoIds = !isStaff ? await getAuthorizedAlunoIdsForUser(user) : null
+    if (!isStaff) {
+      if (!allowedAlunoIds || allowedAlunoIds.size === 0) {
+        return NextResponse.json({ data: [] })
+      }
+      if (aluno_id) {
+        const clean = String(aluno_id).trim()
+        const unpadded = clean.replace(/^0+/, '')
+        if (!allowedAlunoIds.has(clean) && (!unpadded || !allowedAlunoIds.has(unpadded))) {
+          return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 })
+        }
+      }
+    }
     
     const accessStartDate = await getLoggedUserAccessStartDate()
 
@@ -44,6 +58,8 @@ export async function GET(request: Request) {
         } else {
           q = q.eq('aluno_id', aluno_id)
         }
+      } else if (!isStaff && allowedAlunoIds) {
+        q = q.in('aluno_id', Array.from(allowedAlunoIds))
       }
       return q
     }

@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server'
-import { requireStaff } from '@/lib/server/authGuard'
+import { requireHrOrAdmin } from '@/lib/server/authGuard'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30
 
 export async function GET(request: Request) {
-  const { user, errorResponse } = await requireStaff(request)
+  const { user, errorResponse } = await requireHrOrAdmin(request)
   if (errorResponse) return errorResponse
 
   try {
@@ -25,7 +25,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const { user, errorResponse } = await requireStaff(request)
+  const { user, errorResponse } = await requireHrOrAdmin(request)
   if (errorResponse) return errorResponse
 
   try {
@@ -33,18 +33,20 @@ export async function POST(request: Request) {
     const supabase = await createProtectedClient()
 
     if (Array.isArray(body)) {
+      if (body.length === 0) return NextResponse.json({ ok: true, count: 0 })
+
       // 1. Fetch current IDs
       const { data: current } = await supabase.from('adiantamentos').select('id')
       const currentIds = (current || []).map(r => r.id)
       const incomingIds = body.map(r => r.id).filter(Boolean)
       
-      // 2. Identify deletions
-      const toDelete = currentIds.filter(id => !incomingIds.includes(id))
-      if (toDelete.length > 0) {
-        await supabase.from('adiantamentos').delete().in('id', toDelete)
+      // 2. Identify deletions (somente quando há IDs válidos no lote)
+      if (incomingIds.length > 0) {
+        const toDelete = currentIds.filter(id => !incomingIds.includes(id))
+        if (toDelete.length > 0) {
+          await supabase.from('adiantamentos').delete().in('id', toDelete)
+        }
       }
-
-      if (body.length === 0) return NextResponse.json({ ok: true, count: 0 })
       
       const rows = body.map(buildRowAuth)
       const { error } = await supabase.from('adiantamentos').upsert(rows)

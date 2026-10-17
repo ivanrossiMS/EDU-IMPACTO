@@ -1,14 +1,18 @@
 import { NextResponse } from 'next/server'
 import { supabaseServer as supabase } from '@/lib/supabaseServer'
 import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
-import { requireAuth, requireStaff } from '@/lib/server/authGuard'
+import {
+  requireStaff,
+  resolveUserRole,
+  getAuthorizedResponsavelIdsForUser,
+} from '@/lib/server/authGuard'
 
 export const dynamic = 'force-dynamic'
 
 // ─── GET: Listar responsáveis com alunos vinculados ──────────────────────────
 export async function GET(request: Request) {
-  const { user, errorResponse } = await requireAuth()
-  if (errorResponse) return errorResponse
+  const { user, isStaff, errorResponse } = await resolveUserRole(request)
+  if (errorResponse || !user) return errorResponse!
 
   try {
     const { searchParams } = new URL(request.url)
@@ -19,8 +23,13 @@ export async function GET(request: Request) {
     const search = searchParams.get('search') || qParam || ''
     const rfid = searchParams.get('rfid') || ''
 
+    const allowedRespIds = !isStaff ? await getAuthorizedResponsavelIdsForUser(user) : null
+
     // ── Otimização 1: Sub-consulta direta de vínculos de um responsável (?aluno_id_of=...) ──
     if (alunoIdOf) {
+      if (!isStaff && (!allowedRespIds || !allowedRespIds.has(String(alunoIdOf).trim()))) {
+        return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 })
+      }
       const { data: links, error: linkErr } = await supabase
         .from('aluno_responsavel')
         .select('*')
@@ -54,6 +63,9 @@ export async function GET(request: Request) {
 
     // ── Otimização 2: Busca pontual por ID (?id=...) sem varredura de tabela ──
     if (id) {
+      if (!isStaff && (!allowedRespIds || !allowedRespIds.has(String(id).trim()))) {
+        return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 })
+      }
       const { data: singleResp, error: singleErr } = await supabase
         .from('responsaveis')
         .select('*')
@@ -173,6 +185,13 @@ export async function GET(request: Request) {
     let query = supabase
       .from('responsaveis')
       .select('*', { count: 'exact' })
+
+    if (!isStaff) {
+      if (!allowedRespIds || allowedRespIds.size === 0) {
+        return NextResponse.json({ data: [], total: 0, page, limit })
+      }
+      query = query.in('id', Array.from(allowedRespIds))
+    }
 
     if (cpfParam) {
       const cleanDigits = cpfParam.replace(/\D/g, '')
@@ -554,14 +573,19 @@ export async function PUT(request: Request) {
         if (!hasActiveLink) {
           const emailClean = data.email.trim().toLowerCase()
           const supabaseAdmin = getAdminClient()
-          // Busca por email diretamente via system_users (evita listUsers)
           const { data: sysUser } = await supabaseAdmin
             .from('system_users')
-            .select('id')
+            .select('id, perfil_id, role, dados')
             .eq('email', emailClean)
             .maybeSingle()
-          if (sysUser?.id) {
+          const isGuardianSysUser = sysUser && (
+            String(sysUser.dados?.responsavel_id || '') === String(id) ||
+            ['familia', 'responsavel', 'pai', 'mae'].includes(String(sysUser.role || '').toLowerCase())
+          )
+          if (sysUser?.id && isGuardianSysUser) {
             await supabaseAdmin.auth.admin.deleteUser(sysUser.id).catch((e: any) => console.error('Erro ao revogar acesso de responsável desvinculado:', e))
+          } else if (!sysUser && data.dados?.auth_id) {
+            await supabaseAdmin.auth.admin.deleteUser(String(data.dados.auth_id)).catch((e: any) => console.error('Erro ao revogar acesso de responsável desvinculado:', e))
           }
         }
       }
@@ -585,7 +609,7 @@ export async function DELETE(request: Request) {
     if (!id) return NextResponse.json({ error: 'ID obrigatório' }, { status: 400 })
 
     // Busca o email do responsável antes de deletar
-    const { data: resp } = await supabase.from('responsaveis').select('email').eq('id', id).maybeSingle()
+    const { data: resp } = await supabase.from('responsaveis').select('email, dados').eq('id', id).maybeSingle()
     const email = resp?.email
 
     // Remove vínculos primeiro
@@ -596,18 +620,23 @@ export async function DELETE(request: Request) {
 
     if (error) return NextResponse.json({ error: error.message }, { status: 400 })
 
-    // Se o responsável possuir email, localiza e remove sua credencial no Supabase Auth
+    // Se o responsável possuir email, localiza e remove sua credencial no Supabase Auth (apenas se não for colaborador ativo)
     if (email) {
       const emailClean = email.trim().toLowerCase()
       const supabaseAdmin = getAdminClient()
-      // Busca via system_users como índice (evita listUsers de 1000 usuários)
       const { data: sysUser } = await supabaseAdmin
         .from('system_users')
-        .select('id')
+        .select('id, role, dados')
         .eq('email', emailClean)
         .maybeSingle()
-      if (sysUser?.id) {
+      const isGuardianSysUser = sysUser && (
+        String(sysUser.dados?.responsavel_id || '') === String(id) ||
+        ['familia', 'responsavel', 'pai', 'mae'].includes(String(sysUser.role || '').toLowerCase())
+      )
+      if (sysUser?.id && isGuardianSysUser) {
         await supabaseAdmin.auth.admin.deleteUser(sysUser.id).catch((e: any) => console.error('Erro ao remover usuário de autenticação:', e))
+      } else if (!sysUser && resp?.dados?.auth_id) {
+        await supabaseAdmin.auth.admin.deleteUser(String(resp.dados.auth_id)).catch((e: any) => console.error('Erro ao remover usuário de autenticação:', e))
       }
     }
 

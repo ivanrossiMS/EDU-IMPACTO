@@ -4,6 +4,7 @@ import { useBroadcastRealtime } from '@/lib/hooks/useBroadcastRealtime'
 import { useSupabaseArray, useSupabaseCollection, invalidateCache } from '@/lib/useSupabaseCollection'
 import { supabase } from '@/lib/supabase'
 import { fetchSingleStudentPhoto } from '@/lib/studentPhotoCache'
+import { apiFetch } from '@/lib/api/apiClient'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 export type GuardianType = 'mae' | 'pai' | 'avo' | 'motorista' | 'outro'
@@ -290,7 +291,7 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
   const persistSingleCall = useCallback(async (call: PickupCall) => {
     try {
       invalidateCache('saida/calls')
-      const res = await fetch('/api/saida/calls', {
+      const res = await apiFetch('/api/saida/calls', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(call)
@@ -1099,14 +1100,14 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
         const todayStr = getTodayStr()
         // Prevents triggering multiple times in the same minute
         if (lastCleared !== todayStr) {
-          setActiveCalls([])
+          setActiveCallsLocal?.([])
           localStorage.setItem('lastClearedDate', todayStr)
         }
       }
     }
     const interval = setInterval(checkTimeAndClear, 30000) // Check every 30s
     return () => clearInterval(interval)
-  }, [getTodayStr, setActiveCalls])
+  }, [getTodayStr, setActiveCallsLocal])
 
   const refreshCalls = useCallback(async () => {
     try {

@@ -623,14 +623,14 @@ export function processarRetornoCNAB400(conteudo: string): {
     const tipo = linha[0]
 
     if (tipo === '0') {
-      // Header do retorno
+      // Header do retorno (posições 1-indexed [047-076] empresa, [077-079] banco, [080-094] nome banco, [095-100] data)
       headerData = {
         tipoRemessa: linha[1],              // '2' = retorno
         literal: linha.slice(2, 9).trim(),
-        nomeEmpresa: linha.slice(26, 46).trim(),
-        codigoBanco: linha.slice(62, 65),
-        nomeBanco: linha.slice(65, 75).trim(),
-        dataGravacao: parseDateDDMMYY(linha.slice(86, 92)),
+        nomeEmpresa: linha.slice(46, 76).trim() || linha.slice(26, 46).trim(),
+        codigoBanco: linha.slice(76, 79).trim() || linha.slice(62, 65).trim(),
+        nomeBanco: linha.slice(79, 94).trim() || linha.slice(65, 75).trim(),
+        dataGravacao: parseDateDDMMYY(linha.slice(94, 100).trim() || linha.slice(86, 92).trim()),
         sequencial: linha.slice(394, 400).trim(),
       }
       continue
@@ -650,45 +650,65 @@ export function processarRetornoCNAB400(conteudo: string): {
     if (tipo !== '1') continue // Pula registros desconhecidos
 
     // ─── Detalhe do retorno ───────────────────────────────────────────────
-    // Todas as posições são 1-indexed conforme manual; em código usamos 0-indexed (pos-1)
-    const ocorrencia = linha.slice(108, 110).trim()
+    // Todas as posições são 1-indexed conforme manual; em código usamos 0-indexed (pos-1).
+    // Suporta tanto o layout padrão CNAB 400 Itaú quanto o layout compacto usado em gerarRetornoSimulado400.
+    const ocorrencia = linha.slice(107, 109).trim() || linha.slice(108, 110).trim()
+
+    // No simulador: [116-121] vencimento, [122-134] valorTitulo, [155-160] dataCredito, [161-173] valorPago
+    // No Itaú padrão: [147-152] vencimento, [153-165] valorTitulo, [254-266] valorPago, [296-301] dataCredito
+    const isStandardItauLayout =
+      /^\d{6}$/.test(linha.slice(146, 152)) &&
+      /^\d{13}$/.test(linha.slice(152, 165)) &&
+      /^\d{13}$/.test(linha.slice(253, 266))
+
+    const rawVencimento = isStandardItauLayout
+      ? linha.slice(146, 152)
+      : (linha.slice(115, 121).trim() || linha.slice(76, 82))
+    const rawValorTitulo = isStandardItauLayout
+      ? linha.slice(152, 165)
+      : (linha.slice(121, 134).trim() || linha.slice(82, 95))
+    const rawDataCredito = isStandardItauLayout
+      ? (linha.slice(295, 301).trim() || linha.slice(109, 115))
+      : (linha.slice(154, 160).trim() || linha.slice(115, 121))
+    const rawValorPago = isStandardItauLayout
+      ? linha.slice(253, 266)
+      : (parseInt(linha.slice(160, 173).trim() || '0', 10) > 0 ? linha.slice(160, 173) : linha.slice(121, 134))
 
     const registro: RegistroRetorno400 = {
       tipo: '1',
-      // [002-005] Agência cedente
-      agenciaSacado: linha.slice(1, 5).trim(),
-      // [020-044] ID empresa (chave para matching)
-      idEmpresa: linha.slice(19, 44).trim(),
-      // [045-052] Nosso número (8 chars)
-      nossoNumero: linha.slice(44, 52).trim(),
+      // [002-005] Agência cedente (ou [018-021] no Itaú padrão)
+      agenciaSacado: linha.slice(17, 21).trim() || linha.slice(1, 5).trim(),
+      // [038-062] ou [020-044] ID empresa (chave para matching)
+      idEmpresa: linha.slice(19, 44).trim() || linha.slice(37, 62).trim(),
+      // [045-052] ou [063-070] Nosso número (8 chars)
+      nossoNumero: linha.slice(44, 52).trim() || linha.slice(62, 70).trim(),
       // [053] DV do nosso número
       dvNossoNumero: linha.slice(52, 53),
-      // [067-076] Número do documento
-      // [077-082] Vencimento DDMMAA
-      dataVencimento: parseDateDDMMYY(linha.slice(76, 82)),
-      // [083-095] Valor do título (13 chars, centavos)
-      valorTitulo: parseInt(linha.slice(82, 95) || '0') / 100,
+      // Vencimento DDMMAA
+      dataVencimento: parseDateDDMMYY(rawVencimento),
+      // Valor do título (13 chars, centavos)
+      valorTitulo: parseInt(rawValorTitulo.trim() || '0', 10) / 100,
       // [108-109] Código de ocorrência
       ocorrencia,
       descricaoOcorrencia: interpretarOcorrencia400(ocorrencia),
       // [110-115] Data da ocorrência/pagamento DDMMAA
       dataOcorrencia: parseDateDDMMYY(linha.slice(109, 115)),
-      // [116-121] Data de crédito DDMMAA
-      dataCredito: parseDateDDMMYY(linha.slice(115, 121)),
-      // [122-134] Valor pago (13 chars)
-      valorPago: parseInt(linha.slice(121, 134) || '0') / 100,
-      // [135-147] IOF (13 chars)
-      valorIOF: parseInt(linha.slice(134, 147) || '0') / 100,
-      // [148-160] Abatimento (13 chars)
-      valorAbatimento: parseInt(linha.slice(147, 160) || '0') / 100,
-      // [161-173] Desconto (13 chars)
-      valorDesconto: parseInt(linha.slice(160, 173) || '0') / 100,
-      // [174-186] Juros (13 chars)
-      valorJuros: parseInt(linha.slice(173, 186) || '0') / 100,
-      // [187-199] Outros créditos (13 chars)
-      outrosCreditos: parseInt(linha.slice(186, 199) || '0') / 100,
+      // Data de crédito DDMMAA
+      dataCredito: parseDateDDMMYY(rawDataCredito),
+      // Valor pago (13 chars)
+      valorPago: parseInt(rawValorPago.trim() || '0', 10) / 100,
+      // IOF (13 chars)
+      valorIOF: parseInt((isStandardItauLayout ? linha.slice(214, 227) : linha.slice(134, 147)).trim() || '0', 10) / 100,
+      // Abatimento (13 chars)
+      valorAbatimento: parseInt((isStandardItauLayout ? linha.slice(227, 240) : linha.slice(186, 199)).trim() || '0', 10) / 100,
+      // Desconto (13 chars)
+      valorDesconto: parseInt((isStandardItauLayout ? linha.slice(240, 253) : linha.slice(173, 186)).trim() || '0', 10) / 100,
+      // Juros (13 chars)
+      valorJuros: parseInt((isStandardItauLayout ? linha.slice(266, 279) : linha.slice(199, 212)).trim() || '0', 10) / 100,
+      // Outros créditos (13 chars)
+      outrosCreditos: parseInt((isStandardItauLayout ? linha.slice(279, 292) : linha.slice(212, 225)).trim() || '0', 10) / 100,
       // [395-400] Sequencial
-      sequencial: parseInt(linha.slice(394, 400)) || 0,
+      sequencial: parseInt(linha.slice(394, 400), 10) || 0,
     }
 
     registros.push(registro)

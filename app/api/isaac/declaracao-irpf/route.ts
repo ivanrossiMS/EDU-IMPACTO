@@ -14,7 +14,7 @@
  */
 
 import { NextResponse } from 'next/server'
-import { resolveUserRole } from '@/lib/server/authGuard'
+import { resolveUserRole, getAuthorizedAlunoIdsForUser, getAuthorizedResponsavelIdsForUser } from '@/lib/server/authGuard'
 import { checkResponsavelRelationship } from '@/lib/server/notificationHelper'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 import { isaacRequest, formatIsaacAmount, getEffectiveAmount, IsaacInstallment } from '@/lib/isaac'
@@ -175,6 +175,13 @@ export async function GET(request: Request) {
   const { user, isStaff, errorResponse } = await resolveUserRole(request)
   if (errorResponse) return errorResponse
 
+  const [allowedAlunoIds, allowedRespIds] = !isStaff
+    ? await Promise.all([
+        getAuthorizedAlunoIdsForUser(user),
+        getAuthorizedResponsavelIdsForUser(user),
+      ])
+    : [new Set<string>(), new Set<string>()]
+
   const supabase = await createProtectedClient()
   const { searchParams } = new URL(request.url)
 
@@ -184,15 +191,22 @@ export async function GET(request: Request) {
   const responsavelIdParam = searchParams.get('responsavelId')
   const responsavelCpfParam = searchParams.get('responsavelCpf')
 
+  if (!isStaff && responsavelIdParam && !allowedRespIds.has(String(responsavelIdParam).trim())) {
+    return NextResponse.json({ error: 'Acesso negado para consultar dados deste responsável.' }, { status: 403 })
+  }
+
   // ── 1. Buscar Dados do Aluno no Supabase ────────────────────────────────────
   let dbAluno: any = null
   if (alunoId) {
-    const { data: al } = await supabase
-      .from('alunos')
-      .select('*')
-      .or(`id.eq.${alunoId},matricula.eq.${alunoId}`)
-      .maybeSingle()
-    dbAluno = al
+    const safeAlunoId = alunoId.replace(/[^A-Za-z0-9_-]/g, '')
+    if (safeAlunoId) {
+      const { data: al } = await supabase
+        .from('alunos')
+        .select('*')
+        .or(`id.eq.${safeAlunoId},matricula.eq.${safeAlunoId}`)
+        .maybeSingle()
+      dbAluno = al
+    }
   }
 
   if (!dbAluno && alunoNome) {
@@ -206,10 +220,14 @@ export async function GET(request: Request) {
 
   if (!isStaff && dbAluno) {
     const checkId = user?.user_metadata?.responsavel_id || user?.user_metadata?.aluno_id || user?.id
-    const hasAccess = await checkResponsavelRelationship(checkId, String(dbAluno.id), user?.email)
+    const hasAccess =
+      allowedAlunoIds.has(String(dbAluno.id)) ||
+      (await checkResponsavelRelationship(checkId, String(dbAluno.id), user?.email))
     if (!hasAccess) {
       return NextResponse.json({ error: 'Acesso negado para consultar declaração deste aluno.' }, { status: 403 })
     }
+  } else if (!isStaff && (alunoId || alunoNome) && !dbAluno) {
+    return NextResponse.json({ error: 'Acesso negado para consultar declaração deste aluno.' }, { status: 403 })
   }
 
   // ── 2. Localizar Responsáveis Disponíveis e Titular ────────────────────────
@@ -227,19 +245,23 @@ export async function GET(request: Request) {
     if (resp) dbResponsavel = resp
   } else if (responsavelCpfParam) {
     const cleanCpf = cleanDigits(responsavelCpfParam)
-    const { data: resp } = await supabase
-      .from('responsaveis')
-      .select('*')
-      .or(`cpf.eq.${cleanCpf},cpf.eq.${responsavelCpfParam}`)
-      .maybeSingle()
-    if (resp) dbResponsavel = resp
+    if (cleanCpf) {
+      const { data: resp } = await supabase
+        .from('responsaveis')
+        .select('*')
+        .or(`cpf.eq.${cleanCpf},cpf.eq.${responsavelCpfParam.replace(/[^0-9.-]/g, '')}`)
+        .maybeSingle()
+      if (resp) dbResponsavel = resp
+    }
   }
 
-  if (!isStaff && dbResponsavel && !dbAluno) {
+  if (!isStaff && (dbResponsavel || responsavelCpfParam) && !dbAluno) {
     const ownRespId = user?.user_metadata?.responsavel_id
     const isSameResp =
-      (ownRespId && String(dbResponsavel.id) === String(ownRespId)) ||
-      (user?.email && dbResponsavel.email && String(dbResponsavel.email).trim().toLowerCase() === String(user.email).trim().toLowerCase())
+      Boolean(dbResponsavel) &&
+      (allowedRespIds.has(String(dbResponsavel.id)) ||
+        (ownRespId && String(dbResponsavel.id) === String(ownRespId)) ||
+        (user?.email && dbResponsavel.email && String(dbResponsavel.email).trim().toLowerCase() === String(user.email).trim().toLowerCase()))
     if (!isSameResp) {
       return NextResponse.json({ error: 'Acesso negado para consultar dados deste responsável.' }, { status: 403 })
     }
@@ -435,6 +457,16 @@ export async function GET(request: Request) {
   // Se ainda não temos um aluno selecionado, pega o primeiro disponível
   if (!dbAluno && alunosDisponiveis.length > 0) {
     dbAluno = alunosDisponiveis[0]
+  }
+
+  if (!isStaff) {
+    const resolvedStudentId = dbAluno?.id ? String(dbAluno.id).trim() : ''
+    const resolvedGuardianId = dbResponsavel?.id ? String(dbResponsavel.id).trim() : (guardianExternalId || '')
+    const isAuthorizedStudent = resolvedStudentId && allowedAlunoIds.has(resolvedStudentId)
+    const isAuthorizedGuardian = resolvedGuardianId && allowedRespIds.has(resolvedGuardianId)
+    if (!isAuthorizedStudent && !isAuthorizedGuardian) {
+      return NextResponse.json({ error: 'Acesso negado para consultar declaração de IRPF.' }, { status: 403 })
+    }
   }
 
   // ── 4. Filtrar EXCLUSIVAMENTE Mensalidades Escolares Pagas do Aluno Selecionado ──

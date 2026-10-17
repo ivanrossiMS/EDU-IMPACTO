@@ -653,9 +653,9 @@ function ColaboradorComunicadosContent() {
       const existingCom = comunicados.find((c: any) => c.id === editComId);
       if (existingCom) {
         apiFetch('/api/comunicados', {
-          method: 'POST',
+          method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...existingCom, ...updatedCom })
+          body: JSON.stringify({ id: editComId, dados: { ...existingCom, ...updatedCom } })
         }).catch(err => console.error("Error updating comunicado:", err));
       }
     } else {

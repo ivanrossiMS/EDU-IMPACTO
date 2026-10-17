@@ -55,7 +55,7 @@ const menuItems = [
   { id: 'espelhar', label: 'Espelhar Agenda', icon: MonitorSmartphone, href: '/agenda-digital/admin/espelhar' },
   { id: 'chat', label: 'Chat & Moderação', icon: MessageSquare, href: '/agenda-digital/admin/chat' },
   { id: 'comunicados', label: 'Comunicados', icon: Bell, href: '/agenda-digital/admin/comunicados' },
-  { id: 'momentos', label: 'Mídia', icon: ImageIcon, href: '/agenda-digital/admin/momentos' },
+  { id: 'momentos', label: 'Galeria', icon: ImageIcon, href: '/agenda-digital/admin/momentos' },
   { id: 'calendario', label: 'Calendário', icon: Calendar, href: '/agenda-digital/admin/calendario' },
   { id: 'relatorios', label: 'Relatórios/Formulários', icon: FileText, href: '/agenda-digital/admin/relatorios' },
   { id: 'cobrancas', label: 'Cobranças', icon: DollarSign, href: '/agenda-digital/admin/cobrancas' },
@@ -225,7 +225,7 @@ export function ADSidebar() {
         { id: 'espelhar', label: 'Espelhar', icon: MonitorSmartphone, href: '/agenda-digital/admin/espelhar' },
         { id: 'chat', label: 'Chat', icon: MessageSquare, href: '/agenda-digital/admin/chat' },
         { id: 'comunicados', label: 'comunicados', icon: Bell, href: '/agenda-digital/admin/comunicados' },
-        { id: 'momentos', label: 'Mídia', icon: ImageIcon, href: '/agenda-digital/admin/momentos' },
+        { id: 'momentos', label: 'Galeria', icon: ImageIcon, href: '/agenda-digital/admin/momentos' },
         { id: 'calendario', label: 'Agenda', icon: Calendar, href: '/agenda-digital/admin/calendario' },
         { id: 'relatorios', label: 'Relatórios', icon: FileText, href: '/agenda-digital/admin/relatorios' },
         { id: 'cobrancas', label: 'Cobranças', icon: DollarSign, href: '/agenda-digital/admin/cobrancas' },
@@ -236,7 +236,7 @@ export function ADSidebar() {
     } else if (alunoId) {
       mobileTabs = [
         { id: 'comunicados', label: 'comunicados', icon: Bell, href: `/agenda-digital/${alunoId}/comunicados` },
-        { id: 'momentos', label: 'Mídia', icon: ImageIcon, href: `/agenda-digital/${alunoId}/momentos` },
+        { id: 'momentos', label: 'Galeria', icon: ImageIcon, href: `/agenda-digital/${alunoId}/momentos` },
         { id: 'calendario', label: 'Agenda', icon: Calendar, href: `/agenda-digital/${alunoId}/calendario` },
         { id: 'financeiro', label: 'Financeiro', icon: DollarSign, href: `/agenda-digital/${alunoId}/financeiro` },
         { id: 'frequencia', label: 'Frequência', icon: BarChart2, href: `/agenda-digital/${alunoId}/frequencia` },
@@ -247,7 +247,7 @@ export function ADSidebar() {
         { id: 'modulos', label: 'Trocar Módulo', icon: Grid, href: '/login?step=choose_system' }
       ].filter(item => {
         if (alunoId === 'colaborador') {
-          return ['comunicados', 'Mídia', 'Agenda', 'Frequência', 'Notas', 'Ocorrências', 'Perfil', 'Trocar Módulo'].includes(item.label)
+          return ['comunicados', 'Galeria', 'Agenda', 'Frequência', 'Notas', 'Ocorrências', 'Perfil', 'Trocar Módulo'].includes(item.label)
         }
         
         // Ocultar sempre "Trocar Módulo" na visão de aluno/família (conforme solicitado pelo usuário)
@@ -574,7 +574,7 @@ export function ADSidebar() {
 
                   {[
                     { label: 'Comunicados', href: `/agenda-digital/${alunoId}/comunicados`, icon: Bell },
-                    { label: 'Mídia', href: `/agenda-digital/${alunoId}/momentos`, icon: ImageIcon },
+                    { label: 'Galeria', href: `/agenda-digital/${alunoId}/momentos`, icon: ImageIcon },
                     { label: 'Calendário', href: `/agenda-digital/${alunoId}/calendario`, icon: Calendar },
                     { label: 'Financeiro', href: `/agenda-digital/${alunoId}/financeiro`, icon: DollarSign },
                     { label: 'Frequência', href: `/agenda-digital/${alunoId}/frequencia`, icon: BarChart2 },
@@ -584,7 +584,7 @@ export function ADSidebar() {
                     { label: 'Meu Perfil', href: `/agenda-digital/${alunoId}/perfil`, icon: UserCog },
                   ].filter(item => {
                     if (alunoId === 'colaborador') {
-                      return ['Comunicados', 'Mídia', 'Calendário', 'Frequência', 'Notas', 'Ocorrências', 'Meu Perfil'].includes(item.label)
+                      return ['Comunicados', 'Galeria', 'Calendário', 'Frequência', 'Notas', 'Ocorrências', 'Meu Perfil'].includes(item.label)
                     }
                     
                     let isFin = false;

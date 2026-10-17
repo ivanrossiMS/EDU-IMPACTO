@@ -1,5 +1,5 @@
 import { NextResponse, after } from 'next/server'
-import { requireAuth } from '@/lib/server/authGuard'
+import { resolveUserRole, getAuthorizedAlunoIdsForUser } from '@/lib/server/authGuard'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 import { getLoggedUserAccessStartDate } from '@/lib/server/visibility'
 import { sendAgendaPushNotification } from '@/lib/server/agendaNotifications'
@@ -9,8 +9,8 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 30
 
 export async function GET(request: Request) {
-  const { user, errorResponse } = await requireAuth()
-  if (errorResponse) return errorResponse
+  const { user, isStaff, errorResponse } = await resolveUserRole(request)
+  if (errorResponse || !user) return errorResponse!
 
   const supabase = await createProtectedClient();
   const { searchParams } = new URL(request.url)
@@ -19,6 +19,19 @@ export async function GET(request: Request) {
   const turmaId = searchParams.get('turma_id') || searchParams.get('turma')
   const limitParam = searchParams.get('limit')
   const limit = limitParam ? parseInt(limitParam, 10) : (alunoId ? 500 : 1000)
+
+  const allowedAlunoIds = !isStaff ? await getAuthorizedAlunoIdsForUser(user) : null
+  const isAllowedStudent = (idVal: string) => {
+    if (isStaff) return true
+    if (!allowedAlunoIds) return false
+    const clean = String(idVal).replace(/^a_?/, '').trim()
+    const unpadded = clean.replace(/^0+/, '')
+    return allowedAlunoIds.has(clean) || (Boolean(unpadded) && allowedAlunoIds.has(unpadded))
+  }
+
+  if (!isStaff && (!allowedAlunoIds || allowedAlunoIds.size === 0)) {
+    return NextResponse.json([])
+  }
 
   let query = supabase.from('ocorrencias').select('*')
   
@@ -29,9 +42,22 @@ export async function GET(request: Request) {
 
   query = query.order('created_at', { ascending: false })
   if (alunoId) {
+    if (!isStaff && !isAllowedStudent(alunoId)) {
+      return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 })
+    }
     query = query.or(`aluno_id.eq.${alunoId},dados->>aluno_id.eq.${alunoId},dados->>alunoId.eq.${alunoId}`)
   } else if (alunoIds) {
-    const ids = alunoIds.split(',').map(id => id.trim()).filter(Boolean)
+    let ids = alunoIds.split(',').map(id => id.trim()).filter(Boolean)
+    if (!isStaff) {
+      ids = ids.filter(isAllowedStudent)
+      if (ids.length === 0) {
+        return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 })
+      }
+    }
+    const inList = `(${ids.join(',')})`
+    query = query.or(`aluno_id.in.${inList},dados->>aluno_id.in.${inList},dados->>alunoId.in.${inList}`)
+  } else if (!isStaff && allowedAlunoIds) {
+    const ids = Array.from(allowedAlunoIds)
     const inList = `(${ids.join(',')})`
     query = query.or(`aluno_id.in.${inList},dados->>aluno_id.in.${inList},dados->>alunoId.in.${inList}`)
   } else if (turmaId) {
@@ -94,7 +120,6 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const { resolveUserRole } = await import('@/lib/server/authGuard')
   const { user, isStaff, errorResponse } = await resolveUserRole(request)
   if (errorResponse || !user) return errorResponse!
 
@@ -154,6 +179,12 @@ export async function POST(request: Request) {
       const { data: existingOc } = await supabase.from('ocorrencias').select('*').eq('id', body.id).maybeSingle()
       if (!existingOc) {
         return NextResponse.json({ error: 'Ocorrência não encontrada.' }, { status: 404 })
+      }
+      const allowedAlunoIds = await getAuthorizedAlunoIdsForUser(user)
+      const ocAlunoId = String(existingOc.aluno_id || existingOc.dados?.alunoId || existingOc.dados?.aluno_id || '').replace(/^a_?/, '').trim()
+      const ocAlunoUnpadded = ocAlunoId.replace(/^0+/, '')
+      if (!ocAlunoId || (!allowedAlunoIds.has(ocAlunoId) && (!ocAlunoUnpadded || !allowedAlunoIds.has(ocAlunoUnpadded)))) {
+        return NextResponse.json({ error: 'Acesso negado para registrar ciência nesta ocorrência.' }, { status: 403 })
       }
       const existingDados = typeof existingOc.dados === 'object' && existingOc.dados ? existingOc.dados : {}
       const incomingDados = typeof body.dados === 'object' && body.dados ? body.dados : {}

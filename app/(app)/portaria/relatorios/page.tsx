@@ -63,6 +63,28 @@ function PortariaRelatoriosPageContent() {
     return Array.isArray(alunosRes) ? alunosRes : (alunosRes?.data || [])
   }, [alunosRes, turmaId])
 
+  const selectedTurmaObj = useMemo(
+    () => turmas.find((t: any) => String(t.id) === String(turmaId) || String(t.codigo) === String(turmaId)),
+    [turmas, turmaId]
+  )
+
+  const matchesSelectedTurma = (alunoTurmaRaw?: string) => {
+    if (!turmaId) return true
+    if (!alunoTurmaRaw) return false
+    const raw = String(alunoTurmaRaw).trim()
+    const prefix = raw.split(' - ')[0].trim()
+    if (prefix === turmaId || raw === turmaId) return true
+    if (selectedTurmaObj) {
+      const tNome = String(selectedTurmaObj.nome || '').trim().toLowerCase()
+      const tCod = String(selectedTurmaObj.codigo || '').trim().toLowerCase()
+      const rawLower = raw.toLowerCase()
+      const prefixLower = prefix.toLowerCase()
+      if (tNome && (rawLower === tNome || prefixLower === tNome || rawLower.endsWith(` - ${tNome}`))) return true
+      if (tCod && (rawLower === tCod || prefixLower === tCod)) return true
+    }
+    return false
+  }
+
   // Filtrar eventos por busca, turma e status
   const filteredEventos = useMemo(() => {
     return eventos.filter((e: any) => {
@@ -71,10 +93,8 @@ function PortariaRelatoriosPageContent() {
         if (e.status !== statusFilter) return false
       }
       // Filtro de Turma
-      if (turmaId) {
-        // e.aluno_turma contêm o ID da turma no formato "ID - Nome" ou "ID"
-        const eventTurmaId = e.aluno_turma ? e.aluno_turma.split(' - ')[0] : ''
-        if (eventTurmaId !== turmaId) return false
+      if (turmaId && !matchesSelectedTurma(e.aluno_turma)) {
+        return false
       }
       // Filtro de Busca por Aluno
       if (buscaAluno) {
@@ -85,7 +105,7 @@ function PortariaRelatoriosPageContent() {
       }
       return true
     })
-  }, [eventos, statusFilter, turmaId, buscaAluno])
+  }, [eventos, statusFilter, turmaId, buscaAluno, selectedTurmaObj])
 
   // Cálculo de Presença & Faltosos (Cross-reference)
   const auditPresenca = useMemo(() => {
@@ -93,8 +113,7 @@ function PortariaRelatoriosPageContent() {
 
     // Obter apenas eventos de sucesso para a turma selecionada na faixa de datas
     const successScans = eventos.filter((e: any) => {
-      const eventTurmaId = e.aluno_turma ? e.aluno_turma.split(' - ')[0] : ''
-      return e.status === 'sucesso' && eventTurmaId === turmaId
+      return e.status === 'sucesso' && matchesSelectedTurma(e.aluno_turma)
     })
 
     const presentes: any[] = []

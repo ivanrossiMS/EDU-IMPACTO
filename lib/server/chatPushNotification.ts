@@ -13,7 +13,7 @@
  *    - Respeita configuração global ad_config.notificacoes.pushMensagemChat
  */
 
-import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
+import { getAdminClient, getAllAuthUsersCached } from '@/lib/server/supabaseAdminSingleton'
 import { sendPushNotification } from '@/lib/server/pushService'
 import { getResponsavelIdsForTargets, getColaboradorIds } from '@/lib/server/notificationHelper'
 import { checkIsCollaboratorOrTeacher } from '@/lib/chatPermissions'
@@ -331,36 +331,50 @@ export async function dispatchChatPushNotification({
         try {
           const { data: respRows } = await supabase
             .from('responsaveis')
-            .select('id, email')
+            .select('id, email, auth_id, dados')
             .in('id', numericRespIds)
+
+          let anyMissingAuthId = false
+          ;(respRows || []).forEach((r: any) => {
+            const directAuthId = r.auth_id || r.dados?.auth_id || r.dados?.user_id
+            if (directAuthId) {
+              familyTargetIds.add(String(directAuthId))
+            } else {
+              anyMissingAuthId = true
+            }
+          })
 
           const emails = (respRows || []).map(r => r.email?.toLowerCase().trim()).filter(Boolean)
           emails.forEach(e => familyTargetIds.add(e))
 
-          if (emails.length > 0) {
-            const { data: sysUsers } = await supabase
-              .from('system_users')
-              .select('id, auth_id, email')
-              .in('email', emails)
+          if (emails.length > 0 || anyMissingAuthId) {
+            if (emails.length > 0) {
+              const { data: sysUsers } = await supabase
+                .from('system_users')
+                .select('id, auth_id, email')
+                .in('email', emails)
 
-            sysUsers?.forEach(su => {
-              if (su.id) familyTargetIds.add(String(su.id))
-              if (su.auth_id) familyTargetIds.add(String(su.auth_id))
-            })
-
-            // Buscar auth.users exclusivamente por email ou responsavel_id específico dos numericRespIds
-            try {
-              const { data: authList } = await supabase.auth.admin.listUsers({ page: 1, perPage: 1000 })
-              authList?.users?.forEach(au => {
-                if (au.email && emails.includes(au.email.toLowerCase().trim())) {
-                  familyTargetIds.add(String(au.id))
-                }
-                const rId = au.user_metadata?.responsavel_id
-                if (rId && numericRespIds.includes(String(rId))) {
-                  familyTargetIds.add(String(au.id))
-                }
+              sysUsers?.forEach(su => {
+                if (su.id) familyTargetIds.add(String(su.id))
+                if (su.auth_id) familyTargetIds.add(String(su.auth_id))
               })
-            } catch (_) {}
+            }
+
+            // Buscar auth.users via cache apenas se algum responsável ainda não tiver auth_id
+            if (anyMissingAuthId) {
+              try {
+                const authUsers = await getAllAuthUsersCached()
+                authUsers.forEach(au => {
+                  if (au.email && emails.includes(au.email.toLowerCase().trim())) {
+                    familyTargetIds.add(String(au.id))
+                  }
+                  const rId = au.user_metadata?.responsavel_id
+                  if (rId && numericRespIds.includes(String(rId))) {
+                    familyTargetIds.add(String(au.id))
+                  }
+                })
+              } catch (_) {}
+            }
           }
         } catch (e) {
           console.warn('[ChatPush] Aviso ao enriquecer aliases familiares:', e)

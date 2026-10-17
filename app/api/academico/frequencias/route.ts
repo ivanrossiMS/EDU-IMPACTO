@@ -1,5 +1,9 @@
 import { NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/server/authGuard'
+import {
+  resolveUserRole,
+  getAuthorizedAlunoIdsForUser,
+  requireAdminOrDirecao,
+} from '@/lib/server/authGuard'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 import { sendAgendaPushNotification } from '@/lib/server/agendaNotifications'
 import { getResponsavelIdsForTargets, getStudentTargetsForComunicados } from '@/lib/server/notificationHelper'
@@ -12,8 +16,8 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 30
 
 export async function GET(request: Request) {
-  const { user, errorResponse } = await requireAuth()
-  if (errorResponse) return errorResponse
+  const { user, isStaff, errorResponse } = await resolveUserRole(request)
+  if (errorResponse || !user) return errorResponse!
 
   const supabase = supabaseServer
   const { searchParams } = new URL(request.url)
@@ -21,6 +25,20 @@ export async function GET(request: Request) {
   const turmaIdsParam = searchParams.get('turma_ids')
   const alunoId = searchParams.get('aluno_id')
   const data = searchParams.get('data')
+
+  const allowedAlunoIds = !isStaff ? await getAuthorizedAlunoIdsForUser(user) : null
+  if (!isStaff) {
+    if (!allowedAlunoIds || allowedAlunoIds.size === 0) {
+      return NextResponse.json([])
+    }
+    if (alunoId) {
+      const clean = String(alunoId).trim()
+      const unpadded = clean.replace(/^0+/, '')
+      if (!allowedAlunoIds.has(clean) && (!unpadded || !allowedAlunoIds.has(unpadded))) {
+        return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 })
+      }
+    }
+  }
   
   let dataInicioVal = searchParams.get('data_inicio')
   let dataFimVal = searchParams.get('data_fim')
@@ -70,7 +88,11 @@ export async function GET(request: Request) {
     if (data) q = q.eq('data', data)
     if (dataInicioVal) q = q.gte('data', dataInicioVal)
     if (dataFimVal) q = q.lte('data', dataFimVal)
-    if (alunoId) q = q.eq('aluno_id', alunoId)
+    if (alunoId) {
+      q = q.eq('aluno_id', alunoId)
+    } else if (!isStaff && allowedAlunoIds) {
+      q = q.in('aluno_id', Array.from(allowedAlunoIds))
+    }
 
     if (turmaId) {
       if (studentIds.length > 0 && studentIds.length <= 100) {
@@ -177,12 +199,36 @@ export async function POST(request: Request) {
   }
 
   try {
+    const mergeExistingAttendanceLogs = async (rowsToSave: any[]) => {
+      if (!rowsToSave.length) return rowsToSave
+      const rowIds = rowsToSave.map(r => r.id).filter(Boolean)
+      if (!rowIds.length) return rowsToSave
+      const { data: existingRows } = await supabaseServer
+        .from('frequencias')
+        .select('id, dados')
+        .in('id', rowIds)
+      if (!existingRows || existingRows.length === 0) return rowsToSave
+      const existingMap = new Map<string, any>(existingRows.map(r => [String(r.id), r.dados || {}]))
+      const preserveKeys = ['saidas', 'entradas', 'totalSaidas', 'totalEntradas', 'saidaHorario', 'saidaResponsavel', 'horaEntrada']
+      return rowsToSave.map(r => {
+        const prevDados = existingMap.get(String(r.id))
+        if (!prevDados) return r
+        const mergedDados: Record<string, any> = { ...(r.dados || {}) }
+        for (const k of preserveKeys) {
+          if (mergedDados[k] === undefined && prevDados[k] !== undefined) {
+            mergedDados[k] = prevDados[k]
+          }
+        }
+        return { ...r, dados: mergedDados }
+      })
+    }
+
     const body = await request.json()
     if (Array.isArray(body)) {
       if (body.length === 0) return NextResponse.json({ ok: true, count: 0 })
       
       const items = body.map(f => buildRow(f, userName, user.id))
-      const rows = items.map(i => i.row)
+      const rows = await mergeExistingAttendanceLogs(items.map(i => i.row))
 
       const { error } = await supabase.from('frequencias').upsert(rows)
       if (error) return NextResponse.json({ error: error.message }, { status: 400 })
@@ -258,7 +304,8 @@ export async function POST(request: Request) {
     }
 
     const item = buildRow(body, userName, user.id)
-    const { data, error } = await supabase.from('frequencias').upsert(item.row).select().single()
+    const [mergedRow] = await mergeExistingAttendanceLogs([item.row])
+    const { data, error } = await supabase.from('frequencias').upsert(mergedRow).select().single()
     if (error) return NextResponse.json({ error: error.message }, { status: 400 })
 
     if (item.notifyPush !== false) {
@@ -318,6 +365,8 @@ export async function DELETE(request: Request) {
   const dataStr = searchParams.get('data')
   
   if (all === 'true') {
+    const { errorResponse: adminErr } = await requireAdminOrDirecao(request)
+    if (adminErr) return adminErr
     const { error } = await supabase.from('frequencias').delete().neq('id', 'non-existent-id')
     if (error) return NextResponse.json({ error: error.message }, { status: 400 })
     return NextResponse.json({ ok: true, message: 'Todos os registros foram excluídos.' })

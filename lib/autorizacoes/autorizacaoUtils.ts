@@ -206,3 +206,51 @@ export function formatarCPF(value: string): string {
   if (digits.length <= 9) return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6)}`
   return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9, 11)}`
 }
+
+export function sanitizeAutorizacaoForViewer(
+  autorizacao: AutorizacaoData | null | undefined,
+  allowedIds: Iterable<string>
+): AutorizacaoData | null {
+  if (!autorizacao) return null
+  const allowedSet = new Set(
+    Array.from(allowedIds || [])
+      .map(id => String(id || '').trim())
+      .filter(Boolean)
+  )
+  const rawRespostas = autorizacao.respostas || {}
+  const sanitizedRespostas: Record<string, AutorizacaoResposta> = {}
+
+  let anonIdx = 0
+  for (const [key, resp] of Object.entries(rawRespostas)) {
+    if (!resp) continue
+    const rUser = String(resp.usuarioId || '').trim()
+    const rAluno = String(resp.alunoId || '').trim()
+    const isOwn =
+      allowedSet.has(key) ||
+      (rUser && allowedSet.has(rUser)) ||
+      (rAluno && allowedSet.has(rAluno)) ||
+      (rUser && rAluno && allowedSet.has(`${rUser}_${rAluno}`))
+
+    if (isOwn) {
+      sanitizedRespostas[key] = resp
+    } else {
+      anonIdx += 1
+      sanitizedRespostas[`anon_${anonIdx}`] = {
+        usuarioId: `anon_${anonIdx}`,
+        usuarioNome: 'Responsável',
+        usuarioFoto: null,
+        usuarioTipo: 'responsavel',
+        opcaoId: resp.opcaoId,
+        opcaoTexto: resp.opcaoTexto,
+        tipoDecisao: resp.tipoDecisao,
+        respondidoEm: resp.respondidoEm
+      }
+    }
+  }
+
+  return {
+    ...autorizacao,
+    respostas: sanitizedRespostas
+  }
+}
+

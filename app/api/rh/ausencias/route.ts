@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server'
-import { requireStaff } from '@/lib/server/authGuard'
+import { requireHrOrAdmin } from '@/lib/server/authGuard'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: Request) {
-  const { errorResponse } = await requireStaff(request)
+  const { errorResponse } = await requireHrOrAdmin(request)
   if (errorResponse) return errorResponse
 
   try {
@@ -25,7 +25,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const { errorResponse } = await requireStaff(request)
+  const { errorResponse } = await requireHrOrAdmin(request)
   if (errorResponse) return errorResponse
 
   try {
@@ -33,14 +33,11 @@ export async function POST(request: Request) {
     const supabase = await createProtectedClient()
 
     if (Array.isArray(body)) {
-      const { data: existing } = await supabase.from('ausencias').select('id')
-      const existingIds = (existing || []).map((r: any) => r.id)
       if (body.length === 0) {
-        if (existingIds.length > 0) {
-          await supabase.from('ausencias').delete().in('id', existingIds)
-        }
         return NextResponse.json({ ok: true, count: 0 })
       }
+      const { data: existing } = await supabase.from('ausencias').select('id')
+      const existingIds = (existing || []).map((r: any) => r.id)
       const rows = body.map(buildRowAuth)
       const incomingIds = new Set(rows.map((r: any) => r.id))
       const toDelete = existingIds.filter((id: string) => !incomingIds.has(id))

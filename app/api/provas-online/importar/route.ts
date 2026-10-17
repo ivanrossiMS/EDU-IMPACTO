@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/server/authGuard'
+import { requireStaff } from '@/lib/server/authGuard'
 import { createClient } from '@supabase/supabase-js'
 import { parseDocx, parsePdf, parseQuestionsFromText } from '@/lib/server/docxMathParser'
 import {
@@ -86,7 +86,7 @@ async function tryUploadImageToStorage(
 }
 
 export async function POST(request: Request) {
-  const { user, errorResponse } = await requireAuth(request)
+  const { errorResponse } = await requireStaff(request)
   if (errorResponse) return errorResponse
 
   let supabase: any = null

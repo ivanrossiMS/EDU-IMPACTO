@@ -88,13 +88,21 @@ export async function GET(request: Request) {
       
       // Camada C: Deduplicação Semântica (Mesmo valor, data, pessoa, descrição)
       // Resolvemos o problema de IDs gerados diferentes para a mesma entidade.
-      // Ex: "receita|José Fernando|Mensalidade - INTEGRAL|107.92|2026-04-10"
-      const semFingerprint = `${row.tipo}|${(row.alunoResponsavel||'').trim().toLowerCase()}|${(row.descricao||'').trim().toLowerCase()}|${Number(row.valorEsperado).toFixed(2)}|${row.dataVencimento}`
+      // Inclui alunoId quando disponível em ambos os lados ou distingue irmãos que compartilham o mesmo responsável.
+      const baseFingerprint = `${row.tipo}|${(row.alunoResponsavel||'').trim().toLowerCase()}|${(row.descricao||'').trim().toLowerCase()}|${Number(row.valorEsperado).toFixed(2)}|${row.dataVencimento}`
+      const studentFingerprint = row.alunoId
+        ? `${row.tipo}|aluno:${String(row.alunoId).trim().toLowerCase()}|${(row.descricao||'').trim().toLowerCase()}|${Number(row.valorEsperado).toFixed(2)}|${row.dataVencimento}`
+        : null
       
-      if (semanticFingerprints.has(semFingerprint)) return // Já temos uma conta exata como esta!
+      if (studentFingerprint && semanticFingerprints.has(studentFingerprint)) return
+      if (!row.alunoId && semanticFingerprints.has(baseFingerprint)) return
+      // Se o título original não tinha alunoId mas tinha o nome do aluno em alunoResponsavel, bloqueia duplicata da parcela do mesmo aluno
+      if (row.alunoId && semanticFingerprints.has(`${baseFingerprint}|no_aluno_id`)) return
 
       idsJaVistos.add(row.id)
-      semanticFingerprints.add(semFingerprint)
+      semanticFingerprints.add(baseFingerprint)
+      if (!row.alunoId) semanticFingerprints.add(`${baseFingerprint}|no_aluno_id`)
+      if (studentFingerprint) semanticFingerprints.add(studentFingerprint)
       rows.push(row)
     }
 
@@ -183,6 +191,7 @@ export async function GET(request: Request) {
         dataVencimento:   parsed.vencimento,
         dataPagamento:    parsed.pagamento || null,
         status:           statusFinal,
+        alunoId:          parsed.aluno_id || parsed.alunoId || '',
         alunoResponsavel: parsed.aluno || parsed.responsavel || parsed.alunoNome || '',
         formaPagamento:   parsed.metodo || parsed.formaPagamento || null,
         documento:        parsed.nossoNumero || parsed.numeroDocumento || '',
@@ -277,6 +286,7 @@ export async function GET(request: Request) {
         dataVencimento:   dataRef,
         dataPagamento:    dataRef,
         status:           'pago',
+        alunoId:          parsed.aluno_id || parsed.alunoId || '',
         alunoResponsavel: parsed.fornecedorNome || parsed.nomeAluno || parsed.aluno || nomeParenteses || '',
         formaPagamento:   parsed.forma_pagamento || parsed.formaPagamento || parsed.metodo || null,
         documento:        parsed.numeroDocumento || parsed.tipoDocumento || '',
@@ -290,10 +300,6 @@ export async function GET(request: Request) {
     for (const aluno of alunos as any[]) {
       const dados    = aluno.dados || {}
       const parcelas: any[] = dados.parcelas || []
-      
-      if (parcelas.length > 0) {
-        console.log(`[DRE-DEBUG] Aluno ${aluno.nome} has ${parcelas.length} parcelas`)
-      }
 
       const nomeAluno =
         aluno.nome      ||
@@ -321,10 +327,7 @@ export async function GET(request: Request) {
         if (candidates.some(c => fingerprints_titulos.has(c))) continue
 
         const vencISO = brDateToISO(p.vencimento || '')
-        if (!vencISO) {
-          console.log(`[DRE-DEBUG] Dropped parcela ${p.descricao} because no vencISO`)
-          continue
-        }
+        if (!vencISO) continue
 
         // Filtro de período:
         if (por === 'pagamento') {
@@ -332,22 +335,14 @@ export async function GET(request: Request) {
             const dtPagISO = brDateToISO(p.dtPagto || '')
             if (!dtPagISO || !isInRange(dtPagISO)) continue
           } else {
-            if (!isInRange(vencISO)) {
-              console.log(`[DRE-DEBUG] Dropped pending parcela ${p.descricao} - vencISO ${vencISO} not in range ${dataInicio} to ${dataFim}`)
-              continue
-            }
+            if (!isInRange(vencISO)) continue
           }
         } else {
-          if (!isInRange(vencISO)) {
-             console.log(`[DRE-DEBUG] Dropped parcela ${p.descricao} - vencISO ${vencISO} not in range ${dataInicio} to ${dataFim}`)
-             continue
-          }
+          if (!isInRange(vencISO)) continue
         }
 
         const uid = p.parcelaId || `${aluno.id}-p${p.num}-${p.evento || 'ms'}`
         const parteRelacionada = nomeAluno || nomeResponsavel || ''
-        
-        console.log(`[DRE-DEBUG] Pushing raw parcela: ${p.evento || p.descricao} | value: ${p.valorFinal ?? p.valor} | st: ${st} | uid: ${uid}`)
 
         safePush({
           id:               uid,
@@ -363,6 +358,7 @@ export async function GET(request: Request) {
           dataVencimento:   vencISO,
           dataPagamento:    st === 'pago' ? (brDateToISO(p.dtPagto || '') || vencISO) : null,
           status:           st === 'vencido' ? 'pendente' : st,
+          alunoId:          aluno.id || '',
           alunoResponsavel: parteRelacionada,
           formaPagamento:   p.formaPagto || null,
           documento:        p.codigo || p.codBaixa || '',

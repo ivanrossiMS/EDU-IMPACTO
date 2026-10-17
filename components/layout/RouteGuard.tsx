@@ -298,12 +298,12 @@ export function RouteGuard({ children }: { children: React.ReactNode }) {
     return () => clearTimeout(timer)
   }, [currentUserPerfil, pathname])
 
-  // Safety timeout: force continuation after 1.5s even if perfis is taking long
+  // Safety timeout: force continuation after 4.5s even if perfis is taking long
   useEffect(() => {
     if (perfisLoading) {
       const timer = setTimeout(() => {
         setIsPerfisLoadingTimeout(true)
-      }, 1500)
+      }, 4500)
       return () => clearTimeout(timer)
     } else {
       setIsPerfisLoadingTimeout(false)
@@ -340,6 +340,8 @@ export function RouteGuard({ children }: { children: React.ReactNode }) {
     (currentUser?.cargo && (p.nome === currentUser.cargo || normalize(p.nome) === normalize(currentUser.cargo)))
   )
   const userPerms = userPerfilObj?.permissoes || []
+  const isFamilyOrStudentUser = ['familia', 'aluno', 'responsavel'].includes(normalize(activePerfilName))
+  const perfisFailedOrEmpty = (!perfis || perfis.length === 0) && !userPerfilObj && !isFamilyOrStudentUser
 
   // ── Step 2.4: Check for CredImpacto Module Access ──
   const isCredImpactoRoute = pathname.startsWith('/credimpacto')
@@ -425,7 +427,7 @@ export function RouteGuard({ children }: { children: React.ReactNode }) {
   }
 
   // ── Step 3: If route is protected and not in permissions → deny ───────────
-  if (matchedRoute && !userPerms.includes(matchedRoute)) {
+  if (matchedRoute && !userPerms.includes(matchedRoute) && !perfisFailedOrEmpty) {
     if (!showDenied) {
       return (
         <div style={{

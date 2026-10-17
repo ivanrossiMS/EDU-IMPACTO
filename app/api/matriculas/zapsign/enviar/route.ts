@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/server/authGuard'
+import { requireStaff } from '@/lib/server/authGuard'
 import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 import { gerarContratoPdf } from '@/lib/contracts/contractPdfGenerator'
 import { ContractDataModel } from '@/lib/contracts/contractTemplates'
@@ -25,7 +25,7 @@ function cleanPdfBase64(raw: string): string {
 }
 
 export async function POST(request: Request) {
-  const { user, errorResponse } = await requireAuth()
+  const { user, errorResponse } = await requireStaff(request)
   if (errorResponse) return errorResponse
 
   try {

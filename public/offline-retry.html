@@ -132,13 +132,25 @@
         if (controller) controller.abort();
       }, 4500);
 
+      var isSameOrigin = typeof window !== "undefined" && window.location && window.location.origin.indexOf("impacto-edu.net") !== -1;
       fetch(TARGET_URL + "manifest.webmanifest?_t=" + Date.now(), {
-        mode: "no-cors",
+        mode: isSameOrigin ? "same-origin" : "no-cors",
         cache: "no-store",
         signal: controller ? controller.signal : undefined
       })
-        .then(function () {
+        .then(function (res) {
           clearTimeout(timeoutId);
+          if (isSameOrigin && (!res || !res.ok)) {
+            throw new Error("HTTP " + (res ? res.status : "error"));
+          }
+          try {
+            var lastRedir = Number(sessionStorage.getItem("edu_offline_last_redirect") || "0");
+            if (!manual && Date.now() - lastRedir < 8000) {
+              isChecking = false;
+              return;
+            }
+            sessionStorage.setItem("edu_offline_last_redirect", String(Date.now()));
+          } catch (e) {}
           if (statusEl) statusEl.textContent = "Conexão restabelecida! Abrindo...";
           window.location.replace(TARGET_URL);
         })

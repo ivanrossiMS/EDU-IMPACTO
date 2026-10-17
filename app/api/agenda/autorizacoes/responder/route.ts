@@ -8,7 +8,8 @@ import {
   generateDigitalSignatureHash,
   formatDateTimeBR,
   validarCPF,
-  formatarCPF
+  formatarCPF,
+  sanitizeAutorizacaoForViewer
 } from '@/lib/autorizacoes/autorizacaoUtils'
 
 export const dynamic = 'force-dynamic'
@@ -247,9 +248,13 @@ export async function POST(request: Request) {
       })
     } catch (_) {}
 
+    const responseAutorizacao = isStaff
+      ? updatedAutorizacao
+      : (sanitizeAutorizacaoForViewer(updatedAutorizacao, [effectiveUserId, String(user.id), String(alunoId || ''), voterKey]) || updatedAutorizacao)
+
     return NextResponse.json({
       ok: true,
-      autorizacao: updatedAutorizacao,
+      autorizacao: responseAutorizacao,
       userResposta: newResposta
     })
   } catch (err: any) {

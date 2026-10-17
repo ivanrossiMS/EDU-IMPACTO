@@ -1,19 +1,39 @@
 import { NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/server/authGuard'
+import { requireStaff, resolveUserRole, getAuthorizedAlunoIdsForUser } from '@/lib/server/authGuard'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 import { getLoggedUserAccessStartDate } from '@/lib/server/visibility'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: Request) {
-  const { user, errorResponse } = await requireAuth()
-  if (errorResponse) return errorResponse
+  const roleCtx = await resolveUserRole(request)
+  if (roleCtx.errorResponse) return roleCtx.errorResponse
+  const { user, isStaff } = roleCtx
+
+  let allowedAlunoIds: Set<string> | null = null
+  if (!isStaff) {
+    allowedAlunoIds = await getAuthorizedAlunoIdsForUser(user)
+    if (allowedAlunoIds.size === 0) {
+      return NextResponse.json([], {
+        headers: {
+          'Cache-Control': 'private, no-cache',
+          'X-Total-Count': '0',
+          'X-Page': '1',
+          'X-Limit': '1000',
+        },
+      })
+    }
+  }
 
   const supabase = await createProtectedClient();
   const { searchParams } = new URL(request.url)
   const status = searchParams.get('status')
   const alunoId = searchParams.get('alunoId')
   const q = searchParams.get('q')
+
+  if (allowedAlunoIds && alunoId && !allowedAlunoIds.has(String(alunoId))) {
+    return NextResponse.json({ error: 'Acesso negado aos títulos deste aluno.' }, { status: 403 })
+  }
 
   const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10))
   const limitParam = searchParams.get('limit')
@@ -28,8 +48,29 @@ export async function GET(request: Request) {
   }
 
   if (status && status !== 'Todos' && status !== 'todos') query = query.eq('status', status)
-  if (alunoId) query = query.or(`aluno.eq.${alunoId},dados->>alunoId.eq.${alunoId},dados->>aluno_id.eq.${alunoId}`)
-  if (q) query = query.or(`aluno.ilike.%${q}%,descricao.ilike.%${q}%,codigo.ilike.%${q}%`)
+  if (alunoId) {
+    const safeId = alunoId.replace(/[^A-Za-z0-9_-]/g, '')
+    if (safeId) {
+      query = query.or(`aluno.eq.${safeId},aluno_id.eq.${safeId},dados->>alunoId.eq.${safeId},dados->>aluno_id.eq.${safeId}`)
+    }
+  } else if (allowedAlunoIds) {
+    const safeIds = Array.from(allowedAlunoIds)
+      .map(id => id.replace(/[^A-Za-z0-9_-]/g, ''))
+      .filter(Boolean)
+    if (safeIds.length > 0) {
+      const orParts = safeIds.flatMap(id => [
+        `aluno.eq.${id}`,
+        `aluno_id.eq.${id}`,
+        `dados->>alunoId.eq.${id}`,
+        `dados->>aluno_id.eq.${id}`,
+      ])
+      query = query.or(orParts.join(','))
+    }
+  }
+  if (q) {
+    const safeQ = q.replace(/[%_().,]/g, '')
+    if (safeQ) query = query.or(`aluno.ilike.%${safeQ}%,descricao.ilike.%${safeQ}%,codigo.ilike.%${safeQ}%`)
+  }
 
   query = query.order('vencimento', { ascending: false })
   if (!all) {
@@ -41,7 +82,7 @@ export async function GET(request: Request) {
   const { data, count, error } = await query
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  const result = (data || []).map(row => ({
+  const mapped = (data || []).map(row => ({
     ...row,
     ...(row.dados_bancarios || {}),
     ...(row.dados || {}),
@@ -51,10 +92,16 @@ export async function GET(request: Request) {
     eventoDescricao: row.evento_descricao ?? row.dados?.eventoDescricao ?? row.dados?.evento_descricao,
     dataNascimento: row.data_nascimento ?? row.dados?.dataNascimento,
   }))
+  const result = allowedAlunoIds
+    ? mapped.filter(r => {
+        const candidateId = String(r.alunoId || r.aluno_id || r.aluno || '')
+        return candidateId && allowedAlunoIds!.has(candidateId)
+      })
+    : mapped
   return NextResponse.json(result, {
     headers: {
       'Cache-Control': 'private, no-cache',
-      'X-Total-Count': String(count ?? result.length),
+      'X-Total-Count': String(allowedAlunoIds ? result.length : (count ?? result.length)),
       'X-Page': String(page),
       'X-Limit': String(limit)
     }
@@ -62,7 +109,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const { user, errorResponse } = await requireAuth()
+  const { user, errorResponse } = await requireStaff(request)
   if (errorResponse) return errorResponse
 
   const supabase = await createProtectedClient();

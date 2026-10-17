@@ -3,7 +3,7 @@
 import { useEffect, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useChatStore } from '@/lib/chatStore'
-import { appendCachedMessage, updateCachedMessage, removeCachedMessage } from '@/lib/chatMessagesCache'
+import { getCachedMessages, appendCachedMessage, updateCachedMessage, removeCachedMessage } from '@/lib/chatMessagesCache'
 import { playWhatsAppReceiveSound } from '@/lib/chatAudio'
 import { useApp } from '@/lib/context'
 import { toast } from 'sonner'
@@ -107,10 +107,14 @@ export function useChatRealtime(alunoId?: string) {
           },
           (payload: any) => {
             const newMsg = payload.new
-            if (!newMsg) return
+            if (!newMsg || !newMsg.conversation_id) return
 
-            // Atualiza cache em segundo plano para abertura em 0ms
-            if (newMsg.conversation_id) {
+            const isKnownOrActive =
+              globalChatContext.activeConvId === newMsg.conversation_id ||
+              Boolean(getCachedMessages(newMsg.conversation_id))
+
+            // Atualiza cache em segundo plano apenas para conversas pertencentes/já abertas pelo usuário
+            if (isKnownOrActive) {
               appendCachedMessage(newMsg.conversation_id, newMsg)
             }
 
@@ -152,7 +156,11 @@ export function useChatRealtime(alunoId?: string) {
             const updatedMsg = payload.new
             if (!updatedMsg) return
 
-            if (updatedMsg.conversation_id) {
+            const isKnownOrActive =
+              globalChatContext.activeConvId === updatedMsg.conversation_id ||
+              Boolean(getCachedMessages(updatedMsg.conversation_id))
+
+            if (updatedMsg.conversation_id && isKnownOrActive) {
               if (updatedMsg.is_deleted) {
                 removeCachedMessage(updatedMsg.conversation_id, updatedMsg.id)
               } else {
@@ -160,11 +168,13 @@ export function useChatRealtime(alunoId?: string) {
               }
             }
 
-            if (updatedMsg.is_deleted) {
-              window.dispatchEvent(new CustomEvent('chat:message-deleted', { detail: updatedMsg }))
-              window.dispatchEvent(new CustomEvent('chat:conversation-updated', { detail: updatedMsg }))
-            } else {
-              window.dispatchEvent(new CustomEvent('chat:message-updated', { detail: updatedMsg }))
+            if (isKnownOrActive) {
+              if (updatedMsg.is_deleted) {
+                window.dispatchEvent(new CustomEvent('chat:message-deleted', { detail: updatedMsg }))
+                window.dispatchEvent(new CustomEvent('chat:conversation-updated', { detail: updatedMsg }))
+              } else {
+                window.dispatchEvent(new CustomEvent('chat:message-updated', { detail: updatedMsg }))
+              }
             }
           }
         )
@@ -179,12 +189,18 @@ export function useChatRealtime(alunoId?: string) {
             const deletedMsg = payload.old
             if (!deletedMsg) return
 
-            if (deletedMsg.conversation_id) {
+            const isKnownOrActive =
+              globalChatContext.activeConvId === deletedMsg.conversation_id ||
+              Boolean(getCachedMessages(deletedMsg.conversation_id))
+
+            if (deletedMsg.conversation_id && isKnownOrActive) {
               removeCachedMessage(deletedMsg.conversation_id, deletedMsg.id)
             }
 
-            window.dispatchEvent(new CustomEvent('chat:message-deleted', { detail: deletedMsg }))
-            window.dispatchEvent(new CustomEvent('chat:conversation-updated', { detail: deletedMsg }))
+            if (isKnownOrActive) {
+              window.dispatchEvent(new CustomEvent('chat:message-deleted', { detail: deletedMsg }))
+              window.dispatchEvent(new CustomEvent('chat:conversation-updated', { detail: deletedMsg }))
+            }
           }
         )
         .subscribe()

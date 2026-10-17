@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { resolveUserRole } from '@/lib/server/authGuard'
 import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 import { EnqueteData, EnqueteVoto } from '@/lib/enquetes/types'
-import { getVoterKey, isEnqueteClosed } from '@/lib/enquetes/enqueteUtils'
+import { getVoterKey, isEnqueteClosed, sanitizeEnqueteForViewer } from '@/lib/enquetes/enqueteUtils'
 
 export const dynamic = 'force-dynamic'
 
@@ -182,9 +182,13 @@ export async function POST(request: Request) {
       })
     } catch (_) {}
 
+    const responseEnquete = isStaff
+      ? updatedEnquete
+      : (sanitizeEnqueteForViewer(updatedEnquete, [effectiveUserId, String(user.id), String(alunoId || ''), voterKey]) || updatedEnquete)
+
     return NextResponse.json({
       ok: true,
-      enquete: updatedEnquete,
+      enquete: responseEnquete,
       userVote: newVote
     })
   } catch (err: any) {

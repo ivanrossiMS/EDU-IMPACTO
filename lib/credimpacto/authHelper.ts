@@ -56,22 +56,23 @@ export async function resolveCredImpactoUser(authUser: any): Promise<ResolvedUse
       if (func2) dbFunc = func2
     }
 
-    // Se ainda não achou e temos nome confiável
-    if (!dbFunc && (dbUser?.nome || authUser.user_metadata?.nome)) {
-      const targetName = (dbUser?.nome || authUser.user_metadata?.nome || '').trim()
+    // Se ainda não achou e temos nome confiável vindo do registro em system_users (não de user_metadata editável)
+    if (!dbFunc && dbUser?.nome) {
+      const targetName = String(dbUser.nome || '').trim()
       if (targetName) {
         const { data: func3 } = await sb
           .from('funcionarios')
           .select('*')
           .ilike('nome', targetName)
-          .limit(1)
-        if (Array.isArray(func3) && func3.length > 0) dbFunc = func3[0]
+          .limit(2)
+        // Somente vincula por nome quando houver exatamente 1 homônimo
+        if (Array.isArray(func3) && func3.length === 1) dbFunc = func3[0]
       }
     }
   } catch (e) {}
 
-  const perfil = dbUser?.perfil || authUser.user_metadata?.perfil || 'Colaborador'
-  const cargo = dbFunc?.cargo || dbUser?.cargo || authUser.user_metadata?.cargo || 'Colaborador'
+  const perfil = dbUser?.perfil || 'Colaborador'
+  const cargo = dbFunc?.cargo || dbUser?.cargo || 'Colaborador'
   const nome = dbFunc?.nome || dbUser?.nome || authUser.user_metadata?.nome || email.split('@')[0]
   const cpf = dbFunc?.cpf || dbUser?.cpf || authUser.user_metadata?.cpf || ''
   const matricula = dbFunc?.codigo || authUser.user_metadata?.matricula || ''
@@ -89,7 +90,8 @@ export async function resolveCredImpactoUser(authUser: any): Promise<ResolvedUse
     ''
   const salarioBase = dbFunc?.salario ? Number(dbFunc.salario) : (dbFunc?.dados?.salario ? Number(dbFunc.dados.salario) : undefined)
 
-  const isAdminOrFinance = isCredImpactoAdmin(perfil, cargo)
+  // Privilégio de gestão deve vir exclusivamente do banco (system_users / funcionarios), nunca de user_metadata
+  const isAdminOrFinance = isCredImpactoAdmin(dbUser?.perfil, dbFunc?.cargo || dbUser?.cargo)
 
   return {
     id: uid,
@@ -110,7 +112,7 @@ export async function resolveCredImpactoUser(authUser: any): Promise<ResolvedUse
 
 /**
  * Verifica de forma resiliente se um empréstimo (ou payload de evento Realtime)
- * pertence ao usuário autenticado (por Auth ID, Funcionario ID, SystemUser ID, Email, CPF ou Nome).
+ * pertence ao usuário autenticado (por Auth ID, Funcionario ID, SystemUser ID, Email ou CPF).
  */
 export function isLoanOwnedByUser(
   loan: {
@@ -161,7 +163,14 @@ export function isLoanOwnedByUser(
     return true
   }
 
+  // Fallback por nome apenas para registros legados que não possuem ID, e-mail nem CPF
+  const hasStrongIdentifier = Boolean(
+    loan.colaboradorId ||
+    loan.colaboradorEmail ||
+    (loanCpf && loanCpf.length === 11 && loanCpf !== '00000000000')
+  )
   if (
+    !hasStrongIdentifier &&
     loan.colaboradorNome &&
     user.nome &&
     cleanStr(loan.colaboradorNome) === cleanStr(user.nome)

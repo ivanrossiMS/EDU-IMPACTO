@@ -4,12 +4,12 @@
  * Valida os dados de emissão sem emitir o boleto
  */
 import { NextRequest, NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/server/authGuard'
+import { requireStaff } from '@/lib/server/authGuard'
 import { validarEmissao } from '@/lib/banking/validacao'
 import type { TituloEmissaoInput, ConvenioBancario } from '@/lib/banking/types'
 
 export async function POST(req: NextRequest) {
-  const { user, errorResponse } = await requireAuth()
+  const { user, errorResponse } = await requireStaff(req)
   if (errorResponse) return errorResponse
 
   try {

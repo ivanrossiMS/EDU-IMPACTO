@@ -1,13 +1,20 @@
 import { supabaseServer as supabase } from '@/lib/supabaseServer'
 import { createClient } from '@supabase/supabase-js'
 import { syncStudentToDevices } from '@/lib/portariaSync'
-import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
+import { getAdminClient, findAuthUserByEmail, invalidateAuthUsersCache } from '@/lib/server/supabaseAdminSingleton'
 import { v4 as uuidv4 } from 'uuid'
 import { NextResponse } from 'next/server'
-import { requireAuth, requireProfile, requireStaff, resolveUserRole } from '@/lib/server/authGuard'
+import {
+  requireAuth,
+  requireProfile,
+  requireStaff,
+  resolveUserRole,
+  getAuthorizedAlunoIdsForUser,
+  clearAuthGuardCache,
+} from '@/lib/server/authGuard'
 import { isValidStudentPhoto } from '@/lib/utils'
 import { isAlunoCursandoTurma, isAlunoIntegralIntermediario } from '@/lib/studentTurmaUtils'
-import { invalidateAlunosCache, getCachedTurmasAndGrupos } from '@/lib/server/turmasGruposCache'
+import { invalidateAlunosCache, invalidateGruposCache, getCachedTurmasAndGrupos } from '@/lib/server/turmasGruposCache'
 
 export const dynamic = 'force-dynamic'
 
@@ -61,8 +68,8 @@ function isSamePerson(r1: any, r2: any): boolean {
 
 // ─── GET: Listar alunos ──────────────────────────────────────────────────────
 export async function GET(request: Request) {
-  const { user, errorResponse } = await requireAuth()
-  if (errorResponse) return errorResponse
+  const { user, isStaff, errorResponse } = await resolveUserRole(request)
+  if (errorResponse || !user) return errorResponse!
 
   try {
     const url = new URL(request.url)
@@ -107,6 +114,14 @@ export async function GET(request: Request) {
     let query = supabase
       .from('alunos')
       .select(queryFields as any, { count: 'exact' })
+
+    if (!isStaff) {
+      const allowedAlunoIds = await getAuthorizedAlunoIdsForUser(user)
+      if (!allowedAlunoIds || allowedAlunoIds.size === 0) {
+        return NextResponse.json({ data: [], total: 0, page, limit })
+      }
+      query = query.in('id', Array.from(allowedAlunoIds))
+    }
 
     if (search) {
       // Busca por nome, ID, matricula, e-mail, CPF ou RGA
@@ -1357,11 +1372,17 @@ export async function PUT(request: Request) {
       if (!isOwner) {
         return NextResponse.json({ error: 'Acesso negado. Você só pode atualizar dados de alunos vinculados à sua conta.' }, { status: 403 })
       }
-      // Nunca permitir que um aluno/responsável altere status, turma, bolsa ou parcelas
+      // Nunca permitir que um aluno/responsável altere status, turma, matrícula, financeiro ou indicadores acadêmicos
       row.status = existingStudent.status
       row.turma = existingStudent.turma
       row.serie = existingStudent.serie
       row.turno = existingStudent.turno
+      row.matricula = existingStudent.matricula
+      row.inadimplente = existingStudent.inadimplente
+      row.risco_evasao = existingStudent.risco_evasao
+      row.media = existingStudent.media
+      row.frequencia = existingStudent.frequencia
+      row.obs = existingStudent.obs
       if (row.dados) {
         delete row.dados.status
         delete row.dados.turma
@@ -1369,6 +1390,14 @@ export async function PUT(request: Request) {
         delete row.dados.bolsa
         delete row.dados.desconto
         delete row.dados.parcelas
+        delete row.dados.autorizadoSairSozinho
+        delete row.dados.inadimplente
+        delete row.dados.risco_evasao
+        delete row.dados.media
+        delete row.dados.frequencia
+        delete row.dados.obs
+        delete row.dados.codigo
+        delete row.dados.matricula
       }
     }
 
@@ -1540,8 +1569,10 @@ export async function PUT(request: Request) {
     const savedStudent = studentData?.[0]
     if (!savedStudent) throw new Error('Aluno não encontrado ou não atualizado')
 
-    // 2. Salvar responsáveis e vínculos (mesma lógica do POST)
-    const responsaveis = (body.responsaveis || body._responsaveis || []).filter((r: any) => r.nome && r.nome.trim() !== '')
+    // 2. Salvar responsáveis e vínculos (mesma lógica do POST, restrito a colaboradores)
+    const responsaveis = (isStaff && !isFamilyOrStudent)
+      ? (body.responsaveis || body._responsaveis || []).filter((r: any) => r.nome && r.nome.trim() !== '')
+      : []
     const validColumns = ['id', 'nome', 'data_nasc', 'email', 'telefone', 'celular', 'profissao', 'estado_civil', 'rfid', 'codigo', 'dias_acesso', 'proibido', 'dados']
     const savedRespIds: string[] = []
 
@@ -1707,8 +1738,8 @@ export async function PUT(request: Request) {
       if (linkError) throw new Error(`Erro ao vincular responsável ${resp.nome} ao aluno: ${linkError.message}`)
     }
 
-    // 3. Desvincular responsáveis que foram removidos
-    if (Array.isArray(body.responsaveis) || Array.isArray(body._responsaveis)) {
+    // 3. Desvincular responsáveis que foram removidos (apenas quando editado por colaboradores)
+    if (isStaff && !isFamilyOrStudent && (Array.isArray(body.responsaveis) || Array.isArray(body._responsaveis))) {
       const studentRefs = [
         savedStudent.id,
         savedStudent.matricula,
@@ -1877,6 +1908,7 @@ export async function PUT(request: Request) {
     }
 
     invalidateAlunosCache()
+    invalidateGruposCache()
     return NextResponse.json(savedStudent)
   } catch (e: any) {
     console.error(`[${new Date().toISOString()}] Error Alunos PUT: ${e.message}\n`)
@@ -1900,30 +1932,48 @@ export async function DELETE(request: Request) {
 
     const supabaseAdmin = getAdminClient()
 
-    // Helper to delete an auth user safely — busca direta por email (evita listUsers)
+    const isFamilyOnlySystemUser = (sysRow: any): boolean => {
+      if (!sysRow) return true
+      const rawRole = String(sysRow.perfil || sysRow.cargo || sysRow.dados?.perfil || sysRow.dados?.cargo || '')
+        .trim()
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+      if (!rawRole) return true
+      return ['responsavel', 'aluno', 'pai', 'mae', 'familia'].includes(rawRole)
+    }
+
+    // Helper to delete an auth user safely — usa findAuthUserByEmail e protege contas de colaboradores
     const deleteAuthUserByEmailOrMeta = async (email: string, metadataKey: string, metadataValue: string) => {
       try {
-        // Tenta busca por email diretamente
         if (email) {
-          const { data: { users: byEmail } } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 10 })
-          // Filtro local apenas na página pequena — na prática a escola tem poucos deletions
-          // A busca completa só ocorre quando metadataKey é passado
-          const byExactEmail = byEmail?.filter(u => u.email?.toLowerCase() === email.toLowerCase()) || []
-          for (const user of byExactEmail) {
-            await supabaseAdmin.auth.admin.deleteUser(user.id)
+          const cleanEmail = email.trim().toLowerCase()
+          const { data: sysRows } = await supabaseAdmin
+            .from('system_users')
+            .select('id, auth_id, perfil, cargo, dados')
+            .ilike('email', cleanEmail)
+          const hasStaffAccount = (sysRows || []).some(r => !isFamilyOnlySystemUser(r))
+          if (hasStaffAccount) {
+            return
+          }
+          const foundUser = await findAuthUserByEmail(cleanEmail)
+          if (foundUser?.id) {
+            await supabaseAdmin.auth.admin.deleteUser(foundUser.id).catch(() => {})
           }
         }
         // Fallback: busca por metadata (ex: aluno_id, responsavel_id)
         if (metadataKey && metadataValue) {
-          // Usar system_users como índice para localizar o auth user ID
           const { data: sysUser } = await supabaseAdmin
             .from('system_users')
-            .select('id')
+            .select('id, auth_id, perfil, cargo, dados')
             .or(`dados->>${metadataKey}.eq.${metadataValue},${metadataKey}.eq.${metadataValue}`)
             .limit(1)
             .maybeSingle()
-          if (sysUser?.id) {
-            await supabaseAdmin.auth.admin.deleteUser(sysUser.id).catch(() => {})
+          if (sysUser && isFamilyOnlySystemUser(sysUser)) {
+            const targetAuthId = sysUser.auth_id || sysUser.id
+            if (targetAuthId) {
+              await supabaseAdmin.auth.admin.deleteUser(targetAuthId).catch(() => {})
+            }
           }
         }
       } catch (err: any) {
@@ -1976,11 +2026,25 @@ export async function DELETE(request: Request) {
             // Delete from public.responsaveis if no links left at all
             await supabaseAdmin.from('responsaveis').delete().eq('id', respId)
 
-            // Delete from public.system_users
+            // Delete from public.system_users SOMENTE se não for colaborador da escola
             if (guardianEmail) {
-              await supabaseAdmin.from('system_users').delete().eq('email', guardianEmail)
+              const { data: sysRows } = await supabaseAdmin
+                .from('system_users')
+                .select('id, perfil, cargo, dados')
+                .ilike('email', guardianEmail)
+              const familySysIds = (sysRows || []).filter(isFamilyOnlySystemUser).map(r => r.id)
+              if (familySysIds.length > 0) {
+                await supabaseAdmin.from('system_users').delete().in('id', familySysIds)
+              }
             }
-            await supabaseAdmin.from('system_users').delete().filter('dados->>responsavel_id', 'eq', respId)
+            const { data: byRespIdRows } = await supabaseAdmin
+              .from('system_users')
+              .select('id, perfil, cargo, dados')
+              .filter('dados->>responsavel_id', 'eq', respId)
+            const familyRespSysIds = (byRespIdRows || []).filter(isFamilyOnlySystemUser).map(r => r.id)
+            if (familyRespSysIds.length > 0) {
+              await supabaseAdmin.from('system_users').delete().in('id', familyRespSysIds)
+            }
           }
 
           // If no links left at all, OR remaining links are NOT financial or pedagogical (e.g. only 'Outro')
@@ -2126,9 +2190,16 @@ export async function DELETE(request: Request) {
         }
       }
 
-      // 9. Clean up student credentials
+      // 9. Clean up student credentials (somente registros de perfil Aluno/Família)
       if (studentEmail) {
-        await supabaseAdmin.from('system_users').delete().eq('email', studentEmail)
+        const { data: sysRows } = await supabaseAdmin
+          .from('system_users')
+          .select('id, perfil, cargo, dados')
+          .ilike('email', studentEmail)
+        const familySysIds = (sysRows || []).filter(isFamilyOnlySystemUser).map(r => r.id)
+        if (familySysIds.length > 0) {
+          await supabaseAdmin.from('system_users').delete().in('id', familySysIds)
+        }
       }
       await supabaseAdmin.from('system_users').delete().filter('dados->>aluno_id', 'eq', studentId)
 
@@ -2146,7 +2217,6 @@ export async function DELETE(request: Request) {
       )
     }
 
-    invalidateAlunosCache()
     if (all) {
       // Get all student IDs in the database
       const { data: allStudents, error: fetchAllError } = await supabaseAdmin
@@ -2164,9 +2234,17 @@ export async function DELETE(request: Request) {
         await Promise.all(chunk.map(studentId => deleteSingleStudent(studentId)))
       }
       
+      invalidateAlunosCache()
+      invalidateGruposCache()
+      clearAuthGuardCache()
+      invalidateAuthUsersCache()
       return NextResponse.json({ ok: true, count: studentIds.length })
     } else if (id) {
       await deleteSingleStudent(id)
+      invalidateAlunosCache()
+      invalidateGruposCache()
+      clearAuthGuardCache()
+      invalidateAuthUsersCache()
       return NextResponse.json({ ok: true })
     }
 

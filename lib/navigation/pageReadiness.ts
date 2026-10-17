@@ -51,8 +51,8 @@ function isBackgroundFireAndForgetUrl(urlStr: string, method: string): boolean {
   ) {
     return true
   }
-  // Leituras de chamadas de portaria em background (polling periódico) não devem travar se já passou o boot
-  if (method !== 'GET' && !urlStr.includes('/api/provas-online') && !urlStr.includes('/api/agenda')) {
+  // Operações de escrita (POST/PUT/PATCH/DELETE) não devem bloquear o loader de navegação de página
+  if (method !== 'GET') {
     return true
   }
   return false

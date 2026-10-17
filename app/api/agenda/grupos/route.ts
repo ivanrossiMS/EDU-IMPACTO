@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/server/authGuard'
+import { requireAuth, requireStaff } from '@/lib/server/authGuard'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 import { getCachedTurmasAndGrupos, invalidateGruposCache } from '@/lib/server/turmasGruposCache'
 
@@ -22,7 +22,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const { user, errorResponse } = await requireAuth()
+  const { errorResponse } = await requireStaff(request)
   if (errorResponse) return errorResponse
 
   try {
@@ -30,6 +30,9 @@ export async function POST(request: Request) {
     const supabase = await createProtectedClient()
 
     if (Array.isArray(body)) {
+      if (body.length === 0) {
+        return NextResponse.json({ ok: true, count: 0 })
+      }
       const rows = body.map(buildRow)
       
       const incomingIds = rows.map(r => r.id).filter(Boolean)
@@ -41,13 +44,6 @@ export async function POST(request: Request) {
           .not('id', 'in', `(${incomingIds.join(',')})`)
           
         if (delError) console.error('Error deleting stale records:', delError)
-      } else {
-        const { error: delError } = await supabase
-          .from('agenda_grupos')
-          .delete()
-          .not('id', 'is', null)
-          
-        if (delError) console.error('Error deleting all records:', delError)
       }
 
       if (rows.length > 0) {

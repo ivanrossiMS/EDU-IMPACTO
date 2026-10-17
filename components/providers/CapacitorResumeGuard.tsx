@@ -40,6 +40,14 @@ export function CapacitorResumeGuard() {
     const isLogoutBarrierActiveAndValid = async (hasBarrier: any, legacyPending: string | null) => {
       if (!hasBarrier && !legacyPending) return false
 
+      const barrierAge = hasBarrier?.timestamp ? Date.now() - Number(hasBarrier.timestamp) : Infinity
+      if (barrierAge >= 0 && barrierAge < 15000) {
+        try {
+          localStorage.removeItem('edu-current-user')
+        } catch {}
+        return true
+      }
+
       // Se há um usuário logado ativo no localStorage, a barreira é resíduo antigo
       const currentUserRaw = localStorage.getItem('edu-current-user')
       if (currentUserRaw) {

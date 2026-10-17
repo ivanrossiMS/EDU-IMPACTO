@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
+import { getAdminClient, findAuthUserByEmail } from '@/lib/server/supabaseAdminSingleton'
 import {
   generateFirstAccessOtp,
   maskEmail,
@@ -31,20 +31,9 @@ export async function POST(request: Request) {
 
     const supabaseAdmin = getAdminClient()
 
-    // Helper: busca usuário existente no Supabase Auth por e-mail
+    // Helper: busca usuário existente no Supabase Auth por e-mail via cache/índice rápido
     const findAuthByEmail = async (email: string) => {
-      let page = 1
-      while (page <= 5) {
-        const { data: list } = await supabaseAdmin.auth.admin
-          .listUsers({ page, perPage: 1000 })
-          .catch(() => ({ data: { users: [] } }))
-        if (!list || !list.users || list.users.length === 0) break
-        const found = list.users.find((u: any) => u.email?.toLowerCase() === email.toLowerCase())
-        if (found) return found
-        if (list.users.length < 1000) break
-        page++
-      }
-      return null
+      return findAuthUserByEmail(email)
     }
 
     // ── 1. Verificar Colaborador (system_users) ─────────────────────────

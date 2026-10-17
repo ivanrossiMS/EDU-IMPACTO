@@ -1,12 +1,13 @@
 import { NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/server/authGuard'
+import { resolveUserRole, requireStaff, getAuthorizedAlunoIdsForUser, getAuthorizedResponsavelIdsForUser } from '@/lib/server/authGuard'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
+import { sanitizeEnqueteForViewer } from '@/lib/enquetes/enqueteUtils'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: Request) {
-  const { user, errorResponse } = await requireAuth()
-  if (errorResponse) return errorResponse
+  const { user, isStaff, errorResponse } = await resolveUserRole(request)
+  if (errorResponse || !user) return errorResponse!
 
   try {
     const { searchParams } = new URL(request.url)
@@ -19,7 +20,25 @@ export async function GET(request: Request) {
       .order('created_at', { ascending: false })
       .limit(limit)
     if (error) throw new Error(error.message)
-    const result = (data || []).map(row => ({ ...row, ...(row.dados || {}) }))
+
+    let allowedIds = new Set<string>()
+    if (!isStaff) {
+      const [alunoIds, respIds] = await Promise.all([
+        getAuthorizedAlunoIdsForUser(user),
+        getAuthorizedResponsavelIdsForUser(user)
+      ])
+      allowedIds = new Set<string>([
+        String(user.id),
+        ...Array.from(alunoIds),
+        ...Array.from(respIds)
+      ])
+    }
+
+    const result = (data || []).map(row => {
+      const rawDados = row.dados || {}
+      const sanitized = isStaff ? rawDados : (sanitizeEnqueteForViewer(rawDados, allowedIds) || rawDados)
+      return { ...row, ...sanitized, dados: sanitized }
+    })
     return NextResponse.json(result, {
       headers: { 'Cache-Control': 'no-store, max-age=0' }
     })
@@ -29,7 +48,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const { user, errorResponse } = await requireAuth()
+  const { errorResponse } = await requireStaff(request)
   if (errorResponse) return errorResponse
 
   try {
@@ -61,3 +80,4 @@ function buildRowAuth(body: any) {
     dados: rest,
   }
 }
+

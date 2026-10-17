@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/server/authGuard'
+import { requireStaff } from '@/lib/server/authGuard'
 import { supabaseServer } from '@/lib/supabaseServer'
 
 export const dynamic = 'force-dynamic'
@@ -24,7 +24,7 @@ function isRelatorio(row: any): boolean {
 }
 
 export async function GET(request: Request) {
-  const { user, errorResponse } = await requireAuth(request)
+  const { errorResponse } = await requireStaff(request)
   if (errorResponse) return errorResponse
 
   try {

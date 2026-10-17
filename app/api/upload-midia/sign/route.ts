@@ -1,12 +1,18 @@
 import { NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/server/authGuard'
+import { resolveUserRole } from '@/lib/server/authGuard'
 import { createAdminClient } from '@/lib/server/supabaseServerFactory'
 
 export const dynamic = 'force-dynamic'
 
+const STAFF_ONLY_BUCKETS = new Set(['documentos', 'simulados-arquivos', 'credimpacto'])
+const BLOCKED_EXTENSIONS = new Set([
+  '.html', '.htm', '.xhtml', '.svg', '.xml', '.js', '.mjs', '.cjs', '.ts', '.tsx', '.jsx',
+  '.php', '.phtml', '.sh', '.bash', '.exe', '.dll', '.bat', '.cmd', '.msi', '.vbs', '.ps1'
+])
+
 export async function POST(request: Request) {
-  const { user, errorResponse } = await requireAuth(request)
-  if (errorResponse) return errorResponse
+  const { user, isStaff, errorResponse } = await resolveUserRole(request)
+  if (errorResponse || !user) return errorResponse || NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
 
   try {
     const { bucket: requestedBucket, fileName, folder = 'uploads' } = await request.json()
@@ -18,9 +24,16 @@ export async function POST(request: Request) {
     const ALLOWED_BUCKETS = ['comunicados-midia', 'documentos', 'simulados-arquivos', 'credimpacto', 'fotos-perfil']
     const bucket = ALLOWED_BUCKETS.includes(requestedBucket) ? requestedBucket : 'comunicados-midia'
 
+    if (STAFF_ONLY_BUCKETS.has(bucket) && !isStaff) {
+      return NextResponse.json({ error: 'Acesso restrito a colaboradores para este repositório de arquivos.' }, { status: 403 })
+    }
+
     const supabase = createAdminClient()
     
-    const ext = fileName.includes('.') ? fileName.slice(fileName.lastIndexOf('.')) : ''
+    const ext = fileName.includes('.') ? fileName.slice(fileName.lastIndexOf('.')).toLowerCase() : ''
+    if (ext && BLOCKED_EXTENSIONS.has(ext)) {
+      return NextResponse.json({ error: `Extensão de arquivo não permitida por segurança: ${ext}` }, { status: 415 })
+    }
     const baseName = fileName.includes('.') ? fileName.slice(0, fileName.lastIndexOf('.')) : fileName
     const safeBaseName = baseName.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 60)
     const safeExt = ext.replace(/[^a-zA-Z0-9.]/g, '').slice(0, 10)

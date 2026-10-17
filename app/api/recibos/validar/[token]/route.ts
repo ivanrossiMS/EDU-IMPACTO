@@ -1,18 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 import { createHash } from 'crypto'
 
 // Rota pública — NÃO requer autenticação
 // Usada pelo QR Code e página pública de validação
 export const dynamic = 'force-dynamic'
-
-// Client Supabase público (somente leitura de dados permitidos)
-function getPublicSupabase() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  )
-}
 
 function generateHash(data: {
   id: string
@@ -29,7 +21,7 @@ export async function GET(
   req: NextRequest,
   context: { params: Promise<{ token: string }> }
 ) {
-  const supabase = getPublicSupabase()
+  const supabase = getAdminClient()
   const { token } = await context.params
   const ip = req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || 'unknown'
   const userAgent = req.headers.get('user-agent') || ''
@@ -92,7 +84,7 @@ export async function GET(
     }
 
     // 3. Verificar status do recibo
-    if (receipt.receipt_status === 'cancelado') {
+    if (receipt.receipt_status === 'cancelado' || receipt.status === 'cancelado') {
       await logValidation(receipt.id, receipt.baixa_id, 'cancelado', 'Recibo cancelado')
       return NextResponse.json({
         status: 'cancelado',
@@ -103,7 +95,7 @@ export async function GET(
       }, { status: 200 })
     }
 
-    if (receipt.receipt_status === 'estornado') {
+    if (receipt.receipt_status === 'estornado' || receipt.status === 'estornado' || receipt.is_active === false) {
       await logValidation(receipt.id, receipt.baixa_id, 'estornado', 'Recibo estornado')
       return NextResponse.json({
         status: 'estornado',
@@ -113,7 +105,7 @@ export async function GET(
       }, { status: 200 })
     }
 
-    if (receipt.receipt_status === 'substituido') {
+    if (receipt.receipt_status === 'substituido' || receipt.status === 'substituido') {
       await logValidation(receipt.id, receipt.baixa_id, 'substituido', 'Recibo substituído por nova versão')
       return NextResponse.json({
         status: 'substituido',
@@ -123,29 +115,43 @@ export async function GET(
       }, { status: 200 })
     }
 
-    // 4. Verificar a baixa associada (título)
-    const { data: titulo, error: tituloError } = await supabase
+    // 4. Verificar a baixa associada (título ou movimentação/codBaixa)
+    const { data: titulo } = await supabase
       .from('titulos')
       .select('id, status, valor, pagamento, metodo, aluno')
       .eq('id', receipt.baixa_id)
-      .single()
+      .maybeSingle()
 
-    if (tituloError || !titulo) {
-      await logValidation(receipt.id, receipt.baixa_id, 'inconsistente', 'Baixa associada não encontrada no sistema')
-      return NextResponse.json({
-        status: 'inconsistente',
-        message: 'O recibo existe, mas a baixa associada não foi localizada.',
-        receipt: buildPublicPayload(receipt),
-      }, { status: 200 })
-    }
+    if (titulo) {
+      if (String(titulo.status || '').toLowerCase() !== 'pago') {
+        await logValidation(receipt.id, receipt.baixa_id, 'inconsistente', `Baixa associada com status '${titulo.status}' (esperado: pago)`)
+        return NextResponse.json({
+          status: 'inconsistente',
+          message: 'O recibo foi localizado, mas o pagamento associado está com status inconsistente.',
+          receipt: buildPublicPayload(receipt),
+        }, { status: 200 })
+      }
+    } else if (receipt.baixa_id) {
+      const safeBaixaId = String(receipt.baixa_id).replace(/[^A-Za-z0-9_-]/g, '')
+      const { data: movs } = safeBaixaId
+        ? await supabase
+            .from('movimentacoes')
+            .select('id')
+            .or(`id.eq.${safeBaixaId},id.like.${safeBaixaId}-%`)
+            .limit(1)
+        : { data: null }
 
-    if (titulo.status !== 'pago') {
-      await logValidation(receipt.id, receipt.baixa_id, 'inconsistente', `Baixa associada com status '${titulo.status}' (esperado: pago)`)
-      return NextResponse.json({
-        status: 'inconsistente',
-        message: 'O recibo foi localizado, mas o pagamento associado está com status inconsistente.',
-        receipt: buildPublicPayload(receipt),
-      }, { status: 200 })
+      if (!movs || movs.length === 0) {
+        // Se também não houver em movimentacoes, verifica se o próprio recibo está ativo e válido
+        if (receipt.receipt_status !== 'valido' && receipt.status !== 'valido') {
+          await logValidation(receipt.id, receipt.baixa_id, 'inconsistente', 'Baixa associada não encontrada no sistema')
+          return NextResponse.json({
+            status: 'inconsistente',
+            message: 'O recibo existe, mas a baixa associada não foi localizada.',
+            receipt: buildPublicPayload(receipt),
+          }, { status: 200 })
+        }
+      }
     }
 
     // ✅ Tudo válido!

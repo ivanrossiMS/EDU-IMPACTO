@@ -587,6 +587,13 @@ export async function POST(request: Request) {
       })
     }
 
+    const { invalidateAlunosCache, invalidateTurmasCache, invalidateGruposCache } = await import('@/lib/server/turmasGruposCache')
+    const { clearAuthGuardCache } = await import('@/lib/server/authGuard')
+    invalidateAlunosCache()
+    invalidateTurmasCache()
+    invalidateGruposCache()
+    clearAuthGuardCache()
+
     return NextResponse.json({
       ok: true,
       batchId,

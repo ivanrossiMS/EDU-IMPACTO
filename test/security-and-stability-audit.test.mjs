@@ -186,3 +186,56 @@ test('Isolamento de Sessão no Logout e Resiliência de Configuração (useConfi
     'Migration SQL deve criar índice UNIQUE em agenda_push_logs(item_id, type)'
   )
 })
+
+test('Auditoria 2026-10-17 - Eliminação de loops listUsers, proteção de escopo familiar e sanitização de Enquetes/Autorizações', () => {
+  const adminSingleton = readRepoFile('lib/server/supabaseAdminSingleton.ts')
+  assert.ok(adminSingleton.includes('export async function getAllAuthUsersCached'), 'Deve expor getAllAuthUsersCached com cache em memória e deduplicação')
+  assert.ok(adminSingleton.includes('export function invalidateAuthUsersCache'), 'Deve expor invalidateAuthUsersCache')
+
+  const authGuard = readRepoFile('lib/server/authGuard.ts')
+  assert.ok(authGuard.includes('export async function getAuthorizedAlunoIdsForUser'), 'Deve expor getAuthorizedAlunoIdsForUser')
+  assert.ok(authGuard.includes('export async function getAuthorizedResponsavelIdsForUser'), 'Deve expor getAuthorizedResponsavelIdsForUser')
+  assert.ok(authGuard.includes('export async function requireAdminOrDirecao'), 'Deve expor requireAdminOrDirecao')
+  assert.ok(authGuard.includes('export async function requireHrOrAdmin'), 'Deve expor requireHrOrAdmin')
+
+  const enqueteUtils = readRepoFile('lib/enquetes/enqueteUtils.ts')
+  assert.ok(enqueteUtils.includes('export function sanitizeEnqueteForViewer'), 'Deve sanitizar votos de terceiros em enquetes para famílias')
+
+  const autorizacaoUtils = readRepoFile('lib/autorizacoes/autorizacaoUtils.ts')
+  assert.ok(autorizacaoUtils.includes('export function sanitizeAutorizacaoForViewer'), 'Deve sanitizar respostas de terceiros em autorizações para famílias')
+
+  const comunicadosRoute = readRepoFile('app/api/comunicados/route.ts')
+  assert.ok(comunicadosRoute.includes('sanitizeEnqueteForViewer'), 'GET /api/comunicados deve sanitizar enquetes para famílias')
+  assert.ok(comunicadosRoute.includes('sanitizeAutorizacaoForViewer'), 'GET /api/comunicados deve sanitizar autorizações para famílias')
+  assert.ok(!comunicadosRoute.includes('|| r.is_admin === true'), 'GET /api/comunicados não deve vazar respostas de admin para outras famílias')
+})
+
+test('Auditoria 2026-10-17 - Hardening de Matrículas Digitais (OTP Brute-Force), Financeiro, CNAB 400, CredImpacto e RLS is_staff()', () => {
+  const assinarRoute = readRepoFile('app/api/matriculas/digital/assinar/route.ts')
+  assert.ok(assinarRoute.includes('(contrato.otp_tentativas || 0) >= 5'), 'Assinatura digital deve limitar tentativas de OTP (proteção brute-force)')
+  assert.ok(assinarRoute.includes('status: 429'), 'Excesso de tentativas OTP deve retornar HTTP 429')
+
+  const matriculasConfig = readRepoFile('app/api/matriculas/config/route.ts')
+  assert.ok(matriculasConfig.includes('requireStaff'), '/api/matriculas/config deve exigir requireStaff')
+  assert.ok(matriculasConfig.includes('maskedToken'), '/api/matriculas/config deve mascarar apiToken do ZapSign no GET')
+
+  const estornarBaixa = readRepoFile('app/api/financeiro/estornar-baixa/route.ts')
+  assert.ok(estornarBaixa.includes('requireStaff'), '/api/financeiro/estornar-baixa deve exigir requireStaff')
+  assert.ok(estornarBaixa.includes('/^[A-Za-z0-9_-]{2,80}$/'), 'cod_baixa_codes deve validar formato seguro contra PostgREST injection')
+
+  const credAuth = readRepoFile('lib/credimpacto/authHelper.ts')
+  assert.ok(
+    credAuth.includes('const isAdminOrFinance = isCredImpactoAdmin(dbUser?.perfil, dbFunc?.cargo || dbUser?.cargo)'),
+    'CredImpacto deve resolver privilégio de gestão exclusivamente do banco (system_users / funcionarios)'
+  )
+
+  const credTemplate = readRepoFile('lib/credimpacto/contractTemplate.ts')
+  assert.ok(credTemplate.includes('function escapeHtml'), 'Contrato CredImpacto deve escapar HTML de campos fornecidos pelo usuário')
+
+  const auditMigration = readRepoFile('supabase/migrations/20261017120000_comprehensive_audit_security_and_performance.sql')
+  assert.ok(
+    auditMigration.includes("'responsavel', 'responsável', 'aluno'"),
+    'public.is_staff() na migration deve excluir perfis de Família/Aluno presentes em system_users'
+  )
+})
+

@@ -13,9 +13,11 @@ import {
   getUserVote, 
   getVoterKey, 
   isEnqueteClosed, 
-  formatTimeRemaining 
+  formatTimeRemaining,
+  sanitizeEnqueteForViewer
 } from '@/lib/enquetes/enqueteUtils'
 import { supabase } from '@/lib/supabase'
+import { apiFetch } from '@/lib/api/apiClient'
 
 interface EnqueteWidgetProps {
   enquete: EnqueteData
@@ -79,21 +81,32 @@ export function EnqueteWidget({
   useEffect(() => {
     if (!enquete?.id) return
 
-    // 1. Broadcast channel listener for instantaneous sub-100ms updates
     const channelName = `enquete_live_${enquete.id}`
     const channel = supabase.channel(channelName)
+
+    const applyRemoteEnquete = (incoming: EnqueteData) => {
+      setEnquete(prev => {
+        const ownKey = getVoterKey(currentUserId, currentAlunoId)
+        const ownVote = getUserVote(prev, currentUserId, currentAlunoId)
+        const mergedVotos = { ...(incoming.votos || {}) }
+        if (ownVote && ownKey && !mergedVotos[ownKey]) {
+          mergedVotos[ownKey] = ownVote
+        }
+        const merged = { ...incoming, votos: mergedVotos }
+        if (onVoteSuccess) onVoteSuccess(merged)
+        return merged
+      })
+    }
 
     channel
       .on('broadcast', { event: 'vote_update' }, (payload: any) => {
         if (payload?.payload?.enquete) {
-          setEnquete(payload.payload.enquete)
-          if (onVoteSuccess) onVoteSuccess(payload.payload.enquete)
+          applyRemoteEnquete(payload.payload.enquete)
         }
       })
       .on('broadcast', { event: 'status_update' }, (payload: any) => {
         if (payload?.payload?.enquete) {
-          setEnquete(payload.payload.enquete)
-          if (onVoteSuccess) onVoteSuccess(payload.payload.enquete)
+          applyRemoteEnquete(payload.payload.enquete)
         }
       })
       .subscribe()
@@ -104,44 +117,27 @@ export function EnqueteWidget({
       if (item && String(item.id) === String(comunicadoId)) {
         const remoteEnquete = item.enquete || item.dados?.enquete
         if (remoteEnquete) {
-          setEnquete(remoteEnquete)
+          applyRemoteEnquete(remoteEnquete)
         }
       }
     }
     window.addEventListener('ad:comunicados-update', handleComunicadosUpdate)
 
-    // 3. Heartbeat polling a cada 30 segundos apenas se a página estiver visível
-    const interval = setInterval(async () => {
-      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return
-      try {
-        const { data } = await supabase
-          .from('comunicados')
-          .select('dados')
-          .eq('id', comunicadoId)
-          .maybeSingle()
-
-        const remoteEnquete = (data as any)?.dados?.enquete
-        if (remoteEnquete) {
-          setEnquete(remoteEnquete)
-        }
-      } catch (_) {}
-    }, 30000)
-
     return () => {
       try { supabase.removeChannel(channel) } catch (_) {}
       window.removeEventListener('ad:comunicados-update', handleComunicadosUpdate)
-      clearInterval(interval)
     }
-  }, [enquete.id, comunicadoId, onVoteSuccess])
+  }, [enquete.id, comunicadoId, currentUserId, currentAlunoId, onVoteSuccess])
 
   // Broadcast helper
   const broadcastUpdate = useCallback(async (updated: EnqueteData, eventName = 'vote_update') => {
     try {
+      const safeEnquete = sanitizeEnqueteForViewer(updated, []) || updated
       const channel = supabase.channel(`enquete_live_${updated.id}`)
       await channel.send({
         type: 'broadcast',
         event: eventName,
-        payload: { enquete: updated, comunicadoId }
+        payload: { enquete: safeEnquete, comunicadoId }
       })
     } catch (_) {}
   }, [comunicadoId])
@@ -183,7 +179,7 @@ export function EnqueteWidget({
         alunoNome: currentAlunoNome
       }
 
-      const res = await fetch('/api/agenda/enquetes/votar', {
+      const res = await apiFetch('/api/agenda/enquetes/votar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -218,7 +214,7 @@ export function EnqueteWidget({
     const newStatus = !enquete.encerrada
 
     try {
-      const res = await fetch('/api/agenda/enquetes/status', {
+      const res = await apiFetch('/api/agenda/enquetes/status', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
-import { requireStaff } from '@/lib/server/authGuard'
+import { requireStaff, clearAuthGuardCache } from '@/lib/server/authGuard'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
+import { invalidateAlunosCache, invalidateTurmasCache } from '@/lib/server/turmasGruposCache'
+import { invalidateColaboradoresCache } from '@/lib/server/colaboradoresCache'
 
 export const dynamic = 'force-dynamic'
 
@@ -402,6 +404,11 @@ export async function POST(request: Request) {
     else {
       return NextResponse.json({ error: `Módulo desconhecido: ${modulo}` }, { status: 400 })
     }
+
+    if (modulo === 'alunos') invalidateAlunosCache()
+    if (modulo === 'turmas') invalidateTurmasCache()
+    if (modulo === 'funcionarios') invalidateColaboradoresCache()
+    if (modulo === 'responsaveis' || modulo === 'alunos' || modulo === 'funcionarios') clearAuthGuardCache()
 
     return NextResponse.json({
       ok: true,

@@ -114,3 +114,54 @@ export function formatTimeRemaining(dataExpiracao?: string | null): string | nul
   if (mins >= 1) return `Encerra em ${mins} min`
   return 'Encerra em instantes'
 }
+
+export function sanitizeEnqueteForViewer(
+  enquete: EnqueteData | null | undefined,
+  allowedIds: Iterable<string>
+): EnqueteData | null {
+  if (!enquete) return null
+  const allowedSet = new Set(
+    Array.from(allowedIds || [])
+      .map(id => String(id || '').trim())
+      .filter(Boolean)
+  )
+  const rawVotos = enquete.votos || {}
+  const sanitizedVotos: Record<string, EnqueteVoto> = {}
+  const hideOtherVotes = enquete.visibilidadeResultados === 'somente_admin'
+
+  let anonIdx = 0
+  for (const [key, voto] of Object.entries(rawVotos)) {
+    if (!voto) continue
+    const vUser = String(voto.usuarioId || '').trim()
+    const vAluno = String(voto.alunoId || '').trim()
+    const isOwn =
+      allowedSet.has(key) ||
+      (vUser && allowedSet.has(vUser)) ||
+      (vAluno && allowedSet.has(vAluno)) ||
+      (vUser && vAluno && allowedSet.has(`${vUser}_${vAluno}`))
+
+    if (isOwn) {
+      sanitizedVotos[key] = voto
+    } else if (!hideOtherVotes) {
+      anonIdx += 1
+      sanitizedVotos[`anon_${anonIdx}`] = {
+        usuarioId: `anon_${anonIdx}`,
+        usuarioNome: 'Participante',
+        usuarioFoto: undefined,
+        usuarioTipo: voto.usuarioTipo || 'responsavel',
+        opcoesIds: Array.isArray(voto.opcoesIds) ? voto.opcoesIds : [],
+        votadoEm: voto.votadoEm
+      }
+    }
+  }
+
+  return {
+    ...enquete,
+    opcoes: hideOtherVotes
+      ? (enquete.opcoes || []).map(op => ({ ...op, votosCount: 0 }))
+      : enquete.opcoes,
+    votos: sanitizedVotos,
+    totalVotos: hideOtherVotes ? Object.keys(sanitizedVotos).length : (enquete.totalVotos ?? Object.keys(rawVotos).length)
+  }
+}
+

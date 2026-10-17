@@ -95,15 +95,15 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
   const [meusAlunos, setMeusAlunos] = useState<any[]>([])
 
   useEffect(() => {
-    if (!currentUser?.id) return
+    if (!hydrated || !currentUser?.id) return
 
     const respMetaId = (currentUser as any)?.responsavel_id || (currentUser as any)?.user_metadata?.responsavel_id || ''
     const userEmail = (currentUser?.email || '').toLowerCase().trim()
     const possibleKeys = [
       `edu-meus-alunos-${currentUser.id}`,
-      `edu-meus-alunos-${respMetaId || userEmail}`,
-      `edu-meus-alunos-${userEmail}`
-    ]
+      respMetaId ? `edu-meus-alunos-${respMetaId}` : '',
+      userEmail ? `edu-meus-alunos-${userEmail}` : ''
+    ].filter(Boolean)
 
     for (const key of possibleKeys) {
       try {
@@ -123,16 +123,18 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
       .then(data => {
         if (Array.isArray(data)) {
           setMeusAlunos(data)
-          possibleKeys.forEach(k => {
-            try {
-              localStorage.setItem(k, JSON.stringify(data))
-              localStorage.setItem(`${k}-meta`, JSON.stringify({ data, ts: Date.now() }))
-            } catch (_) {}
-          })
+          if (data.length > 0) {
+            possibleKeys.forEach(k => {
+              try {
+                localStorage.setItem(k, JSON.stringify(data))
+                localStorage.setItem(`${k}-meta`, JSON.stringify({ data, ts: Date.now() }))
+              } catch (_) {}
+            })
+          }
         }
       })
       .catch(() => {})
-  }, [currentUser?.id, (currentUser as any)?.responsavel_id, currentUser?.email])
+  }, [hydrated, currentUser?.id, (currentUser as any)?.responsavel_id, currentUser?.email])
 
   const [extraStaffIds, setExtraStaffIds] = useState<string[]>([])
 
@@ -477,11 +479,12 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
 
       // 2. Family match (verifica TODOS os alunos vinculados ao responsável logado)
       let matchingStudent: any = null
-      const studentsToCheck: any[] = [...currentMeusAlunos]
-      if (currentAlunoObj && !studentsToCheck.some(s => String(s.id) === String(currentAlunoObj.id))) {
+      const isInternalOnly = destino === 'interno' || destino === 'funcionarios' || destino === 'equipe' || String(dados.id || '').startsWith('AD-COM-REL-COLAB-')
+      const studentsToCheck: any[] = isInternalOnly ? [] : [...currentMeusAlunos]
+      if (!isInternalOnly && currentAlunoObj && !studentsToCheck.some(s => String(s.id) === String(currentAlunoObj.id))) {
         studentsToCheck.push(currentAlunoObj)
       }
-      if (currentAlunoId && !studentsToCheck.some(s => String(s.id) === String(currentAlunoId))) {
+      if (!isInternalOnly && currentAlunoId && !studentsToCheck.some(s => String(s.id) === String(currentAlunoId))) {
         studentsToCheck.push({ id: currentAlunoId, nome: 'Aluno', turma: currentRawTurma, turmaNome: currentTurmaNome })
       }
 
@@ -771,8 +774,13 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
       const destino = String(merged.destino || '').toLowerCase().trim()
 
       const hasAnyTarget = alvoTurmas.length > 0 || alvoTurmasIds.length > 0 || alvoGrupos.length > 0 || alvoAlunos.length > 0 || alvoFuncs.length > 0 || destino === 'todos' || destino === 'interno' || destino === 'funcionarios'
+      const isPublicStatus = !normalizedItem.status || normalizedItem.status === 'enviado'
+      const isColabReport = String(normalizedItem.id || '').startsWith('AD-COM-REL-COLAB-')
+      const isAllowedForCurrentViewer = !isFamilyRef.current || isStaffUserRef.current
+        ? true
+        : (isPublicStatus && !isColabReport && destino !== 'interno' && destino !== 'funcionarios' && destino !== 'equipe' && (match.isTarget || !hasAnyTarget))
 
-      if (eventType === 'DELETE' || match.isTarget || hasAnyTarget || !isFamilyRef.current) {
+      if (eventType === 'DELETE' || isAllowedForCurrentViewer) {
         // Atualização otimista em 0ms no cache do React Query (evita refetch HTTP em cascata a cada leitura/ciência)
         if (eventType === 'INSERT') {
           queryClient.setQueriesData({ queryKey: ['agenda', 'comunicados'] }, (oldData: any) => {
@@ -859,13 +867,19 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
             ...meusAlunosRef.current.map((s: any) => s?.matricula),
           ]
             .filter(Boolean)
-            .map(v => String(v).trim())
+            .flatMap(v => {
+              const s = String(v).trim()
+              const clean = s.replace(/^f_?/, '')
+              return [s, clean]
+            })
         )
         const remId = String(msgRow.remetente_id || '').trim()
+        const remClean = remId.replace(/^f_?/, '')
         const destId = String(msgRow.destinatario_id || '').trim()
         const isRelatedToFamily =
           myCandidateIds.has(remId) ||
-          (destId ? myCandidateIds.has(destId) : Boolean(msgRow.is_admin))
+          myCandidateIds.has(remClean) ||
+          (destId ? myCandidateIds.has(destId) : false)
         if (!isRelatedToFamily) return
       }
 
@@ -897,9 +911,9 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
       const alvoFuncs = Array.isArray(merged.funcionariosIds) ? merged.funcionariosIds : [merged.funcionariosIds].filter(Boolean)
       const destino = String(merged.destino || '').toLowerCase().trim()
       
-      const hasAnyTarget = alvoTurmas.length > 0 || alvoTurmasIds.length > 0 || alvoGrupos.length > 0 || alvoAlunos.length > 0 || alvoFuncs.length > 0 || destino === 'todos'
+      const hasAnyTarget = alvoTurmas.length > 0 || alvoTurmasIds.length > 0 || alvoGrupos.length > 0 || alvoAlunos.length > 0 || alvoFuncs.length > 0 || destino === 'todos' || destino === 'interno' || destino === 'funcionarios'
 
-      if (eventType === 'DELETE' || match.isTarget || hasAnyTarget || !isFamilyRef.current) {
+      if (eventType === 'DELETE' || match.isTarget || !hasAnyTarget || !isFamilyRef.current) {
         window.dispatchEvent(new CustomEvent(`ad:eventos_agenda-${eventType.toLowerCase()}`, { detail: payload }))
         queryClient.invalidateQueries({ queryKey: ['agenda', 'calendario'] })
       }
@@ -947,9 +961,9 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
       const alvoFuncs = ensureStringArray(merged.funcionariosIds || merged.colaboradoresIds)
       const destino = String(merged.destino || '').toLowerCase().trim()
       
-      const hasAnyTarget = alvoTurmas.length > 0 || alvoTurmasIds.length > 0 || alvoGrupos.length > 0 || alvoAlunos.length > 0 || alvoFuncs.length > 0 || destino === 'todos'
+      const hasAnyTarget = alvoTurmas.length > 0 || alvoTurmasIds.length > 0 || alvoGrupos.length > 0 || alvoAlunos.length > 0 || alvoFuncs.length > 0 || destino === 'todos' || destino === 'interno' || destino === 'funcionarios'
 
-      if (eventType === 'DELETE' || match.isTarget || hasAnyTarget || !isFamilyRef.current) {
+      if (eventType === 'DELETE' || match.isTarget || !hasAnyTarget || !isFamilyRef.current) {
         window.dispatchEvent(new CustomEvent(`ad:momentos-${eventType.toLowerCase()}`, { detail: { ...payload, new: merged } }))
         queryClient.invalidateQueries({ queryKey: ['agenda', 'momentos'] })
       }

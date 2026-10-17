@@ -601,7 +601,7 @@ export async function dbSaveEmprestimo(
     if (!empError) {
       dedicatedSaved = true
 
-      // Salva parcelas na tabela dedicada
+      // Salva parcelas na tabela dedicada e remove parcelas antigas órfãs (ex: renegociação/recálculo)
       if (updatedLoan.parcelas && updatedLoan.parcelas.length > 0) {
         const parcRows = updatedLoan.parcelas.map((p) => ({
           id: p.id,
@@ -626,6 +626,18 @@ export async function dbSaveEmprestimo(
           created_at: (p as any).createdAt || updatedLoan.createdAt || nowIso,
           updated_at: nowIso
         }))
+
+        const activeParcelaIds = parcRows.map((r) => r.id).filter(Boolean)
+        const { data: existingParcelas } = await sb
+          .from('credimpacto_parcelas')
+          .select('id')
+          .eq('emprestimo_id', updatedLoan.id)
+        const orphanIds = (existingParcelas || [])
+          .map((r: any) => String(r.id))
+          .filter((id: string) => !activeParcelaIds.includes(id))
+        if (orphanIds.length > 0) {
+          await sb.from('credimpacto_parcelas').delete().in('id', orphanIds)
+        }
 
         await sb.from('credimpacto_parcelas').upsert(parcRows)
       }
@@ -662,19 +674,17 @@ export async function dbSaveEmprestimo(
     createdAt: nowIso
   })
 
-  // 4. Emite broadcast Realtime sanitizado para sincronização imediata (<100ms)
-  const { contratoConteudoHtml, dadosBancarios: _db, colaboradorSalarioBase: _sal, ...lightweightLoan } = updatedLoan
+  // 4. Emite broadcast Realtime sanitizado (sem valores financeiros/parcelas em texto aberto no canal compartilhado)
   await broadcastCredImpactoRealtimeEvent({
     type: 'EMPRESTIMO_UPSERT',
     acao: acaoAudit,
     emprestimoId: updatedLoan.id,
     codigoOperacao: updatedLoan.codigoOperacao,
     colaboradorId: updatedLoan.colaboradorId,
-    colaboradorEmail: updatedLoan.colaboradorEmail,
-    colaboradorNome: updatedLoan.colaboradorNome,
+    colaboradorEmail: '',
+    colaboradorNome: '',
     colaboradorCpf: '',
     status: updatedLoan.status,
-    emprestimo: lightweightLoan as CredImpactoEmprestimo,
     autorId: autor.id,
     autorNome: autor.nome
   })

@@ -24,7 +24,7 @@ export const AgendaNavigationTabBar = React.memo(function AgendaNavigationTabBar
 
   const navItems = [
     { label: 'Comunicados', href: `/agenda-digital/${alunoId}/comunicados`, icon: <Bell size={18} /> },
-    { label: 'Mídia', href: `/agenda-digital/${alunoId}/momentos`, icon: <ImageIcon size={18} /> },
+    { label: 'Galeria', href: `/agenda-digital/${alunoId}/momentos`, icon: <ImageIcon size={18} /> },
     { label: 'Calendário', href: `/agenda-digital/${alunoId}/calendario`, icon: <Calendar size={18} /> },
     { label: 'Financeiro', href: `/agenda-digital/${alunoId}/financeiro`, icon: <DollarSign size={18} /> },
     { label: 'Frequência', href: `/agenda-digital/${alunoId}/frequencia`, icon: <BarChart2 size={18} /> },

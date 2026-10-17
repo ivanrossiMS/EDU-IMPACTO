@@ -1,17 +1,20 @@
 import { NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/server/authGuard'
+import {
+  resolveUserRole,
+  getAuthorizedAlunoIdsForUser,
+  getAuthorizedResponsavelIdsForUser,
+} from '@/lib/server/authGuard'
 import { supabaseServer as supabase } from '@/lib/supabaseServer'
 
 export const dynamic = 'force-dynamic'
 
 /**
  * GET /api/aluno-responsavel?aluno_id=XXXX
- * Endpoint público (sem auth) para carregar responsáveis de um aluno na Agenda Digital.
- * Usa service role key internamente para contornar RLS.
+ * Carrega responsáveis de um aluno na Agenda Digital com verificação de escopo.
  */
 export async function GET(request: Request) {
-  const { user, errorResponse } = await requireAuth()
-  if (errorResponse) return errorResponse
+  const { user, isStaff, errorResponse } = await resolveUserRole(request)
+  if (errorResponse || !user) return errorResponse!
 
   try {
     const url = new URL(request.url)
@@ -21,8 +24,26 @@ export async function GET(request: Request) {
     const responsavelId = url.searchParams.get('responsavel_id')
     const mode = url.searchParams.get('mode')
 
+    const allowedAlunoIds = !isStaff ? await getAuthorizedAlunoIdsForUser(user) : null
+    const allowedRespIds = !isStaff ? await getAuthorizedResponsavelIdsForUser(user) : null
+    const isAllowedAluno = (idVal: string) => {
+      if (isStaff) return true
+      if (!allowedAlunoIds) return false
+      const clean = String(idVal).trim()
+      const unpadded = clean.replace(/^0+/, '')
+      return allowedAlunoIds.has(clean) || (Boolean(unpadded) && allowedAlunoIds.has(unpadded))
+    }
+
     // ── Se fornecido responsavel_id ou mode=co_students, retorna os alunos vinculados ao responsável financeiro ──
     if (responsavelId || (alunoId && mode === 'co_students')) {
+      if (!isStaff) {
+        if (responsavelId && (!allowedRespIds || !allowedRespIds.has(String(responsavelId).trim()))) {
+          return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 })
+        }
+        if (alunoId && !isAllowedAluno(alunoId)) {
+          return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 })
+        }
+      }
       let targetRespIds: string[] = []
       if (responsavelId) {
         targetRespIds = [String(responsavelId).trim()]
@@ -103,9 +124,16 @@ export async function GET(request: Request) {
 
     let alunoIds: string[] = []
     if (alunoIdsStr) {
-      alunoIds = alunoIdsStr.split(',').filter(Boolean)
+      alunoIds = alunoIdsStr.split(',').map(s => s.trim()).filter(Boolean)
     } else if (alunoId) {
-      alunoIds = [alunoId]
+      alunoIds = [alunoId.trim()]
+    }
+
+    if (!isStaff) {
+      alunoIds = alunoIds.filter(isAllowedAluno)
+      if (alunoIds.length === 0) {
+        return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 })
+      }
     }
 
     if (alunoIds.length === 0) {

@@ -28,11 +28,15 @@ export async function POST(request: Request) {
 
     dbUser = foundUser
 
+    const { resolveFamilyScope } = await import('@/lib/server/chatFamilyHelper')
+    const familyScope = await resolveFamilyScope(user, { dbUser })
+
     const userCandidateIds = Array.from(new Set([
       String(user.id),
-      String(dbUser?.id),
-      String(dbUser?.auth_id),
-      user.user_metadata?.responsavel_id ? String(user.user_metadata.responsavel_id) : null
+      dbUser?.id ? String(dbUser.id) : null,
+      dbUser?.auth_id ? String(dbUser.auth_id) : null,
+      user.user_metadata?.responsavel_id ? String(user.user_metadata.responsavel_id) : null,
+      ...(familyScope.candidateUserIds || [])
     ].filter(Boolean))) as string[]
 
     // 2. Verificar se já existe participação
@@ -64,6 +68,34 @@ export async function POST(request: Request) {
         .eq('conversation_id', conversation_id)
         .in('user_id', userCandidateIds)
     } else {
+      const { data: convInfo } = await supabase
+        .from('chat_conversations')
+        .select('id, type, grupo_id, turma_id')
+        .eq('id', conversation_id)
+        .maybeSingle()
+
+      if (!convInfo) {
+        return NextResponse.json({ error: 'Conversa não encontrada' }, { status: 404 })
+      }
+
+      if (convInfo.type === 'direct' && !familyScope.isAdmin) {
+        return NextResponse.json({ error: 'Acesso negado a esta conversa direta' }, { status: 403 })
+      }
+
+      if (convInfo.type === 'group' && !familyScope.isAdmin && familyScope.isFamilyOrStudent) {
+        const rawGId = convInfo.grupo_id ? String(convInfo.grupo_id) : ''
+        const rawTId = convInfo.turma_id ? String(convInfo.turma_id) : ''
+        const cleanTId = rawTId.replace(/^sync-/, '')
+        const isAllowedGroup =
+          (rawGId && (familyScope.allGroupIds.has(rawGId) || familyScope.historicalGroupIds.has(rawGId))) ||
+          (rawTId && (familyScope.allTurmaIds.has(rawTId) || familyScope.allGroupIds.has(rawTId) || familyScope.historicalGroupIds.has(rawTId))) ||
+          (cleanTId && (familyScope.allTurmaIds.has(cleanTId) || familyScope.allGroupIds.has(cleanTId) || familyScope.historicalGroupIds.has(cleanTId)))
+
+        if (!isAllowedGroup) {
+          return NextResponse.json({ error: 'Acesso negado a este grupo' }, { status: 403 })
+        }
+      }
+
       // Criar participação com o estado de arquivado
       await supabase
         .from('chat_participants')

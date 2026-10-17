@@ -262,17 +262,8 @@ export async function GET(request: Request) {
       }
     })
 
-    // Filtrar conversas: apenas conversas com mensagens válidas devem aparecer em "Conversas"
-    // Se o usuário apenas iniciou a conversa mas nenhuma mensagem foi enviada, NÃO deve aparecer em conversas
-    // e limpamos conversas vazias do banco para não guardar conversas sem mensagens
-    const emptyConvIds = (convRows || []).filter(conv => !conv.last_message_text || conv.last_message_text.trim() === '').map(c => c.id)
-    if (emptyConvIds.length > 0) {
-      Promise.all([
-        supabase.from('chat_participants').delete().in('conversation_id', emptyConvIds),
-        supabase.from('chat_read_receipts').delete().in('conversation_id', emptyConvIds),
-        supabase.from('chat_conversations').delete().in('id', emptyConvIds)
-      ]).catch(() => {})
-    }
+    // Filtrar conversas em memória: apenas conversas com mensagens válidas devem aparecer em "Conversas".
+    // Não executar DELETE em GET para evitar condição de corrida com conversas recém-criadas antes da 1ª mensagem.
 
     const filteredConvRows = (convRows || []).filter(conv => {
       const hasMessage = !!(conv.last_message_text && conv.last_message_text.trim() !== '')

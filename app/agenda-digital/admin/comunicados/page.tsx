@@ -575,9 +575,9 @@ export default function ADAdminComunicados() {
       }
 
       fetch('/api/comunicados', {
-        method: 'POST',
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updatedCom)
+        body: JSON.stringify({ id: editComId, dados: updatedCom })
       }).catch(err => console.error("Erro ao salvar comunicado", err))
 
       if (setComunicadosLocally) {

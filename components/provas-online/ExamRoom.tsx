@@ -984,8 +984,13 @@ function MinimizarAdvertenciaModal({
   )
 }
 
-export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, returnUrl }: ExamRoomProps) {
+export function ExamRoom({ prova: initialProva, initialTentativa, currentUserId, alunoNome, returnUrl }: ExamRoomProps) {
   const router = useRouter()
+  const [prova, setProva] = useState(initialProva)
+
+  useEffect(() => {
+    setProva(initialProva)
+  }, [initialProva])
 
   // Briefing vs Taking vs Submitted
   const [tentativa, setTentativa] = useState<TentativaAluno | null>(initialTentativa || null)
@@ -1799,6 +1804,11 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
         throw new Error(data.error || 'Não foi possível iniciar a prova')
       }
 
+      if (data.prova) {
+        setProva(data.prova)
+      } else if (Array.isArray(data.questoes) && data.questoes.length > 0) {
+        setProva(prev => ({ ...prev, questoes: data.questoes }))
+      }
       setTentativa(data.tentativa)
       setStarted(true)
 
@@ -2736,7 +2746,7 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
                   Questões
                 </span>
                 <strong className="er-metric-val" style={{ fontSize: '18px', fontWeight: 900, color: '#0f172a' }}>
-                  {(prova.questoes || []).length} itens
+                  {(prova as any).quantidadeQuestoes ?? (prova.questoes || []).length} itens
                 </strong>
               </div>
             </div>
@@ -3304,10 +3314,11 @@ export function ExamRoom({ prova, initialTentativa, currentUserId, alunoNome, re
   // VIEW 3: ACTIVE EXAM ROOM (REALIZAÇÃO DA PROVA)
   // =========================================================================
   const isTimeCritical = timeRemainingSeconds <= 300 // under 5 min
-  const isFlagged = flaggedIds.has(currentQuestion.id)
-  const currentAnswer = respostas[currentQuestion.id]
+  const isFlagged = currentQuestion ? flaggedIds.has(currentQuestion.id) : false
+  const currentAnswer = currentQuestion ? respostas[currentQuestion.id] : undefined
 
   const renderQuestionCard = (q: QuestaoProva, qIndex: number, showPaginationFooter = false) => {
+    if (!q) return null
     const qAnswer = respostas[q.id]
     const isQFlagged = flaggedIds.has(q.id)
     const alternatives = getQuestionAlternatives(q)

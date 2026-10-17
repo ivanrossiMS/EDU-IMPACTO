@@ -4,7 +4,7 @@
  * Pipeline completo de emissão de boleto — SERVER-SIDE ONLY
  */
 import { NextRequest, NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/server/authGuard'
+import { requireStaff } from '@/lib/server/authGuard'
 import { validarEmissao } from '@/lib/banking/validacao'
 import { gerarNossoNumeroItau } from '@/lib/banking/nossoNumero'
 import { gerarCodigoBarrasCompleto } from '@/lib/banking/codigoBarras'
@@ -48,7 +48,7 @@ function truncInst(s: string | undefined): string {
 }
 
 export async function POST(req: NextRequest) {
-  const { user, errorResponse } = await requireAuth()
+  const { user, errorResponse } = await requireStaff(req)
   if (errorResponse) return errorResponse
 
   try {

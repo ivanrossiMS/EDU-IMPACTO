@@ -4,11 +4,11 @@
  * Gera o próximo Nosso Número com DV para o Itaú
  */
 import { NextRequest, NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/server/authGuard'
+import { requireStaff } from '@/lib/server/authGuard'
 import { gerarNossoNumeroItau } from '@/lib/banking/nossoNumero'
 
 export async function GET(req: NextRequest) {
-  const { user, errorResponse } = await requireAuth()
+  const { user, errorResponse } = await requireStaff(req)
   if (errorResponse) return errorResponse
 
   try {

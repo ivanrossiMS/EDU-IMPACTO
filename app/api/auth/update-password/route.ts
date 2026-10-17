@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
-import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
+import { getAdminClient, findAuthUserByEmail as findAuthUserByEmailFast, invalidateAuthUsersCache } from '@/lib/server/supabaseAdminSingleton'
+import { clearAuthGuardCache } from '@/lib/server/authGuard'
 
 export const dynamic = 'force-dynamic'
 
@@ -30,18 +31,9 @@ export async function POST(request: Request) {
 
     const supabaseAdmin = getAdminClient()
 
-    // Helper: busca usuário no Auth de forma completa e paginada
+    // Helper: busca usuário no Auth usando cache O(1) + índices do banco
     const findAuthUserByEmail = async (em: string) => {
-      let page = 1
-      while (page <= 5) {
-        const { data: list } = await supabaseAdmin.auth.admin.listUsers({ page, perPage: 1000 }).catch(() => ({ data: { users: [] } }))
-        if (!list || !list.users || list.users.length === 0) break
-        const found = list.users.find((u: any) => u.email?.toLowerCase() === em.toLowerCase())
-        if (found) return found
-        if (list.users.length < 1000) break
-        page++
-      }
-      return null
+      return findAuthUserByEmailFast(em)
     }
 
     // ── Detect user type from prefixed ID ───────────────────────────
@@ -125,6 +117,9 @@ export async function POST(request: Request) {
         if (createErr) throw createErr
       }
 
+      invalidateAuthUsersCache()
+      clearAuthGuardCache()
+
       // Also set email on alunos record if registeredEmail provided and not previously set
       if (registeredEmail && (!alunoRealEmail || registeredEmail.trim().toLowerCase() === alunoRealEmail)) {
         await supabaseAdmin
@@ -142,7 +137,7 @@ export async function POST(request: Request) {
 
       const { data: resp } = await supabaseAdmin
         .from('responsaveis')
-        .select('id, nome, email, celular')
+        .select('id, nome, email, celular, auth_id')
         .eq('id', realId)
         .maybeSingle()
 
@@ -165,15 +160,21 @@ export async function POST(request: Request) {
         : null
       const existing = existingByStored || existingByTarget
 
+      let resolvedAuthId: string | null = resp.auth_id || null
+
       if (existing) {
         if (existing.last_sign_in_at || (existingByStored && registeredEmail && registeredEmail.trim().toLowerCase() !== storedRespEmail)) {
           return NextResponse.json({ error: "Sua senha já foi configurada. Use o Login normal ou 'Esqueci minha senha' para receber um link por e-mail." }, { status: 409 })
         }
         const { error: upErr } = await supabaseAdmin.auth.admin.updateUserById(existing.id, { password: newPass })
         if (upErr && !isSamePasswordError(upErr)) throw upErr
+        resolvedAuthId = existing.id
       } else {
+        if (storedRespEmail && registeredEmail && registeredEmail.trim().toLowerCase() !== storedRespEmail) {
+          return NextResponse.json({ error: 'O e-mail informado não corresponde ao cadastro do responsável.' }, { status: 403 })
+        }
         const finalEmailToCreate = storedRespEmail || (registeredEmail || '').trim().toLowerCase()
-        const { error: createErr } = await supabaseAdmin.auth.admin.createUser({
+        const { data: createdAuth, error: createErr } = await supabaseAdmin.auth.admin.createUser({
           email: finalEmailToCreate,
           password: newPass,
           email_confirm: true,
@@ -191,13 +192,22 @@ export async function POST(request: Request) {
           }
         })
         if (createErr) throw createErr
+        resolvedAuthId = createdAuth?.user?.id || null
       }
 
-      // Save registered email back to responsaveis ONLY if it was previously empty
+      invalidateAuthUsersCache()
+      clearAuthGuardCache()
+
+      // Save registered email back to responsaveis ONLY if it was previously empty, and persist auth_id
       if (!storedRespEmail && targetEmail) {
         await supabaseAdmin
           .from('responsaveis')
-          .update({ email: targetEmail })
+          .update(resolvedAuthId ? { email: targetEmail, auth_id: resolvedAuthId } : { email: targetEmail })
+          .eq('id', realId)
+      } else if (resolvedAuthId && resp.auth_id !== resolvedAuthId) {
+        await supabaseAdmin
+          .from('responsaveis')
+          .update({ auth_id: resolvedAuthId })
           .eq('id', realId)
       }
 
@@ -222,6 +232,12 @@ export async function POST(request: Request) {
       }, { status: 409 })
     }
 
+    if (registeredEmail && registeredEmail.trim().toLowerCase() !== email) {
+      return NextResponse.json({
+        error: 'O e-mail informado não corresponde ao cadastro do colaborador.'
+      }, { status: 403 })
+    }
+
     let existingAuthUser: any = null
     const { data: { user: byId } } = await supabaseAdmin.auth.admin.getUserById(userIdLegacy).catch(() => ({ data: { user: null } }))
     if (byId) {
@@ -231,6 +247,11 @@ export async function POST(request: Request) {
     }
 
     if (existingAuthUser) {
+      if (existingAuthUser.last_sign_in_at) {
+        return NextResponse.json({
+          error: "Sua senha já foi configurada. Use o Login normal ou 'Esqueci minha senha' para receber um link por e-mail."
+        }, { status: 409 })
+      }
       const { error: upErr } = await supabaseAdmin.auth.admin.updateUserById(existingAuthUser.id, { password: newPass })
       if (upErr && !isSamePasswordError(upErr)) throw upErr
       if (existingAuthUser.id !== userIdLegacy) {
@@ -256,6 +277,9 @@ export async function POST(request: Request) {
       .from('system_users')
       .update({ senha_definida: true })
       .eq('id', userIdLegacy)
+
+    invalidateAuthUsersCache()
+    clearAuthGuardCache()
     
     return NextResponse.json({ ok: true })
   } catch (err: any) {

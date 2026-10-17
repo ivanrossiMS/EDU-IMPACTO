@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/server/authGuard'
+import { requireStaff } from '@/lib/server/authGuard'
 import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 import {
   testarConexaoZapSign,
@@ -62,9 +62,9 @@ const DEFAULT_CONFIG: ZapSignConfig = {
   mensagemWhatsappContratado: DEFAULT_MENSAGEM_WHATSAPP_CONTRATADO,
 }
 
-export async function GET() {
-  const { user, errorResponse } = await requireAuth()
-  if (errorResponse) return errorResponse
+export async function GET(request: Request) {
+  const { user, errorResponse } = await requireStaff(request)
+  if (errorResponse || !user) return errorResponse!
 
   try {
     const supabase = getAdminClient()
@@ -96,7 +96,7 @@ export async function GET() {
       : ''
 
     return NextResponse.json({
-      config,
+      config: { ...config, apiToken: maskedToken },
       hasToken: Boolean(config.apiToken && config.apiToken.trim()),
       maskedToken,
     })
@@ -106,8 +106,8 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const { user, errorResponse } = await requireAuth()
-  if (errorResponse) return errorResponse
+  const { user, errorResponse } = await requireStaff(request)
+  if (errorResponse || !user) return errorResponse!
 
   try {
     const body = await request.json()
@@ -129,7 +129,7 @@ export async function POST(request: Request) {
 
     // Ação: Testar conexão
     if (action === 'test_connection') {
-      let tokenToTest = apiToken
+      let tokenToTest = apiToken && !String(apiToken).includes('••••') ? apiToken : ''
       if (!tokenToTest) {
         // Busca token salvo
         const { data } = await supabase
@@ -157,8 +157,13 @@ export async function POST(request: Request) {
     const effectiveContratante = authModeContratantePadrao || authModePadrao || currentVal.authModeContratantePadrao || currentVal.authModePadrao || 'tokenWhatsapp'
     const effectiveContratado = authModeContratadoPadrao || currentVal.authModeContratadoPadrao || currentVal.authModePadrao || 'tokenWhatsapp'
 
+    const resolvedApiToken =
+      apiToken !== undefined && !String(apiToken).includes('••••')
+        ? String(apiToken).trim()
+        : currentVal.apiToken
+
     const newVal: ZapSignConfig = {
-      apiToken: apiToken !== undefined ? String(apiToken).trim() : currentVal.apiToken,
+      apiToken: resolvedApiToken,
       sandbox: sandbox !== undefined ? Boolean(sandbox) : currentVal.sandbox,
       authModePadrao: effectiveContratante,
       authModeContratantePadrao: effectiveContratante,
@@ -189,10 +194,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: upsertErr.message }, { status: 400 })
     }
 
+    const maskedSavedToken = newVal.apiToken
+      ? newVal.apiToken.length > 8
+        ? `${newVal.apiToken.slice(0, 4)}••••••••${newVal.apiToken.slice(-4)}`
+        : '••••••••'
+      : ''
+
     return NextResponse.json({
       success: true,
       message: 'Configurações do ZapSign atualizadas com sucesso!',
-      config: newVal,
+      config: { ...newVal, apiToken: maskedSavedToken },
     })
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 })

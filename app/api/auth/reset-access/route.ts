@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
-import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
-import { requireStaff } from '@/lib/server/authGuard'
+import { getAdminClient, findAuthUserByEmail, getAllAuthUsersCached, invalidateAuthUsersCache } from '@/lib/server/supabaseAdminSingleton'
+import { requireStaff, clearAuthGuardCache } from '@/lib/server/authGuard'
 
 export const dynamic = 'force-dynamic'
 
@@ -20,40 +20,16 @@ export async function POST(request: Request) {
     let targetAuthUserId: string | null = null
     let emailFound: string | null = null
 
-    // Helper: busca auth user por email sem listUsers(1000)
     const findAuthByEmail = async (email: string): Promise<string | null> => {
-      // 1. Tenta via system_users (índice rápido)
-      const { data: sys } = await supabaseAdmin
-        .from('system_users')
-        .select('id')
-        .eq('email', email.toLowerCase())
-        .maybeSingle()
-      if (sys?.id) {
-        const { data: { user } } = await supabaseAdmin.auth.admin.getUserById(sys.id).catch(() => ({ data: { user: null } }))
-        if (user) return user.id
-      }
-      // 2. Fallback: listUsers grande
-      let foundUser = null;
-      let page = 1;
-      while (page <= 5) { // Busca até 5000 usuários
-        const { data: list } = await supabaseAdmin.auth.admin.listUsers({ page, perPage: 1000 })
-        if (!list || !list.users || list.users.length === 0) break;
-        const found = list.users.find((u: any) => u.email?.toLowerCase() === email.toLowerCase())
-        if (found) {
-          foundUser = found.id;
-          break;
-        }
-        if (list.users.length < 1000) break;
-        page++;
-      }
-      return foundUser;
+      const found = await findAuthUserByEmail(email)
+      return found?.id || null
     }
 
     if (type === 'responsavel') {
       // Find the responsible record
       const { data: resp, error: dbErr } = await supabaseAdmin
         .from('responsaveis')
-        .select('id, nome, email')
+        .select('id, nome, email, auth_id')
         .eq('id', id)
         .maybeSingle()
 
@@ -62,11 +38,19 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'Responsável não encontrado' }, { status: 404 })
       }
 
-      if (resp.email) {
+      if (resp.auth_id) {
+        targetAuthUserId = resp.auth_id
+        emailFound = resp.email || null
+      } else if (resp.email) {
         const cleanEmail = resp.email.trim().toLowerCase()
         emailFound = cleanEmail
         targetAuthUserId = await findAuthByEmail(cleanEmail)
       }
+
+      await supabaseAdmin
+        .from('responsaveis')
+        .update({ auth_id: null })
+        .eq('id', id)
     } else if (type === 'aluno') {
       // Find the student record
       const { data: aluno, error: dbErr } = await supabaseAdmin
@@ -96,10 +80,10 @@ export async function POST(request: Request) {
         }
       }
 
-      // Procura também por metadata aluno_id para garantir remoção completa
+      // Procura também por metadata aluno_id usando o cache compartilhado
       try {
-        const { data: list } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 1000 })
-        const matches = (list?.users || []).filter((u: any) => 
+        const allUsers = await getAllAuthUsersCached()
+        const matches = allUsers.filter((u: any) => 
           u.user_metadata?.aluno_id === aluno.id ||
           (matricula && u.user_metadata?.matricula === matricula)
         )
@@ -114,13 +98,15 @@ export async function POST(request: Request) {
           if (user?.email) emailFound = (emailFound ? emailFound + ', ' + user.email : user.email)
           await supabaseAdmin.auth.admin.deleteUser(authId).catch(() => {})
         }
+        invalidateAuthUsersCache()
+        clearAuthGuardCache()
         return NextResponse.json({ ok: true, message: `Acesso reiniciado com sucesso para: ${emailFound}` })
       }
     } else if (type === 'system_user') {
       // Find system user
       const { data: sysUser, error: dbErr } = await supabaseAdmin
         .from('system_users')
-        .select('id, email')
+        .select('id, email, auth_id')
         .eq('id', id)
         .maybeSingle()
 
@@ -129,8 +115,9 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'Usuário do sistema não encontrado' }, { status: 404 })
       }
 
-      // Para system_users, o ID do banco pode ser igual ao ID do Auth
-      const { data: { user: byId } } = await supabaseAdmin.auth.admin.getUserById(id).catch(() => ({ data: { user: null } }))
+      // Para system_users, o ID do banco ou auth_id pode ser usado diretamente
+      const candidateId = sysUser.auth_id || id
+      const { data: { user: byId } } = await supabaseAdmin.auth.admin.getUserById(candidateId).catch(() => ({ data: { user: null } }))
       if (byId) {
         targetAuthUserId = byId.id
         emailFound = byId.email || null
@@ -153,9 +140,12 @@ export async function POST(request: Request) {
       if (deleteErr) {
         throw deleteErr
       }
+      invalidateAuthUsersCache()
+      clearAuthGuardCache()
       return NextResponse.json({ ok: true, message: `Acesso reiniciado com sucesso para o e-mail: ${emailFound}` })
     }
 
+    clearAuthGuardCache()
     return NextResponse.json({ ok: true, message: 'Nenhuma credencial ativa encontrada no Supabase Auth. Usuário já está livre para Primeiro Acesso.' })
   } catch (err: any) {
     console.error('[API reset-access] Error:', err.message)

@@ -1,18 +1,29 @@
 import { NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/server/authGuard'
+import {
+  requireStaff,
+  resolveUserRole,
+  getAuthorizedAlunoIdsForUser,
+} from '@/lib/server/authGuard'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: Request) {
-  const { user, errorResponse } = await requireAuth()
-  if (errorResponse) return errorResponse
+  const { user, isStaff, errorResponse } = await resolveUserRole(request)
+  if (errorResponse || !user) return errorResponse!
 
   try {
     const supabase = await createProtectedClient()
     const { data, error } = await supabase.from('saida_student_guardians').select('id, dados').limit(500)
     if (error) throw new Error(error.message)
-    const result = (data || []).map(row => ({ id: row.id, ...(row.dados || {}) }))
+    let result = (data || []).map(row => ({ id: row.id, ...(row.dados || {}) }))
+    if (!isStaff) {
+      const allowedAlunoIds = await getAuthorizedAlunoIdsForUser(user)
+      result = result.filter((sg: any) => {
+        const sId = String(sg.studentId || sg.alunoId || '').trim()
+        return sId && allowedAlunoIds.has(sId)
+      })
+    }
     return NextResponse.json(result)
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 400 })
@@ -20,8 +31,8 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const { user, errorResponse } = await requireAuth()
-  if (errorResponse) return errorResponse
+  const { user, errorResponse } = await requireStaff(request)
+  if (errorResponse || !user) return errorResponse!
 
   try {
     const body = await request.json()

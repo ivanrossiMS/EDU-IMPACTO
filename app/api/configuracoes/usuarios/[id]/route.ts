@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
-import { requireStaff } from '@/lib/server/authGuard'
+import { requireStaff, requireAdminOrDirecao, clearAuthGuardCache } from '@/lib/server/authGuard'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
-import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
+import { getAdminClient, invalidateAuthUsersCache } from '@/lib/server/supabaseAdminSingleton'
 import { invalidateColaboradoresCache } from '@/lib/server/colaboradoresCache'
 
 export const dynamic = 'force-dynamic'
@@ -9,6 +9,8 @@ export const dynamic = 'force-dynamic'
 export async function PUT(req: Request, context: { params: Promise<{ id: string }> }) {
   const { errorResponse } = await requireStaff(req)
   if (errorResponse) return errorResponse
+  const { errorResponse: adminErr } = await requireAdminOrDirecao(req)
+  if (adminErr) return adminErr
 
   const supabase = await createProtectedClient()
   const body = await req.json()
@@ -27,6 +29,8 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
   invalidateColaboradoresCache()
+  clearAuthGuardCache()
+  invalidateAuthUsersCache()
 
   const supabaseAdmin = getAdminClient()
   const oldEmail = (oldUser?.email || '').trim().toLowerCase()
@@ -71,6 +75,8 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
 export async function DELETE(req: Request, context: { params: Promise<{ id: string }> }) {
   const { errorResponse } = await requireStaff(req)
   if (errorResponse) return errorResponse
+  const { errorResponse: adminErr } = await requireAdminOrDirecao(req)
+  if (adminErr) return adminErr
 
   const supabase = await createProtectedClient()
   const { id } = await context.params
@@ -86,6 +92,8 @@ export async function DELETE(req: Request, context: { params: Promise<{ id: stri
   }
 
   invalidateColaboradoresCache()
+  clearAuthGuardCache()
+  invalidateAuthUsersCache()
 
   const supabaseAdmin = getAdminClient()
   

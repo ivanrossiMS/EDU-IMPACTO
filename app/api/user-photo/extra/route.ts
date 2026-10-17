@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/server/authGuard'
-import { createClient } from '@supabase/supabase-js'
+import { requireAuth, resolveUserRole, isAdminStaff } from '@/lib/server/authGuard'
+import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 
 export const dynamic = 'force-dynamic'
@@ -10,47 +10,41 @@ export async function POST(request: Request) {
   if (errorResponse) return errorResponse
 
   try {
-    // requireAuth já validou o usuário
-
     const { userId, bio, telefone, unidade } = await request.json()
     if (!userId) {
       return NextResponse.json({ error: 'Falta userId' }, { status: 400 })
     }
 
-    const loggedUser = user;
-    const isMasterAdmin = ['Diretor Geral', 'Administrador', 'Administrador Master'].includes(
-      loggedUser.user_metadata?.perfil || loggedUser.user_metadata?.cargo || ''
-    );
+    const loggedUser = user
+    const roleCtx = await resolveUserRole(request)
+    const isMasterAdmin = roleCtx ? isAdminStaff(roleCtx) : false
     const isSelf = loggedUser.id === userId ||
-      loggedUser.email?.toLowerCase() === userId.toLowerCase() ||
+      loggedUser.email?.toLowerCase() === String(userId).toLowerCase() ||
       loggedUser.user_metadata?.system_user_id === userId ||
-      loggedUser.user_metadata?.colaborador_id === userId;
+      loggedUser.user_metadata?.colaborador_id === userId ||
+      roleCtx?.dbUser?.id === userId ||
+      roleCtx?.dbUser?.auth_id === userId
 
     if (!isSelf && !isMasterAdmin) {
-      return NextResponse.json({ error: 'Proibido atualizar dados de outro usuário' }, { status: 403 });
+      return NextResponse.json({ error: 'Proibido atualizar dados de outro usuário' }, { status: 403 })
     }
 
-    const supabaseAdmin = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY!,
-      {
-        auth: {
-          autoRefreshToken: false,
-          persistSession: false
-        }
-      }
-    );
+    const supabaseAdmin = getAdminClient()
 
-    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId);
-    const filter = isUuid
-      ? `id.eq.${userId},auth_id.eq.${userId},auth_id.eq.${loggedUser.id},email.eq.${loggedUser.email}`
-      : `id.eq.${userId},auth_id.eq.${loggedUser.id},email.eq.${loggedUser.email}`;
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId)
+    const filter = isSelf
+      ? (isUuid
+          ? `id.eq.${userId},auth_id.eq.${userId},auth_id.eq.${loggedUser.id},email.eq.${loggedUser.email}`
+          : `id.eq.${userId},auth_id.eq.${loggedUser.id},email.eq.${loggedUser.email}`)
+      : (isUuid
+          ? `id.eq.${userId},auth_id.eq.${userId}`
+          : `id.eq.${userId},email.eq.${userId}`)
 
     const { data: current } = await supabaseAdmin
       .from('system_users')
       .select('id, dados')
       .or(filter)
-      .maybeSingle();
+      .maybeSingle()
 
     if (current) {
       const newDados = { 
@@ -58,21 +52,21 @@ export async function POST(request: Request) {
         bio, 
         telefone, 
         unidade 
-      };
+      }
 
       const { error: dbErr } = await supabaseAdmin
         .from('system_users')
         .update({ dados: newDados })
-        .eq('id', current.id);
+        .eq('id', current.id)
 
       if (dbErr) {
-        return NextResponse.json({ error: dbErr.message }, { status: 500 });
+        return NextResponse.json({ error: dbErr.message }, { status: 500 })
       }
     }
 
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true })
   } catch (err: any) {
-    console.error('[API user-photo/extra POST] Error:', err);
-    return NextResponse.json({ error: err.message || 'Erro interno' }, { status: 500 });
+    console.error('[API user-photo/extra POST] Error:', err)
+    return NextResponse.json({ error: err.message || 'Erro interno' }, { status: 500 })
   }
 }

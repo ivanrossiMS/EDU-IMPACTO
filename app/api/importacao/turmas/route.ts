@@ -146,6 +146,9 @@ export async function POST(request: Request) {
         console.error('[Import Turmas] Erro no upsert:', upsertError)
         return NextResponse.json({ error: `Erro ao salvar turmas: ${upsertError.message}` }, { status: 500 })
       }
+      const { invalidateTurmasCache, invalidateGruposCache } = await import('@/lib/server/turmasGruposCache')
+      invalidateTurmasCache()
+      invalidateGruposCache()
     }
 
     return NextResponse.json({

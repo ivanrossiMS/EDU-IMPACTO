@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/server/authGuard'
+import { requireStaff } from '@/lib/server/authGuard'
 import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 import {
   listarContratos,
@@ -29,7 +29,7 @@ export const dynamic = 'force-dynamic'
  * Lista todos os contratos/documentos com filtros e métricas
  */
 export async function GET(request: Request) {
-  const { user, errorResponse } = await requireAuth(request)
+  const { user, errorResponse } = await requireStaff(request)
   if (errorResponse) return errorResponse
 
   try {
@@ -57,7 +57,7 @@ export async function GET(request: Request) {
  * Emite documento de ciência/matrícula ou processa arquivo PDF enviado pela escola
  */
 export async function POST(request: Request) {
-  const { user, errorResponse } = await requireAuth(request)
+  const { user, errorResponse } = await requireStaff(request)
   if (errorResponse) return errorResponse
 
   try {
@@ -509,7 +509,7 @@ export async function POST(request: Request) {
  * DELETE /api/matriculas/digital?id=...&tipo=cancelar|excluir
  */
 export async function DELETE(request: Request) {
-  const { user, errorResponse } = await requireAuth(request)
+  const { user, errorResponse } = await requireStaff(request)
   if (errorResponse) return errorResponse
 
   try {
