@@ -11,19 +11,32 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { createServerClient } from '@supabase/ssr'
-import { cookies } from 'next/headers'
+import { cookies, headers } from 'next/headers'
 import { getAdminClient } from './supabaseAdminSingleton'
 
-/** Client autenticado — respeita Row Level Security. Suporta Bearer Token (mobile) ou cookies (web). */
+/** Client autenticado — respeita Row Level Security. Suporta Bearer Token (mobile/web) ou cookies (web). */
 export async function createProtectedClient(bearerToken?: string) {
-  if (bearerToken) {
-    return createClient(
+  let effectiveBearer = bearerToken
+  if (!effectiveBearer) {
+    try {
+      const headerStore = await headers()
+      const authHeader = headerStore.get('authorization')
+      if (authHeader && authHeader.toLowerCase().startsWith('bearer ')) {
+        effectiveBearer = authHeader.substring(7).trim()
+      }
+    } catch {
+      // Ignorado fora de contexto de Request Next.js
+    }
+  }
+
+  if (effectiveBearer) {
+    const client = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       {
         global: {
           headers: {
-            Authorization: `Bearer ${bearerToken}`
+            Authorization: `Bearer ${effectiveBearer}`
           },
           fetch: (url, options) => {
             return fetch(url, { ...options, cache: 'no-store' })
@@ -36,6 +49,9 @@ export async function createProtectedClient(bearerToken?: string) {
         }
       }
     )
+    const origGetUser = client.auth.getUser.bind(client.auth)
+    client.auth.getUser = ((jwt?: string) => origGetUser(jwt || effectiveBearer)) as typeof client.auth.getUser
+    return client
   }
 
   const cookieStore = await cookies()

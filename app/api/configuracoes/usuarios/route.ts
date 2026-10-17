@@ -38,12 +38,12 @@ export async function GET(req: Request) {
     const to = from + limit - 1
 
     if (type === 'colaboradores') {
-      // FIX E: Modo "dropdown" — quando limit=1000, as páginas só precisam de id/nome/email/perfil
-      // para preencher selects. Retornar só dados da DB sem chamar o Supabase Auth.
+      // FIX E: Modo "dropdown" — quando limit=1000, as páginas só precisam de dados de system_users
+      // sem chamar o Supabase Auth API 10.000 vezes.
       const isDropdownMode = limit >= 500
+      const supabaseAdmin = getAdminClient()
 
       // FIX D: Checar cache em memória (TTL 2min) para evitar N chamadas repetidas
-      // Cache só ativo no modo dropdown (sem search, sem paginação real)
       const cacheKey = `colaboradores-dropdown`
       if (isDropdownMode && !search) {
         const cached = getCachedColaboradores(cacheKey)
@@ -52,9 +52,9 @@ export async function GET(req: Request) {
         }
       }
 
-      let query = supabase.from('system_users').select(
+      let query = supabaseAdmin.from('system_users').select(
         isDropdownMode 
-          ? 'id, auth_id, nome, email, cargo, perfil, status, dados' // campos mínimos para dropdowns incluindo dados.foto
+          ? 'id, auth_id, nome, email, cargo, perfil, status, dados'
           : '*',
         { count: 'exact' }
       )
@@ -66,32 +66,31 @@ export async function GET(req: Request) {
         .order('nome')
         .range(from, isDropdownMode ? 999 : to)
 
-      // FIX E: No modo dropdown, pular Auth queries — economiza N×HTTP round-trips
-      // Os dados de perfil já estão na coluna `perfil` da system_users
       if (isDropdownMode) {
         const mappedDropdown = (sysUsers || []).map((u: any) => ({
           id: u.id,
           auth_id: u.auth_id || u.dados?.auth_id || null,
+          uid_legacy: u.dados?.uid_legacy || null,
           nome: u.nome,
           email: (u.email || '').trim().toLowerCase(),
           cargo: u.cargo || 'Não definido',
           perfil: u.perfil || 'Colaborador',
           status: u.status || 'ativo',
           foto: u.dados?.foto || null,
+          unidades: u.dados?.unidades || [],
+          dados: u.dados || {},
           ultimoAcesso: 'N/A'
         }))
         const result = { data: mappedDropdown, total: count || 0, page: 1, limit }
         if (!search) setCachedColaboradores(cacheKey, result)
         return NextResponse.json(result, {
           headers: {
-            // Cache privado de 60s — evita múltiplas chamadas no mesmo carregamento de página
             'Cache-Control': 'private, max-age=60, stale-while-revalidate=120',
           },
         })
       }
 
       // Modo administração (limit <= 20): enriquecer com dados do Supabase Auth
-      const supabaseAdmin = getAdminClient()
       const authMap = new Map<string, any>()
       const usersList: any[] = (sysUsers as any[]) || []
       if (usersList.length > 0) {

@@ -363,7 +363,7 @@ export function DestinatariosModal({
 
   const [gruposManuais = [], _setG, { loading: loadingGrupos }] = useSupabaseArray<any>('agenda/grupos')
   const [alunos = [], _setA, { loading: loadingAlunos }] = useSupabaseArray<any>('alunos/lightweight?limit=2000')
-  const [colaboradores = [], _setC, { loading: loadingColabs }] = useSupabaseArray<any>('configuracoes/usuarios')
+  const [colaboradores = [], _setC, { loading: loadingColabs }] = useSupabaseArray<any>('configuracoes/usuarios?type=colaboradores&limit=1000')
 
   // As turmas da Agenda Digital são estritamente os grupos ativos da Gestão de Turmas (Imagem 2)
   const turmas = useMemo(() => {

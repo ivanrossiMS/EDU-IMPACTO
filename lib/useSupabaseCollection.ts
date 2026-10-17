@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { apiFetch } from '@/lib/api/apiClient'
 
 // ─── Shared in-memory cache (survives route navigations) ──────────────────────
 // Key: endpoint string → { data, timestamp, inflightPromise }
@@ -13,6 +14,12 @@ interface CacheEntry<T> {
 const CACHE_TTL_MS = 60_000   // 60 seconds stale-while-revalidate window
 const MAX_MEMCACHE_SIZE = 80
 const memCache = new Map<string, CacheEntry<any>>()
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('edu:logout-start', () => {
+    memCache.clear()
+  })
+}
 
 function getCacheEntry<T>(key: string): CacheEntry<T> | undefined {
   return memCache.get(key)
@@ -78,13 +85,18 @@ async function fetchWithDedup<T>(
   const promise = fetcher().then(data => {
     // Do NOT call setCacheEntry here — the hook caller decides if it should update
     // the cache (it may be holding an optimistic lock)
-    // Clear inflight reference
     const entry = memCache.get(endpoint)
     if (entry) delete entry.inflightPromise
     return data
   }).catch(err => {
     const entry = memCache.get(endpoint)
-    if (entry) delete entry.inflightPromise
+    if (entry) {
+      delete entry.inflightPromise
+      // Se a entrada ainda não tinha dados válidos (timestamp === 0), remove do memCache para nunca bloquear novas tentativas
+      if (!entry.timestamp || entry.data === undefined) {
+        memCache.delete(endpoint)
+      }
+    }
     throw err
   })
 
@@ -98,11 +110,10 @@ async function fetchWithDedup<T>(
  * Drop-in replacement for useLocalStorage that persists data in Supabase
  * through the generic /api/colecoes endpoint.
  *
- * Performance improvements:
- * - In-memory cache shared between all hook instances (survives navigation)
- * - Stale-While-Revalidate: renders cached data instantly, revalidates in background
- * - In-flight deduplication: multiple components requesting same endpoint → 1 fetch
- * - Optimistic updates: state is updated before network confirmation
+ * Performance & Resilience:
+ * - Uses apiFetch (Bearer token + proactive refresh + 401 forced refresh + network retry)
+ * - Never caches error responses in memCache
+ * - Auto-heals on network reconnect ('online'), tab focus ('visibilitychange'), and auth recovery ('edu:auth-recovered')
  */
 export function useSupabaseCollection<T>(
   endpoint: string,
@@ -122,32 +133,39 @@ export function useSupabaseCollection<T>(
   // Store initialValue in a ref so it stays stable across Fast Refresh / re-renders
   const initialValueRef = useRef<T>(safeInitialValue)
 
-  // Initialization priority: 1. mem-cache, 2. initialValue (localStorage removed for security/UX)
+  // Initialization priority: 1. mem-cache, 2. initialValue
   const getBootValue = (): T => {
     const cached = getCacheEntry<T>(endpoint)
-    if (cached && cached.data !== undefined && cached.data !== null) {
+    if (cached && cached.timestamp > 0 && cached.data !== undefined && cached.data !== null) {
       if (Array.isArray(initialValueRef.current) && !Array.isArray(cached.data)) return initialValueRef.current
       return cached.data
     }
-    // Fallback: initial value (usually empty array). Loading flag will be TRUE.
     return initialValueRef.current
   }
 
   const [state, setState] = useState<T>(getBootValue)
-  // If we don't have memory cache with valid populated data, we are actively loading. Prevents empty screen flashes.
   const [loading, setLoading] = useState<boolean>(() => {
     const cached = getCacheEntry<T>(endpoint)
-    const hasValidData = Boolean(cached && cached.data !== undefined && cached.data !== null)
+    const hasValidData = Boolean(cached && cached.timestamp > 0 && cached.data !== undefined && cached.data !== null)
     return !hasValidData
   })
   const [error, setError] = useState<string | null>(null)
   const isMounted = useRef(true)
+  const hadErrorRef = useRef(false)
+  const autoHealTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Optimistic lock: timestamp until which server responses should be merged, not replaced
   const optimisticLockUntil = useRef<number>(0)
 
+  // Sync latest state to allow synchronous derivation without React's impure setState updater
+  const latestState = useRef<T>(state)
+  useEffect(() => { latestState.current = state }, [state])
+
   useEffect(() => {
     isMounted.current = true
-    return () => { isMounted.current = false }
+    return () => {
+      isMounted.current = false
+      if (autoHealTimerRef.current) clearTimeout(autoHealTimerRef.current)
+    }
   }, [])
 
   // Safety timeout: garante que o flag loading nunca fique preso como true por mais de 15 segundos
@@ -160,7 +178,107 @@ export function useSupabaseCollection<T>(
     }
   }, [loading])
 
-  // ── Fetch with SWR ─────────────────────────────────────────────────────────
+  const normalizeData = useCallback((data: any): T => {
+    let normalized: T = data
+    if (data === undefined || data === null) {
+      normalized = initialValueRef.current
+    } else if (Array.isArray(initialValueRef.current) && !Array.isArray(data)) {
+      if (data && typeof data === 'object' && Array.isArray((data as any).data)) {
+        normalized = (data as any).data
+      } else {
+        normalized = initialValueRef.current
+      }
+    } else if (
+      typeof data === 'object' && !Array.isArray(data) &&
+      initialValueRef.current && typeof initialValueRef.current === 'object' && !Array.isArray(initialValueRef.current)
+    ) {
+      normalized = { ...initialValueRef.current, ...data }
+    } else if (!Array.isArray(initialValueRef.current) && Array.isArray(data)) {
+      const first = data[0]
+      normalized = (first && typeof first === 'object') ? { ...initialValueRef.current, ...first } : initialValueRef.current
+    }
+
+    const isLocked = Date.now() < optimisticLockUntil.current
+    if (isLocked && Array.isArray(latestState.current) && Array.isArray(normalized)) {
+      const serverMap = new Map<string, any>((normalized as any[]).map((item: any) => [item?.id, item]))
+      const localArr = latestState.current as any[]
+      const merged: any[] = localArr.map((localItem: any) => {
+        const serverVersion = serverMap.get(localItem?.id)
+        return serverVersion ? { ...localItem, ...serverVersion } : localItem
+      })
+      const localIds = new Set(localArr.map((i: any) => i?.id))
+      for (const serverItem of (normalized as any[])) {
+        if (serverItem?.id && !localIds.has(serverItem.id)) {
+          merged.push(serverItem)
+        }
+      }
+      normalized = merged as any
+    } else if (!isLocked && Array.isArray(latestState.current) && Array.isArray(normalized) && options?.mergeLocal === true) {
+      const serverIds = new Set((normalized as any[]).map((item: any) => item?.id).filter(Boolean))
+      const localOnly = (latestState.current as any[]).filter((item: any) => item && item.id && !serverIds.has(item.id))
+      if (localOnly.length > 0) {
+        normalized = [...localOnly, ...(normalized as any[])] as any
+      }
+      setCacheEntry(endpoint, normalized)
+    } else if (!isLocked) {
+      setCacheEntry(endpoint, normalized)
+    }
+    return normalized
+  }, [endpoint, options?.mergeLocal])
+
+  const buildDefaultFetcher = useCallback(() => {
+    if (options?.fetcher) return options.fetcher()
+    return apiFetch(`/api/${endpoint}`, {
+      headers: { 'Cache-Control': 'default' },
+      cache: 'default',
+      credentials: 'include',
+      redirect: 'error'
+    }).then(async r => {
+      const contentType = r.headers.get('content-type')
+      if (r.ok && contentType && contentType.includes('text/html')) {
+        console.error(`[useSupabaseCollection] Endpoint /${endpoint} returned HTML on success (likely auth redirect).`)
+        throw new Error(`Auth Redirect`)
+      }
+      if (!r.ok) {
+        let errText = ''
+        try { errText = await r.text() } catch {}
+        console.error(`[useSupabaseCollection] API Error for /${endpoint}: HTTP ${r.status} - ${errText}`)
+        throw new Error(`HTTP ${r.status} - ${errText}`)
+      }
+      const text = await r.text()
+      if (!text) return initialValueRef.current
+      try {
+        return JSON.parse(text) as T
+      } catch (err) {
+        console.warn(`[useSupabaseCollection] JSON parse failed for /${endpoint}:`, err)
+        return initialValueRef.current
+      }
+    })
+  }, [endpoint, options?.fetcher])
+
+  const refresh = useCallback(() => {
+    if (options?.enabled === false) return
+    invalidateCache(endpoint)
+    fetchWithDedup<T>(endpoint, buildDefaultFetcher)
+      .then(data => {
+        if (!isMounted.current) return
+        hadErrorRef.current = false
+        const normalized = normalizeData(data)
+        if (hasDataChanged(latestState.current, normalized)) {
+          setState(normalized)
+        }
+        setError(null)
+        setLoading(false)
+      })
+      .catch(err => {
+        if (!isMounted.current) return
+        hadErrorRef.current = true
+        setError(`Falha ao carregar dados: ${err?.message || 'erro de rede'}`)
+        setLoading(false)
+      })
+  }, [endpoint, options?.enabled, buildDefaultFetcher, normalizeData])
+
+  // ── Fetch with SWR & Self-Healing Reconnection ─────────────────────────────
   useEffect(() => {
     if (options?.enabled === false) {
       setLoading(false)
@@ -169,223 +287,138 @@ export function useSupabaseCollection<T>(
 
     let cancelled = false
     const existing = getCacheEntry<T>(endpoint)
+    const hasValidCache = Boolean(existing && existing.timestamp > 0 && existing.data !== undefined && existing.data !== null)
+    const isCacheEmptyArray = hasValidCache && Array.isArray(existing!.data) && existing!.data.length === 0
 
-    // Cache HIT and still fresh → skip fetch entirely
-    if (existing && existing.data !== undefined && existing.data !== null && !isStale(existing)) {
+    // Cache HIT and still fresh (and not an empty array from an unpopulated initial load) → skip fetch
+    if (hasValidCache && !isStale(existing!) && !isCacheEmptyArray && !hadErrorRef.current) {
       if (isMounted.current && !cancelled) {
-        // Don't overwrite optimistic local state during lock window
         if (Date.now() >= optimisticLockUntil.current) {
-          setState(existing.data)
+          setState(existing!.data)
         }
         setLoading(false)
       }
-      return
-    }
-
-    // Cache HIT but stale → show cached data immediately, revalidate in background
-    if (existing && existing.data !== undefined && existing.data !== null) {
-      setState(existing.data)
-      const isCacheEmpty = Array.isArray(existing.data) ? existing.data.length === 0 : !existing.data;
-      setLoading(isCacheEmpty)
     } else {
-      setLoading(true)
+      if (hasValidCache) {
+        setState(existing!.data)
+        const isCacheEmpty = Array.isArray(existing!.data) ? existing!.data.length === 0 : !existing!.data
+        setLoading(isCacheEmpty)
+      } else {
+        setLoading(true)
+      }
+
+      fetchWithDedup<T>(endpoint, buildDefaultFetcher)
+        .then(data => {
+          if (cancelled || !isMounted.current) return
+          hadErrorRef.current = false
+          if (autoHealTimerRef.current) {
+            clearTimeout(autoHealTimerRef.current)
+            autoHealTimerRef.current = null
+          }
+          const normalized = normalizeData(data)
+          setState(normalized)
+          setError(null)
+          setLoading(false)
+        })
+        .catch((err) => {
+          if (cancelled || !isMounted.current) return
+          hadErrorRef.current = true
+          // NUNCA salva [] no cache quando ocorre erro!
+          setError(`Falha ao carregar dados: ${err?.message || 'erro de rede'}`)
+          setLoading(false)
+
+          // Auto-healing em segundo plano: se o dispositivo está online e houve falha transitória (ex: timeout 57014 ou queda rápida),
+          // agenda uma reconexão silenciosa em 3.5s
+          if (typeof navigator === 'undefined' || navigator.onLine) {
+            if (autoHealTimerRef.current) clearTimeout(autoHealTimerRef.current)
+            autoHealTimerRef.current = setTimeout(() => {
+              if (!cancelled && isMounted.current && hadErrorRef.current) {
+                console.log(`[useSupabaseCollection] Auto-healing após falha transitória em /${endpoint}...`)
+                refresh()
+              }
+            }, 3500)
+          }
+        })
     }
 
-    const doFetch = options?.fetcher
-      ? () => options.fetcher!()
-      : () => {
-          return fetch(`/api/${endpoint}`, { 
-            headers: { 'Cache-Control': 'default' }, 
-            cache: 'default',
-            credentials: 'include',
-            redirect: 'error'
-          })
-            .then(async r => {
-              const contentType = r.headers.get('content-type')
-              if (r.ok && contentType && contentType.includes('text/html')) {
-                console.error(`[useSupabaseCollection] Endpoint /${endpoint} returned HTML on success (likely auth redirect).`)
-                throw new Error(`Auth Redirect`)
-              }
-              if (!r.ok) {
-                let errText = '';
-                try { errText = await r.text(); } catch(e) {}
-                console.error(`[useSupabaseCollection] API Error for /${endpoint}: HTTP ${r.status} - ${errText}`);
-                throw new Error(`HTTP ${r.status} - ${errText}`);
-              }
-              const text = await r.text()
-              if (!text) return initialValueRef.current
-              try {
-                return JSON.parse(text) as T
-              } catch (err) {
-                console.warn(`[useSupabaseCollection] JSON parse failed for /${endpoint}:`, err)
-                return initialValueRef.current
-              }
-            })
-        }
+    // ── Listeners de Auto-Reconexão (Online, Auth Recovered, Visibility) ─────
+    const handleReconnectionOrRecovery = () => {
+      if (cancelled || !isMounted.current) return
+      const currentEntry = getCacheEntry<T>(endpoint)
+      const isCurrentEmpty = Array.isArray(latestState.current)
+        ? latestState.current.length === 0
+        : !latestState.current
+      const shouldRefetch =
+        hadErrorRef.current ||
+        isCurrentEmpty ||
+        !currentEntry ||
+        isStale(currentEntry)
 
-    fetchWithDedup<T>(endpoint, doFetch)
-      .then(data => {
-        if (cancelled || !isMounted.current) return
-        // Normalize: if result is not usable, fall back to initial value
-        let normalized: T = data
-        if (data === undefined || data === null) {
-          normalized = initialValueRef.current
-        } else if (Array.isArray(initialValueRef.current) && !Array.isArray(data)) {
-          if (data && typeof data === 'object' && Array.isArray((data as any).data)) {
-            normalized = (data as any).data
-          } else {
-            normalized = initialValueRef.current
-          }
-        } else if (
-          typeof data === 'object' && !Array.isArray(data) &&
-          initialValueRef.current && typeof initialValueRef.current === 'object' && !Array.isArray(initialValueRef.current)
-        ) {
-          // Merge defaults with API data to avoid undefined fields
-          normalized = { ...initialValueRef.current, ...data }
-        } else if (!Array.isArray(initialValueRef.current) && Array.isArray(data)) {
-          // Expected Object but received Array — use first element or default
-          const first = data[0]
-          normalized = (first && typeof first === 'object') ? { ...initialValueRef.current, ...first } : initialValueRef.current
-        }
-        // Optimistic lock: if we recently made local changes, merge server data
-        // with local state to avoid losing items that haven't been persisted yet
-        const isLocked = Date.now() < optimisticLockUntil.current
-        if (isLocked && Array.isArray(latestState.current) && Array.isArray(normalized)) {
-          // Keep all local items not yet on server, merge updates from server for existing items
-          const serverMap = new Map<string, any>((normalized as any[]).map((item: any) => [item?.id, item]))
-          const localArr = latestState.current as any[]
-          const merged: any[] = localArr.map((localItem: any) => {
-            const serverVersion = serverMap.get(localItem?.id)
-            return serverVersion ? { ...localItem, ...serverVersion } : localItem
-          })
-          // Add server items not present locally
-          const localIds = new Set(localArr.map((i: any) => i?.id))
-          for (const serverItem of (normalized as any[])) {
-            if (serverItem?.id && !localIds.has(serverItem.id)) {
-              merged.push(serverItem)
-            }
-          }
-          normalized = merged as any
-          // Do NOT update cache while locked — preserve optimistic data
-        } else if (!isLocked && Array.isArray(latestState.current) && Array.isArray(normalized) && options?.mergeLocal === true) {
-          // Only when explicitly requested via mergeLocal: true
-          const serverIds = new Set((normalized as any[]).map((item: any) => item?.id).filter(Boolean))
-          const localOnly = (latestState.current as any[]).filter((item: any) => item && item.id && !serverIds.has(item.id))
-          if (localOnly.length > 0) {
-            normalized = [...localOnly, ...(normalized as any[])] as any
-          }
-          setCacheEntry(endpoint, normalized)
-        } else {
-          setCacheEntry(endpoint, normalized)
-        }
-        setState(normalized)
-        setLoading(false)
-      })
-      .catch((err) => {
-        if (cancelled || !isMounted.current) return
-        setError(`Falha ao carregar dados: ${err?.message || 'erro de rede'}`)
-        setLoading(false)
-      })
+      if (shouldRefetch) {
+        refresh()
+      }
+    }
+
+    const handleVisibilityRecovery = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        handleReconnectionOrRecovery()
+      }
+    }
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('online', handleReconnectionOrRecovery)
+      window.addEventListener('edu:auth-recovered', handleReconnectionOrRecovery)
+      window.addEventListener('edu:network-reconnected', handleReconnectionOrRecovery)
+    }
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', handleVisibilityRecovery)
+    }
 
     // Setup polling with Visibility API — pauses when tab is hidden to save egress
+    let intervalId: ReturnType<typeof setInterval> | null = null
     if (options?.refreshIntervalMs && options.refreshIntervalMs > 0) {
-      let intervalId: ReturnType<typeof setInterval> | null = null
-
       const doPoll = () => {
         if (cancelled || !isMounted.current) return
-        // Skip fetch entirely if the page is hidden (user switched tabs / minimized window)
         if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
-        fetchWithDedup<T>(endpoint, doFetch)
+        fetchWithDedup<T>(endpoint, buildDefaultFetcher)
           .then(data => {
             if (cancelled || !isMounted.current) return
-            let normalized: T = data
-            if (data === undefined || data === null) {
-              normalized = initialValueRef.current
-            } else if (Array.isArray(initialValueRef.current) && !Array.isArray(data)) {
-              if (data && typeof data === 'object' && Array.isArray((data as any).data)) {
-                normalized = (data as any).data
-              } else {
-                normalized = initialValueRef.current
-              }
-            } else if (
-              typeof data === 'object' && !Array.isArray(data) &&
-              initialValueRef.current && typeof initialValueRef.current === 'object' && !Array.isArray(initialValueRef.current)
-            ) {
-              normalized = { ...initialValueRef.current, ...data }
-            } else if (!Array.isArray(initialValueRef.current) && Array.isArray(data)) {
-              const first = data[0]
-              normalized = (first && typeof first === 'object') ? { ...initialValueRef.current, ...first } : initialValueRef.current
-            }
-            // Optimistic lock: preserve local optimistic state during lock window
-            const isLocked = Date.now() < optimisticLockUntil.current
-            if (isLocked && Array.isArray(latestState.current) && Array.isArray(normalized)) {
-              const serverMap = new Map<string, any>((normalized as any[]).map((item: any) => [item?.id, item]))
-              const localArr = latestState.current as any[]
-              const merged: any[] = localArr.map((localItem: any) => {
-                const serverVersion = serverMap.get(localItem?.id)
-                return serverVersion ? { ...localItem, ...serverVersion } : localItem
-              })
-              const localIds = new Set(localArr.map((i: any) => i?.id))
-              for (const serverItem of (normalized as any[])) {
-                if (serverItem?.id && !localIds.has(serverItem.id)) merged.push(serverItem)
-              }
-              normalized = merged as any
-              // Do NOT update cache during lock — optimistic data wins
-            } else if (!isLocked && Array.isArray(latestState.current) && Array.isArray(normalized) && options?.mergeLocal === true) {
-              const serverIds = new Set((normalized as any[]).map((item: any) => item?.id).filter(Boolean))
-              const localOnly = (latestState.current as any[]).filter((item: any) => item && item.id && !serverIds.has(item.id))
-              if (localOnly.length > 0) {
-                normalized = [...localOnly, ...(normalized as any[])] as any
-              }
-              setCacheEntry(endpoint, normalized)
-            } else {
-              setCacheEntry(endpoint, normalized)
-            }
-            // Only update if data actually changed to avoid unnecessary re-renders
+            hadErrorRef.current = false
+            const normalized = normalizeData(data)
             if (hasDataChanged(latestState.current, normalized)) {
               setState(normalized)
             }
+            setError(null)
           })
           .catch(() => { /* silent fail on polling */ })
       }
-
-      // When the user returns to the tab, fetch immediately so data feels fresh
-      const handleVisibilityChange = () => {
-        if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
-          doPoll()
-        }
-      }
-
-      if (typeof document !== 'undefined') {
-        document.addEventListener('visibilitychange', handleVisibilityChange)
-      }
-
       intervalId = setInterval(doPoll, options.refreshIntervalMs)
-
-      return () => {
-        cancelled = true
-        if (intervalId) clearInterval(intervalId)
-        if (typeof document !== 'undefined') {
-          document.removeEventListener('visibilitychange', handleVisibilityChange)
-        }
-      }
     }
 
-    return () => { cancelled = true }
-  }, [endpoint]) // eslint-disable-line react-hooks/exhaustive-deps
+    return () => {
+      cancelled = true
+      if (intervalId) clearInterval(intervalId)
+      if (autoHealTimerRef.current) clearTimeout(autoHealTimerRef.current)
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('online', handleReconnectionOrRecovery)
+        window.removeEventListener('edu:auth-recovered', handleReconnectionOrRecovery)
+        window.removeEventListener('edu:network-reconnected', handleReconnectionOrRecovery)
+      }
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', handleVisibilityRecovery)
+      }
+    }
+  }, [endpoint, options?.enabled]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Persist helper ─────────────────────────────────────────────────────────
   const persist = useCallback(async (next: T) => {
-    // 1. Invalidate mem-cache
     invalidateCache(endpoint)
-    // 2. Update mem-cache optimistically
     setCacheEntry(endpoint, next)
-    // 3. Sync to API FIRST (source of truth)
     try {
       if (options?.persister) {
         await options.persister(next)
       } else {
-        const res = await fetch(`/api/${endpoint}`, {
+        const res = await apiFetch(`/api/${endpoint}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(next),
@@ -415,10 +448,6 @@ export function useSupabaseCollection<T>(
     }
   }, [endpoint, lsKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Sync latest state to allow synchronous derivation without React's impure setState updater
-  const latestState = useRef<T>(state);
-  useEffect(() => { latestState.current = state; }, [state]);
-
   // ── Setter — optimistic update then persist ────────────────────────────────
   const set = useCallback(async (valOrFn: T | ((prev: T) => T)) => {
     const safePrev: T = latestState.current !== undefined ? latestState.current : initialValueRef.current;
@@ -426,24 +455,17 @@ export function useSupabaseCollection<T>(
       ? (valOrFn as (p: T) => T)(safePrev)
       : valOrFn;
     
-    // Check if nothing changed to prevent redundant network writes / database resets
     if (safePrev === next || JSON.stringify(safePrev) === JSON.stringify(next)) {
       return;
     }
     
-    // Update ref immediately for sequential setter calls
     latestState.current = next;
-    
-    // React state update (Pure)
     setState(next);
-    
-    // Side effects (Run exactly once outside setState)
     setCacheEntry(endpoint, next);
     await persist(next);
   }, [persist, endpoint]);
 
   const setLocalWrapped = useCallback((valOrFn: any) => {
-    // Extend optimistic lock by 5 seconds every time local state is updated
     optimisticLockUntil.current = Date.now() + 5000
     setState((prev: any) => {
       const safePrev = prev !== undefined && prev !== null ? prev : initialValueRef.current;
@@ -455,13 +477,15 @@ export function useSupabaseCollection<T>(
   }, [endpoint]);
 
   const returnedState = state !== undefined && state !== null ? state : initialValueRef.current;
-  return [returnedState, set, { loading, error, setLocal: setLocalWrapped }]
+  return [returnedState, set, { loading, error, setLocal: setLocalWrapped, refresh }]
 }
 
 /**
  * useSupabaseArray<T>
  *
  * Specialized version for array endpoints that support full CRUD.
+ * Uses apiFetch for automatic Bearer authentication, 401 token refresh, and network drop retry.
+ * NEVER returns [] on 401/403/500 so memCache is never poisoned with empty arrays on failure.
  */
 export function useSupabaseArray<T>(
   endpoint: string,
@@ -483,75 +507,57 @@ export function useSupabaseArray<T>(
         fetchOpts.headers = { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' };
         fetchOpts.cache = 'no-store';
       } else {
-        // Usa as configs default do browser e cabeçalhos enviados pelo servidor Next.js
         fetchOpts.cache = 'default';
       }
 
       return (() => {
-        // AbortController com timeout de 30s — evita fetch pendente por minutos no cliente
         const ctrl = new AbortController()
         const tid = setTimeout(() => ctrl.abort(), 30_000)
 
-        return fetch(url, { ...fetchOpts, signal: ctrl.signal })
-              .then(async r => {
-                clearTimeout(tid)
-                const contentType = r.headers.get('content-type')
-                if (r.ok && contentType && contentType.includes('text/html')) {
-                  r.text().then(html => console.error(`[useSupabaseArray] HTML returned from /${endpoint}:`, html.substring(0, 300)));
-                  throw new Error(`Auth Redirect`)
-                }
-                if (!r.ok) {
-                if (r.status === 404) {
-                  console.warn(`[useSupabaseArray] Endpoint /${endpoint} is not implemented yet or table is missing (HTTP ${r.status}). Returning [].`);
-                  return [];
-                }
-                if (r.status === 504) {
-                  // Timeout da rota — tentar novamente em 3s
-                  console.warn(`[useSupabaseArray] Timeout (504) em /${endpoint}. Retentando em 3s...`)
-                  await new Promise(res => setTimeout(res, 3000))
-                  throw new Error('Retry after 504')
-                }
-                if (r.status === 500) {
-                  console.warn(`[useSupabaseArray] Endpoint /${endpoint} retornou erro 500. Returning [].`);
-                  return [];
-                }
-                if (r.status === 401 || r.status === 403) {
-                  console.warn(`[useSupabaseArray] Access Denied for /${endpoint} (HTTP ${r.status}). Returning [].`);
-                  return [];
-                }
-                let errText = '';
-                try { errText = await r.text(); } catch(e) {}
-                console.error(`[useSupabaseArray] API Error for /${endpoint}: HTTP ${r.status} - ${errText}`);
-                throw new Error(`HTTP ${r.status} - ${errText}`);
+        return apiFetch(url, { ...fetchOpts, signal: ctrl.signal })
+          .then(async r => {
+            clearTimeout(tid)
+            const contentType = r.headers.get('content-type')
+            if (r.ok && contentType && contentType.includes('text/html')) {
+              r.text().then(html => console.error(`[useSupabaseArray] HTML returned from /${endpoint}:`, html.substring(0, 300)));
+              throw new Error(`Auth Redirect`)
+            }
+            if (!r.ok) {
+              if (r.status === 404) {
+                console.warn(`[useSupabaseArray] Endpoint /${endpoint} is not implemented yet or table is missing (HTTP ${r.status}). Returning [].`);
+                return [];
               }
-              const text = await r.text();
-              if (!text) return [];
-              try {
-                const payload = JSON.parse(text);
-                // Always return an array — never return an object or null
-                if (Array.isArray(payload)) return payload
-                if (Array.isArray(payload?.data)) return payload.data
-                // API returned error object or unexpected shape — return empty array
-                console.warn(`[useSupabaseArray] Unexpected response shape for /${endpoint}:`, payload)
-                return []
-              } catch (err) {
-                console.warn(`[useSupabaseArray] JSON parse failed for /${endpoint}:`, err)
-                return []
-              }
+              let errText = '';
+              try { errText = await r.text(); } catch(e) {}
+              console.warn(`[useSupabaseArray] API Error for /${endpoint}: HTTP ${r.status} - ${errText.substring(0, 200)}`);
+              // Lança erro para que o useSupabaseCollection NÃO salve [] no memCache e acione o auto-healing!
+              throw new Error(`HTTP ${r.status}`);
+            }
+            const text = await r.text();
+            if (!text) return [];
+            try {
+              const payload = JSON.parse(text);
+              if (Array.isArray(payload)) return payload
+              if (Array.isArray(payload?.data)) return payload.data
+              console.warn(`[useSupabaseArray] Unexpected response shape for /${endpoint}:`, payload)
+              return []
+            } catch (err) {
+              console.warn(`[useSupabaseArray] JSON parse failed for /${endpoint}:`, err)
+              throw new Error('JSON parse error')
+            }
           })
           .catch(err => {
-              clearTimeout(tid)
-              if (err?.name === 'AbortError') {
-                console.warn(`[useSupabaseArray] Fetch abortado por timeout (30s) em /${endpoint}`)
-                throw new Error('Fetch timeout')
-              }
-              console.warn(`[useSupabaseArray] Fetch failed for /${endpoint}:`, err)
-              throw err
+            clearTimeout(tid)
+            if (err?.name === 'AbortError') {
+              console.warn(`[useSupabaseArray] Fetch abortado por timeout (30s) em /${endpoint}`)
+              throw new Error('Fetch timeout')
+            }
+            throw err
           })
       })()
     }, [endpoint, options?.noCache]),
     persister: useCallback(async (arr: T[]) => {
-      const res = await fetch(`/api/${endpoint}`, {
+      const res = await apiFetch(`/api/${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(arr),
@@ -561,8 +567,8 @@ export function useSupabaseArray<T>(
       if (!res.ok) {
         const body = await res.json().catch(() => ({}))
         if (res.status === 404 || res.status === 405) {
-           console.warn(`[useSupabaseArray] API POST ${res.status} para o endpoint: /api/${endpoint}. Ignorando salvamento (coleção somente-leitura).`)
-           return
+          console.warn(`[useSupabaseArray] API POST ${res.status} para o endpoint: /api/${endpoint}. Ignorando salvamento (coleção somente-leitura).`)
+          return
         }
         console.error(`[useSupabaseArray] API POST failed for /api/${endpoint}:`, res.status, body)
         throw new Error(body?.error || `Erro ${res.status} ao salvar em ${endpoint}`)
@@ -570,3 +576,4 @@ export function useSupabaseArray<T>(
     }, [endpoint]),
   })
 }
+

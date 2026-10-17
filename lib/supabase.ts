@@ -37,19 +37,53 @@ function decodeAndValidate(raw: string | null): string | null {
   }
 }
 
+function compactSessionJsonForCookie(rawJson: string): string {
+  try {
+    const parsed = JSON.parse(rawJson)
+    if (!parsed || typeof parsed !== 'object') return rawJson
+    if (parsed.user && typeof parsed.user === 'object') {
+      const compactUser = { ...parsed.user }
+      // identities duplica user_metadata inteiro e infla o Header Cookie desnecessariamente
+      delete compactUser.identities
+      if (compactUser.user_metadata && typeof compactUser.user_metadata === 'object') {
+        const meta = { ...compactUser.user_metadata }
+        for (const k of Object.keys(meta)) {
+          if (typeof meta[k] === 'string' && (meta[k].startsWith('data:image/') || meta[k].length > 1024)) {
+            delete meta[k]
+          }
+        }
+        compactUser.user_metadata = meta
+      }
+      return JSON.stringify({ ...parsed, user: compactUser })
+    }
+    return rawJson
+  } catch {
+    return rawJson
+  }
+}
+
 export function syncDocumentCookie(key: string, value: string) {
   if (typeof document === 'undefined') return
   const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:'
   const securePart = isHttps ? '; Secure' : ''
   try {
-    const encoded = `${BASE64_PREFIX}${stringToBase64URL(value)}`
+    const compactValue = compactSessionJsonForCookie(value)
+    const encoded = `${BASE64_PREFIX}${stringToBase64URL(compactValue)}`
     const chunks = createChunks(key, encoded)
 
-    // Remove chunks antigos/órfãos que não estão mais nesta lista
-    const currentCookies = document.cookie.split('; ').map(c => c.split('=')[0])
+    // Remove chunks antigos/órfãos que não estão mais nesta lista (incluindo índices explícitos 0..7 para CapacitorCookies)
+    const currentCookies = document.cookie.split(';').map(c => c.split('=')[0].trim()).filter(Boolean)
     const newNames = new Set(chunks.map(ch => ch.name))
-    currentCookies.filter(name => isChunkLike(name, key) && !newNames.has(name)).forEach(name => {
-      document.cookie = `${name}=; path=/; max-age=0; SameSite=Lax${securePart}`
+    const candidateOrphans = new Set<string>([
+      key,
+      ...Array.from({ length: 8 }, (_, i) => `${key}.${i}`),
+      ...currentCookies.filter(name => isChunkLike(name, key))
+    ])
+
+    candidateOrphans.forEach(name => {
+      if (!newNames.has(name)) {
+        document.cookie = `${name}=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax${securePart}`
+      }
     })
 
     // Grava chunks com codificação segura base64url
@@ -58,7 +92,7 @@ export function syncDocumentCookie(key: string, value: string) {
     })
   } catch (e) {
     try {
-      document.cookie = `${key}=; path=/; max-age=0; SameSite=Lax${securePart}`
+      document.cookie = `${key}=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax${securePart}`
     } catch {}
   }
 }
@@ -68,11 +102,15 @@ function removeDocumentCookie(key: string) {
   const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:'
   const securePart = isHttps ? '; Secure' : ''
   try {
-    const currentCookies = document.cookie.split('; ').map(c => c.split('=')[0])
-    currentCookies.filter(name => isChunkLike(name, key)).forEach(name => {
-      document.cookie = `${name}=; path=/; max-age=0; SameSite=Lax${securePart}`
+    const currentCookies = document.cookie.split(';').map(c => c.split('=')[0].trim()).filter(Boolean)
+    const toRemove = new Set<string>([
+      key,
+      ...Array.from({ length: 8 }, (_, i) => `${key}.${i}`),
+      ...currentCookies.filter(name => isChunkLike(name, key))
+    ])
+    toRemove.forEach(name => {
+      document.cookie = `${name}=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax${securePart}`
     })
-    document.cookie = `${key}=; path=/; max-age=0; SameSite=Lax${securePart}`
   } catch {}
 }
 
@@ -212,6 +250,11 @@ if (isBrowser) {
       if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
         if (session) {
           await saveSessionSecurely(session).catch(() => {})
+          if (typeof window !== 'undefined') {
+            try {
+              window.dispatchEvent(new CustomEvent('edu:auth-recovered'))
+            } catch {}
+          }
         }
       } else if (event === 'SIGNED_OUT') {
         await clearSessionSecurely().catch(() => {})

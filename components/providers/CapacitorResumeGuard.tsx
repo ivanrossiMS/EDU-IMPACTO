@@ -99,6 +99,11 @@ export function CapacitorResumeGuard() {
           console.log(`[CapacitorResumeGuard] Token expirado ou próximo do vencimento (${reason}). Renovando proativamente...`)
           await refreshSessionCentralized(supabase)
         }
+        if (reason !== 'cold boot / montagem inicial') {
+          try {
+            window.dispatchEvent(new CustomEvent('edu:network-reconnected'))
+          } catch {}
+        }
       } catch (e) {
         console.warn('[CapacitorResumeGuard] Aviso ao renovar em primeiro plano:', e)
       }

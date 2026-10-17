@@ -146,7 +146,7 @@ export default function CalendarioPage() {
   const { eventosAgenda = [], setEventosAgenda, cfgCalendarioLetivo = [] } = useData()
   const [turmas = []] = useSupabaseArray<any>('turmas')
   const [gruposManuais = []] = useSupabaseArray<any>('agenda/grupos')
-  const [sysUsers] = useSupabaseArray<any>('configuracoes/usuarios')
+  const [sysUsers] = useSupabaseArray<any>('configuracoes/usuarios?type=colaboradores&limit=1000')
   const usuariosAtivos = sysUsers || []
 
   const anosLetivos = useMemo(() => {

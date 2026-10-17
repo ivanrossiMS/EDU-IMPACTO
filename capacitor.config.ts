@@ -7,6 +7,7 @@ const config: CapacitorConfig = {
   server: {
     url: 'https://impacto-edu.net',
     cleartext: true,
+    errorPath: 'offline-retry.html',
   },
   plugins: {
     CapacitorCookies: {

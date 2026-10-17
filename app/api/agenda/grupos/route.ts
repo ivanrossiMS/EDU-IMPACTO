@@ -1,24 +1,17 @@
 import { NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/server/authGuard'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
-import { invalidateGruposCache } from '@/lib/server/turmasGruposCache'
+import { getCachedTurmasAndGrupos, invalidateGruposCache } from '@/lib/server/turmasGruposCache'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: Request) {
-  const { user, errorResponse } = await requireAuth()
+  const { user, errorResponse } = await requireAuth(request)
   if (errorResponse) return errorResponse
 
   try {
-    const supabase = await createProtectedClient()
-    
-    const { data, error } = await supabase
-      .from('agenda_grupos')
-      .select('id, dados')
-      
-    if (error) throw new Error(error.message)
-    
-    const result = (data || []).map(row => ({ id: row.id, ...(row.dados || {}) }))
+    const { allGrupos } = await getCachedTurmasAndGrupos()
+    const result = (allGrupos || []).map((row: any) => ({ id: row.id, ...(row.dados || {}) }))
     
     return NextResponse.json(result, {
       headers: { 'Cache-Control': 'private, max-age=60, stale-while-revalidate=120' }

@@ -24,7 +24,7 @@ export function useCollaboratorTurmas(options?: { includeGroups?: boolean }) {
   const searchParams = useSearchParams()
   const { turmas = [], turmasLoading = false, cfgCalendarioLetivo = [] } = useData()
   const { chatGroups = [] } = useAgendaDigital()
-  const [colaboradores, , { loading: loadingColabs }] = useSupabaseArray<any>('configuracoes/usuarios')
+  const [colaboradores, , { loading: loadingColabs }] = useSupabaseArray<any>('configuracoes/usuarios?type=colaboradores&limit=1000')
   const [equipes = [], , { loading: loadingEquipes }] = useSupabaseArray<any>('agenda/equipes')
 
   const espelharColabId = searchParams?.get('espelhar_colaborador')

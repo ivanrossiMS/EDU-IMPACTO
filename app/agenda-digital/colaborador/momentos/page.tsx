@@ -70,7 +70,7 @@ export default function ADMomentosPage() {
 
   const { turmas = [], cfgCalendarioLetivo = [] } = useData()
   const [alunos] = useSupabaseArray<any>('alunos/lightweight?limit=2000')
-  const [colaboradores = []] = useSupabaseArray<any>('configuracoes/usuarios')
+  const [colaboradores = []] = useSupabaseArray<any>('configuracoes/usuarios?type=colaboradores&limit=1000')
 
   const mirroredColab = useMemo(() => {
     if (!isMirroring || !espelharColabId) return null

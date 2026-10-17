@@ -42,7 +42,7 @@ export function ReportsSelectionModal({
   const [alunos, _sa, { loading: loadingAlunos }] = useSupabaseArray<any>('alunos/lightweight?limit=2000')
   const [gruposManuais, _sg, { loading: loadingGrupos }] = useSupabaseArray<any>('agenda/grupos')
   const [turmas, _st, { loading: loadingTurmas }] = useSupabaseArray<any>('turmas')
-  const [colaboradores, _sc, { loading: loadingColabs }] = useSupabaseArray<any>('configuracoes/usuarios')
+  const [colaboradores, _sc, { loading: loadingColabs }] = useSupabaseArray<any>('configuracoes/usuarios?type=colaboradores&limit=1000')
   
   // Timeout de segurança para evitar travamento em caso de erro de rede
   const [loadTimeoutPassed, setLoadTimeoutPassed] = useState(false)

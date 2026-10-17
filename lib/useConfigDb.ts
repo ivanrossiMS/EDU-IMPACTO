@@ -22,6 +22,12 @@ let configCache: ConfigCacheState = {
   hadError: false,
 }
 
+if (typeof window !== 'undefined') {
+  window.addEventListener('edu:logout-start', () => {
+    configCache = { data: {}, timestamp: 0, promise: null, resolved: false, hadError: false }
+  })
+}
+
 function isConfigCacheFresh(): boolean {
   return configCache.resolved && !configCache.hadError && (Date.now() - configCache.timestamp < CONFIG_TTL_MS)
 }
@@ -137,44 +143,66 @@ export function useConfigDb<T>(chave: string, defaultValue: T[] = []) {
     return () => { isMounted.current = false }
   }, [])
 
-  // ── Fetch from shared bulk cache on mount ──────────────────────────────────
+  // ── Fetch from shared bulk cache on mount & reconnect ──────────────────────
   useEffect(() => {
     let cancelled = false
 
-    // Already fresh in cache → update state and return
-    if (isConfigCacheFresh()) {
-      const cachedVal = configCache.data[chave]
-      if (cachedVal && cachedVal.length > 0 && isMounted.current) {
-        setDataState(cachedVal as T[])
+    const loadConfigs = () => {
+      if (isConfigCacheFresh()) {
+        const cachedVal = configCache.data[chave]
+        if (cachedVal && cachedVal.length > 0 && isMounted.current) {
+          setDataState(cachedVal as T[])
+        }
+        setLoading(false)
+        return
       }
-      setLoading(false)
-      return
+
+      fetchAllConfigs().then(allConfigs => {
+        if (cancelled || !isMounted.current) return
+
+        const val = allConfigs[chave]
+        if (val && Array.isArray(val) && val.length > 0) {
+          setDataState(val as T[])
+        } else if (defaultValue.length > 0) {
+          setDataState(defaultValue)
+          // Somente faz auto-seed no banco se a leitura de /api/configuracoes teve sucesso real
+          if (configCache.resolved && !configCache.hadError) {
+            apiFetch('/api/configuracoes', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ chave, valor: defaultValue }),
+            }).catch(() => {})
+            configCache.data[chave] = defaultValue as any[]
+          }
+        }
+        setLoading(false)
+      }).catch(() => {
+        if (!cancelled && isMounted.current) setLoading(false)
+      })
     }
 
-    fetchAllConfigs().then(allConfigs => {
-      if (cancelled || !isMounted.current) return
+    loadConfigs()
 
-      const val = allConfigs[chave]
-      if (val && Array.isArray(val) && val.length > 0) {
-        setDataState(val as T[])
-      } else if (defaultValue.length > 0) {
-        setDataState(defaultValue)
-        // Somente faz auto-seed no banco se a leitura de /api/configuracoes teve sucesso real
-        if (configCache.resolved && !configCache.hadError) {
-          apiFetch('/api/configuracoes', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ chave, valor: defaultValue }),
-          }).catch(() => {})
-          configCache.data[chave] = defaultValue as any[]
-        }
+    const handleReconnect = () => {
+      if (!cancelled && isMounted.current && (configCache.hadError || !configCache.resolved)) {
+        loadConfigs()
       }
-      setLoading(false)
-    }).catch(() => {
-      if (!cancelled && isMounted.current) setLoading(false)
-    })
+    }
 
-    return () => { cancelled = true }
+    if (typeof window !== 'undefined') {
+      window.addEventListener('online', handleReconnect)
+      window.addEventListener('edu:auth-recovered', handleReconnect)
+      window.addEventListener('edu:network-reconnected', handleReconnect)
+    }
+
+    return () => {
+      cancelled = true
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('online', handleReconnect)
+        window.removeEventListener('edu:auth-recovered', handleReconnect)
+        window.removeEventListener('edu:network-reconnected', handleReconnect)
+      }
+    }
   }, [chave]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Persist to Supabase + update local state + invalidate cache ────────────

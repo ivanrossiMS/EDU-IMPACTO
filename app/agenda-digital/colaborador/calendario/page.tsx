@@ -207,7 +207,7 @@ export default function ADCalendarioPage() {
     isLoading: isLoadingTurmas
   } = useCollaboratorTurmas({ includeGroups: true })
 
-  const [sysUsers] = useSupabaseArray<any>('configuracoes/usuarios')
+  const [sysUsers] = useSupabaseArray<any>('configuracoes/usuarios?type=colaboradores&limit=1000')
   const usuariosAtivos = sysUsers || []
   const { chatGroups = [] } = useAgendaDigital()
   const searchParams = useSearchParams()

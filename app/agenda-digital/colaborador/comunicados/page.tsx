@@ -171,7 +171,7 @@ function ColaboradorComunicadosContent() {
   const isMirroring = !!espelharColabId
 
   const [alunos, , { loading: alunosLoading }] = useSupabaseArray<any>('alunos/lightweight?limit=2000')
-  const [colaboradores, , { loading: colabLoading }] = useSupabaseArray<any>('configuracoes/usuarios')
+  const [colaboradores, , { loading: colabLoading }] = useSupabaseArray<any>('configuracoes/usuarios?type=colaboradores&limit=1000')
 
   const mirroredColab = useMemo(() => {
     if (!isMirroring || !espelharColabId) return null

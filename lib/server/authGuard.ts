@@ -13,6 +13,10 @@ import { createProtectedClient } from './supabaseServerFactory'
  * // Acesso seguro: user está autenticado
  * ```
  */
+const VERIFIED_TOKEN_CACHE_TTL_MS = 10_000
+const verifiedTokenCache = new Map<string, { user: any; expiresAt: number }>()
+const inflightTokenVerifications = new Map<string, Promise<any | null>>()
+
 export async function requireAuth(req?: Request) {
   let authHeader: string | null = null;
   if (req && 'headers' in req) {
@@ -29,13 +33,38 @@ export async function requireAuth(req?: Request) {
 
   // 1. Se o Bearer token foi fornecido explicitamente:
   if (bearerToken) {
-    const supabase = await createProtectedClient(bearerToken);
-    try {
-      const res = await supabase.auth.getUser(bearerToken);
-      if (!res.error && res.data?.user) {
-        return { user: res.data.user, errorResponse: null };
-      }
-    } catch {}
+    const now = Date.now()
+    const cachedToken = verifiedTokenCache.get(bearerToken)
+    if (cachedToken && cachedToken.expiresAt > now && cachedToken.user) {
+      return { user: cachedToken.user, errorResponse: null }
+    }
+
+    let verifyPromise = inflightTokenVerifications.get(bearerToken)
+    if (!verifyPromise) {
+      verifyPromise = (async () => {
+        try {
+          const supabase = await createProtectedClient(bearerToken)
+          const res = await supabase.auth.getUser(bearerToken)
+          if (!res.error && res.data?.user) {
+            if (verifiedTokenCache.size > 300) verifiedTokenCache.clear()
+            verifiedTokenCache.set(bearerToken, {
+              user: res.data.user,
+              expiresAt: Date.now() + VERIFIED_TOKEN_CACHE_TTL_MS
+            })
+            return res.data.user
+          }
+        } catch {}
+        return null
+      })().finally(() => {
+        inflightTokenVerifications.delete(bearerToken)
+      })
+      inflightTokenVerifications.set(bearerToken, verifyPromise)
+    }
+
+    const verifiedUser = await verifyPromise
+    if (verifiedUser) {
+      return { user: verifiedUser, errorResponse: null }
+    }
 
     // REGRA DE SEGURANÇA: Se o Bearer falhar, NUNCA assume silenciosamente uma identidade presente no cookie!
     return {
@@ -100,8 +129,14 @@ const systemUserCache = new Map<string, SystemUserCacheEntry>()
 export function clearAuthGuardCache(userId?: string) {
   if (userId) {
     systemUserCache.delete(userId)
+    for (const [token, entry] of verifiedTokenCache.entries()) {
+      if (entry.user?.id === userId) {
+        verifiedTokenCache.delete(token)
+      }
+    }
   } else {
     systemUserCache.clear()
+    verifiedTokenCache.clear()
   }
 }
 
