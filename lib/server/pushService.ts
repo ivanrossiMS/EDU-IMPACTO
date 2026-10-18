@@ -41,6 +41,7 @@ export interface PushResult {
   mock?: boolean
   skipped?: boolean
   paused?: boolean
+  noSubscribers?: boolean
   data?: any
   error?: string
   statusCode?: number
@@ -85,6 +86,7 @@ async function attemptSend(
 
       // Checar se a API retornou erro explícito de ausência total de inscritos
       let allUnsubscribed = false
+      let onlyInvalidAliases = false
       if (parsedBody.errors) {
         if (Array.isArray(parsedBody.errors)) {
           allUnsubscribed = parsedBody.errors.some((e: any) =>
@@ -92,6 +94,8 @@ async function attemptSend(
           )
         } else if (typeof parsedBody.errors === 'string') {
           allUnsubscribed = parsedBody.errors.toLowerCase().includes('not subscribed')
+        } else if (typeof parsedBody.errors === 'object' && parsedBody.errors.invalid_aliases) {
+          onlyInvalidAliases = true
         }
       }
 
@@ -104,7 +108,8 @@ async function attemptSend(
         recipientCount = (hasValidId && !allUnsubscribed) ? 1 : 0
       }
 
-      if (!hasValidId || (recipientCount === 0 && allUnsubscribed)) {
+      if (!hasValidId || (recipientCount === 0 && (allUnsubscribed || onlyInvalidAliases))) {
+        const isNoSubscribers = allUnsubscribed || onlyInvalidAliases
         const errorDetail = allUnsubscribed
           ? 'All included players are not subscribed'
           : (parsedBody.errors ? JSON.stringify(parsedBody.errors) : 'No subscribed recipients found')
@@ -115,6 +120,7 @@ async function attemptSend(
         })
         return {
           success: false,
+          noSubscribers: isNoSubscribers,
           data: parsedBody,
           statusCode: response.status,
           recipients: 0,
@@ -237,6 +243,7 @@ export async function sendPushNotification(params: PushPayload): Promise<PushRes
       (params.targetUserIds || [])
         .filter(id => id && typeof id === 'string' && id.trim().length > 0)
         .map(id => id.trim())
+        .filter(id => id !== 'undefined' && id !== 'null')
     )
   )
 
@@ -250,32 +257,44 @@ export async function sendPushNotification(params: PushPayload): Promise<PushRes
   // Expandir com IDs sem prefixos (ex: remove 'f_', 'a_', 'func_') para garantir matching com UUIDs canônicos e aliases
   const uniqueTargetUserIds = Array.from(
     new Set(
-      rawTargetUserIds.flatMap(id => {
-        const cleaned = id.replace(/^(?:f_|func_|eq_|g_|a_|_ALU)/i, '')
-        return cleaned && cleaned !== id ? [id, cleaned] : [id]
-      })
+      rawTargetUserIds
+        .flatMap(id => {
+          const cleaned = id.replace(/^(?:f_|func_|eq_|g_|a_|_ALU)/i, '').trim()
+          return cleaned && cleaned !== id ? [id, cleaned] : [id]
+        })
+        .map(id => id.trim())
+        .filter(id => id.length > 0 && id !== 'undefined' && id !== 'null')
     )
   )
 
-  // Limitar a 2000 destinatários por chamada (limite do OneSignal)
-  const maxChunkSize = 2000
+  if (uniqueTargetUserIds.length === 0 && !hasSubscriptionTargets) {
+    console.log('[PushService] Nenhum destinatário válido após sanitização. Push ignorado.')
+    return { success: true, skipped: true }
+  }
+
+  // Limitar a 300 destinatários por chamada:
+  // O OneSignal impõe limite máximo de 2.000 aliases somando todas as chaves de include_aliases.
+  // Como enviamos até 6 chaves por ID (external_id, colaborador_id, system_user_id, responsavel_id, aluno_id, email),
+  // 300 IDs × 6 chaves = 1.800 aliases <= 2.000.
+  const maxChunkSize = 300
   if (uniqueTargetUserIds.length > maxChunkSize) {
-    console.warn(`⚠️ [PushService] ${uniqueTargetUserIds.length} destinatários excedem o limite. Enviando em lotes sequenciais...`)
+    console.warn(`⚠️ [PushService] ${uniqueTargetUserIds.length} destinatários excedem o limite por lote (${maxChunkSize}). Enviando em lotes sequenciais...`)
     const chunks: string[][] = []
     for (let i = 0; i < uniqueTargetUserIds.length; i += maxChunkSize) {
       chunks.push(uniqueTargetUserIds.slice(i, i + maxChunkSize))
     }
 
     const results: PushResult[] = []
-    for (const chunk of chunks) {
+    for (let idx = 0; idx < chunks.length; idx++) {
+      const chunk = chunks[idx]
       const result = await sendPushNotification({ ...params, targetUserIds: chunk })
       results.push(result)
-      if (chunks.indexOf(chunk) < chunks.length - 1) {
-        await new Promise(resolve => setTimeout(resolve, 500))
+      if (idx < chunks.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, 350))
       }
     }
-    const allOk = results.every(r => r.success)
-    return { success: allOk, data: results }
+    const anyOk = results.some(r => r.success)
+    return { success: anyOk, data: results }
   }
 
   const appBaseUrl = (process.env.NEXT_PUBLIC_APP_URL || 'https://impacto-edu.net').replace(/\/$/, '')

@@ -503,15 +503,16 @@ export async function POST(request: Request) {
       const remetenteNome = body.remetente_nome || user.user_metadata?.nome || user.user_metadata?.name || (serverIsAdmin ? 'A Escola' : 'Usuário');
 
       if (!serverIsAdmin) {
-        // Responsável/Aluno respondeu -> Notifica a Escola (Autor original do comunicado + Administradores Master Institucionais)
+        // Responsável/Aluno respondeu -> Notifica a Escola (Autor original do comunicado + Colaboradores marcados)
         const { data: comData } = await supabase
           .from('comunicados')
-          .select('titulo, dados')
-          .eq('id', body.comunicado_id)
+          .select('titulo, autor, dados')
+          .eq('id', finalComunicadoId)
           .single();
         
         if (comData) {
-          const rawAutorId = comData.dados?.autorId;
+          const rawAutorId = comData.dados?.autorId || comData.dados?.autor_id || comData.dados?.authorId || comData.dados?.colaborador_id;
+          const rawAutorName = String(comData.autor || comData.dados?.autor || '').trim();
           const markedColabs = [
             ...(comData.dados?.colaboradoresIds || []),
             ...(comData.dados?.funcionariosIds || [])
@@ -523,21 +524,46 @@ export async function POST(request: Request) {
             String(body.remetente_id || '')
           ].filter(Boolean));
 
-          const allRelevantColabs = Array.from(new Set([rawAutorId, ...markedColabs].filter(Boolean)))
+          const candidateColabTokens = new Set<string>(
+            [rawAutorId, ...markedColabs].filter(Boolean).map(String)
+          );
+
+          // Se o comunicado antigo só tiver o nome do autor, resolve o ID pelo nome
+          if (candidateColabTokens.size === 0 && rawAutorName) {
+            const [{ data: byNameColab }, { data: byNameSys }] = await Promise.all([
+              supabase.from('colaboradores').select('id, email, auth_id').ilike('nome', rawAutorName).limit(5),
+              supabase.from('system_users').select('id, email, auth_id, colaborador_id').ilike('nome', rawAutorName).limit(5),
+            ]);
+            byNameColab?.forEach((c: any) => {
+              if (c.id) candidateColabTokens.add(String(c.id));
+              if (c.auth_id) candidateColabTokens.add(String(c.auth_id));
+              if (c.email) candidateColabTokens.add(String(c.email).toLowerCase());
+            });
+            byNameSys?.forEach((u: any) => {
+              if (u.id) candidateColabTokens.add(String(u.id));
+              if (u.auth_id) candidateColabTokens.add(String(u.auth_id));
+              if (u.colaborador_id) candidateColabTokens.add(String(u.colaborador_id));
+              if (u.email) candidateColabTokens.add(String(u.email).toLowerCase());
+            });
+          }
+
+          const allRelevantColabs = Array.from(candidateColabTokens)
             .filter(id => !currentSenderIds.has(String(id)));
           let targetUserIds: string[] = [];
           if (allRelevantColabs.length > 0) {
             const resolvedIds = await getColaboradorIds(allRelevantColabs);
-            targetUserIds = resolvedIds.length > 0 ? resolvedIds : allRelevantColabs.map(String);
+            targetUserIds = Array.from(new Set([...resolvedIds, ...allRelevantColabs.map(String)]))
+              .filter(id => !currentSenderIds.has(String(id)));
           }
           
+          const colabTargetUrl = `/agenda-digital/colaborador/comunicados?id=${finalComunicadoId}`;
           try {
             for (const uid of targetUserIds) {
               await supabase.from('notificacoes').insert({
                 user_id: uid,
                 titulo: `Nova resposta: ${comData.titulo}`,
                 mensagem: `${remetenteNome} comentou: "${msgTexto}"`,
-                link: `/agenda-digital/comunicados`,
+                link: colabTargetUrl,
                 lida: false,
                 tipo: 'comunicado',
                 created_at: new Date().toISOString()
@@ -547,35 +573,82 @@ export async function POST(request: Request) {
             console.error("Notificacao DB erro:", err);
           }
 
-          try {
-            await sendAgendaPushNotification({
-              type: 'comunicados',
-              itemId: String(data.id), // ID único do comentário evita deduplicação indevida
-              title: `💬 Resposta de ${remetenteNome}`,
-              message: `No comunicado "${comData.titulo}": ${msgTexto}`,
-              targetUserIds,
-              targetUrl: `/agenda-digital/colaborador/comunicados?id=${body.comunicado_id}`,
-              metadata: { perfil_destino: 'colaborador', item_id: String(body.comunicado_id), rota: 'comunicados', targetUrl: `/agenda-digital/colaborador/comunicados?id=${body.comunicado_id}` }
-            });
-          } catch (err) {
-            console.error("Push erro:", err);
+          if (targetUserIds.length > 0) {
+            try {
+              await sendAgendaPushNotification({
+                type: 'comunicados',
+                itemId: String(data.id), // ID único do comentário evita deduplicação indevida
+                title: `💬 Resposta de ${remetenteNome}`,
+                message: `No comunicado "${comData.titulo}": ${msgTexto}`,
+                targetUserIds,
+                targetUrl: colabTargetUrl,
+                metadata: { perfil_destino: 'colaborador', item_id: String(finalComunicadoId), rota: 'comunicados', targetUrl: colabTargetUrl }
+              });
+            } catch (err) {
+              console.error("Push erro:", err);
+            }
           }
         }
       } else {
         // Escola respondeu -> Notifica o Pai/Aluno dono da thread (remetente_id da thread)
-        const targetUserId = body.remetente_id; 
+        const targetUserId = String(body.remetente_id || '').trim(); 
         if (targetUserId) {
           const { data: comData } = await supabase
             .from('comunicados')
             .select('titulo, dados')
-            .eq('id', body.comunicado_id)
+            .eq('id', finalComunicadoId)
             .single();
             
           const tituloCom = comData ? comData.titulo : 'Comunicado';
-          const targetAlunoId = body.aluno_id || comData?.dados?.aluno_id || (Array.isArray(comData?.dados?.targetStudents) && comData.dados.targetStudents.length === 1 ? comData.dados.targetStudents[0] : null);
+          let targetAlunoId = body.aluno_id || comData?.dados?.aluno_id || (Array.isArray(comData?.dados?.targetStudents) && comData.dados.targetStudents.length === 1 ? comData.dados.targetStudents[0] : null);
+
+          // Expandir todos os identificadores do responsável/aluno destinatário para garantir entrega 100% no OneSignal
+          const expandedFamilyTargets = new Set<string>([targetUserId]);
+          const cleanTargetId = targetUserId.replace(/^(?:a_|r_|resp_)/i, '').trim();
+          if (cleanTargetId) expandedFamilyTargets.add(cleanTargetId);
+
+          try {
+            const isNumericId = /^\d+$/.test(cleanTargetId);
+            const { data: respRows } = await supabase
+              .from('responsaveis')
+              .select('id, auth_id, email')
+              .or(isNumericId ? `id.eq.${cleanTargetId},auth_id.eq.${cleanTargetId}` : `auth_id.eq.${cleanTargetId}`)
+              .limit(5);
+
+            const numericRespIds: string[] = [];
+            respRows?.forEach((r: any) => {
+              if (r.id) {
+                expandedFamilyTargets.add(String(r.id));
+                numericRespIds.push(String(r.id));
+              }
+              if (r.auth_id) expandedFamilyTargets.add(String(r.auth_id));
+              if (r.email) expandedFamilyTargets.add(String(r.email).trim().toLowerCase());
+            });
+            if (isNumericId && !numericRespIds.includes(cleanTargetId)) {
+              numericRespIds.push(cleanTargetId);
+            }
+
+            if (numericRespIds.length > 0) {
+              const { data: vincs } = await supabase
+                .from('aluno_responsavel')
+                .select('aluno_id')
+                .in('responsavel_id', numericRespIds);
+              if (vincs && vincs.length > 0) {
+                if (!targetAlunoId && vincs.length === 1 && vincs[0].aluno_id) {
+                  targetAlunoId = String(vincs[0].aluno_id);
+                }
+                vincs.forEach((v: any) => {
+                  if (v.aluno_id) expandedFamilyTargets.add(String(v.aluno_id));
+                });
+              }
+            }
+          } catch (expandErr) {
+            console.warn('[comunicados_respostas] Aviso ao expandir IDs da família:', expandErr);
+          }
+
           const studentUrl = targetAlunoId 
-            ? `/agenda-digital/${targetAlunoId}/comunicados?id=${body.comunicado_id}`
-            : `/agenda-digital/comunicados?id=${body.comunicado_id}`;
+            ? `/agenda-digital/${targetAlunoId}/comunicados?id=${finalComunicadoId}`
+            : `/agenda-digital/selecionar-aluno?redirect=comunicados&id=${finalComunicadoId}`;
 
           try {
             await supabase.from('notificacoes').insert({
@@ -597,11 +670,11 @@ export async function POST(request: Request) {
               itemId: String(data.id),
               title: `🏫 Nova mensagem de ${remetenteNome}`,
               message: `Sobre "${tituloCom}": ${msgTexto}`,
-              targetUserIds: [targetUserId],
+              targetUserIds: Array.from(expandedFamilyTargets),
               targetUrl: studentUrl,
               metadata: { 
                 perfil_destino: 'familia', 
-                item_id: String(body.comunicado_id), 
+                item_id: String(finalComunicadoId), 
                 rota: 'comunicados', 
                 targetUrl: studentUrl,
                 ...(targetAlunoId ? { aluno_id: String(targetAlunoId) } : {})

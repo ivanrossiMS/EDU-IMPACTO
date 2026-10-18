@@ -20,6 +20,7 @@ import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 import { useApp } from '@/lib/context'
 import { formatDateTime } from '@/lib/utils'
 import { MomentoLightbox } from '@/components/agenda/MomentoLightbox'
+import { MomentoVideoPlayer } from '@/components/agenda/MomentoVideoPlayer'
 
 // Ultra-modern gradient configs per card slot
 const CARD_THEMES = [
@@ -254,7 +255,12 @@ export function MomentoPostCard({ post, index, onDelete }: Props) {
           >
             {currentMedia ? (
               currentMedia.type === 'video' || /\.(mp4|webm|mov|m4v|3gp|mkv|ogv)$/i.test((currentMedia.url || '').split('?')[0]) ? (
-                <video src={currentMedia.url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} playsInline preload="metadata" />
+                <MomentoVideoPlayer
+                  src={currentMedia.url}
+                  poster={currentMedia.thumbnail_url || (currentMedia as any).thumbnail || null}
+                  objectFit="cover"
+                  onExpand={() => setShowLightbox(true)}
+                />
               ) : (
                 <img src={currentMedia.url} alt="Momento" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
               )

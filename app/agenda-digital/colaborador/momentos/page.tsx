@@ -15,8 +15,9 @@ import { EmptyStateCard } from '../../components/EmptyStateCard'
 import { getInitials, formatDateTime } from '@/lib/utils'
 import { uploadFileToSupabase } from '@/lib/upload/uploadClient'
 import { apiFetch } from '@/lib/api/apiClient'
-import { compressImage, compressVideo, formatFileSize, extractVideoThumbnail } from '@/lib/mediaCompressor'
+import { compressImage, compressVideo, formatFileSize, extractVideoThumbnail, thumbnailDataUrlToFile } from '@/lib/mediaCompressor'
 import { DestinatariosModal } from '@/components/agenda/DestinatariosModal'
+import { MomentoVideoPlayer } from '@/components/agenda/MomentoVideoPlayer'
 
 import { useQueryClient } from '@tanstack/react-query'
 import { useAgendaRealtime } from '@/hooks/useAgendaRealtime'
@@ -206,7 +207,8 @@ export default function ADMomentosPage() {
       if (targetMedia && targetMedia.length > 0) {
         setLightboxMedia(targetMedia.map((item: any) => ({
           url: item.url,
-          type: item.type === 'video' || (item.url && item.url.match(/\.(mp4|webm)$/i)) ? 'video' : 'image'
+          type: item.type === 'video' || /\.(mp4|webm|mov|m4v|3gp|mkv|ogv)$/i.test((item.url || '').split('?')[0]) ? 'video' : 'image',
+          poster: item.thumbnail_url || item.thumbnailUrl || item.poster || undefined
         })))
         setLightboxIndex(0)
         setLightboxOpen(true)
@@ -851,7 +853,34 @@ export default function ADMomentosPage() {
         // Sucesso deste arquivo
         setUploadProgress(prev => ({ ...prev, [file.name]: 100 }))
 
-        mediaArray.push({ type: isVideo ? 'video' : 'image', url: uploadRes.url })
+        let thumbUrl: string | null = null
+        if (isVideo) {
+          try {
+            const rawThumb = mediaThumbnails[file.name] || (await extractVideoThumbnail(file)).thumbnailUrl
+            if (rawThumb) {
+              const thumbFile = await thumbnailDataUrlToFile(rawThumb, `thumb_${file.name.replace(/\.[^/.]+$/, '')}`)
+              if (thumbFile) {
+                const thumbUpload = await uploadFileToSupabase({
+                  bucket: 'comunicados-midia',
+                  folder: 'thumbnails',
+                  file: thumbFile,
+                  usageType: 'common'
+                })
+                if (thumbUpload.ok && thumbUpload.url) {
+                  thumbUrl = thumbUpload.url
+                }
+              }
+            }
+          } catch (tErr) {
+            console.warn('[Video Thumbnail Upload] Falha ao enviar capa do vídeo:', tErr)
+          }
+        }
+
+        mediaArray.push({
+          type: isVideo ? 'video' : 'image',
+          url: uploadRes.url,
+          thumbnail_url: thumbUrl || null
+        })
       }
 
       const isSelected = newPost.targetClasses.length > 0;
@@ -1903,7 +1932,8 @@ export default function ADMomentosPage() {
                                 }
                                 setLightboxMedia(m.media.map((item: any) => ({
                                   url: item.url,
-                                  type: item.type === 'video' || /\.(mp4|webm|mov|m4v|3gp|mkv|ogv)$/i.test((item.url || '').split('?')[0]) ? 'video' : 'image'
+                                  type: item.type === 'video' || /\.(mp4|webm|mov|m4v|3gp|mkv|ogv)$/i.test((item.url || '').split('?')[0]) ? 'video' : 'image',
+                                  poster: item.thumbnail_url || item.thumbnail || null
                                 })))
                                 setLightboxIndex(activeIndex)
                                 setLightboxOpen(true)
@@ -1913,51 +1943,22 @@ export default function ADMomentosPage() {
                                 const isVideo = med.type === 'video' || /\.(mp4|webm|mov|m4v|3gp|mkv|ogv)$/i.test((med.url || '').split('?')[0]);
                                 if (isVideo) {
                                   return (
-                                    <div style={{ width: '100%', height: '100%', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                      <video 
-                                        src={med.url} 
-                                        style={{ width: '100%', height: '100%', objectFit: 'contain' }} 
-                                        controls 
-                                        playsInline 
-                                        preload="metadata"
-                                        onClick={(e) => e.stopPropagation()} 
-                                      />
-                                      <button
-                                        type="button"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          setLightboxMedia(m.media.map((item: any) => ({
-                                            url: item.url,
-                                            type: item.type === 'video' || /\.(mp4|webm|mov|m4v|3gp|mkv|ogv)$/i.test((item.url || '').split('?')[0]) ? 'video' : 'image'
-                                          })));
-                                          setLightboxIndex(activeIndex);
-                                          setLightboxOpen(true);
-                                        }}
-                                        title="Expandir Vídeo"
-                                        style={{
-                                          position: 'absolute',
-                                          top: 10,
-                                          right: 10,
-                                          background: 'rgba(15, 23, 42, 0.75)',
-                                          backdropFilter: 'blur(8px)',
-                                          color: 'white',
-                                          border: '1px solid rgba(255,255,255,0.25)',
-                                          borderRadius: '50%',
-                                          width: 34,
-                                          height: 34,
-                                          display: 'flex',
-                                          alignItems: 'center',
-                                          justifyContent: 'center',
-                                          cursor: 'pointer',
-                                          zIndex: 5,
-                                          transition: 'transform 0.2s, background 0.2s'
-                                        }}
-                                        onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.1)'}
-                                        onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
-                                      >
-                                        <Maximize2 size={16} />
-                                      </button>
-                                    </div>
+                                    <MomentoVideoPlayer
+                                      src={med.url}
+                                      poster={med.thumbnail_url || med.thumbnail || null}
+                                      isProtected={isProtected}
+                                      onContextMenu={isProtected ? handleContextMenu : undefined}
+                                      onClick={(e) => e?.stopPropagation()}
+                                      onExpand={() => {
+                                        setLightboxMedia(m.media.map((item: any) => ({
+                                          url: item.url,
+                                          type: item.type === 'video' || /\.(mp4|webm|mov|m4v|3gp|mkv|ogv)$/i.test((item.url || '').split('?')[0]) ? 'video' : 'image',
+                                          thumbnail_url: item.thumbnail_url || item.thumbnail || null
+                                        })));
+                                        setLightboxIndex(activeIndex);
+                                        setLightboxOpen(true);
+                                      }}
+                                    />
                                   );
                                 }
                                 return (

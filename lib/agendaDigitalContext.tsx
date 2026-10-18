@@ -40,7 +40,7 @@ export interface ADComunicado {
 
 export type ADChat = { id: number | string, name: string, status: string, preview: string, time: string, unread: number, tag: string, date?: string, startDate?: string, startTime?: string }
 export type ADMessage = { id: number | string, text: string, sender: 'them' | 'us', time: string, date?: string, author?: string, authorRole?: string, authorId?: string }
-export type ADMedia = { type: 'image' | 'video', url: string }
+export type ADMedia = { type: 'image' | 'video', url: string, thumbnail_url?: string | null, thumbnail?: string | null }
 export type ADComment = { id: string, author: string, text: string, time: string }
 export type ADChatGroup = { id: string, nome: string, cor?: string, colaboradoresIds: string[], alunosIds: string[], isGlobalAccess?: boolean, isEquipeEscolar?: boolean, ano?: string, dados?: any, syncId?: string }
 export type ADMomento = { id: number | string, author: string, authorId?: string, targetClasses: string[], targetClassesIds?: string[], alunosIds?: string[], alunosNomes?: string[], funcionariosIds?: string[], media: ADMedia[], desc: string, status: 'pending' | 'approved' | 'rejected', time: string, reason?: string, likes: string[], comments: ADComment[], dados?: any, date?: string, created_at?: string, _isNew?: boolean, grupos?: string[], targetGrupos?: string[] }

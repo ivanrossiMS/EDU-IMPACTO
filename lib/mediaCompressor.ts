@@ -28,32 +28,44 @@ export function formatFileSize(bytes?: number): string {
 }
 
 /**
- * Extrai o frame (aos 0.5s ou início) de um arquivo de vídeo para thumbnail
+ * Extrai o frame (aos 0.5s ou início) de um arquivo de vídeo ou URL remota para thumbnail
  */
-export async function extractVideoThumbnail(file: File): Promise<{ thumbnailUrl: string; duration: number }> {
+export async function extractVideoThumbnail(
+  source: File | string,
+  targetSecond = 0.5
+): Promise<{ thumbnailUrl: string; duration: number }> {
   return new Promise((resolve) => {
     try {
+      if (typeof window === 'undefined') {
+        resolve({ thumbnailUrl: '', duration: 0 });
+        return;
+      }
       const video = document.createElement('video');
       video.preload = 'metadata';
       video.muted = true;
       video.playsInline = true;
-      const url = URL.createObjectURL(file);
+      video.crossOrigin = 'anonymous';
+
+      const isFile = typeof source !== 'string' && source instanceof File;
+      const url = isFile ? URL.createObjectURL(source) : source;
       video.src = url;
 
       let resolved = false;
       const cleanup = () => {
         if (!resolved) {
           resolved = true;
-          URL.revokeObjectURL(url);
+          if (isFile) {
+            try { URL.revokeObjectURL(url); } catch {}
+          }
           try { video.remove(); } catch {}
         }
       };
 
       const triggerSeek = () => {
         try {
-          const targetTime = Math.max(0.1, Math.min(0.5, (video.duration || 1) / 2));
-          if (Math.abs(video.currentTime - targetTime) > 0.05) {
-            video.currentTime = targetTime;
+          const seekTime = Math.max(0.1, Math.min(targetSecond, (video.duration || 1) / 2));
+          if (Math.abs(video.currentTime - seekTime) > 0.05) {
+            video.currentTime = seekTime;
           }
         } catch {}
       };
@@ -73,7 +85,7 @@ export async function extractVideoThumbnail(file: File): Promise<{ thumbnailUrl:
           const ctx = canvas.getContext('2d');
           if (ctx) {
             ctx.drawImage(video, 0, 0, width, height);
-            const thumbnailUrl = canvas.toDataURL('image/jpeg', 0.75);
+            const thumbnailUrl = canvas.toDataURL('image/jpeg', 0.8);
             const duration = video.duration || 0;
             cleanup();
             resolve({ thumbnailUrl, duration });
@@ -95,7 +107,7 @@ export async function extractVideoThumbnail(file: File): Promise<{ thumbnailUrl:
       setTimeout(() => {
         cleanup();
         resolve({ thumbnailUrl: '', duration: video.duration || 0 });
-      }, 3500);
+      }, 4000);
     } catch (e) {
       resolve({ thumbnailUrl: '', duration: 0 });
     }

@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
 import { resolveUserRole } from '@/lib/server/authGuard'
-import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 import { sendAgendaPushNotification } from '@/lib/server/agendaNotifications'
 import { getColaboradorIds } from '@/lib/server/notificationHelper'
 import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
@@ -17,10 +16,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
-    const supabase = await createProtectedClient()
+    const adminClient = getAdminClient()
 
     // 1. Fetch current momento
-    const { data: momento, error: fetchErr } = await supabase
+    const { data: momento, error: fetchErr } = await adminClient
       .from('momentos')
       .select('*')
       .eq('id', momentId)
@@ -31,8 +30,8 @@ export async function POST(request: Request) {
     }
 
     const dados = momento.dados || {}
-    let likes = dados.likes || []
-    let comments = dados.comments || []
+    let likes: string[] = Array.isArray(dados.likes) ? dados.likes : []
+    let comments: any[] = Array.isArray(dados.comments) ? dados.comments : []
     let isRemoval = false
 
     // 2. Apply Interaction
@@ -49,7 +48,6 @@ export async function POST(request: Request) {
       if (!value) return NextResponse.json({ error: 'Comment value missing' }, { status: 400 })
 
       // Verificar permissão no ad_config
-      const adminClient = getAdminClient()
       const { data: cfgRow } = await adminClient
         .from('configuracoes')
         .select('valor')
@@ -111,7 +109,7 @@ export async function POST(request: Request) {
     }
 
     // 3. Save Update
-    const { error: updateErr } = await supabase
+    const { error: updateErr } = await adminClient
       .from('momentos')
       .update({ dados })
       .eq('id', momentId)
@@ -120,34 +118,91 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: updateErr.message }, { status: 400 })
     }
 
-    // 4. Dispatch Push Notification EXCLUSIVELY to authorId (if they are not the one interacting)
-    if (!isRemoval && dados.authorId && String(dados.authorId) !== String(user.id)) {
-      const rawAuthorId = String(dados.authorId)
-      const isColab = rawAuthorId.startsWith('COLAB-') || rawAuthorId.startsWith('AD-')
-      const message = action === 'like' 
-        ? `${authorName} curtiu sua publicação.` 
-        : `${authorName} comentou na sua publicação: "${value}"`
-      
-      const resolvedIds = await getColaboradorIds([rawAuthorId])
-      const targetUserIds = resolvedIds.length > 0 ? resolvedIds : [rawAuthorId]
-      const targetUrl = isColab 
-        ? `/agenda-digital/colaborador/momentos?id=${momentId}` 
-        : `/agenda-digital/momentos?id=${momentId}`
+    // 4. Dispatch Push Notification EXCLUSIVELY to the author (if they are not the one interacting)
+    if (!isRemoval) {
+      const rawAuthorId = dados.authorId || dados.autorId || dados.autor_id || dados.criadoPorId || momento.autor_id || momento.colaborador_id
+      const momAuthorName = (dados.author || dados.autor || '').trim()
 
-      sendAgendaPushNotification({
-        type: 'momentos',
-        itemId: String(momentId),
-        title: action === 'like' ? '❤️ Nova Curtida' : '💬 Novo Comentário',
-        message,
-        targetUserIds,
-        targetUrl,
-        metadata: {
-          perfil_destino: isColab ? 'colaborador' : 'familia',
-          item_id: String(momentId),
-          rota: 'momentos',
-          targetUrl
+      let targetUserIds: string[] = []
+
+      // Se temos o ID do autor, expandimos com todas as credenciais do colaborador
+      if (rawAuthorId) {
+        const resolved = await getColaboradorIds([String(rawAuthorId)])
+        targetUserIds = resolved.length > 0 ? resolved : [String(rawAuthorId)]
+      }
+
+      // Se não resolveu pelo ID ou se faltou algum alias, busca também pelo nome do autor em system_users
+      if (targetUserIds.length === 0 && momAuthorName) {
+        const { data: authorByName } = await adminClient
+          .from('system_users')
+          .select('id, auth_id, email')
+          .ilike('nome', momAuthorName)
+          .maybeSingle()
+
+        if (authorByName) {
+          const candidateIds = [authorByName.id, authorByName.auth_id, authorByName.email].filter(Boolean) as string[]
+          const resolved = await getColaboradorIds(candidateIds)
+          targetUserIds = resolved.length > 0 ? resolved : candidateIds
         }
-      }).catch(err => console.error('[Push Dispatch Error] Interacoes Momento:', err))
+      }
+
+      // Verificar se a interação foi feita pelo próprio autor (não notificar a si mesmo)
+      const userCandidateIds = new Set<string>(
+        [
+          String(user.id),
+          dbUser?.id ? String(dbUser.id) : null,
+          dbUser?.auth_id ? String(dbUser.auth_id) : null,
+          dbUser?.email ? String(dbUser.email).toLowerCase() : null,
+          user.email ? String(user.email).toLowerCase() : null,
+          user.user_metadata?.colaborador_id ? String(user.user_metadata.colaborador_id) : null,
+          user.user_metadata?.system_user_id ? String(user.user_metadata.system_user_id) : null,
+          user.user_metadata?.nome ? String(user.user_metadata.nome).toLowerCase().trim() : null,
+          dbUser?.nome ? String(dbUser.nome).toLowerCase().trim() : null,
+        ].filter(Boolean) as string[]
+      )
+
+      const isSelfInteraction = targetUserIds.some(id => userCandidateIds.has(String(id).toLowerCase().trim())) ||
+        (momAuthorName && userCandidateIds.has(momAuthorName.toLowerCase()))
+
+      if (targetUserIds.length > 0 && !isSelfInteraction) {
+        // Chave única por interação para NUNCA ser bloqueada pela deduplicação de agenda_push_logs
+        // Agrupa likes do mesmo usuário por intervalo de 1 minuto para evitar spam de duplo clique acidental
+        const minuteBucket = Math.floor(Date.now() / 60000)
+        const interactionId = action === 'like'
+          ? `momento_like_${momentId}_${user.id}_${minuteBucket}`
+          : `momento_comment_${momentId}_${commentId || Date.now()}`
+
+        const collapseId = action === 'like'
+          ? `like_${momentId}_${user.id}`
+          : `comment_${momentId}_${commentId || Date.now()}`
+
+        const message = action === 'like'
+          ? `${authorName} curtiu sua publicação.`
+          : `${authorName} comentou na sua publicação: "${value}"`
+
+        // Destino canônico para o autor visualizar sua publicação na galeria de colaboradores
+        const targetUrl = `/agenda-digital/colaborador/momentos?id=${momentId}`
+
+        sendAgendaPushNotification({
+          type: 'momentos',
+          itemId: interactionId,
+          title: action === 'like' ? '❤️ Nova Curtida' : '💬 Novo Comentário',
+          message,
+          targetUserIds,
+          targetUrl,
+          collapseId,
+          senderUserId: user.id,
+          metadata: {
+            perfil_destino: 'colaborador',
+            item_id: String(momentId),
+            interaction_id: interactionId,
+            rota: 'momentos',
+            targetUrl,
+            author: authorName,
+            action,
+          }
+        }).catch(err => console.error('[Push Dispatch Error] Interacoes Momento:', err))
+      }
     }
 
     return NextResponse.json({ ok: true, likes, comments })

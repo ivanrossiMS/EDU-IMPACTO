@@ -18,6 +18,7 @@ import { getInitials, formatDateTime, downloadMediaFile } from '@/lib/utils'
 import { useSelectedStudent } from '@/lib/selectedStudentContext'
 import { MomentoSkeleton } from '../../components/MomentoSkeleton'
 import { MomentoLightbox } from '@/components/agenda/MomentoLightbox'
+import { MomentoVideoPlayer } from '@/components/agenda/MomentoVideoPlayer'
 import { useScreenshotProtection } from '@/hooks/useScreenshotProtection'
 import { PrivacyProtectionModal } from '@/components/agenda/PrivacyProtectionModal'
 
@@ -977,7 +978,8 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
                               }
                               setLightboxMedia(m.media.map((item: any) => ({
                                 url: item.url,
-                                type: item.type === 'video' || /\.(mp4|webm|mov|m4v|3gp|mkv|ogv)$/i.test((item.url || '').split('?')[0]) ? 'video' : 'image'
+                                type: item.type === 'video' || /\.(mp4|webm|mov|m4v|3gp|mkv|ogv)$/i.test((item.url || '').split('?')[0]) ? 'video' : 'image',
+                                poster: item.thumbnail_url || item.thumbnail || null
                               })))
                               setLightboxIndex(activeIndex)
                               setLightboxOpen(true)
@@ -996,53 +998,22 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
                               const isVideo = med.type === 'video' || /\.(mp4|webm|mov|m4v|3gp|mkv|ogv)$/i.test((med.url || '').split('?')[0]);
                               if (isVideo) {
                                 return (
-                                  <div style={{ width: '100%', height: '100%', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                    <video 
-                                      src={med.url} 
-                                      style={{ width: '100%', height: '100%', objectFit: 'contain' }} 
-                                      controls 
-                                      controlsList={isProtected ? "nodownload" : undefined}
-                                      playsInline 
-                                      preload="metadata"
-                                      onContextMenu={isProtected ? handleContextMenu : undefined}
-                                      onClick={(e) => e.stopPropagation()} 
-                                    />
-                                    <button
-                                      type="button"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setLightboxMedia(m.media.map((item: any) => ({
-                                          url: item.url,
-                                          type: item.type === 'video' || /\.(mp4|webm|mov|m4v|3gp|mkv|ogv)$/i.test((item.url || '').split('?')[0]) ? 'video' : 'image'
-                                        })));
-                                        setLightboxIndex(activeIndex);
-                                        setLightboxOpen(true);
-                                      }}
-                                      title="Expandir Vídeo"
-                                      style={{
-                                        position: 'absolute',
-                                        top: 10,
-                                        right: 10,
-                                        background: 'rgba(15, 23, 42, 0.75)',
-                                        backdropFilter: 'blur(8px)',
-                                        color: 'white',
-                                        border: '1px solid rgba(255,255,255,0.25)',
-                                        borderRadius: '50%',
-                                        width: 34,
-                                        height: 34,
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        cursor: 'pointer',
-                                        zIndex: 5,
-                                        transition: 'transform 0.2s, background 0.2s'
-                                      }}
-                                      onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.1)'}
-                                      onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
-                                    >
-                                      <Maximize2 size={16} />
-                                    </button>
-                                  </div>
+                                  <MomentoVideoPlayer
+                                    src={med.url}
+                                    poster={med.thumbnail_url || med.thumbnail || null}
+                                    isProtected={isProtected}
+                                    onContextMenu={isProtected ? handleContextMenu : undefined}
+                                    onClick={(e) => e?.stopPropagation()}
+                                    onExpand={() => {
+                                      setLightboxMedia(m.media.map((item: any) => ({
+                                        url: item.url,
+                                        type: item.type === 'video' || /\.(mp4|webm|mov|m4v|3gp|mkv|ogv)$/i.test((item.url || '').split('?')[0]) ? 'video' : 'image',
+                                        thumbnail_url: item.thumbnail_url || item.thumbnail || null
+                                      })));
+                                      setLightboxIndex(activeIndex);
+                                      setLightboxOpen(true);
+                                    }}
+                                  />
                                 );
                               }
                               return (

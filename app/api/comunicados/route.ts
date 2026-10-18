@@ -1157,7 +1157,7 @@ export async function POST(request: Request) {
       console.log("==> UPSERT SUCCESS");
       
       after(async () => {
-        const allPushPromises = [];
+        const pushTasks: Array<() => Promise<any>> = [];
         for (const row of rows) {
           const rowStatus = row.dados?.status || (row as any).status || 'enviado';
           if (rowStatus !== 'enviado') continue;
@@ -1173,7 +1173,7 @@ export async function POST(request: Request) {
             if (isIndividualStudentReport) {
               for (const student of students) {
                 if (student.responsaveis_ids.length > 0) {
-                  allPushPromises.push(
+                  pushTasks.push(() =>
                     sendAgendaPushNotification({
                       type: 'comunicados',
                       itemId: String(row.id),
@@ -1199,7 +1199,7 @@ export async function POST(request: Request) {
             } else if (students.length <= 5) {
               for (const student of students) {
                 if (student.responsaveis_ids.length > 0) {
-                  allPushPromises.push(
+                  pushTasks.push(() =>
                     sendAgendaPushNotification({
                       type: 'comunicados',
                       itemId: String(row.id),
@@ -1227,7 +1227,7 @@ export async function POST(request: Request) {
               for (const student of students) {
                 if (student.responsaveis_ids && student.responsaveis_ids.length > 0) {
                   const nomeAluno = formatFriendlyStudentName(student.aluno_nome)
-                  allPushPromises.push(
+                  pushTasks.push(() =>
                     sendAgendaPushNotification({
                       type: 'comunicados',
                       itemId: String(row.id),
@@ -1254,7 +1254,7 @@ export async function POST(request: Request) {
           }
 
           if (directColaboradores.length > 0 && !isIndividualStudentReport) {
-            allPushPromises.push(
+            pushTasks.push(() =>
               sendAgendaPushNotification({
                 type: 'comunicados',
                 itemId: String(row.id),
@@ -1277,7 +1277,10 @@ export async function POST(request: Request) {
             );
           }
         }
-        await Promise.allSettled(allPushPromises);
+        const BATCH_SIZE = 20;
+        for (let i = 0; i < pushTasks.length; i += BATCH_SIZE) {
+          await Promise.allSettled(pushTasks.slice(i, i + BATCH_SIZE).map(fn => fn()));
+        }
       });
       
       return NextResponse.json({ ok: true, count: rows.length })
@@ -1374,13 +1377,13 @@ export async function POST(request: Request) {
         );
         const { students, directColaboradores } = await getStudentTargetsForComunicados({ ...(data.dados || {}), id: data.id, tipoRelatorio: data.tipoRelatorio || data.dados?.tipoRelatorio });
         console.log(`[Push Comunicado][${data.id}] students=${students.length} colaboradores=${directColaboradores.length} destino=${data.destino} funcionariosIds=${JSON.stringify(data.dados?.funcionariosIds || [])}`);
-        const pushPromises = [];
+        const pushTasks: Array<() => Promise<any>> = [];
         
         if (!isInterno) {
           if (isIndividualStudentReport) {
             for (const student of students) {
               if (student.responsaveis_ids.length > 0) {
-                pushPromises.push(
+                pushTasks.push(() =>
                   sendAgendaPushNotification({
                     type: 'comunicados',
                     itemId: String(data.id),
@@ -1406,7 +1409,7 @@ export async function POST(request: Request) {
           } else if (students.length <= 5) {
             for (const student of students) {
               if (student.responsaveis_ids.length > 0) {
-                pushPromises.push(
+                pushTasks.push(() =>
                   sendAgendaPushNotification({
                     type: 'comunicados',
                     itemId: String(data.id),
@@ -1434,7 +1437,7 @@ export async function POST(request: Request) {
             for (const student of students) {
               if (student.responsaveis_ids && student.responsaveis_ids.length > 0) {
                 const nomeAluno = formatFriendlyStudentName(student.aluno_nome)
-                pushPromises.push(
+                pushTasks.push(() =>
                   sendAgendaPushNotification({
                     type: 'comunicados',
                     itemId: String(data.id),
@@ -1462,7 +1465,7 @@ export async function POST(request: Request) {
 
         if (directColaboradores.length > 0 && !isIndividualStudentReport) {
           console.log(`[Push Comunicado][${data.id}] Enviando push para ${directColaboradores.length} colaboradores:`, directColaboradores.slice(0, 10));
-          pushPromises.push(
+          pushTasks.push(() =>
             sendAgendaPushNotification({
               type: 'comunicados',
               itemId: String(data.id),
@@ -1487,7 +1490,10 @@ export async function POST(request: Request) {
           console.log(`[Push Comunicado][${data.id}] Nenhum colaborador para push. dados.funcionariosIds=${JSON.stringify(data.dados?.funcionariosIds)}, dados.colaboradoresIds=${JSON.stringify(data.dados?.colaboradoresIds)}`);
         }
         
-        await Promise.allSettled(pushPromises);
+        const BATCH_SIZE = 20;
+        for (let i = 0; i < pushTasks.length; i += BATCH_SIZE) {
+          await Promise.allSettled(pushTasks.slice(i, i + BATCH_SIZE).map(fn => fn()));
+        }
       });
     }
 

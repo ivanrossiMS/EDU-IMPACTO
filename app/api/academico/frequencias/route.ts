@@ -233,61 +233,67 @@ export async function POST(request: Request) {
       const { error } = await supabase.from('frequencias').upsert(rows)
       if (error) return NextResponse.json({ error: error.message }, { status: 400 })
 
-      // ⚡ OTIMIZAÇÃO: Processamento de Push em background assíncrono (não bloqueia a resposta HTTP do professor)
+      // ⚡ OTIMIZAÇÃO: Processamento de Push em background assíncrono em lotes reais de 20
       const dispatchBatchPushes = async () => {
         try {
           const targetData = await getStudentTargetsForComunicados({ targetStudents: rows.map(r => String(r.aluno_id)) })
-          
-          const pushPromises = items.map(async (item) => {
-            if (item.notifyPush === false) return
+          const chunkSize = 20
 
-            const row = item.row
-            const rowAlunoIdClean = String(row.aluno_id || '').replace(/^0+/, '')
-            const studentInfo = targetData.students.find(s => {
-              const sIdClean = String(s.aluno_id || '').replace(/^0+/, '')
-              return String(s.aluno_id) === String(row.aluno_id) || sIdClean === rowAlunoIdClean
-            })
-            if (!studentInfo || studentInfo.responsaveis_ids.length === 0) return
+          for (let i = 0; i < items.length; i += chunkSize) {
+            const chunk = items.slice(i, i + chunkSize)
+            await Promise.allSettled(
+              chunk.map(async (item) => {
+                if (item.notifyPush === false) return
 
-            const nomeAluno = studentInfo.aluno_nome || 'o aluno'
-            const isJustified = Boolean(row.justificativa && String(row.justificativa).trim().length > 0)
-            const isPresent = row.presente !== false && !isJustified
+                const row = item.row
+                const rowAlunoIdClean = String(row.aluno_id || '').replace(/^0+/, '')
+                const studentInfo = targetData.students.find(s => {
+                  const sIdClean = String(s.aluno_id || '').replace(/^0+/, '')
+                  return String(s.aluno_id) === String(row.aluno_id) || sIdClean === rowAlunoIdClean
+                })
+                if (!studentInfo || studentInfo.responsaveis_ids.length === 0) return
 
-            let pushTitle = '✅ Presença Confirmada'
-            let pushMsg = `A presença de ${nomeAluno} foi confirmada na escola.`
+                const nomeAluno = studentInfo.aluno_nome || 'o aluno'
+                const isJustified = Boolean(row.justificativa && String(row.justificativa).trim().length > 0)
+                const isPresent = row.presente !== false && !isJustified
+                const statusKey = isJustified ? 'justificada' : (isPresent ? 'presente' : 'falta')
 
-            if (isJustified) {
-              pushTitle = '📋 Falta Justificada'
-              pushMsg = `Foi registrada uma falta justificada para ${nomeAluno}.`
-            } else if (!isPresent) {
-              pushTitle = '❌ Falta Registrada'
-              pushMsg = `Foi registrada uma falta para ${nomeAluno}.`
-            }
+                let pushTitle = '✅ Presença Confirmada'
+                let pushMsg = `A presença de ${nomeAluno} foi confirmada na escola.`
 
-            const pushItemId = `${row.id}_${Date.now()}`
+                if (isJustified) {
+                  pushTitle = '📋 Falta Justificada'
+                  pushMsg = `Foi registrada uma falta justificada para ${nomeAluno}.`
+                } else if (!isPresent) {
+                  pushTitle = '❌ Falta Registrada'
+                  pushMsg = `Foi registrada uma falta para ${nomeAluno}.`
+                }
 
-            try {
-              await sendAgendaPushNotification({
-                type: 'frequencia',
-                itemId: pushItemId,
-                title: pushTitle,
-                message: pushMsg,
-                targetUserIds: studentInfo.responsaveis_ids,
-                targetUrl: `/agenda-digital/${row.aluno_id}/frequencia`,
-                metadata: {
-                  aluno_id: String(row.aluno_id),
-                  turma_id: String(row.turma_id),
-                  data: String(row.data)
+                // Chave determinística por registro + status final do dia:
+                // Evita reenviar push para todos os alunos da turma quando o professor edita apenas 1 aluno e salva novamente.
+                const pushItemId = `${row.id}_${statusKey}`
+
+                try {
+                  await sendAgendaPushNotification({
+                    type: 'frequencia',
+                    itemId: pushItemId,
+                    collapseId: `freq_${row.id}`,
+                    title: pushTitle,
+                    message: pushMsg,
+                    targetUserIds: studentInfo.responsaveis_ids,
+                    targetUrl: `/agenda-digital/${row.aluno_id}/frequencia`,
+                    metadata: {
+                      aluno_id: String(row.aluno_id),
+                      turma_id: String(row.turma_id),
+                      data: String(row.data),
+                      status: statusKey
+                    }
+                  })
+                } catch (err) {
+                  console.error('Frequencia Push Error:', err)
                 }
               })
-            } catch (err) {
-              console.error('Frequencia Push Error:', err)
-            }
-          })
-
-          const chunkSize = 25
-          for (let i = 0; i < pushPromises.length; i += chunkSize) {
-            await Promise.all(pushPromises.slice(i, i + chunkSize))
+            )
           }
         } catch (err) {
           console.error('[Frequencias Background Push Error]', err)
@@ -316,6 +322,7 @@ export async function POST(request: Request) {
         
         const isJustified = Boolean(data.justificativa && String(data.justificativa).trim().length > 0)
         const isPresent = data.presente !== false && !isJustified
+        const statusKey = isJustified ? 'justificada' : (isPresent ? 'presente' : 'falta')
 
         let pushTitle = '✅ Presença Confirmada'
         let pushMsg = `A presença de ${nomeAluno} foi confirmada na escola.`
@@ -328,11 +335,12 @@ export async function POST(request: Request) {
           pushMsg = `Foi registrada uma falta para ${nomeAluno}.`
         }
 
-        const pushItemId = `${data.id}_${Date.now()}`
+        const pushItemId = `${data.id}_${statusKey}`
 
         sendAgendaPushNotification({
           type: 'frequencia',
           itemId: pushItemId,
+          collapseId: `freq_${data.id}`,
           title: pushTitle,
           message: pushMsg,
           targetUserIds: targetIds,
@@ -340,7 +348,8 @@ export async function POST(request: Request) {
           metadata: {
             aluno_id: String(data.aluno_id),
             turma_id: String(data.turma_id),
-            data: String(data.data)
+            data: String(data.data),
+            status: statusKey
           }
         }).catch(err => console.error('Frequencia Push Error:', err))
       }

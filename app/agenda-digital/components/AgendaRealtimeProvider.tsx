@@ -267,6 +267,9 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
   const agendaCtxRef = useRef(agendaCtx)
   useEffect(() => { agendaCtxRef.current = agendaCtx }, [agendaCtx])
 
+  const knownMomentLikesRef = useRef<Record<string, string[]>>({})
+  const knownMomentCommentsRef = useRef<Record<string, any[]>>({})
+
   // Escuta eventos globais de foreground emitidos pelo GlobalNotificationProvider
   useEffect(() => {
     const handleRefresh = () => {
@@ -993,6 +996,118 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
           conteudo: merged.legenda || merged.descricao || '',
           match,
         })
+      }
+
+      if (eventType === 'UPDATE' && merged) {
+        // Verificar se o usuário logado é o autor do momento
+        const rawAuthorId = String(
+          merged.authorId ||
+          merged.autorId ||
+          merged.autor_id ||
+          merged.author_id ||
+          merged.criadoPorId ||
+          merged.colaborador_id ||
+          row.autor_id ||
+          row.colaborador_id ||
+          ''
+        ).trim().toLowerCase()
+
+        const momAuthorName = String(
+          merged.author ||
+          merged.autor ||
+          merged.authorName ||
+          merged.autor_nome ||
+          ''
+        ).trim().toLowerCase()
+
+        const currentStaffIds = myCandidateStaffIdsRef.current
+        const currentUserId = String(currentUserRef.current?.id || '').trim().toLowerCase()
+        const currentUserName = String(
+          currentUserRef.current?.nome ||
+          (currentUserRef.current as any)?.name ||
+          (currentUserRef.current as any)?.user_metadata?.nome ||
+          ''
+        ).trim().toLowerCase()
+
+        const isAuthor = Boolean(
+          (rawAuthorId && (
+            currentStaffIds.includes(rawAuthorId) ||
+            currentStaffIds.includes(rawAuthorId.replace(/^f_?/, '')) ||
+            currentUserId === rawAuthorId
+          )) ||
+          (momAuthorName && currentUserName && (
+            momAuthorName === currentUserName ||
+            norm(momAuthorName) === norm(currentUserName)
+          ))
+        )
+
+        if (isAuthor) {
+          const oldDados = old?.dados || old || {}
+          const hasOldData = Boolean(old && (old.dados || old.likes || old.curtidas || old.comments))
+
+          const newLikes: string[] = ensureStringArray(merged.likes || merged.curtidas)
+          const newComments: any[] = Array.isArray(merged.comments) ? merged.comments : []
+
+          const momentId = String(merged.id || row.id)
+          const cachedLikes = knownMomentLikesRef.current[momentId]
+          const cachedComments = knownMomentCommentsRef.current[momentId]
+
+          const previousLikes = hasOldData
+            ? ensureStringArray(oldDados.likes || oldDados.curtidas)
+            : (cachedLikes !== undefined ? cachedLikes : newLikes)
+
+          const previousComments: any[] = hasOldData
+            ? (Array.isArray(oldDados.comments) ? oldDados.comments : [])
+            : (cachedComments !== undefined ? cachedComments : newComments)
+
+          const addedLikes = newLikes.filter(name => !previousLikes.includes(name))
+          const addedComments = newComments.filter(nc => !previousComments.some(oc => String(oc.id) === String(nc.id)))
+
+          knownMomentLikesRef.current[momentId] = newLikes
+          knownMomentCommentsRef.current[momentId] = newComments
+
+          if (addedLikes.length > 0) {
+            addedLikes.forEach(likerName => {
+              const cleanLiker = String(likerName || '').trim()
+              const isSelf = cleanLiker.toLowerCase() === currentUserName.toLowerCase() || (norm(cleanLiker) !== '' && norm(cleanLiker) === norm(currentUserName))
+              if (!isSelf) {
+                window.dispatchEvent(new CustomEvent('agenda-digital:unread-updated'))
+                addNotification({
+                  id: `like-${momentId}-${cleanLiker}-${Date.now()}`,
+                  type: 'momento',
+                  title: `❤️ ${cleanLiker} curtiu sua publicação`,
+                  description: merged.legenda || merged.descricao || merged.titulo || 'Publicação na galeria de momentos',
+                  createdAt: new Date().toISOString(),
+                  read: false,
+                  link: `/agenda-digital/colaborador/momentos?id=${momentId}`,
+                })
+              }
+            })
+          }
+
+          if (addedComments.length > 0) {
+            addedComments.forEach(comment => {
+              const commenterName = String(comment.author || 'Alguém').trim()
+              const commenterId = String(comment.authorId || '').trim().toLowerCase()
+              const isSelf = (commenterId && commenterId === currentUserId) ||
+                commenterName.toLowerCase() === currentUserName.toLowerCase() ||
+                (norm(commenterName) !== '' && norm(commenterName) === norm(currentUserName))
+
+              if (!isSelf) {
+                window.dispatchEvent(new CustomEvent('agenda-digital:unread-updated'))
+                addNotification({
+                  id: `comment-${momentId}-${comment.id || Date.now()}`,
+                  type: 'momento',
+                  title: `💬 ${commenterName} comentou na sua publicação`,
+                  description: comment.text || 'Novo comentário',
+                  createdAt: new Date().toISOString(),
+                  read: false,
+                  link: `/agenda-digital/colaborador/momentos?id=${momentId}`,
+                })
+              }
+            })
+          }
+        }
       }
     })
 

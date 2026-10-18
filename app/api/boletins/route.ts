@@ -162,9 +162,13 @@ export async function POST(request: Request) {
         if (targetIds.length > 0) {
           const { data: aluno } = await supabase.from('alunos').select('nome').eq('id', data[0].aluno_id).single()
           const nomeAluno = aluno?.nome ? aluno.nome : 'o aluno'
+          // Usa janela de 5 minutos no itemId para agrupar salvamentos seguidos do professor,
+          // mas permitir novas notificações quando novas notas forem lançadas no mesmo bimestre em outro momento
+          const updateBucket = Math.floor(Date.now() / 300000)
           await sendAgendaPushNotification({
             type: 'notas',
-            itemId: String(data[0].id),
+            itemId: `${data[0].id}_${updateBucket}`,
+            collapseId: `boletim_${data[0].id}`,
             title: '🏆 Novas Notas Lançadas!',
             message: `O boletim de ${nomeAluno} acabou de ser atualizado.`,
             targetUserIds: targetIds,

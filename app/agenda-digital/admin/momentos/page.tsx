@@ -20,7 +20,7 @@ import { useData } from '@/lib/dataContext'
 import { useApp } from '@/lib/context'
 import { uploadFileToSupabase } from '@/lib/upload/uploadClient'
 import { apiFetch } from '@/lib/api/apiClient'
-import { compressImage, compressVideo, formatFileSize, extractVideoThumbnail } from '@/lib/mediaCompressor'
+import { compressImage, compressVideo, formatFileSize, extractVideoThumbnail, thumbnailDataUrlToFile } from '@/lib/mediaCompressor'
 import { useQueryClient } from '@tanstack/react-query'
 import { DestinatariosModal } from '@/components/agenda/DestinatariosModal'
 import { MomentoPostCard } from '@/components/agenda/MomentoPostCard'
@@ -268,7 +268,34 @@ export default function ADAdminMomentos() {
         // Sucesso deste arquivo
         setUploadProgress(prev => ({ ...prev, [file.name]: 100 }))
 
-        mediaArray.push({ type: isVideo ? 'video' : 'image', url: uploadRes.url })
+        let thumbUrl: string | null = null
+        if (isVideo) {
+          try {
+            const rawThumb = mediaThumbnails[file.name] || (await extractVideoThumbnail(file)).thumbnailUrl
+            if (rawThumb) {
+              const thumbFile = await thumbnailDataUrlToFile(rawThumb, `thumb_${file.name.replace(/\.[^/.]+$/, '')}`)
+              if (thumbFile) {
+                const thumbUpload = await uploadFileToSupabase({
+                  bucket,
+                  folder: 'thumbnails',
+                  file: thumbFile,
+                  usageType: 'common'
+                })
+                if (thumbUpload.ok && thumbUpload.url) {
+                  thumbUrl = thumbUpload.url
+                }
+              }
+            }
+          } catch (tErr) {
+            console.warn('[Admin Video Thumbnail Upload] Falha ao enviar capa do vídeo:', tErr)
+          }
+        }
+
+        mediaArray.push({
+          type: isVideo ? 'video' : 'image',
+          url: uploadRes.url,
+          thumbnail_url: thumbUrl || null
+        })
       }
 
       const isSelected = newPost.targetClasses.length > 0;

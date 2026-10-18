@@ -246,3 +246,40 @@ test('NotificationPermissionModal - Durante Logout e Sem Usuário Autenticado (N
     )
   }
 })
+
+test('Push Architecture Regression Guards - OneSignal Limits, Deduplication Keys & Deep Links', async () => {
+  const fs = await import('node:fs/promises')
+  const path = await import('node:path')
+  const root = process.cwd()
+
+  // 1. pushService.ts: maxChunkSize <= 300 para respeitar o limite de 2.000 aliases em 6 chaves de include_aliases
+  const pushServiceCode = await fs.readFile(path.join(root, 'lib/server/pushService.ts'), 'utf8')
+  assert.match(pushServiceCode, /const maxChunkSize = 300\b/, 'pushService.ts deve limitar lotes a 300 IDs (<= 1.800 aliases totais)')
+  assert.match(pushServiceCode, /id !== 'undefined' && id !== 'null'/, 'pushService.ts deve sanitizar strings vazias/inválidas nos aliases')
+
+  // 2. agendaNotifications.ts: URL de fallback atualizada, cache de ad_config e retentativa em caso de status failed
+  const agendaNotifsCode = await fs.readFile(path.join(root, 'lib/server/agendaNotifications.ts'), 'utf8')
+  assert.ok(!agendaNotifsCode.includes('resilient-cuchufli-2b4125.netlify.app'), 'agendaNotifications.ts não deve conter URL legada do Netlify')
+  assert.match(agendaNotifsCode, /existingLog\?\.status !== 'failed'/, 'agendaNotifications.ts deve permitir reenvio quando o registro anterior falhou')
+
+  // 3. chatPushNotification.ts: Conversas de grupo não devem fixar o aluno_id do 1º aluno para todos os pais
+  const chatPushCode = await fs.readFile(path.join(root, 'lib/server/chatPushNotification.ts'), 'utf8')
+  assert.match(chatPushCode, /let resolvedFamilyAlunoId = conv\.type === 'group' \? null : conv\.aluno_id/, 'Chat de grupo não deve fixar o aluno_id de uma única criança para toda a turma')
+
+  // 4. ocorrencias/route.ts: Confirmação de ciência deve usar itemId distinto da criação
+  const ocorrenciasCode = await fs.readFile(path.join(root, 'app/api/ocorrencias/route.ts'), 'utf8')
+  assert.match(ocorrenciasCode, /itemId:\s*`ciencia_\$\{data\.id\}`/, 'Confirmação de ciência deve usar chave ciencia_${data.id}')
+
+  // 5. boletins/route.ts: Atualizações de notas no mesmo bimestre devem incluir janela de tempo no itemId
+  const boletinsCode = await fs.readFile(path.join(root, 'app/api/boletins/route.ts'), 'utf8')
+  assert.match(boletinsCode, /itemId:\s*`\$\{data\[0\]\.id\}_\$\{updateBucket\}`/, 'Boletins devem incluir bucket de atualização no itemId')
+
+  // 6. frequencias/route.ts: Chave determinística por status do dia para não reenviar push inalterado
+  const frequenciasCode = await fs.readFile(path.join(root, 'app/api/academico/frequencias/route.ts'), 'utf8')
+  assert.match(frequenciasCode, /const pushItemId = `\$\{row\.id\}_\$\{statusKey\}`/, 'Frequência em lote deve usar chave determinística por status')
+
+  // 7. eventos/route.ts: Agendamento send_after na criação limitado a 24h (demais via Cron Diário)
+  const eventosCode = await fs.readFile(path.join(root, 'app/api/agenda/eventos/route.ts'), 'utf8')
+  assert.match(eventosCode, /shouldSendReminder = diffHours > 0 && diffHours <= 24/, 'Agendamento imediato send_after de eventos deve ocorrer apenas dentro da janela de 24h')
+})
+

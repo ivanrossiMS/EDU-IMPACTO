@@ -217,12 +217,12 @@ export async function POST(request: Request) {
           if (!nomeAluno) nomeAluno = 'o aluno'
           await sendAgendaPushNotification({
             type: 'ocorrencias',
-            itemId: String(data.id),
+            itemId: `ciencia_${data.id}`,
             title: '✍️ Ciência de Ocorrência Confirmada',
             message: `A família de ${nomeAluno} confirmou ciência da ocorrência.`,
             targetUserIds: masterAdminIds,
             targetUrl: `/agenda-digital/admin/ocorrencias?id=${data.id}`,
-            metadata: { aluno_id: String(data.aluno_id), item_id: String(data.id), rota: 'ocorrencias' }
+            metadata: { aluno_id: String(data.aluno_id), item_id: String(data.id), rota: 'ocorrencias', action: 'ciencia_confirmada' }
           }).catch(err => console.error('Ciencia Push Error:', err))
         }
         return

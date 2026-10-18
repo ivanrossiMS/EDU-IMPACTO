@@ -243,26 +243,34 @@ async function dispatchPushNotifications(supabase: any, row: any) {
     }
   }
 
-  // Common date calculation for reminder (horário local de MS: GMT-0400)
-  let sendAfterStr = null;
+  // Cálculo da véspera do evento (horário local de MS: GMT-0400)
+  // Apenas agenda via send_after na criação se o horário do lembrete for nas próximas 24h.
+  // Eventos mais distantes são disparados na véspera pelo Cron Diário (/api/cron/lembretes-calendario),
+  // evitando o limite de 30 dias do OneSignal e garantindo que eventos excluídos/remarcados não enviem lembretes obsoletos.
+  let sendAfterStr: string | null = null;
   let shouldSendReminder = false;
   if (row.data) {
     const eventDate = new Date(`${row.data}T12:00:00Z`);
     eventDate.setUTCDate(eventDate.getUTCDate() - 1);
-    sendAfterStr = `${eventDate.toISOString().split('T')[0]} 20:00:00 GMT-0400`;
-    const sendAfterDate = new Date(`${eventDate.toISOString().split('T')[0]}T20:00:00-04:00`);
-    shouldSendReminder = sendAfterDate > new Date();
+    const eveDateStr = eventDate.toISOString().split('T')[0];
+    sendAfterStr = `${eveDateStr} 20:00:00 GMT-0400`;
+    const sendAfterDate = new Date(`${eveDateStr}T20:00:00-04:00`);
+    const diffHours = (sendAfterDate.getTime() - Date.now()) / (1000 * 60 * 60);
+    shouldSendReminder = diffHours > 0 && diffHours <= 24;
   }
 
-  // 1. Dispatch for students (personalizado com o nome do aluno)
+  // 1. Dispatch for students (personalizado com o nome do aluno, em lotes controlados de 20)
   if (students.length > 0) {
-    const studentPushPromises: Promise<any>[] = [];
-    for (const student of students) {
-      if (student.responsaveis_ids && student.responsaveis_ids.length > 0) {
+    const validStudents = students.filter(s => s.responsaveis_ids && s.responsaveis_ids.length > 0);
+    const BATCH_SIZE = 20;
+    for (let i = 0; i < validStudents.length; i += BATCH_SIZE) {
+      const batch = validStudents.slice(i, i + BATCH_SIZE);
+      const batchPromises: Promise<any>[] = [];
+      for (const student of batch) {
         const nomeAluno = formatFriendlyStudentName(student.aluno_nome);
 
         // Notificação Imediata
-        studentPushPromises.push(
+        batchPromises.push(
           sendAgendaPushNotification({
             type: 'calendario',
             itemId: `${row.id}-${student.aluno_id}`,
@@ -274,9 +282,9 @@ async function dispatchPushNotifications(supabase: any, row: any) {
           }).catch(err => console.error('Evento Push Error:', err))
         );
 
-        // Lembrete Agendado na Véspera
+        // Lembrete Agendado na Véspera (apenas quando a véspera é nas próximas 24h)
         if (shouldSendReminder && sendAfterStr) {
-          studentPushPromises.push(
+          batchPromises.push(
             sendAgendaPushNotification({
               type: 'calendario',
               itemId: `${row.id}-${student.aluno_id}-reminder`,
@@ -299,8 +307,8 @@ async function dispatchPushNotifications(supabase: any, row: any) {
           );
         }
       }
+      await Promise.allSettled(batchPromises);
     }
-    await Promise.allSettled(studentPushPromises);
   }
 
   // 2. Dispatch for direct colaboradores / untargeted responsaveis

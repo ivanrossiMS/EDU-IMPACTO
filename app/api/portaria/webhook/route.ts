@@ -819,7 +819,9 @@ export async function POST(req: Request) {
                       const { getResponsavelIdsForTargets } = await import('@/lib/server/notificationHelper')
                       const { formatFriendlyStudentName } = await import('@/lib/studentNameHelper')
                       const nomeAmigavel = formatFriendlyStudentName(alunoNome)
-                      const targetIds = await getResponsavelIdsForTargets({ targetStudents: [alunoId] })
+                      const unpaddedId = String(alunoId).replace(/^0+/, '')
+                      const studentTargets = Array.from(new Set([String(alunoId), unpaddedId, unpaddedId.padStart(6, '0')].filter(Boolean)))
+                      const targetIds = await getResponsavelIdsForTargets({ targetStudents: studentTargets })
 
                       if (targetIds.length > 0) {
                         const pushItemId = `reentrada_catraca_${alunoId}_${localDate}_${localTimeStr.replace(':', '')}`
@@ -890,7 +892,9 @@ export async function POST(req: Request) {
                   const { getResponsavelIdsForTargets } = await import('@/lib/server/notificationHelper')
                   const { formatFriendlyStudentName } = await import('@/lib/studentNameHelper')
                   const nomeAmigavel = formatFriendlyStudentName(alunoNome)
-                  const targetIds = await getResponsavelIdsForTargets({ targetStudents: [alunoId] })
+                  const unpaddedId = String(alunoId).replace(/^0+/, '')
+                  const studentTargets = Array.from(new Set([String(alunoId), unpaddedId, unpaddedId.padStart(6, '0')].filter(Boolean)))
+                  const targetIds = await getResponsavelIdsForTargets({ targetStudents: studentTargets })
                   
                   if (targetIds.length > 0) {
                     await sendAgendaPushNotification({

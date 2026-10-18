@@ -507,9 +507,9 @@ export async function POST(request: Request) {
         throw new Error(error.message)
       }
 
-      // Disparar Push APENAS para novos
+      // Disparar Push APENAS para novos em lotes controlados de 20
       after(async () => {
-        const allPushPromises: Promise<any>[] = [];
+        const pushTasks: Array<() => Promise<any>> = [];
         for (const row of newRows) {
           const targetParams = normalizeMomentoParams(row.dados);
           const { students, directColaboradores } = await getStudentTargetsForComunicados(targetParams);
@@ -517,7 +517,7 @@ export async function POST(request: Request) {
           if (students.length <= 5) {
             for (const student of students) {
               if (student.responsaveis_ids.length > 0) {
-                allPushPromises.push(
+                pushTasks.push(() =>
                   sendAgendaPushNotification({
                     type: 'momentos',
                     itemId: String(row.id),
@@ -546,7 +546,7 @@ export async function POST(request: Request) {
             for (const student of students) {
               if (student.responsaveis_ids && student.responsaveis_ids.length > 0) {
                 const nomeAluno = formatFriendlyStudentName(student.aluno_nome)
-                allPushPromises.push(
+                pushTasks.push(() =>
                   sendAgendaPushNotification({
                     type: 'momentos',
                     itemId: String(row.id),
@@ -578,7 +578,7 @@ export async function POST(request: Request) {
               ? `${autorMomento} compartilhou um novo conteúdo. Confira!`
               : `Um novo conteúdo foi compartilhado. Confira!`
 
-            allPushPromises.push(
+            pushTasks.push(() =>
               sendAgendaPushNotification({
                 type: 'momentos',
                 itemId: String(row.id),
@@ -601,7 +601,10 @@ export async function POST(request: Request) {
             )
           }
         }
-        await Promise.allSettled(allPushPromises);
+        const BATCH_SIZE = 20;
+        for (let i = 0; i < pushTasks.length; i += BATCH_SIZE) {
+          await Promise.allSettled(pushTasks.slice(i, i + BATCH_SIZE).map(fn => fn()));
+        }
       });
 
       return NextResponse.json({ ok: true, count: rows.length })
@@ -623,12 +626,12 @@ export async function POST(request: Request) {
       after(async () => {
         const targetParams = normalizeMomentoParams(data.dados);
         const { students, directColaboradores } = await getStudentTargetsForComunicados(targetParams);
-        const pushPromises = [];
+        const pushTasks: Array<() => Promise<any>> = [];
         
         if (students.length <= 5) {
           for (const student of students) {
             if (student.responsaveis_ids.length > 0) {
-              pushPromises.push(
+              pushTasks.push(() =>
                 sendAgendaPushNotification({
                   type: 'momentos',
                   itemId: String(data.id),
@@ -657,7 +660,7 @@ export async function POST(request: Request) {
           for (const student of students) {
             if (student.responsaveis_ids && student.responsaveis_ids.length > 0) {
               const nomeAluno = formatFriendlyStudentName(student.aluno_nome)
-              pushPromises.push(
+              pushTasks.push(() =>
                 sendAgendaPushNotification({
                   type: 'momentos',
                   itemId: String(data.id),
@@ -689,7 +692,7 @@ export async function POST(request: Request) {
             ? `${autorMomento} compartilhou um novo conteúdo. Confira!`
             : `Um novo conteúdo foi compartilhado. Confira!`
 
-          pushPromises.push(
+          pushTasks.push(() =>
             sendAgendaPushNotification({
               type: 'momentos',
               itemId: String(data.id),
@@ -711,7 +714,10 @@ export async function POST(request: Request) {
             }).catch(err => console.error('Momento Push Error Colab:', err))
           )
         }
-        await Promise.allSettled(pushPromises);
+        const BATCH_SIZE = 20;
+        for (let i = 0; i < pushTasks.length; i += BATCH_SIZE) {
+          await Promise.allSettled(pushTasks.slice(i, i + BATCH_SIZE).map(fn => fn()));
+        }
       });
     }
 

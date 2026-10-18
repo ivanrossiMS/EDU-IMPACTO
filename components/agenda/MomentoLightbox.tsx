@@ -791,7 +791,8 @@ export function MomentoLightbox({
 
           {isVideo ? (
             <video
-              src={currentItem.url}
+              src={currentItem.url.includes('#') ? currentItem.url : `${currentItem.url}#t=0.001`}
+              poster={(currentItem as any).poster || (currentItem as any).thumbnail_url || (currentItem as any).thumbnail || undefined}
               controls
               controlsList={isContentProtected ? "nodownload" : undefined}
               autoPlay

@@ -414,8 +414,8 @@ export async function dispatchChatPushNotification({
     // Envio para Famílias (abre no modo família com a conversa e o aluno)
     const finalFamilyIds = Array.from(familyTargetIds)
     if (finalFamilyIds.length > 0) {
-      let resolvedFamilyAlunoId = conv.aluno_id
-      if (!resolvedFamilyAlunoId) {
+      let resolvedFamilyAlunoId = conv.type === 'group' ? null : conv.aluno_id
+      if (!resolvedFamilyAlunoId && conv.type !== 'group') {
         try {
           const numericRespIds = finalFamilyIds.filter(id => /^\d+$/.test(id))
           if (numericRespIds.length > 0) {
@@ -466,10 +466,14 @@ export async function dispatchChatPushNotification({
 
           // Registrar no Histórico & Auditoria de Disparos (agenda_push_logs)
           try {
-            const logStatus = pushRes.success ? 'sent' : 'failed'
+            const logStatus = pushRes.success ? 'sent' : (pushRes.noSubscribers ? 'skipped' : 'failed')
             const logErrorMsg = pushRes.mock
               ? 'Mock mode: credenciais OneSignal não configuradas (push simulado)'
-              : (pushRes.success ? null : (pushRes.error || 'Erro no envio do push'))
+              : (pushRes.success
+                  ? null
+                  : (pushRes.noSubscribers
+                      ? 'Destinatário sem aparelho inscrito para notificações push no momento do envio'
+                      : (pushRes.error || 'Erro no envio do push')))
 
             const responsePayloadObj = {
               ...(pushRes.data && typeof pushRes.data === 'object' ? pushRes.data : { raw: pushRes.data }),
@@ -550,10 +554,14 @@ export async function dispatchChatPushNotification({
 
           // Registrar no Histórico & Auditoria de Disparos (agenda_push_logs)
           try {
-            const logStatus = pushRes.success ? 'sent' : 'failed'
+            const logStatus = pushRes.success ? 'sent' : (pushRes.noSubscribers ? 'skipped' : 'failed')
             const logErrorMsg = pushRes.mock
               ? 'Mock mode: credenciais OneSignal não configuradas (push simulado)'
-              : (pushRes.success ? null : (pushRes.error || 'Erro no envio do push'))
+              : (pushRes.success
+                  ? null
+                  : (pushRes.noSubscribers
+                      ? 'Destinatário sem aparelho inscrito para notificações push no momento do envio'
+                      : (pushRes.error || 'Erro no envio do push')))
 
             const responsePayloadObj = {
               ...(pushRes.data && typeof pushRes.data === 'object' ? pushRes.data : { raw: pushRes.data }),

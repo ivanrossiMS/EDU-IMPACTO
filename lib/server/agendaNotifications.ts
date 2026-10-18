@@ -65,6 +65,10 @@ const _globalSentKeys: Map<string, number> = (global as any).__agendaPushSentKey
   ?? ((global as any).__agendaPushSentKeys = new Map<string, number>())
 const IN_PROCESS_TTL_MS = 5 * 60 * 1000 // 5 minutos
 
+// Cache curto em memória (15s) para ad_config evitando leituras repetidas em envios de turma
+let _adConfigCache: { value: Record<string, any> | null; expiresAt: number } | null = null
+const AD_CONFIG_CACHE_TTL_MS = 15 * 1000
+
 /**
  * Limpa entradas expiradas do cache em memória.
  * Chamado de forma proativa para evitar acúmulo em servidores long-running.
@@ -107,8 +111,8 @@ function _createSupabaseService() {
  * Constrói URL completa e segura usando URLSearchParams para evitar duplicatas de parâmetros.
  */
 function _buildTargetUrl(targetUrl: string, itemId: string): string {
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://resilient-cuchufli-2b4125.netlify.app'
-  const base = targetUrl.startsWith('http') ? targetUrl : `${appUrl}${targetUrl}`
+  const appUrl = (process.env.NEXT_PUBLIC_APP_URL || 'https://impacto-edu.net').replace(/\/$/, '')
+  const base = targetUrl.startsWith('http') ? targetUrl : `${appUrl}${targetUrl.startsWith('/') ? '' : '/'}${targetUrl}`
 
   if (!itemId) return base
 
@@ -166,6 +170,7 @@ export async function sendAgendaPushNotification({
         targetUserIds
           .filter(id => id && typeof id === 'string' && id.trim().length > 0)
           .map(id => id.trim())
+          .filter(id => id !== 'undefined' && id !== 'null')
       )
     )
     if (cleanTargetIds.length === 0) {
@@ -248,16 +253,22 @@ export async function sendAgendaPushNotification({
       }
     }
 
-    // ── Checagem de Configuração Global de Notificações Push ───────────────
+    // ── Checagem de Configuração Global de Notificações Push (com cache 15s) ──
     try {
-      const { data: configRow } = await supabaseService
-        .from('configuracoes')
-        .select('valor')
-        .eq('chave', 'ad_config')
-        .maybeSingle()
+      let notifs: Record<string, any> | null = null
+      if (_adConfigCache && Date.now() < _adConfigCache.expiresAt) {
+        notifs = _adConfigCache.value
+      } else {
+        const { data: configRow } = await supabaseService
+          .from('configuracoes')
+          .select('valor')
+          .eq('chave', 'ad_config')
+          .maybeSingle()
+        notifs = configRow?.valor?.notificacoes || null
+        _adConfigCache = { value: notifs, expiresAt: Date.now() + AD_CONFIG_CACHE_TTL_MS }
+      }
 
-      if (configRow?.valor?.notificacoes) {
-        const notifs = configRow.valor.notificacoes
+      if (notifs) {
         const configMap: Record<string, boolean | undefined> = {
           comunicados: notifs.pushComunicados,
           momentos:    notifs.pushMomentos,
@@ -319,9 +330,20 @@ export async function sendAgendaPushNotification({
 
     // Se já existia um registro anterior com essa constraint (ON CONFLICT DO NOTHING),
     // o PostgREST retorna lista vazia de inserção sem lançar erro.
+    // Verificamos se a tentativa anterior falhou por erro técnico ('failed') para permitir reenvio (ex: Cron após falha de send_after).
     if (!reserveError && (!insertedRows || insertedRows.length === 0)) {
-      console.log(`${logPrefix} Push duplicado interceptado pelo banco (chave=${dedupKey}). Ignorando silenciosamente.`)
-      return { success: true, skipped: true, reason: 'already_sent' }
+      const { data: existingLog } = await supabaseService
+        .from('agenda_push_logs')
+        .select('status')
+        .eq('item_id', dedupKey)
+        .eq('type', type)
+        .maybeSingle()
+
+      if (existingLog?.status !== 'failed') {
+        console.log(`${logPrefix} Push duplicado interceptado pelo banco (chave=${dedupKey}, status=${existingLog?.status}). Ignorando silenciosamente.`)
+        return { success: true, skipped: true, reason: 'already_sent' }
+      }
+      console.log(`${logPrefix} Registro anterior estava com status 'failed'. Permitindo nova tentativa de envio...`)
     }
 
     // Erro 23505 residual = UNIQUE violation → já existe uma entrada → skip duplicata
@@ -357,13 +379,21 @@ export async function sendAgendaPushNotification({
     })
 
     // ── Atualizar o log com o resultado final ───────────────────────────────
-    // IMPORTANTE: Sempre marcar como 'sent' ao final — mesmo em mock mode.
-    // Isso garante que a constraint UNIQUE (item_id, type) bloqueie qualquer
-    // tentativa futura de INSERT para o mesmo item, impedindo duplicatas.
-    const logStatus = 'sent'
+    // IMPORTANTE:
+    // - 'sent': entregue ao OneSignal (ou mock mode)
+    // - 'skipped': destinatário ainda não possui aparelho inscrito no OneSignal (noSubscribers) — bloqueia reenvios desnecessários sem sujar métricas de falha
+    // - 'failed': falha real de rede/API (400/500) — permite retentativa futura
+    const finalStatus = pushResponse.success
+      ? 'sent'
+      : (pushResponse.noSubscribers ? 'skipped' : 'failed')
+
     const errorMsg = pushResponse.mock
       ? 'Mock mode: credenciais OneSignal não configuradas (push simulado)'
-      : (pushResponse.success ? null : (pushResponse.error || 'Unknown error'))
+      : (pushResponse.success
+          ? null
+          : (pushResponse.noSubscribers
+              ? 'Destinatário sem aparelho inscrito para notificações push no momento do envio'
+              : (pushResponse.error || 'Unknown error')))
 
     const responsePayload = {
       ...(pushResponse.data && typeof pushResponse.data === 'object' ? pushResponse.data : { raw: pushResponse.data }),
@@ -376,7 +406,7 @@ export async function sendAgendaPushNotification({
     const { error: updateError } = await supabaseService
       .from('agenda_push_logs')
       .update({
-        status: pushResponse.success ? logStatus : 'failed',
+        status: finalStatus,
         error_message: errorMsg,
         onesignal_response: JSON.stringify(responsePayload),
         target_url: fullUrl,
@@ -389,7 +419,11 @@ export async function sendAgendaPushNotification({
     }
 
     if (!pushResponse.success) {
-      console.error(`${logPrefix} Falha no envio do push:`, pushResponse.error)
+      if (pushResponse.noSubscribers) {
+        console.log(`${logPrefix} Destinatário sem aparelho inscrito no OneSignal (registrado como 'skipped').`)
+      } else {
+        console.error(`${logPrefix} Falha no envio do push:`, pushResponse.error)
+      }
     } else if (pushResponse.mock) {
       console.log(`${logPrefix} [MODO MOCK] Push simulado — log marcado como 'sent' para bloquear duplicatas.`)
     } else {
