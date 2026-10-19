@@ -1821,12 +1821,16 @@ export async function DELETE(request: Request) {
   try {
     const { data: respostas } = await adminClient
       .from('comunicados_respostas')
-      .select('arquivo_url, audio_url')
+      .select('anexos')
       .in('comunicado_id', finalIdsToDelete);
     if (respostas) {
       for (const resp of respostas) {
-        if (resp.arquivo_url) urlsToDelete.push(resp.arquivo_url);
-        if (resp.audio_url) urlsToDelete.push(resp.audio_url);
+        if (Array.isArray(resp.anexos)) {
+          for (const item of resp.anexos) {
+            const url = typeof item === 'string' ? (item.split('|')[1] || item) : item?.url;
+            if (url && typeof url === 'string') urlsToDelete.push(url);
+          }
+        }
       }
     }
   } catch (err) {

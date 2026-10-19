@@ -15,6 +15,31 @@ import { cookies, headers } from 'next/headers'
 import { getAdminClient } from './supabaseAdminSingleton'
 
 /**
+ * Extrai o timestamp de expiração (em ms) do payload de um JWT sem precisar de chamada de rede.
+ */
+export function getJwtExpMs(token: string): number | null {
+  try {
+    const parts = token.split('.')
+    if (parts.length !== 3) return null
+    const b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/')
+    const payload = JSON.parse(Buffer.from(b64, 'base64').toString('utf-8'))
+    if (typeof payload?.exp === 'number') {
+      return payload.exp * 1000
+    }
+  } catch {}
+  return null
+}
+
+/**
+ * Verifica localmente se o JWT já expirou (evita chamadas GET /auth/v1/user que geram 403 bad_jwt nos logs).
+ */
+export function isJwtTokenExpired(token: string, clockSkewSeconds = 0): boolean {
+  const expMs = getJwtExpMs(token)
+  if (expMs === null) return false
+  return expMs <= Date.now() + clockSkewSeconds * 1000
+}
+
+/**
  * Extrai o access_token diretamente dos cookies de sessão do Supabase (@supabase/ssr),
  * suportando formato base64url ('base64-...'), JSON direto e cookies fragmentados (.0, .1, ...).
  * Isso evita que múltiplas rotas de API paralelas acionem refresh_token simultaneamente no servidor.
@@ -119,7 +144,16 @@ export async function createProtectedClient(bearerToken?: string) {
       }
     )
     const origGetUser = client.auth.getUser.bind(client.auth)
-    client.auth.getUser = ((jwt?: string) => origGetUser(jwt || effectiveBearer)) as typeof client.auth.getUser
+    client.auth.getUser = (async (jwt?: string) => {
+      const targetJwt = jwt || effectiveBearer
+      if (targetJwt && isJwtTokenExpired(targetJwt, 0)) {
+        return {
+          data: { user: null },
+          error: { name: 'AuthApiError', message: 'token is expired', status: 401 } as any
+        }
+      }
+      return origGetUser(targetJwt)
+    }) as typeof client.auth.getUser
     return client
   }
 

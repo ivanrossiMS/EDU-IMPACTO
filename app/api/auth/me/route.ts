@@ -2,6 +2,8 @@ import { cookies } from 'next/headers';
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse } from 'next/server';
 import { getAdminClient } from '@/lib/server/supabaseAdminSingleton';
+import { extractAccessTokenFromCookieList, isJwtTokenExpired } from '@/lib/server/supabaseServerFactory';
+import { verifyTokenWithDedup } from '@/lib/server/authGuard';
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -46,44 +48,53 @@ export async function GET(request: Request) {
 
   let user = null;
   let isNetworkError = false;
-  try {
-    const res = bearerToken 
-      ? await supabase.auth.getUser(bearerToken)
-      : await supabase.auth.getUser();
 
-    if (res.error) {
-      const msg = res.error.message?.toLowerCase() || '';
-      const name = res.error.name || '';
-      const cause = (res.error as any).cause?.message?.toLowerCase() || '';
-      if (
-        name === 'AuthRetryableFetchError' ||
-        msg.includes('fetch failed') ||
-        msg.includes('enotfound') ||
-        msg.includes('load failed') ||
-        msg.includes('timeout') ||
-        msg.includes('econnrefused') ||
-        cause.includes('enotfound') ||
-        cause.includes('fetch failed')
-      ) {
-        isNetworkError = true;
-      }
+  if (bearerToken) {
+    if (!isJwtTokenExpired(bearerToken, 0)) {
+      user = await verifyTokenWithDedup(bearerToken);
     }
-    user = res.data?.user || null;
-  } catch (err: any) {
-    const msg = err?.message?.toLowerCase() || '';
-    const name = err?.name || '';
-    const cause = err?.cause?.message?.toLowerCase() || '';
-    if (
-      name === 'AuthRetryableFetchError' ||
-      msg.includes('fetch failed') ||
-      msg.includes('enotfound') ||
-      msg.includes('load failed') ||
-      msg.includes('timeout') ||
-      msg.includes('econnrefused') ||
-      cause.includes('enotfound') ||
-      cause.includes('fetch failed')
-    ) {
-      isNetworkError = true;
+  } else {
+    const cookieToken = extractAccessTokenFromCookieList(cookieStore.getAll());
+    if (cookieToken && !isJwtTokenExpired(cookieToken, 0)) {
+      user = await verifyTokenWithDedup(cookieToken);
+    } else {
+      try {
+        const res = await supabase.auth.getUser();
+        if (res.error) {
+          const msg = res.error.message?.toLowerCase() || '';
+          const name = res.error.name || '';
+          const cause = (res.error as any).cause?.message?.toLowerCase() || '';
+          if (
+            name === 'AuthRetryableFetchError' ||
+            msg.includes('fetch failed') ||
+            msg.includes('enotfound') ||
+            msg.includes('load failed') ||
+            msg.includes('timeout') ||
+            msg.includes('econnrefused') ||
+            cause.includes('enotfound') ||
+            cause.includes('fetch failed')
+          ) {
+            isNetworkError = true;
+          }
+        }
+        user = res.data?.user || null;
+      } catch (err: any) {
+        const msg = err?.message?.toLowerCase() || '';
+        const name = err?.name || '';
+        const cause = err?.cause?.message?.toLowerCase() || '';
+        if (
+          name === 'AuthRetryableFetchError' ||
+          msg.includes('fetch failed') ||
+          msg.includes('enotfound') ||
+          msg.includes('load failed') ||
+          msg.includes('timeout') ||
+          msg.includes('econnrefused') ||
+          cause.includes('enotfound') ||
+          cause.includes('fetch failed')
+        ) {
+          isNetworkError = true;
+        }
+      }
     }
   }
 

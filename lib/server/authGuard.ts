@@ -1,6 +1,11 @@
 import { NextResponse } from 'next/server'
 import { cookies, headers } from 'next/headers'
-import { createProtectedClient, extractAccessTokenFromCookieList } from './supabaseServerFactory'
+import {
+  createProtectedClient,
+  extractAccessTokenFromCookieList,
+  getJwtExpMs,
+  isJwtTokenExpired
+} from './supabaseServerFactory'
 
 /**
  * Utilitário para proteger rotas de API.
@@ -17,7 +22,12 @@ const VERIFIED_TOKEN_CACHE_TTL_MS = 45_000
 const verifiedTokenCache = new Map<string, { user: any; expiresAt: number }>()
 const inflightTokenVerifications = new Map<string, Promise<any | null>>()
 
-async function verifyTokenWithDedup(token: string): Promise<any | null> {
+export async function verifyTokenWithDedup(token: string): Promise<any | null> {
+  if (!token || isJwtTokenExpired(token, 0)) {
+    verifiedTokenCache.delete(token)
+    return null
+  }
+
   const now = Date.now()
   const cachedToken = verifiedTokenCache.get(token)
   if (cachedToken && cachedToken.expiresAt > now && cachedToken.user) {
@@ -32,9 +42,11 @@ async function verifyTokenWithDedup(token: string): Promise<any | null> {
         const res = await supabase.auth.getUser(token)
         if (!res.error && res.data?.user) {
           if (verifiedTokenCache.size > 500) verifiedTokenCache.clear()
+          const tokenExpMs = getJwtExpMs(token)
+          const cacheUntil = Date.now() + VERIFIED_TOKEN_CACHE_TTL_MS
           verifiedTokenCache.set(token, {
             user: res.data.user,
-            expiresAt: Date.now() + VERIFIED_TOKEN_CACHE_TTL_MS
+            expiresAt: tokenExpMs ? Math.min(cacheUntil, tokenExpMs) : cacheUntil
           })
           return res.data.user
         }
@@ -81,16 +93,28 @@ export async function requireAuth(req?: Request) {
   }
 
   // 1.5. Tenta extrair o access_token do cookie de sessão e validar via cache/deduplicação in-flight:
+  let hadCookieToken = false
   try {
     const cookieStore = await cookies()
     const cookieToken = extractAccessTokenFromCookieList(cookieStore.getAll())
     if (cookieToken) {
+      hadCookieToken = true
       const verifiedUser = await verifyTokenWithDedup(cookieToken)
       if (verifiedUser) {
         return { user: verifiedUser, errorResponse: null }
       }
     }
   } catch {}
+
+  if (hadCookieToken) {
+    return {
+      user: null,
+      errorResponse: NextResponse.json(
+        { error: 'Não autorizado. Sessão expirada ou inválida.', code: 'token_expired' },
+        { status: 401 }
+      )
+    }
+  }
 
   // 2. Fluxo tradicional por cookies de sessão para requisições web/SSR:
   const supabase = await createProtectedClient()

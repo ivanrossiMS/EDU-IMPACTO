@@ -196,7 +196,7 @@ export async function GET(req: Request) {
         }
 
         const [sysUsers, allAuthUsers, alunosData, respData, linksData] = await Promise.all([
-          fetchAll('system_users', 'id, nome, email, cargo, perfil, status, foto, telefone, unidade, dados'),
+          fetchAll('system_users', 'id, auth_id, nome, email, cargo, perfil, status, dados'),
           getAllAuthUsersCached(),
           fetchAll('alunos', 'id, nome, email, matricula'),
           fetchAll('responsaveis', 'id, nome, email'),

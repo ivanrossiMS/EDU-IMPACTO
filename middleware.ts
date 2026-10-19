@@ -99,6 +99,29 @@ const EDGE_TOKEN_CACHE_TTL_MS = 45_000
 const edgeVerifiedTokenCache = new Map<string, { user: any; expiresAt: number }>()
 const edgeInflightVerifications = new Map<string, Promise<{ user: any | null; isTransientError: boolean }>>()
 
+function getEdgeJwtExpMs(token: string): number | null {
+  try {
+    const parts = token.split('.')
+    if (parts.length !== 3) return null
+    let b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/')
+    while (b64.length % 4 !== 0) b64 += '='
+    const binStr = atob(b64)
+    const bytes = new Uint8Array(binStr.length)
+    for (let i = 0; i < binStr.length; i++) bytes[i] = binStr.charCodeAt(i)
+    const payload = JSON.parse(new TextDecoder().decode(bytes))
+    if (typeof payload?.exp === 'number') {
+      return payload.exp * 1000
+    }
+  } catch {}
+  return null
+}
+
+function isEdgeJwtTokenExpired(token: string, clockSkewSeconds = 0): boolean {
+  const expMs = getEdgeJwtExpMs(token)
+  if (expMs === null) return false
+  return expMs <= Date.now() + clockSkewSeconds * 1000
+}
+
 function extractEdgeAccessTokenFromCookies(
   allCookies: Array<{ name: string; value: string }>,
   projectRef: string
@@ -154,6 +177,11 @@ async function verifyEdgeTokenWithDedup(
   supabase: any,
   token: string
 ): Promise<{ user: any | null; isTransientError: boolean }> {
+  if (!token || isEdgeJwtTokenExpired(token, 0)) {
+    edgeVerifiedTokenCache.delete(token)
+    return { user: null, isTransientError: false }
+  }
+
   const now = Date.now()
   const cached = edgeVerifiedTokenCache.get(token)
   if (cached && cached.expiresAt > now && cached.user) {
@@ -171,9 +199,11 @@ async function verifyEdgeTokenWithDedup(
         const { data, error } = await Promise.race([userPromise, timeoutPromise])
         if (!error && data?.user) {
           if (edgeVerifiedTokenCache.size > 500) edgeVerifiedTokenCache.clear()
+          const expMs = getEdgeJwtExpMs(token)
+          const cacheUntil = Date.now() + EDGE_TOKEN_CACHE_TTL_MS
           edgeVerifiedTokenCache.set(token, {
             user: data.user,
-            expiresAt: Date.now() + EDGE_TOKEN_CACHE_TTL_MS
+            expiresAt: expMs ? Math.min(cacheUntil, expMs) : cacheUntil
           })
           return { user: data.user, isTransientError: false }
         }
@@ -225,11 +255,9 @@ export async function middleware(request: NextRequest) {
     if (!hasLogoutBarrier && !stepParam) {
       const projectRef = getProjectRef()
       const allCookies = request.cookies.getAll()
-      const hasAuthCookie = allCookies.some(
-        c => (c.name === `sb-${projectRef}-auth-token` || c.name.startsWith(`sb-${projectRef}-auth-token.`)) && c.value.length > 0
-      )
+      const loginCookieToken = extractEdgeAccessTokenFromCookies(allCookies, projectRef)
 
-      if (hasAuthCookie) {
+      if (loginCookieToken && !isEdgeJwtTokenExpired(loginCookieToken, 0)) {
         try {
           const supabaseAuthCheck = createServerClient(
             process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -241,16 +269,14 @@ export async function middleware(request: NextRequest) {
                 },
                 setAll() {},
               },
+              auth: { autoRefreshToken: false },
             }
           )
 
-          const userPromise = supabaseAuthCheck.auth.getUser()
-          const timeoutPromise = new Promise<{ data: { user: any }, error?: any }>(res =>
-            setTimeout(() => res({ data: { user: null }, error: new Error('TIMEOUT') }), 3000)
-          )
-          const { data, error } = await Promise.race([userPromise, timeoutPromise])
+          const { user: verifiedLoginUser } = await verifyEdgeTokenWithDedup(supabaseAuthCheck, loginCookieToken)
+          const data = { user: verifiedLoginUser }
 
-          if (!error && data?.user) {
+          if (data.user) {
             const redirectParam = request.nextUrl.searchParams.get('next') || request.nextUrl.searchParams.get('redirect')
             if (redirectParam && redirectParam.startsWith('/') && !redirectParam.startsWith('//')) {
               return NextResponse.redirect(new URL(redirectParam, request.url))
