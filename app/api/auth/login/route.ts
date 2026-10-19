@@ -187,7 +187,7 @@ export async function POST(request: NextRequest) {
     if (userType === 'system_user') {
       const { data: dbSystemUserRows } = await supabaseAdmin
         .from('system_users')
-        .select('id, nome, email, cargo, perfil, status, dados')
+        .select('id, nome, email, cargo, perfil, status, dados, senha_definida')
         .ilike('email', resolvedEmail)
         .limit(1)
 
@@ -212,6 +212,13 @@ export async function POST(request: NextRequest) {
           )
           await supabaseSignOut.auth.signOut()
           return NextResponse.json({ error: 'Acesso bloqueado: Usuário inativo. Contate o suporte.' }, { status: 200 })
+        }
+        if (dbSystemUser.senha_definida !== true) {
+          supabaseAdmin
+            .from('system_users')
+            .update({ senha_definida: true, auth_id: user.id })
+            .eq('id', dbSystemUser.id)
+            .then(() => {})
         }
         nome   = dbSystemUser.nome   || nome
         cargo  = dbSystemUser.cargo  || cargo

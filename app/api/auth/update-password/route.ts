@@ -68,13 +68,21 @@ export async function POST(request: Request) {
       const targetEmail = (registeredEmail || alunoRealEmail || '').trim().toLowerCase()
       const emailForAuth = isValidEmail(targetEmail) ? targetEmail : virtualEmail
 
+      const confirmedIso = new Date().toISOString()
+
       if (targetUser) {
-        if (targetUser.last_sign_in_at || (existingByRealEmail && targetEmail && targetEmail !== alunoRealEmail)) {
+        if (targetUser.last_sign_in_at || targetUser.user_metadata?.password_confirmed_at || (existingByRealEmail && targetEmail && targetEmail !== alunoRealEmail)) {
           return NextResponse.json({ error: "Sua senha já foi configurada. Use o Login normal ou 'Esqueci minha senha' para receber um link por e-mail." }, { status: 409 })
         }
         
         // Update password and ensure email matches what user registered
-        const updatePayload: any = { password: newPass }
+        const updatePayload: any = {
+          password: newPass,
+          user_metadata: {
+            ...(targetUser.user_metadata || {}),
+            password_confirmed_at: confirmedIso,
+          },
+        }
         if (isValidEmail(targetEmail) && targetUser.email !== targetEmail) {
            updatePayload.email = targetEmail
            updatePayload.email_confirm = true
@@ -86,7 +94,11 @@ export async function POST(request: Request) {
             if (updatePayload.email) {
               const { error: emailErr } = await supabaseAdmin.auth.admin.updateUserById(targetUser.id, {
                 email: updatePayload.email,
-                email_confirm: true
+                email_confirm: true,
+                user_metadata: {
+                  ...(targetUser.user_metadata || {}),
+                  password_confirmed_at: confirmedIso,
+                },
               })
               if (emailErr && !isSamePasswordError(emailErr)) throw emailErr
             }
@@ -112,6 +124,7 @@ export async function POST(request: Request) {
             perfil: 'Família',
             matricula,
             aluno_id: aluno.id,
+            password_confirmed_at: confirmedIso,
           }
         })
         if (createErr) throw createErr
@@ -161,12 +174,19 @@ export async function POST(request: Request) {
       const existing = existingByStored || existingByTarget
 
       let resolvedAuthId: string | null = resp.auth_id || null
+      const confirmedIso = new Date().toISOString()
 
       if (existing) {
-        if (existing.last_sign_in_at || (existingByStored && registeredEmail && registeredEmail.trim().toLowerCase() !== storedRespEmail)) {
+        if (existing.last_sign_in_at || existing.user_metadata?.password_confirmed_at || (existingByStored && registeredEmail && registeredEmail.trim().toLowerCase() !== storedRespEmail)) {
           return NextResponse.json({ error: "Sua senha já foi configurada. Use o Login normal ou 'Esqueci minha senha' para receber um link por e-mail." }, { status: 409 })
         }
-        const { error: upErr } = await supabaseAdmin.auth.admin.updateUserById(existing.id, { password: newPass })
+        const { error: upErr } = await supabaseAdmin.auth.admin.updateUserById(existing.id, {
+          password: newPass,
+          user_metadata: {
+            ...(existing.user_metadata || {}),
+            password_confirmed_at: confirmedIso,
+          },
+        })
         if (upErr && !isSamePasswordError(upErr)) throw upErr
         resolvedAuthId = existing.id
       } else {
@@ -189,6 +209,7 @@ export async function POST(request: Request) {
             cargo: 'Responsável',
             perfil: 'Família',
             responsavel_id: resp.id,
+            password_confirmed_at: confirmedIso,
           }
         })
         if (createErr) throw createErr
@@ -246,13 +267,21 @@ export async function POST(request: Request) {
       existingAuthUser = await findAuthUserByEmail(email)
     }
 
+    const confirmedIso = new Date().toISOString()
+
     if (existingAuthUser) {
-      if (existingAuthUser.last_sign_in_at) {
+      if (existingAuthUser.last_sign_in_at || existingAuthUser.user_metadata?.password_confirmed_at) {
         return NextResponse.json({
           error: "Sua senha já foi configurada. Use o Login normal ou 'Esqueci minha senha' para receber um link por e-mail."
         }, { status: 409 })
       }
-      const { error: upErr } = await supabaseAdmin.auth.admin.updateUserById(existingAuthUser.id, { password: newPass })
+      const { error: upErr } = await supabaseAdmin.auth.admin.updateUserById(existingAuthUser.id, {
+        password: newPass,
+        user_metadata: {
+          ...(existingAuthUser.user_metadata || {}),
+          password_confirmed_at: confirmedIso,
+        },
+      })
       if (upErr && !isSamePasswordError(upErr)) throw upErr
       if (existingAuthUser.id !== userIdLegacy) {
         await supabaseAdmin.from('system_users')
@@ -264,6 +293,10 @@ export async function POST(request: Request) {
         email,
         password: newPass,
         email_confirm: true,
+        user_metadata: {
+          nome: dbUser?.nome,
+          password_confirmed_at: confirmedIso,
+        },
       })
       if (authErr) throw authErr
       if (authData?.user?.id) {

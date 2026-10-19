@@ -279,6 +279,17 @@ export default function AtualizarSenha() {
           setLoading(false);
           return;
         }
+        if (apiRes.status === 403 || apiData.needsFirstAccess) {
+          clearRecoveryTempFlags();
+          await supabase.auth.signOut().catch(() => {});
+          setErro(
+            apiData.error ||
+              'Você ainda não realizou o seu Primeiro Acesso. Para cadastrar sua senha pela primeira vez, acesse a opção "Primeiro Acesso" na tela de login.'
+          );
+          setSessionValid(false);
+          setLoading(false);
+          return;
+        }
       }
 
       // 2. Fallback direto pelo SDK do cliente

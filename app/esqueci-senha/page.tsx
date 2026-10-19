@@ -10,7 +10,11 @@ import { isNonDeliverableTestEmail } from '@/lib/utils/emailValidation';
 
 export default function EsqueciSenha() {
   const [email, setEmail] = useState('');
-  const [mensagem, setMensagem] = useState<{ tipo: 'sucesso' | 'erro', texto: string } | null>(null);
+  const [mensagem, setMensagem] = useState<{
+    tipo: 'sucesso' | 'erro' | 'primeiro_acesso'
+    texto: string
+    usuario?: { nome?: string; email?: string; cargo?: string }
+  } | null>(null);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
 
@@ -51,10 +55,20 @@ export default function EsqueciSenha() {
       const data = await res.json().catch(() => ({}));
 
       if (!res.ok || data.error) {
-        setMensagem({
-          tipo: 'erro',
-          texto: data.error || 'Não foi possível enviar o link de recuperação. Tente novamente.',
-        });
+        if (data.needsFirstAccess) {
+          setMensagem({
+            tipo: 'primeiro_acesso',
+            texto:
+              data.error ||
+              'Você ainda não realizou o seu Primeiro Acesso. Para criar sua senha pela primeira vez, acesse a opção "Primeiro Acesso" na tela de login.',
+            usuario: data.user,
+          });
+        } else {
+          setMensagem({
+            tipo: 'erro',
+            texto: data.error || 'Não foi possível enviar o link de recuperação. Tente novamente.',
+          });
+        }
       } else {
         setMensagem({
           tipo: 'sucesso',
@@ -144,7 +158,90 @@ export default function EsqueciSenha() {
             para você voltar a acessar sua conta.
           </p>
 
-          {mensagem && (
+          {mensagem && mensagem.tipo === 'primeiro_acesso' ? (
+            <div
+              style={{
+                marginBottom: '24px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '14px',
+                borderRadius: '16px',
+                padding: '18px',
+                fontSize: '14px',
+                backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                border: '1px solid rgba(245, 158, 11, 0.3)',
+                color: '#fbbf24',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+                <AlertCircle size={22} style={{ flexShrink: 0, marginTop: '2px', color: '#fbbf24' }} />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <strong style={{ fontSize: '15px', color: '#fde68a', lineHeight: 1.3 }}>
+                    Primeiro Acesso ainda não realizado
+                  </strong>
+                  <span style={{ fontSize: '13px', color: 'rgba(255, 255, 255, 0.85)', lineHeight: 1.55 }}>
+                    {mensagem.usuario?.nome
+                      ? `${mensagem.usuario.nome} (${mensagem.usuario.cargo || 'Usuário'}): identificamos`
+                      : 'Identificamos'}{' '}
+                    que você ainda não concluiu o seu primeiro cadastro de senha no sistema. Por segurança, a redefinição de senha só é liberada após o Primeiro Acesso.
+                  </span>
+                </div>
+              </div>
+
+              <div
+                style={{
+                  backgroundColor: 'rgba(15, 23, 42, 0.6)',
+                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                  borderRadius: '12px',
+                  padding: '12px 14px',
+                  color: '#cbd5e1',
+                  fontSize: '12.5px',
+                  lineHeight: 1.6,
+                }}
+              >
+                <div style={{ fontWeight: 700, color: '#93c5fd', marginBottom: '4px', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  Instruções para criar sua senha:
+                </div>
+                <ol style={{ margin: 0, paddingLeft: '18px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <li>Clique no botão <strong>&quot;Realizar Primeiro Acesso&quot;</strong> abaixo (ou na tela de login).</li>
+                  <li>Informe seu e-mail cadastrado para receber o código de ativação de 6 dígitos.</li>
+                  <li>Digite o código recebido no seu e-mail e cadastre sua senha de acesso.</li>
+                </ol>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  const targetEmail = (email || mensagem.usuario?.email || '').trim().toLowerCase();
+                  router.push(
+                    targetEmail
+                      ? `/login?step=first_access_verify&email=${encodeURIComponent(targetEmail)}`
+                      : '/login?step=first_access_verify'
+                  );
+                }}
+                style={{
+                  width: '100%',
+                  borderRadius: '12px',
+                  padding: '13px 16px',
+                  fontWeight: 700,
+                  fontSize: '14px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  color: '#ffffff',
+                  border: '1px solid rgba(139, 92, 246, 0.4)',
+                  cursor: 'pointer',
+                  background: 'linear-gradient(135deg, #3b82f6 0%, #6366f1 50%, #8b5cf6 100%)',
+                  boxShadow: '0 6px 18px rgba(99, 102, 241, 0.35)',
+                  transition: 'all 0.2s',
+                }}
+              >
+                <span>🔑</span>
+                <span>Realizar Primeiro Acesso</span>
+              </button>
+            </div>
+          ) : mensagem ? (
             <div 
               style={{ 
                 marginBottom: '24px', 
@@ -163,7 +260,7 @@ export default function EsqueciSenha() {
               {mensagem.tipo === 'erro' ? <AlertCircle size={20} style={{ flexShrink: 0, marginTop: '2px' }} /> : <CheckCircle2 size={20} style={{ flexShrink: 0, marginTop: '2px' }} />}
               <span style={{ lineHeight: 1.5 }}>{mensagem.texto}</span>
             </div>
-          )}
+          ) : null}
 
           <form onSubmit={handleResetPassword} style={{ display: 'flex', flexDirection: 'column', gap: '24px', width: '100%', margin: 0 }}>
             {/* Email Input */}
@@ -178,7 +275,10 @@ export default function EsqueciSenha() {
                 <input
                   type="email"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    if (mensagem) setMensagem(null);
+                  }}
                   required
                   className="login-input"
                   style={{ 

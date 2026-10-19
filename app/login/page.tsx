@@ -243,6 +243,7 @@ export default function LoginPage() {
       const emailParam = params.get('email')
       if (emailParam) {
         setEmail(emailParam)
+        setFaQuery(emailParam)
       }
 
       // Capturar redirecionamento de recuperação de senha ou erros do Supabase

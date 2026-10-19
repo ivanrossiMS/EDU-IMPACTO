@@ -548,6 +548,7 @@ export default function RegimentoInternoPage() {
   const [faQuery, setFaQuery] = React.useState('');
   const [faLoading, setFaLoading] = React.useState(false);
   const [faError, setFaError] = React.useState('');
+  const [faNeedsFirstAccess, setFaNeedsFirstAccess] = React.useState(false);
   const [faUser, setFaUser] = React.useState<any>(null);
   const [faRegEmail, setFaRegEmail] = React.useState('');
   const [newPass, setNewPass] = React.useState('');
@@ -944,7 +945,7 @@ export default function RegimentoInternoPage() {
       setFaError(modalStep === 'forgot_password' ? 'Informe seu e-mail cadastrado.' : 'Informe seu e-mail ou código.'); 
       return; 
     }
-    setFaLoading(true); setFaError('');
+    setFaLoading(true); setFaError(''); setFaNeedsFirstAccess(false);
     
     if (modalStep === 'forgot_password') {
       try {
@@ -959,6 +960,9 @@ export default function RegimentoInternoPage() {
         const data = await res.json().catch(() => ({}));
 
         if (!res.ok || data.error) {
+          if (data.needsFirstAccess) {
+            setFaNeedsFirstAccess(true);
+          }
           throw new Error(data.error || 'Erro ao enviar instruções.');
         }
 
@@ -1816,8 +1820,21 @@ export default function RegimentoInternoPage() {
                     </div>
 
                     {faError && (
-                      <div className="p-3 bg-rose-50 dark:bg-rose-950/20 text-rose-600 dark:text-rose-400 rounded-xl text-xs font-medium border border-rose-100 dark:border-rose-950">
-                        {faError}
+                      <div className="p-3 bg-rose-50 dark:bg-rose-950/20 text-rose-600 dark:text-rose-400 rounded-xl text-xs font-medium border border-rose-100 dark:border-rose-950 flex flex-col gap-2">
+                        <span>{faError}</span>
+                        {faNeedsFirstAccess && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setFaError('');
+                              setFaNeedsFirstAccess(false);
+                              setModalStep('first_access_verify');
+                            }}
+                            className="mt-1 py-2 px-3 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs cursor-pointer border-none transition-colors"
+                          >
+                            🔑 Realizar Primeiro Acesso
+                          </button>
+                        )}
                       </div>
                     )}
 

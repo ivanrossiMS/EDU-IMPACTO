@@ -4,12 +4,13 @@ import { useSupabaseArray } from '@/lib/useSupabaseCollection';
 
 
 import React, { useState, useEffect } from 'react'
-import { Search, Shield, Key, Pencil, Eye, Smartphone, Power, Copy, Check, Users } from 'lucide-react'
+import { Search, Shield, Key, Pencil, Eye, Smartphone, Power, Copy, Check, Users, RotateCcw } from 'lucide-react'
 import { useData } from '@/lib/dataContext'
 import { useLocalStorage } from '@/lib/useLocalStorage'
 import { getInitials } from '@/lib/utils'
 import { useApiQuery } from '@/hooks/useApi'
 import { useQueryClient } from '@tanstack/react-query'
+import { FirstAccessGeneratorModal, FirstAccessTargetUser } from '@/components/usuarios/FirstAccessGeneratorModal'
 
 const TableSkeleton = () => (
   <div className="table-container" style={{ animation: 'fadeIn 0.25s ease-out' }}>
@@ -92,6 +93,7 @@ export function AuthAlunosTab() {
   const [editModal, setEditModal] = useState<any | null>(null)
   const [resetModal, setResetModal] = useState<any | null>(null)
   const [linksModal, setLinksModal] = useState<any | null>(null)
+  const [firstAccessTarget, setFirstAccessTarget] = useState<FirstAccessTargetUser | null>(null)
   
   // States for resetting password
   const [resetParams, setResetParams] = useState({ mode: 'auto', password: '', confirm: '', sendSms: false, sendEmail: false, requireChange: true })
@@ -439,7 +441,23 @@ export function AuthAlunosTab() {
                         <div style={{ display: 'flex', gap: 4 }}>
                           <button className="btn btn-ghost btn-icon btn-sm" title="Editar Contatos de Acesso" onClick={() => setEditModal({ aluno: a, auth: a.auth, form: { email: a.email || a.auth?.email || '', celular: a.celular || a.telefone || a.auth?.celular || '' } })}><Pencil size={13} /></button>
                           <button className="btn btn-ghost btn-icon btn-sm" title="Responsáveis Vinculados" onClick={() => setLinksModal(a)}><Users size={13} /></button>
-                          <button className="btn btn-ghost btn-icon btn-sm" title="Redefinir Senha" onClick={() => { setResetModal({ aluno: a, auth: a.auth }); setResetParams({ mode: 'auto', password: generateAutoPass(), confirm: '', sendSms: false, sendEmail: false, requireChange: true }); setCopied(false) }}><Key size={13} /></button>
+                          <button
+                            className="btn btn-ghost btn-icon btn-sm"
+                            title="Criar 1º Acesso / Gerar Senha Aleatória"
+                            style={{ color: '#3b82f6' }}
+                            onClick={() =>
+                              setFirstAccessTarget({
+                                type: 'aluno',
+                                id: String(a.id),
+                                nome: a.nome,
+                                email: a.email || a.auth?.email || '',
+                                sublabel: `Matrícula/Cód: ${a.auth?.login || (a as any).codigo || (a as any).matricula || '-'}`,
+                              })
+                            }
+                          >
+                            <Key size={13} />
+                          </button>
+                          <button className="btn btn-ghost btn-icon btn-sm" title="Reiniciar 1º Acesso" onClick={() => { setResetModal({ aluno: a, auth: a.auth }); setResetParams({ mode: 'auto', password: generateAutoPass(), confirm: '', sendSms: false, sendEmail: false, requireChange: true }); setCopied(false) }}><RotateCcw size={13} /></button>
                           <button className="btn btn-ghost btn-icon btn-sm" title={currentStatus === 'ATIVO' ? 'Inativar Acesso' : 'Ativar Acesso'} onClick={() => toggleStatus(a)}><Power size={13} style={{ color: currentStatus === 'ATIVO' ? '#ef4444' : '#10b981' }} /></button>
                         </div>
                       </td>
@@ -592,6 +610,35 @@ export function AuthAlunosTab() {
           </div>
         )
       })()}
+
+      <FirstAccessGeneratorModal
+        isOpen={Boolean(firstAccessTarget)}
+        onClose={() => setFirstAccessTarget(null)}
+        initialUser={firstAccessTarget}
+        defaultTabType="aluno"
+        onSuccess={({ user, login, action }) => {
+          if (login) {
+            setAlunos(prev =>
+              prev.map(a =>
+                String(a.id) === String(user.id)
+                  ? { ...a, email: login, dados: { ...(a.dados || {}), email: login } }
+                  : a
+              )
+            )
+          }
+          queryClient.invalidateQueries({ queryKey: ['alunos_auth_tab'] })
+          queryClient.invalidateQueries({ queryKey: ['alunos'] })
+          queryClient.invalidateQueries({ queryKey: ['usuarios'] })
+          logSystemAction(
+            'Config (Acessos)',
+            'Edição',
+            action === 'created'
+              ? `1º Acesso com senha aleatória gerado (Aluno: ${user.nome} — ${login})`
+              : `Redefinição de acesso (Aluno: ${user.nome})`,
+            { registroId: user.id }
+          )
+        }}
+      />
     </div>
   )
 }

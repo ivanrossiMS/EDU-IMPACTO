@@ -135,7 +135,10 @@ export async function POST(request: Request) {
       }
 
       const existingAuthResp = await findAuthByEmail(targetEmail)
-      if (existingAuthResp && (existingAuthResp.last_sign_in_at || existingAuthResp.confirmed_at)) {
+      if (
+        existingAuthResp &&
+        (existingAuthResp.last_sign_in_at || existingAuthResp.user_metadata?.password_confirmed_at)
+      ) {
         return NextResponse.json(
           {
             error:
@@ -205,7 +208,10 @@ export async function POST(request: Request) {
         userType: 'aluno',
       }
 
-      if (existingAuth && (existingAuth.last_sign_in_at || existingAuth.confirmed_at)) {
+      if (
+        existingAuth &&
+        (existingAuth.last_sign_in_at || existingAuth.user_metadata?.password_confirmed_at)
+      ) {
         return NextResponse.json(
           {
             error:

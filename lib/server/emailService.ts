@@ -1538,3 +1538,167 @@ export async function enviarEmailTeste(
   }
 }
 
+/**
+ * Dispara o e-mail contendo as credenciais de Primeiro Acesso (Login + Senha Aleatória) geradas pelo administrador
+ */
+export async function enviarEmailCredenciaisPrimeiroAcesso(params: {
+  destinatario: string
+  nomeDestinatario: string
+  login: string
+  senhaGerada: string
+  perfilOuCargo?: string
+  loginUrl?: string
+}): Promise<{ success: boolean; simulated?: boolean; messageId?: string; error?: string }> {
+  if (isNonDeliverableTestEmail(params.destinatario)) {
+    console.warn(`[EmailService] [SUPRIMIDO CREDENCIAIS PRIMEIRO ACESSO] Destinatário fictício interceptado: ${params.destinatario}.`)
+    return {
+      success: true,
+      simulated: true,
+      messageId: `suppressed-fa-creds-${Date.now()}`,
+    }
+  }
+
+  const cfg = await getSmtpConfig()
+  const cargoTexto = params.perfilOuCargo ? ` (${params.perfilOuCargo})` : ''
+  const targetLoginUrl = params.loginUrl || 'https://impacto-edu.net/login'
+
+  const htmlContent = `
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" lang="pt-BR">
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="light dark" />
+  <meta name="supported-color-schemes" content="light dark" />
+  <title>Credenciais de Primeiro Acesso - Colégio Impacto</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #f1f5f9; -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1e293b;">
+  <table role="presentation" width="100%" border="0" cellpadding="0" cellspacing="0" style="background-color: #f1f5f9; width: 100%; margin: 0; padding: 28px 0;">
+    <tr>
+      <td align="center" style="padding: 0 12px;">
+        <table role="presentation" width="100%" border="0" cellpadding="0" cellspacing="0" style="max-width: 560px; width: 100%; background-color: #ffffff; border-radius: 16px; border: 1px solid #e2e8f0; border-collapse: separate; overflow: hidden; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);">
+          <tr>
+            <td align="center" bgcolor="#0b1f48" style="background-color: #0b1f48; background-image: linear-gradient(135deg, #0b1f48 0%, #1e3a8a 100%); padding: 32px 20px; text-align: center; border-top-left-radius: 15px; border-top-right-radius: 15px;">
+              <table role="presentation" border="0" cellpadding="0" cellspacing="0" align="center" style="margin: 0 auto 12px auto;">
+                <tr>
+                  <td align="center" bgcolor="#ffffff" style="background-color: #ffffff; width: 56px; height: 56px; border-radius: 50%; padding: 4px; text-align: center; vertical-align: middle; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);">
+                    <img src="https://impacto-edu.net/logo-impacto-clean.png" alt="Colégio Impacto" width="48" height="48" style="display: block; margin: 0 auto; width: 48px; height: 48px; border: 0; outline: none; text-decoration: none;" />
+                  </td>
+                </tr>
+              </table>
+              <h1 style="margin: 0; padding: 0; font-size: 22px; font-weight: 800; color: #ffffff !important; letter-spacing: 0.8px; line-height: 1.2; text-transform: uppercase;">
+                COLÉGIO IMPACTO
+              </h1>
+              <p style="margin: 8px 0 0 0; padding: 0; font-size: 13px; font-weight: 600; color: #93c5fd !important; letter-spacing: 0.5px; line-height: 1.4; text-transform: uppercase;">
+                Portal de Acesso • Credenciais de Primeiro Acesso
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 32px 28px; text-align: left; font-size: 14px; line-height: 1.6; color: #475569;">
+              <div style="font-size: 17px; font-weight: 700; margin-bottom: 12px; color: #0f172a;">
+                Olá, ${params.nomeDestinatario}${cargoTexto}!
+              </div>
+              <div style="margin-bottom: 20px; font-size: 14px; line-height: 1.6;">
+                Seu <strong style="color: #0f172a;">Primeiro Acesso</strong> na plataforma <strong style="color: #1e3a8a;">Impacto EDU</strong> foi liberado. Utilize as credenciais abaixo para entrar no sistema:
+              </div>
+
+              <table role="presentation" width="100%" border="0" cellpadding="0" cellspacing="0" style="margin: 22px 0;">
+                <tr>
+                  <td style="background-color: #f8fafc; border: 2px dashed #3b82f6; border-radius: 12px; padding: 22px 20px;">
+                    <div style="margin-bottom: 14px;">
+                      <div style="font-size: 11px; font-weight: 800; text-transform: uppercase; color: #64748b; letter-spacing: 0.08em; margin-bottom: 4px;">
+                        Login (E-mail)
+                      </div>
+                      <div style="font-family: monospace; font-size: 15px; font-weight: 700; color: #0f172a; word-break: break-all;">
+                        ${params.login}
+                      </div>
+                    </div>
+                    <div style="border-top: 1px solid #e2e8f0; padding-top: 14px;">
+                      <div style="font-size: 11px; font-weight: 800; text-transform: uppercase; color: #64748b; letter-spacing: 0.08em; margin-bottom: 4px;">
+                        Senha de Acesso Gerada
+                      </div>
+                      <div style="font-family: 'Courier New', Courier, monospace; font-size: 28px; font-weight: 800; letter-spacing: 4px; color: #1e3a8a;">
+                        ${params.senhaGerada}
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+              </table>
+
+              <table role="presentation" border="0" cellpadding="0" cellspacing="0" align="center" style="margin: 24px auto;">
+                <tr>
+                  <td align="center" bgcolor="#2563eb" style="background-color: #2563eb; border-radius: 10px;">
+                    <a href="${targetLoginUrl}" target="_blank" style="display: inline-block; background-color: #2563eb; color: #ffffff !important; text-decoration: none; padding: 14px 32px; border-radius: 10px; font-weight: 700; font-size: 15px; text-align: center;">
+                      Acessar Plataforma Impacto EDU
+                    </a>
+                  </td>
+                </tr>
+              </table>
+
+              <div style="background-color: #eff6ff; border-left: 4px solid #3b82f6; padding: 12px 16px; border-radius: 6px; font-size: 13px; color: #1e40af; line-height: 1.5; margin-top: 20px;">
+                <strong style="color: #1e3a8a;">💡 Dica de Segurança:</strong> Após realizar seu login, você poderá alterar sua senha a qualquer momento nas configurações do seu perfil ou através da opção "Esqueci minha senha".
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td align="center" bgcolor="#f8fafc" style="background-color: #f8fafc; border-top: 1px solid #e2e8f0; padding: 20px 24px; text-align: center; font-size: 11px; color: #94a3b8; line-height: 1.5; border-bottom-left-radius: 15px; border-bottom-right-radius: 15px;">
+              COLÉGIO IMPACTO CENTRO DE ENSINO LTDA • CNPJ: 04.395.789/0001-88<br>
+              Campo Grande - MS • Mensagem gerada automaticamente pelo Sistema Impacto EDU.
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+`
+
+  if (!cfg) {
+    console.info(`[EmailService] [SIMULAÇÃO CREDENCIAIS 1º ACESSO] Para: ${params.destinatario} | Senha: ${params.senhaGerada}`)
+    return {
+      success: true,
+      simulated: true,
+      messageId: `simulated-fa-creds-${Date.now()}`,
+    }
+  }
+
+  try {
+    const plainText = `Olá, ${params.nomeDestinatario}!\n\nSeu Primeiro Acesso na plataforma Impacto EDU foi criado.\n\nLogin: ${params.login}\nSenha de Acesso: ${params.senhaGerada}\n\nAcesse em: ${targetLoginUrl}\n\nColégio Impacto`
+    const antiThreadToken = Date.now().toString().slice(-4)
+    const msgId = `<fa-creds-${Date.now()}-${Math.random().toString(36).substring(2, 7)}@colegioimpacto.net>`
+
+    const info = await sendMailWithResilience(
+      cfg,
+      {
+        messageId: msgId,
+        from: `"${cfg.fromName}" <${cfg.fromEmail}>`,
+        to: params.destinatario,
+        subject: `Suas Credenciais de Acesso • Plataforma Impacto EDU [${antiThreadToken}]`,
+        text: plainText,
+        html: htmlContent,
+        headers: {
+          Importance: 'high',
+          'X-Entity-Ref-ID': `fa-creds-${Date.now()}`,
+        },
+      },
+      3,
+      { useFreshConnection: true }
+    )
+
+    return {
+      success: true,
+      simulated: false,
+      messageId: info.messageId,
+    }
+  } catch (err: any) {
+    console.error('[EmailService] Erro ao enviar e-mail de credenciais de Primeiro Acesso:', err)
+    return {
+      success: false,
+      error: err.message,
+    }
+  }
+}
+
+

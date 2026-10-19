@@ -6,12 +6,13 @@ import { useSupabaseArray } from '@/lib/useSupabaseCollection';
 import { useState, useMemo, useEffect } from 'react'
 import { useApiQuery } from '@/hooks/useApi'
 import { useQueryClient } from '@tanstack/react-query'
-import { Search, Plus, Shield, Eye, Pencil, Trash2, Lock, X, Save, ChevronDown, ChevronRight, GraduationCap, Users, RotateCcw, Layers } from 'lucide-react'
+import { Search, Plus, Shield, Eye, Pencil, Trash2, Lock, X, Save, ChevronDown, ChevronRight, GraduationCap, Users, RotateCcw, Layers, Key } from 'lucide-react'
 import { useLocalStorage } from '@/lib/useLocalStorage'
 import { newId, useData, Perfil } from '@/lib/dataContext'
 import { useApp } from '@/lib/context'
 import { AuthAlunosTab } from '@/components/usuarios/AuthAlunosTab'
 import { AuthResponsaveisTab } from '@/components/usuarios/AuthResponsaveisTab'
+import { FirstAccessGeneratorModal, FirstAccessTargetUser } from '@/components/usuarios/FirstAccessGeneratorModal'
 import { ALL_NAV_GROUPS } from '@/components/layout/Sidebar'
 import { setCachedPerfis } from '@/lib/auth/moduleRouting'
 
@@ -255,6 +256,8 @@ export default function UsuariosPage() {
   const [userForm, setUserForm] = useState<Omit<SysUser, 'id' | 'ultimoAcesso'>>(BLANK_USER)
   const [showUser, setShowUser] = useState<SysUser | null>(null)
   const [isSavingUser, setIsSavingUser] = useState(false)
+  const [firstAccessModalOpen, setFirstAccessModalOpen] = useState(false)
+  const [firstAccessTarget, setFirstAccessTarget] = useState<FirstAccessTargetUser | null>(null)
 
   /* Perfil CRUD state */
   const [perfilModal, setPerfilModal] = useState<'add' | 'edit' | null>(null)
@@ -271,19 +274,35 @@ export default function UsuariosPage() {
   /* ── User actions ── */
   const openAddUser = () => { setUserForm(BLANK_USER); setUserModal('add') }
   const openEditUser = (u: SysUser) => { setUserForm({ nome: u.nome, email: u.email, cargo: u.cargo, perfil: u.perfil, status: u.status, twofa: u.twofa }); setEditingUserId(u.id); setUserModal('edit') }
+  const openFirstAccessGenerator = (target: FirstAccessTargetUser | null = null) => {
+    setFirstAccessTarget(target)
+    setFirstAccessModalOpen(true)
+  }
   const saveUser = async () => {
     if (!userForm.nome.trim() || !userForm.email.trim() || isSavingUser) return
     setIsSavingUser(true)
     if (userModal === 'add') {
       const uId = newId('U')
       const payload = { ...userForm, id: uId, ultimoAcesso: 'Nunca' }
+      let createdUserId = uId
       try {
         const res = await fetch('/api/configuracoes/usuarios', { method: 'POST', body: JSON.stringify(payload) })
         if (!res.ok) { const err = await res.json(); alert('Erro na nuvem: ' + err.error); setIsSavingUser(false); return; }
+        const createdData = await res.json().catch(() => null)
+        if (createdData?.id) createdUserId = String(createdData.id)
       } catch(e) { alert('Erro critico ao salvar usuario'); setIsSavingUser(false); return; }
       
       queryClient.invalidateQueries({ queryKey: ['usuarios'] })
-      logSystemAction('Config (Usuários)', 'Cadastro', `Novo usuário: ${userForm.nome}`, { registroId: uId, detalhesDepois: userForm })
+      logSystemAction('Config (Usuários)', 'Cadastro', `Novo usuário: ${userForm.nome}`, { registroId: createdUserId, detalhesDepois: userForm })
+      setUserModal(null); setEditingUserId(null); setIsSavingUser(false)
+      openFirstAccessGenerator({
+        type: 'system_user',
+        id: createdUserId,
+        nome: userForm.nome.trim(),
+        email: userForm.email.trim().toLowerCase(),
+        sublabel: `${userForm.cargo || 'Colaborador'} • Perfil: ${userForm.perfil}`,
+      })
+      return
     } else if (editingUserId) {
       const uAntigo = users.find(u => u.id === editingUserId)
       try {
@@ -539,7 +558,25 @@ export default function UsuariosPage() {
           <h1 className="page-title">Usuários & Acessos</h1>
           <p className="page-subtitle">Controle de usuários, perfis, permissões e auditoria de acesso</p>
         </div>
-        <button className="btn btn-primary btn-sm" onClick={openAddUser}><Plus size={13} />Novo Usuário</button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <button
+            className="btn btn-ghost btn-sm"
+            onClick={() => openFirstAccessGenerator(null)}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              border: '1px solid rgba(59,130,246,0.35)',
+              background: 'rgba(59,130,246,0.08)',
+              color: '#3b82f6',
+              fontWeight: 700,
+            }}
+          >
+            <Key size={13} />
+            Criar 1º Acesso (Senha Aleatória)
+          </button>
+          <button className="btn btn-primary btn-sm" onClick={openAddUser}><Plus size={13} />Novo Usuário</button>
+        </div>
       </div>
 
       <div className="tab-list usuarios-tab-list" style={{ marginBottom: 20 }}>
@@ -682,6 +719,22 @@ export default function UsuariosPage() {
                         <div style={{ display: 'flex', gap: 4 }}>
                           <button className="btn btn-ghost btn-icon btn-sm" title="Ver detalhes" onClick={() => setShowUser(u)}><Eye size={12} /></button>
                           <button className="btn btn-ghost btn-icon btn-sm" title="Editar" onClick={() => openEditUser(u)}><Pencil size={12} /></button>
+                          <button
+                            className="btn btn-ghost btn-icon btn-sm"
+                            title="Criar 1º Acesso / Gerar Senha Aleatória"
+                            style={{ color: '#3b82f6' }}
+                            onClick={() =>
+                              openFirstAccessGenerator({
+                                type: 'system_user',
+                                id: u.id,
+                                nome: u.nome,
+                                email: u.email,
+                                sublabel: `${u.cargo || 'Colaborador'} • Perfil: ${u.perfil}`,
+                              })
+                            }
+                          >
+                            <Key size={12} />
+                          </button>
                           <button className="btn btn-ghost btn-icon btn-sm" title="Reiniciar 1º Acesso" onClick={() => reiniciarAcesso(u.id, u.nome)}><RotateCcw size={12} /></button>
                           <button className="btn btn-ghost btn-icon btn-sm" title="Excluir" style={{ color: '#f87171' }} onClick={() => setDeleteUserId(u.id)}><Trash2 size={12} /></button>
                         </div>
@@ -1720,6 +1773,29 @@ export default function UsuariosPage() {
         
 </motion.div>
 )}</AnimatePresence>
+
+      <FirstAccessGeneratorModal
+        isOpen={firstAccessModalOpen}
+        onClose={() => {
+          setFirstAccessModalOpen(false)
+          setFirstAccessTarget(null)
+        }}
+        initialUser={firstAccessTarget}
+        defaultTabType={tab === 'alunos' ? 'aluno' : tab === 'responsaveis' ? 'responsavel' : 'system_user'}
+        onSuccess={({ user, login, action }) => {
+          queryClient.invalidateQueries({ queryKey: ['usuarios'] })
+          queryClient.invalidateQueries({ queryKey: ['alunos_auth_tab'] })
+          queryClient.invalidateQueries({ queryKey: ['responsaveis_auth_tab'] })
+          logSystemAction(
+            'Config (Acessos)',
+            'Edição',
+            action === 'created'
+              ? `1º Acesso com senha aleatória gerado (${user.nome} — ${login})`
+              : `Acesso reiniciado (${user.nome})`,
+            { registroId: user.id }
+          )
+        }}
+      />
     </div>
   )
 }

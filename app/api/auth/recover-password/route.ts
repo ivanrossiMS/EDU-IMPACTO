@@ -79,10 +79,10 @@ export async function POST(request: Request) {
     const supabaseAdmin = getAdminClient()
 
     // 1. Verifica cadastro em system_users, responsaveis, alunos e auth.users
-    const [sysRes, respRes, alunoRes, existingAuthUser] = await Promise.all([
+    const [sysRes, respRes, alunoRes, initialAuthUser] = await Promise.all([
       supabaseAdmin
         .from('system_users')
-        .select('id, nome, email, cargo, perfil, status, auth_id')
+        .select('id, nome, email, cargo, perfil, status, auth_id, senha_definida')
         .ilike('email', cleanEmail)
         .limit(1),
       supabaseAdmin
@@ -101,12 +101,65 @@ export async function POST(request: Request) {
     const sysUser = sysRes.data?.[0] || null
     const respUser = respRes.data?.[0] || null
     const alunoUser = alunoRes.data?.[0] || null
+    let existingAuthUser = initialAuthUser
+
+    // Se for aluno e ainda não localizou pelo e-mail real, verifica se já fez primeiro acesso com e-mail virtual
+    if (!existingAuthUser && alunoUser) {
+      const matricula = alunoUser.matricula || alunoUser.dados?.codigo || alunoUser.id
+      if (matricula) {
+        const virtualEmail = `aluno.${matricula}@impactoedu.local`.toLowerCase()
+        existingAuthUser = await findAuthUserByEmail(virtualEmail)
+      }
+    }
+
+    if (!sysUser && !respUser && !alunoUser && !existingAuthUser) {
+      return NextResponse.json(
+        {
+          error:
+            'Nenhum cadastro ativo encontrado com este e-mail. Verifique se digitou o e-mail cadastrado na secretaria escolar.',
+        },
+        { status: 404 }
+      )
+    }
 
     if (sysUser && sysUser.status === 'inativo') {
       return NextResponse.json(
         { error: 'Acesso bloqueado: Usuário inativo. Contate o suporte ou a secretaria.' },
         { status: 403 }
       )
+    }
+
+    if (!sysUser && respUser) {
+      const { data: links } = await supabaseAdmin
+        .from('aluno_responsavel')
+        .select('resp_financeiro, resp_pedagogico')
+        .eq('responsavel_id', respUser.id)
+
+      const isAllowed = (links || []).some(
+        (l: any) => l.resp_financeiro === true || l.resp_pedagogico === true
+      )
+
+      if (!isAllowed && !alunoUser) {
+        return NextResponse.json(
+          {
+            error:
+              'Acesso não autorizado. Apenas responsáveis Financeiro ou Pedagógico possuem login no sistema.',
+          },
+          { status: 403 }
+        )
+      }
+    }
+
+    if (!sysUser && !respUser && alunoUser) {
+      const activeStatus = ['ativo', 'matriculado', 'cursando', 'ativo_transferencia']
+      const isActive =
+        !alunoUser.status || activeStatus.includes((alunoUser.status || '').toLowerCase())
+      if (!isActive) {
+        return NextResponse.json(
+          { error: 'Matrícula inativa. Por favor, verifique com a secretaria escolar.' },
+          { status: 403 }
+        )
+      }
     }
 
     const nomeDestinatario =
@@ -116,90 +169,46 @@ export async function POST(request: Request) {
       existingAuthUser?.user_metadata?.nome ||
       undefined
 
-    // 2. Se o usuário existe nas tabelas do sistema mas ainda não tinha conta criada no Supabase Auth,
-    // provisiona automaticamente para que a recuperação de senha funcione sem falhas
-    if (!existingAuthUser && (sysUser || respUser || alunoUser)) {
-      const tempPassword = `Imp@${crypto.randomBytes(12).toString('hex')}9!`
-      if (sysUser) {
-        const { data: created } = await supabaseAdmin.auth.admin
-          .createUser({
-            email: cleanEmail,
-            password: tempPassword,
-            email_confirm: true,
-            app_metadata: {
-              role_type: 'staff',
-              cargo: sysUser.cargo || 'Colaborador',
-              perfil: sysUser.perfil || 'Usuário',
-              system_user_id: sysUser.id,
-            },
-            user_metadata: {
-              nome: sysUser.nome,
-              cargo: sysUser.cargo || 'Colaborador',
-              perfil: sysUser.perfil || 'Usuário',
-              system_user_id: sysUser.id,
-            },
-          })
-          .catch(() => ({ data: null }))
+    // 2. Verifica se o usuário já realizou o Primeiro Acesso (primeiro cadastro de senha).
+    // Caso ainda não tenha feito o Primeiro Acesso, bloqueia o envio de redefinição e orienta o usuário.
+    const hasAuthSignInOrConfirmation = Boolean(
+      existingAuthUser &&
+        (existingAuthUser.last_sign_in_at ||
+          existingAuthUser.user_metadata?.password_confirmed_at)
+    )
 
-        if (created?.user?.id) {
-          await supabaseAdmin
-            .from('system_users')
-            .update({ auth_id: created.user.id })
-            .eq('id', sysUser.id)
-          invalidateAuthUsersCache()
-        }
-      } else if (respUser) {
-        const { data: created } = await supabaseAdmin.auth.admin
-          .createUser({
-            email: cleanEmail,
-            password: tempPassword,
-            email_confirm: true,
-            app_metadata: {
-              role_type: 'responsavel',
-              perfil: 'Família',
-              cargo: 'Responsável',
-              responsavel_id: respUser.id,
-            },
-            user_metadata: {
-              nome: respUser.nome,
-              cargo: 'Responsável',
-              perfil: 'Família',
-              responsavel_id: respUser.id,
-            },
-          })
-          .catch(() => ({ data: null }))
+    const hasCompletedFirstAccess = sysUser
+      ? Boolean(
+          existingAuthUser &&
+            (sysUser.senha_definida === true || hasAuthSignInOrConfirmation)
+        )
+      : hasAuthSignInOrConfirmation
 
-        if (created?.user?.id) {
-          await supabaseAdmin
-            .from('responsaveis')
-            .update({ auth_id: created.user.id })
-            .eq('id', respUser.id)
-          invalidateAuthUsersCache()
-        }
-      } else if (alunoUser) {
-        const matricula = alunoUser.matricula || alunoUser.dados?.codigo || alunoUser.id
-        await supabaseAdmin.auth.admin
-          .createUser({
+    if (!hasCompletedFirstAccess) {
+      return NextResponse.json(
+        {
+          error:
+            'Você ainda não realizou o seu Primeiro Acesso. Para cadastrar sua senha pela primeira vez, volte para a tela de login, clique em "Primeiro Acesso" e siga as instruções enviadas para o seu e-mail.',
+          needsFirstAccess: true,
+          user: {
+            nome: nomeDestinatario || '',
             email: cleanEmail,
-            password: tempPassword,
-            email_confirm: true,
-            app_metadata: {
-              role_type: 'aluno',
-              perfil: 'Família',
-              cargo: 'Aluno',
-              aluno_id: alunoUser.id,
-            },
-            user_metadata: {
-              nome: alunoUser.nome,
-              cargo: 'Aluno',
-              perfil: 'Família',
-              matricula,
-              aluno_id: alunoUser.id,
-            },
-          })
-          .catch(() => ({ data: null }))
-        invalidateAuthUsersCache()
-      }
+            cargo: sysUser?.cargo || (respUser ? 'Responsável' : alunoUser ? 'Aluno' : 'Usuário'),
+          },
+        },
+        { status: 403 }
+      )
+    }
+
+    // Se o aluno já tinha feito Primeiro Acesso com e-mail virtual e agora possui e-mail real cadastrado, sincroniza antes de gerar o link
+    if (existingAuthUser && existingAuthUser.email?.toLowerCase() !== cleanEmail) {
+      await supabaseAdmin.auth.admin
+        .updateUserById(existingAuthUser.id, {
+          email: cleanEmail,
+          email_confirm: true,
+        })
+        .catch(() => {})
+      invalidateAuthUsersCache()
     }
 
     // 3. Gera o link/token de recuperação via Supabase Admin API
@@ -214,15 +223,6 @@ export async function POST(request: Request) {
 
     if (linkErr || !linkData?.properties) {
       console.warn('[API recover-password] generateLink error:', linkErr?.message)
-      if (!sysUser && !respUser && !alunoUser && !existingAuthUser) {
-        return NextResponse.json(
-          {
-            error:
-              'Nenhum cadastro ativo encontrado com este e-mail. Verifique se digitou o e-mail cadastrado na secretaria escolar.',
-          },
-          { status: 404 }
-        )
-      }
       return NextResponse.json(
         { error: linkErr?.message || 'Não foi possível gerar o link de recuperação.' },
         { status: 500 }
@@ -315,6 +315,35 @@ export async function PUT(request: Request) {
       )
     }
 
+    const userEmail = (targetUser.email || '').trim().toLowerCase()
+    if (userEmail) {
+      const { data: sysRows } = await supabaseAdmin
+        .from('system_users')
+        .select('id, status, senha_definida')
+        .ilike('email', userEmail)
+        .limit(1)
+
+      const sysCheck = sysRows?.[0]
+      if (sysCheck) {
+        if (sysCheck.status === 'inativo') {
+          return NextResponse.json(
+            { error: 'Acesso bloqueado: Usuário inativo. Contate o suporte ou a secretaria.' },
+            { status: 403 }
+          )
+        }
+        if (sysCheck.senha_definida !== true && !targetUser.user_metadata?.password_confirmed_at) {
+          return NextResponse.json(
+            {
+              error:
+                'Você ainda não realizou o seu Primeiro Acesso. Para cadastrar sua senha pela primeira vez, acesse a opção "Primeiro Acesso" na tela de login.',
+              needsFirstAccess: true,
+            },
+            { status: 403 }
+          )
+        }
+      }
+    }
+
     let mantemMesmaSenha = false
     const { error: upErr } = await supabaseAdmin.auth.admin.updateUserById(targetUser.id, {
       password: newPassword,
@@ -336,7 +365,6 @@ export async function PUT(request: Request) {
       }
     }
 
-    const userEmail = (targetUser.email || '').trim().toLowerCase()
     if (userEmail) {
       await Promise.all([
         supabaseAdmin

@@ -4,12 +4,13 @@ import { useSupabaseArray } from '@/lib/useSupabaseCollection';
 
 
 import React, { useState, useMemo, useEffect } from 'react'
-import { Search, Shield, Key, Pencil, Eye, Power, Copy, Check, Users } from 'lucide-react'
+import { Search, Shield, Key, Pencil, Eye, Power, Copy, Check, Users, RotateCcw } from 'lucide-react'
 import { useData } from '@/lib/dataContext'
 import { useLocalStorage } from '@/lib/useLocalStorage'
 import { getInitials } from '@/lib/utils'
 import { useApiQuery } from '@/hooks/useApi'
 import { useQueryClient } from '@tanstack/react-query'
+import { FirstAccessGeneratorModal, FirstAccessTargetUser } from '@/components/usuarios/FirstAccessGeneratorModal'
 
 const TableSkeleton = () => (
   <div className="table-container" style={{ animation: 'fadeIn 0.25s ease-out' }}>
@@ -91,6 +92,7 @@ export function AuthResponsaveisTab() {
   const [editModal, setEditModal] = useState<any | null>(null)
   const [resetModal, setResetModal] = useState<any | null>(null)
   const [linksModal, setLinksModal] = useState<any | null>(null)
+  const [firstAccessTarget, setFirstAccessTarget] = useState<FirstAccessTargetUser | null>(null)
   
   // States for resetting password
   const [resetParams, setResetParams] = useState({ mode: 'auto', password: '', confirm: '', sendSms: false, sendEmail: false, requireChange: true })
@@ -383,7 +385,23 @@ export function AuthResponsaveisTab() {
                       <td>
                         <div style={{ display: 'flex', gap: 4 }}>
                           <button className="btn btn-ghost btn-icon btn-sm" title="Editar Contatos de Acesso" onClick={() => setEditModal({ guardian: g, auth: g.auth, form: { email: g.email || g.auth?.email || '', celular: g.celular || g.telefone || g.auth?.celular || '' } })}><Pencil size={13} /></button>
-                          <button className="btn btn-ghost btn-icon btn-sm" title="Redefinir Senha" onClick={() => { setResetModal({ guardian: g, auth: g.auth }); setResetParams({ mode: 'auto', password: generateAutoPass(), confirm: '', sendSms: false, sendEmail: false, requireChange: true }); setCopied(false) }}><Key size={13} /></button>
+                          <button
+                            className="btn btn-ghost btn-icon btn-sm"
+                            title="Criar 1º Acesso / Gerar Senha Aleatória"
+                            style={{ color: '#3b82f6' }}
+                            onClick={() =>
+                              setFirstAccessTarget({
+                                type: 'responsavel',
+                                id: String(g.id || g.responsavel_id || g.key),
+                                nome: g.nome,
+                                email: g.email || g.auth?.email || '',
+                                sublabel: g.cpf ? `CPF: ${g.cpf}` : 'Responsável',
+                              })
+                            }
+                          >
+                            <Key size={13} />
+                          </button>
+                          <button className="btn btn-ghost btn-icon btn-sm" title="Reiniciar 1º Acesso" onClick={() => { setResetModal({ guardian: g, auth: g.auth }); setResetParams({ mode: 'auto', password: generateAutoPass(), confirm: '', sendSms: false, sendEmail: false, requireChange: true }); setCopied(false) }}><RotateCcw size={13} /></button>
                           <button className="btn btn-ghost btn-icon btn-sm" title={currentStatus === 'ATIVO' ? 'Inativar Acesso' : 'Ativar Acesso'} onClick={() => toggleStatus(g)}><Power size={13} style={{ color: currentStatus === 'ATIVO' ? '#ef4444' : '#10b981' }} /></button>
                         </div>
                       </td>
@@ -526,6 +544,36 @@ export function AuthResponsaveisTab() {
         
 </motion.div>
 )}</AnimatePresence>
+
+      <FirstAccessGeneratorModal
+        isOpen={Boolean(firstAccessTarget)}
+        onClose={() => setFirstAccessTarget(null)}
+        initialUser={firstAccessTarget}
+        defaultTabType="responsavel"
+        onSuccess={({ user, login, action }) => {
+          if (login) {
+            setLocalResps(prev =>
+              prev.map(r =>
+                String(r.id || r.responsavel_id || r.key) === String(user.id)
+                  ? { ...r, email: login }
+                  : r
+              )
+            )
+          }
+          queryClient.invalidateQueries({ queryKey: ['responsaveis_auth_tab'] })
+          queryClient.invalidateQueries({ queryKey: ['alunos_auth_tab'] })
+          queryClient.invalidateQueries({ queryKey: ['responsaveis'] })
+          queryClient.invalidateQueries({ queryKey: ['usuarios'] })
+          logSystemAction(
+            'Config (Acessos)',
+            'Edição',
+            action === 'created'
+              ? `1º Acesso com senha aleatória gerado (Responsável: ${user.nome} — ${login})`
+              : `Redefinição de acesso (Responsável: ${user.nome})`,
+            { registroId: user.id }
+          )
+        }}
+      />
     </div>
   )
 }

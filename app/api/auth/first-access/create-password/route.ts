@@ -101,8 +101,16 @@ export async function POST(request: Request) {
         : null
       const targetUser = existingByRealEmail || existingByVirtual
 
+      const confirmedIso = new Date().toISOString()
+
       if (targetUser) {
-        const updatePayload: any = { password: newPass }
+        const updatePayload: any = {
+          password: newPass,
+          user_metadata: {
+            ...(targetUser.user_metadata || {}),
+            password_confirmed_at: confirmedIso,
+          },
+        }
         if (isValidEmail(targetEmail) && targetUser.email !== targetEmail) {
           updatePayload.email = targetEmail
           updatePayload.email_confirm = true
@@ -132,6 +140,7 @@ export async function POST(request: Request) {
             perfil: 'Família',
             matricula,
             aluno_id: aluno.id,
+            password_confirmed_at: confirmedIso,
           },
         })
         if (createErr) throw createErr
@@ -193,10 +202,15 @@ export async function POST(request: Request) {
 
       const existing = await findAuthUserByEmail(finalEmail)
       let resolvedAuthId: string | null = resp.auth_id || null
+      const confirmedIso = new Date().toISOString()
 
       if (existing) {
         const { error: upErr } = await supabaseAdmin.auth.admin.updateUserById(existing.id, {
           password: newPass,
+          user_metadata: {
+            ...(existing.user_metadata || {}),
+            password_confirmed_at: confirmedIso,
+          },
         })
         if (upErr && !isSamePasswordError(upErr)) throw upErr
         resolvedAuthId = existing.id
@@ -216,6 +230,7 @@ export async function POST(request: Request) {
             cargo: 'Responsável',
             perfil: 'Família',
             responsavel_id: resp.id,
+            password_confirmed_at: confirmedIso,
           },
         })
         if (createErr) throw createErr
@@ -262,11 +277,18 @@ export async function POST(request: Request) {
 
       loginIdentifier = dbUser.email
       let existingAuthUser = await findAuthUserByEmail(dbUser.email.trim().toLowerCase())
+      const confirmedIso = new Date().toISOString()
 
       if (existingAuthUser) {
         const { error: upErr } = await supabaseAdmin.auth.admin.updateUserById(
           existingAuthUser.id,
-          { password: newPass }
+          {
+            password: newPass,
+            user_metadata: {
+              ...(existingAuthUser.user_metadata || {}),
+              password_confirmed_at: confirmedIso,
+            },
+          }
         )
         if (upErr && !isSamePasswordError(upErr)) throw upErr
 
@@ -290,6 +312,7 @@ export async function POST(request: Request) {
             cargo: dbUser.cargo,
             perfil: dbUser.perfil,
             system_user_id: dbUser.id,
+            password_confirmed_at: confirmedIso,
           },
         })
         if (authErr) throw authErr

@@ -121,7 +121,7 @@ export async function POST(request: Request) {
         userType: 'aluno'
       }
 
-      if (existingAuth) {
+      if (existingAuth && (existingAuth.last_sign_in_at || existingAuth.user_metadata?.password_confirmed_at)) {
         return NextResponse.json({ 
           error: "Sua senha já foi configurada. Use o Login normal ou 'Esqueci minha senha' para receber um link por e-mail.",
           alreadyConfigured: true,
@@ -196,7 +196,7 @@ export async function POST(request: Request) {
       const emailToCheck = finalRespEmail || responsavel.email
       if (emailToCheck) {
         const existingAuthResp = await findAuthByEmail(emailToCheck.trim())
-        if (existingAuthResp) {
+        if (existingAuthResp && (existingAuthResp.last_sign_in_at || existingAuthResp.user_metadata?.password_confirmed_at)) {
           return NextResponse.json({ 
             error: "Sua senha já foi configurada. Use o Login normal ou 'Esqueci minha senha' para receber um link por e-mail.",
             alreadyConfigured: true,
