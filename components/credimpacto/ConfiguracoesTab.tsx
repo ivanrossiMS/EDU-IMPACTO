@@ -11,11 +11,14 @@ import {
   AlertTriangle,
   FileSignature,
   RotateCcw,
-  Info
+  Info,
+  BellRing,
+  Send
 } from 'lucide-react'
-import { CredImpactoConfig, MetodoCalculo } from '@/types/credimpacto'
+import { CredImpactoConfig, CredImpactoPushConfig, MetodoCalculo } from '@/types/credimpacto'
 import { METODOS_LABELS } from '@/lib/credimpacto/engine'
 import { DEFAULT_TERMO_AUTORIZACAO } from '@/lib/credimpacto/contractTemplate'
+import { DEFAULT_PUSH_CONFIG } from '@/lib/credimpacto/db'
 import { toast } from 'sonner'
 
 interface ConfiguracoesTabProps {
@@ -34,16 +37,60 @@ const ALL_METODOS: MetodoCalculo[] = [
 export function ConfiguracoesTab({ initialConfig, onConfigSaved }: ConfiguracoesTabProps) {
   const [config, setConfig] = useState<CredImpactoConfig>({
     ...initialConfig,
-    termoAutorizacaoDesconto: initialConfig.termoAutorizacaoDesconto ?? DEFAULT_TERMO_AUTORIZACAO
+    termoAutorizacaoDesconto: initialConfig.termoAutorizacaoDesconto ?? DEFAULT_TERMO_AUTORIZACAO,
+    pushConfig: {
+      ...DEFAULT_PUSH_CONFIG,
+      ...(initialConfig.pushConfig || {})
+    }
   })
   const [isSaving, setIsSaving] = useState(false)
+  const [isTestingPush, setIsTestingPush] = useState(false)
 
   useEffect(() => {
     setConfig({
       ...initialConfig,
-      termoAutorizacaoDesconto: initialConfig.termoAutorizacaoDesconto ?? DEFAULT_TERMO_AUTORIZACAO
+      termoAutorizacaoDesconto: initialConfig.termoAutorizacaoDesconto ?? DEFAULT_TERMO_AUTORIZACAO,
+      pushConfig: {
+        ...DEFAULT_PUSH_CONFIG,
+        ...(initialConfig.pushConfig || {})
+      }
     })
   }, [initialConfig])
+
+  const handleTogglePushField = (key: keyof CredImpactoPushConfig) => {
+    const currentPush: CredImpactoPushConfig = {
+      ...DEFAULT_PUSH_CONFIG,
+      ...(config.pushConfig || {})
+    }
+    setConfig({
+      ...config,
+      pushConfig: {
+        ...currentPush,
+        [key]: !currentPush[key]
+      }
+    })
+  }
+
+  const handleTestPush = async () => {
+    setIsTestingPush(true)
+    try {
+      const res = await fetch('/api/credimpacto/push', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          acao: 'testar',
+          targetRole: 'admin'
+        })
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Erro ao disparar push de teste')
+      toast.success('Notificação Push de teste enviada! Verifique o banner e o sino do CredImpacto.')
+    } catch (err: any) {
+      toast.error(err.message || 'Falha ao enviar push de teste')
+    } finally {
+      setIsTestingPush(false)
+    }
+  }
 
   const handleResetTermo = () => {
     setConfig((prev) => ({
@@ -317,6 +364,160 @@ export function ConfiguracoesTab({ initialConfig, onConfigSaved }: Configuracoes
                 <li><strong>No Contrato Formal (Cláusula 3ª):</strong> Inscrito na íntegra no Instrumento Particular de Mútuo em PDF/HTML.</li>
                 <li><strong>Na Auditoria Jurídica:</strong> Arquivado de forma imutável com a versão exata pactuada no momento da emissão da operação.</li>
               </ul>
+            </div>
+          </div>
+        </div>
+
+        {/* CARD 4: NOTIFICAÇÕES PUSH AUTOMÁTICAS (ADMIN E COLABORADORES) */}
+        <div className="md:col-span-2 bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-5 space-y-4 shadow-sm">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <BellRing size={16} className="text-cyan-600 dark:text-cyan-400" />
+                <h3 className="text-xs font-bold text-slate-900 dark:text-slate-200 uppercase tracking-wider">
+                  Notificações Push Automáticas (OneSignal + Tempo Real)
+                </h3>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-cyan-50 dark:bg-cyan-950/50 text-cyan-700 dark:text-cyan-300 border border-cyan-200 dark:border-cyan-800/40">
+                  Admin & Colaboradores
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+                Controle os disparos automáticos de Push no celular/navegador e banners em tempo real para a Direção/Financeiro e para os Colaboradores em cada etapa do empréstimo.
+              </p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                disabled={isTestingPush}
+                onClick={handleTestPush}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-cyan-200 dark:border-cyan-800 bg-cyan-50 dark:bg-cyan-950/50 hover:bg-cyan-100 dark:hover:bg-cyan-900/50 text-cyan-700 dark:text-cyan-300 text-xs font-bold transition-all active:scale-98 disabled:opacity-50"
+              >
+                <Send size={12} />
+                <span>{isTestingPush ? 'Disparando...' : 'Testar Push Agora'}</span>
+              </button>
+            </div>
+          </div>
+
+          <label className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700 cursor-pointer">
+            <div>
+              <div className="text-xs font-bold text-slate-900 dark:text-white">
+                Ativar Motor Global de Notificações Push no CredImpacto
+              </div>
+              <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                Quando ativo, todas as transições de status disparam alertas instantâneos com deep-link direto para a operação.
+              </div>
+            </div>
+            <input
+              type="checkbox"
+              checked={config.pushConfig?.habilitado ?? true}
+              onChange={() => handleTogglePushField('habilitado')}
+              className="w-4 h-4 rounded text-cyan-600 focus:ring-cyan-500 cursor-pointer"
+            />
+          </label>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* COLUNA ADMIN */}
+            <div className="space-y-2">
+              <div className="text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+                Alertas para Administradores / Financeiro
+              </div>
+              {(
+                [
+                  {
+                    key: 'notificarAdminNovaSolicitacao',
+                    title: 'Nova Solicitação de Empréstimo',
+                    desc: 'Avisa a gestão assim que um colaborador envia um pedido de crédito.'
+                  },
+                  {
+                    key: 'notificarAdminContrapropostaRespondida',
+                    title: 'Resposta à Contraproposta (Aceite / Recusa)',
+                    desc: 'Avisa quando o colaborador aceita ou recusa a revisão de valores.'
+                  },
+                  {
+                    key: 'notificarAdminContratoAssinado',
+                    title: 'Assinatura Eletrônica e Chave PIX',
+                    desc: 'Avisa a tesouraria quando o contrato é assinado ou o PIX é atualizado.'
+                  },
+                  {
+                    key: 'notificarAdminQuitacaoSolicitada',
+                    title: 'Solicitação de Quitação / Cancelamento',
+                    desc: 'Avisa quando o colaborador solicita quitação antecipada ou cancela.'
+                  },
+                  {
+                    key: 'notificarAdminSimulacao',
+                    title: 'Simulações Realizadas pelos Colaboradores',
+                    desc: 'Avisa quando o colaborador compartilha ou registra uma simulação.'
+                  }
+                ] as const
+              ).map((item) => (
+                <label
+                  key={item.key}
+                  className="flex items-start gap-2.5 p-2.5 rounded-xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/50 text-xs cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors"
+                >
+                  <input
+                    type="checkbox"
+                    checked={Boolean(config.pushConfig?.[item.key] ?? true)}
+                    onChange={() => handleTogglePushField(item.key)}
+                    className="mt-0.5 rounded text-cyan-600 focus:ring-cyan-500 cursor-pointer"
+                  />
+                  <div>
+                    <div className="font-bold text-slate-900 dark:text-white text-[11px]">{item.title}</div>
+                    <div className="text-[10px] text-slate-500 dark:text-slate-400">{item.desc}</div>
+                  </div>
+                </label>
+              ))}
+            </div>
+
+            {/* COLUNA COLABORADOR */}
+            <div className="space-y-2">
+              <div className="text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+                Alertas para os Colaboradores (App / Portal)
+              </div>
+              {(
+                [
+                  {
+                    key: 'notificarColaboradorConcessao',
+                    title: 'Confirmação de Solicitação e Concessão pela Escola',
+                    desc: 'Notifica o colaborador quando um empréstimo é aberto ou concedido.'
+                  },
+                  {
+                    key: 'notificarColaboradorAprovado',
+                    title: 'Aprovação, Recusa e Contraproposta',
+                    desc: 'Notifica imediatamente a decisão da análise com link para assinatura.'
+                  },
+                  {
+                    key: 'notificarColaboradorLiberado',
+                    title: 'Depósito / Liberação PIX e TED Efetuada',
+                    desc: 'Notifica que os recursos foram creditados na conta bancária/PIX.'
+                  },
+                  {
+                    key: 'notificarColaboradorParcelaBaixada',
+                    title: 'Baixa de Parcela em Folha / Estornos',
+                    desc: 'Notifica a quitação mensal de cada parcela descontada no holerite.'
+                  },
+                  {
+                    key: 'notificarColaboradorQuitacao',
+                    title: 'Quitação Antecipada e Homologação CLT',
+                    desc: 'Notifica a liquidação total do contrato ou compensação rescisória.'
+                  }
+                ] as const
+              ).map((item) => (
+                <label
+                  key={item.key}
+                  className="flex items-start gap-2.5 p-2.5 rounded-xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/50 text-xs cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors"
+                >
+                  <input
+                    type="checkbox"
+                    checked={Boolean(config.pushConfig?.[item.key] ?? true)}
+                    onChange={() => handleTogglePushField(item.key)}
+                    className="mt-0.5 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                  />
+                  <div>
+                    <div className="font-bold text-slate-900 dark:text-white text-[11px]">{item.title}</div>
+                    <div className="text-[10px] text-slate-500 dark:text-slate-400">{item.desc}</div>
+                  </div>
+                </label>
+              ))}
             </div>
           </div>
         </div>

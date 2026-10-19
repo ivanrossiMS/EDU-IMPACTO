@@ -22,7 +22,8 @@ import {
   ArrowRight,
   Building,
   AlertCircle,
-  RotateCcw
+  RotateCcw,
+  BellRing
 } from 'lucide-react'
 import {
   MetodoCalculo,
@@ -151,6 +152,7 @@ export function SimuladorEmprestimo({
   const [justificativa, setJustificativa] = useState('')
   const [finalidade, setFinalidade] = useState('Despesas Pessoais / Emergência')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isSendingSimPush, setIsSendingSimPush] = useState(false)
   const [showConfirmationModal, setShowConfirmationModal] = useState(false)
   const [showSuccessModal, setShowSuccessModal] = useState(false)
   const [successData, setSuccessData] = useState<{
@@ -532,6 +534,42 @@ export function SimuladorEmprestimo({
       toast.error(err.message || 'Falha ao enviar proposta.')
     } finally {
       setIsSubmitting(false)
+    }
+  }
+
+  const handleSendSimulationPush = async () => {
+    if (isAdmin && !selectedColaborador) {
+      toast.error('Selecione um colaborador beneficiário no topo para enviar a simulação via Push.')
+      return
+    }
+    setIsSendingSimPush(true)
+    try {
+      const res = await fetch('/api/credimpacto/push', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          acao: 'notificar_simulacao',
+          valor,
+          parcelas,
+          valorParcela: simulacao.valorPrimeiraParcela,
+          colaboradorId: isAdmin ? selectedColaborador?.id : currentUserId,
+          colaboradorNome: isAdmin ? selectedColaborador?.nome : currentUserName,
+          colaboradorCpf: cpfInput || (isAdmin ? selectedColaborador?.cpf : currentUserCpf),
+          colaboradorEmail: isAdmin ? selectedColaborador?.email : undefined,
+          targetRoles: isAdmin ? ['colaborador'] : ['admin', 'colaborador']
+        })
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Erro ao enviar simulação via Push')
+      toast.success(
+        isAdmin
+          ? `Simulação enviada via Push para ${selectedColaborador?.nome}!`
+          : 'Simulação enviada via Push para a equipe do CredImpacto e registrada nos seus avisos!'
+      )
+    } catch (err: any) {
+      toast.error(err.message || 'Falha ao enviar simulação via Push')
+    } finally {
+      setIsSendingSimPush(false)
     }
   }
 
@@ -989,15 +1027,30 @@ export function SimuladorEmprestimo({
           </div>
 
           {/* BOTÃO E SUBTEXTO */}
-          <div className="pt-2">
+          <div className="pt-2 space-y-2">
             <button
               onClick={handleOpenModal}
               className="w-full py-3.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm shadow-md shadow-emerald-600/25 flex items-center justify-center gap-2 active:scale-98 transition-all"
             >
               <Send size={15} />
-              <span>Solicitar empréstimo &gt;</span>
+              <span>{isAdmin ? 'Conceder Empréstimo &gt;' : 'Solicitar empréstimo &gt;'}</span>
             </button>
-            <p className="text-xs text-slate-400 dark:text-slate-500 text-center font-medium mt-2">
+            <button
+              type="button"
+              disabled={isSendingSimPush}
+              onClick={handleSendSimulationPush}
+              className="w-full py-2.5 px-4 rounded-xl bg-cyan-50 hover:bg-cyan-100/80 dark:bg-cyan-950/30 dark:hover:bg-cyan-900/40 text-cyan-700 dark:text-cyan-300 border border-cyan-200/80 dark:border-cyan-800/50 font-bold text-xs flex items-center justify-center gap-1.5 transition-all disabled:opacity-50"
+            >
+              <BellRing size={14} />
+              <span>
+                {isSendingSimPush
+                  ? 'Enviando simulação via Push...'
+                  : isAdmin
+                  ? 'Enviar Simulação no Push do Colaborador'
+                  : 'Compartilhar Simulação com o Financeiro (Push)'}
+              </span>
+            </button>
+            <p className="text-xs text-slate-400 dark:text-slate-500 text-center font-medium pt-0.5">
               Sujeito à análise e assinatura do contrato.
             </p>
           </div>

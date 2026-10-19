@@ -62,6 +62,14 @@ export function PushHistoryDetailModal({
   const [detailsData, setDetailsData] = useState<{
     sender?: any
     recipients: RecipientItem[]
+    studentContext?: {
+      id: string
+      nome: string
+      matricula: string
+      turmaNome: string
+      totalLinkedGuardians: number
+      targetedGuardiansCount: number
+    } | null
     summary: string
     targetAliases: string[]
     targetCount: number
@@ -617,6 +625,50 @@ export function PushHistoryDetailModal({
                 </button>
               )}
             </div>
+
+            {detailsData?.studentContext && (
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: 8,
+                padding: '8px 12px',
+                marginBottom: 10,
+                borderRadius: 10,
+                background: 'rgba(59, 130, 246, 0.06)',
+                border: '1px solid rgba(59, 130, 246, 0.18)',
+                fontSize: 11,
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'hsl(var(--text-main))' }}>
+                  <GraduationCap size={14} color="#3b82f6" />
+                  <span>
+                    <strong>Aluno(a) de referência:</strong> {detailsData.studentContext.nome}
+                    <span style={{ color: 'hsl(var(--text-muted))', marginLeft: 6 }}>
+                      (Mat. {detailsData.studentContext.matricula} • {detailsData.studentContext.turmaNome})
+                    </span>
+                  </span>
+                </div>
+                {detailsData.studentContext.totalLinkedGuardians > 0 && (
+                  <span style={{
+                    fontSize: 10,
+                    fontWeight: 700,
+                    padding: '2px 8px',
+                    borderRadius: 6,
+                    background: detailsData.studentContext.targetedGuardiansCount < detailsData.studentContext.totalLinkedGuardians
+                      ? 'rgba(99, 102, 241, 0.12)'
+                      : 'rgba(16, 185, 129, 0.12)',
+                    color: detailsData.studentContext.targetedGuardiansCount < detailsData.studentContext.totalLinkedGuardians
+                      ? '#4f46e5'
+                      : '#059669',
+                  }}>
+                    {detailsData.studentContext.targetedGuardiansCount < detailsData.studentContext.totalLinkedGuardians
+                      ? `🎯 Disparo seletivo: ${detailsData.studentContext.targetedGuardiansCount} de ${detailsData.studentContext.totalLinkedGuardians} responsável(is) vinculado(s)`
+                      : `Todos os ${detailsData.studentContext.totalLinkedGuardians} responsável(is) vinculado(s)`}
+                  </span>
+                )}
+              </div>
+            )}
 
             {isLoadingDetails ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 0', fontSize: 12, color: 'hsl(var(--text-muted))' }}>

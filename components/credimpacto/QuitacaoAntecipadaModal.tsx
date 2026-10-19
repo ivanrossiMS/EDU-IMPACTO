@@ -7,7 +7,8 @@ import {
   Sparkles,
   CheckCircle2,
   Upload,
-  AlertCircle
+  AlertCircle,
+  BellRing
 } from 'lucide-react'
 import { CredImpactoEmprestimo } from '@/types/credimpacto'
 import { formatBrl } from '@/lib/credimpacto/engine'
@@ -41,9 +42,12 @@ export function QuitacaoAntecipadaModal({
   const [observacao, setObservacao] = useState('')
   const [isUploading, setIsUploading] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isRequestingPush, setIsRequestingPush] = useState(false)
+  const [pushRequested, setPushRequested] = useState(false)
 
   useEffect(() => {
     if (!loan) return
+    setPushRequested(false)
     const fetchCalc = async () => {
       setLoadingCalc(true)
       try {
@@ -65,6 +69,32 @@ export function QuitacaoAntecipadaModal({
   }, [loan])
 
   if (!loan) return null
+
+  const handleRequestPayoffPush = async () => {
+    if (!calcData) return
+    setIsRequestingPush(true)
+    try {
+      const res = await fetch('/api/credimpacto/push', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          acao: 'solicitar_quitacao',
+          emprestimoId: loan.id,
+          valorQuitacao: calcData.valorParaQuitacao,
+          economiaJuros: calcData.economiaColaborador
+        })
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Erro ao notificar o Financeiro')
+
+      setPushRequested(true)
+      toast.success('Setor Financeiro notificado via Push! A equipe entrará em contato para concluir a quitação.')
+    } catch (err: any) {
+      toast.error(err.message || 'Falha ao enviar solicitação ao Financeiro')
+    } finally {
+      setIsRequestingPush(false)
+    }
+  }
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -211,11 +241,27 @@ export function QuitacaoAntecipadaModal({
                 </div>
               </div>
             ) : (
-              <div className="bg-slate-50 dark:bg-slate-800/50 p-3.5 rounded-xl border border-slate-200/80 dark:border-slate-700 text-[11px] text-slate-600 dark:text-slate-300 space-y-1">
+              <div className="bg-slate-50 dark:bg-slate-800/50 p-3.5 rounded-xl border border-slate-200/80 dark:border-slate-700 text-[11px] text-slate-600 dark:text-slate-300 space-y-2.5">
                 <div className="font-bold text-slate-900 dark:text-white">Instruções para Quitação pelo Colaborador:</div>
                 <p className="leading-relaxed">
-                  Para efetivar a quitação antecipada, realize o PIX no valor de <strong>{formatBrl(calcData.valorParaQuitacao)}</strong> para a chave da escola ou contate o financeiro. Após o envio do comprovante, o mútuo é baixado imediatamente e as parcelas futuras na folha são canceladas.
+                  Para efetivar a quitação antecipada, realize o PIX no valor de <strong>{formatBrl(calcData.valorParaQuitacao)}</strong> para a chave da escola ou notifique o setor financeiro abaixo. Após o envio do comprovante, o mútuo é baixado imediatamente e as parcelas futuras na folha são canceladas.
                 </p>
+                {pushRequested ? (
+                  <div className="p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/50 text-emerald-700 dark:text-emerald-300 font-bold flex items-center gap-1.5">
+                    <CheckCircle2 size={14} className="shrink-0" />
+                    <span>Solicitação enviada ao Financeiro via Push!</span>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={isRequestingPush}
+                    onClick={handleRequestPayoffPush}
+                    className="w-full py-2 px-3 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm shadow-cyan-600/20 disabled:opacity-50 transition-all"
+                  >
+                    <BellRing size={14} />
+                    <span>{isRequestingPush ? 'Enviando aviso ao Financeiro...' : 'Avisar Financeiro que Desejo Quitar (Push)'}</span>
+                  </button>
+                )}
               </div>
             )}
 

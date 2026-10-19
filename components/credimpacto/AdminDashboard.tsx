@@ -29,7 +29,8 @@ import {
   ChevronUp,
   MessageCircle,
   Send,
-  Phone
+  Phone,
+  BellRing
 } from 'lucide-react'
 import { CredImpactoEmprestimo, StatusEmprestimo } from '@/types/credimpacto'
 import { formatBrl, METODOS_LABELS, roundMoney, simulateLoan } from '@/lib/credimpacto/engine'
@@ -39,6 +40,7 @@ import {
   buildCredImpactoWhatsAppMessage,
   getCredImpactoWhatsAppUrl
 } from '@/lib/credimpacto/whatsappTemplates'
+import { CredImpactoManualPushModal } from './CredImpactoPushCenter'
 import { toast } from 'sonner'
 
 interface AdminDashboardProps {
@@ -122,7 +124,9 @@ export function AdminDashboard({
     })
   }, [emprestimos])
 
-  // Sistema de Envio de Mensagem no WhatsApp do Colaborador (Aprovado, Recusado, Depositado)
+  // Sistema de Envio de Notificação Push e WhatsApp do Colaborador
+  const [notifyPushOnAction, setNotifyPushOnAction] = useState(true)
+  const [pushModalLoan, setPushModalLoan] = useState<CredImpactoEmprestimo | null>(null)
   const [notifyWhatsAppOnAction, setNotifyWhatsAppOnAction] = useState(true)
   const [whatsappModalLoan, setWhatsappModalLoan] = useState<CredImpactoEmprestimo | null>(null)
   const [whatsappEventType, setWhatsappEventType] = useState<WhatsAppEventType>('aprovado')
@@ -501,7 +505,8 @@ export function AdminDashboard({
           acao: 'aprovar_direto',
           ativarDireto: directApproveDestination === 'ativo',
           chavePix: directApprovePixKey.trim() || undefined,
-          tipoChavePix: directApprovePixType
+          tipoChavePix: directApprovePixType,
+          enviarPush: notifyPushOnAction
         })
       })
       const data = await res.json()
@@ -537,7 +542,8 @@ export function AdminDashboard({
         acao: 'analisar',
         decisao: analysisDecision,
         dispensarAssinatura: analysisDispensarAssinatura,
-        ativarDireto: analysisAtivarDireto
+        ativarDireto: analysisAtivarDireto,
+        enviarPush: notifyPushOnAction
       }
 
       if (analysisDecision === 'recusar') {
@@ -650,7 +656,8 @@ export function AdminDashboard({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           acao: 'liberar',
-          comprovanteLiberacaoUrl: comprovanteUrl
+          comprovanteLiberacaoUrl: comprovanteUrl,
+          enviarPush: notifyPushOnAction
         })
       })
 
@@ -1236,6 +1243,15 @@ export function AdminDashboard({
 
                             <button
                               type="button"
+                              onClick={() => setPushModalLoan(loan)}
+                              className="p-1.5 rounded-lg bg-cyan-50 hover:bg-cyan-100 dark:bg-cyan-950/40 dark:hover:bg-cyan-900/40 text-cyan-600 dark:text-cyan-400 border border-cyan-200/60 dark:border-cyan-800/40 transition-all"
+                              title="Enviar Notificação Push no App do Colaborador"
+                            >
+                              <BellRing size={14} />
+                            </button>
+
+                            <button
+                              type="button"
                               onClick={() =>
                                 handleOpenWhatsAppNotification(
                                   loan,
@@ -1383,6 +1399,16 @@ export function AdminDashboard({
                               <span>Liberar</span>
                             </button>
                           )}
+
+                          {/* Ação: Enviar Notificação Push no App */}
+                          <button
+                            type="button"
+                            onClick={() => setPushModalLoan(loan)}
+                            className="p-1.5 rounded-lg bg-cyan-50 hover:bg-cyan-100 dark:bg-cyan-950/40 dark:hover:bg-cyan-900/40 text-cyan-600 dark:text-cyan-400 border border-cyan-200/60 dark:border-cyan-800/40 transition-all"
+                            title="Disparar Notificação Push no App do Colaborador"
+                          >
+                            <BellRing size={14} />
+                          </button>
 
                           {/* Ação: Enviar Mensagem WhatsApp (Aprovado, Recusado, Depositado) */}
                           <button
@@ -1637,6 +1663,15 @@ export function AdminDashboard({
                       >
                         <Eye size={14} />
                         <span>Ver Detalhes</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPushModalLoan(loan)}
+                        className="px-2.5 py-2 rounded-xl bg-cyan-50/90 hover:bg-cyan-100 dark:bg-cyan-950/40 text-cyan-700 dark:text-cyan-300 border border-cyan-200/70 dark:border-cyan-800/50 font-bold text-xs flex items-center justify-center gap-1 transition-all shadow-xs"
+                        title="Notificação Push no App"
+                      >
+                        <BellRing size={14} />
+                        <span>Push</span>
                       </button>
                       <button
                         type="button"
@@ -2114,22 +2149,39 @@ export function AdminDashboard({
                 )}
               </div>
 
-              {(analysisDecision === 'aprovar' || analysisDecision === 'recusar') && (
-                <label className="flex items-center gap-2.5 p-3 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200/80 dark:border-emerald-800/50 cursor-pointer">
+              <div className="space-y-2">
+                <label className="flex items-center gap-2.5 p-2.5 rounded-xl bg-cyan-50/70 dark:bg-cyan-950/30 border border-cyan-200/80 dark:border-cyan-800/50 cursor-pointer">
                   <input
                     type="checkbox"
-                    checked={notifyWhatsAppOnAction}
-                    onChange={(e) => setNotifyWhatsAppOnAction(e.target.checked)}
-                    className="rounded text-emerald-600 focus:ring-emerald-500 w-4 h-4"
+                    checked={notifyPushOnAction}
+                    onChange={(e) => setNotifyPushOnAction(e.target.checked)}
+                    className="rounded text-cyan-600 focus:ring-cyan-500 w-4 h-4"
                   />
-                  <div className="flex items-center gap-2 text-xs text-emerald-900 dark:text-emerald-200 font-semibold">
-                    <MessageCircle size={15} className="text-emerald-600 dark:text-emerald-400 shrink-0" />
+                  <div className="flex items-center gap-2 text-xs text-cyan-900 dark:text-cyan-200 font-semibold">
+                    <BellRing size={15} className="text-cyan-600 dark:text-cyan-400 shrink-0" />
                     <span>
-                      Abrir mensagem de WhatsApp para o colaborador após confirmar ({analysisDecision === 'aprovar' ? 'Aprovado' : 'Recusado'})
+                      Enviar Notificação Push instantânea no App do colaborador ({analysisDecision === 'aprovar' ? 'Aprovado' : analysisDecision === 'recusar' ? 'Recusado' : 'Contraproposta'})
                     </span>
                   </div>
                 </label>
-              )}
+
+                {(analysisDecision === 'aprovar' || analysisDecision === 'recusar') && (
+                  <label className="flex items-center gap-2.5 p-2.5 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200/80 dark:border-emerald-800/50 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={notifyWhatsAppOnAction}
+                      onChange={(e) => setNotifyWhatsAppOnAction(e.target.checked)}
+                      className="rounded text-emerald-600 focus:ring-emerald-500 w-4 h-4"
+                    />
+                    <div className="flex items-center gap-2 text-xs text-emerald-900 dark:text-emerald-200 font-semibold">
+                      <MessageCircle size={15} className="text-emerald-600 dark:text-emerald-400 shrink-0" />
+                      <span>
+                        Abrir mensagem de WhatsApp para o colaborador após confirmar ({analysisDecision === 'aprovar' ? 'Aprovado' : 'Recusado'})
+                      </span>
+                    </div>
+                  </label>
+                )}
+              </div>
 
               <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-2">
                 <button
@@ -2266,18 +2318,33 @@ export function AdminDashboard({
               )}
             </div>
 
-            <label className="flex items-center gap-2.5 p-3 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200/80 dark:border-emerald-800/50 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={notifyWhatsAppOnAction}
-                onChange={(e) => setNotifyWhatsAppOnAction(e.target.checked)}
-                className="rounded text-emerald-600 focus:ring-emerald-500 w-4 h-4"
-              />
-              <div className="flex items-center gap-2 text-xs text-emerald-900 dark:text-emerald-200 font-semibold">
-                <MessageCircle size={15} className="text-emerald-600 dark:text-emerald-400 shrink-0" />
-                <span>Notificar colaborador no WhatsApp que o valor foi depositado</span>
-              </div>
-            </label>
+            <div className="space-y-2">
+              <label className="flex items-center gap-2.5 p-2.5 rounded-xl bg-cyan-50/70 dark:bg-cyan-950/30 border border-cyan-200/80 dark:border-cyan-800/50 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={notifyPushOnAction}
+                  onChange={(e) => setNotifyPushOnAction(e.target.checked)}
+                  className="rounded text-cyan-600 focus:ring-cyan-500 w-4 h-4"
+                />
+                <div className="flex items-center gap-2 text-xs text-cyan-900 dark:text-cyan-200 font-semibold">
+                  <BellRing size={15} className="text-cyan-600 dark:text-cyan-400 shrink-0" />
+                  <span>Enviar Notificação Push no App que o valor foi creditado</span>
+                </div>
+              </label>
+
+              <label className="flex items-center gap-2.5 p-2.5 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200/80 dark:border-emerald-800/50 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={notifyWhatsAppOnAction}
+                  onChange={(e) => setNotifyWhatsAppOnAction(e.target.checked)}
+                  className="rounded text-emerald-600 focus:ring-emerald-500 w-4 h-4"
+                />
+                <div className="flex items-center gap-2 text-xs text-emerald-900 dark:text-emerald-200 font-semibold">
+                  <MessageCircle size={15} className="text-emerald-600 dark:text-emerald-400 shrink-0" />
+                  <span>Notificar colaborador no WhatsApp que o valor foi depositado</span>
+                </div>
+              </label>
+            </div>
 
             {(() => {
               const isPixMissing = !disbursingLoan.dadosBancarios?.chavePix || disbursingLoan.dadosBancarios.chavePix.toLowerCase().includes('definir')
@@ -2733,20 +2800,37 @@ export function AdminDashboard({
                 </div>
               </div>
 
-              <label className="flex items-center gap-2.5 p-3 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200/80 dark:border-emerald-800/50 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={notifyWhatsAppOnAction}
-                  onChange={(e) => setNotifyWhatsAppOnAction(e.target.checked)}
-                  className="rounded text-emerald-600 focus:ring-emerald-500 w-4 h-4"
-                />
-                <div className="flex items-center gap-2 text-xs text-emerald-900 dark:text-emerald-200 font-semibold">
-                  <MessageCircle size={15} className="text-emerald-600 dark:text-emerald-400 shrink-0" />
-                  <span>
-                    Abrir mensagem de WhatsApp para o colaborador após aprovar ({directApproveDestination === 'ativo' ? 'Valor Depositado' : 'Empréstimo Aprovado'})
-                  </span>
-                </div>
-              </label>
+              <div className="space-y-2">
+                <label className="flex items-center gap-2.5 p-2.5 rounded-xl bg-cyan-50/70 dark:bg-cyan-950/30 border border-cyan-200/80 dark:border-cyan-800/50 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={notifyPushOnAction}
+                    onChange={(e) => setNotifyPushOnAction(e.target.checked)}
+                    className="rounded text-cyan-600 focus:ring-cyan-500 w-4 h-4"
+                  />
+                  <div className="flex items-center gap-2 text-xs text-cyan-900 dark:text-cyan-200 font-semibold">
+                    <BellRing size={15} className="text-cyan-600 dark:text-cyan-400 shrink-0" />
+                    <span>
+                      Enviar Notificação Push instantânea no App do colaborador ({directApproveDestination === 'ativo' ? 'Ativado / Liberado' : 'Aprovado'})
+                    </span>
+                  </div>
+                </label>
+
+                <label className="flex items-center gap-2.5 p-2.5 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200/80 dark:border-emerald-800/50 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={notifyWhatsAppOnAction}
+                    onChange={(e) => setNotifyWhatsAppOnAction(e.target.checked)}
+                    className="rounded text-emerald-600 focus:ring-emerald-500 w-4 h-4"
+                  />
+                  <div className="flex items-center gap-2 text-xs text-emerald-900 dark:text-emerald-200 font-semibold">
+                    <MessageCircle size={15} className="text-emerald-600 dark:text-emerald-400 shrink-0" />
+                    <span>
+                      Abrir mensagem de WhatsApp para o colaborador após aprovar ({directApproveDestination === 'ativo' ? 'Valor Depositado' : 'Empréstimo Aprovado'})
+                    </span>
+                  </div>
+                </label>
+              </div>
 
               <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-2">
                 <button
@@ -2932,6 +3016,12 @@ export function AdminDashboard({
           </div>
         </div>
       )}
+
+      {/* MODAL DE ENVIO DE NOTIFICAÇÃO PUSH AO COLABORADOR */}
+      <CredImpactoManualPushModal
+        loan={pushModalLoan}
+        onClose={() => setPushModalLoan(null)}
+      />
     </div>
   )
 }

@@ -984,10 +984,10 @@ export function PushHistoryTab({ onSwitchToTesterWithPayload }: PushHistoryTabPr
                   <div className="push-history-col-dest">
                     <div style={{ fontWeight: 800, fontSize: 13, color: 'hsl(var(--text-main))', display: 'flex', alignItems: 'center', gap: 5 }}>
                       <Users size={13} color="#6366f1" />
-                      <span>{log.recipient_summary || `${log.target_count || 1} usuário(s)`}</span>
+                      <span>{log.recipient_summary || `${log.resolved_target_count ?? log.target_count ?? 1} destinatário(s)`}</span>
                     </div>
                     <div style={{ fontSize: 10, color: 'hsl(var(--text-muted))', marginTop: 2 }}>
-                      {log.target_count || 1} alvos • {log.item_id?.split('_')[0] || 'Evento'}
+                      {log.resolved_target_count ?? log.target_count ?? 1} destinatário(s) • {log.item_id?.split('_')[0] || 'Evento'}
                     </div>
                   </div>
 

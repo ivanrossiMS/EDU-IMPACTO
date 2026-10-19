@@ -69,6 +69,8 @@ export async function POST(request: Request) {
       loteFolhaId
     } = body
 
+    const { notifyCredImpactoEvent } = await import('@/lib/credimpacto/pushNotifications')
+
     // 1. Conciliação em Lote (múltiplas parcelas confirmadas pela folha de pagamento)
     if (Array.isArray(parcelaIds) && parcelaIds.length > 0) {
       const concilSuccess: string[] = []
@@ -76,7 +78,7 @@ export async function POST(request: Request) {
 
       for (const id of parcelaIds) {
         try {
-          await dbConciliarParcela(
+          const itemRes = await dbConciliarParcela(
             id,
             {
               valorPago: 0, // se 0, usará o valor total da parcela
@@ -89,6 +91,19 @@ export async function POST(request: Request) {
             { id: resolved.id, nome: resolved.nome, perfil: resolved.perfil }
           )
           concilSuccess.push(id)
+
+          await notifyCredImpactoEvent({
+            eventType: 'parcela_conciliada',
+            loan: itemRes.emprestimo,
+            targetRoles: ['colaborador'],
+            sentByNome: resolved.nome,
+            extra: {
+              parcelaNumero: itemRes.parcela.numero,
+              competencia: itemRes.parcela.competencia,
+              valor: itemRes.parcela.valorPago || itemRes.parcela.valorTotal,
+              autorNome: resolved.nome
+            }
+          }).catch((e) => console.warn('[CredImpacto Push Batch Folha Error]', e))
         } catch (e: any) {
           concilErrors.push({ id, error: e.message })
         }
@@ -119,6 +134,19 @@ export async function POST(request: Request) {
       },
       { id: resolved.id, nome: resolved.nome, perfil: resolved.perfil }
     )
+
+    await notifyCredImpactoEvent({
+      eventType: 'parcela_conciliada',
+      loan: res.emprestimo,
+      targetRoles: ['colaborador'],
+      sentByNome: resolved.nome,
+      extra: {
+        parcelaNumero: res.parcela.numero,
+        competencia: res.parcela.competencia,
+        valor: res.parcela.valorPago || res.parcela.valorTotal,
+        autorNome: resolved.nome
+      }
+    }).catch((e) => console.warn('[CredImpacto Push Folha Error]', e))
 
     return NextResponse.json(res)
   } catch (err: any) {
@@ -152,6 +180,20 @@ export async function DELETE(request: Request) {
       justificativa,
       { id: resolved.id, nome: resolved.nome, perfil: resolved.perfil }
     )
+
+    const { notifyCredImpactoEvent } = await import('@/lib/credimpacto/pushNotifications')
+    await notifyCredImpactoEvent({
+      eventType: 'parcela_estornada',
+      loan: res.emprestimo,
+      targetRoles: ['colaborador'],
+      sentByNome: resolved.nome,
+      extra: {
+        parcelaNumero: res.parcela.numero,
+        competencia: res.parcela.competencia,
+        motivo: justificativa,
+        autorNome: resolved.nome
+      }
+    }).catch((e) => console.warn('[CredImpacto Push Estorno Error]', e))
 
     return NextResponse.json(res)
   } catch (err: any) {

@@ -12,7 +12,6 @@ import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInte
 import { ptBR } from 'date-fns/locale'
 import { useQueryClient } from '@tanstack/react-query'
 import { useAgendaRealtime } from '@/hooks/useAgendaRealtime'
-import { supabase } from '@/lib/supabase'
 
 import { useParams, useSearchParams } from 'next/navigation'
 
@@ -36,54 +35,32 @@ export default function ADFrequenciaPage({ params }: { params: any }) {
   const resolvedParams = useParams() as { slug: string }
   const queryClient = useQueryClient()
 
+  const invalidateAllFrequenciaQueries = React.useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ['frequencias-aluno'] })
+    queryClient.invalidateQueries({ queryKey: ['portaria-eventos-aluno'] })
+    queryClient.invalidateQueries({ queryKey: ['saida-calls-aluno'] })
+  }, [queryClient])
+
   useAgendaRealtime({
     table: 'frequencias',
     toastConfig: {
       enabled: true,
-      insertMessage: (doc) => `Nova frequência registrada!`,
-      updateMessage: (doc) => `Registro de frequência atualizado!`,
+      insertMessage: () => `Nova frequência registrada!`,
+      updateMessage: () => `Registro de frequência atualizado!`,
       icon: <CheckCircle2 size={18} color="#16a34a" />
     },
-    onInsert: () => {
-      queryClient.invalidateQueries({ queryKey: ['frequencias-aluno'] })
-    },
-    onUpdate: () => {
-      queryClient.invalidateQueries({ queryKey: ['frequencias-aluno'] })
-    },
-    onDelete: () => {
-      queryClient.invalidateQueries({ queryKey: ['frequencias-aluno'] })
-    }
-  });
-  // Escuta em tempo real o Supabase para a tabela saida_calls (independente do dispositivo)
-  React.useEffect(() => {
-    const channelName = `saida_calls_agenda_sync_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
-    const channel = supabase.channel(channelName)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'saida_calls' },
-        () => {
-          // Invalida a query do React Query para forçar recarregamento na página do aluno
-          queryClient.invalidateQueries({ queryKey: ['saida-calls-aluno'] })
-        }
-      )
-      .subscribe()
+    onInsert: invalidateAllFrequenciaQueries,
+    onUpdate: invalidateAllFrequenciaQueries,
+    onDelete: invalidateAllFrequenciaQueries
+  })
 
-    return () => {
-      try {
-        const wasJoined = (channel as any)?.state === 'joined'
-        if (typeof (channel as any)?.teardown === 'function') {
-          ;(channel as any).teardown()
-        }
-        const rt = (supabase as any)?.realtime
-        if (rt && Array.isArray(rt.channels)) {
-          rt.channels = rt.channels.filter((item: any) => item !== channel && item?.topic !== (channel as any)?.topic)
-        }
-        if (wasJoined) {
-          supabase.removeChannel(channel).catch(() => {})
-        }
-      } catch (_) {}
-    }
-  }, [queryClient])
+  // Escuta eventos de saída consolidados via AgendaRealtimeProvider (sem abrir canal WebSocket duplicado)
+  useAgendaRealtime({
+    table: 'saida_calls',
+    onInsert: invalidateAllFrequenciaQueries,
+    onUpdate: invalidateAllFrequenciaQueries,
+    onDelete: invalidateAllFrequenciaQueries
+  })
 
   // State for interactive calendar
   const [currentMonth, setCurrentMonth] = useState(new Date())

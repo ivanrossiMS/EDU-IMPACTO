@@ -53,7 +53,78 @@ export interface CredImpactoConfig {
   limiteCompensacaoRescisaoCltPercentual: number // Ex: 100% de 1 salário (Art. 477 § 5º CLT)
   textoContratoPadrao?: string
   termoAutorizacaoDesconto?: string
+  pushConfig?: CredImpactoPushConfig
   updatedAt?: string
+}
+
+export type CredImpactoPushEventType =
+  | 'simulacao_realizada'
+  | 'solicitacao_nova'
+  | 'concessao_escola'
+  | 'em_analise'
+  | 'aprovado_aguardando_assinatura'
+  | 'aprovado_aguardando_liberacao'
+  | 'aprovado_ativo'
+  | 'recusado'
+  | 'contraproposta_enviada'
+  | 'contraproposta_aceita'
+  | 'contraproposta_recusada'
+  | 'contrato_assinado'
+  | 'recursos_liberados'
+  | 'parcela_conciliada'
+  | 'parcela_estornada'
+  | 'lembrete_parcela'
+  | 'quitacao_solicitada'
+  | 'quitacao_confirmada'
+  | 'rescisao_homologada'
+  | 'cancelado_pelo_colaborador'
+  | 'cancelado_pelo_admin'
+  | 'chave_pix_atualizada'
+  | 'aviso_personalizado'
+  | 'teste_push'
+
+export interface CredImpactoPushConfig {
+  habilitado: boolean
+  notificarAdminNovaSolicitacao: boolean
+  notificarAdminSimulacao: boolean
+  notificarAdminContrapropostaRespondida: boolean
+  notificarAdminContratoAssinado: boolean
+  notificarAdminQuitacaoSolicitada: boolean
+  notificarAdminCancelamentoColaborador: boolean
+  notificarAdminChavePixAtualizada: boolean
+  notificarColaboradorSolicitacaoRecebida: boolean
+  notificarColaboradorConcessao: boolean
+  notificarColaboradorAprovado: boolean
+  notificarColaboradorRecusado: boolean
+  notificarColaboradorContraproposta: boolean
+  notificarColaboradorAssinaturaConfirmada: boolean
+  notificarColaboradorLiberado: boolean
+  notificarColaboradorParcelaBaixada: boolean
+  notificarColaboradorParcelaEstornada: boolean
+  notificarColaboradorQuitacao: boolean
+  notificarColaboradorRescisao: boolean
+  notificarColaboradorCancelado: boolean
+}
+
+export interface CredImpactoNotificationItem {
+  id: string
+  eventType: CredImpactoPushEventType
+  recipientRole: 'admin' | 'colaborador' | 'ambos'
+  targetColaboradorId?: string
+  targetColaboradorCpf?: string
+  targetColaboradorEmail?: string
+  targetColaboradorNome?: string
+  emprestimoId?: string
+  codigoOperacao?: string
+  statusOperacao?: StatusEmprestimo | 'simulacao'
+  title: string
+  message: string
+  targetUrl: string
+  createdAt: string
+  readByUserIds: string[]
+  sentByNome?: string
+  onesignalSuccess?: boolean
+  devicesReached?: number
 }
 
 export interface CredImpactoParcela {

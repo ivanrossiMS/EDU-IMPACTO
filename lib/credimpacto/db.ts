@@ -6,6 +6,8 @@
 import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 import {
   CredImpactoConfig,
+  CredImpactoPushConfig,
+  CredImpactoNotificationItem,
   CredImpactoEmprestimo,
   CredImpactoParcela,
   CredImpactoQuitacao,
@@ -33,6 +35,29 @@ function isTableMissingError(err: any): boolean {
   )
 }
 
+export const DEFAULT_PUSH_CONFIG: CredImpactoPushConfig = {
+  habilitado: true,
+  notificarAdminNovaSolicitacao: true,
+  notificarAdminSimulacao: true,
+  notificarAdminContrapropostaRespondida: true,
+  notificarAdminContratoAssinado: true,
+  notificarAdminQuitacaoSolicitada: true,
+  notificarAdminCancelamentoColaborador: true,
+  notificarAdminChavePixAtualizada: true,
+  notificarColaboradorSolicitacaoRecebida: true,
+  notificarColaboradorConcessao: true,
+  notificarColaboradorAprovado: true,
+  notificarColaboradorRecusado: true,
+  notificarColaboradorContraproposta: true,
+  notificarColaboradorAssinaturaConfirmada: true,
+  notificarColaboradorLiberado: true,
+  notificarColaboradorParcelaBaixada: true,
+  notificarColaboradorParcelaEstornada: true,
+  notificarColaboradorQuitacao: true,
+  notificarColaboradorRescisao: true,
+  notificarColaboradorCancelado: true
+}
+
 const DEFAULT_CONFIG: CredImpactoConfig = {
   taxaMensalPadrao: 1.5,
   metodoCalculoPadrao: 'JUROS_SIMPLES_SALDO',
@@ -51,7 +76,8 @@ const DEFAULT_CONFIG: CredImpactoConfig = {
   diaPadraoDescontoFolha: 5,
   exigeAprovacaoDupla: false,
   limiteCompensacaoRescisaoCltPercentual: 100,
-  termoAutorizacaoDesconto: DEFAULT_TERMO_AUTORIZACAO
+  termoAutorizacaoDesconto: DEFAULT_TERMO_AUTORIZACAO,
+  pushConfig: DEFAULT_PUSH_CONFIG
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -60,6 +86,23 @@ const DEFAULT_CONFIG: CredImpactoConfig = {
 
 export async function dbGetConfiguracao(): Promise<CredImpactoConfig> {
   const sb = getAdminClient()
+
+  // Lê também da tabela 'configuracoes' para preservar campos extras como pushConfig
+  let extraConfig: Partial<CredImpactoConfig> = {}
+  try {
+    const { data: extraRow } = await sb
+      .from('configuracoes')
+      .select('valor, updated_at')
+      .eq('chave', 'credimpacto_config')
+      .maybeSingle()
+
+    if (extraRow && extraRow.valor && typeof extraRow.valor === 'object') {
+      extraConfig = {
+        ...(extraRow.valor as any),
+        updatedAt: extraRow.updated_at
+      }
+    }
+  } catch {}
 
   // 1. Tenta tabela dedicada apenas se disponivel
   if (isCredImpactoDedicatedAvailable !== false) {
@@ -74,20 +117,24 @@ export async function dbGetConfiguracao(): Promise<CredImpactoConfig> {
         isCredImpactoDedicatedAvailable = true
         return {
           id: data.id,
-          taxaMensalPadrao: Number(data.taxa_mensal_padrao ?? DEFAULT_CONFIG.taxaMensalPadrao),
-          metodoCalculoPadrao: data.metodo_calculo_padrao || DEFAULT_CONFIG.metodoCalculoPadrao,
-          metodosPermitidos: data.metodos_permitidos || DEFAULT_CONFIG.metodosPermitidos,
-          margemMaximaConsignavel: Number(data.margem_maxima_consignavel ?? DEFAULT_CONFIG.margemMaximaConsignavel),
-          prazoMinimoParcelas: Number(data.prazo_minimo_parcelas ?? DEFAULT_CONFIG.prazoMinimoParcelas),
-          prazoMaximoParcelas: Number(data.prazo_maximo_parcelas ?? DEFAULT_CONFIG.prazoMaximoParcelas),
-          valorMinimoEmprestimo: Number(data.valor_minimo_emprestimo ?? DEFAULT_CONFIG.valorMinimoEmprestimo),
-          valorMaximoEmprestimo: Number(data.valor_maximo_emprestimo ?? DEFAULT_CONFIG.valorMaximoEmprestimo),
-          diaPadraoDescontoFolha: Number(data.dia_padrao_desconto_folha ?? DEFAULT_CONFIG.diaPadraoDescontoFolha),
-          exigeAprovacaoDupla: Boolean(data.exige_aprovacao_dupla),
-          limiteCompensacaoRescisaoCltPercentual: Number(data.limite_compensacao_rescisao_clt_percentual ?? 100),
-          textoContratoPadrao: data.texto_contrato_padrao,
-          termoAutorizacaoDesconto: data.termo_autorizacao_desconto || DEFAULT_CONFIG.termoAutorizacaoDesconto,
-          updatedAt: data.updated_at
+          taxaMensalPadrao: Number(data.taxa_mensal_padrao ?? extraConfig.taxaMensalPadrao ?? DEFAULT_CONFIG.taxaMensalPadrao),
+          metodoCalculoPadrao: data.metodo_calculo_padrao || extraConfig.metodoCalculoPadrao || DEFAULT_CONFIG.metodoCalculoPadrao,
+          metodosPermitidos: data.metodos_permitidos || extraConfig.metodosPermitidos || DEFAULT_CONFIG.metodosPermitidos,
+          margemMaximaConsignavel: Number(data.margem_maxima_consignavel ?? extraConfig.margemMaximaConsignavel ?? DEFAULT_CONFIG.margemMaximaConsignavel),
+          prazoMinimoParcelas: Number(data.prazo_minimo_parcelas ?? extraConfig.prazoMinimoParcelas ?? DEFAULT_CONFIG.prazoMinimoParcelas),
+          prazoMaximoParcelas: Number(data.prazo_maximo_parcelas ?? extraConfig.prazoMaximoParcelas ?? DEFAULT_CONFIG.prazoMaximoParcelas),
+          valorMinimoEmprestimo: Number(data.valor_minimo_emprestimo ?? extraConfig.valorMinimoEmprestimo ?? DEFAULT_CONFIG.valorMinimoEmprestimo),
+          valorMaximoEmprestimo: Number(data.valor_maximo_emprestimo ?? extraConfig.valorMaximoEmprestimo ?? DEFAULT_CONFIG.valorMaximoEmprestimo),
+          diaPadraoDescontoFolha: Number(data.dia_padrao_desconto_folha ?? extraConfig.diaPadraoDescontoFolha ?? DEFAULT_CONFIG.diaPadraoDescontoFolha),
+          exigeAprovacaoDupla: Boolean(data.exige_aprovacao_dupla ?? extraConfig.exigeAprovacaoDupla),
+          limiteCompensacaoRescisaoCltPercentual: Number(data.limite_compensacao_rescisao_clt_percentual ?? extraConfig.limiteCompensacaoRescisaoCltPercentual ?? 100),
+          textoContratoPadrao: data.texto_contrato_padrao || extraConfig.textoContratoPadrao,
+          termoAutorizacaoDesconto: data.termo_autorizacao_desconto || extraConfig.termoAutorizacaoDesconto || DEFAULT_CONFIG.termoAutorizacaoDesconto,
+          pushConfig: {
+            ...DEFAULT_PUSH_CONFIG,
+            ...(extraConfig.pushConfig || {})
+          },
+          updatedAt: data.updated_at || extraConfig.updatedAt
         }
       }
 
@@ -104,22 +151,15 @@ export async function dbGetConfiguracao(): Promise<CredImpactoConfig> {
   }
 
   // 2. Fallback na tabela geral 'configuracoes' (chave: 'credimpacto_config')
-  try {
-    const { data } = await sb
-      .from('configuracoes')
-      .select('valor, updated_at')
-      .eq('chave', 'credimpacto_config')
-      .maybeSingle()
-
-    if (data && data.valor) {
-      return {
-        ...DEFAULT_CONFIG,
-        ...(data.valor as any),
-        updatedAt: data.updated_at
+  if (Object.keys(extraConfig).length > 0) {
+    return {
+      ...DEFAULT_CONFIG,
+      ...extraConfig,
+      pushConfig: {
+        ...DEFAULT_PUSH_CONFIG,
+        ...(extraConfig.pushConfig || {})
       }
     }
-  } catch (err: any) {
-    console.warn('[dbGetConfiguracao fallback error]', err?.message)
   }
 
   return DEFAULT_CONFIG
@@ -1119,3 +1159,91 @@ function mapDbRowToEmprestimo(e: any, parcelas: CredImpactoParcela[]): CredImpac
     updatedAt: e.updated_at || e.updatedAt
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 7. CENTRAL DE NOTIFICAÇÕES PUSH CREDIMPACTO (HISTÓRICO & LEITURA)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const NOTIFICACOES_KEY = 'credimpacto_push_notifications_v1'
+const MAX_STORED_NOTIFICACOES = 200
+
+export async function dbListarNotificacoesPush(): Promise<CredImpactoNotificationItem[]> {
+  const sb = getAdminClient()
+
+  try {
+    const { data } = await sb
+      .from('configuracoes')
+      .select('valor')
+      .eq('chave', NOTIFICACOES_KEY)
+      .maybeSingle()
+
+    if (data && Array.isArray(data.valor)) {
+      return data.valor as CredImpactoNotificationItem[]
+    }
+  } catch (err) {
+    console.warn('[dbListarNotificacoesPush]', err)
+  }
+
+  return []
+}
+
+export async function dbRegistrarNotificacaoPush(
+  item: CredImpactoNotificationItem
+): Promise<void> {
+  const sb = getAdminClient()
+
+  try {
+    const current = await dbListarNotificacoesPush()
+    const updated = [item, ...current.filter((n) => n.id !== item.id)].slice(0, MAX_STORED_NOTIFICACOES)
+
+    await sb.from('configuracoes').upsert({
+      chave: NOTIFICACOES_KEY,
+      valor: updated,
+      updated_at: new Date().toISOString()
+    })
+  } catch (err) {
+    console.warn('[dbRegistrarNotificacaoPush]', err)
+  }
+}
+
+export async function dbMarcarNotificacoesLidas(
+  userIdentifiers: string[],
+  notificationIds?: string[]
+): Promise<number> {
+  const sb = getAdminClient()
+  const cleanUserIds = userIdentifiers.map((id) => String(id || '').trim()).filter(Boolean)
+  if (cleanUserIds.length === 0) return 0
+
+  try {
+    const current = await dbListarNotificacoesPush()
+    let modifiedCount = 0
+
+    const updated = current.map((n) => {
+      if (notificationIds && notificationIds.length > 0 && !notificationIds.includes(n.id)) {
+        return n
+      }
+      const existingReads = Array.isArray(n.readByUserIds) ? n.readByUserIds : []
+      const hasAll = cleanUserIds.every((uid) => existingReads.includes(uid))
+      if (hasAll) return n
+      modifiedCount++
+      return {
+        ...n,
+        readByUserIds: Array.from(new Set([...existingReads, ...cleanUserIds]))
+      }
+    })
+
+    if (modifiedCount > 0) {
+      await sb.from('configuracoes').upsert({
+        chave: NOTIFICACOES_KEY,
+        valor: updated,
+        updated_at: new Date().toISOString()
+      })
+    }
+
+    return modifiedCount
+  } catch (err) {
+    console.warn('[dbMarcarNotificacoesLidas]', err)
+    return 0
+  }
+}
+

@@ -200,6 +200,18 @@ export async function POST(request: Request) {
       `Assinatura eletrônica confirmada pelo colaborador via IP ${ip} (PIX: ${loan.dadosBancarios.chavePix}, Hash SHA-256: ${hashSha256.slice(0, 16)}...)`
     )
 
+    const { notifyCredImpactoEvent } = await import('@/lib/credimpacto/pushNotifications')
+    await notifyCredImpactoEvent({
+      eventType: 'contrato_assinado',
+      loan: updated,
+      sentByNome: resolved.nome,
+      extra: {
+        chavePix: loan.dadosBancarios.chavePix,
+        codigoVerificacao,
+        autorNome: resolved.nome
+      }
+    }).catch((e) => console.warn('[CredImpacto Push Signature Error]', e))
+
     return NextResponse.json({
       success: true,
       emprestimo: updated,

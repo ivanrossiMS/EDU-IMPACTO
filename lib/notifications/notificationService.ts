@@ -180,6 +180,10 @@ class NotificationService {
                 resolve()
                 return
               }
+
+              // Limpa operações de alias travadas (404 SetAlias failed) no IndexedDB antes do init
+              await this.clearStaleWebOperations()
+
               await OneSignal.init({
                 appId,
                 allowLocalhostAsSecureOrigin: true,
@@ -191,12 +195,18 @@ class NotificationService {
               if (OneSignal.Notifications?.addEventListener) {
                 OneSignal.Notifications.addEventListener('permissionChange', () => {
                   this.refresh().catch(() => {})
+                  if (this.cachedUser) {
+                    this.syncUser(this.cachedUser, this.cachedExtraData).catch(() => {})
+                  }
                 })
               }
               const pushSub = OneSignal.User?.PushSubscription || OneSignal.User?.pushSubscription
               if (pushSub?.addEventListener) {
                 pushSub.addEventListener('change', () => {
                   this.refresh().catch(() => {})
+                  if (this.cachedUser) {
+                    this.syncUser(this.cachedUser, this.cachedExtraData).catch(() => {})
+                  }
                 })
               }
 
@@ -866,153 +876,58 @@ class NotificationService {
         const performWebSync = async (OS: any) => {
           if (!OS || typeof OS.login !== 'function' || !(window as any).__OS_INIT__) return
 
-          // Evita chamadas repetidas ao OS.login se o usuário já estiver ativo e identificado com este ID
-          const currentExtId = OS.User?.externalId
-          if (currentExtId === userId && this.loggedInToOneSignal) {
-            this.currentUserId = userId
-          } else {
-            try {
-              await OS.login(userId)
-            } catch (webLoginErr: any) {
-              console.warn('[NotificationService] Conflito/aviso no OS.login web:', webLoginErr)
-            }
-
-            // Verificação pós-login: se o externalId não foi vinculado (devido a operação pausada na fila
-            // ou conflito 409 com ID órfão), purga storage corrompido e tenta recuperação limpa
-            await new Promise(r => setTimeout(r, 300))
-            let verifiedExtId = OS.User?.externalId
-            if (verifiedExtId !== userId) {
-              console.warn(`⚠️ [NotificationService] OneSignal Web externalId (${verifiedExtId}) diverge do usuário atual (${userId}).`)
-
-              const repairKey = `__os_repaired_${userId}__`
-              const alreadyRepaired = typeof sessionStorage !== 'undefined' && sessionStorage.getItem(repairKey)
-
-              if (!alreadyRepaired) {
-                if (typeof sessionStorage !== 'undefined') {
-                  sessionStorage.setItem(repairKey, 'true')
-                }
-                console.warn('⚠️ [NotificationService] Detectado conflito de fila no OneSignal Web. Purgando IndexedDB...')
-                await this.purgeOneSignalWebStorage()
-                try {
-                  if (typeof OS.logout === 'function') {
-                    await OS.logout().catch(() => {})
-                  }
-                  await new Promise(r => setTimeout(r, 200))
-                  await OS.login(userId)
-                  await new Promise(r => setTimeout(r, 300))
-                  verifiedExtId = OS.User?.externalId
-                  if (verifiedExtId === userId) {
-                    console.log(`✅ [NotificationService] Usuário recuperado e associado ao OneSignal Web após purga (External ID: ${userId})`)
-                  }
-                } catch (recoverErr) {
-                  console.warn('[NotificationService] Falha na recuperação limpa do login web:', recoverErr)
-                }
-              }
-            } else {
-              console.log(`✅ [NotificationService] Usuário associado ao OneSignal Web (External ID: ${userId})`)
-            }
-
-            if (verifiedExtId === userId) {
-              this.currentUserId = userId
-              this.loggedInToOneSignal = true
-            } else {
-              this.loggedInToOneSignal = false
-            }
-          }
-
-          // Apenas tenta optIn se o navegador já concedeu permissão (granted).
-          // Se estiver 'denied' ou 'default', chamar optIn gera erro "Permission blocked" no console.
+          // Apenas sincroniza no OneSignal Web se o navegador já concedeu permissão (granted).
+          // Sem permissão/subscrição ativa, o onesignal_id local não existe no servidor da OneSignal,
+          // e chamadas a OS.login / OS.User.addAliases geram erro 404 (/users/by/onesignal_id/.../identity) e "SetAlias failed".
           const isNotificationGranted =
             typeof window !== 'undefined' &&
             'Notification' in window &&
             Notification.permission === 'granted'
 
-          if (isNotificationGranted) {
-            const optInFn = OS.User?.PushSubscription?.optIn || OS.User?.pushSubscription?.optIn
-            if (typeof optInFn === 'function') {
-              try {
-                await optInFn.call(OS.User?.PushSubscription || OS.User?.pushSubscription)
-              } catch {}
-            }
+          if (!isNotificationGranted) {
+            this.currentUserId = userId
+            ;(window as any).__OS_USER_ID__ = userId
+            this.loggedInToOneSignal = false
+            return
           }
 
-          // Aliases atômicos (external_id e onesignal_id são reservados no OneSignal e definidos via login)
-          const aliasMap: Record<string, string> = {}
-          for (const a of aliasesToRegister) {
-            if (a.label && a.id && a.label !== 'external_id' && a.label !== 'onesignal_id') {
-              aliasMap[a.label] = String(a.id)
-            }
-          }
-
-          if (this.loggedInToOneSignal && Object.keys(aliasMap).length > 0) {
+          const optInFn = OS.User?.PushSubscription?.optIn || OS.User?.pushSubscription?.optIn
+          if (typeof optInFn === 'function') {
             try {
-              if (OS.User?.addAliases) {
-                await OS.User.addAliases(aliasMap)
-                Object.keys(aliasMap).forEach(k => this.registeredAliases.add(k))
-              } else if (OS.User?.addAlias) {
-                for (const [k, v] of Object.entries(aliasMap)) {
-                  try {
-                    await OS.User.addAlias(k, v)
-                    this.registeredAliases.add(k)
-                  } catch {}
-                }
-              }
-            } catch (aliasErr) {
-              console.warn('[NotificationService] Aviso ao adicionar aliases web:', aliasErr)
-            }
-          }
-
-          if (this.loggedInToOneSignal && OS.User?.addTags) {
-            try {
-              await OS.User.addTags(tags)
+              await optInFn.call(OS.User?.PushSubscription || OS.User?.pushSubscription)
             } catch {}
-          }
-
-          if (isPureStaff) {
-            const studentTags = ['aluno_id', 'responsavel_id', 'turma', 'aluno_db_id']
-            if (OS.User?.removeTags) {
-              try {
-                await OS.User.removeTags(studentTags)
-              } catch {}
-            }
-            const toRemove = ['responsavel_id', 'aluno_id'].filter(a => this.registeredAliases.has(a))
-            if (toRemove.length > 0 && OS.User?.removeAliases) {
-              try {
-                await OS.User.removeAliases(toRemove)
-                toRemove.forEach(a => this.registeredAliases.delete(a))
-              } catch {}
-            }
-          } else if (!colabId && !isMaster) {
-            const staffTags = ['colaborador_id', 'system_user_id', 'isMasterAdmin']
-            if (OS.User?.removeTags) {
-              try {
-                await OS.User.removeTags(staffTags)
-              } catch {}
-            }
-            const toRemove = ['colaborador_id', 'system_user_id'].filter(a => this.registeredAliases.has(a))
-            if (toRemove.length > 0 && OS.User?.removeAliases) {
-              try {
-                await OS.User.removeAliases(toRemove)
-                toRemove.forEach(a => this.registeredAliases.delete(a))
-              } catch {}
-            }
           }
 
           const pushSub = OS.User?.PushSubscription || OS.User?.pushSubscription
           const subId = pushSub?.id
-          if (subId) {
-            await this.sendSubscriptionToBackend({
-              subscriptionId: subId,
-              pushToken: pushSub?.token || null,
-              userId,
-              responsavelId: rId ? String(rId) : undefined,
-              alunoId: user.aluno_id ? String(user.aluno_id) : (extraData?.alunoId ? String(extraData.alunoId) : undefined),
-              colaboradorId: colabId ? String(colabId) : undefined,
-              systemUserId: colabId ? String(colabId) : undefined,
-              email: user.email ? String(user.email).toLowerCase().trim() : undefined,
-              tags,
-            }).catch(() => {})
+
+          // Se o navegador ainda não possui um Subscription ID ativo no OneSignal,
+          // aguarda o listener pushSubscription.addEventListener('change') disparar o próximo syncUser.
+          if (!subId) {
+            this.currentUserId = userId
+            ;(window as any).__OS_USER_ID__ = userId
+            this.loggedInToOneSignal = false
+            return
           }
+
+          // Sincroniza subscrição, external_id, aliases e tags diretamente via backend (REST API),
+          // evitando enfileirar operações SetAlias no IndexedDB do cliente que falham com 404
+          // quando o onesignal_id anônimo provisório é substituído/mesclado no servidor.
+          await this.sendSubscriptionToBackend({
+            subscriptionId: subId,
+            pushToken: pushSub?.token || null,
+            userId,
+            responsavelId: rId ? String(rId) : undefined,
+            alunoId: user.aluno_id ? String(user.aluno_id) : (extraData?.alunoId ? String(extraData.alunoId) : undefined),
+            colaboradorId: colabId ? String(colabId) : undefined,
+            systemUserId: colabId ? String(colabId) : undefined,
+            email: user.email ? String(user.email).toLowerCase().trim() : undefined,
+            tags,
+          }).catch(() => {})
+
+          this.currentUserId = userId
+          ;(window as any).__OS_USER_ID__ = userId
+          this.loggedInToOneSignal = true
         }
 
         const OS = (window as any).OneSignal
@@ -1095,22 +1010,10 @@ class NotificationService {
           console.log('🚪 [NotificationService] Usuário deslogado do OneSignal.')
         }
       } else {
-        const OS = (window as any).OneSignal
-        if ((window as any).__OS_INIT__) {
-          try {
-            if (OS?.User?.removeTags) {
-              try { await OS.User.removeTags(tagsToRemove) } catch {}
-            }
-            if (OS?.User?.removeAliases) {
-              try { await OS.User.removeAliases(aliasesToRemove) } catch {}
-            }
-            if (OS && typeof OS.logout === 'function') {
-              try { await OS.logout() } catch {}
-            }
-          } catch (logoutErr) {
-            console.warn('[NotificationService] Aviso no logout web:', logoutErr)
-          }
+        if (typeof window !== 'undefined') {
+          ;(window as any).__OS_USER_ID__ = null
         }
+        await this.clearStaleWebOperations()
       }
     } catch (err) {
       console.warn('[NotificationService] Erro no logout do OneSignal:', err)
@@ -1124,6 +1027,7 @@ class NotificationService {
 
       if (typeof window !== 'undefined') {
         try {
+          ;(window as any).__OS_USER_ID__ = null
           localStorage.removeItem('edu_push_dismissed_v2')
           localStorage.removeItem('edu_push_dismissed')
           sessionStorage.removeItem('edu_push_blocked_dismissed_session')
@@ -1138,6 +1042,97 @@ class NotificationService {
 
       await this.refresh().catch(() => {})
     }
+  }
+
+  /**
+   * Limpa silenciosamente operações de alias travadas (SetAlias 404) na fila do OneSignal Web
+   * ou purga o banco local caso o navegador não tenha permissão de notificação concedida.
+   */
+  private async clearStaleWebOperations(): Promise<void> {
+    if (typeof window === 'undefined' || !('indexedDB' in window)) return
+    try {
+      const hasPermission = 'Notification' in window && Notification.permission === 'granted'
+
+      if (!hasPermission) {
+        // Sem permissão ativa, qualquer registro local do OneSignal é apenas rascunho anônimo/órfão
+        try {
+          const delReq = window.indexedDB.deleteDatabase('ONE_SIGNAL_SDK_DB')
+          await new Promise<void>((resolve) => {
+            delReq.onsuccess = () => resolve()
+            delReq.onerror = () => resolve()
+            delReq.onblocked = () => resolve()
+            setTimeout(resolve, 250)
+          })
+        } catch {}
+        try {
+          for (let i = localStorage.length - 1; i >= 0; i--) {
+            const key = localStorage.key(i)
+            if (key && (key.startsWith('onesignal') || key.startsWith('OneSignal') || key.startsWith('os_'))) {
+              localStorage.removeItem(key)
+            }
+          }
+          for (let i = sessionStorage.length - 1; i >= 0; i--) {
+            const key = sessionStorage.key(i)
+            if (key && (key.startsWith('onesignal') || key.startsWith('OneSignal'))) {
+              sessionStorage.removeItem(key)
+            }
+          }
+        } catch {}
+        return
+      }
+
+      // Com permissão concedida, limpa apenas a store 'operations' se o banco já existir,
+      // removendo operações SetAlias travadas de sessões anteriores sem apagar a subscrição ativa.
+      if (typeof window.indexedDB.databases === 'function') {
+        const dbs = await window.indexedDB.databases().catch(() => [])
+        const exists = Array.isArray(dbs) && dbs.some((d) => d?.name === 'ONE_SIGNAL_SDK_DB')
+        if (!exists) return
+      }
+
+      await new Promise<void>((resolve) => {
+        try {
+          const req = window.indexedDB.open('ONE_SIGNAL_SDK_DB')
+          req.onupgradeneeded = () => {
+            // Não cria banco vazio caso não exista previamente
+            try { req.transaction?.abort() } catch {}
+            resolve()
+          }
+          req.onsuccess = () => {
+            const db = req.result
+            try {
+              const opStores = Array.from(db.objectStoreNames).filter((name) =>
+                name.toLowerCase().includes('operation')
+              )
+              if (opStores.length > 0) {
+                const tx = db.transaction(opStores, 'readwrite')
+                opStores.forEach((s) => {
+                  try { tx.objectStore(s).clear() } catch {}
+                })
+                tx.oncomplete = () => {
+                  db.close()
+                  resolve()
+                }
+                tx.onerror = () => {
+                  db.close()
+                  resolve()
+                }
+              } else {
+                db.close()
+                resolve()
+              }
+            } catch {
+              db.close()
+              resolve()
+            }
+          }
+          req.onerror = () => resolve()
+          req.onblocked = () => resolve()
+          setTimeout(resolve, 300)
+        } catch {
+          resolve()
+        }
+      })
+    } catch {}
   }
 
   /**

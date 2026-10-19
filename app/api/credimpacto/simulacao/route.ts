@@ -63,6 +63,30 @@ export async function POST(request: Request) {
       customVenc
     )
 
+    if (body.notificarPush) {
+      const { notifyCredImpactoEvent } = await import('@/lib/credimpacto/pushNotifications')
+      await notifyCredImpactoEvent({
+        eventType: 'simulacao_realizada',
+        loan: {
+          id: '',
+          codigoOperacao: 'SIMULAÇÃO',
+          colaboradorId: resolvedUser.id,
+          colaboradorNome: resolvedUser.nome,
+          colaboradorCpf: resolvedUser.cpf,
+          colaboradorEmail: resolvedUser.email,
+          valorSolicitado: Number(valorSolicitado),
+          quantidadeParcelas: Number(quantidadeParcelas)
+        },
+        sentByNome: resolvedUser.nome,
+        extra: {
+          valor: Number(valorSolicitado),
+          parcelas: Number(quantidadeParcelas),
+          valorParcela: simulacao.valorPrimeiraParcela,
+          autorNome: resolvedUser.nome
+        }
+      }).catch((e) => console.warn('[CredImpacto Push Simulacao Error]', e))
+    }
+
     return NextResponse.json(simulacao)
   } catch (err: any) {
     return NextResponse.json({ error: err.message || 'Erro ao calcular simulação' }, { status: 400 })

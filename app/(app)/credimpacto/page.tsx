@@ -580,6 +580,71 @@ function CredImpactoContent() {
     setActiveTab('simular')
   }
 
+  const handleNavigateToLoan = useCallback(
+    (emprestimoId?: string, targetUrl?: string) => {
+      if (targetUrl) {
+        try {
+          const qIndex = targetUrl.indexOf('?')
+          if (qIndex !== -1) {
+            const sp = new URLSearchParams(targetUrl.slice(qIndex + 1))
+            const tabParam = sp.get('tab') as TabId | null
+            const actionParam = sp.get('action')
+            const loanParam = sp.get('loanId') || sp.get('id') || emprestimoId
+
+            if (tabParam) {
+              if (tabParam === 'meus_emprestimos' && !isAdminOrFinance) {
+                setViewMode('colaborador')
+                setActiveTab('meus_emprestimos')
+              } else if (isAdminOrFinance) {
+                setViewMode('admin')
+                setActiveTab(tabParam === 'meus_emprestimos' ? 'dashboard' : tabParam)
+              } else {
+                setActiveTab(tabParam)
+              }
+            }
+
+            if (loanParam) {
+              const found = emprestimos.find((e) => e.id === loanParam)
+              if (found) {
+                if (actionParam === 'assinar' && found.status === 'aguardando_assinatura') {
+                  setSelectedLoanForSign(found)
+                } else {
+                  setSelectedLoanForDetails(found)
+                }
+                return
+              }
+            }
+          }
+        } catch {}
+      }
+
+      if (emprestimoId) {
+        const found = emprestimos.find((e) => e.id === emprestimoId)
+        if (found) {
+          setSelectedLoanForDetails(found)
+        }
+      }
+    },
+    [emprestimos, isAdminOrFinance]
+  )
+
+  // Deep-link automático ao abrir o CredImpacto via clique em Notificação Push (?tab=...&loanId=...&action=...)
+  const handledUrlLoanRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (typeof window === 'undefined' || isLoading || emprestimos.length === 0) return
+    const search = window.location.search
+    if (!search) return
+    const sp = new URLSearchParams(search)
+    const loanParam = sp.get('loanId') || sp.get('id')
+    const tabParam = sp.get('tab') as TabId | null
+    const key = `${tabParam || ''}:${loanParam || ''}:${sp.get('action') || ''}`
+    if (!tabParam && !loanParam) return
+    if (handledUrlLoanRef.current === key) return
+    handledUrlLoanRef.current = key
+
+    handleNavigateToLoan(loanParam || undefined, window.location.pathname + search)
+  }, [isLoading, emprestimos, handleNavigateToLoan])
+
   if (perfisLoading && !userPerfilObj) {
     return (
       <div className="min-h-[70vh] flex items-center justify-center p-6">
@@ -644,6 +709,7 @@ function CredImpactoContent() {
             activeTab={activeTab}
             currentMe={currentMe}
             realtimeStatus={realtimeStatus}
+            onNavigateToLoan={handleNavigateToLoan}
           />
 
           {/* CONTEÚDO PRINCIPAL DE CADA ABA */}

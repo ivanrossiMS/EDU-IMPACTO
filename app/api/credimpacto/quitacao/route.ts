@@ -30,6 +30,20 @@ export async function POST(request: Request) {
 
     const calc = calculateEarlyPayoff(loan.parcelas || [], loan.valorAprovado)
 
+    if (body.solicitarQuitacao) {
+      const { notifyCredImpactoEvent } = await import('@/lib/credimpacto/pushNotifications')
+      await notifyCredImpactoEvent({
+        eventType: 'quitacao_solicitada',
+        loan,
+        sentByNome: resolved.nome,
+        extra: {
+          valorQuitacao: calc.valorParaQuitacao,
+          economiaQuitacao: calc.economiaColaborador,
+          autorNome: resolved.nome
+        }
+      }).catch((e) => console.warn('[CredImpacto Push Quitacao Request Error]', e))
+    }
+
     return NextResponse.json({
       emprestimoId: loan.id,
       codigoOperacao: loan.codigoOperacao,
@@ -65,6 +79,11 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: 'Apenas usuários do financeiro podem confirmar a liquidação de quitação antecipada.' }, { status: 403 })
     }
 
+    const previousLoan = await dbGetEmprestimoById(emprestimoId)
+    const calcPrev = previousLoan
+      ? calculateEarlyPayoff(previousLoan.parcelas || [], previousLoan.valorAprovado)
+      : null
+
     const updatedLoan = await dbProcessarQuitacaoAntecipada(
       emprestimoId,
       {
@@ -75,6 +94,18 @@ export async function PUT(request: Request) {
       },
       { id: resolved.id, nome: resolved.nome, perfil: resolved.perfil }
     )
+
+    const { notifyCredImpactoEvent } = await import('@/lib/credimpacto/pushNotifications')
+    await notifyCredImpactoEvent({
+      eventType: 'quitacao_confirmada',
+      loan: updatedLoan,
+      sentByNome: resolved.nome,
+      extra: {
+        valorQuitacao: Number(valorPago),
+        economiaQuitacao: calcPrev?.economiaColaborador || 0,
+        autorNome: resolved.nome
+      }
+    }).catch((e) => console.warn('[CredImpacto Push Quitacao Confirm Error]', e))
 
     return NextResponse.json({ success: true, emprestimo: updatedLoan })
   } catch (err: any) {

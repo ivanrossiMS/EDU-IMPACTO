@@ -115,6 +115,18 @@ export async function PUT(request: Request) {
       `Homologação de rescisão CLT: compensado R$ ${compensado.toFixed(2)} no TRCT. Saldo remanescente: R$ ${remanescente.toFixed(2)}`
     )
 
+    const { notifyCredImpactoEvent } = await import('@/lib/credimpacto/pushNotifications')
+    await notifyCredImpactoEvent({
+      eventType: 'rescisao_homologada',
+      loan: updated,
+      sentByNome: resolved.nome,
+      extra: {
+        valorCompensadoTrct: compensado,
+        saldoRemanescente: remanescente,
+        autorNome: resolved.nome
+      }
+    }).catch((e) => console.warn('[CredImpacto Push Rescisao Error]', e))
+
     return NextResponse.json({ success: true, emprestimo: updated })
   } catch (err: any) {
     return NextResponse.json({ error: err.message || 'Erro ao homologar compensação rescisória' }, { status: 400 })

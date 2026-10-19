@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/server/authGuard'
 import { supabaseServer } from '@/lib/supabaseServer'
-import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
+import { getAdminClient, getAllAuthUsersCached } from '@/lib/server/supabaseAdminSingleton'
 import { sendPushNotification, getNotificationStats } from '@/lib/server/pushService'
 import { AgendaPushType } from '@/lib/server/agendaNotifications'
 import { formatFriendlyStudentName } from '@/lib/studentNameHelper'
@@ -674,28 +674,69 @@ async function resolveLogFullDetails(logIdOrLog: string | any, supabase: any) {
     log = data
   }
 
-  const alunoId = extractLogStudentId(log)
-  const isColaborador = log.item_id?.includes('colaborador') || log.target_url?.includes('/colaborador/')
-
-  let recipients: any[] = []
-  let summary = ''
-  const targetAliases = new Set<string>()
-
-  // Extrair alvos já gravados no JSON
+  let parsedResp: any = null
   try {
     if (log.onesignal_response) {
-      const p = typeof log.onesignal_response === 'string' ? JSON.parse(log.onesignal_response) : log.onesignal_response
-      if (Array.isArray(p?._target_user_ids)) {
-        p._target_user_ids.forEach((id: string) => targetAliases.add(id))
-      }
+      parsedResp = typeof log.onesignal_response === 'string' ? JSON.parse(log.onesignal_response) : log.onesignal_response
     }
   } catch {}
 
+  const meta = parsedResp?._metadata || null
+  const savedTargetDetails: any[] | null = Array.isArray(parsedResp?._target_details)
+    ? parsedResp._target_details
+    : (Array.isArray(meta?.target_details) ? meta.target_details : null)
+
+  const recordedTargetIds = new Set<string>()
+  const targetAliases = new Set<string>()
+
+  if (Array.isArray(parsedResp?._target_user_ids)) {
+    parsedResp._target_user_ids.forEach((id: string) => {
+      const clean = String(id || '').trim()
+      if (clean) {
+        recordedTargetIds.add(clean)
+        targetAliases.add(clean)
+      }
+    })
+  }
+
+  const normalizedRecordedTargets = new Set<string>()
+  recordedTargetIds.forEach(id => {
+    normalizedRecordedTargets.add(id.toLowerCase())
+    const noZeros = id.replace(/^0+/, '')
+    if (noZeros) normalizedRecordedTargets.add(noZeros.toLowerCase())
+  })
+
+  const alunoId = extractLogStudentId(log)
+  const isColaborador = Boolean(
+    log.item_id?.includes('colaborador') ||
+    log.target_url?.includes('/colaborador/') ||
+    meta?.colaborador_id ||
+    (savedTargetDetails && savedTargetDetails.some((d: any) => d.tipo === 'colaborador'))
+  )
+
+  let recipients: any[] = []
+  let summary = ''
+  let studentContext: {
+    id: string
+    nome: string
+    matricula: string
+    turmaNome: string
+    totalLinkedGuardians: number
+    targetedGuardiansCount: number
+  } | null = null
+
   // 1. Caso seja relativo a Aluno (comunicados, momentos, frequência, saída - exceto chat que possui destinatários específicos)
   if (alunoId && log.type !== 'chat') {
+    const cleanAlunoId = String(alunoId).trim()
+    const expandedAlunoIds = Array.from(new Set([
+      cleanAlunoId,
+      cleanAlunoId.replace(/^0+/, ''),
+      !isNaN(Number(cleanAlunoId)) ? String(Number(cleanAlunoId)).padStart(6, '0') : ''
+    ].filter(Boolean)))
+
     const [{ data: aluno }, { data: vinculos }] = await Promise.all([
-      supabase.from('alunos').select('id, nome, matricula, turma, foto, status').eq('id', alunoId).maybeSingle(),
-      supabase.from('aluno_responsavel').select('responsavel_id').eq('aluno_id', alunoId)
+      supabase.from('alunos').select('id, nome, matricula, turma, foto, status, responsavel, responsavel_financeiro, responsavel_pedagogico').in('id', expandedAlunoIds).maybeSingle(),
+      supabase.from('aluno_responsavel').select('responsavel_id').in('aluno_id', expandedAlunoIds)
     ])
 
     let turmaNome = ''
@@ -704,60 +745,138 @@ async function resolveLogFullDetails(logIdOrLog: string | any, supabase: any) {
       turmaNome = turma?.nome || `Turma ${aluno.turma}`
     }
 
-    const respIds = (vinculos || []).map((v: any) => String(v.responsavel_id)).filter(Boolean)
+    const rawRespIds: string[] = Array.from(new Set((vinculos || []).map((v: any) => String(v.responsavel_id).trim()).filter(Boolean)))
+    const expandedRespIds = Array.from(new Set([
+      ...rawRespIds,
+      ...rawRespIds.map((id: string) => id.replace(/^0+/, '')),
+      ...rawRespIds.map((id: string) => !isNaN(Number(id)) ? String(Number(id)).padStart(6, '0') : '')
+    ].filter(Boolean)))
+
     let resps: any[] = []
-    if (respIds.length > 0) {
-      const { data: rList } = await supabase.from('responsaveis').select('id, nome, email, telefone, celular, dados').in('id', respIds)
+    if (expandedRespIds.length > 0) {
+      const { data: rList } = await supabase.from('responsaveis').select('id, nome, email, telefone, celular, dados').in('id', expandedRespIds)
       resps = rList || []
     }
 
-    // Buscar contas no Supabase Auth e system_users para verificar ativação real
+    // Buscar contas no Supabase Auth (com cache) e system_users para verificar ativação real
     let authUsersList: any[] = []
     try {
-      const adminClient = getAdminClient()
-      let page = 1
-      while (page <= 5) {
-        const { data: list } = await adminClient.auth.admin.listUsers({ page, perPage: 1000 })
-        if (!list?.users || list.users.length === 0) break
-        authUsersList.push(...list.users)
-        if (list.users.length < 1000) break
-        page++
-      }
+      authUsersList = await getAllAuthUsersCached()
     } catch (e) {
       console.warn('[resolveLogFullDetails] Aviso ao buscar auth.users:', e)
     }
 
     const { data: sysUsersList } = await supabase
       .from('system_users')
-      .select('id, auth_id, email, dados')
+      .select('id, auth_id, email, nome, dados')
       .limit(3000)
 
-    // Identificadores de disparo para este aluno
-    targetAliases.add(String(alunoId))
-    targetAliases.add(String(alunoId).padStart(6, '0'))
-    respIds.forEach((id: string) => targetAliases.add(id))
-    resps.forEach((r: any) => {
-      if (r.email) targetAliases.add(r.email.toLowerCase().trim())
-      if (r.dados?.auth_id) targetAliases.add(r.dados.auth_id)
-    })
-
-    // Consultar dispositivos no OneSignal para cada responsável
-    for (const r of resps) {
+    // Resolver dados completos de todos os responsáveis vinculados ao aluno
+    const resolvedLinkedGuardians = resps.map((r: any) => {
       const rIdStr = String(r.id).trim()
+      const rIdClean = rIdStr.replace(/^0+/, '')
+      const rIdPadded = !isNaN(Number(rIdStr)) ? String(Number(rIdStr)).padStart(6, '0') : ''
       const cleanEmail = (r.email || '').toLowerCase().trim()
 
-      const matchedAuthByEmail = cleanEmail ? authUsersList.find(u => (u.email || '').toLowerCase().trim() === cleanEmail) : null
-      const matchedAuthByMeta = authUsersList.find(u => String(u.user_metadata?.responsavel_id || '').trim() === rIdStr)
+      const matchedAuthByEmail = cleanEmail ? authUsersList.find(u => (u.email || u.user_metadata?.email || '').toLowerCase().trim() === cleanEmail) : null
+      const matchedAuthByMeta = authUsersList.find(u => {
+        const metaRespId = String(u.user_metadata?.responsavel_id || u.user_metadata?.responsavelId || '').trim()
+        return metaRespId && (metaRespId === rIdStr || metaRespId.replace(/^0+/, '') === rIdClean)
+      })
       const matchedAuth = matchedAuthByEmail || matchedAuthByMeta
 
       const matchedSys = (sysUsersList || []).find((u: any) => {
         const uEmail = (u.email || '').toLowerCase().trim()
         const uRespId = String(u.dados?.responsavel_id || u.dados?.responsavelId || '').trim()
-        return (cleanEmail && uEmail === cleanEmail) || (uRespId && uRespId === rIdStr)
+        return (cleanEmail && uEmail === cleanEmail) || (uRespId && (uRespId === rIdStr || uRespId.replace(/^0+/, '') === rIdClean))
       })
 
       const effectiveAuthId = matchedAuth?.id || matchedSys?.auth_id || (matchedSys ? matchedSys.id : null) || r.dados?.auth_id || null
-      if (effectiveAuthId) targetAliases.add(effectiveAuthId)
+      const sysUserId = matchedSys?.id ? String(matchedSys.id).trim() : null
+
+      const candidateIds = [
+        rIdStr,
+        rIdClean,
+        rIdPadded,
+        cleanEmail,
+        effectiveAuthId ? String(effectiveAuthId).trim() : '',
+        sysUserId || '',
+        r.dados?.auth_id ? String(r.dados.auth_id).trim() : ''
+      ].filter(Boolean)
+
+      const isTargetedByRecordedIds = candidateIds.some(cid =>
+        normalizedRecordedTargets.has(cid.toLowerCase()) ||
+        normalizedRecordedTargets.has(cid.replace(/^0+/, '').toLowerCase())
+      )
+
+      return {
+        raw: r,
+        rIdStr,
+        rIdClean,
+        rIdPadded,
+        cleanEmail,
+        matchedAuth,
+        matchedSys,
+        effectiveAuthId,
+        sysUserId,
+        isTargetedByRecordedIds,
+      }
+    })
+
+    // Filtrar apenas os responsáveis que realmente foram alvo deste disparo
+    let guardiansToProcess = resolvedLinkedGuardians
+
+    if (Array.isArray(meta?.responsavel_ids)) {
+      const explicitSet = new Set(
+        meta.responsavel_ids.flatMap((id: any) => {
+          const s = String(id || '').trim()
+          return [s.toLowerCase(), s.replace(/^0+/, '').toLowerCase()]
+        }).filter(Boolean)
+      )
+      guardiansToProcess = resolvedLinkedGuardians.filter(g =>
+        explicitSet.has(g.rIdStr.toLowerCase()) || explicitSet.has(g.rIdClean.toLowerCase())
+      )
+    } else if (savedTargetDetails && savedTargetDetails.some((d: any) => d.tipo === 'responsavel')) {
+      const savedRespSet = new Set(
+        savedTargetDetails
+          .filter((d: any) => d.tipo === 'responsavel')
+          .flatMap((d: any) => {
+            const s = String(d.id || '').trim()
+            return [s.toLowerCase(), s.replace(/^0+/, '').toLowerCase()]
+          })
+          .filter(Boolean)
+      )
+      guardiansToProcess = resolvedLinkedGuardians.filter(g =>
+        savedRespSet.has(g.rIdStr.toLowerCase()) || savedRespSet.has(g.rIdClean.toLowerCase())
+      )
+    } else if (recordedTargetIds.size > 0) {
+      const matchedByTargets = resolvedLinkedGuardians.filter(g => g.isTargetedByRecordedIds)
+      const studentOnlyTargeted =
+        matchedByTargets.length === 0 &&
+        expandedAlunoIds.some(aid => normalizedRecordedTargets.has(aid.toLowerCase())) &&
+        recordedTargetIds.size <= 2
+
+      if (matchedByTargets.length > 0) {
+        guardiansToProcess = matchedByTargets
+      } else if (studentOnlyTargeted) {
+        guardiansToProcess = []
+      }
+    }
+
+    // Se o log não tinha _target_user_ids gravado (logs legados), sintetizar aliases apenas dos responsáveis filtrados
+    if (recordedTargetIds.size === 0) {
+      targetAliases.add(String(alunoId))
+      targetAliases.add(String(alunoId).padStart(6, '0'))
+      guardiansToProcess.forEach(g => {
+        targetAliases.add(g.rIdStr)
+        if (g.cleanEmail) targetAliases.add(g.cleanEmail)
+        if (g.effectiveAuthId) targetAliases.add(String(g.effectiveAuthId))
+      })
+    }
+
+    // Consultar dispositivos no OneSignal para cada responsável efetivamente alvo
+    for (const g of guardiansToProcess) {
+      const { raw: r, cleanEmail, matchedAuth, matchedSys, effectiveAuthId } = g
 
       const devices = await fetchDevicesForGuardian({
         responsavel_id: r.id,
@@ -797,10 +916,10 @@ async function resolveLogFullDetails(logIdOrLog: string | any, supabase: any) {
 
       recipients.push({
         id: String(r.id),
-        nome: r.nome || 'Responsável Legal',
+        nome: r.nome || matchedSys?.nome || matchedAuth?.user_metadata?.nome || 'Responsável Legal',
         tipo: 'responsavel',
         tipoLabel: 'Responsável',
-        email: r.email || null,
+        email: r.email || matchedSys?.email || matchedAuth?.email || null,
         telefone: formatPhoneDisplay(r.telefone || r.celular),
         devicesCount: devices.length,
         devices,
@@ -813,23 +932,47 @@ async function resolveLogFullDetails(logIdOrLog: string | any, supabase: any) {
       })
     }
 
-    if (aluno) {
+    const wasAlunoDirectTargeted = Boolean(
+      meta?.include_aluno_direct === true ||
+      (savedTargetDetails && savedTargetDetails.some((d: any) => d.tipo === 'aluno')) ||
+      (recipients.length === 0 && aluno)
+    )
+
+    if (aluno && wasAlunoDirectTargeted) {
       recipients.push({
         id: String(aluno.id),
         nome: aluno.nome,
         tipo: 'aluno',
-        tipoLabel: 'Aluno(a)',
+        tipoLabel: 'Aluno(a) (Acesso Direto)',
         matricula: aluno.matricula || String(aluno.id),
         turmaNome: turmaNome || aluno.turma || 'Turma não informada',
         statusTone: 'neutral',
-        deviceSummary: 'Dispositivo cadastrado pelos responsáveis',
+        deviceSummary: 'Alias direto do aluno (aluno_id)',
       })
     }
 
-    summary = `${aluno?.nome || 'Aluno'} (${resps.length} responsável(is) vinculado(s))`
+    if (aluno) {
+      studentContext = {
+        id: String(aluno.id),
+        nome: aluno.nome,
+        matricula: aluno.matricula || String(aluno.id),
+        turmaNome: turmaNome || aluno.turma || 'Turma não informada',
+        totalLinkedGuardians: resolvedLinkedGuardians.length,
+        targetedGuardiansCount: guardiansToProcess.length,
+      }
+    }
+
+    if (guardiansToProcess.length === 1 && resolvedLinkedGuardians.length > 1) {
+      summary = `${recipients[0]?.nome || 'Responsável'} • Aluno(a): ${aluno?.nome || 'Aluno'} (1 de ${resolvedLinkedGuardians.length} responsáveis)`
+    } else if (guardiansToProcess.length > 1 && guardiansToProcess.length < resolvedLinkedGuardians.length) {
+      summary = `${guardiansToProcess.map(g => g.raw.nome).join(', ')} • Aluno(a): ${aluno?.nome || 'Aluno'} (${guardiansToProcess.length} de ${resolvedLinkedGuardians.length} responsáveis)`
+    } else {
+      summary = `${aluno?.nome || 'Aluno'} (${guardiansToProcess.length || resolvedLinkedGuardians.length} responsável(is) vinculado(s))`
+    }
   } else if (isColaborador) {
     // 2. Caso seja relativo a Colaborador
     const rawAliases = Array.from(targetAliases)
+    if (meta?.colaborador_id) rawAliases.push(String(meta.colaborador_id))
     const cleanColabIds = Array.from(new Set(rawAliases.map(id => id.replace(/^f_/, '').trim()).filter(Boolean)))
     
     let colabQuery = supabase.from('system_users').select('id, nome, email, cargo, perfil, auth_id, dados')
@@ -908,13 +1051,17 @@ async function resolveLogFullDetails(logIdOrLog: string | any, supabase: any) {
         accountStatusDetail,
         statusTone,
       })
-      targetAliases.add(String(c.id))
-      if (c.email) targetAliases.add(c.email.toLowerCase().trim())
-      if (c.auth_id) targetAliases.add(c.auth_id)
+      if (recordedTargetIds.size === 0) {
+        targetAliases.add(String(c.id))
+        if (c.email) targetAliases.add(c.email.toLowerCase().trim())
+        if (c.auth_id) targetAliases.add(c.auth_id)
+      }
     }
-    summary = `Equipe Escolar / Colaboradores (${(colabs || []).length} destinatários)`
-  } else if (log.type === 'chat') {
-    // 3. Caso seja mensagem de Chat
+    summary = (colabs || []).length === 1
+      ? `${colabs![0].nome} (${colabs![0].cargo || colabs![0].perfil || 'Colaborador'})`
+      : `Equipe Escolar / Colaboradores (${(colabs || []).length} destinatários)`
+  } else if (log.type === 'chat' || recordedTargetIds.size > 0) {
+    // 3. Caso seja mensagem de Chat ou disparo avulso com _target_user_ids registrados
     const targetIds = Array.from(targetAliases)
     if (targetIds.length > 0) {
       const numericIds = targetIds.filter(id => /^\d+$/.test(id))
@@ -929,7 +1076,7 @@ async function resolveLogFullDetails(logIdOrLog: string | any, supabase: any) {
       }
 
       if (uuidIds.length > 0 || emailIds.length > 0) {
-        let q = supabase.from('system_users').select('id, nome, email, cargo, perfil, auth_id')
+        let q = supabase.from('system_users').select('id, nome, email, cargo, perfil, auth_id, dados')
         const conds: string[] = []
         if (uuidIds.length > 0) {
           conds.push(`id.in.(${uuidIds.map(u => `"${u}"`).join(',')})`)
@@ -944,11 +1091,20 @@ async function resolveLogFullDetails(logIdOrLog: string | any, supabase: any) {
       }
 
       const [{ data: resps }, { data: sysUsers }] = await Promise.all(queries)
+      const matchedRespIds = new Set((resps || []).map((r: any) => String(r.id).trim()))
 
       for (const r of resps || []) {
+        const matchedSysForResp = (sysUsers || []).find((u: any) => {
+          const uRespId = String(u.dados?.responsavel_id || u.dados?.responsavelId || '').trim()
+          const uEmail = (u.email || '').toLowerCase().trim()
+          const rEmail = (r.email || '').toLowerCase().trim()
+          return (uRespId && uRespId === String(r.id).trim()) || (rEmail && uEmail === rEmail)
+        })
+
         const devices = await fetchDevicesForGuardian({
           responsavel_id: r.id,
           email: r.email,
+          authId: matchedSysForResp?.auth_id || null,
         })
         const hasActive = devices.some((d: any) => d.isSubscribed)
         const deviceModels = devices.map((d: any) => d.modelo || d.tipo).filter(Boolean)
@@ -972,6 +1128,11 @@ async function resolveLogFullDetails(logIdOrLog: string | any, supabase: any) {
       }
 
       for (const c of sysUsers || []) {
+        // Evitar duplicar caso este system_user já tenha sido listado como o próprio responsável acima
+        const uRespId = String(c.dados?.responsavel_id || c.dados?.responsavelId || '').trim()
+        if (uRespId && matchedRespIds.has(uRespId)) continue
+        if (c.email && (resps || []).some((r: any) => (r.email || '').toLowerCase().trim() === c.email.toLowerCase().trim())) continue
+
         const devices = await fetchDevicesForGuardian({
           authId: c.auth_id,
           system_user_id: String(c.id),
@@ -1000,16 +1161,10 @@ async function resolveLogFullDetails(logIdOrLog: string | any, supabase: any) {
       }
     }
 
-    let metaTitle = ''
-    let metaRecipient = ''
-    try {
-      const p = typeof log.onesignal_response === 'string' ? JSON.parse(log.onesignal_response) : log.onesignal_response
-      metaTitle = p?._metadata?.conversation_title || ''
-      metaRecipient = p?._metadata?.recipient_name || ''
-    } catch {}
-
+    const metaTitle = meta?.conversation_title || ''
+    const metaRecipient = meta?.recipient_name || ''
     const friendlyName = metaRecipient || metaTitle || (recipients[0]?.nome) || 'Destinatário'
-    summary = `${friendlyName} (${recipients.length || log.target_count || 1} destinatário(s))`
+    summary = `${friendlyName} (${recipients.length || 1} destinatário(s))`
   } else {
     // 4. Fallback genérico
     summary = `${log.target_count || 1} destinatário(s) na lista`
@@ -1042,7 +1197,7 @@ async function resolveLogFullDetails(logIdOrLog: string | any, supabase: any) {
       if (foundResp) {
         readInfo.readerName = foundResp.nome
       } else if (cleanUserId === alunoId) {
-        readInfo.readerName = recipients.find(rec => rec.tipo === 'aluno')?.nome || 'Aluno'
+        readInfo.readerName = studentContext?.nome || recipients.find(rec => rec.tipo === 'aluno')?.nome || 'Aluno'
       } else {
         const { data: su } = await supabase.from('system_users').select('nome').eq('id', cleanUserId).maybeSingle()
         if (su) readInfo.readerName = su.nome
@@ -1053,11 +1208,7 @@ async function resolveLogFullDetails(logIdOrLog: string | any, supabase: any) {
   // Se for chat e não constar em agenda_notification_reads, checar em chat_messages
   if (!readInfo.isRead && log.type === 'chat') {
     try {
-      let msgId: string | null = null
-      if (log.onesignal_response) {
-        const p = typeof log.onesignal_response === 'string' ? JSON.parse(log.onesignal_response) : log.onesignal_response
-        msgId = p?._metadata?.message_id || null
-      }
+      let msgId: string | null = meta?.message_id || null
       if (!msgId && log.item_id) {
         const m = log.item_id.match(/(?:^|_)msg_([a-zA-Z0-9-]+?)(?:_(?:familia|colaborador))?$/)
         if (m) msgId = m[1]
@@ -1080,16 +1231,10 @@ async function resolveLogFullDetails(logIdOrLog: string | any, supabase: any) {
 
   // Estatísticas de entrega ao vivo OneSignal
   let oneSignalStats: any = null
-  let oneSignalId: string | null = null
-  try {
-    if (log.onesignal_response) {
-      const p = typeof log.onesignal_response === 'string' ? JSON.parse(log.onesignal_response) : log.onesignal_response
-      oneSignalId = p?.id || null
-      if (p?.successful !== undefined) {
-        oneSignalStats = p
-      }
-    }
-  } catch {}
+  let oneSignalId: string | null = parsedResp?.id || null
+  if (parsedResp?.successful !== undefined) {
+    oneSignalStats = parsedResp
+  }
 
   if (oneSignalId && !oneSignalStats) {
     try {
@@ -1100,17 +1245,9 @@ async function resolveLogFullDetails(logIdOrLog: string | any, supabase: any) {
   }
 
   // Extrair informações de lembrete / agendamento
-  let sendAfter: string | null = null
-  let isReminder = Boolean(log.item_id?.includes('-reminder') || log.title?.toLowerCase().includes('lembrete'))
-  let eventDate: string | null = null
-  try {
-    if (log.onesignal_response) {
-      const p = typeof log.onesignal_response === 'string' ? JSON.parse(log.onesignal_response) : log.onesignal_response
-      sendAfter = p?._send_after || p?._metadata?.send_after || null
-      eventDate = p?._metadata?.data || null
-      if (p?._metadata?.is_reminder) isReminder = true
-    }
-  } catch {}
+  let sendAfter: string | null = parsedResp?._send_after || meta?.send_after || null
+  let isReminder = Boolean(log.item_id?.includes('-reminder') || log.title?.toLowerCase().includes('lembrete') || meta?.is_reminder)
+  let eventDate: string | null = meta?.data || null
 
   if (isReminder && !sendAfter && eventDate) {
     try {
@@ -1127,9 +1264,10 @@ async function resolveLogFullDetails(logIdOrLog: string | any, supabase: any) {
     logId: log.id,
     sender,
     recipients,
+    studentContext,
     summary,
     targetAliases: Array.from(targetAliases),
-    targetCount: log.target_count || recipients.length || 1,
+    targetCount: recipients.length || log.target_count || 1,
     readInfo,
     oneSignalId,
     oneSignalStats,
@@ -1485,10 +1623,51 @@ export async function GET(request: Request) {
       // Ordenar e Paginar
       query = query.order('created_at', { ascending: false }).range(from, to)
 
-      const { data: logs, count: totalCount, error: logsError } = await query
+      const { data: rawLogs, count: totalCount, error: logsError } = await query
 
       if (logsError) {
         return NextResponse.json({ error: logsError.message }, { status: 400 })
+      }
+
+      // Se houver filtro por responsável específico, remover disparos direcionados exclusivamente a OUTRO responsável do mesmo aluno
+      let logs = rawLogs || []
+      if (filterUserId && filterUserType === 'responsavel' && userContext) {
+        const respIdStr = String(userContext.id).trim().toLowerCase()
+        const respIdClean = respIdStr.replace(/^0+/, '')
+        const respEmail = String(userContext.email || '').trim().toLowerCase()
+        const allowedTokens = new Set([respIdStr, respIdClean, respEmail].filter(Boolean))
+
+        try {
+          const authUsersList = await getAllAuthUsersCached()
+          authUsersList.forEach((u: any) => {
+            const uEmail = (u.email || u.user_metadata?.email || '').toLowerCase().trim()
+            const uMetaResp = String(u.user_metadata?.responsavel_id || u.user_metadata?.responsavelId || '').trim().toLowerCase()
+            if ((respEmail && uEmail === respEmail) || (uMetaResp && (uMetaResp === respIdStr || uMetaResp.replace(/^0+/, '') === respIdClean))) {
+              allowedTokens.add(String(u.id).toLowerCase())
+            }
+          })
+        } catch {}
+
+        logs = logs.filter((l: any) => {
+          try {
+            const p = typeof l.onesignal_response === 'string' ? JSON.parse(l.onesignal_response) : l.onesignal_response
+            const explicitResps: any[] | null = Array.isArray(p?._metadata?.responsavel_ids) ? p._metadata.responsavel_ids : null
+            if (explicitResps && explicitResps.length > 0) {
+              return explicitResps.some(id => {
+                const s = String(id || '').trim().toLowerCase()
+                return allowedTokens.has(s) || allowedTokens.has(s.replace(/^0+/, ''))
+              })
+            }
+            const targetIds: any[] | null = Array.isArray(p?._target_user_ids) ? p._target_user_ids : null
+            if (targetIds && targetIds.length > 0) {
+              return targetIds.some(id => {
+                const s = String(id || '').trim().toLowerCase()
+                return allowedTokens.has(s) || allowedTokens.has(s.replace(/^0+/, ''))
+              })
+            }
+          } catch {}
+          return true
+        })
       }
 
       // 1. Mapeamento de candidatos para busca de leitura (Notification Center)
@@ -1550,36 +1729,96 @@ export async function GET(request: Request) {
         (logs || []).map((l: any) => extractLogStudentId(l)).filter(Boolean) as string[]
       ))
 
-      const studentLookup = new Map<string, { nome: string; turma?: string; resps: { nome: string; email?: string }[] }>()
+      interface GuardianLookupItem {
+        id: string
+        idClean: string
+        nome: string
+        email?: string
+        candidateTokens: string[]
+      }
+
+      const studentLookup = new Map<string, { nome: string; turma?: string; resps: GuardianLookupItem[] }>()
 
       if (batchAlunoIds.length > 0) {
+        const expandedBatchAlunoIds = Array.from(new Set([
+          ...batchAlunoIds,
+          ...batchAlunoIds.map(id => id.replace(/^0+/, '')),
+          ...batchAlunoIds.map(id => !isNaN(Number(id)) ? String(Number(id)).padStart(6, '0') : '')
+        ].filter(Boolean)))
+
         const [{ data: alunosData }, { data: vinculosData }] = await Promise.all([
-          supabase.from('alunos').select('id, nome, matricula, turma').in('id', batchAlunoIds),
-          supabase.from('aluno_responsavel').select('aluno_id, responsavel_id').in('aluno_id', batchAlunoIds)
+          supabase.from('alunos').select('id, nome, matricula, turma').in('id', expandedBatchAlunoIds),
+          supabase.from('aluno_responsavel').select('aluno_id, responsavel_id').in('aluno_id', expandedBatchAlunoIds)
         ])
 
-        const respIds = Array.from(new Set((vinculosData || []).map((v: any) => String(v.responsavel_id)).filter(Boolean)))
+        const rawRespIds = Array.from(new Set((vinculosData || []).map((v: any) => String(v.responsavel_id).trim()).filter(Boolean)))
+        const expandedBatchRespIds = Array.from(new Set([
+          ...rawRespIds,
+          ...rawRespIds.map(id => id.replace(/^0+/, '')),
+          ...rawRespIds.map(id => !isNaN(Number(id)) ? String(Number(id)).padStart(6, '0') : '')
+        ].filter(Boolean)))
+
         let respsData: any[] = []
-        if (respIds.length > 0) {
-          const { data: rList } = await supabase.from('responsaveis').select('id, nome, email').in('id', respIds)
+        if (expandedBatchRespIds.length > 0) {
+          const { data: rList } = await supabase.from('responsaveis').select('id, nome, email, dados').in('id', expandedBatchRespIds)
           respsData = rList || []
         }
 
-        const respMap = new Map<string, { nome: string; email?: string }>()
-        respsData.forEach((r: any) => respMap.set(String(r.id), { nome: r.nome, email: r.email }))
+        let authUsersList: any[] = []
+        try {
+          authUsersList = await getAllAuthUsersCached()
+        } catch {}
+
+        const respMap = new Map<string, GuardianLookupItem>()
+        respsData.forEach((r: any) => {
+          const rId = String(r.id).trim()
+          const rIdClean = rId.replace(/^0+/, '')
+          const rEmail = (r.email || '').toLowerCase().trim()
+          const tokens = new Set<string>([rId.toLowerCase(), rIdClean.toLowerCase()])
+          if (rEmail) tokens.add(rEmail)
+          if (r.dados?.auth_id) tokens.add(String(r.dados.auth_id).toLowerCase())
+
+          authUsersList.forEach((u: any) => {
+            const uEmail = (u.email || u.user_metadata?.email || '').toLowerCase().trim()
+            const uMetaResp = String(u.user_metadata?.responsavel_id || u.user_metadata?.responsavelId || '').trim()
+            if ((rEmail && uEmail === rEmail) || (uMetaResp && (uMetaResp === rId || uMetaResp.replace(/^0+/, '') === rIdClean))) {
+              tokens.add(String(u.id).toLowerCase())
+            }
+          })
+
+          const item: GuardianLookupItem = {
+            id: rId,
+            idClean: rIdClean,
+            nome: r.nome || 'Responsável',
+            email: r.email,
+            candidateTokens: Array.from(tokens).filter(Boolean),
+          }
+          respMap.set(rId, item)
+          respMap.set(rIdClean, item)
+        })
 
         ;(alunosData || []).forEach((a: any) => {
-          const aId = String(a.id)
-          const linkedRespIds = (vinculosData || [])
-            .filter((v: any) => String(v.aluno_id) === aId)
-            .map((v: any) => String(v.responsavel_id))
-          const resps = linkedRespIds.map(rid => respMap.get(rid)).filter(Boolean) as { nome: string; email?: string }[]
+          const aId = String(a.id).trim()
+          const aIdClean = aId.replace(/^0+/, '')
+          const linkedRespIds = Array.from(new Set(
+            (vinculosData || [])
+              .filter((v: any) => {
+                const vAid = String(v.aluno_id).trim()
+                return vAid === aId || vAid.replace(/^0+/, '') === aIdClean
+              })
+              .map((v: any) => String(v.responsavel_id).trim())
+          ))
+          const resps = linkedRespIds
+            .map(rid => respMap.get(rid) || respMap.get(rid.replace(/^0+/, '')))
+            .filter(Boolean) as GuardianLookupItem[]
 
-          studentLookup.set(aId, {
+          const entry = {
             nome: a.nome,
             turma: a.turma,
             resps,
-          })
+          }
+          studentLookup.set(aId, entry)
+          studentLookup.set(aIdClean, entry)
         })
       }
 
@@ -1588,6 +1827,7 @@ export async function GET(request: Request) {
 
       // 4. Enriquecer logs com indicador de leitura, telemetria, remetente e resumo de destinatários
       const enrichedLogs = (logs || []).map((log: any) => {
+        let parsed: any = null
         let oneSignalId = null
         let oneSignalErrors = null
         let sendAfter: string | null = null
@@ -1596,12 +1836,12 @@ export async function GET(request: Request) {
 
         try {
           if (log.onesignal_response) {
-            const parsed = typeof log.onesignal_response === 'string' ? JSON.parse(log.onesignal_response) : log.onesignal_response
-            oneSignalId = parsed.id || null
-            oneSignalErrors = parsed.errors || null
-            sendAfter = parsed._send_after || parsed._metadata?.send_after || null
-            eventDate = parsed._metadata?.data || null
-            if (parsed._metadata?.is_reminder) isReminder = true
+            parsed = typeof log.onesignal_response === 'string' ? JSON.parse(log.onesignal_response) : log.onesignal_response
+            oneSignalId = parsed?.id || null
+            oneSignalErrors = parsed?.errors || null
+            sendAfter = parsed?._send_after || parsed?._metadata?.send_after || null
+            eventDate = parsed?._metadata?.data || null
+            if (parsed?._metadata?.is_reminder) isReminder = true
           }
         } catch {}
 
@@ -1623,43 +1863,115 @@ export async function GET(request: Request) {
           }
         }
 
+        const meta = parsed?._metadata || null
+        const savedTargetDetails: any[] | null = Array.isArray(parsed?._target_details)
+          ? parsed._target_details
+          : (Array.isArray(meta?.target_details) ? meta.target_details : null)
+        const recordedTargetSet = new Set<string>(
+          Array.isArray(parsed?._target_user_ids)
+            ? parsed._target_user_ids.flatMap((id: any) => {
+                const s = String(id || '').trim().toLowerCase()
+                return [s, s.replace(/^0+/, '')]
+              }).filter(Boolean)
+            : []
+        )
+
         // Resumo de destinatários
         const aId = extractLogStudentId(log)
-        let recipient_summary = `${log.target_count || 1} usuário(s)`
+        let recipient_summary = `${log.target_count || 1} destinatário(s)`
         let recipients_preview: { nome: string; tipo: string }[] = []
+        let resolved_target_count = log.target_count || 1
 
-        if (aId && studentLookup.has(aId)) {
-          const stu = studentLookup.get(aId)!
+        if (aId && (studentLookup.has(aId) || studentLookup.has(aId.replace(/^0+/, '')))) {
+          const stu = (studentLookup.get(aId) || studentLookup.get(aId.replace(/^0+/, '')))!
           const parts = stu.nome.trim().split(/\s+/).filter(Boolean)
           const friendlyStudent = parts.length > 1 ? `${parts[0]} ${parts[1]}` : parts[0]
-          const numResps = stu.resps.length
 
-          recipient_summary = numResps > 0
-            ? `${friendlyStudent} (${numResps} resp.)`
-            : friendlyStudent
+          let targetedResps = stu.resps
+          if (Array.isArray(meta?.responsavel_ids)) {
+            const explicitSet = new Set(
+              meta.responsavel_ids.flatMap((id: any) => {
+                const s = String(id || '').trim().toLowerCase()
+                return [s, s.replace(/^0+/, '')]
+              }).filter(Boolean)
+            )
+            targetedResps = stu.resps.filter(r =>
+              explicitSet.has(r.id.toLowerCase()) || explicitSet.has(r.idClean.toLowerCase())
+            )
+          } else if (savedTargetDetails && savedTargetDetails.some((d: any) => d.tipo === 'responsavel')) {
+            const savedSet = new Set(
+              savedTargetDetails
+                .filter((d: any) => d.tipo === 'responsavel')
+                .flatMap((d: any) => {
+                  const s = String(d.id || '').trim().toLowerCase()
+                  return [s, s.replace(/^0+/, '')]
+                }).filter(Boolean)
+            )
+            targetedResps = stu.resps.filter(r =>
+              savedSet.has(r.id.toLowerCase()) || savedSet.has(r.idClean.toLowerCase())
+            )
+          } else if (recordedTargetSet.size > 0) {
+            const matched = stu.resps.filter(r =>
+              r.candidateTokens.some(tok => recordedTargetSet.has(tok))
+            )
+            if (matched.length > 0) {
+              targetedResps = matched
+            }
+          }
+
+          const numTargeted = targetedResps.length
+          const totalLinked = stu.resps.length
+          const includeAlunoDirect = Boolean(
+            meta?.include_aluno_direct === true ||
+            (savedTargetDetails && savedTargetDetails.some((d: any) => d.tipo === 'aluno'))
+          )
+
+          resolved_target_count = (numTargeted + (includeAlunoDirect ? 1 : 0)) || 1
+
+          if (numTargeted === 1 && totalLinked > 1) {
+            const respFirstParts = targetedResps[0].nome.trim().split(/\s+/).filter(Boolean)
+            const friendlyResp = respFirstParts.length > 1 ? `${respFirstParts[0]} ${respFirstParts[1]}` : respFirstParts[0]
+            recipient_summary = `${friendlyResp} • ${friendlyStudent}`
+          } else if (numTargeted > 1 && numTargeted < totalLinked) {
+            recipient_summary = `${friendlyStudent} (${numTargeted} de ${totalLinked} resp.)`
+          } else if (numTargeted > 0) {
+            recipient_summary = `${friendlyStudent} (${numTargeted} resp.)`
+          } else {
+            recipient_summary = friendlyStudent
+          }
 
           recipients_preview = [
-            ...stu.resps.map(r => ({ nome: r.nome, tipo: 'responsavel' })),
-            { nome: stu.nome, tipo: 'aluno' }
+            ...targetedResps.map(r => ({ nome: r.nome, tipo: 'responsavel' })),
+            ...(includeAlunoDirect || numTargeted === 0 ? [{ nome: stu.nome, tipo: 'aluno' }] : [])
           ]
-        } else if (log.item_id?.includes('colaborador') || log.target_url?.includes('/colaborador/')) {
+        } else if (savedTargetDetails && savedTargetDetails.length > 0) {
+          resolved_target_count = savedTargetDetails.length
+          if (savedTargetDetails.length === 1) {
+            recipient_summary = savedTargetDetails[0].nome || '1 destinatário'
+          } else {
+            recipient_summary = `${savedTargetDetails[0].nome} (+${savedTargetDetails.length - 1})`
+          }
+          recipients_preview = savedTargetDetails.map((d: any) => ({
+            nome: d.nome || 'Destinatário',
+            tipo: d.tipo || 'colaborador'
+          }))
+        } else if (log.item_id?.includes('colaborador') || log.target_url?.includes('/colaborador/') || meta?.colaborador_id) {
           recipient_summary = `Equipe Escolar (${log.target_count || 1} alvos)`
           recipients_preview = [{ nome: 'Equipe de Colaboradores', tipo: 'colaborador' }]
         } else if (log.type === 'chat') {
-          let metaTitle = ''
-          let metaRecipient = ''
-          try {
-            const p = typeof log.onesignal_response === 'string' ? JSON.parse(log.onesignal_response) : log.onesignal_response
-            metaTitle = p?._metadata?.conversation_title || ''
-            metaRecipient = p?._metadata?.recipient_name || ''
-          } catch {}
+          const metaTitle = meta?.conversation_title || ''
+          const metaRecipient = meta?.recipient_name || ''
           const displayName = metaRecipient || metaTitle || 'Participante do Chat'
-          recipient_summary = `${displayName} (${log.target_count || 1} alvo${(log.target_count || 1) !== 1 ? 's' : ''})`
+          resolved_target_count = 1
+          recipient_summary = displayName
           recipients_preview = [{ nome: displayName, tipo: 'chat' }]
         }
 
         return {
           ...log,
+          target_count: resolved_target_count,
+          resolved_target_count,
+          aliases_count: recordedTargetSet.size || log.target_count || 1,
           sender: sendersMap.get(log.id) || null,
           oneSignalId,
           oneSignalErrors,
@@ -1674,7 +1986,7 @@ export async function GET(request: Request) {
         }
       })
 
-      const total = totalCount || 0
+      const total = filterUserId && filterUserType === 'responsavel' ? enrichedLogs.length : (totalCount || 0)
       const totalPages = Math.ceil(total / limit)
 
       return NextResponse.json({
@@ -1896,13 +2208,9 @@ export async function GET(request: Request) {
         .limit(2000)
 
       // 2. Buscar usuários do Supabase Auth para verificar contas ativas dos responsáveis
-      const supabaseAdmin = getAdminClient()
       let authUsers: any[] = []
       try {
-        const { data: listData } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 })
-        if (listData?.users) {
-          authUsers = listData.users
-        }
+        authUsers = await getAllAuthUsersCached()
       } catch (authErr: any) {
         console.warn('[API Push Test GET] Erro ao listar auth.users:', authErr.message)
       }
@@ -2099,7 +2407,7 @@ export async function POST(request: Request) {
     const {
       alunoId,
       colaboradorId,
-      responsavelIds = [],
+      responsavelIds,
       includeAlunoDirect = false,
       type = 'test',
       title,
@@ -2122,6 +2430,7 @@ export async function POST(request: Request) {
 
     let studentData: any = null
     let colabData: any = null
+    let resolvedRespIdsForLog: string[] = []
     const targetUserIdsSet = new Set<string>()
     const targetDetails: any[] = []
 
@@ -2185,7 +2494,7 @@ export async function POST(request: Request) {
       if (st) {
         studentData = st
 
-        // Incluir o ID do aluno se marcado ou se responsável virtual
+        // Incluir o ID do aluno se marcado
         if (includeAlunoDirect) {
           targetUserIdsSet.add(String(st.id))
           if (st.matricula) targetUserIdsSet.add(String(st.matricula))
@@ -2198,12 +2507,13 @@ export async function POST(request: Request) {
         }
       }
 
-      // Se responsavelIds não foi passado explicitamente, buscar todos os vinculados
-      let respIdsToQuery = Array.isArray(responsavelIds) && responsavelIds.length > 0
-        ? responsavelIds.map(String)
+      // Respeitar estritamente responsavelIds quando enviado como array pelo Simulador
+      const hasExplicitRespArray = Array.isArray(responsavelIds)
+      let respIdsToQuery = hasExplicitRespArray
+        ? responsavelIds.map((id: any) => String(id || '').trim()).filter(Boolean)
         : []
 
-      if (respIdsToQuery.length === 0) {
+      if (!hasExplicitRespArray) {
         const searchAlunoIds = Array.from(new Set([
           String(st?.id || alunoId),
           String(st?.id || alunoId).replace(/^0+/, ''),
@@ -2220,6 +2530,15 @@ export async function POST(request: Request) {
         }
       }
 
+      if (hasExplicitRespArray && respIdsToQuery.length === 0 && !includeAlunoDirect && !effectiveColabId && !targetSubscriptionId) {
+        return NextResponse.json(
+          { error: 'Selecione pelo menos um responsável vinculado ou marque a opção de envio direto para o aluno.' },
+          { status: 400 }
+        )
+      }
+
+      resolvedRespIdsForLog = respIdsToQuery
+
       // Buscar detalhes e contas dos responsáveis selecionados
       if (respIdsToQuery.length > 0) {
         const expandedRespIds = Array.from(new Set([
@@ -2230,7 +2549,7 @@ export async function POST(request: Request) {
 
         const { data: resps } = await supabase
           .from('responsaveis')
-          .select('id, nome, email, telefone')
+          .select('id, nome, email, telefone, celular, dados')
           .in('id', expandedRespIds)
 
         const { data: sysUsers } = await supabase
@@ -2238,14 +2557,10 @@ export async function POST(request: Request) {
           .select('id, auth_id, email, nome, dados')
           .limit(2000)
 
-        // Buscar usuários do Supabase Auth para mapear auth UUID
-        const supabaseAdmin = getAdminClient()
+        // Buscar usuários do Supabase Auth para mapear auth UUID (usando cache)
         let authUsers: any[] = []
         try {
-          const { data: listData } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 })
-          if (listData?.users) {
-            authUsers = listData.users
-          }
+          authUsers = await getAllAuthUsersCached()
         } catch (authErr: any) {
           console.warn('[API Push Test POST] Erro ao listar auth.users:', authErr.message)
         }
@@ -2326,7 +2641,8 @@ export async function POST(request: Request) {
         })
       }
     } else if (Array.isArray(responsavelIds) && responsavelIds.length > 0) {
-      responsavelIds.forEach(id => targetUserIdsSet.add(String(id).trim()))
+      resolvedRespIdsForLog = responsavelIds.map((id: any) => String(id).trim()).filter(Boolean)
+      resolvedRespIdsForLog.forEach(id => targetUserIdsSet.add(id))
     }
 
     // Se nenhum destinatário for encontrado, adicionar o ID do admin para teste de envio
@@ -2342,6 +2658,7 @@ export async function POST(request: Request) {
     }
 
     const cleanTargetIds = Array.from(targetUserIdsSet).filter(Boolean)
+    const humanTargetCount = targetDetails.length || 1
 
     // Formatar texto com formatFriendlyStudentName exatamente como a Agenda Digital real
     const rawNomeAlvo = colabData?.nome || studentData?.nome || 'Destinatário'
@@ -2375,9 +2692,10 @@ export async function POST(request: Request) {
       ? resolvedTargetUrl
       : `${appUrl}${resolvedTargetUrl.startsWith('/') ? '' : '/'}${resolvedTargetUrl}`
 
-    console.log(`🧪 [API Push Test] Disparando push de teste [${type}] para ${cleanTargetIds.length} alvo(s)...`, {
+    console.log(`🧪 [API Push Test] Disparando push de teste [${type}] para ${humanTargetCount} destinatário(s) (${cleanTargetIds.length} aliases)...`, {
       aluno: nomeAlvo,
-      targetCount: cleanTargetIds.length,
+      targetCount: humanTargetCount,
+      aliasesCount: cleanTargetIds.length,
       item_id: uniqueTestId,
     })
 
@@ -2438,7 +2756,15 @@ export async function POST(request: Request) {
       else if (pushResult.data) responsePayloadObj = pushResult.data
     } catch {}
     responsePayloadObj._target_user_ids = cleanTargetIds
-    responsePayloadObj._metadata = metadata || null
+    responsePayloadObj._target_details = targetDetails
+    responsePayloadObj._metadata = {
+      ...(metadata || {}),
+      aluno_id: studentData?.id ? String(studentData.id) : (alunoId ? String(alunoId) : null),
+      aluno_nome: studentData?.nome || null,
+      colaborador_id: colabData?.id ? String(colabData.id) : (effectiveColabId ? String(effectiveColabId) : null),
+      responsavel_ids: resolvedRespIdsForLog,
+      include_aluno_direct: Boolean(includeAlunoDirect),
+    }
     if (pushResult.paused) {
       responsePayloadObj.paused = true
     }
@@ -2452,7 +2778,7 @@ export async function POST(request: Request) {
         title: finalTitle,
         message: finalMessage,
         target_url: finalTargetUrl,
-        target_count: finalRecipients || cleanTargetIds.length,
+        target_count: humanTargetCount,
         status: logStatus,
         error_message: logErrorMsg,
         onesignal_response: JSON.stringify(responsePayloadObj),
@@ -2482,7 +2808,8 @@ export async function POST(request: Request) {
       platformDeliveryStats,
       mock: Boolean(pushResult.mock),
       status: logStatus,
-      targetCount: cleanTargetIds.length,
+      targetCount: humanTargetCount,
+      aliasesCount: cleanTargetIds.length,
       targetUserIds: cleanTargetIds,
       targetDetails,
       warning,

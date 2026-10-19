@@ -4,6 +4,7 @@ import { dbGetEmprestimoById, dbSaveEmprestimo, dbGetConfiguracao } from '@/lib/
 import { resolveCredImpactoUser, isLoanOwnedByUser } from '@/lib/credimpacto/authHelper'
 import { simulateLoan } from '@/lib/credimpacto/engine'
 import { generateContractHtml } from '@/lib/credimpacto/contractTemplate'
+import { notifyCredImpactoEvent } from '@/lib/credimpacto/pushNotifications'
 import crypto from 'crypto'
 
 export const dynamic = 'force-dynamic'
@@ -129,6 +130,21 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
             ? `Solicitação de empréstimo aprovada diretamente por ${resolved.nome} (autorização do colaborador dispensada)${ativarDireto ? ' e ativada imediatamente' : ' e encaminhada para Liberação TED'}`
             : 'Solicitação de empréstimo aprovada pelo financeiro (aguardando assinatura do colaborador)'
         )
+
+        if (body.enviarPush !== false) {
+          const evtType = ativarDireto
+            ? 'aprovado_ativo'
+            : dispensarAssinatura
+            ? 'aprovado_aguardando_liberacao'
+            : 'aprovado_aguardando_assinatura'
+          await notifyCredImpactoEvent({
+            eventType: evtType,
+            loan: updated,
+            sentByNome: resolved.nome,
+            extra: { autorNome: resolved.nome }
+          }).catch((e) => console.warn('[CredImpacto Push Approve Error]', e))
+        }
+
         return NextResponse.json(updated)
       }
 
@@ -141,6 +157,16 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
           'RECUSA',
           `Solicitação recusada: ${loan.motivoRecusa}`
         )
+
+        if (body.enviarPush !== false) {
+          await notifyCredImpactoEvent({
+            eventType: 'recusado',
+            loan: updated,
+            sentByNome: resolved.nome,
+            extra: { motivo: loan.motivoRecusa, autorNome: resolved.nome }
+          }).catch((e) => console.warn('[CredImpacto Push Reject Error]', e))
+        }
+
         return NextResponse.json(updated)
       }
 
@@ -170,6 +196,29 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
           'CONTRAPROPOSTA',
           `Contraproposta enviada: R$ ${contraproposta.valorProposto} em ${contraproposta.quantidadeParcelas}x`
         )
+
+        if (body.enviarPush !== false) {
+          const simProp = simulateLoan(
+            loan.contraproposta.valorProposto,
+            loan.contraproposta.quantidadeParcelas,
+            loan.contraproposta.taxaMensal,
+            loan.contraproposta.metodoCalculo,
+            loan.colaboradorSalarioBase
+          )
+          await notifyCredImpactoEvent({
+            eventType: 'contraproposta_enviada',
+            loan: updated,
+            sentByNome: resolved.nome,
+            extra: {
+              valor: loan.contraproposta.valorProposto,
+              parcelas: loan.contraproposta.quantidadeParcelas,
+              valorParcela: simProp.valorPrimeiraParcela,
+              motivo: loan.contraproposta.motivo,
+              autorNome: resolved.nome
+            }
+          }).catch((e) => console.warn('[CredImpacto Push Counterproposal Error]', e))
+        }
+
         return NextResponse.json(updated)
       }
     }
@@ -254,6 +303,15 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
         `Empréstimo ${loan.codigoOperacao} aprovado diretamente por ${resolved.nome} (autorização do colaborador dispensada)${ativarDireto ? ' e ativado de imediato' : ' e enviado para Liberação TED'}`
       )
 
+      if (body.enviarPush !== false) {
+        await notifyCredImpactoEvent({
+          eventType: ativarDireto ? 'aprovado_ativo' : 'aprovado_aguardando_liberacao',
+          loan: updated,
+          sentByNome: resolved.nome,
+          extra: { autorNome: resolved.nome }
+        }).catch((e) => console.warn('[CredImpacto Push Direct Approve Error]', e))
+      }
+
       return NextResponse.json(updated)
     }
 
@@ -327,6 +385,18 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
           'APROVACAO',
           'Colaborador aceitou a contraproposta. Contrato gerado para assinatura.'
         )
+
+        await notifyCredImpactoEvent({
+          eventType: 'contraproposta_aceita',
+          loan: updated,
+          sentByNome: resolved.nome,
+          extra: {
+            valor: updated.valorAprovado,
+            parcelas: updated.quantidadeParcelas,
+            autorNome: resolved.nome
+          }
+        }).catch((e) => console.warn('[CredImpacto Push Counterproposal Accepted Error]', e))
+
         return NextResponse.json(updated)
       } else {
         loan.contraproposta.status = 'recusada'
@@ -342,6 +412,14 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
           'CANCELAMENTO',
           loan.motivoCancelamento
         )
+
+        await notifyCredImpactoEvent({
+          eventType: 'contraproposta_recusada',
+          loan: updated,
+          sentByNome: resolved.nome,
+          extra: { motivo: loan.motivoCancelamento, autorNome: resolved.nome }
+        }).catch((e) => console.warn('[CredImpacto Push Counterproposal Rejected Error]', e))
+
         return NextResponse.json(updated)
       }
     }
@@ -377,6 +455,21 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
         'LIBERACAO',
         `Recursos no valor de R$ ${loan.valorAprovado.toFixed(2)} liberados na conta do colaborador`
       )
+
+      if (body.enviarPush !== false) {
+        await notifyCredImpactoEvent({
+          eventType: 'recursos_liberados',
+          loan: updated,
+          sentByNome: resolved.nome,
+          extra: {
+            valor: updated.valorAprovado,
+            parcelas: updated.quantidadeParcelas,
+            chavePix: updated.dadosBancarios?.chavePix,
+            autorNome: resolved.nome
+          }
+        }).catch((e) => console.warn('[CredImpacto Push Disbursement Error]', e))
+      }
+
       return NextResponse.json(updated)
     }
 
@@ -384,7 +477,8 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
     // 4. AÇÃO: CANCELAR OPERAÇÃO
     // ─────────────────────────────────────────────────────────────────────────
     if (acao === 'cancelar') {
-      if (!resolved.isAdminOrFinance && !isLoanOwnedByUser(loan, resolved)) {
+      const isOwner = isLoanOwnedByUser(loan, resolved)
+      if (!resolved.isAdminOrFinance && !isOwner) {
         return NextResponse.json({ error: 'Acesso não autorizado para cancelar esta operação.' }, { status: 403 })
       }
       if (loan.status === 'ativo' || loan.status === 'quitado') {
@@ -403,6 +497,14 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
         'CANCELAMENTO',
         loan.motivoCancelamento
       )
+
+      await notifyCredImpactoEvent({
+        eventType: resolved.isAdminOrFinance && !isOwner ? 'cancelado_pelo_admin' : 'cancelado_pelo_colaborador',
+        loan: updated,
+        sentByNome: resolved.nome,
+        extra: { motivo: loan.motivoCancelamento, autorNome: resolved.nome }
+      }).catch((e) => console.warn('[CredImpacto Push Cancel Error]', e))
+
       return NextResponse.json(updated)
     }
 
@@ -433,6 +535,16 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
         'EDICAO',
         `Chave PIX atualizada para: ${cleanPix} por ${resolved.nome}`
       )
+
+      if (isOwner || !resolved.isAdminOrFinance) {
+        await notifyCredImpactoEvent({
+          eventType: 'chave_pix_atualizada',
+          loan: updated,
+          sentByNome: resolved.nome,
+          extra: { chavePix: cleanPix, autorNome: resolved.nome }
+        }).catch((e) => console.warn('[CredImpacto Push PIX Update Error]', e))
+      }
+
       return NextResponse.json(updated)
     }
 

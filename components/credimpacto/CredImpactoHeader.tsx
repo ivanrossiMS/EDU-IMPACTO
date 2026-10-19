@@ -3,6 +3,7 @@
 import React from 'react'
 import { Landmark, Plus, ShieldCheck, UserCheck, RefreshCw, ChevronRight } from 'lucide-react'
 import { TabId } from './CredImpactoNavigation'
+import { CredImpactoNotificationBell } from './CredImpactoPushCenter'
 
 interface CredImpactoHeaderProps {
   isAdminOrFinance: boolean
@@ -14,6 +15,7 @@ interface CredImpactoHeaderProps {
   activeTab?: TabId
   currentMe?: any
   realtimeStatus?: 'connecting' | 'online' | 'offline'
+  onNavigateToLoan?: (emprestimoId?: string, targetUrl?: string) => void
 }
 
 const TAB_TITLES: Record<TabId, { title: string; subtitle: string; adminOnly?: boolean }> = {
@@ -80,7 +82,9 @@ export function CredImpactoHeader({
   onRefresh,
   isRefreshing,
   activeTab = 'dashboard',
-  realtimeStatus = 'online'
+  currentMe,
+  realtimeStatus = 'online',
+  onNavigateToLoan
 }: CredImpactoHeaderProps) {
   const currentTabInfo = TAB_TITLES[activeTab] || {
     title: 'CredImpacto',
@@ -145,6 +149,13 @@ export function CredImpactoHeader({
         </div>
 
         <div className="flex items-center gap-2.5">
+          <CredImpactoNotificationBell
+            isAdminOrFinance={isAdminOrFinance}
+            viewMode={viewMode}
+            currentUserId={currentMe?.id}
+            onNavigateToLoan={onNavigateToLoan}
+          />
+
           <button
             onClick={onRefresh}
             disabled={isRefreshing}
@@ -187,6 +198,12 @@ export function CredImpactoHeader({
           </div>
 
           <div className="flex items-center gap-1.5">
+            <CredImpactoNotificationBell
+              isAdminOrFinance={isAdminOrFinance}
+              viewMode={viewMode}
+              currentUserId={currentMe?.id}
+              onNavigateToLoan={onNavigateToLoan}
+            />
             <button
               onClick={onRefresh}
               disabled={isRefreshing}

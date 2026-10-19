@@ -275,6 +275,9 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
     const handleRefresh = () => {
       console.log('🔄 [AgendaRealtime] Revalidando queries da agenda após evento foreground...')
       queryClient.invalidateQueries({ queryKey: ['agenda'] })
+      queryClient.invalidateQueries({ queryKey: ['frequencias-aluno'], refetchType: 'active' })
+      queryClient.invalidateQueries({ queryKey: ['portaria-eventos-aluno'], refetchType: 'active' })
+      queryClient.invalidateQueries({ queryKey: ['saida-calls-aluno'], refetchType: 'active' })
     }
     window.addEventListener('ad:push-foreground', handleRefresh)
     window.addEventListener('ad:app-foreground', handleRefresh)
@@ -714,6 +717,9 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
         subscribeMainChannel()
       }
       queryClient.invalidateQueries({ queryKey: ['agenda'], refetchType: 'active' })
+      queryClient.invalidateQueries({ queryKey: ['frequencias-aluno'], refetchType: 'active' })
+      queryClient.invalidateQueries({ queryKey: ['portaria-eventos-aluno'], refetchType: 'active' })
+      queryClient.invalidateQueries({ queryKey: ['saida-calls-aluno'], refetchType: 'active' })
     }
 
     const handleVisibilityChange = () => {
@@ -1212,7 +1218,9 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
     createBinding('frequencias', { event: '*', schema: 'public', table: 'frequencias' }, payload => {
       const { eventType, old, new: newRow } = payload
       const row = eventType === 'DELETE' ? old : newRow
-      const rowAlunoId = String(row.aluno_id || row.dados?.aluno_id || '')
+      const rowAlunoId = String(row?.aluno_id || row?.dados?.aluno_id || '').trim()
+      const cleanId = (val: any) => String(val || '').trim().replace(/^0+/, '')
+      const rowAlunoClean = cleanId(rowAlunoId)
 
       const currentMeusAlunos = meusAlunosRef.current
       const currentAlunoId = alunoIdRef.current
@@ -1221,16 +1229,36 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
       const currentIsColaboradorAccess = isColaboradorAccessRef.current
       const currentIsMasterAdmin = isMasterAdminRef.current
 
-      const matchingStudent = currentMeusAlunos.find(s => String(s.id) === rowAlunoId) || (currentAlunoId === rowAlunoId ? currentAlunoObj : null)
+      const matchingStudent =
+        currentMeusAlunos.find(s => {
+          const sId = String(s?.id || '').trim()
+          const sMat = String(s?.matricula || '').trim()
+          return (
+            sId === rowAlunoId ||
+            (rowAlunoClean && cleanId(sId) === rowAlunoClean) ||
+            (sMat && (sMat === rowAlunoId || (rowAlunoClean && cleanId(sMat) === rowAlunoClean)))
+          )
+        }) ||
+        (currentAlunoId && (
+          String(currentAlunoId).trim() === rowAlunoId ||
+          (rowAlunoClean && cleanId(currentAlunoId) === rowAlunoClean) ||
+          (currentAlunoObj?.id && String(currentAlunoObj.id).trim() === rowAlunoId) ||
+          (currentAlunoObj?.matricula && String(currentAlunoObj.matricula).trim() === rowAlunoId)
+        )
+          ? (currentAlunoObj || { id: currentAlunoId, nome: 'Aluno' })
+          : null)
 
       // Se for perfil família puro e o registro de frequência for de outro aluno, ignora antes de invalidar queries
       if (!currentIsColaboradorAccess && !currentIsMasterAdmin && currentIsFamily && !matchingStudent) {
         return
       }
 
-      // Invalidação silenciosa para manter tabelas e gráficos sincronizados em background
+      // Invalidação imediata para manter calendário, entradas da catraca e saídas sincronizados em tempo real
       window.dispatchEvent(new CustomEvent(`ad:frequencias-${eventType.toLowerCase()}`, { detail: payload }))
       queryClient.invalidateQueries({ queryKey: ['agenda', 'frequencias'] })
+      queryClient.invalidateQueries({ queryKey: ['frequencias-aluno'] })
+      queryClient.invalidateQueries({ queryKey: ['portaria-eventos-aluno'] })
+      queryClient.invalidateQueries({ queryKey: ['saida-calls-aluno'] })
 
       // Banners e notificações de presença NÃO devem aparecer para perfil acesso colaboradores,
       // apenas para o Administrador Master (ou família para seus próprios dependentes).
@@ -1245,7 +1273,7 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
         }
       }
 
-      if (eventType === 'INSERT') {
+      if (eventType === 'INSERT' || eventType === 'UPDATE') {
         window.dispatchEvent(new CustomEvent('agenda-digital:unread-updated'))
         const targetSlug = matchingStudent?.id || rowAlunoId || currentAlunoId || (currentMeusAlunos[0]?.id)
         const match: EventMatchResult = {
@@ -1261,10 +1289,21 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
           (row.dados?.justificativa && String(row.dados.justificativa).trim().length > 0)
         )
 
-        let title = 'Presença confirmada'
-        let conteudo = 'Registro de frequência atualizado.'
+        const ultimaSaida = row.dados?.ultimaSaida || row.dados?.saidaHorario
+        const ultimaEntrada = row.dados?.ultimaEntrada || row.dados?.horaEntrada
 
-        if (isJustificada) {
+        let title = 'Presença confirmada'
+        let conteudo = ultimaEntrada
+          ? `Entrada registrada às ${ultimaEntrada}.`
+          : 'Registro de frequência atualizado.'
+
+        if (eventType === 'UPDATE' && ultimaSaida && old?.dados?.ultimaSaida !== ultimaSaida) {
+          title = `Saída confirmada (${ultimaSaida})`
+          conteudo = 'Saída registrada na portaria.'
+        } else if (eventType === 'UPDATE' && ultimaEntrada && old?.dados?.ultimaEntrada !== ultimaEntrada) {
+          title = `Entrada confirmada (${ultimaEntrada})`
+          conteudo = 'Nova entrada registrada na portaria.'
+        } else if (isJustificada) {
           title = 'Falta justificada'
           conteudo = (row.justificativa || row.dados?.justificativa)
             ? `Justificativa: ${row.justificativa || row.dados?.justificativa}`
@@ -1274,18 +1313,22 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
           conteudo = 'Registro de frequência atualizado.'
         }
 
+        const notifId = eventType === 'INSERT'
+          ? String(row.id)
+          : `${row.id}-${ultimaSaida || ultimaEntrada || row.updated_at || Date.now()}`
+
         addNotification({
-          id: row.id,
+          id: notifId,
           type: 'frequencia',
           title,
-          createdAt: row.created_at || new Date().toISOString(),
+          createdAt: row.updated_at || row.created_at || new Date().toISOString(),
           read: false,
           link: `/agenda-digital/${targetSlug}/frequencia`,
         })
 
         showInAppToast({
           type: 'frequencia',
-          id: row.id,
+          id: String(row.id),
           title,
           conteudo,
           match,
@@ -1295,10 +1338,70 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
 
     // ── SAÍDA DE ALUNOS / PORTARIA ───────────────────────────────────────
     createBinding('saida_calls', { event: '*', schema: 'public', table: 'saida_calls' }, payload => {
-      const { eventType } = payload
+      const { eventType, old, new: newRow } = payload
+      const row = eventType === 'DELETE' ? old : newRow
+      const dados = row?.dados || row || {}
+      const callStudentId = String(dados.studentId || row?.aluno_id || '').trim()
+      const cleanId = (val: any) => String(val || '').trim().replace(/^0+/, '')
+      const callStudentClean = cleanId(callStudentId)
+
+      const currentMeusAlunos = meusAlunosRef.current
+      const currentAlunoId = alunoIdRef.current
+      const currentAlunoObj = alunoObjRef.current
+      const currentIsFamily = isFamilyRef.current
+      const currentIsColaboradorAccess = isColaboradorAccessRef.current
+      const currentIsMasterAdmin = isMasterAdminRef.current
+
+      const matchingStudent =
+        currentMeusAlunos.find(s => {
+          const sId = String(s?.id || '').trim()
+          const sMat = String(s?.matricula || '').trim()
+          return (
+            sId === callStudentId ||
+            (callStudentClean && cleanId(sId) === callStudentClean) ||
+            (sMat && (sMat === callStudentId || (callStudentClean && cleanId(sMat) === callStudentClean)))
+          )
+        }) ||
+        (currentAlunoId && (
+          String(currentAlunoId).trim() === callStudentId ||
+          (callStudentClean && cleanId(currentAlunoId) === callStudentClean) ||
+          (currentAlunoObj?.id && String(currentAlunoObj.id).trim() === callStudentId) ||
+          (currentAlunoObj?.matricula && String(currentAlunoObj.matricula).trim() === callStudentId)
+        )
+          ? (currentAlunoObj || { id: currentAlunoId, nome: 'Aluno' })
+          : null)
+
       window.dispatchEvent(new CustomEvent(`ad:saida_calls-${eventType.toLowerCase()}`, { detail: payload }))
       queryClient.invalidateQueries({ queryKey: ['saida-calls-colaborador'] })
       queryClient.invalidateQueries({ queryKey: ['agenda', 'saida'] })
+
+      if (!currentIsFamily || currentIsColaboradorAccess || currentIsMasterAdmin || matchingStudent || !callStudentId) {
+        queryClient.invalidateQueries({ queryKey: ['saida-calls-aluno'] })
+        queryClient.invalidateQueries({ queryKey: ['frequencias-aluno'] })
+        queryClient.invalidateQueries({ queryKey: ['portaria-eventos-aluno'] })
+      }
+
+      if (
+        (eventType === 'INSERT' || eventType === 'UPDATE') &&
+        String(dados.status || '').toLowerCase() === 'confirmed' &&
+        !currentIsColaboradorAccess &&
+        (currentIsMasterAdmin || (currentIsFamily && matchingStudent))
+      ) {
+        const oldStatus = String(old?.dados?.status || old?.status || '').toLowerCase()
+        if (eventType === 'INSERT' || oldStatus !== 'confirmed') {
+          window.dispatchEvent(new CustomEvent('agenda-digital:unread-updated'))
+          const targetSlug = matchingStudent?.id || callStudentId || currentAlunoId || (currentMeusAlunos[0]?.id)
+          const horaSaida = dados.horaSaida || ''
+          addNotification({
+            id: `saida-${row?.id || Date.now()}`,
+            type: 'frequencia',
+            title: horaSaida ? `Saída confirmada (${horaSaida})` : 'Saída confirmada na portaria',
+            createdAt: dados.confirmedAt || row?.created_at || new Date().toISOString(),
+            read: false,
+            link: `/agenda-digital/${targetSlug}/frequencia`,
+          })
+        }
+      }
     })
 
     // Inicia subscrição com pequeno debounce (180ms) para evitar abertura/fechamento

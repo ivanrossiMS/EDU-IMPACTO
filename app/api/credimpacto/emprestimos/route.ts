@@ -4,6 +4,7 @@ import { dbGetEmprestimos, dbSaveEmprestimo, dbGetConfiguracao } from '@/lib/cre
 import { resolveCredImpactoUser } from '@/lib/credimpacto/authHelper'
 import { simulateLoan } from '@/lib/credimpacto/engine'
 import { generateContractHtml } from '@/lib/credimpacto/contractTemplate'
+import { notifyCredImpactoEvent } from '@/lib/credimpacto/pushNotifications'
 import { CredImpactoEmprestimo, MetodoCalculo } from '@/types/credimpacto'
 import crypto from 'crypto'
 
@@ -344,6 +345,21 @@ export async function POST(request: Request) {
         ? 'Empréstimo iniciado pelo financeiro'
         : 'Solicitação enviada pelo colaborador'
     )
+
+    // Dispara notificações Push automáticas (Admin & Colaborador)
+    if (body.enviarPush !== false) {
+      await notifyCredImpactoEvent({
+        eventType: criadoPorFinanceiro && resolved.isAdminOrFinance ? 'concessao_escola' : 'solicitacao_nova',
+        loan: salvo,
+        sentByNome: resolved.nome,
+        extra: {
+          valor,
+          parcelas: parcelasCount,
+          valorParcela: simulacao.valorPrimeiraParcela,
+          autorNome: resolved.nome
+        }
+      }).catch((e) => console.warn('[CredImpacto Push Create Error]', e))
+    }
 
     return NextResponse.json(salvo, { status: 201 })
   } catch (err: any) {

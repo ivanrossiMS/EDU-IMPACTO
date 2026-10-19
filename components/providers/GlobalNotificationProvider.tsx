@@ -339,7 +339,8 @@ export function GlobalNotificationProvider() {
       pathname.includes('/frequencia') ||
       pathname.includes('/ocorrencias') ||
       pathname.includes('/notas') ||
-      pathname.includes('/financeiro')
+      pathname.includes('/financeiro') ||
+      pathname.includes('/credimpacto')
     ) {
       if (typeof window !== 'undefined') {
         delete (window as any).__EDU_PENDING_PUSH_ROUTE__
@@ -758,8 +759,76 @@ export function GlobalNotificationProvider() {
       handleSpecialAuthPayload(payload?.data)
     })
 
+    const handleCredImpactoPushPayload = (rawPayload: any) => {
+      try {
+        const d = rawPayload?.payload || rawPayload?.data || rawPayload
+        if (!d || !d.title) return
+
+        const user = currentUserRef.current
+        if (!user) return
+
+        const targetUserIds: string[] = Array.isArray(d.targetUserIds)
+          ? d.targetUserIds.map((x: any) => String(x || '').trim())
+          : []
+        const myId = String(user.id || '').trim()
+        const mySystemUserId = String(user.system_user_id || '').trim()
+        const myColabId = String(user.colaborador_id || '').trim()
+        const myEmail = String(user.email || '').toLowerCase().trim()
+        const myCpf = String(user.cpf || '').replace(/\D/g, '')
+        const targetCpf = String(d.targetColaboradorCpf || '').replace(/\D/g, '')
+        const targetEmail = String(d.targetColaboradorEmail || '').toLowerCase().trim()
+
+        const p = (user.perfil || '').toLowerCase()
+        const c = (user.cargo || '').toLowerCase()
+        const isMyUserAdmin =
+          p === 'admin' ||
+          p === 'administrador' ||
+          p === 'diretor geral' ||
+          p === 'diretor_geral' ||
+          p === 'master' ||
+          p === 'financeiro' ||
+          c.includes('diretor geral') ||
+          c.includes('administrador') ||
+          c.includes('gestor financeiro') ||
+          c.includes('tesouraria')
+
+        const matchesIdOrEmailOrCpf =
+          (myId && targetUserIds.includes(myId)) ||
+          (mySystemUserId && targetUserIds.includes(mySystemUserId)) ||
+          (myColabId && targetUserIds.includes(myColabId)) ||
+          (myEmail && (targetUserIds.includes(myEmail) || targetEmail === myEmail)) ||
+          (myCpf && myCpf.length === 11 && targetCpf === myCpf)
+
+        const isRecipient =
+          matchesIdOrEmailOrCpf ||
+          (d.recipientRole === 'admin' && isMyUserAdmin)
+
+        if (isRecipient) {
+          showForegroundPushBanner({
+            id: d.id || `credimpacto_banner_${Date.now()}`,
+            title: d.title,
+            body: d.message || '',
+            data: {
+              type: 'credimpacto',
+              module: 'credimpacto',
+              eventType: d.eventType,
+              emprestimoId: d.emprestimoId,
+              codigoOperacao: d.codigoOperacao,
+              targetUrl: d.targetUrl || '/credimpacto'
+            },
+            time: 'Agora'
+          })
+
+          window.dispatchEvent(new CustomEvent('credimpacto:push-received', { detail: d }))
+        }
+      } catch (err) {
+        console.warn('[GlobalPush] Erro ao processar CREDIMPACTO_PUSH_BANNER:', err)
+      }
+    }
+
     // 3b. Listener Supabase Realtime multi-dispositivos (rede de computadores e smartphones)
     let realtimeChannel: any = null
+    let credimpactoChannel: any = null
     const destroyChannelCleanly = (ch: any) => {
       if (!ch) return
       try {
@@ -780,7 +849,10 @@ export function GlobalNotificationProvider() {
     const subTimer = setTimeout(() => {
       try {
         for (const existing of supabase.getChannels()) {
-          if (existing?.topic === 'realtime:saida_calls_shared_room_global_listener') {
+          if (
+            existing?.topic === 'realtime:saida_calls_shared_room_global_listener' ||
+            existing?.topic === 'realtime:credimpacto_push_global_room'
+          ) {
             destroyChannelCleanly(existing)
           }
         }
@@ -794,6 +866,15 @@ export function GlobalNotificationProvider() {
       if (!(ch as any)?.channelAdapter?.getChannel?.()?.joinedOnce) {
         ch.subscribe()
       }
+
+      const credCh = supabase.channel('credimpacto_push_global_room')
+        .on('broadcast', { event: 'CREDIMPACTO_PUSH_BANNER' }, (ev: any) => {
+          handleCredImpactoPushPayload(ev.payload || ev)
+        })
+      credimpactoChannel = credCh
+      if (!(credCh as any)?.channelAdapter?.getChannel?.()?.joinedOnce) {
+        credCh.subscribe()
+      }
     }, 150)
 
     return () => {
@@ -802,6 +883,10 @@ export function GlobalNotificationProvider() {
       if (realtimeChannel) {
         destroyChannelCleanly(realtimeChannel)
         realtimeChannel = null
+      }
+      if (credimpactoChannel) {
+        destroyChannelCleanly(credimpactoChannel)
+        credimpactoChannel = null
       }
     }
   }, [onRealtime, showForegroundPushBanner])

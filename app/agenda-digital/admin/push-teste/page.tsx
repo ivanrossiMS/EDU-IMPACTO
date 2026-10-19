@@ -4,6 +4,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { PushHistoryTab } from './components/PushHistoryTab'
+import { PushHistoryDetailModal } from './components/PushHistoryDetailModal'
 import {
   Bell, Send, Users, Smartphone, ShieldCheck, CheckCircle2,
   AlertTriangle, RefreshCw, Sparkles, ExternalLink, ArrowRight,
@@ -984,6 +985,14 @@ export default function ADAdminPushTestPage() {
   const handleSendTestPush = async () => {
     if (!title.trim() || !message.trim()) {
       adAlert('Preencha o título e a mensagem antes de disparar.', 'Atenção')
+      return
+    }
+
+    if (selectedAluno && guardians.length > 0 && selectedRespIds.length === 0 && !includeAlunoDirect) {
+      adAlert(
+        'Selecione pelo menos um responsável vinculado na lista ou marque a opção "Disparar também para o acesso direto do aluno".',
+        'Nenhum destinatário marcado'
+      )
       return
     }
 
@@ -2780,7 +2789,17 @@ export default function ADAdminPushTestPage() {
                     ) : null}
                   </b>
                 </div>
-                <div>Alvos Resolvidos: <b style={{ color: 'hsl(var(--text-main))' }}>{lastResult.targetCount ?? 0}</b></div>
+                <div>
+                  Destinatários Alvejados:{' '}
+                  <b style={{ color: 'hsl(var(--text-main))' }}>
+                    {lastResult.targetDetails?.length || lastResult.targetCount || 0}
+                  </b>
+                  {(lastResult.aliasesCount || lastResult.targetUserIds?.length) ? (
+                    <span style={{ fontSize: 10, fontWeight: 500, color: 'hsl(var(--text-muted))', marginLeft: 4 }}>
+                      ({lastResult.aliasesCount || lastResult.targetUserIds?.length} aliases)
+                    </span>
+                  ) : null}
+                </div>
                 <div>Tipo de Evento: <b style={{ color: 'hsl(var(--text-main))' }}>{lastResult.itemId?.split('-')[1] || activeCategory}</b></div>
               </div>
 
@@ -2881,56 +2900,12 @@ export default function ADAdminPushTestPage() {
     </>
   )}
 
-      {/* ── MODAL DE DETALHES DO LOG ── */}
+      {/* ── MODAL DE AUDITORIA COMPLETA DO LOG ── */}
       {viewLogDetail && (
-        <div style={{
-          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: 20
-        }} onClick={() => setViewLogDetail(null)}>
-          <div style={{
-            background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))',
-            borderRadius: 20, padding: 24, maxWidth: 540, width: '100%', maxHeight: '80vh', overflowY: 'auto'
-          }} onClick={e => e.stopPropagation()}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <h3 style={{ fontSize: 16, fontWeight: 800, margin: 0 }}>Detalhes do Disparo #{viewLogDetail.id}</h3>
-              <button onClick={() => setViewLogDetail(null)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'hsl(var(--text-muted))' }}>
-                <X size={18} />
-              </button>
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, fontSize: 13 }}>
-              <div><b>Título:</b> {viewLogDetail.title}</div>
-              <div><b>Mensagem:</b> {viewLogDetail.message}</div>
-              <div><b>Tipo de Notificação:</b> <code>{viewLogDetail.type}</code></div>
-              <div><b>Quem Enviou:</b> {viewLogDetail.sender?.nome || 'Sistema Escolar'} {viewLogDetail.sender?.subtitulo ? `(${viewLogDetail.sender.subtitulo})` : ''}</div>
-              <div><b>Status:</b> <span style={{ fontWeight: 700, color: viewLogDetail.status === 'sent' ? '#10b981' : '#ef4444' }}>{viewLogDetail.status}</span></div>
-              <div><b>Destinatários:</b> {viewLogDetail.target_count || 0} usuário(s)</div>
-              <div><b>URL de Destino:</b> <code>{viewLogDetail.target_url}</code></div>
-              <div><b>Horário:</b> {new Date(viewLogDetail.created_at).toLocaleString('pt-BR')}</div>
-
-              {viewLogDetail.error_message && (
-                <div style={{ padding: 10, borderRadius: 8, background: 'rgba(239, 68, 68, 0.08)', color: '#ef4444' }}>
-                  <b>Erro/Aviso:</b> {viewLogDetail.error_message}
-                </div>
-              )}
-
-              {viewLogDetail.onesignal_response && (
-                <div>
-                  <div style={{ fontWeight: 700, marginBottom: 4 }}>Resposta OneSignal (JSON):</div>
-                  <pre style={{ background: 'hsl(var(--bg-main))', padding: 10, borderRadius: 8, fontSize: 11, overflowX: 'auto' }}>
-                    {(() => {
-                      try {
-                        return JSON.stringify(JSON.parse(viewLogDetail.onesignal_response), null, 2)
-                      } catch {
-                        return viewLogDetail.onesignal_response
-                      }
-                    })()}
-                  </pre>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
+        <PushHistoryDetailModal
+          log={viewLogDetail}
+          onClose={() => setViewLogDetail(null)}
+        />
       )}
 
       {/* ── MODAL DE PAUSA E GESTÃO DE EXCEÇÕES DE ALUNOS ── */}
