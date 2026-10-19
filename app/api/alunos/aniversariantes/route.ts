@@ -1,16 +1,18 @@
 import { NextResponse } from 'next/server'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 import { requireAuth } from '@/lib/server/authGuard'
+import { getCachedTurmasAndGrupos } from '@/lib/server/turmasGruposCache'
 
 export const dynamic = 'force-dynamic'
+
+const anivCache = new Map<string, { data: any, expires: number }>()
+const anivInflight = new Map<string, Promise<any>>()
 
 export async function GET(req: Request) {
   const { errorResponse } = await requireAuth(req)
   if (errorResponse) return errorResponse
 
   try {
-    const supabase = await createProtectedClient()
-    
     const { searchParams } = new URL(req.url)
     const mesQuery = searchParams.get('mes')
     
@@ -22,23 +24,32 @@ export async function GET(req: Request) {
     const currentDay = String(new Date().getDate()).padStart(2, '0')
     const todayStr = `-${String(new Date().getMonth() + 1).padStart(2, '0')}-${currentDay}`
     const monthStr = `-${currentMonth}-`
+    const cacheKey = `${currentMonth}_${todayStr}`
 
-    // Buscamos os campos necessários dos alunos e as turmas em paralelo
-    const [{ data, error }, { data: turmasData }] = await Promise.all([
-      supabase
-        .from('alunos')
-        .select('id, nome, data_nascimento, turma, foto, dados')
-        .ilike('data_nascimento', `%${monthStr}%`)
-        .or('status.neq.inativo,status.is.null'),
-      supabase
-        .from('turmas')
-        .select('id, nome, codigo')
-    ])
-
-    if (error) {
-      console.error('[API alunos/aniversariantes] erro:', error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+    const nowMs = Date.now()
+    const cached = anivCache.get(cacheKey)
+    if (cached && cached.expires > nowMs) {
+      return NextResponse.json(cached.data)
     }
+
+    let promise = anivInflight.get(cacheKey)
+    if (!promise) {
+      promise = (async () => {
+        const supabase = await createProtectedClient()
+
+        // Buscamos os campos necessários dos alunos e as turmas em paralelo (reutilizando cache de turmas)
+        const [{ data, error }, { allTurmas: turmasData }] = await Promise.all([
+          supabase
+            .from('alunos')
+            .select('id, nome, data_nascimento, turma, foto_url, foto, dados')
+            .ilike('data_nascimento', `%${monthStr}%`)
+            .or('status.neq.inativo,status.is.null'),
+          getCachedTurmasAndGrupos()
+        ])
+
+        if (error) {
+          throw new Error(error.message)
+        }
 
     // Mapeamento de id, código e nome para o Nome Oficial da Turma
     const turmasMap = new Map<string, string>()
@@ -123,31 +134,41 @@ export async function GET(req: Request) {
       return ''
     }
 
-    const formatData = (aluno: any) => {
-       const dataNasc = aluno.data_nascimento || ''
-       const turmaNome = resolveTurmaNome(aluno)
-       return {
-         id: aluno.id,
-         nome: aluno.nome,
-         dataNascimento: dataNasc,
-         turma: aluno.turma,
-         turmaNome: turmaNome,
-         foto: aluno.foto,
-         hoje: dataNasc.includes(todayStr)
-       }
+        const formatData = (aluno: any) => {
+          const dataNasc = aluno.data_nascimento || ''
+          const turmaNome = resolveTurmaNome(aluno)
+          return {
+            id: aluno.id,
+            nome: aluno.nome,
+            dataNascimento: dataNasc,
+            turma: aluno.turma,
+            turmaNome: turmaNome,
+            foto: aluno.foto_url || aluno.foto,
+            hoje: dataNasc.includes(todayStr)
+          }
+        }
+
+        const formatados = (data || []).map(formatData).sort((a, b) => {
+          // Ordenar por dia
+          const diaA = a.dataNascimento.split('-')[2] || '00'
+          const diaB = b.dataNascimento.split('-')[2] || '00'
+          return parseInt(diaA) - parseInt(diaB)
+        })
+
+        const payload = {
+          data: formatados,
+          meta: { total: formatados.length }
+        }
+        anivCache.set(cacheKey, { data: payload, expires: Date.now() + 120_000 })
+        return payload
+      })().finally(() => {
+        anivInflight.delete(cacheKey)
+      })
+      anivInflight.set(cacheKey, promise)
     }
 
-    const formatados = (data || []).map(formatData).sort((a, b) => {
-       // Ordenar por dia
-       const diaA = a.dataNascimento.split('-')[2] || '00'
-       const diaB = b.dataNascimento.split('-')[2] || '00'
-       return parseInt(diaA) - parseInt(diaB)
-    })
-
-    return NextResponse.json({
-      data: formatados,
-      meta: { total: formatados.length }
-    })
+    const payload = await promise
+    return NextResponse.json(payload)
   } catch (err: any) {
     console.error('[API alunos/aniversariantes] Error:', err)
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })

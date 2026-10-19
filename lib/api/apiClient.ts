@@ -70,21 +70,75 @@ function isTrustedAppOrigin(input: string | URL | Request): boolean {
   }
 }
 
+let cachedClientSession: { session: any; timestamp: number } | null = null
+let inflightGetSessionPromise: Promise<any | null> | null = null
+let lastAuthRecoveredDispatchAt = 0
+
+async function getActiveClientSessionFast(): Promise<any | null> {
+  const now = Date.now()
+  if (
+    cachedClientSession &&
+    now - cachedClientSession.timestamp < 5_000 &&
+    isValidSessionObject(cachedClientSession.session) &&
+    !isSessionExpiredOrExpiringSoon(cachedClientSession.session, 60)
+  ) {
+    return cachedClientSession.session
+  }
+
+  if (inflightGetSessionPromise) {
+    return inflightGetSessionPromise
+  }
+
+  inflightGetSessionPromise = (async () => {
+    try {
+      let session: any = null
+      try {
+        const { data } = await supabase.auth.getSession()
+        session = data?.session
+      } catch {}
+
+      if (!session) {
+        session = await getSessionFromStorageTiers()
+      }
+
+      if (session && isValidSessionObject(session)) {
+        if (isSessionExpiredOrExpiringSoon(session, 60)) {
+          console.log('[apiFetch] Token expirado ou próximo de vencer. Renovando proativamente...')
+          const { session: refreshedSession } = await refreshSessionCentralized(supabase)
+          if (refreshedSession && isValidSessionObject(refreshedSession)) {
+            session = refreshedSession
+          }
+        }
+        cachedClientSession = { session, timestamp: Date.now() }
+        return session
+      }
+      return null
+    } finally {
+      inflightGetSessionPromise = null
+    }
+  })()
+
+  return inflightGetSessionPromise
+}
+
 async function fetchWithNetworkRetry(
   input: string | URL | Request,
   init: RequestInit,
   canRetryNetwork: boolean
 ): Promise<Response> {
-  const maxAttempts = canRetryNetwork ? 3 : 1
-  const delays = [600, 1500]
+  // Máximo de 2 tentativas (1 original + 1 retry com jitter) para não amplificar sobrecarga 503/504 no servidor
+  const maxAttempts = canRetryNetwork ? 2 : 1
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
       const res = await fetch(input, init)
-      // Se for erro transitório de gateway/timeout (502, 503, 504) em leitura idempotente, tenta novamente
+      // Se for erro transitório de gateway/timeout (502, 503, 504) em leitura idempotente, tenta novamente 1 vez com jitter
       if (canRetryNetwork && attempt < maxAttempts && [502, 503, 504].includes(res.status)) {
+        if (init.signal?.aborted) return res
+        const jitterDelay = 1200 + Math.floor(Math.random() * 1000)
         console.warn(`[apiFetch] Status transitório ${res.status} (tentativa ${attempt}/${maxAttempts}). Retentando...`)
-        await new Promise(r => setTimeout(r, delays[attempt - 1] || 1000))
+        await new Promise(r => setTimeout(r, jitterDelay))
+        if (init.signal?.aborted) return res
         continue
       }
       return res
@@ -94,8 +148,10 @@ async function fetchWithNetworkRetry(
         throw err
       }
       if (canRetryNetwork && attempt < maxAttempts && isNetworkOrTransientError(err)) {
+        const jitterDelay = 1000 + Math.floor(Math.random() * 800)
         console.warn(`[apiFetch] Oscilação de rede detectada (${err?.message || 'network drop'}) — reconectando tentativa ${attempt + 1}/${maxAttempts}...`)
-        await new Promise(r => setTimeout(r, delays[attempt - 1] || 1000))
+        await new Promise(r => setTimeout(r, jitterDelay))
+        if (init.signal?.aborted) throw err
         continue
       }
       throw err
@@ -135,27 +191,8 @@ export async function apiFetch(
 
   if (!skipAuth && isTrusted && typeof window !== 'undefined') {
     try {
-      // 1. Obter sessão atual em memória ou armazenamento persistente
-      let session: any = null
-      try {
-        const { data } = await supabase.auth.getSession()
-        session = data?.session
-      } catch {}
-
-      if (!session) {
-        session = await getSessionFromStorageTiers()
-      }
-
+      const session = await getActiveClientSessionFast()
       if (session && isValidSessionObject(session)) {
-        // 2. Proativo: se o token está expirado ou vence em menos de 60s, renova primeiro
-        if (isSessionExpiredOrExpiringSoon(session, 60)) {
-          console.log('[apiFetch] Token expirado ou próximo de vencer. Renovando proativamente...')
-          const { session: refreshedSession } = await refreshSessionCentralized(supabase)
-          if (refreshedSession && isValidSessionObject(refreshedSession)) {
-            session = refreshedSession
-          }
-        }
-
         accessToken = session.access_token || null
       }
     } catch (authPrepErr) {
@@ -182,8 +219,10 @@ export async function apiFetch(
     if (isIdempotentMethod) {
       console.warn('[apiFetch] Recebido 401 em consulta de leitura. Forçando renovação de sessão no servidor (force=true) e retry...')
       try {
+        cachedClientSession = null
         const { session: newSession, error: refreshErr, isOffline } = await refreshSessionCentralized(supabase, true)
         if (!refreshErr && newSession?.access_token) {
+          cachedClientSession = { session: newSession, timestamp: Date.now() }
           const retryHeaders = new Headers(fetchOptions.headers)
           retryHeaders.set('Authorization', `Bearer ${newSession.access_token}`)
 
@@ -197,9 +236,13 @@ export async function apiFetch(
           )
           console.log('[apiFetch] Retry após refresh forçado concluído com status:', response.status)
           if (response.ok) {
-            try {
-              window.dispatchEvent(new CustomEvent('edu:auth-recovered'))
-            } catch {}
+            const now = Date.now()
+            if (now - lastAuthRecoveredDispatchAt > 5_000) {
+              lastAuthRecoveredDispatchAt = now
+              try {
+                window.dispatchEvent(new CustomEvent('edu:auth-recovered'))
+              } catch {}
+            }
           }
         } else if (!isOffline && (isPermanentTokenRevocation(refreshErr) || (!newSession && refreshErr?.message?.includes('No valid session stored')))) {
           // Sessão zumbi confirmada: o usuário parecia logado localmente (localStorage), mas a sessão não existe mais no servidor

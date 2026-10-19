@@ -1,8 +1,12 @@
 import { NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/server/authGuard'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
+import { getCachedActiveAlunos, getCachedTurmasAndGrupos } from '@/lib/server/turmasGruposCache'
 
 export const dynamic = 'force-dynamic'
+
+let pedidosSummaryCache: { data: any, expires: number } | null = null
+let inflightPedidosSummary: Promise<any> | null = null
 
 const EVENTOS_LIVROS = ['livros', 'apostilas em', 'apostilas fund2', 'apostila em', 'apostila fund2', 'apostilas ens. médio', 'liv', 'itinerário', 'itinerario', 'arte', 'inglês', 'ingles']
 
@@ -27,27 +31,31 @@ export async function GET(request: Request) {
   if (errorResponse) return errorResponse
 
   try {
-    const supabase = await createProtectedClient()
+    const nowMs = Date.now()
+    if (pedidosSummaryCache && pedidosSummaryCache.expires > nowMs) {
+      return NextResponse.json(pedidosSummaryCache.data, {
+        headers: { 'Cache-Control': 'public, s-maxage=30, stale-while-revalidate=120' }
+      })
+    }
 
-    // Buscamos em paralelo os dados estritamente necessários
-    const [resTitulos, resPedidos, resManuais, resAlunos, resTurmas] = await Promise.all([
-      supabase.from('titulos').select('id, aluno, evento_descricao, descricao, valor, created_at, vencimento, dados'),
-      supabase.from('adm_pedidos_livros').select('id, dados'),
-      supabase.from('adm_pedidos_livros_manuais').select('id, dados'),
-      supabase.from('alunos').select('id, nome, turma'),
-      supabase.from('turmas').select('id, codigo, nome')
-    ])
+    if (!inflightPedidosSummary) {
+      inflightPedidosSummary = (async () => {
+        const supabase = await createProtectedClient()
 
-    const titulos = resTitulos.data || []
-    
-    // Mapeia os pedidos da tabela de meta-dados
-    const pedidosMeta = (resPedidos.data || []).map(row => ({ id: row.id, ...(row.dados || {}) }))
-    
-    // Mapeia os pedidos manuais
-    const pedidosManuais = (resManuais.data || []).map(row => ({ id: row.id, ...(row.dados || {}) }))
-    
-    const alunos = resAlunos.data || []
-    const turmas = resTurmas.data || []
+        // Buscamos em paralelo os dados estritamente necessários, reutilizando o cache de alunos e turmas
+        const [resTitulos, resPedidos, resManuais, activeAlunos, { allTurmas }] = await Promise.all([
+          supabase.from('titulos').select('id, aluno, evento_descricao, descricao, valor, created_at, vencimento, dados'),
+          supabase.from('adm_pedidos_livros').select('id, dados'),
+          supabase.from('adm_pedidos_livros_manuais').select('id, dados'),
+          getCachedActiveAlunos(),
+          getCachedTurmasAndGrupos()
+        ])
+
+        const titulos = resTitulos.data || []
+        const pedidosMeta = (resPedidos.data || []).map(row => ({ id: row.id, ...(row.dados || {}) }))
+        const pedidosManuais = (resManuais.data || []).map(row => ({ id: row.id, ...(row.dados || {}) }))
+        const alunos = activeAlunos || []
+        const turmas = allTurmas || []
 
     // HashMaps para O(1) Lookups
     const turmasMap = new Map()
@@ -150,17 +158,26 @@ export async function GET(request: Request) {
       else pendenteCount++
     }
 
-    const sortedOrders = uniqueOrders.sort((a, b) => b.timestamp - a.timestamp)
-    const recentOrders = sortedOrders.slice(0, 4)
+        const sortedOrders = uniqueOrders.sort((a, b) => b.timestamp - a.timestamp)
+        const recentOrders = sortedOrders.slice(0, 4)
 
-    return NextResponse.json({
-      totalOrders: uniqueOrders.length,
-      totalValue,
-      entregueCount,
-      preparadoCount,
-      pendenteCount,
-      recentOrders
-    }, {
+        const payload = {
+          totalOrders: uniqueOrders.length,
+          totalValue,
+          entregueCount,
+          preparadoCount,
+          pendenteCount,
+          recentOrders
+        }
+        pedidosSummaryCache = { data: payload, expires: Date.now() + 60_000 }
+        return payload
+      })().finally(() => {
+        inflightPedidosSummary = null
+      })
+    }
+
+    const payload = await inflightPedidosSummary
+    return NextResponse.json(payload, {
       headers: { 'Cache-Control': 'public, s-maxage=30, stale-while-revalidate=120' }
     })
   } catch (err: any) {

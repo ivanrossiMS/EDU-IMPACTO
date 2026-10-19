@@ -1,4 +1,4 @@
-import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
+import { requireAuth } from '@/lib/server/authGuard'
 import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 
 /**
@@ -16,10 +16,13 @@ export function invalidateAccessStartDateCache() {
   accessStartDateCache.clear()
 }
 
-export async function getLoggedUserAccessStartDate(strictMomentos = false): Promise<Date | null> {
+export async function getLoggedUserAccessStartDate(strictMomentos = false, existingUser?: any): Promise<Date | null> {
   try {
-    const authClient = await createProtectedClient()
-    const { data: { user } } = await authClient.auth.getUser()
+    let user = existingUser
+    if (!user) {
+      const authRes = await requireAuth()
+      user = authRes.user
+    }
     if (!user) return null
 
     const cacheKey = `${user.id}_${strictMomentos}`

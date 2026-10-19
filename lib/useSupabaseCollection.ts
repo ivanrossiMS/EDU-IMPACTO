@@ -60,14 +60,23 @@ export function hasDataChanged(prev: any, next: any): boolean {
   return JSON.stringify(prev) !== JSON.stringify(next)
 }
 
+const lastAttemptMap = new Map<string, number>()
+
 /** Manually invalidate a cache entry (call after write operations) */
-export function invalidateCache(endpoint: string): void {
+export function invalidateCache(endpoint: string, clearInflight = false): void {
+  const existing = memCache.get(endpoint)
+  if (!clearInflight && existing?.inflightPromise) {
+    // Mantém a inflightPromise ativa para não quebrar a deduplicação entre múltiplos hooks/eventos
+    existing.timestamp = 0
+    return
+  }
   memCache.delete(endpoint)
 }
 
 /** Invalidate all entries (call on wipeAll / logout) */
 export function invalidateAllCache(): void {
   memCache.clear()
+  lastAttemptMap.clear()
 }
 
 // ─── Fetch with in-flight deduplication ──────────────────────────────────────
@@ -81,6 +90,8 @@ async function fetchWithDedup<T>(
   if (existing?.inflightPromise) {
     return existing.inflightPromise as Promise<T>
   }
+
+  lastAttemptMap.set(endpoint, Date.now())
 
   const promise = fetcher().then(data => {
     // Do NOT call setCacheEntry here — the hook caller decides if it should update
@@ -256,13 +267,16 @@ export function useSupabaseCollection<T>(
     })
   }, [endpoint, options?.fetcher])
 
+  const autoHealAttemptsRef = useRef(0)
+
   const refresh = useCallback(() => {
     if (options?.enabled === false) return
-    invalidateCache(endpoint)
+    invalidateCache(endpoint, false)
     fetchWithDedup<T>(endpoint, buildDefaultFetcher)
       .then(data => {
         if (!isMounted.current) return
         hadErrorRef.current = false
+        autoHealAttemptsRef.current = 0
         const normalized = normalizeData(data)
         if (hasDataChanged(latestState.current, normalized)) {
           setState(normalized)
@@ -311,6 +325,7 @@ export function useSupabaseCollection<T>(
         .then(data => {
           if (cancelled || !isMounted.current) return
           hadErrorRef.current = false
+          autoHealAttemptsRef.current = 0
           if (autoHealTimerRef.current) {
             clearTimeout(autoHealTimerRef.current)
             autoHealTimerRef.current = null
@@ -322,21 +337,30 @@ export function useSupabaseCollection<T>(
         })
         .catch((err) => {
           if (cancelled || !isMounted.current) return
+          const errMsg = String(err?.message || '')
+          if (errMsg.includes('HTTP 403') || errMsg.includes('HTTP 401')) {
+            hadErrorRef.current = false
+            setLoading(false)
+            return
+          }
           hadErrorRef.current = true
           // NUNCA salva [] no cache quando ocorre erro!
           setError(`Falha ao carregar dados: ${err?.message || 'erro de rede'}`)
           setLoading(false)
 
-          // Auto-healing em segundo plano: se o dispositivo está online e houve falha transitória (ex: timeout 57014 ou queda rápida),
-          // agenda uma reconexão silenciosa em 3.5s
-          if (typeof navigator === 'undefined' || navigator.onLine) {
+          // Auto-healing em segundo plano com backoff exponencial + jitter (máximo 2 tentativas)
+          if ((typeof navigator === 'undefined' || navigator.onLine) && autoHealAttemptsRef.current < 2) {
+            autoHealAttemptsRef.current += 1
+            const attemptNum = autoHealAttemptsRef.current
+            const baseDelay = attemptNum === 1 ? 5000 : 15000
+            const jitter = Math.floor(Math.random() * 2500)
             if (autoHealTimerRef.current) clearTimeout(autoHealTimerRef.current)
             autoHealTimerRef.current = setTimeout(() => {
               if (!cancelled && isMounted.current && hadErrorRef.current) {
-                console.log(`[useSupabaseCollection] Auto-healing após falha transitória em /${endpoint}...`)
+                console.log(`[useSupabaseCollection] Auto-healing (tentativa ${attemptNum}/2) após falha transitória em /${endpoint}...`)
                 refresh()
               }
-            }, 3500)
+            }, baseDelay + jitter)
           }
         })
     }
@@ -345,6 +369,10 @@ export function useSupabaseCollection<T>(
     const handleReconnectionOrRecovery = () => {
       if (cancelled || !isMounted.current) return
       const currentEntry = getCacheEntry<T>(endpoint)
+      if (currentEntry?.inflightPromise) return
+      const lastAttempt = lastAttemptMap.get(endpoint) || 0
+      if (Date.now() - lastAttempt < 5_000) return
+
       const isCurrentEmpty = Array.isArray(latestState.current)
         ? latestState.current.length === 0
         : !latestState.current
@@ -532,8 +560,10 @@ export function useSupabaseArray<T>(
               throw new Error(`Auth Redirect`)
             }
             if (!r.ok) {
-              if (r.status === 404) {
-                console.warn(`[useSupabaseArray] Endpoint /${endpoint} is not implemented yet or table is missing (HTTP ${r.status}). Returning [].`);
+              if (r.status === 404 || r.status === 403) {
+                if (r.status === 404) {
+                  console.warn(`[useSupabaseArray] Endpoint /${endpoint} is not implemented yet or table is missing (HTTP ${r.status}). Returning [].`);
+                }
                 return [];
               }
               let errText = '';

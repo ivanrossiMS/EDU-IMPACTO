@@ -19,9 +19,27 @@ import { useApp } from '@/lib/context'
 import { useSupabaseArray } from '@/lib/useSupabaseCollection'
 import { useBroadcastRealtime } from '@/lib/hooks/useBroadcastRealtime'
 import { supabase } from '@/lib/supabase'
+import { apiFetch } from '@/lib/api/apiClient'
 import { checkIsCollaboratorOrTeacher, checkIsAdmin, checkIsStaffManagement } from '@/lib/chatPermissions'
 import { format, isAfter, subDays, isSameDay } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
+
+// ── Estado e conexões compartilhadas entre múltiplas instâncias montadas (DesktopTopNav + Sidebar) ──
+let sharedSaidaCallsState: any[] = []
+const saidaCallsListeners = new Set<(calls: any[]) => void>()
+let inflightSpecialAuthFetch: Promise<any[]> | null = null
+let lastSpecialAuthFetchAt = 0
+
+function updateSharedSaidaCalls(updater: any[] | ((prev: any[]) => any[])) {
+  sharedSaidaCallsState = typeof updater === 'function' ? updater(sharedSaidaCallsState) : updater
+  saidaCallsListeners.forEach(listener => listener(sharedSaidaCallsState))
+}
+
+let sharedRealtimeChannel: any = null
+let sharedRealtimeSubscribers = 0
+
+const sharedReadsInflight = new Map<string, Promise<string[]>>()
+const sharedReadsCache = new Map<string, { reads: string[], timestamp: number }>()
 
 export function NotificationPopover({
   side = 'top',
@@ -46,56 +64,102 @@ export function NotificationPopover({
   const pathname = usePathname()
   const { on: onRealtime } = useBroadcastRealtime()
 
+  // ── Identificação e Permissões do Colaborador Individual ───────────────────
+  const isColab = useMemo(() => {
+    return checkIsCollaboratorOrTeacher(currentUser?.cargo, currentUser?.perfil, currentUser)
+  }, [currentUser])
+
+  const isAdmin = useMemo(() => {
+    return checkIsAdmin(currentUser?.cargo, currentUser?.perfil)
+  }, [currentUser])
+
+  const isManagement = useMemo(() => {
+    return isAdmin || checkIsStaffManagement(currentUser?.cargo, currentUser?.perfil)
+  }, [currentUser, isAdmin])
+
   // Comunicados recentes
   const [comunicados] = useSupabaseArray<any>('comunicados?order=created_at.desc&limit=15')
 
   // ── Sincronização em tempo real das Autorizações Especiais do Dia ────────────
-  const [saidaCalls, setSaidaCalls] = useState<any[]>([])
+  const [saidaCalls, setSaidaCalls] = useState<any[]>(() => sharedSaidaCallsState)
 
-  const fetchSpecialAuths = useCallback(async () => {
-    try {
-      const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Campo_Grande' }).format(new Date())
-      const res = await fetch(`/api/saida/calls?date=${todayStr}&_t=${Date.now()}`, {
-        headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' },
-        cache: 'no-store'
-      })
-      if (!res.ok) return
-      const data = await res.json()
-      const arr: any[] = Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : []
-      setSaidaCalls(arr)
-    } catch (err) {
-      console.warn('[NotificationPopover] Falha ao sincronizar autorizações da portaria:', err)
+  useEffect(() => {
+    saidaCallsListeners.add(setSaidaCalls)
+    if (sharedSaidaCallsState.length > 0) {
+      setSaidaCalls(sharedSaidaCallsState)
+    }
+    return () => {
+      saidaCallsListeners.delete(setSaidaCalls)
     }
   }, [])
 
-  // 1. Carga inicial e a cada mudança de rota
+  const fetchSpecialAuths = useCallback(async (force = false) => {
+    if (!hydrated || !currentUser || !isColab) return
+    if (typeof document !== 'undefined' && document.visibilityState === 'hidden' && !force) return
+
+    const now = Date.now()
+    if (!force && now - lastSpecialAuthFetchAt < 15000) {
+      return
+    }
+    if (inflightSpecialAuthFetch) {
+      await inflightSpecialAuthFetch
+      return
+    }
+
+    lastSpecialAuthFetchAt = now
+    inflightSpecialAuthFetch = (async () => {
+      try {
+        const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Campo_Grande' }).format(new Date())
+        const res = await apiFetch(`/api/saida/calls?date=${todayStr}&onlySpecialAuth=true`, {
+          headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' },
+          cache: 'no-store'
+        })
+        if (!res.ok) return sharedSaidaCallsState
+        const data = await res.json()
+        const arr: any[] = Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : []
+        updateSharedSaidaCalls(arr)
+        return arr
+      } catch (err) {
+        console.warn('[NotificationPopover] Falha ao sincronizar autorizações da portaria:', err)
+        return sharedSaidaCallsState
+      } finally {
+        inflightSpecialAuthFetch = null
+      }
+    })()
+
+    await inflightSpecialAuthFetch
+  }, [hydrated, currentUser, isColab])
+
+  // 1. Carga inicial e a cada mudança de rota (respeitando cooldown de 15s entre instâncias)
   useEffect(() => {
-    fetchSpecialAuths()
+    fetchSpecialAuths(false)
   }, [fetchSpecialAuths, pathname])
 
   // 2. Revalidação imediata sempre que o usuário abre o popover
   useEffect(() => {
     if (open) {
-      fetchSpecialAuths()
+      fetchSpecialAuths(true)
     }
   }, [open, fetchSpecialAuths])
 
-  // 3. Polling em segundo plano a cada 30 segundos
+  // 3. Polling em segundo plano a cada 60 segundos (compartilhado entre instâncias)
   useEffect(() => {
+    if (!hydrated || !currentUser || !isColab) return
     const timer = setInterval(() => {
-      fetchSpecialAuths()
-    }, 30000)
+      fetchSpecialAuths(false)
+    }, 60000)
     return () => clearInterval(timer)
-  }, [fetchSpecialAuths])
+  }, [fetchSpecialAuths, hydrated, currentUser, isColab])
 
   // 4. Escuta de eventos em tempo real locais/BroadcastChannel (chamadas e autorizações instantâneas)
   useEffect(() => {
+    if (!hydrated || !currentUser || !isColab) return
     const unsub = onRealtime('*', payload => {
       const d = payload.data as any
       if ((payload.event === 'CALL_STUDENT' && d?.status === 'special_auth') || payload.event === 'SPECIAL_AUTH_NOTIFY') {
         const incomingId = d?.id || d?.callId
         if (incomingId) {
-          setSaidaCalls(prev => {
+          updateSharedSaidaCalls(prev => {
             const idx = prev.findIndex(c => c.id === incomingId)
             const targetTime = d.targetTime || d.target_time || d.dados?.targetTime || d.horarioPrevisto || undefined
             const newEntry = {
@@ -115,7 +179,7 @@ export function NotificationPopover({
       } else if (payload.event === 'CONFIRM_PICKUP') {
         const targetId = d?.callId
         const sId = d?.studentId ? String(d.studentId).trim() : ''
-        setSaidaCalls(prev => {
+        updateSharedSaidaCalls(prev => {
           return prev.map(c => {
             const matchId = targetId && c.id === targetId
             const matchStudent = sId && c.studentId && String(c.studentId).trim() === sId
@@ -127,102 +191,93 @@ export function NotificationPopover({
         })
       } else if (payload.event === 'DELETE_CALL' || payload.event === 'CANCEL_CALL') {
         if (d?.callId) {
-          setSaidaCalls(prev => prev.filter(c => c.id !== d.callId))
+          updateSharedSaidaCalls(prev => prev.filter(c => c.id !== d.callId))
         }
       }
     })
     return () => { unsub() }
-  }, [onRealtime])
+  }, [onRealtime, hydrated, currentUser, isColab])
 
-  // 5. Escuta de eventos Realtime via Supabase (entre dispositivos diferentes conectados)
+  // 5. Escuta de eventos Realtime via Supabase (canal único compartilhado entre instâncias)
   useEffect(() => {
-    let channel: any = null
-    try {
-      const channelName = `saida_popover_${Math.random().toString(36).substring(2, 8)}`
-      channel = supabase.channel(channelName)
+    if (!hydrated || !currentUser || !isColab) return
 
-      channel
-        .on(
-          'postgres_changes',
-          { event: '*', schema: 'public', table: 'saida_calls' },
-          (payload: any) => {
-            const { eventType, new: newRow, old: oldRow } = payload
-            if (eventType === 'INSERT' || eventType === 'UPDATE') {
-              let rawDados = newRow?.dados || {}
-              if (typeof rawDados === 'string') {
-                try { rawDados = JSON.parse(rawDados) } catch (e) {}
+    sharedRealtimeSubscribers += 1
+    if (!sharedRealtimeChannel) {
+      try {
+        sharedRealtimeChannel = supabase.channel('saida_calls_shared_room')
+        sharedRealtimeChannel
+          .on(
+            'postgres_changes',
+            { event: '*', schema: 'public', table: 'saida_calls' },
+            (payload: any) => {
+              const { eventType, new: newRow, old: oldRow } = payload
+              if (eventType === 'INSERT' || eventType === 'UPDATE') {
+                let rawDados = newRow?.dados || {}
+                if (typeof rawDados === 'string') {
+                  try { rawDados = JSON.parse(rawDados) } catch (e) {}
+                }
+                if (rawDados.status === 'special_auth') {
+                  const call = { id: newRow.id, ...rawDados }
+                  updateSharedSaidaCalls(prev => {
+                    const idx = prev.findIndex(c => c.id === call.id)
+                    if (idx >= 0) {
+                      const next = [...prev]
+                      next[idx] = { ...next[idx], ...call }
+                      return next
+                    }
+                    return [call, ...prev]
+                  })
+                } else if (rawDados.status === 'confirmed') {
+                  const sId = rawDados.studentId ? String(rawDados.studentId).trim() : ''
+                  if (sId) {
+                    updateSharedSaidaCalls(prev => prev.map(c => {
+                      if (c.studentId && String(c.studentId).trim() === sId) {
+                        return { ...c, confirmedOut: true, confirmedAt: rawDados.confirmedAt || rawDados.calledAt || new Date().toISOString() }
+                      }
+                      return c
+                    }))
+                  }
+                }
+              } else if (eventType === 'DELETE' && oldRow?.id) {
+                updateSharedSaidaCalls(prev => prev.filter(c => c.id !== oldRow.id))
               }
-              if (rawDados.status === 'special_auth') {
-                const call = { id: newRow.id, ...rawDados }
-                setSaidaCalls(prev => {
-                  const idx = prev.findIndex(c => c.id === call.id)
+            }
+          )
+          .on(
+            'broadcast',
+            { event: 'SPECIAL_AUTH_NOTIFY' },
+            (payload: any) => {
+              const d = payload?.payload?.data || payload?.data
+              const incomingId = d?.id || d?.callId
+              if (incomingId) {
+                updateSharedSaidaCalls(prev => {
+                  const idx = prev.findIndex(c => c.id === incomingId)
+                  const newEntry = { ...d, id: incomingId, status: 'special_auth' }
                   if (idx >= 0) {
                     const next = [...prev]
-                    next[idx] = { ...next[idx], ...call }
+                    next[idx] = { ...next[idx], ...newEntry }
                     return next
                   }
-                  return [call, ...prev]
+                  return [newEntry, ...prev]
                 })
-              } else if (rawDados.status === 'confirmed') {
-                const sId = rawDados.studentId ? String(rawDados.studentId).trim() : ''
-                if (sId) {
-                  setSaidaCalls(prev => prev.map(c => {
-                    if (c.studentId && String(c.studentId).trim() === sId) {
-                      return { ...c, confirmedOut: true, confirmedAt: rawDados.confirmedAt || rawDados.calledAt || new Date().toISOString() }
-                    }
-                    return c
-                  }))
-                }
               }
-            } else if (eventType === 'DELETE' && oldRow?.id) {
-              setSaidaCalls(prev => prev.filter(c => c.id !== oldRow.id))
             }
-          }
-        )
-        .on(
-          'broadcast',
-          { event: 'SPECIAL_AUTH_NOTIFY' },
-          (payload: any) => {
-            const d = payload?.payload?.data || payload?.data
-            const incomingId = d?.id || d?.callId
-            if (incomingId) {
-              setSaidaCalls(prev => {
-                const idx = prev.findIndex(c => c.id === incomingId)
-                const newEntry = { ...d, id: incomingId, status: 'special_auth' }
-                if (idx >= 0) {
-                  const next = [...prev]
-                  next[idx] = { ...next[idx], ...newEntry }
-                  return next
-                }
-                return [newEntry, ...prev]
-              })
-            }
-          }
-        )
-        .subscribe()
-    } catch (err) {
-      console.warn('[NotificationPopover] Erro ao subscrever canal Realtime:', err)
+          )
+          .subscribe()
+      } catch (err) {
+        console.warn('[NotificationPopover] Erro ao subscrever canal Realtime:', err)
+      }
     }
 
     return () => {
-      if (channel) {
-        supabase.removeChannel(channel)
+      sharedRealtimeSubscribers = Math.max(0, sharedRealtimeSubscribers - 1)
+      if (sharedRealtimeSubscribers === 0 && sharedRealtimeChannel) {
+        supabase.removeChannel(sharedRealtimeChannel)
+        sharedRealtimeChannel = null
       }
     }
-  }, [])
-
-  // ── Identificação e Permissões do Colaborador Individual ───────────────────
-  const isColab = useMemo(() => {
-    return checkIsCollaboratorOrTeacher(currentUser?.cargo, currentUser?.perfil, currentUser)
-  }, [currentUser])
-
-  const isAdmin = useMemo(() => {
-    return checkIsAdmin(currentUser?.cargo, currentUser?.perfil)
-  }, [currentUser])
-
-  const isManagement = useMemo(() => {
-    return isAdmin || checkIsStaffManagement(currentUser?.cargo, currentUser?.perfil)
-  }, [currentUser, isAdmin])
+  }, [hydrated, currentUser, isColab])
 
   const myName = (currentUser?.nome || '').trim().toLowerCase()
   const myId = String(currentUser?.id || '').trim()
@@ -283,7 +338,7 @@ export function NotificationPopover({
   }, [markedRead])
 
   useEffect(() => {
-    if (!currentUser?.id) {
+    if (!currentUser?.id || !isColab) {
       setMarkedRead([])
       return
     }
@@ -300,35 +355,56 @@ export function NotificationPopover({
       }
     } catch {}
 
-    // 2. Sincronização resiliente com o banco de dados Supabase
+    // 2. Sincronização resiliente com o banco de dados Supabase (deduplicada entre instâncias)
     let isMounted = true
     const sysId = currentUser.system_user_id || ''
     const colabId = currentUser.colaborador_id || ''
-    const params = new URLSearchParams({
-      userId,
-      systemUserId: sysId,
-      colaboradorId: colabId,
-      _t: String(Date.now())
-    })
+    const cacheKey = `${userId}_${sysId}_${colabId}`
+    const now = Date.now()
+    const cachedReads = sharedReadsCache.get(cacheKey)
 
-    fetch(`/api/agenda/notificacoes/reads?${params.toString()}`, {
-      headers: { 'Cache-Control': 'no-cache' },
-      cache: 'no-store'
-    })
-      .then(res => res.json())
-      .then(data => {
-        if (!isMounted || !data?.reads || !Array.isArray(data.reads)) return
-        setMarkedRead(prev => {
-          const merged = Array.from(new Set([...prev, ...data.reads]))
-          try {
-            localStorage.setItem(`edu_notif_read_${userId}`, JSON.stringify(merged))
-          } catch {}
-          return merged
+    let readsPromise: Promise<string[]>
+    if (cachedReads && now - cachedReads.timestamp < 30000) {
+      readsPromise = Promise.resolve(cachedReads.reads)
+    } else if (sharedReadsInflight.has(cacheKey)) {
+      readsPromise = sharedReadsInflight.get(cacheKey)!
+    } else {
+      const params = new URLSearchParams({
+        userId,
+        systemUserId: sysId,
+        colaboradorId: colabId,
+      })
+      const p = apiFetch(`/api/agenda/notificacoes/reads?${params.toString()}`, {
+        headers: { 'Cache-Control': 'no-cache' },
+        cache: 'no-store'
+      })
+        .then(res => res.json())
+        .then(data => {
+          const arr = Array.isArray(data?.reads) ? data.reads : []
+          sharedReadsCache.set(cacheKey, { reads: arr, timestamp: Date.now() })
+          return arr
         })
+        .catch(err => {
+          console.warn('[NotificationPopover] Erro ao sincronizar leituras com servidor:', err)
+          return [] as string[]
+        })
+        .finally(() => {
+          sharedReadsInflight.delete(cacheKey)
+        })
+      sharedReadsInflight.set(cacheKey, p)
+      readsPromise = p
+    }
+
+    readsPromise.then(serverReads => {
+      if (!isMounted || !Array.isArray(serverReads) || serverReads.length === 0) return
+      setMarkedRead(prev => {
+        const merged = Array.from(new Set([...prev, ...serverReads]))
+        try {
+          localStorage.setItem(`edu_notif_read_${userId}`, JSON.stringify(merged))
+        } catch {}
+        return merged
       })
-      .catch(err => {
-        console.warn('[NotificationPopover] Erro ao sincronizar leituras com servidor:', err)
-      })
+    })
 
     // 3. Listener para sincronização instantânea entre abas e componentes da interface
     const handleSync = (e: any) => {
@@ -342,7 +418,7 @@ export function NotificationPopover({
       isMounted = false
       window.removeEventListener('edu:notif-read-sync', handleSync)
     }
-  }, [currentUser?.id, currentUser?.system_user_id, currentUser?.colaborador_id])
+  }, [currentUser?.id, currentUser?.system_user_id, currentUser?.colaborador_id, isColab])
 
   // ── Derive notifications filtradas estritamente para o Colaborador Individual ─
   const notifications = useMemo(() => {

@@ -8,6 +8,8 @@ import { getCachedColaboradores, setCachedColaboradores, invalidateColaboradores
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30
 
+let fullUsersReportCache: { data: any[], stats: any, expires: number } | null = null
+let inflightFullUsersReport: Promise<{ data: any[], stats: any, expires: number }> | null = null
 
 export async function GET(req: Request) {
   try {
@@ -158,130 +160,181 @@ export async function GET(req: Request) {
       return NextResponse.json({ data: mappedSys, total: count || 0, page, limit })
     }
 
-
-
-    // Fallback logic for general users fetch (legacy support)
-    async function fetchAll(table: string, cols: string) {
-      let all: any[] = []
-      let fromLoop = 0
-      let toLoop = 999
-      let hasMore = true
-      while(hasMore) {
-        const { data } = await supabase.from(table).select(cols).range(fromLoop, toLoop)
-        if (!data || data.length === 0) {
-          hasMore = false
-        } else {
-          all = [...all, ...data]
-          if (data.length < 1000) hasMore = false
-          else {
-            fromLoop += 1000
-            toLoop += 1000
-          }
-        }
-      }
-      return all
-    }
-
-    const sysUsers = await fetchAll('system_users', '*')
-
-    // Para o relatório completo (fallback geral), ainda precisamos do mapa de Auth.
-    // Carregamos em paralelo com os dados de alunos para minimizar o tempo total.
-    const allAuthUsers = await getAllAuthUsersCached()
-    const authMap = new Map<string, any>()
-    for (const au of allAuthUsers) {
-      if (au.email) authMap.set(au.email.toLowerCase(), au)
-    }
-    
-    const mappedSys = sysUsers.map((u: any) => {
-      const email = (u.email || '').trim().toLowerCase()
-      const authUser = authMap.get(email)
-
-
-      const sysProfile = authUser?.user_metadata?.profile_code
-      let perfilStr = 'Colaborador'
-      if (sysProfile === 'DIRECAO') perfilStr = 'Direção'
-      else if (sysProfile === 'SECRETARIA') perfilStr = 'Secretaria'
-      else if (sysProfile === 'FINANCEIRO') perfilStr = 'Financeiro'
-      else if (sysProfile === 'COORDENACAO') perfilStr = 'Coordenação'
-      else if (sysProfile === 'PROFESSOR') perfilStr = 'Professor'
-      else if (sysProfile === 'PORTARIA') perfilStr = 'Portaria'
-
-      if (u.perfil && typeof u.perfil === 'string') {
-        perfilStr = u.perfil
-      }
-
-      return {
-        id: u.id,
-        nome: u.nome,
-        email: email,
-        cargo: u.cargo || 'Não definido',
-        perfil: perfilStr,
-        status: authUser ? 'ativo' : 'inativo',
-        foto: authUser?.user_metadata?.foto || u.dados?.foto || u.foto || null,
-        dados: u.dados || {},
-        telefone: u.dados?.telefone || u.telefone || '',
-        unidade: u.dados?.unidade || u.unidade || '',
-        ultimoAcesso: authUser?.last_sign_in_at 
-          ? new Date(authUser.last_sign_in_at).toLocaleDateString('pt-BR') 
-          : 'Nunca acessou'
-      }
-    })
-
-    const alunosData = await fetchAll('alunos', 'id, nome, email, matricula')
-
-    const mappedAlunos = (alunosData || []).reduce((acc: any[], aluno: any) => {
-       const alunoEmail = (aluno.email || '').trim().toLowerCase()
-       const virtualEmail = `aluno.${aluno.matricula || aluno.id}@impactoedu.local`.toLowerCase()
-       
-       const authUser = authMap.get(alunoEmail) || authMap.get(virtualEmail)
-       
-       acc.push({
-          id: `virtual-${aluno.id}`,
-          nome: aluno.nome,
-          email: alunoEmail || '',
-          cargo: 'Alunos',
-          perfil: 'Família',
-          status: authUser ? 'ativo' : 'inativo',
-          ultimoAcesso: authUser?.last_sign_in_at 
-            ? new Date(authUser.last_sign_in_at).toLocaleDateString('pt-BR') 
-            : 'Nunca acessou'
-       })
-       return acc
-    }, [])
-
-    const respData = await fetchAll('responsaveis', 'id, nome, email')
-    const linksData = await fetchAll('aluno_responsavel', 'responsavel_id, resp_financeiro, resp_pedagogico')
-
-    const activeRespIds = new Set(
-      (linksData || [])
-        .filter((l: any) => l.resp_financeiro === true || l.resp_pedagogico === true)
-        .map((l: any) => String(l.responsavel_id))
-    )
-
-    const mappedResps: any[] = []
-
-    if (respData && Array.isArray(respData)) {
-      respData.forEach((resp: any) => {
-        if (!activeRespIds.has(String(resp.id))) return
-
-        const email = (resp.email || '').trim().toLowerCase()
-        const authUser = email ? authMap.get(email) : undefined
-
-        mappedResps.push({
-          id: `resp-${resp.id}`,
-          nome: resp.nome,
-          email: email || '',
-          cargo: 'Responsáveis',
-          perfil: 'Família',
-          status: authUser ? 'ativo' : 'inativo',
-          ultimoAcesso: authUser?.last_sign_in_at 
-            ? new Date(authUser.last_sign_in_at).toLocaleDateString('pt-BR') 
-            : 'Nunca acessou'
-        })
+    const isSummaryOnly = url.searchParams.get('summary') === 'true'
+    const nowMs = Date.now()
+    if (fullUsersReportCache && fullUsersReportCache.expires > nowMs) {
+      const payload = isSummaryOnly ? { stats: fullUsersReportCache.stats, data: [] } : fullUsersReportCache.data
+      return NextResponse.json(payload, {
+        headers: {
+          'Cache-Control': 'private, max-age=30, stale-while-revalidate=60',
+        },
       })
     }
 
-    return NextResponse.json([...mappedSys, ...mappedAlunos, ...mappedResps], {
+    if (!inflightFullUsersReport) {
+      inflightFullUsersReport = (async () => {
+        // Fallback logic for general users fetch (legacy support)
+        async function fetchAll(table: string, cols: string) {
+          let all: any[] = []
+          let fromLoop = 0
+          let toLoop = 999
+          let hasMore = true
+          while (hasMore) {
+            const { data } = await supabase.from(table).select(cols).range(fromLoop, toLoop)
+            if (!data || data.length === 0) {
+              hasMore = false
+            } else {
+              all = [...all, ...data]
+              if (data.length < 1000) hasMore = false
+              else {
+                fromLoop += 1000
+                toLoop += 1000
+              }
+            }
+          }
+          return all
+        }
+
+        const [sysUsers, allAuthUsers, alunosData, respData, linksData] = await Promise.all([
+          fetchAll('system_users', 'id, nome, email, cargo, perfil, status, foto, telefone, unidade, dados'),
+          getAllAuthUsersCached(),
+          fetchAll('alunos', 'id, nome, email, matricula'),
+          fetchAll('responsaveis', 'id, nome, email'),
+          fetchAll('aluno_responsavel', 'responsavel_id, resp_financeiro, resp_pedagogico')
+        ])
+
+        const authMap = new Map<string, any>()
+        for (const au of allAuthUsers) {
+          if (au.email) authMap.set(au.email.toLowerCase(), au)
+        }
+        
+        const mappedSys = sysUsers.map((u: any) => {
+          const email = (u.email || '').trim().toLowerCase()
+          const authUser = authMap.get(email)
+
+          const sysProfile = authUser?.user_metadata?.profile_code
+          let perfilStr = 'Colaborador'
+          if (sysProfile === 'DIRECAO') perfilStr = 'Direção'
+          else if (sysProfile === 'SECRETARIA') perfilStr = 'Secretaria'
+          else if (sysProfile === 'FINANCEIRO') perfilStr = 'Financeiro'
+          else if (sysProfile === 'COORDENACAO') perfilStr = 'Coordenação'
+          else if (sysProfile === 'PROFESSOR') perfilStr = 'Professor'
+          else if (sysProfile === 'PORTARIA') perfilStr = 'Portaria'
+
+          if (u.perfil && typeof u.perfil === 'string') {
+            perfilStr = u.perfil
+          }
+
+          return {
+            id: u.id,
+            nome: u.nome,
+            email: email,
+            cargo: u.cargo || 'Não definido',
+            perfil: perfilStr,
+            status: authUser ? 'ativo' : 'inativo',
+            foto: authUser?.user_metadata?.foto || u.dados?.foto || u.foto || null,
+            dados: u.dados || {},
+            telefone: u.dados?.telefone || u.telefone || '',
+            unidade: u.dados?.unidade || u.unidade || '',
+            ultimoAcesso: authUser?.last_sign_in_at 
+              ? new Date(authUser.last_sign_in_at).toLocaleDateString('pt-BR') 
+              : 'Nunca acessou'
+          }
+        })
+
+        const mappedAlunos = (alunosData || []).reduce((acc: any[], aluno: any) => {
+          const alunoEmail = (aluno.email || '').trim().toLowerCase()
+          const virtualEmail = `aluno.${aluno.matricula || aluno.id}@impactoedu.local`.toLowerCase()
+          
+          const authUser = authMap.get(alunoEmail) || authMap.get(virtualEmail)
+          
+          acc.push({
+            id: `virtual-${aluno.id}`,
+            nome: aluno.nome,
+            email: alunoEmail || '',
+            cargo: 'Alunos',
+            perfil: 'Família',
+            status: authUser ? 'ativo' : 'inativo',
+            ultimoAcesso: authUser?.last_sign_in_at 
+              ? new Date(authUser.last_sign_in_at).toLocaleDateString('pt-BR') 
+              : 'Nunca acessou'
+          })
+          return acc
+        }, [])
+
+        const activeRespIds = new Set(
+          (linksData || [])
+            .filter((l: any) => l.resp_financeiro === true || l.resp_pedagogico === true)
+            .map((l: any) => String(l.responsavel_id))
+        )
+
+        const mappedResps: any[] = []
+
+        if (respData && Array.isArray(respData)) {
+          respData.forEach((resp: any) => {
+            if (!activeRespIds.has(String(resp.id))) return
+
+            const email = (resp.email || '').trim().toLowerCase()
+            const authUser = email ? authMap.get(email) : undefined
+
+            mappedResps.push({
+              id: `resp-${resp.id}`,
+              nome: resp.nome,
+              email: email || '',
+              cargo: 'Responsáveis',
+              perfil: 'Família',
+              status: authUser ? 'ativo' : 'inativo',
+              ultimoAcesso: authUser?.last_sign_in_at 
+                ? new Date(authUser.last_sign_in_at).toLocaleDateString('pt-BR') 
+                : 'Nunca acessou'
+            })
+          })
+        }
+
+        const combined = [...mappedSys, ...mappedAlunos, ...mappedResps]
+        let colab = 0, colabTotal = 0
+        let alunos = 0, alunosTotal = 0
+        let resps = 0, respsTotal = 0
+        let totalAtivos = 0
+
+        for (const u of combined) {
+          const isAtivo = u.ultimoAcesso && u.ultimoAcesso !== 'Nunca acessou'
+          if (isAtivo) totalAtivos++
+          if (u.cargo === 'Alunos') {
+            alunosTotal++
+            if (isAtivo) alunos++
+          } else if (u.cargo === 'Responsáveis') {
+            respsTotal++
+            if (isAtivo) resps++
+          } else {
+            colabTotal++
+            if (isAtivo) colab++
+          }
+        }
+
+        const stats = {
+          colab,
+          colabTotal,
+          alunos,
+          alunosTotal,
+          resps,
+          respsTotal,
+          total: totalAtivos,
+          totalGeral: combined.length
+        }
+
+        const entry = { data: combined, stats, expires: Date.now() + 60_000 }
+        fullUsersReportCache = entry
+        return entry
+      })().finally(() => {
+        inflightFullUsersReport = null
+      })
+    }
+
+    const report = await inflightFullUsersReport
+    const payload = isSummaryOnly ? { stats: report.stats, data: [] } : report.data
+
+    return NextResponse.json(payload, {
       headers: {
         // Cache curto de 30s — dados de usuários mudam raramente durante a sessão
         'Cache-Control': 'private, max-age=30, stale-while-revalidate=60',
@@ -440,6 +493,7 @@ export async function POST(req: Request) {
     invalidateColaboradoresCache()
     clearAuthGuardCache()
     invalidateAuthUsersCache()
+    fullUsersReportCache = null
 
     // Sync to funcionarios
     for (const row of (data || [])) {

@@ -102,12 +102,14 @@ export function CapacitorResumeGuard() {
       }
 
       try {
+        let didRefresh = false
         const stored = await getSessionFromStorageTiers()
         if (stored && isSessionExpiredOrExpiringSoon(stored, 300)) {
           console.log(`[CapacitorResumeGuard] Token expirado ou próximo do vencimento (${reason}). Renovando proativamente...`)
           await refreshSessionCentralized(supabase)
+          didRefresh = true
         }
-        if (reason !== 'cold boot / montagem inicial') {
+        if (reason === 'reconexão online' || didRefresh) {
           try {
             window.dispatchEvent(new CustomEvent('edu:network-reconnected'))
           } catch {}

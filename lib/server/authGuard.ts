@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { cookies, headers } from 'next/headers'
-import { createProtectedClient } from './supabaseServerFactory'
+import { createProtectedClient, extractAccessTokenFromCookieList } from './supabaseServerFactory'
 
 /**
  * Utilitário para proteger rotas de API.
@@ -13,9 +13,41 @@ import { createProtectedClient } from './supabaseServerFactory'
  * // Acesso seguro: user está autenticado
  * ```
  */
-const VERIFIED_TOKEN_CACHE_TTL_MS = 10_000
+const VERIFIED_TOKEN_CACHE_TTL_MS = 45_000
 const verifiedTokenCache = new Map<string, { user: any; expiresAt: number }>()
 const inflightTokenVerifications = new Map<string, Promise<any | null>>()
+
+async function verifyTokenWithDedup(token: string): Promise<any | null> {
+  const now = Date.now()
+  const cachedToken = verifiedTokenCache.get(token)
+  if (cachedToken && cachedToken.expiresAt > now && cachedToken.user) {
+    return cachedToken.user
+  }
+
+  let verifyPromise = inflightTokenVerifications.get(token)
+  if (!verifyPromise) {
+    verifyPromise = (async () => {
+      try {
+        const supabase = await createProtectedClient(token)
+        const res = await supabase.auth.getUser(token)
+        if (!res.error && res.data?.user) {
+          if (verifiedTokenCache.size > 500) verifiedTokenCache.clear()
+          verifiedTokenCache.set(token, {
+            user: res.data.user,
+            expiresAt: Date.now() + VERIFIED_TOKEN_CACHE_TTL_MS
+          })
+          return res.data.user
+        }
+      } catch {}
+      return null
+    })().finally(() => {
+      inflightTokenVerifications.delete(token)
+    })
+    inflightTokenVerifications.set(token, verifyPromise)
+  }
+
+  return verifyPromise
+}
 
 export async function requireAuth(req?: Request) {
   let authHeader: string | null = null;
@@ -33,35 +65,7 @@ export async function requireAuth(req?: Request) {
 
   // 1. Se o Bearer token foi fornecido explicitamente:
   if (bearerToken) {
-    const now = Date.now()
-    const cachedToken = verifiedTokenCache.get(bearerToken)
-    if (cachedToken && cachedToken.expiresAt > now && cachedToken.user) {
-      return { user: cachedToken.user, errorResponse: null }
-    }
-
-    let verifyPromise = inflightTokenVerifications.get(bearerToken)
-    if (!verifyPromise) {
-      verifyPromise = (async () => {
-        try {
-          const supabase = await createProtectedClient(bearerToken)
-          const res = await supabase.auth.getUser(bearerToken)
-          if (!res.error && res.data?.user) {
-            if (verifiedTokenCache.size > 300) verifiedTokenCache.clear()
-            verifiedTokenCache.set(bearerToken, {
-              user: res.data.user,
-              expiresAt: Date.now() + VERIFIED_TOKEN_CACHE_TTL_MS
-            })
-            return res.data.user
-          }
-        } catch {}
-        return null
-      })().finally(() => {
-        inflightTokenVerifications.delete(bearerToken)
-      })
-      inflightTokenVerifications.set(bearerToken, verifyPromise)
-    }
-
-    const verifiedUser = await verifyPromise
+    const verifiedUser = await verifyTokenWithDedup(bearerToken)
     if (verifiedUser) {
       return { user: verifiedUser, errorResponse: null }
     }
@@ -75,6 +79,18 @@ export async function requireAuth(req?: Request) {
       )
     };
   }
+
+  // 1.5. Tenta extrair o access_token do cookie de sessão e validar via cache/deduplicação in-flight:
+  try {
+    const cookieStore = await cookies()
+    const cookieToken = extractAccessTokenFromCookieList(cookieStore.getAll())
+    if (cookieToken) {
+      const verifiedUser = await verifyTokenWithDedup(cookieToken)
+      if (verifiedUser) {
+        return { user: verifiedUser, errorResponse: null }
+      }
+    }
+  } catch {}
 
   // 2. Fluxo tradicional por cookies de sessão para requisições web/SSR:
   const supabase = await createProtectedClient()
@@ -123,7 +139,7 @@ interface SystemUserCacheEntry {
   expiresAt: number
 }
 
-const SYSTEM_USER_CACHE_TTL_MS = 15_000
+const SYSTEM_USER_CACHE_TTL_MS = 45_000
 const systemUserCache = new Map<string, SystemUserCacheEntry>()
 
 interface FamilyScopeCacheEntry {
@@ -132,7 +148,7 @@ interface FamilyScopeCacheEntry {
   expiresAt: number
 }
 
-const FAMILY_SCOPE_CACHE_TTL_MS = 15_000
+const FAMILY_SCOPE_CACHE_TTL_MS = 45_000
 const familyScopeCache = new Map<string, FamilyScopeCacheEntry>()
 
 export function clearAuthGuardCache(userId?: string) {

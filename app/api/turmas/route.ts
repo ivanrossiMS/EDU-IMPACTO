@@ -7,6 +7,14 @@ import { getCachedTurmasAndGrupos, getCachedActiveAlunos, invalidateTurmasCache 
 
 export const dynamic = 'force-dynamic'
 
+const turmasRouteCache = new Map<string, { payload: any, expires: number }>()
+const turmasRouteInflight = new Map<string, Promise<any>>()
+
+function clearLocalTurmasRouteCache() {
+  turmasRouteCache.clear()
+  invalidateTurmasCache()
+}
+
 export async function GET(request: Request) {
   const { user, errorResponse } = await requireAuth()
   if (errorResponse) return errorResponse
@@ -23,93 +31,115 @@ export async function GET(request: Request) {
     const search = url.searchParams.get('search') || ''
     const ano = url.searchParams.get('ano') || ''
     const segmento = url.searchParams.get('segmento') || ''
-
-    const from = (page - 1) * limit
-    const to = from + limit - 1
-
-    let query = supabase
-      .from('turmas')
-      .select('*', { count: 'exact' })
-
-    if (search) {
-      query = query.or(`nome.ilike.%${search}%,codigo.ilike.%${search}%`)
-    }
-
-    if (ano) {
-      query = query.eq('ano', parseInt(ano))
-    }
-
-    // Como segmento é guardado em dados->segmento, precisamos filtrar via JSONB
-    if (segmento) {
-      query = query.filter('dados->>segmento', 'eq', segmento)
-    }
-
-    let queryExec = query.order('nome')
-    if (!all) {
-      queryExec = queryExec.range(from, to)
-    }
-
-    const { data, error, count } = await queryExec
-
-    if (error) throw error
-
     const includeStats = url.searchParams.get('stats') !== 'false'
-    let totalAlunosMatriculados = 0
-    let totalAlunosIntegral = 0
-    let capacidadeTotal = 0
-    let vagasOcupadasPercent = 0
 
-    if (includeStats) {
-      // Buscar todos os alunos ativos e turmas com cache em memória (TTL 45-60s) para evitar scans repetidos
-      const [activeAlunos, { allTurmas }] = await Promise.all([
-        getCachedActiveAlunos(),
-        getCachedTurmasAndGrupos()
-      ])
-
-      const yearFilter = ano ? parseInt(ano) : null
-      const alunosDoAno = yearFilter
-        ? activeAlunos.filter((a: any) => {
-            const hist = a.historicoTurmas || a.dados?.historicoTurmas
-            if (Array.isArray(hist) && hist.length > 0) {
-              return hist.some((h: any) => String(h.anoLetivo || h.ano || '').trim() === String(yearFilter))
-            }
-            const sAno = String(a.anoLetivo || a.ano_letivo || a.dados?.anoLetivo || a.dados?.ano_letivo || '').trim()
-            return sAno === String(yearFilter)
-          })
-        : activeAlunos
-
-      totalAlunosMatriculados = alunosDoAno.length
-      totalAlunosIntegral = alunosDoAno.filter((a: any) => isAlunoIntegralIntermediario(a, allTurmas, [], yearFilter || undefined)).length
-
-      const turmasDoAno = yearFilter
-        ? (allTurmas || []).filter((t: any) => parseInt(t.ano) === yearFilter)
-        : (allTurmas || [])
-
-      capacidadeTotal = turmasDoAno.reduce((acc: number, t: any) => acc + (parseInt(t.capacidade) || 30), 0)
-      vagasOcupadasPercent = capacidadeTotal > 0 ? Math.round((totalAlunosMatriculados / capacidadeTotal) * 100) : 0
-
-      // Calcular matriculados por turma em tempo real para os itens da tabela
-      if (data && data.length > 0) {
-        data.forEach((t: any) => {
-          const countAlunos = activeAlunos.filter((a: any) => isAlunoCursandoTurma(a, t, t.ano, allTurmas)).length;
-          t.matriculados = countAlunos;
-        })
-      }
+    const cacheKey = `${all ? 'all' : `${page}_${limit}`}_${search}_${ano}_${segmento}_${includeStats ? '1' : '0'}`
+    const nowMs = Date.now()
+    const cached = turmasRouteCache.get(cacheKey)
+    if (cached && cached.expires > nowMs) {
+      return NextResponse.json(cached.payload, {
+        headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate' }
+      })
     }
 
-    return NextResponse.json({
-      data: data || [],
-      total: count || 0,
-      stats: {
-        totalTurmas: count || 0,
-        totalAlunosMatriculados,
-        totalAlunosIntegral,
-        capacidadeTotal,
-        vagasOcupadasPercent
-      },
-      page,
-      limit
-    }, {
+    let promise = turmasRouteInflight.get(cacheKey)
+    if (!promise) {
+      promise = (async () => {
+        const from = (page - 1) * limit
+        const to = from + limit - 1
+
+        let query = supabase
+          .from('turmas')
+          .select('*', { count: 'exact' })
+
+        if (search) {
+          query = query.or(`nome.ilike.%${search}%,codigo.ilike.%${search}%`)
+        }
+
+        if (ano) {
+          query = query.eq('ano', parseInt(ano))
+        }
+
+        // Como segmento é guardado em dados->segmento, precisamos filtrar via JSONB
+        if (segmento) {
+          query = query.filter('dados->>segmento', 'eq', segmento)
+        }
+
+        let queryExec = query.order('nome')
+        if (!all) {
+          queryExec = queryExec.range(from, to)
+        }
+
+        const { data, error, count } = await queryExec
+
+        if (error) throw error
+
+        let totalAlunosMatriculados = 0
+        let totalAlunosIntegral = 0
+        let capacidadeTotal = 0
+        let vagasOcupadasPercent = 0
+
+        if (includeStats) {
+          // Buscar todos os alunos ativos e turmas com cache em memória (TTL 45-60s) para evitar scans repetidos
+          const [activeAlunos, { allTurmas }] = await Promise.all([
+            getCachedActiveAlunos(),
+            getCachedTurmasAndGrupos()
+          ])
+
+          const yearFilter = ano ? parseInt(ano) : null
+          const alunosDoAno = yearFilter
+            ? activeAlunos.filter((a: any) => {
+                const hist = a.historicoTurmas || a.dados?.historicoTurmas
+                if (Array.isArray(hist) && hist.length > 0) {
+                  return hist.some((h: any) => String(h.anoLetivo || h.ano || '').trim() === String(yearFilter))
+                }
+                const sAno = String(a.anoLetivo || a.ano_letivo || a.dados?.anoLetivo || a.dados?.ano_letivo || '').trim()
+                return sAno === String(yearFilter)
+              })
+            : activeAlunos
+
+          totalAlunosMatriculados = alunosDoAno.length
+          totalAlunosIntegral = alunosDoAno.filter((a: any) => isAlunoIntegralIntermediario(a, allTurmas, [], yearFilter || undefined)).length
+
+          const turmasDoAno = yearFilter
+            ? (allTurmas || []).filter((t: any) => parseInt(t.ano) === yearFilter)
+            : (allTurmas || [])
+
+          capacidadeTotal = turmasDoAno.reduce((acc: number, t: any) => acc + (parseInt(t.capacidade) || 30), 0)
+          vagasOcupadasPercent = capacidadeTotal > 0 ? Math.round((totalAlunosMatriculados / capacidadeTotal) * 100) : 0
+
+          // Calcular matriculados por turma em tempo real para os itens da tabela
+          if (data && data.length > 0) {
+            data.forEach((t: any) => {
+              const countAlunos = activeAlunos.filter((a: any) => isAlunoCursandoTurma(a, t, t.ano, allTurmas)).length;
+              t.matriculados = countAlunos;
+            })
+          }
+        }
+
+        const payload = {
+          data: data || [],
+          total: count || 0,
+          stats: {
+            totalTurmas: count || 0,
+            totalAlunosMatriculados,
+            totalAlunosIntegral,
+            capacidadeTotal,
+            vagasOcupadasPercent
+          },
+          page,
+          limit
+        }
+        turmasRouteCache.set(cacheKey, { payload, expires: Date.now() + 60_000 })
+        return payload
+      })().finally(() => {
+        turmasRouteInflight.delete(cacheKey)
+      })
+      turmasRouteInflight.set(cacheKey, promise)
+    }
+
+    const payload = await promise
+    return NextResponse.json(payload, {
       headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate' }
     })
   } catch (e: any) {
@@ -174,7 +204,7 @@ export async function POST(request: Request) {
         if (error) throw error
       }
 
-      invalidateTurmasCache()
+      clearLocalTurmasRouteCache()
       return NextResponse.json({ success: true, count: rowsToUpsert.length })
     }
 
@@ -226,7 +256,7 @@ export async function POST(request: Request) {
 
     if (error) throw error
 
-    invalidateTurmasCache()
+    clearLocalTurmasRouteCache()
     return NextResponse.json({ success: true, data: data?.[0] })
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 400 })
@@ -277,7 +307,7 @@ export async function PUT(request: Request) {
 
     if (error) throw error
 
-    invalidateTurmasCache()
+    clearLocalTurmasRouteCache()
     return NextResponse.json({ success: true, data: data?.[0] })
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 400 })
@@ -309,7 +339,7 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: 'Turma não encontrada ou já excluída.' }, { status: 404 })
     }
 
-    invalidateTurmasCache()
+    clearLocalTurmasRouteCache()
     return NextResponse.json({ success: true, data })
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 400 })

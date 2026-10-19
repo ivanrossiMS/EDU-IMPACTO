@@ -6,8 +6,16 @@ import { resolveCollaboratorUsers } from '@/lib/server/collaboratorLookup'
 
 export const dynamic = 'force-dynamic'
 
-// Cache em memória no servidor (TTL 120s) para evitar sobrecarga repetitiva na tabela alunos
+// Cache em memória no servidor (TTL 300s) para evitar sobrecarga repetitiva na tabela alunos
 const serverAlunosCache = new Map<string, { data: any, expires: number }>()
+
+// Cache curto + deduplicação in-flight para GET /api/saida/calls
+const saidaCallsResponseCache = new Map<string, { data: any[], expires: number }>()
+const saidaCallsInflight = new Map<string, Promise<any[]>>()
+
+function invalidateSaidaCallsCache() {
+  saidaCallsResponseCache.clear()
+}
 
 async function fetchAlunosBatch(supabaseClient: any, ids: string[]): Promise<Record<string, any>> {
   const result: Record<string, any> = {}
@@ -39,7 +47,7 @@ async function fetchAlunosBatch(supabaseClient: any, ids: string[]): Promise<Rec
       data.forEach((a: any) => {
         const strId = String(a.id)
         result[strId] = a
-        serverAlunosCache.set(strId, { data: a, expires: now + 120000 })
+        serverAlunosCache.set(strId, { data: a, expires: now + 300000 })
       })
     }
   }
@@ -53,6 +61,7 @@ export async function GET(request: Request) {
     const fromDate = url.searchParams.get('from')
     const toDate = url.searchParams.get('to')
     const studentId = url.searchParams.get('studentId')
+    const onlySpecialAuth = url.searchParams.get('onlySpecialAuth') === 'true'
     const limitParam = url.searchParams.get('limit')
     const limit = limitParam ? parseInt(limitParam, 10) : 500
 
@@ -113,14 +122,6 @@ export async function GET(request: Request) {
       if (errorResponse) return errorResponse
     }
 
-    let query = supabase.from('saida_calls').select('id, dados, created_at').order('created_at', { ascending: false }).limit(limit)
-    
-    if (studentIdsToMatch.length === 1) {
-      query = query.eq('dados->>studentId', studentIdsToMatch[0])
-    } else if (studentIdsToMatch.length > 1) {
-      query = query.or(studentIdsToMatch.map(id => `dados->>studentId.eq.${id}`).join(','))
-    }
-    
     const dateParam = url.searchParams.get('date')
     const formatter = new Intl.DateTimeFormat('en-CA', { 
       timeZone: 'America/Campo_Grande', 
@@ -133,121 +134,185 @@ export async function GET(request: Request) {
     // Define os limites de data considerando fuso America/Campo_Grande (-04:00)
     const effectiveFrom = fromDate || dateParam || (!toDate ? todayStr : null)
     const targetDate = effectiveFrom || todayStr
-    if (effectiveFrom) {
-      query = query.gte('created_at', `${effectiveFrom}T00:00:00-04:00`)
-    }
-    
     const effectiveTo = toDate || dateParam
-    if (effectiveTo) {
-      query = query.lte('created_at', `${effectiveTo}T23:59:59.999-04:00`)
-    }
-    
-    let freqQuery = supabase
-      .from('frequencias')
-      .select('id, aluno_id, turma_id, data, dados, created_at')
 
-    if (studentIdsToMatch.length === 1) {
-      freqQuery = freqQuery.eq('aluno_id', studentIdsToMatch[0])
-    } else if (studentIdsToMatch.length > 1) {
-      freqQuery = freqQuery.in('aluno_id', studentIdsToMatch)
-    }
-
-    if (effectiveFrom) {
-      freqQuery = freqQuery.gte('data', effectiveFrom)
-    }
-
-    if (effectiveTo) {
-      freqQuery = freqQuery.lte('data', effectiveTo)
-    } else if (!fromDate && !toDate) {
-      freqQuery = freqQuery.lte('data', todayStr)
-    }
-
-    let eventosQuery = supabase
-      .from('portaria_eventos')
-      .select('id, aluno_id, aluno_nome, data_hora, dispositivo_nome, status, tipo')
-      .eq('tipo', 'saida')
-      .eq('status', 'sucesso')
-
-    if (studentIdsToMatch.length === 1) {
-      eventosQuery = eventosQuery.eq('aluno_id', studentIdsToMatch[0])
-    } else if (studentIdsToMatch.length > 1) {
-      eventosQuery = eventosQuery.in('aluno_id', studentIdsToMatch)
-    }
-
-    if (effectiveFrom) {
-      eventosQuery = eventosQuery.gte('data_hora', `${effectiveFrom}T00:00:00-04:00`)
-    }
-    if (effectiveTo) {
-      eventosQuery = eventosQuery.lte('data_hora', `${effectiveTo}T23:59:59.999-04:00`)
-    }
-    eventosQuery = eventosQuery.limit(Math.min(limit, 1000))
-    freqQuery = freqQuery.limit(Math.min(limit, 1000))
-
-    // Executa as consultas ao Supabase em paralelo para reduzir tempo de resposta
-    const [callsRes, freqRes, eventosRes] = await Promise.all([
-      query,
-      freqQuery,
-      Promise.resolve(eventosQuery).catch(() => ({ data: [] as any[] }))
-    ])
-    if (callsRes.error) throw new Error(callsRes.error.message)
-    
-    const data = callsRes.data
-    const freqRecords: any[] = freqRes.data || []
-    const exitEvents: any[] = (eventosRes && 'data' in eventosRes && Array.isArray((eventosRes as any).data)) ? (eventosRes as any).data : []
-    let rawResult: any[] = (data || []).map((row: any) => ({ id: row.id, ...(row.dados || {}) }))
-
-    // Filtrar para garantir que apenas chamadas cuja data efetiva (calledAt / confirmedAt) corresponde ao período solicitado sejam retornadas
-    if (effectiveFrom || effectiveTo) {
-      rawResult = rawResult.filter((c: any) => {
-        const dt = c.calledAt || c.confirmedAt
-        if (!dt) return true
-        let callDate = dt.slice(0, 10)
-        try {
-          const d = new Date(dt.includes('T') && !dt.endsWith('Z') && !dt.includes('-') && !dt.includes('+') ? `${dt}-04:00` : dt)
-          if (!isNaN(d.getTime())) {
-            callDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Campo_Grande' }).format(d)
-          }
-        } catch {}
-        if (effectiveFrom && callDate < effectiveFrom) return false
-        if (effectiveTo && callDate > effectiveTo) return false
-        return true
+    const cacheKey = `${effectiveFrom || ''}_${effectiveTo || ''}_${studentIdsToMatch.join(',')}_${limit}_${onlySpecialAuth ? 'special' : 'all'}`
+    const nowMs = Date.now()
+    const cachedResp = saidaCallsResponseCache.get(cacheKey)
+    if (cachedResp && cachedResp.expires > nowMs) {
+      return NextResponse.json(cachedResp.data, {
+        headers: {
+          'Cache-Control': 'no-store, max-age=0',
+          'Pragma': 'no-cache'
+        }
       })
     }
 
-    const getCallTimeKey = (sId: string, dtStr?: string) => {
-      if (!sId || !dtStr) return ''
-      try {
-        const d = new Date(dtStr.includes('T') && !dtStr.endsWith('Z') && !dtStr.includes('-') && !dtStr.includes('+') ? `${dtStr}-04:00` : dtStr)
-        const ymd = d.toISOString().slice(0, 10)
-        const hm = d.toLocaleTimeString('pt-BR', { timeZone: 'America/Campo_Grande', hour: '2-digit', minute: '2-digit' })
-        return `${sId}_${ymd}_${hm}`
-      } catch {
-        return `${sId}_${String(dtStr).slice(0, 16)}`
-      }
+    const existingPromise = saidaCallsInflight.get(cacheKey)
+    if (existingPromise) {
+      const sharedResult = await existingPromise
+      return NextResponse.json(sharedResult, {
+        headers: {
+          'Cache-Control': 'no-store, max-age=0',
+          'Pragma': 'no-cache'
+        }
+      })
     }
 
-    const existingCallKeys = new Set(rawResult.map((c: any) => getCallTimeKey(c.studentId, c.confirmedAt || c.calledAt)))
-
-    if (freqRecords && freqRecords.length > 0) {
-      const studentIdsToFetch = Array.from(new Set(freqRecords.map((f: any) => String(f.aluno_id || '').trim()).filter(Boolean)))
-      let alunosMap: Record<string, any> = {}
-      if (studentIdsToFetch.length > 0) {
-        alunosMap = await fetchAlunosBatch(supabase, studentIdsToFetch)
+    const computePromise = (async () => {
+      let query = supabase.from('saida_calls').select('id, dados, created_at').order('created_at', { ascending: false }).limit(limit)
+      
+      if (studentIdsToMatch.length === 1) {
+        query = query.eq('dados->>studentId', studentIdsToMatch[0])
+      } else if (studentIdsToMatch.length > 1) {
+        query = query.or(studentIdsToMatch.map(id => `dados->>studentId.eq.${id}`).join(','))
+      }
+      
+      if (effectiveFrom) {
+        query = query.gte('created_at', `${effectiveFrom}T00:00:00-04:00`)
+      }
+      if (effectiveTo) {
+        query = query.lte('created_at', `${effectiveTo}T23:59:59.999-04:00`)
       }
 
-      for (const fRecord of freqRecords) {
-        const aId = String(fRecord.aluno_id || '').trim()
-        if (!aId) continue
-        const recordDate = fRecord.data || targetDate
-        const al = alunosMap[aId]
+      // Fast-path para NotificationPopover: busca apenas saida_calls primeiro
+      if (onlySpecialAuth) {
+        const callsRes = await query
+        if (callsRes.error) throw new Error(callsRes.error.message)
+        let rawCalls: any[] = (callsRes.data || []).map((row: any) => ({ id: row.id, ...(row.dados || {}) }))
+        const specialAuths = rawCalls.filter((c: any) => c.status === 'special_auth' || c.guardianId === 'special' || c.guardianId === 'special-auth')
+        if (specialAuths.length === 0) {
+          return []
+        }
+        const specialStudentIds = Array.from(new Set(specialAuths.map((c: any) => String(c.studentId || '').trim()).filter(Boolean)))
+        const confirmedCalls = rawCalls.filter((c: any) => c.status === 'confirmed' && specialStudentIds.includes(String(c.studentId || '').trim()))
+        const combined = [...specialAuths, ...confirmedCalls]
+        const missingPhotos = combined.filter((c: any) => !c.studentPhoto && c.studentId)
+        if (missingPhotos.length > 0) {
+          const photoMap = await fetchAlunosBatch(supabase, missingPhotos.map((c: any) => String(c.studentId)))
+          for (const c of missingPhotos) {
+            const p = photoMap[String(c.studentId).trim()]
+            if (p?.foto || p?.foto_url) {
+              c.studentPhoto = p.foto || p.foto_url
+            }
+          }
+        }
+        return combined
+      }
+      
+      let freqQuery = supabase
+        .from('frequencias')
+        .select('id, aluno_id, turma_id, data, dados, created_at')
 
-        const todasSaidas = Array.isArray(fRecord.dados?.saidas) && fRecord.dados.saidas.length > 0
-          ? fRecord.dados.saidas
-          : (fRecord.dados?.saidaHorario ? [{
-              hora: fRecord.dados.saidaHorario,
-              dispositivo: fRecord.dados.saidaResponsavel,
-              data_hora: fRecord.dados?.horaRegistro ? `${recordDate}T${fRecord.dados.horaRegistro}:00.000Z` : undefined
-            }] : [])
+      if (studentIdsToMatch.length === 1) {
+        freqQuery = freqQuery.eq('aluno_id', studentIdsToMatch[0])
+      } else if (studentIdsToMatch.length > 1) {
+        freqQuery = freqQuery.in('aluno_id', studentIdsToMatch)
+      }
+
+      if (effectiveFrom) {
+        freqQuery = freqQuery.gte('data', effectiveFrom)
+      }
+
+      if (effectiveTo) {
+        freqQuery = freqQuery.lte('data', effectiveTo)
+      } else if (!fromDate && !toDate) {
+        freqQuery = freqQuery.lte('data', todayStr)
+      }
+
+      let eventosQuery = supabase
+        .from('portaria_eventos')
+        .select('id, aluno_id, aluno_nome, data_hora, dispositivo_nome, status, tipo')
+        .eq('tipo', 'saida')
+        .eq('status', 'sucesso')
+
+      if (studentIdsToMatch.length === 1) {
+        eventosQuery = eventosQuery.eq('aluno_id', studentIdsToMatch[0])
+      } else if (studentIdsToMatch.length > 1) {
+        eventosQuery = eventosQuery.in('aluno_id', studentIdsToMatch)
+      }
+
+      if (effectiveFrom) {
+        eventosQuery = eventosQuery.gte('data_hora', `${effectiveFrom}T00:00:00-04:00`)
+      }
+      if (effectiveTo) {
+        eventosQuery = eventosQuery.lte('data_hora', `${effectiveTo}T23:59:59.999-04:00`)
+      }
+      eventosQuery = eventosQuery.limit(Math.min(limit, 1000))
+      freqQuery = freqQuery.limit(Math.min(limit, 1000))
+
+      // Executa as consultas ao Supabase em paralelo para reduzir tempo de resposta
+      const [callsRes, freqRes, eventosRes] = await Promise.all([
+        query,
+        freqQuery,
+        Promise.resolve(eventosQuery).catch(() => ({ data: [] as any[] }))
+      ])
+      if (callsRes.error) throw new Error(callsRes.error.message)
+      
+      const data = callsRes.data
+      const freqRecords: any[] = freqRes.data || []
+      const exitEvents: any[] = (eventosRes && 'data' in eventosRes && Array.isArray((eventosRes as any).data)) ? (eventosRes as any).data : []
+      let rawResult: any[] = (data || []).map((row: any) => ({ id: row.id, ...(row.dados || {}) }))
+
+      // Filtrar para garantir que apenas chamadas cuja data efetiva (calledAt / confirmedAt) corresponde ao período solicitado sejam retornadas
+      if (effectiveFrom || effectiveTo) {
+        rawResult = rawResult.filter((c: any) => {
+          const dt = c.calledAt || c.confirmedAt
+          if (!dt) return true
+          let callDate = dt.slice(0, 10)
+          try {
+            const d = new Date(dt.includes('T') && !dt.endsWith('Z') && !dt.includes('-') && !dt.includes('+') ? `${dt}-04:00` : dt)
+            if (!isNaN(d.getTime())) {
+              callDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Campo_Grande' }).format(d)
+            }
+          } catch {}
+          if (effectiveFrom && callDate < effectiveFrom) return false
+          if (effectiveTo && callDate > effectiveTo) return false
+          return true
+        })
+      }
+
+      const getCallTimeKey = (sId: string, dtStr?: string) => {
+        if (!sId || !dtStr) return ''
+        try {
+          const d = new Date(dtStr.includes('T') && !dtStr.endsWith('Z') && !dtStr.includes('-') && !dtStr.includes('+') ? `${dtStr}-04:00` : dtStr)
+          const ymd = d.toISOString().slice(0, 10)
+          const hm = d.toLocaleTimeString('pt-BR', { timeZone: 'America/Campo_Grande', hour: '2-digit', minute: '2-digit' })
+          return `${sId}_${ymd}_${hm}`
+        } catch {
+          return `${sId}_${String(dtStr).slice(0, 16)}`
+        }
+      }
+
+      const existingCallKeys = new Set(rawResult.map((c: any) => getCallTimeKey(c.studentId, c.confirmedAt || c.calledAt)))
+
+      // Pré-filtra apenas frequências que efetivamente possuem registro de saída ANTES de buscar fotos em alunos
+      const freqRecordsWithSaidas = (freqRecords || []).filter((fRecord: any) => {
+        const hasArraySaidas = Array.isArray(fRecord.dados?.saidas) && fRecord.dados.saidas.length > 0
+        const hasSingleSaida = Boolean(fRecord.dados?.saidaHorario)
+        return hasArraySaidas || hasSingleSaida
+      })
+
+      if (freqRecordsWithSaidas.length > 0) {
+        const studentIdsToFetch = Array.from(new Set(freqRecordsWithSaidas.map((f: any) => String(f.aluno_id || '').trim()).filter(Boolean)))
+        let alunosMap: Record<string, any> = {}
+        if (studentIdsToFetch.length > 0) {
+          alunosMap = await fetchAlunosBatch(supabase, studentIdsToFetch)
+        }
+
+        for (const fRecord of freqRecordsWithSaidas) {
+          const aId = String(fRecord.aluno_id || '').trim()
+          if (!aId) continue
+          const recordDate = fRecord.data || targetDate
+          const al = alunosMap[aId]
+
+          const todasSaidas = Array.isArray(fRecord.dados?.saidas) && fRecord.dados.saidas.length > 0
+            ? fRecord.dados.saidas
+            : (fRecord.dados?.saidaHorario ? [{
+                hora: fRecord.dados.saidaHorario,
+                dispositivo: fRecord.dados.saidaResponsavel,
+                data_hora: fRecord.dados?.horaRegistro ? `${recordDate}T${fRecord.dados.horaRegistro}:00.000Z` : undefined
+              }] : [])
 
         for (const s of todasSaidas) {
           const sHorario = s.hora
@@ -359,14 +424,26 @@ export async function GET(request: Request) {
         .map((c: any) => String(c.studentId))
     )
 
-    // Normalize: if a student has a confirmed call, mark any un-reverted waiting/called calls for that student as confirmed
-    const result = rawResult.map((c: any) => {
-      if (c.studentId != null && confirmedStudentIds.has(String(c.studentId)) && (c.status === 'waiting' || c.status === 'called') && !c.isRevert) {
-        return { ...c, status: 'confirmed' }
-      }
-      return c
-    })
-    
+      // Normalize: if a student has a confirmed call, mark any un-reverted waiting/called calls for that student as confirmed
+      const result = rawResult.map((c: any) => {
+        if (c.studentId != null && confirmedStudentIds.has(String(c.studentId)) && (c.status === 'waiting' || c.status === 'called') && !c.isRevert) {
+          return { ...c, status: 'confirmed' }
+        }
+        return c
+      })
+      return result
+    })()
+
+    saidaCallsInflight.set(cacheKey, computePromise)
+    let result: any[]
+    try {
+      result = await computePromise
+      const ttlMs = onlySpecialAuth ? 15000 : 4000
+      saidaCallsResponseCache.set(cacheKey, { data: result, expires: Date.now() + ttlMs })
+    } finally {
+      saidaCallsInflight.delete(cacheKey)
+    }
+
     return NextResponse.json(result, {
       headers: { 
         'Cache-Control': 'no-store, max-age=0',
@@ -383,6 +460,7 @@ export async function POST(request: Request) {
   if (errorResponse) return errorResponse
 
   try {
+    invalidateSaidaCallsCache()
     const body = await request.json()
     const supabase = await createProtectedClient()
 
@@ -432,6 +510,7 @@ export async function POST(request: Request) {
 
       const { error } = await supabaseService.from('saida_calls').upsert(rows, { onConflict: 'id' })
       if (error) throw new Error(error.message)
+      invalidateSaidaCallsCache()
       
       // Processar Notificações de Saída e Chamada de Portaria em paralelo
       const pushTasks = rows.map(async (row: any) => {
@@ -574,6 +653,7 @@ export async function POST(request: Request) {
 
     const { data, error } = await supabaseService.from('saida_calls').upsert(row).select().single()
     if (error) throw new Error(error.message)
+    invalidateSaidaCallsCache()
 
     const isConfirmed = data.dados?.status === 'confirmed'
 
@@ -653,6 +733,7 @@ export async function DELETE(request: Request) {
   if (errorResponse) return errorResponse
 
   try {
+    invalidateSaidaCallsCache()
     const body = await request.json()
     const { id, clearToday } = body
     const supabaseService = getAdminClient()
@@ -671,6 +752,7 @@ export async function DELETE(request: Request) {
         .gte('created_at', `${todayStr}T00:00:00-04:00`)
 
       if (error) throw new Error(error.message)
+      invalidateSaidaCallsCache()
 
       return NextResponse.json({ ok: true, clearedToday: true })
     }
@@ -679,6 +761,7 @@ export async function DELETE(request: Request) {
 
     const { error } = await supabaseService.from('saida_calls').delete().eq('id', id)
     if (error) throw new Error(error.message)
+    invalidateSaidaCallsCache()
 
     return NextResponse.json({ ok: true })
   } catch (err: any) {

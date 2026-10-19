@@ -6,13 +6,17 @@ workflows:
     environment:
       groups:
         - supabase_credentials
+      vars:
+        NODE_OPTIONS: "--max-old-space-size=6144"
       java: 21
-      node: latest
+      node: 22
     scripts:
       - name: Install npm dependencies
         script: npm install
       - name: Build web app
-        script: npm run build
+        script: |
+          npm run type-check
+          npm run build:cap
       - name: Sync Capacitor Android
         script: |
           mkdir -p android/app/src/main/assets
@@ -60,12 +64,18 @@ workflows:
     instance_type: mac_mini_m1
     max_build_duration: 120
     environment:
-      node: latest
+      vars:
+        NODE_OPTIONS: "--max-old-space-size=6144"
+      node: 22
       xcode: latest
       cocoapods: default
     scripts:
       - name: Install npm dependencies
         script: npm install
+      - name: Build web app
+        script: |
+          npm run type-check
+          npm run build:cap
       - name: Sync Capacitor iOS
         script: npx cap sync ios
       - name: Build iOS App (Simulator)
@@ -84,10 +94,12 @@ workflows:
     environment:
       groups:
         - supabase_credentials
+      vars:
+        NODE_OPTIONS: "--max-old-space-size=6144"
       ios_signing:
         distribution_type: app_store
         bundle_identifier: br.com.impactoedu.agenda
-      node: latest
+      node: 22
       xcode: latest
       cocoapods: default
     scripts:
@@ -100,7 +112,9 @@ workflows:
           : "${SUPABASE_SECRET_KEY:?SUPABASE_SECRET_KEY não configurada}"
           : "${SUPABASE_JWKS_URL:?SUPABASE_JWKS_URL não configurada}"
       - name: Build web app
-        script: npm run build
+        script: |
+          npm run type-check
+          npm run build:cap
       - name: Sync Capacitor iOS
         script: |
           npx cap sync ios

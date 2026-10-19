@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev --webpack",
-    "build": "next build --webpack",
+    "build": "NODE_OPTIONS='--max-old-space-size=6144' next build --webpack",
+    "build:cap": "mkdir -p out && cp public/offline-retry.html out/offline-retry.html && cp public/offline-retry.html out/index.html",
     "start": "next start",
     "lint": "tsc --noEmit",
     "type-check": "tsc --noEmit",

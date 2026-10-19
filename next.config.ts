@@ -61,7 +61,12 @@ const nextConfig: NextConfig = {
     serverActions: {
       bodySizeLimit: '100mb',
     },
+    // Executa compilação Webpack em worker dedicado (desativado por padrão quando há custom webpack())
+    // e ativa otimizações de memória para evitar Abort trap: 6 (OOM exit code 134) em CI
+    webpackBuildWorker: true,
+    webpackMemoryOptimizations: true,
   },
+  productionBrowserSourceMaps: false,
 
   // ── Images ──────────────────────────────────────────────────────
   images: {

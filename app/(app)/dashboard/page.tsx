@@ -66,8 +66,8 @@ export default function DashboardPage() {
   const mesPrevStr = `${mesPrev.getFullYear()}-${String(mesPrev.getMonth() + 1).padStart(2, '0')}`
   const [refreshKey] = useState(0)
 
-  // ── Context Data (Calendar & Tasks)
-  const { tarefas = [], eventosAgenda = [], turmas = [], cfgCalendarioLetivo = [], loading: loadContext = false } = useData() as any
+  // ── Context Data (Calendar, Tasks & Ocorrências)
+  const { tarefas = [], eventosAgenda = [], turmas = [], cfgCalendarioLetivo = [], ocorrencias: contextOcorrencias = [], loading: loadContext = false } = useData() as any
 
   // ── Modais
   const [modalAnivOpen, setModalAnivOpen] = useState(false)
@@ -80,24 +80,20 @@ export default function DashboardPage() {
   const [apenasMinhasTarefas, setApenasMinhasTarefas] = useState(true)
 
   // ── Data for Stats
-  const { data: aniversariantesList, isLoading: loadAniv } = useApiQuery<any[]>(['dash-aniversariantes'], '/api/alunos/aniversariantes')
+  const { data: aniversariantesList, isLoading: loadAniv } = useApiQuery<any[]>(['dash-aniversariantes'], '/api/alunos/aniversariantes', {}, { staleTime: 120_000 })
   const { data: ordersData, isLoading: loadOrders } = useApiQuery<any>(['dash-pedidos-summary'], '/api/administrativo/pedidos-summary', {}, { staleTime: 60000 })
   const ordersSummary = ordersData || { totalOrders: 0, totalValue: 0, entregueCount: 0, preparadoCount: 0, pendenteCount: 0, recentOrders: [] }
 
-  // ── Ocorrências
-  const { data: ocorrData, isLoading: loadOcorr } = useApiQuery<any>(
-    ['dash-ocorr'],
-    `/api/ocorrencias`,
-    {},
-    { staleTime: 120_000 }
-  )
-  const ocorrencias: any[] = Array.isArray(ocorrData) ? ocorrData : []
+  // ── Ocorrências (reutiliza dados já carregados pelo DataProvider para evitar request duplicado)
+  const ocorrencias: any[] = Array.isArray(contextOcorrencias) ? contextOcorrencias : []
+  const loadOcorr = loadContext && ocorrencias.length === 0
 
   // ── KPI principal (server-side aggregated)
   const { data: kpiData, isLoading: loadKpis } = useApiQuery<any>(
     ['dashboard-kpis', mesStr, mesPrevStr, String(refreshKey)],
     `/api/financeiro/dashboard?mes=${mesStr}&mesPrev=${mesPrevStr}`,
-    {}
+    {},
+    { staleTime: 60_000 }
   )
   const kpis = kpiData || {}
   const {
@@ -105,32 +101,30 @@ export default function DashboardPage() {
     novasMatriculas = 0,
   } = kpis
 
-  // ── Usuários Cadastrados / Acessos
+  // ── Usuários Cadastrados / Acessos (modo summary=true para evitar tráfego pesado no dashboard)
   const { data: usuariosData, isLoading: loadUsuarios } = useApiQuery<any>(
-    ['dash-usuarios'],
-    `/api/configuracoes/usuarios`,
+    ['dash-usuarios-summary'],
+    `/api/configuracoes/usuarios?summary=true`,
     {},
     { staleTime: 300_000 }
   )
 
-  const usuariosList: any[] = useMemo(() => {
-    if (Array.isArray(usuariosData)) return usuariosData
-    if (usuariosData && Array.isArray((usuariosData as any).data)) return (usuariosData as any).data
-    return []
-  }, [usuariosData])
-  
-  const usuariosAtivos = useMemo(() => {
-    return usuariosList.filter((u: any) => u.ultimoAcesso && u.ultimoAcesso !== 'Nunca acessou')
-  }, [usuariosList])
-
   const statsUsuarios = useMemo(() => {
-    if (!usuariosList.length) return { colab: 0, colabTotal: 0, alunos: 0, alunosTotal: 0, resps: 0, respsTotal: 0, total: 0, totalGeral: 0 }
+    if (usuariosData && typeof usuariosData === 'object' && usuariosData.stats) {
+      return usuariosData.stats
+    }
+    const list: any[] = Array.isArray(usuariosData)
+      ? usuariosData
+      : (usuariosData && Array.isArray((usuariosData as any).data) ? (usuariosData as any).data : [])
+    if (!list.length) return { colab: 0, colabTotal: 0, alunos: 0, alunosTotal: 0, resps: 0, respsTotal: 0, total: 0, totalGeral: 0 }
     let colab = 0, colabTotal = 0
     let alunos = 0, alunosTotal = 0
     let resps = 0, respsTotal = 0
+    let ativos = 0
 
-    usuariosList.forEach((u: any) => {
+    list.forEach((u: any) => {
       const isAtivo = u.ultimoAcesso && u.ultimoAcesso !== 'Nunca acessou'
+      if (isAtivo) ativos++
       if (u.cargo === 'Alunos') {
         alunosTotal++
         if (isAtivo) alunos++
@@ -144,8 +138,8 @@ export default function DashboardPage() {
         if (isAtivo) colab++
       }
     })
-    return { colab, colabTotal, alunos, alunosTotal, resps, respsTotal, total: usuariosAtivos.length, totalGeral: usuariosList.length }
-  }, [usuariosList, usuariosAtivos])
+    return { colab, colabTotal, alunos, alunosTotal, resps, respsTotal, total: ativos, totalGeral: list.length }
+  }, [usuariosData])
 
   // ── Derived Data
   const todayStr = hoje.toISOString().slice(0, 10)

@@ -1,6 +1,7 @@
 'use client'
 
 import { createContext, useContext, useCallback, useEffect, useMemo, useState } from 'react'
+import { usePathname } from 'next/navigation'
 import { useLocalStorage } from './useLocalStorage'
 import { useSupabaseArray, invalidateAllCache } from './useSupabaseCollection'
 import { useConfigDb, invalidateConfigCache } from './useConfigDb'
@@ -1483,11 +1484,13 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const { data: cfgCalendarioLetivo, setData: setCfgCalendarioLetivo } = useConfigDb<ConfigCalendarioLetivo>('cfgCalendarioLetivo')
   // ── OPERAÇÕES FINANCEIRAS — persistidas no Supabase ────────────────
+  const pathname = usePathname()
+  const isRhOrConfigRoute = Boolean(pathname && (pathname.startsWith('/rh') || pathname.startsWith('/configuracoes')))
   const [movimentacoesManuais, setMovimentacoesManuais] = useState<MovimentacaoManual[]>([])
   const [unidadesFiscais, setUnidadesFiscais] = useState<UnidadeFiscal[]>([])
   const [notasFiscais, setNotasFiscais] = useState<NotaFiscal[]>([])
-  const [advertencias, setAdvertencias] = useSupabaseArray<Advertencia>('rh/advertencias')
-  const [adiantamentos, setAdiantamentos] = useSupabaseArray<Adiantamento>('rh/adiantamentos')
+  const [advertencias, setAdvertencias] = useSupabaseArray<Advertencia>('rh/advertencias', [], { enabled: isRhOrConfigRoute })
+  const [adiantamentos, setAdiantamentos] = useSupabaseArray<Adiantamento>('rh/adiantamentos', [], { enabled: isRhOrConfigRoute })
 
   // ── SYSTEM LOGS — inseridos no Supabase via batch / api / beacon ────
 

@@ -95,6 +95,110 @@ const NO_CACHE_HEADERS = {
   'Pragma': 'no-cache',
 }
 
+const EDGE_TOKEN_CACHE_TTL_MS = 45_000
+const edgeVerifiedTokenCache = new Map<string, { user: any; expiresAt: number }>()
+const edgeInflightVerifications = new Map<string, Promise<{ user: any | null; isTransientError: boolean }>>()
+
+function extractEdgeAccessTokenFromCookies(
+  allCookies: Array<{ name: string; value: string }>,
+  projectRef: string
+): string | null {
+  try {
+    if (!allCookies || allCookies.length === 0) return null
+    const baseName = `sb-${projectRef}-auth-token`
+    let rawValue = ''
+    const exact = allCookies.find(c => c.name === baseName && c.value)
+    if (exact) {
+      rawValue = exact.value
+    } else {
+      const chunks = allCookies
+        .filter(c => c.name.startsWith(`${baseName}.`) && /^\d+$/.test(c.name.slice(baseName.length + 1)))
+        .sort((a, b) => {
+          const idxA = parseInt(a.name.slice(baseName.length + 1), 10)
+          const idxB = parseInt(b.name.slice(baseName.length + 1), 10)
+          return idxA - idxB
+        })
+      if (chunks.length > 0) {
+        rawValue = chunks.map(c => c.value).join('')
+      }
+    }
+
+    if (!rawValue) {
+      const fallback = allCookies.find(c => c.name.startsWith('sb-') && c.name.endsWith('-auth-token') && c.value)
+      if (fallback) rawValue = fallback.value
+    }
+    if (!rawValue) return null
+
+    let jsonStr = rawValue
+    if (jsonStr.startsWith('base64-')) {
+      let b64 = jsonStr.slice(7).replace(/-/g, '+').replace(/_/g, '/')
+      while (b64.length % 4 !== 0) b64 += '='
+      const binStr = atob(b64)
+      const bytes = new Uint8Array(binStr.length)
+      for (let i = 0; i < binStr.length; i++) bytes[i] = binStr.charCodeAt(i)
+      jsonStr = new TextDecoder().decode(bytes)
+    } else if (jsonStr.startsWith('%7B') || jsonStr.startsWith('%5B')) {
+      jsonStr = decodeURIComponent(jsonStr)
+    }
+
+    const parsed = JSON.parse(jsonStr)
+    const token = parsed?.access_token || (Array.isArray(parsed) ? parsed[0] : null)
+    if (typeof token === 'string' && token.split('.').length === 3) {
+      return token
+    }
+  } catch {}
+  return null
+}
+
+async function verifyEdgeTokenWithDedup(
+  supabase: any,
+  token: string
+): Promise<{ user: any | null; isTransientError: boolean }> {
+  const now = Date.now()
+  const cached = edgeVerifiedTokenCache.get(token)
+  if (cached && cached.expiresAt > now && cached.user) {
+    return { user: cached.user, isTransientError: false }
+  }
+
+  let inflight = edgeInflightVerifications.get(token)
+  if (!inflight) {
+    inflight = (async () => {
+      try {
+        const userPromise = supabase.auth.getUser(token)
+        const timeoutPromise = new Promise<{ data: { user: any }; error?: any }>(res =>
+          setTimeout(() => res({ data: { user: null }, error: new Error('TIMEOUT') }), 8000)
+        )
+        const { data, error } = await Promise.race([userPromise, timeoutPromise])
+        if (!error && data?.user) {
+          if (edgeVerifiedTokenCache.size > 500) edgeVerifiedTokenCache.clear()
+          edgeVerifiedTokenCache.set(token, {
+            user: data.user,
+            expiresAt: Date.now() + EDGE_TOKEN_CACHE_TTL_MS
+          })
+          return { user: data.user, isTransientError: false }
+        }
+        if (error) {
+          const errMsg = (error.message || '').toLowerCase()
+          const transient =
+            errMsg.includes('timeout') ||
+            errMsg.includes('fetch') ||
+            errMsg.includes('network') ||
+            (error as any).name === 'AuthRetryableFetchError'
+          return { user: null, isTransientError: transient }
+        }
+        return { user: null, isTransientError: false }
+      } catch {
+        return { user: null, isTransientError: true }
+      }
+    })().finally(() => {
+      edgeInflightVerifications.delete(token)
+    })
+    edgeInflightVerifications.set(token, inflight)
+  }
+
+  return inflight
+}
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
@@ -199,6 +303,7 @@ export async function middleware(request: NextRequest) {
 
   // 365 dias (1 ano) em segundos — dentro do padrão RFC 6265bis e sem overflow de 32 bits
   const SAFE_SESSION_SECONDS = 31536000;
+  const isApiRoute = pathname.startsWith('/api/')
 
   // Cria cliente Supabase SSR no edge — lê/escreve cookies da requisição
   const supabase = createServerClient(
@@ -230,6 +335,7 @@ export async function middleware(request: NextRequest) {
           })
         },
       },
+      auth: isApiRoute ? { autoRefreshToken: false } : undefined,
     }
   )
 
@@ -244,28 +350,9 @@ export async function middleware(request: NextRequest) {
   if (bearerToken) {
     // REGRA DE SEGURANÇA: Se o Bearer foi fornecido explicitamente, ele é a credencial autoritativa.
     // NUNCA assume silenciosamente identidade do cookie se o Bearer falhar.
-    try {
-      const userPromise = supabase.auth.getUser(bearerToken)
-      const timeoutPromise = new Promise<{ data: { user: any }, error?: any }>(res =>
-        setTimeout(() => res({ data: { user: null }, error: new Error('TIMEOUT') }), 8000)
-      )
-      const { data, error } = await Promise.race([userPromise, timeoutPromise])
-      if (!error && data?.user) {
-        user = data.user
-      } else if (error) {
-        const errMsg = (error.message || '').toLowerCase()
-        if (
-          errMsg.includes('timeout') ||
-          errMsg.includes('fetch') ||
-          errMsg.includes('network') ||
-          (error as any).name === 'AuthRetryableFetchError'
-        ) {
-          isTransientError = true
-        }
-      }
-    } catch (err: any) {
-      isTransientError = true
-    }
+    const verified = await verifyEdgeTokenWithDedup(supabase, bearerToken)
+    user = verified.user
+    isTransientError = verified.isTransientError
 
     // Se o Bearer token for inválido ou expirado, rejeita com 401 imediato sem rotacionar no servidor
     if (!user) {
@@ -281,30 +368,47 @@ export async function middleware(request: NextRequest) {
       )
     }
   } else {
-    // ── 2. Fluxo Tradicional por Cookies (Navegação Web / SSR) ──
-    try {
-      const userPromise = supabase.auth.getUser()
-      const timeoutPromise = new Promise<{ data: { user: any }, error?: any }>(res =>
-        setTimeout(() => res({ data: { user: null }, error: new Error('TIMEOUT') }), 8000)
-      )
-      const { data, error } = await Promise.race([userPromise, timeoutPromise])
-      if (!error && data?.user) {
-        user = data.user
-      } else if (error) {
-        const errMsg = (error.message || '').toLowerCase()
-        if (
-          errMsg.includes('timeout') ||
-          errMsg.includes('fetch') ||
-          errMsg.includes('network') ||
-          (error as any).name === 'AuthRetryableFetchError'
-        ) {
-          isTransientError = true
+    // ── 2. Fluxo por Cookies (Navegação Web / SSR / fetch sem Bearer) ──
+    const cookieToken = extractEdgeAccessTokenFromCookies(request.cookies.getAll(), getProjectRef())
+    if (cookieToken) {
+      const verified = await verifyEdgeTokenWithDedup(supabase, cookieToken)
+      user = verified.user
+      isTransientError = verified.isTransientError
+    }
+
+    // Se não for rota de API (ex: navegação de página HTML e o access_token do cookie expirou),
+    // permite que o @supabase/ssr tente refrescar a sessão uma única vez na navegação da página.
+    if (!user && !isTransientError && (!isApiRoute || !cookieToken)) {
+      try {
+        const userPromise = supabase.auth.getUser()
+        const timeoutPromise = new Promise<{ data: { user: any }, error?: any }>(res =>
+          setTimeout(() => res({ data: { user: null }, error: new Error('TIMEOUT') }), 8000)
+        )
+        const { data, error } = await Promise.race([userPromise, timeoutPromise])
+        if (!error && data?.user) {
+          user = data.user
+          if (cookieToken) {
+            edgeVerifiedTokenCache.set(cookieToken, {
+              user: data.user,
+              expiresAt: Date.now() + EDGE_TOKEN_CACHE_TTL_MS
+            })
+          }
+        } else if (error) {
+          const errMsg = (error.message || '').toLowerCase()
+          if (
+            errMsg.includes('timeout') ||
+            errMsg.includes('fetch') ||
+            errMsg.includes('network') ||
+            (error as any).name === 'AuthRetryableFetchError'
+          ) {
+            isTransientError = true
+          }
         }
-      }
-    } catch (err: any) {
-      isTransientError = true
-      if (!err?.message?.includes('Refresh Token') && err?.code !== 'refresh_token_not_found') {
-        console.warn('[Middleware Auth Warning]', err)
+      } catch (err: any) {
+        isTransientError = true
+        if (!err?.message?.includes('Refresh Token') && err?.code !== 'refresh_token_not_found') {
+          console.warn('[Middleware Auth Warning]', err)
+        }
       }
     }
   }
