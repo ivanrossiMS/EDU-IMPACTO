@@ -16,6 +16,7 @@ import { useAgendaNotifications } from '../hooks/useAgendaNotifications'
 import { apiFetch } from '@/lib/api/apiClient'
 import { getMeusAlunosDedup } from '@/lib/api/meusAlunosClient'
 import { PENDING_PUSH_ROUTE_KEY } from '@/components/providers/GlobalNotificationProvider'
+import { triggerHaptic } from '@/lib/utils/haptics'
 
 // Helper function to abbreviate Portuguese surnames to fit single line
 function formatShortName(name: string): string {
@@ -1241,7 +1242,10 @@ const StudentCard = memo(({ student, loadingCardId, redirectTarget, getForwardPa
   return (
     <Link
       href={`/agenda-digital/${student.id}/${redirectTarget}${getForwardParams()}`}
-      onClick={() => setLoadingCardId(student.id)}
+      onClick={() => {
+        void triggerHaptic('selection')
+        setLoadingCardId(student.id)
+      }}
       className={`portal-modern-card ${loadingCardId === student.id ? 'is-card-loading' : ''}`}
     >
       {content}
@@ -1694,7 +1698,10 @@ function SelecionarAlunoContent() {
             <div className="cards-column">
               <Link 
                 href={`/agenda-digital/colaborador/${redirectTarget}${getForwardParams()}`} 
-                onClick={() => setLoadingCardId('colaborador')}
+                onClick={() => {
+                  void triggerHaptic('selection')
+                  setLoadingCardId('colaborador')
+                }}
                 className={`portal-modern-card collaborator-theme ${loadingCardId === 'colaborador' ? 'is-card-loading' : ''}`}
               >
                 <div className="card-avatar-container collaborator-avatar">

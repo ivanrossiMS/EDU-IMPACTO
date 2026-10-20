@@ -9,6 +9,20 @@ export type HapticType =
   | 'error' 
   | 'selection'
 
+let cachedHapticsModule: typeof import('@capacitor/haptics') | null = null
+let lastLightHapticAt = 0
+
+// Pré-carrega e registra o plugin Haptics no cliente para resposta instantânea (0ms)
+if (typeof window !== 'undefined') {
+  import('@capacitor/haptics')
+    .then((mod) => {
+      cachedHapticsModule = mod
+    })
+    .catch(() => {
+      // Ignora silenciosamente caso o módulo não possa ser carregado
+    })
+}
+
 /**
  * Dispara uma vibração háptica tátil no dispositivo.
  * Suporta nativamente iOS/Android via Capacitor Haptics (quando disponível)
@@ -17,13 +31,25 @@ export type HapticType =
 export async function triggerHaptic(type: HapticType = 'impactLight'): Promise<void> {
   if (typeof window === 'undefined') return
 
+  const now = typeof performance !== 'undefined' ? performance.now() : Date.now()
+  const isLightOrSelection = type === 'impactLight' || type === 'selection'
+
+  // Evita vibração duplicada quando pointerdown global e onClick local disparam no mesmo toque
+  if (isLightOrSelection && now - lastLightHapticAt < 120) {
+    return
+  }
+  lastLightHapticAt = now
+
   try {
-    if (Capacitor.isNativePlatform() && Capacitor.isPluginAvailable('Haptics')) {
-      const hapticsModule = await import('@capacitor/haptics').catch(() => null)
+    if (Capacitor.isNativePlatform()) {
+      const hapticsModule =
+        cachedHapticsModule || (await import('@capacitor/haptics').catch(() => null))
       if (hapticsModule) {
+        cachedHapticsModule = hapticsModule
         const { Haptics, ImpactStyle, NotificationType } = hapticsModule
         switch (type) {
           case 'impactLight':
+          case 'selection':
             await Haptics.impact({ style: ImpactStyle.Light })
             return
           case 'impactMedium':
@@ -40,10 +66,6 @@ export async function triggerHaptic(type: HapticType = 'impactLight'): Promise<v
             return
           case 'error':
             await Haptics.notification({ type: NotificationType.Error })
-            return
-          case 'selection':
-            await Haptics.selectionStart()
-            await Haptics.selectionChanged()
             return
         }
       }

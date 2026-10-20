@@ -9,6 +9,7 @@ import { createPortal } from 'react-dom'
 import { ChevronRight, Briefcase, Sparkles, Shield, LayoutDashboard, Loader2, Target, Settings, Building, Bell, LogOut, ArrowLeft } from 'lucide-react'
 import { LoadingGlass } from '@/components/LoadingGlass'
 import { ImpactoLoader } from '@/components/ui/ImpactoLoader'
+import { triggerHaptic } from '@/lib/utils/haptics'
 
 // Helper function to abbreviate Portuguese surnames to fit single line
 function formatShortName(name: string): string {
@@ -677,7 +678,11 @@ function SelecionarPerfilAdminContent() {
             </div>
 
             <div className="cards-column">
-              <Link href={`/agenda-digital/admin/${redirectTarget}`} className="portal-modern-card admin-theme">
+              <Link
+                href={`/agenda-digital/admin/${redirectTarget}`}
+                onClick={() => void triggerHaptic('selection')}
+                className="portal-modern-card admin-theme"
+              >
                 <div className="card-avatar-container admin-avatar">
                   <LayoutDashboard size={28} color="white" />
                 </div>
@@ -714,7 +719,11 @@ function SelecionarPerfilAdminContent() {
           </div>
 
           <div className="cards-column">
-            <Link href={`/agenda-digital/colaborador/${redirectTarget}`} className="portal-modern-card collaborator-theme">
+            <Link
+              href={`/agenda-digital/colaborador/${redirectTarget}`}
+              onClick={() => void triggerHaptic('selection')}
+              className="portal-modern-card collaborator-theme"
+            >
               <div className="card-avatar-container collaborator-avatar" style={{ padding: 0 }}>
                 {currentUser?.foto ? (
                   <img src={currentUser.foto} alt={currentUser.nome} loading="lazy" decoding="async" className="card-avatar-img" />

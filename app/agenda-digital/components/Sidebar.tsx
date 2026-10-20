@@ -47,6 +47,7 @@ import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 import { useQuery } from '@tanstack/react-query'
 import { TrocarModuloModal } from '@/components/layout/TrocarModuloModal'
 import { isFamilyOrStudent } from '@/lib/auth/moduleRouting'
+import { triggerHaptic } from '@/lib/utils/haptics'
 
 const menuItems = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, href: '/agenda-digital/admin' },
@@ -375,10 +376,13 @@ export function ADSidebar() {
                   )}
                   <Link 
                     href={appendMirrorParams(item.href)} 
-                    onClick={item.id === 'modulos' ? (e) => {
-                      e.preventDefault()
-                      window.location.href = '/login?step=choose_system'
-                    } : undefined}
+                    onClick={(e) => {
+                      void triggerHaptic('selection')
+                      if (item.id === 'modulos') {
+                        e.preventDefault()
+                        window.location.href = '/login?step=choose_system'
+                      }
+                    }}
                     style={{ textDecoration: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1, gap: 4, position: 'relative', overflow: 'visible' }}>
                     <motion.div 
                       whileTap={{ scale: 0.9 }}
@@ -504,7 +508,7 @@ export function ADSidebar() {
               {!isFamily && !isSlugPath && alunoId !== "colaborador" && menuItems.map((item) => {
                 const isActive = pathname === item.href || (item.href !== '/agenda-digital' && pathname.startsWith(item.href))
                 return (
-                  <Link key={item.id} href={item.href} style={{ textDecoration: 'none' }}>
+                  <Link key={item.id} href={item.href} onClick={() => void triggerHaptic('selection')} style={{ textDecoration: 'none' }}>
                     <motion.div
                       whileHover={{ x: 6, background: 'rgba(255,255,255,0.04)' }}
                       whileTap={{ scale: 0.98 }}
@@ -608,10 +612,13 @@ export function ADSidebar() {
                       <Link 
                         key={idx} 
                         href={appendMirrorParams(item.href)} 
-                        onClick={item.label === 'Trocar Módulo' || (item as any).id === 'modulos' ? (e) => {
-                          e.preventDefault()
-                          window.location.href = '/login?step=choose_system'
-                        } : undefined}
+                        onClick={(e) => {
+                          void triggerHaptic('selection')
+                          if (item.label === 'Trocar Módulo' || (item as any).id === 'modulos') {
+                            e.preventDefault()
+                            window.location.href = '/login?step=choose_system'
+                          }
+                        }}
                         style={{ textDecoration: 'none' }}>
                         <motion.div
                           whileHover={{ x: 6, background: 'rgba(255,255,255,0.04)' }}
