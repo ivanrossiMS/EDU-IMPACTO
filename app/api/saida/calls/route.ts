@@ -223,8 +223,9 @@ export async function GET(request: Request) {
         if (specialAuths.length === 0) {
           return []
         }
+        const specialAuthIds = new Set(specialAuths.map((c: any) => c.id))
         const specialStudentIds = Array.from(new Set(specialAuths.map((c: any) => String(c.studentId || '').trim()).filter(Boolean)))
-        const confirmedCalls = rawCalls.filter((c: any) => c.status === 'confirmed' && specialStudentIds.includes(String(c.studentId || '').trim()))
+        const confirmedCalls = rawCalls.filter((c: any) => !specialAuthIds.has(c.id) && c.status === 'confirmed' && specialStudentIds.includes(String(c.studentId || '').trim()))
         const combined = [...specialAuths, ...confirmedCalls]
         const missingPhotos = combined.filter((c: any) => !c.studentPhoto && c.studentId)
         if (missingPhotos.length > 0) {

@@ -1876,9 +1876,6 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
       try {
         localStorage.setItem('saida_special_auth_sound', String(next))
       } catch {}
-      if (next) {
-        playSpecialAuthChime()
-      }
       return next
     })
   }, [])
@@ -1904,35 +1901,23 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
     }
   }, [])
 
-  // Ref para controlar que o som só toque em novas autorizações e não no carregamento inicial
-  const initialLoadDoneRef = useRef(false)
-  const recentlyPlayedIdsRef = useRef<Set<string>>(new Set())
+  // Registro permanente de IDs de autorizações especiais que já existiam ou já tocaram som nesta sessão
+  const playedSoundIdsRef = useRef<Set<string>>(new Set())
 
   const triggerSpecialAuthSound = useCallback((callId?: string) => {
     if (!soundEnabled) return
     if (callId) {
-      if (recentlyPlayedIdsRef.current.has(callId)) return
-      recentlyPlayedIdsRef.current.add(callId)
-      setTimeout(() => {
-        recentlyPlayedIdsRef.current.delete(callId)
-      }, 30000)
+      if (playedSoundIdsRef.current.has(callId)) return
+      playedSoundIdsRef.current.add(callId)
     }
     playSpecialAuthChime()
   }, [soundEnabled])
-
-  // Após 1.5s, qualquer autorização recebida é considerada nova e toca o sino
-  useEffect(() => {
-    const t = setTimeout(() => {
-      initialLoadDoneRef.current = true
-    }, 1500)
-    return () => clearTimeout(t)
-  }, [])
 
   // ── Persistent accumulator: stores special_auth entries of today ──
   const seenSpecialAuthsRef = useRef<Map<string, PickupCall>>(new Map())
   const [seenSpecialAuthsVersion, setSeenSpecialAuthsVersion] = useState(0)
 
-  // Escuta imediata de eventos broadcast (DELETE_CALL, CANCEL_CALL e CALL_STUDENT para special_auth)
+  // Escuta imediata de eventos broadcast (DELETE_CALL, CANCEL_CALL, SPECIAL_AUTH_NOTIFY e CALL_STUDENT para special_auth)
   useEffect(() => {
     const unsub = onRealtime('*', payload => {
       const d = payload.data as any
@@ -1946,18 +1931,29 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
           seenSpecialAuthsRef.current.delete(d.callId)
           setSeenSpecialAuthsVersion(v => v + 1)
         }
-      } else if (payload.event === 'CALL_STUDENT' && d?.status === 'special_auth') {
-        const incomingId = d.id || d.callId
+      } else if (
+        (payload.event === 'SPECIAL_AUTH_NOTIFY' && !d?.isTest) ||
+        (payload.event === 'CALL_STUDENT' && d?.status === 'special_auth')
+      ) {
+        const incomingId = d?.id || d?.callId
         if (incomingId && !seenSpecialAuthsRef.current.has(incomingId)) {
+          const alreadyKnown = playedSoundIdsRef.current.has(incomingId)
+          const calledAtMs = d?.calledAt ? new Date(d.calledAt).getTime() : Date.now()
+          const isNewlyInserted = !isNaN(calledAtMs) && Math.abs(Date.now() - calledAtMs) < 30000
+
           const incomingTargetTime = d.targetTime || d.target_time || d.dados?.targetTime || d.dados?.target_time || d.horarioPrevisto || d.scheduledTime || null
           seenSpecialAuthsRef.current.set(incomingId, {
             ...d,
             id: incomingId,
+            status: 'special_auth',
             targetTime: incomingTargetTime || undefined
           })
           setSeenSpecialAuthsVersion(v => v + 1)
-          if (initialLoadDoneRef.current) {
+
+          if (!alreadyKnown && isNewlyInserted) {
             triggerSpecialAuthSound(incomingId)
+          } else {
+            playedSoundIdsRef.current.add(incomingId)
           }
         }
       }
@@ -1966,7 +1962,7 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
   }, [onRealtime, triggerSpecialAuthSound])
 
   // Sincronização contínua com /api/saida/calls?onlySpecialAuth=true para manter autorizações de hoje sincronizadas
-  // (a carga inicial já vem de activeCalls do SaidaProvider)
+  // (apenas sincroniza dados — NUNCA dispara som aqui)
   useEffect(() => {
     let isSubscribed = true
     const fetchSpecialAuths = async () => {
@@ -1999,6 +1995,7 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
 
         for (const c of arr) {
           if (c.status === 'special_auth') {
+            playedSoundIdsRef.current.add(c.id)
             const existing = seenSpecialAuthsRef.current.get(c.id)
             const incomingTargetTime = c.targetTime || (c as any).target_time || (c as any).dados?.targetTime || (c as any).dados?.target_time || (c as any).horarioPrevisto || (c as any).scheduledTime || null
             if (!existing) {
@@ -2007,9 +2004,6 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
                 targetTime: incomingTargetTime || undefined
               })
               changed = true
-              if (initialLoadDoneRef.current) {
-                triggerSpecialAuthSound(c.id)
-              }
             } else if (existing.targetTime !== incomingTargetTime || JSON.stringify(existing) !== JSON.stringify(c)) {
               seenSpecialAuthsRef.current.set(c.id, {
                 ...existing,
@@ -2020,14 +2014,12 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
             }
           }
         }
-        if (!initialLoadDoneRef.current) {
-          initialLoadDoneRef.current = true
-        }
         if (changed) setSeenSpecialAuthsVersion(v => v + 1)
       } catch (err) {
         console.warn('[SpecialExitSticker] Falha ao sincronizar autorizações especiais:', err)
       }
     }
+    fetchSpecialAuths()
     const handleVisibility = () => {
       if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
         fetchSpecialAuths()
@@ -2044,34 +2036,27 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
       document.removeEventListener('visibilitychange', handleVisibility)
       clearInterval(timer)
     }
-  }, [triggerSpecialAuthSound])
+  }, [])
 
   // Whenever activeCalls changes, absorb any special_auth entries into the accumulator,
-  // e remove aquelas canceladas ou deletadas
+  // e remove aquelas canceladas (apenas sincroniza estado — NUNCA dispara som aqui)
   useEffect(() => {
     let changed = false
     const activeMap = new Map(activeCalls.map(c => [c.id, c]))
 
-    // 1. Prunar cancelados ou deletados
-    for (const [id, seenCall] of seenSpecialAuthsRef.current.entries()) {
+    // 1. Prunar apenas se explicitamente cancelado em activeCalls
+    for (const [id] of seenSpecialAuthsRef.current.entries()) {
       const liveCall = activeMap.get(id)
-      if (liveCall) {
-        if (liveCall.status === 'cancelled' || (liveCall.status !== 'special_auth' && liveCall.status !== 'confirmed')) {
-          seenSpecialAuthsRef.current.delete(id)
-          changed = true
-        }
-      } else {
-        const isVeryRecent = Date.now() - new Date(seenCall.calledAt).getTime() < 5000
-        if (!isVeryRecent) {
-          seenSpecialAuthsRef.current.delete(id)
-          changed = true
-        }
+      if (liveCall && (liveCall.status === 'cancelled' || (liveCall.status !== 'special_auth' && liveCall.status !== 'confirmed'))) {
+        seenSpecialAuthsRef.current.delete(id)
+        changed = true
       }
     }
 
-    // 2. Absorver special_auth
+    // 2. Absorver special_auth sem disparar som
     for (const c of activeCalls) {
       if (c.status === 'special_auth') {
+        playedSoundIdsRef.current.add(c.id)
         const existing = seenSpecialAuthsRef.current.get(c.id)
         const incomingTargetTime = c.targetTime || (c as any).target_time || (c as any).dados?.targetTime || (c as any).dados?.target_time || (c as any).horarioPrevisto || (c as any).scheduledTime || null
         if (!existing) {
@@ -2080,9 +2065,6 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
             targetTime: incomingTargetTime || undefined
           })
           changed = true
-          if (initialLoadDoneRef.current) {
-            triggerSpecialAuthSound(c.id)
-          }
         } else if (existing.targetTime !== incomingTargetTime || JSON.stringify(existing) !== JSON.stringify(c)) {
           seenSpecialAuthsRef.current.set(c.id, {
             ...existing,
@@ -2093,12 +2075,9 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
         }
       }
     }
-    if (!initialLoadDoneRef.current && activeCalls.length > 0) {
-      initialLoadDoneRef.current = true
-    }
     // Force a re-render if entries changed
     if (changed) setSeenSpecialAuthsVersion(v => v + 1)
-  }, [activeCalls, triggerSpecialAuthSound])
+  }, [activeCalls])
 
   // Remove a specific special_auth from the accumulator (called from the delete handler)
   const removeFromAccumulator = useCallback((callId: string) => {
@@ -2238,6 +2217,8 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
     )
 
     if (createdCall?.id) {
+      seenSpecialAuthsRef.current.set(createdCall.id, createdCall)
+      setSeenSpecialAuthsVersion(v => v + 1)
       triggerSpecialAuthSound(createdCall.id)
     } else {
       triggerSpecialAuthSound()

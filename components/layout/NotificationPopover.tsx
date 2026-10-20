@@ -31,7 +31,15 @@ let inflightSpecialAuthFetch: Promise<any[]> | null = null
 let lastSpecialAuthFetchAt = 0
 
 function updateSharedSaidaCalls(updater: any[] | ((prev: any[]) => any[])) {
-  sharedSaidaCallsState = typeof updater === 'function' ? updater(sharedSaidaCallsState) : updater
+  const next = typeof updater === 'function' ? updater(sharedSaidaCallsState) : updater
+  const seen = new Set<string>()
+  sharedSaidaCallsState = (Array.isArray(next) ? next : []).filter(item => {
+    const id = item?.id ? String(item.id) : ''
+    if (!id) return true
+    if (seen.has(id)) return false
+    seen.add(id)
+    return true
+  })
   saidaCallsListeners.forEach(listener => listener(sharedSaidaCallsState))
 }
 
@@ -674,8 +682,15 @@ export function NotificationPopover({
       })
     })
 
-    // Ordenação decrescente por data
-    return list.sort((a, b) => b.date.getTime() - a.date.getTime())
+      // Ordenação decrescente por data e deduplicação por id para evitar keys duplicadas no React
+      const uniqueIds = new Set<string>()
+      return list
+        .sort((a, b) => b.date.getTime() - a.date.getTime())
+        .filter(item => {
+          if (uniqueIds.has(item.id)) return false
+          uniqueIds.add(item.id)
+          return true
+        })
   }, [
     tarefas,
     eventosAgenda,

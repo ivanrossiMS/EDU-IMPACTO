@@ -260,6 +260,11 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
     setActiveCallsLocalRef.current = setActiveCallsLocal
   }, [setActiveCallsLocal])
 
+  const emitRef = useRef(emit)
+  useEffect(() => {
+    emitRef.current = emit
+  }, [emit])
+
   const getTodayStr = useCallback(() => {
     return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Campo_Grande' }).format(new Date())
   }, [])
@@ -386,6 +391,12 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
                 try { rawDados = JSON.parse(rawDados) } catch (e) {}
               }
               const call = { id: newRow.id, ...rawDados } as PickupCall
+              if (call.status === 'special_auth') {
+                const calledAtMs = call.calledAt ? new Date(call.calledAt).getTime() : Date.now()
+                if (!isNaN(calledAtMs) && Math.abs(Date.now() - calledAtMs) < 30000) {
+                  emitRef.current('SPECIAL_AUTH_NOTIFY', { ...call })
+                }
+              }
               const callStudentId = call.studentId ? String(call.studentId) : null
               setActiveCallsLocalRef.current?.((prev: PickupCall[]) => {
                 const arr = prev || []
@@ -459,7 +470,12 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
               addProcessedBroadcast(processedBroadcasts.current, eventId);
             }
             const dataStudentId = data?.studentId ? String(data.studentId) : null
-            if (event === 'CALL_STUDENT') {
+            if (event === 'SPECIAL_AUTH_NOTIFY') {
+              emitRef.current('SPECIAL_AUTH_NOTIFY', data || {})
+            } else if (event === 'CALL_STUDENT') {
+              if (data?.status === 'special_auth') {
+                emitRef.current('SPECIAL_AUTH_NOTIFY', data)
+              }
               setActiveCallsLocalRef.current?.((prev: PickupCall[]) => {
                 const arr = prev || []
                 // special_auth entries must ALWAYS stay as special_auth — never auto-confirm them
@@ -891,37 +907,14 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
   // ─── confirmSpecialExit ────────────────────────────────────────────────────
   const confirmSpecialExit = useCallback((
     studentId: string, studentName: string, studentClass: string, authorizedPerson: string, studentPhoto?: string | null,
-    targetTime?: string | null
+    _targetTime?: string | null
   ): PickupCall => {
     const sIdStr = studentId ? String(studentId) : ''
     const sNameNorm = studentName ? studentName.trim().toLowerCase() : ''
     const currentNow = now()
 
-    // 1. Garantir que exista o registro de Autorização Especial (status: 'special_auth') para o aluno
-    const hasSpecialAuth = activeCalls.some(c =>
-      c.status === 'special_auth' &&
-      ((c.studentId != null && String(c.studentId) === sIdStr) ||
-       (c.studentName && sNameNorm && c.studentName.trim().toLowerCase() === sNameNorm))
-    )
-
-    let specialAuthCall: PickupCall | null = null
-    if (!hasSpecialAuth) {
-      specialAuthCall = {
-        id: uid(),
-        studentId: sIdStr,
-        studentName,
-        studentClass,
-        studentPhoto: studentPhoto ?? null,
-        guardianId: 'special',
-        guardianName: authorizedPerson,
-        calledAt: currentNow,
-        status: 'special_auth',
-        source: 'manual',
-        targetTime: targetTime || undefined,
-      }
-    }
-
-    // 2. Encontrar ou atualizar a chamada de saída do aluno para 'confirmed'
+    // Encontrar ou atualizar a chamada de saída do aluno para 'confirmed'
+    // (não cria novo registro special_auth ao apenas confirmar a saída)
     const existingCall = activeCalls.find(c =>
       c.status !== 'special_auth' && c.status !== 'cancelled' &&
       ((c.studentId != null && String(c.studentId) === sIdStr) ||
@@ -967,16 +960,9 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
       if (!existsConfirmed) {
         next = [confirmedCall, ...next]
       }
-      if (specialAuthCall) {
-        const existsSpecial = next.some(c => c.id === specialAuthCall!.id)
-        if (!existsSpecial) {
-          next = [specialAuthCall, ...next]
-        }
-      }
       return next
     })
 
-    if (specialAuthCall) persistSingleCall(specialAuthCall)
     persistSingleCall(confirmedCall)
 
     emit('CONFIRM_PICKUP', { callId: confirmedCall.id, studentId: sIdStr, confirmedAt: currentNow, _remote: false })

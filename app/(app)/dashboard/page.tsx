@@ -963,10 +963,25 @@ export default function DashboardPage() {
                     }
                   }
 
+                  const rawDesc = oc.descricao || '';
+                  const lancadoMatch = rawDesc.match(/\[Lançado por:\s*([^\]]+)\]/i);
+                  const lancadoAutor = lancadoMatch
+                    ? lancadoMatch[1].replace(/\s+em\s+\d{2}\/\d{2}\/\d{4}.*$/i, '').trim()
+                    : (oc.responsavel || '').trim();
+
+                  const cleanDescricao = rawDesc
+                    .replace(/\[(?:Lançado|Editado|Confirmado) por:[^\]]*\]/gi, '')
+                    .replace(/\s+/g, ' ')
+                    .trim();
+
+                  const tituloOcorrencia = lancadoAutor
+                    ? `[Lançado por: ${lancadoAutor}] ${cleanDescricao}`.trim()
+                    : (cleanDescricao || 'Ocorrência Disciplinar');
+
                   return (
                     <div key={oc.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px', borderRadius: '16px', background: bg, borderLeft: `4px solid ${color}` }}>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: '14px', fontWeight: 800, color: 'hsl(var(--text-primary))', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{oc.descricao || 'Ocorrência Disciplinar'}</div>
+                        <div style={{ fontSize: '14px', fontWeight: 800, color: 'hsl(var(--text-primary))', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tituloOcorrencia}</div>
                         <div style={{ fontSize: '12px', color: 'hsl(var(--text-secondary))', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
                           <Users size={12} /> {oc.alunoNome || 'Aluno'}
                         </div>
