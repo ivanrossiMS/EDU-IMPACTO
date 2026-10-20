@@ -1825,7 +1825,7 @@ select option {
 
 .dashboard-kpi-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 24px;
 }
 
@@ -1893,7 +1893,7 @@ select option {
 
 .dashboard-main-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 24px;
   align-items: start;
 }
@@ -1931,6 +1931,8 @@ select option {
   border: 1px solid hsl(var(--border-subtle));
   display: flex;
   flex-direction: column;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .dashboard-card-header {
@@ -1948,6 +1950,8 @@ select option {
   display: flex;
   flex-direction: column;
   flex: 1;
+  min-width: 0;
+  max-width: 100%;
 }
 
 /* Engagement Banner */
@@ -2010,13 +2014,13 @@ select option {
 /* Responsive Breakpoints */
 @media (max-width: 1200px) {
   .dashboard-main-grid {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
 @media (max-width: 900px) {
   .dashboard-kpi-grid {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -2029,7 +2033,7 @@ select option {
 
   /* 2x2 compact KPI cards on mobile */
   .dashboard-kpi-grid {
-    grid-template-columns: repeat(2, 1fr) !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
     gap: 10px !important;
   }
 
@@ -2084,7 +2088,7 @@ select option {
 
   /* Main Grid single column */
   .dashboard-main-grid {
-    grid-template-columns: 1fr !important;
+    grid-template-columns: minmax(0, 1fr) !important;
     gap: 16px !important;
   }
 

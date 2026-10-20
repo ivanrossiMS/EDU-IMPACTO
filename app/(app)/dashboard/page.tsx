@@ -315,7 +315,7 @@ export default function DashboardPage() {
       <div className="dashboard-main-grid">
 
         {/* ── Coluna 1: Pedido de Livros ──────────────────────────── */}
-        <div className="dashboard-card" style={{ height: '100%' }}>
+        <div className="dashboard-card" style={{ height: '100%', minWidth: 0 }}>
           {/* Header Ultra Moderno com Gradiente */}
           <div className="dashboard-card-header" style={{ 
             background: 'linear-gradient(135deg, #1e3a8a 0%, #2563eb 45%, #06b6d4 100%)', 
@@ -461,7 +461,7 @@ export default function DashboardPage() {
         </div>
 
         {/* ── Coluna Central: Tarefas e Agenda ──────────────────────────── */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 24, minWidth: 0 }}>
           {/* Tarefas */}
           <div className="dashboard-card">
             {/* Header Ultra Moderno com Gradiente */}
@@ -758,7 +758,7 @@ export default function DashboardPage() {
         </div>
 
         {/* ── Coluna 4: Aniversários & Ocorrências ──────────────── */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 24, minWidth: 0 }}>
           
           {/* Aniversariantes */}
           <div className="dashboard-card">
@@ -872,7 +872,7 @@ export default function DashboardPage() {
           </div>
 
           {/* Ocorrências Recentes */}
-          <div className="dashboard-card">
+          <div className="dashboard-card" style={{ minWidth: 0, maxWidth: '100%' }}>
             {/* Header Ultra Moderno com Gradiente */}
             <div className="dashboard-card-header" style={{ 
               background: 'linear-gradient(135deg, #9a3412 0%, #ea580c 45%, #f59e0b 100%)', 
@@ -944,7 +944,7 @@ export default function DashboardPage() {
                 </div>
               ) : (
                 <>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0, width: '100%' }}>
               {ocorrencias.length === 0 ? (
                 <div style={{ fontSize: '13px', color: 'hsl(var(--text-muted))', textAlign: 'center', padding: '16px 0', fontWeight: 600 }}>Nenhuma registrada.</div>
               ) : (
@@ -979,11 +979,12 @@ export default function DashboardPage() {
                     : (cleanDescricao || 'Ocorrência Disciplinar');
 
                   return (
-                    <div key={oc.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px', borderRadius: '16px', background: bg, borderLeft: `4px solid ${color}` }}>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: '14px', fontWeight: 800, color: 'hsl(var(--text-primary))', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tituloOcorrencia}</div>
-                        <div style={{ fontSize: '12px', color: 'hsl(var(--text-secondary))', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
-                          <Users size={12} /> {oc.alunoNome || 'Aluno'}
+                    <div key={oc.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '14px', borderRadius: '16px', background: bg, borderLeft: `4px solid ${color}`, minWidth: 0, maxWidth: '100%', overflow: 'hidden' }}>
+                      <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
+                        <div title={tituloOcorrencia} style={{ fontSize: '14px', fontWeight: 800, color: 'hsl(var(--text-primary))', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>{tituloOcorrencia}</div>
+                        <div style={{ fontSize: '12px', color: 'hsl(var(--text-secondary))', fontWeight: 600, marginTop: 4, display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
+                          <Users size={12} style={{ flexShrink: 0 }} />
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{oc.alunoNome || 'Aluno'}</span>
                         </div>
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, flexShrink: 0 }}>

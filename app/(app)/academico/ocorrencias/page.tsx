@@ -978,9 +978,9 @@ export default function OcorrenciasPage() {
         )}
 
         {/* Segundo nível: status de ciência + reincidentes + recentes */}
-        <div className="ocorrencias-cards-grid" style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:20, marginBottom:32 }}>
+        <div className="ocorrencias-cards-grid" style={{ display:'grid', gridTemplateColumns:'repeat(3, minmax(0, 1fr))', gap:20, marginBottom:32 }}>
           {/* Status de Ciência */}
-          <div style={{ background: '#fff', padding: '24px', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
+          <div style={{ background: '#fff', padding: '24px', borderRadius: '16px', border: '1px solid #e2e8f0', minWidth: 0 }}>
             <div style={{ fontWeight:800, fontSize:14, color: '#0f172a', marginBottom:16, display: 'flex', alignItems: 'center', gap: '8px' }}>
               <BarChart size={16} style={{ color: '#2563eb' }} />
               <span>Status de Ciência</span>
@@ -1024,7 +1024,7 @@ export default function OcorrenciasPage() {
           </div>
 
           {/* Alunos reincidentes */}
-          <div style={{ background: '#fff', padding: '24px', borderRadius: '16px', borderTop: '1px solid #e2e8f0', borderRight: '1px solid #e2e8f0', borderBottom: '1px solid #e2e8f0', borderLeft: '4px solid #ef4444' }}>
+          <div style={{ background: '#fff', padding: '24px', borderRadius: '16px', borderTop: '1px solid #e2e8f0', borderRight: '1px solid #e2e8f0', borderBottom: '1px solid #e2e8f0', borderLeft: '4px solid #ef4444', minWidth: 0 }}>
             <div style={{ fontWeight:800, fontSize:14, color: '#0f172a', marginBottom:16, display: 'flex', alignItems: 'center', gap: '8px' }}>
               <AlertTriangle size={16} style={{ color: '#ef4444' }} />
               <span>Alunos Reincidentes</span>
@@ -1065,7 +1065,7 @@ export default function OcorrenciasPage() {
           </div>
 
           {/* Últimas ocorrências */}
-          <div style={{ background: '#fff', padding: '24px', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
+          <div style={{ background: '#fff', padding: '24px', borderRadius: '16px', border: '1px solid #e2e8f0', minWidth: 0 }}>
             <div style={{ fontWeight:800, fontSize:14, color: '#0f172a', marginBottom:16, display: 'flex', alignItems: 'center', gap: '8px' }}>
               <Calendar size={16} style={{ color: '#10b981' }} />
               <span>Registro Recente</span>
