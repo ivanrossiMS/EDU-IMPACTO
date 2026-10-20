@@ -35,13 +35,28 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        const supabase = createClient();
-        const restored = await restoreSessionSecurely(supabase);
+        // Optimistic fast-path: if a valid active user is already cached locally, unblock UI immediately
+        // while /api/auth/me validates in the background.
+        if (typeof window !== 'undefined' && window.localStorage.getItem('edu-auth-logged-out') !== 'true') {
+          try {
+            const rawLocal = window.localStorage.getItem('edu-current-user')
+            if (rawLocal) {
+              const parsedLocal = JSON.parse(rawLocal)
+              if (parsedLocal?.id && parsedLocal?.status !== 'inativo' && parsedLocal?.status !== 'bloqueado') {
+                setAuthState('authorized')
+              }
+            }
+          } catch {}
+        }
 
-        const res = await fetch('/api/auth/me', {
-          cache: 'no-store', credentials: 'include',
-          headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }
-        })
+        const supabase = createClient();
+        const [restored, res] = await Promise.all([
+          restoreSessionSecurely(supabase),
+          fetch('/api/auth/me', {
+            cache: 'no-store', credentials: 'include',
+            headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }
+          })
+        ])
 
         if (!res.ok) {
           // Cenário 12: Resposta 403 da API NÃO desloga o usuário — mantém sessão ativa

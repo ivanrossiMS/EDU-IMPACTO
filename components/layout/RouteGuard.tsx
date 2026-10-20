@@ -310,10 +310,20 @@ export function RouteGuard({ children }: { children: React.ReactNode }) {
     }
   }, [perfisLoading])
 
+  const normalize = (s: string) => (s || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim()
+  const activePerfilName = currentUserPerfil || currentUser?.perfil || currentUser?.cargo || ''
+  const userPerfilObj = (perfis || []).find(p => 
+    p.nome === activePerfilName || 
+    normalize(p.nome) === normalize(activePerfilName) ||
+    (currentUser?.perfil && (p.nome === currentUser.perfil || normalize(p.nome) === normalize(currentUser.perfil))) ||
+    (currentUser?.cargo && (p.nome === currentUser.cargo || normalize(p.nome) === normalize(currentUser.cargo)))
+  )
+  const hasResolvedPerfil = Boolean(userPerfilObj) || (perfis && perfis.length > 0)
+
   // ── Wait for localStorage hydration ───────────────────────────────────────
   // Before hydration, currentUserPerfil = 'Diretor Geral' (false default).
   // We MUST wait to avoid incorrectly granting/denying access.
-  if (!hydrated || (perfisLoading && !isPerfisLoadingTimeout)) {
+  if (!hydrated || (perfisLoading && !hasResolvedPerfil && !isPerfisLoadingTimeout)) {
     return (
       <div style={{
         position: 'fixed', inset: 0, zIndex: 9998,
@@ -331,14 +341,6 @@ export function RouteGuard({ children }: { children: React.ReactNode }) {
     )
   }
 
-  const normalize = (s: string) => (s || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim()
-  const activePerfilName = currentUserPerfil || currentUser?.perfil || currentUser?.cargo || ''
-  const userPerfilObj = (perfis || []).find(p => 
-    p.nome === activePerfilName || 
-    normalize(p.nome) === normalize(activePerfilName) ||
-    (currentUser?.perfil && (p.nome === currentUser.perfil || normalize(p.nome) === normalize(currentUser.perfil))) ||
-    (currentUser?.cargo && (p.nome === currentUser.cargo || normalize(p.nome) === normalize(currentUser.cargo)))
-  )
   const userPerms = userPerfilObj?.permissoes || []
   const isFamilyOrStudentUser = ['familia', 'aluno', 'responsavel'].includes(normalize(activePerfilName))
   const perfisFailedOrEmpty = (!perfis || perfis.length === 0) && !userPerfilObj && !isFamilyOrStudentUser

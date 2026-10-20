@@ -1,9 +1,16 @@
 'use client';
 
+import { apiFetch } from '@/lib/api/apiClient';
+
 // Cache global em memória durante a sessão da aplicação com limite LRU
 const MAX_CACHE_SIZE = 400;
 const photoCache = new Map<string, string | null>();
 const inFlightRequests = new Map<string, Promise<Record<string, string | null>>>();
+
+// Agrupador automático (DataLoader pattern) para chamadas individuais simultâneas (fetchSingleStudentPhoto)
+let pendingSingleIds = new Set<string>();
+let pendingSinglePromise: Promise<Record<string, string | null>> | null = null;
+let pendingSingleTimer: ReturnType<typeof setTimeout> | null = null;
 
 function enforceCacheLimit(): void {
   if (photoCache.size > MAX_CACHE_SIZE) {
@@ -68,7 +75,7 @@ export async function fetchStudentPhotos(ids: (string | number)[]): Promise<Reco
 
   const promise = (async () => {
     try {
-      const res = await fetch('/api/alunos/fotos', {
+      const res = await apiFetch('/api/alunos/fotos', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ids: missingIds })
@@ -113,12 +120,40 @@ export async function fetchSingleStudentPhoto(id: string | number | undefined | 
     return photoCache.get(cleanId) ?? null;
   }
 
-  const batchResult = await fetchStudentPhotos([cleanId]);
+  pendingSingleIds.add(cleanId);
+
+  if (!pendingSinglePromise) {
+    pendingSinglePromise = new Promise<Record<string, string | null>>(resolve => {
+      pendingSingleTimer = setTimeout(async () => {
+        const idsToFetch = Array.from(pendingSingleIds);
+        pendingSingleIds = new Set<string>();
+        pendingSinglePromise = null;
+        pendingSingleTimer = null;
+        try {
+          const res = await fetchStudentPhotos(idsToFetch);
+          resolve(res);
+        } catch {
+          resolve({});
+        }
+      }, 16);
+    });
+  }
+
+  const batchResult = await pendingSinglePromise;
+  if (photoCache.has(cleanId)) {
+    return photoCache.get(cleanId) ?? null;
+  }
   return batchResult[cleanId] ?? null;
 }
 
 export function clearStudentPhotoCache(): void {
   photoCache.clear();
   inFlightRequests.clear();
+  pendingSingleIds.clear();
+  if (pendingSingleTimer) {
+    clearTimeout(pendingSingleTimer);
+    pendingSingleTimer = null;
+  }
+  pendingSinglePromise = null;
 }
 

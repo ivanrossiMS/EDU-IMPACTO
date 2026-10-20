@@ -769,7 +769,9 @@ function PainelTabletContent() {
   // ── Fallback Polling 30s se o Supabase Realtime falhar ou desconectar ──────────
   useEffect(() => {
     if (realtimeStatus !== 'online') {
-      refreshCalls() // Dispara imediatamente
+      if (realtimeStatus === 'offline') {
+        refreshCalls() // Dispara imediatamente apenas se caiu para offline
+      }
       const iv = setInterval(() => {
         if (typeof document === 'undefined' || document.visibilityState === 'visible') {
           refreshCalls()
@@ -795,7 +797,7 @@ function PainelTabletContent() {
 
     const delayDebounce = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/alunos?search=${encodeURIComponent(q)}&status=ativo&limit=25`, {
+        const res = await fetch(`/api/alunos?search=${encodeURIComponent(q)}&status=ativo&limit=25&lightweight=true&withPhoto=true`, {
           signal: controller.signal
         })
         if (res.ok) {

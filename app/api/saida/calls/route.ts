@@ -26,7 +26,7 @@ async function fetchAlunosBatch(supabaseClient: any, ids: string[]): Promise<Rec
   for (const id of cleanIds) {
     const cached = serverAlunosCache.get(id)
     if (cached && cached.expires > now) {
-      result[id] = cached.data
+      if (cached.data) result[id] = cached.data
     } else {
       missingIds.push(id)
     }
@@ -36,19 +36,43 @@ async function fetchAlunosBatch(supabaseClient: any, ids: string[]): Promise<Rec
 
   // Chunking em blocos de até 60 IDs para evitar URLs gigantescas que geram HTTP 500 no PostgREST
   const CHUNK_SIZE = 60
+  const foundSet = new Set<string>()
   for (let i = 0; i < missingIds.length; i += CHUNK_SIZE) {
     const chunk = missingIds.slice(i, i + CHUNK_SIZE)
     const { data } = await supabaseClient
       .from('alunos')
-      .select('id, nome, turma, foto, foto_url')
+      .select('id, matricula, nome, turma, foto, foto_url, dados_foto:dados->>foto, dados_avatar:dados->>avatarUrl, dados_foto_url:dados->>fotoUrl')
       .in('id', chunk)
 
     if (data && Array.isArray(data)) {
       data.forEach((a: any) => {
-        const strId = String(a.id)
-        result[strId] = a
-        serverAlunosCache.set(strId, { data: a, expires: now + 300000 })
+        const resolvedPhoto = a.foto || a.foto_url || a.dados_foto || a.dados_avatar || a.dados_foto_url || null
+        const normalized = {
+          id: a.id,
+          matricula: a.matricula,
+          nome: a.nome,
+          turma: a.turma,
+          foto: resolvedPhoto,
+          foto_url: a.foto_url || resolvedPhoto
+        }
+        const strId = String(a.id).trim()
+        foundSet.add(strId)
+        result[strId] = normalized
+        serverAlunosCache.set(strId, { data: normalized, expires: now + 300000 })
+        if (a.matricula) {
+          const strMat = String(a.matricula).trim()
+          foundSet.add(strMat)
+          result[strMat] = normalized
+          serverAlunosCache.set(strMat, { data: normalized, expires: now + 300000 })
+        }
       })
+    }
+  }
+
+  // Cache negative lookups briefly (60s) to avoid hammering DB for unknown IDs
+  for (const id of missingIds) {
+    if (!foundSet.has(id)) {
+      serverAlunosCache.set(id, { data: null, expires: now + 60000 })
     }
   }
 
@@ -134,9 +158,10 @@ export async function GET(request: Request) {
     // Define os limites de data considerando fuso America/Campo_Grande (-04:00)
     const effectiveFrom = fromDate || dateParam || (!toDate ? todayStr : null)
     const targetDate = effectiveFrom || todayStr
-    const effectiveTo = toDate || dateParam
+    const effectiveTo = toDate || dateParam || (!fromDate ? todayStr : null)
 
     const cacheKey = `${effectiveFrom || ''}_${effectiveTo || ''}_${studentIdsToMatch.join(',')}_${limit}_${onlySpecialAuth ? 'special' : 'all'}`
+    const fullCacheKey = `${effectiveFrom || ''}_${effectiveTo || ''}_${studentIdsToMatch.join(',')}_${limit}_all`
     const nowMs = Date.now()
     const cachedResp = saidaCallsResponseCache.get(cacheKey)
     if (cachedResp && cachedResp.expires > nowMs) {
@@ -146,6 +171,20 @@ export async function GET(request: Request) {
           'Pragma': 'no-cache'
         }
       })
+    }
+
+    // Se for onlySpecialAuth e já houver cache ou request in-flight da lista completa do mesmo dia, reaproveita sem bater no banco!
+    if (onlySpecialAuth) {
+      const cachedFull = saidaCallsResponseCache.get(fullCacheKey)
+      if (cachedFull && cachedFull.expires > nowMs) {
+        const specialFiltered = cachedFull.data.filter((c: any) => c.status === 'special_auth' || c.guardianId === 'special' || c.guardianId === 'special-auth')
+        return NextResponse.json(specialFiltered, {
+          headers: {
+            'Cache-Control': 'no-store, max-age=0',
+            'Pragma': 'no-cache'
+          }
+        })
+      }
     }
 
     const existingPromise = saidaCallsInflight.get(cacheKey)
@@ -203,6 +242,7 @@ export async function GET(request: Request) {
       let freqQuery = supabase
         .from('frequencias')
         .select('id, aluno_id, turma_id, data, dados, created_at')
+        .or('dados->>saidaHorario.not.is.null,dados->saidas.not.is.null')
 
       if (studentIdsToMatch.length === 1) {
         freqQuery = freqQuery.eq('aluno_id', studentIdsToMatch[0])
@@ -286,25 +326,40 @@ export async function GET(request: Request) {
 
       const existingCallKeys = new Set(rawResult.map((c: any) => getCallTimeKey(c.studentId, c.confirmedAt || c.calledAt)))
 
-      // Pré-filtra apenas frequências que efetivamente possuem registro de saída ANTES de buscar fotos em alunos
+      // Pré-filtra apenas frequências que efetivamente possuem registro de saída
       const freqRecordsWithSaidas = (freqRecords || []).filter((fRecord: any) => {
         const hasArraySaidas = Array.isArray(fRecord.dados?.saidas) && fRecord.dados.saidas.length > 0
         const hasSingleSaida = Boolean(fRecord.dados?.saidaHorario)
         return hasArraySaidas || hasSingleSaida
       })
 
-      if (freqRecordsWithSaidas.length > 0) {
-        const studentIdsToFetch = Array.from(new Set(freqRecordsWithSaidas.map((f: any) => String(f.aluno_id || '').trim()).filter(Boolean)))
-        let alunosMap: Record<string, any> = {}
-        if (studentIdsToFetch.length > 0) {
-          alunosMap = await fetchAlunosBatch(supabase, studentIdsToFetch)
+      // Busca única unificada de alunos para enriquecer frequências, eventos de catraca e chamadas sem foto
+      const unifiedStudentIds = new Set<string>()
+      for (const f of freqRecordsWithSaidas) {
+        const id = String(f.aluno_id || '').trim()
+        if (id) unifiedStudentIds.add(id)
+      }
+      for (const ev of exitEvents) {
+        const id = String(ev.aluno_id || '').trim()
+        if (id) unifiedStudentIds.add(id)
+      }
+      for (const c of rawResult) {
+        if (!c.studentPhoto && c.studentId) {
+          const id = String(c.studentId).trim()
+          if (id) unifiedStudentIds.add(id)
         }
+      }
 
+      const unifiedAlunosMap: Record<string, any> = unifiedStudentIds.size > 0
+        ? await fetchAlunosBatch(supabase, Array.from(unifiedStudentIds))
+        : {}
+
+      if (freqRecordsWithSaidas.length > 0) {
         for (const fRecord of freqRecordsWithSaidas) {
           const aId = String(fRecord.aluno_id || '').trim()
           if (!aId) continue
           const recordDate = fRecord.data || targetDate
-          const al = alunosMap[aId]
+          const al = unifiedAlunosMap[aId]
 
           const todasSaidas = Array.isArray(fRecord.dados?.saidas) && fRecord.dados.saidas.length > 0
             ? fRecord.dados.saidas
@@ -314,108 +369,96 @@ export async function GET(request: Request) {
                 data_hora: fRecord.dados?.horaRegistro ? `${recordDate}T${fRecord.dados.horaRegistro}:00.000Z` : undefined
               }] : [])
 
-        for (const s of todasSaidas) {
-          const sHorario = s.hora
-          const sResp = s.dispositivo || fRecord.dados?.saidaResponsavel
-          const sOrigem = fRecord.dados?.saidaOrigem
-          if (sHorario || sResp) {
-            const isCatraca = sOrigem === 'catraca' || (sResp && String(sResp).toLowerCase().includes('catraca'))
-            const isSolo = isCatraca || (sResp && String(sResp).toLowerCase().includes('sozinho'))
-            const callTime = s.data_hora || `${recordDate}T${sHorario}:00-04:00`
-            const callKey = getCallTimeKey(aId, callTime)
-            if (!existingCallKeys.has(callKey)) {
-              existingCallKeys.add(callKey)
-              rawResult.push({
-                id: `freq-saida-${aId}-${recordDate}-${String(sHorario).replace(':', '')}`,
-                studentId: aId,
-                studentName: al?.nome || aId,
-                studentClass: al?.turma || fRecord.turma_id || '',
-                studentPhoto: al?.foto || al?.foto_url || null,
-                guardianId: isCatraca ? 'catraca-saida' : (isSolo ? 'sozinho' : 'frequencia-diario'),
-                guardianName: sResp || (isSolo ? 'Saiu Sozinho' : 'Responsável Cadastrado'),
-                calledAt: callTime,
-                confirmedAt: callTime,
-                status: 'confirmed',
-                source: isCatraca ? 'catraca' : 'frequencia',
-                tipo: isSolo ? 'sozinho' : undefined,
-                origem: isCatraca ? 'catraca_idface' : (isSolo ? 'manual' : undefined)
-              })
+          for (const s of todasSaidas) {
+            const sHorario = s.hora
+            const sResp = s.dispositivo || fRecord.dados?.saidaResponsavel
+            const sOrigem = fRecord.dados?.saidaOrigem
+            if (sHorario || sResp) {
+              const isCatraca = sOrigem === 'catraca' || (sResp && String(sResp).toLowerCase().includes('catraca'))
+              const isSolo = isCatraca || (sResp && String(sResp).toLowerCase().includes('sozinho'))
+              const callTime = s.data_hora || `${recordDate}T${sHorario}:00-04:00`
+              const callKey = getCallTimeKey(aId, callTime)
+              if (!existingCallKeys.has(callKey)) {
+                existingCallKeys.add(callKey)
+                rawResult.push({
+                  id: `freq-saida-${aId}-${recordDate}-${String(sHorario).replace(':', '')}`,
+                  studentId: aId,
+                  studentName: al?.nome || aId,
+                  studentClass: al?.turma || fRecord.turma_id || '',
+                  studentPhoto: al?.foto || al?.foto_url || null,
+                  guardianId: isCatraca ? 'catraca-saida' : (isSolo ? 'sozinho' : 'frequencia-diario'),
+                  guardianName: sResp || (isSolo ? 'Saiu Sozinho' : 'Responsável Cadastrado'),
+                  calledAt: callTime,
+                  confirmedAt: callTime,
+                  status: 'confirmed',
+                  source: isCatraca ? 'catraca' : 'frequencia',
+                  tipo: isSolo ? 'sozinho' : undefined,
+                  origem: isCatraca ? 'catraca_idface' : (isSolo ? 'manual' : undefined)
+                })
+              }
             }
           }
         }
       }
-    }
 
-    if (exitEvents && exitEvents.length > 0) {
-      const missingEventStudentIds = Array.from(new Set(exitEvents.map((e: any) => String(e.aluno_id || '').trim()).filter(Boolean)))
-
-      let missingAlunosMap: Record<string, any> = {}
-      if (missingEventStudentIds.length > 0) {
-        missingAlunosMap = await fetchAlunosBatch(supabase, missingEventStudentIds)
-      }
-
-      for (const ev of exitEvents) {
-        const aId = String(ev.aluno_id || '').trim()
-        if (!aId) continue
-        const dispNome = ev.dispositivo_nome || 'Catraca de Saída'
-        const evTimeKey = getCallTimeKey(aId, ev.data_hora)
-        if (!existingCallKeys.has(evTimeKey)) {
-          existingCallKeys.add(evTimeKey)
-          const al = missingAlunosMap[aId]
-          const recordDate = ev.data_hora ? ev.data_hora.slice(0, 10) : targetDate
-          const timeToken = ev.data_hora ? ev.data_hora.slice(11, 16).replace(':', '') : '1200'
-          rawResult.push({
-            id: `catraca-saida-${aId}-${recordDate}-${timeToken}`,
-            studentId: aId,
-            studentName: ev.aluno_nome || al?.nome || aId,
-            studentClass: al?.turma || '',
-            studentPhoto: al?.foto || al?.foto_url || null,
-            guardianId: 'catraca-saida',
-            guardianName: `Saiu Sozinho (${dispNome})`,
-            calledAt: ev.data_hora || `${recordDate}T12:00:00-04:00`,
-            confirmedAt: ev.data_hora || `${recordDate}T12:00:00-04:00`,
-            status: 'confirmed',
-            tipo: 'sozinho',
-            origem: 'catraca_idface',
-            dispositivoNome: dispNome,
-            source: 'catraca'
-          })
+      if (exitEvents && exitEvents.length > 0) {
+        for (const ev of exitEvents) {
+          const aId = String(ev.aluno_id || '').trim()
+          if (!aId) continue
+          const dispNome = ev.dispositivo_nome || 'Catraca de Saída'
+          const evTimeKey = getCallTimeKey(aId, ev.data_hora)
+          if (!existingCallKeys.has(evTimeKey)) {
+            existingCallKeys.add(evTimeKey)
+            const al = unifiedAlunosMap[aId]
+            const recordDate = ev.data_hora ? ev.data_hora.slice(0, 10) : targetDate
+            const timeToken = ev.data_hora ? ev.data_hora.slice(11, 16).replace(':', '') : '1200'
+            rawResult.push({
+              id: `catraca-saida-${aId}-${recordDate}-${timeToken}`,
+              studentId: aId,
+              studentName: ev.aluno_nome || al?.nome || aId,
+              studentClass: al?.turma || '',
+              studentPhoto: al?.foto || al?.foto_url || null,
+              guardianId: 'catraca-saida',
+              guardianName: `Saiu Sozinho (${dispNome})`,
+              calledAt: ev.data_hora || `${recordDate}T12:00:00-04:00`,
+              confirmedAt: ev.data_hora || `${recordDate}T12:00:00-04:00`,
+              status: 'confirmed',
+              tipo: 'sozinho',
+              origem: 'catraca_idface',
+              dispositivoNome: dispNome,
+              source: 'catraca'
+            })
+          }
         }
       }
-    }
 
-    if (studentIdsToMatch.length > 0) {
-      const matchSet = new Set(studentIdsToMatch)
-      rawResult = rawResult.filter((c: any) => matchSet.has(String(c.studentId || '').trim()))
-    }
-
-    // Deduplicação final por chave de minuto para evitar duplicidade de chamada entre tabelas
-    const uniqueMap = new Map<string, any>()
-    for (const c of rawResult) {
-      const k = c.status === 'special_auth' ? `special_auth_${c.id}` : (getCallTimeKey(c.studentId, c.confirmedAt || c.calledAt) || c.id)
-      if (!uniqueMap.has(k)) {
-        uniqueMap.set(k, c)
-      } else {
-        const old = uniqueMap.get(k)
-        uniqueMap.set(k, { ...old, ...c, studentPhoto: old.studentPhoto || c.studentPhoto })
+      if (studentIdsToMatch.length > 0) {
+        const matchSet = new Set(studentIdsToMatch)
+        rawResult = rawResult.filter((c: any) => matchSet.has(String(c.studentId || '').trim()))
       }
-    }
-    rawResult = Array.from(uniqueMap.values())
 
-    // Retroalimentação / Enriquecimento de foto para chamadas que possuem studentId mas vieram sem foto
-    const callsMissingPhoto = rawResult.filter((c: any) => !c.studentPhoto && c.studentId)
-    if (callsMissingPhoto.length > 0) {
-      const studentIdsToFetch = Array.from(new Set(callsMissingPhoto.map((c: any) => String(c.studentId).trim()).filter(Boolean)))
-      if (studentIdsToFetch.length > 0) {
-        const photoMap = await fetchAlunosBatch(supabase, studentIdsToFetch)
-        for (const c of callsMissingPhoto) {
-          const p = photoMap[String(c.studentId).trim()]
+      // Deduplicação final por chave de minuto para evitar duplicidade de chamada entre tabelas
+      const uniqueMap = new Map<string, any>()
+      for (const c of rawResult) {
+        const k = c.status === 'special_auth' ? `special_auth_${c.id}` : (getCallTimeKey(c.studentId, c.confirmedAt || c.calledAt) || c.id)
+        if (!uniqueMap.has(k)) {
+          uniqueMap.set(k, c)
+        } else {
+          const old = uniqueMap.get(k)
+          uniqueMap.set(k, { ...old, ...c, studentPhoto: old.studentPhoto || c.studentPhoto })
+        }
+      }
+      rawResult = Array.from(uniqueMap.values())
+
+      // Retroalimentação / Enriquecimento de foto para chamadas que possuem studentId mas vieram sem foto
+      for (const c of rawResult) {
+        if (!c.studentPhoto && c.studentId) {
+          const p = unifiedAlunosMap[String(c.studentId).trim()]
           if (p?.foto || p?.foto_url) {
             c.studentPhoto = p.foto || p.foto_url
           }
         }
       }
-    }
 
     // Build set of studentIds that have a confirmed call today
     const confirmedStudentIds = new Set(

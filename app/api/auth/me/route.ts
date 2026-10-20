@@ -113,74 +113,95 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Unauthorized', ip }, { status: 401, headers: NO_CACHE_HEADERS });
   }
 
-  // Fetch latest profile data: check system_users, responsaveis, and alunos
+  // Fetch latest profile data in parallel: check system_users, responsaveis, and alunos
   const supabaseAdmin = getAdminClient();
   const cleanUserEmail = (user.email || '').trim().toLowerCase();
   const isVirtualStudentEmail = cleanUserEmail.endsWith('@impactoedu.local');
 
-  let dbUser = null;
-  try {
-    const { data } = await supabaseAdmin
-      .from('system_users')
-      .select('*')
-      .or(`id.eq.${user.id},auth_id.eq.${user.id},email.eq.${user.email}`)
-      .maybeSingle();
-    if (data && (isVirtualStudentEmail || !data.email || String(data.email).trim().toLowerCase() === cleanUserEmail)) {
-      dbUser = data;
-    }
-  } catch (e) {
-    if (user.email) {
+  const fetchDbUser = async () => {
+    try {
       const { data } = await supabaseAdmin
         .from('system_users')
         .select('*')
-        .ilike('email', user.email)
+        .or(`id.eq.${user.id},auth_id.eq.${user.id},email.eq.${user.email}`)
         .maybeSingle();
-      dbUser = data;
+      if (data && (isVirtualStudentEmail || !data.email || String(data.email).trim().toLowerCase() === cleanUserEmail)) {
+        return data;
+      }
+    } catch (e) {
+      if (user.email) {
+        const { data } = await supabaseAdmin
+          .from('system_users')
+          .select('*')
+          .ilike('email', user.email)
+          .maybeSingle();
+        return data;
+      }
     }
+    return null;
+  };
+
+  const fetchDbResp = async (extraRespId?: string): Promise<any> => {
+    const targetRespId = extraRespId || user.user_metadata?.responsavel_id;
+    try {
+      const respConds: string[] = [];
+      if (targetRespId) respConds.push(`id.eq.${targetRespId}`);
+      if (user.email) respConds.push(`email.ilike.${user.email.trim()}`);
+      if (respConds.length > 0) {
+        const { data } = await supabaseAdmin
+          .from('responsaveis')
+          .select('id, nome, email, dados')
+          .or(respConds.join(','))
+          .limit(5);
+        const rows = Array.isArray(data) ? data : [];
+        return (
+          rows.find((r: any) => String(r.email || '').trim().toLowerCase() === cleanUserEmail) ||
+          rows.find((r: any) => !r.email && String(r.id) === String(targetRespId)) ||
+          null
+        );
+      }
+    } catch (e) {}
+    return null;
+  };
+
+  const fetchDbAluno = async (extraAlunoId?: string): Promise<any> => {
+    const targetAlunoId = extraAlunoId || user.user_metadata?.aluno_id;
+    try {
+      const alunoConds: string[] = [];
+      if (targetAlunoId) alunoConds.push(`id.eq.${targetAlunoId}`);
+      if (user.email && !isVirtualStudentEmail) alunoConds.push(`email.ilike.${user.email.trim()}`);
+      if (alunoConds.length > 0) {
+        const { data } = await supabaseAdmin
+          .from('alunos')
+          .select('id, nome, email, status, foto, dados')
+          .or(alunoConds.join(','))
+          .limit(5);
+        const rows = Array.isArray(data) ? data : [];
+        return (
+          rows.find((a: any) => {
+            const aEmail = String(a.email || a.dados?.email || '').trim().toLowerCase();
+            return isVirtualStudentEmail
+              ? String(a.id) === String(targetAlunoId)
+              : aEmail === cleanUserEmail || (!aEmail && String(a.id) === String(targetAlunoId));
+          }) || null
+        );
+      }
+    } catch (e) {}
+    return null;
+  };
+
+  let [dbUser, dbResp, dbAluno] = await Promise.all([
+    fetchDbUser(),
+    fetchDbResp(),
+    fetchDbAluno()
+  ]);
+
+  if (dbUser?.dados?.responsavel_id && !dbResp && dbUser.dados.responsavel_id !== user.user_metadata?.responsavel_id) {
+    dbResp = await fetchDbResp(dbUser.dados.responsavel_id);
   }
-
-  let dbResp: any = null;
-  const targetRespId = user.user_metadata?.responsavel_id || dbUser?.dados?.responsavel_id;
-  try {
-    const respConds: string[] = [];
-    if (targetRespId) respConds.push(`id.eq.${targetRespId}`);
-    if (user.email) respConds.push(`email.ilike.${user.email.trim()}`);
-    if (respConds.length > 0) {
-      const { data } = await supabaseAdmin
-        .from('responsaveis')
-        .select('*')
-        .or(respConds.join(','))
-        .limit(5);
-      const rows = Array.isArray(data) ? data : [];
-      dbResp =
-        rows.find((r: any) => String(r.email || '').trim().toLowerCase() === cleanUserEmail) ||
-        rows.find((r: any) => !r.email && String(r.id) === String(targetRespId)) ||
-        null;
-    }
-  } catch (e) {}
-
-  let dbAluno: any = null;
-  const targetAlunoId = user.user_metadata?.aluno_id || dbUser?.dados?.aluno_id;
-  try {
-    const alunoConds: string[] = [];
-    if (targetAlunoId) alunoConds.push(`id.eq.${targetAlunoId}`);
-    if (user.email && !isVirtualStudentEmail) alunoConds.push(`email.ilike.${user.email.trim()}`);
-    if (alunoConds.length > 0) {
-      const { data } = await supabaseAdmin
-        .from('alunos')
-        .select('*')
-        .or(alunoConds.join(','))
-        .limit(5);
-      const rows = Array.isArray(data) ? data : [];
-      dbAluno =
-        rows.find((a: any) => {
-          const aEmail = String(a.email || a.dados?.email || '').trim().toLowerCase();
-          return isVirtualStudentEmail
-            ? String(a.id) === String(targetAlunoId)
-            : aEmail === cleanUserEmail || (!aEmail && String(a.id) === String(targetAlunoId));
-        }) || null;
-    }
-  } catch (e) {}
+  if (dbUser?.dados?.aluno_id && !dbAluno && dbUser.dados.aluno_id !== user.user_metadata?.aluno_id) {
+    dbAluno = await fetchDbAluno(dbUser.dados.aluno_id);
+  }
 
   if (!dbUser && !dbResp && !dbAluno) {
     await supabase.auth.signOut().catch(() => {});

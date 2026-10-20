@@ -16,7 +16,7 @@ function clearLocalTurmasRouteCache() {
 }
 
 export async function GET(request: Request) {
-  const { user, errorResponse } = await requireAuth()
+  const { user, errorResponse } = await requireAuth(request)
   if (errorResponse) return errorResponse
 
   try {
@@ -31,7 +31,8 @@ export async function GET(request: Request) {
     const search = url.searchParams.get('search') || ''
     const ano = url.searchParams.get('ano') || ''
     const segmento = url.searchParams.get('segmento') || ''
-    const includeStats = url.searchParams.get('stats') !== 'false'
+    const statsParam = url.searchParams.get('stats')
+    const includeStats = statsParam === 'true' || (statsParam !== 'false' && !all)
 
     const cacheKey = `${all ? 'all' : `${page}_${limit}`}_${search}_${ano}_${segmento}_${includeStats ? '1' : '0'}`
     const nowMs = Date.now()

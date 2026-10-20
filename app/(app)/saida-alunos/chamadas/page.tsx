@@ -1965,13 +1965,13 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
     return () => { unsub() }
   }, [onRealtime, triggerSpecialAuthSound])
 
-  // Sincronização contínua com /api/saida/calls para carregar imediatamente do banco todas as autorizações de hoje com targetTime
-  // e expurgar aquelas deletadas ou canceladas
+  // Sincronização contínua com /api/saida/calls?onlySpecialAuth=true para manter autorizações de hoje sincronizadas
+  // (a carga inicial já vem de activeCalls do SaidaProvider)
   useEffect(() => {
     let isSubscribed = true
     const fetchSpecialAuths = async () => {
       try {
-        const res = await fetch(`/api/saida/calls?_t=${Date.now()}`, {
+        const res = await fetch(`/api/saida/calls?onlySpecialAuth=true&_t=${Date.now()}`, {
           headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }
         })
         if (!res.ok) return
@@ -2028,7 +2028,6 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
         console.warn('[SpecialExitSticker] Falha ao sincronizar autorizações especiais:', err)
       }
     }
-    fetchSpecialAuths()
     const handleVisibility = () => {
       if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
         fetchSpecialAuths()
@@ -2093,6 +2092,9 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
           changed = true
         }
       }
+    }
+    if (!initialLoadDoneRef.current && activeCalls.length > 0) {
+      initialLoadDoneRef.current = true
     }
     // Force a re-render if entries changed
     if (changed) setSeenSpecialAuthsVersion(v => v + 1)
@@ -2188,7 +2190,7 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
     setIsSearching(true)
     const timer = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/alunos?search=${encodeURIComponent(q)}&limit=5&page=1&withPhoto=true`)
+        const res = await fetch(`/api/alunos?search=${encodeURIComponent(q)}&limit=5&page=1&withPhoto=true&lightweight=true`)
         if (!res.ok) throw new Error('Falha ao buscar')
         const json = await res.json()
         const data = json.data || []
@@ -3103,7 +3105,9 @@ function ChamadasContent() {
   // Fallback Polling 30s se o Supabase Realtime falhar ou desconectar
   useEffect(() => {
     if (realtimeStatus !== 'online') {
-      refreshCalls() // Dispara imediatamente
+      if (realtimeStatus === 'offline') {
+        refreshCalls() // Dispara imediatamente apenas se caiu para offline (no mount 'connecting', SaidaProvider já busca)
+      }
       const iv = setInterval(() => {
         refreshCalls()
       }, 30000)
@@ -3125,7 +3129,7 @@ function ChamadasContent() {
 
     const timer = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/alunos?search=${encodeURIComponent(q)}&limit=10&page=1&withPhoto=true`, {
+        const res = await fetch(`/api/alunos?search=${encodeURIComponent(q)}&limit=10&page=1&withPhoto=true&lightweight=true`, {
           signal: controller.signal
         })
         if (!res.ok) throw new Error('Falha ao buscar alunos')

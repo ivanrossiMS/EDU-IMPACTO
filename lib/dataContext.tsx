@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 import { useLocalStorage } from './useLocalStorage'
 import { useSupabaseArray, invalidateAllCache } from './useSupabaseCollection'
 import { useConfigDb, invalidateConfigCache } from './useConfigDb'
-import { setCachedPerfis } from './auth/moduleRouting'
+import { getCachedPerfis, setCachedPerfis } from './auth/moduleRouting'
 
 // ─── Data version — bump to force-clear all stored data ───────────
 const DATA_VERSION = '17'
@@ -1494,7 +1494,13 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   // ── SYSTEM LOGS — inseridos no Supabase via batch / api / beacon ────
 
-  const [perfis, setPerfisRaw, { loading: perfisLoading }] = useSupabaseArray<Perfil>('configuracoes/perfis', DEFAULT_PERFIS)
+  const [perfis, setPerfisRaw, { loading: perfisLoading }] = useSupabaseArray<Perfil>('configuracoes/perfis', getCachedPerfis() || DEFAULT_PERFIS)
+
+  useEffect(() => {
+    if (!perfisLoading && Array.isArray(perfis) && perfis.length > 0) {
+      setCachedPerfis(perfis)
+    }
+  }, [perfis, perfisLoading])
 
 
   const logSystemAction = useCallback((modulo: string, acao: string, descricao: string, payload?: Partial<SystemLog>) => {

@@ -1109,49 +1109,66 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
     return () => clearInterval(interval)
   }, [getTodayStr, setActiveCallsLocal])
 
-  const refreshCalls = useCallback(async () => {
-    try {
-      invalidateCache('saida/calls')
-      const res = await fetch(`/api/saida/calls?date=${getTodayStr()}&_t=${Date.now()}`, {
-        headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }
-      })
-      if (res.ok) {
-        const data = await res.json()
-        const arr = Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : []
-        
-        // Normalize array: Ensure that if any entry for a studentId is 'confirmed',
-        // all non-reverted entries for that same studentId are also marked as 'confirmed'.
-        const confirmedSet = new Set(
-          arr.filter((c: PickupCall) => c.status === 'confirmed' && c.studentId != null).map((c: PickupCall) => String(c.studentId))
-        )
-        const normalized = arr.map((c: PickupCall) => {
-          if (c.studentId != null && confirmedSet.has(String(c.studentId)) && (c.status === 'waiting' || c.status === 'called') && !(c as any).isRevert) {
-            return { ...c, status: 'confirmed' as const }
-          }
-          return c
-        })
+  const isLoadingCallsRef = useRef(isLoadingCalls)
+  useEffect(() => {
+    isLoadingCallsRef.current = isLoadingCalls
+  }, [isLoadingCalls])
+  const inFlightRefreshRef = useRef<Promise<void> | null>(null)
 
-        if (setActiveCallsLocal) {
-          setActiveCallsLocal(prev => {
-            const prevArr = prev || []
-            const prevConfirmedSet = new Set(
-              prevArr.filter(c => c.status === 'confirmed' && c.studentId != null).map(c => String(c.studentId))
-            )
-            return normalized.map((c: PickupCall) => {
-              if (c.studentId != null && prevConfirmedSet.has(String(c.studentId)) && (c.status === 'waiting' || c.status === 'called') && !(c as any).isRevert) {
-                return { ...c, status: 'confirmed' as const }
-              }
-              return c
-            })
+  const refreshCalls = useCallback(async () => {
+    // Se a carga inicial do useSupabaseArray('saida/calls') já está em voo, evita disparar requisição duplicada concorrente
+    if (isLoadingCallsRef.current) return
+    if (inFlightRefreshRef.current) return inFlightRefreshRef.current
+
+    const promise = (async () => {
+      try {
+        invalidateCache('saida/calls')
+        const res = await fetch(`/api/saida/calls?date=${getTodayStr()}&_t=${Date.now()}`, {
+          headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }
+        })
+        if (res.ok) {
+          const data = await res.json()
+          const arr = Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : []
+          
+          // Normalize array: Ensure that if any entry for a studentId is 'confirmed',
+          // all non-reverted entries for that same studentId are also marked as 'confirmed'.
+          const confirmedSet = new Set(
+            arr.filter((c: PickupCall) => c.status === 'confirmed' && c.studentId != null).map((c: PickupCall) => String(c.studentId))
+          )
+          const normalized = arr.map((c: PickupCall) => {
+            if (c.studentId != null && confirmedSet.has(String(c.studentId)) && (c.status === 'waiting' || c.status === 'called') && !(c as any).isRevert) {
+              return { ...c, status: 'confirmed' as const }
+            }
+            return c
           })
-        } else {
-          setActiveCalls(normalized) // fallback
+
+          if (setActiveCallsLocal) {
+            setActiveCallsLocal(prev => {
+              const prevArr = prev || []
+              const prevConfirmedSet = new Set(
+                prevArr.filter(c => c.status === 'confirmed' && c.studentId != null).map(c => String(c.studentId))
+              )
+              return normalized.map((c: PickupCall) => {
+                if (c.studentId != null && prevConfirmedSet.has(String(c.studentId)) && (c.status === 'waiting' || c.status === 'called') && !(c as any).isRevert) {
+                  return { ...c, status: 'confirmed' as const }
+                }
+                return c
+              })
+            })
+          } else {
+            setActiveCalls(normalized) // fallback
+          }
         }
+      } catch (e) {
+        console.error('Erro ao recarregar chamadas:', e)
+      } finally {
+        inFlightRefreshRef.current = null
       }
-    } catch (e) {
-      console.error('Erro ao recarregar chamadas:', e)
-    }
-  }, [setActiveCalls, setActiveCallsLocal])
+    })()
+
+    inFlightRefreshRef.current = promise
+    return promise
+  }, [getTodayStr, setActiveCalls, setActiveCallsLocal])
 
   const broadcastAnnouncement = useCallback((phrase: string, options?: { repeat?: number, chime?: boolean, title?: string, operatorName?: string, rate?: number, pitch?: number }) => {
     if (!phrase || !phrase.trim()) return

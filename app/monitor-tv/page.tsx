@@ -396,13 +396,17 @@ function MonitorContent() {
 
   // Fallback Polling apenas se estiver desconectado / offline para não sobrecarregar
   useEffect(() => {
-    refreshCalls()
-    const iv = setInterval(() => {
-      if (realtimeStatus !== 'online' && (typeof document === 'undefined' || document.visibilityState === 'visible')) {
+    if (realtimeStatus !== 'online') {
+      if (realtimeStatus === 'offline') {
         refreshCalls()
       }
-    }, 15000)
-    return () => clearInterval(iv)
+      const iv = setInterval(() => {
+        if (typeof document === 'undefined' || document.visibilityState === 'visible') {
+          refreshCalls()
+        }
+      }, 15000)
+      return () => clearInterval(iv)
+    }
   }, [refreshCalls, realtimeStatus])
 
   // Chrome/Browser TTS Resume Heartbeat (evita travamento do sintetizador de voz em background)

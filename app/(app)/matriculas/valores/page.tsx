@@ -1603,7 +1603,7 @@ export default function ValoresPage() {
     window.print()
   }
 
-  // Renderiza o card da proposta em um canvas de alta fidelidade
+  // Renderiza o card da proposta em um canvas de alta fidelidade (3x Ultra-HD)
   const generateProposalCanvas = async (): Promise<{ canvas: HTMLCanvasElement; baseFileName: string }> => {
     if (!propostaCardRef.current) throw new Error('Card da proposta não encontrado')
 
@@ -1616,98 +1616,134 @@ export default function ValoresPage() {
       }
     }
 
-    const html2canvas = (await import('html2canvas')).default
     const cardEl = propostaCardRef.current
     const targetWidth = 860
+    const scale = 3
 
-    // Captura com html2canvas em 3x Ultra-HD para máxima nitidez de leitura no WhatsApp e no PDF
-    const canvas = await html2canvas(cardEl, {
-      scale: 3,
-      useCORS: true,
-      allowTaint: true,
-      backgroundColor: '#ffffff',
-      logging: false,
-      imageTimeout: 15000,
-      windowWidth: 1400,
-      ignoreElements: (el) => el.classList.contains('no-export') || el.classList.contains('no-print'),
-      onclone: (clonedDoc) => {
-        // Clona as fontes e stylesheets para o documento clonado
-        try {
-          const fontSheets = document.querySelectorAll('link[rel="stylesheet"], style')
-          fontSheets.forEach((s) => {
-            clonedDoc.head.appendChild(s.cloneNode(true))
-          })
-        } catch (e) {
-          console.warn('Aviso ao clonar stylesheets:', e)
-        }
+    // 2. Cria um palco offscreen isolado com largura fixa consistente (860px)
+    // para que a captura nunca dependa da largura da janela, coluna responsiva ou scroll atual.
+    const stage = document.createElement('div')
+    stage.setAttribute('aria-hidden', 'true')
+    stage.style.cssText = [
+      'position: fixed',
+      'left: -99999px',
+      'top: 0',
+      `width: ${targetWidth}px`,
+      `min-width: ${targetWidth}px`,
+      `max-width: ${targetWidth}px`,
+      'height: auto',
+      'max-height: none',
+      'overflow: visible',
+      'background: #ffffff',
+      'padding: 0',
+      'margin: 0',
+      'z-index: -9999',
+      'pointer-events: none',
+      'box-sizing: border-box',
+    ].join('; ')
 
-        const el = clonedDoc.getElementById('proposta-card-imprimir')
-        if (el) {
-          el.style.width = `${targetWidth}px`
-          el.style.maxWidth = `${targetWidth}px`
-          el.style.minWidth = `${targetWidth}px`
-          el.style.boxShadow = 'none'
-          el.style.margin = '0 auto'
-          el.style.padding = '0'
-          el.style.fontFamily = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif'
-          ;(el.style as any).webkitFontSmoothing = 'antialiased'
-          ;(el.style as any).mozOsxFontSmoothing = 'grayscale'
-          el.style.textRendering = 'optimizeLegibility'
+    const clonedCard = cardEl.cloneNode(true) as HTMLElement
+    clonedCard.id = 'proposta-card-export-clone'
+    clonedCard.style.width = `${targetWidth}px`
+    clonedCard.style.minWidth = `${targetWidth}px`
+    clonedCard.style.maxWidth = `${targetWidth}px`
+    clonedCard.style.height = 'auto'
+    clonedCard.style.maxHeight = 'none'
+    clonedCard.style.margin = '0'
+    clonedCard.style.padding = '0'
+    clonedCard.style.boxShadow = 'none'
+    clonedCard.style.boxSizing = 'border-box'
+    clonedCard.style.position = 'static'
+    clonedCard.style.transform = 'none'
+    clonedCard.style.background = '#ffffff'
 
-          // Remove backdrop-filter e limpa letter-spacing / tabular-nums que causam quebras/espaços em badges e números
-          const allNodes = el.querySelectorAll('*')
-          allNodes.forEach((node) => {
-            if (node instanceof HTMLElement) {
-              node.style.fontFamily = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif'
-              ;(node.style as any).webkitFontSmoothing = 'antialiased'
-              ;(node.style as any).mozOsxFontSmoothing = 'grayscale'
-              node.style.textRendering = 'optimizeLegibility'
-              node.style.backdropFilter = 'none'
-              ;(node.style as any).webkitBackdropFilter = 'none'
-              node.style.letterSpacing = 'normal'
-              node.style.fontVariantNumeric = 'normal'
-              node.style.fontFeatureSettings = 'normal'
-            }
-          })
+    // Remove elementos marcados para não exportar
+    clonedCard.querySelectorAll('.no-export, .no-print').forEach((node) => node.remove())
 
-          // Garante alinhamento perfeitamente centralizado no html2canvas para todos os badges
-          const allBadges = el.querySelectorAll('.proposta-badge, .badge-auto')
-          allBadges.forEach((b) => {
-            if (b instanceof HTMLElement) {
-              b.style.display = 'inline-block'
-              b.style.textAlign = 'center'
-              b.style.verticalAlign = 'middle'
-              b.style.width = 'auto'
-              b.style.maxWidth = 'none'
-              b.style.minWidth = '0'
-              b.style.whiteSpace = 'nowrap'
-              b.style.flexShrink = '0'
-              b.style.boxSizing = 'border-box'
-              b.style.lineHeight = 'normal'
+    stage.appendChild(clonedCard)
+    document.body.appendChild(stage)
 
-              const children = Array.from(b.children)
-              children.forEach((child, idx) => {
-                if (child instanceof HTMLElement) {
-                  child.style.display = 'inline-block'
-                  child.style.verticalAlign = 'middle'
-                  child.style.textAlign = 'center'
-                  child.style.lineHeight = 'normal'
-                  child.style.whiteSpace = 'nowrap'
-                  if (idx === 0 && children.length > 1) {
-                    child.style.marginRight = '4px'
-                  }
-                }
+    try {
+      // 3. Converte todas as imagens internas para Data URL e aguarda decodificação completa
+      const origImages = Array.from(cardEl.querySelectorAll('img'))
+      const clonedImages = Array.from(clonedCard.querySelectorAll('img'))
+      await Promise.all(
+        clonedImages.map(async (img, idx) => {
+          try {
+            img.loading = 'eager'
+            img.decoding = 'sync'
+            const origImg = origImages[idx]
+            if (origImg && origImg.complete && origImg.naturalWidth > 0) {
+              const imgCanvas = document.createElement('canvas')
+              imgCanvas.width = origImg.naturalWidth
+              imgCanvas.height = origImg.naturalHeight
+              const ctx = imgCanvas.getContext('2d')
+              if (ctx) {
+                ctx.drawImage(origImg, 0, 0)
+                img.src = imgCanvas.toDataURL('image/png')
+              }
+            } else if (img.src && !img.src.startsWith('data:')) {
+              const res = await fetch(img.src)
+              const blob = await res.blob()
+              const dataUrl = await new Promise<string>((resolve, reject) => {
+                const reader = new FileReader()
+                reader.onloadend = () => resolve(String(reader.result || ''))
+                reader.onerror = reject
+                reader.readAsDataURL(blob)
               })
+              if (dataUrl) img.src = dataUrl
             }
-          })
-        }
+            if (typeof img.decode === 'function') {
+              await img.decode().catch(() => {})
+            }
+          } catch (imgErr) {
+            console.warn('Aviso ao preparar imagem para exportação:', imgErr)
+          }
+        })
+      )
+
+      // 4. Aguarda estabilização completa do layout após aplicar estilos e imagens
+      await new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+      )
+
+      const rect = clonedCard.getBoundingClientRect()
+      const exportWidth = targetWidth
+      const exportHeight = Math.ceil(Math.max(rect.height, clonedCard.scrollHeight, clonedCard.offsetHeight))
+
+      // 5. Renderiza usando o motor nativo do navegador via SVG foreignObject (html-to-image) em 3x Ultra-HD
+      const { toCanvas } = await import('html-to-image')
+      const canvas = await toCanvas(clonedCard, {
+        width: exportWidth,
+        height: exportHeight,
+        canvasWidth: exportWidth,
+        canvasHeight: exportHeight,
+        pixelRatio: scale,
+        backgroundColor: '#ffffff',
+        skipFonts: true,
+        cacheBust: false,
+        style: {
+          margin: '0',
+          padding: '0',
+          width: `${exportWidth}px`,
+          minWidth: `${exportWidth}px`,
+          maxWidth: `${exportWidth}px`,
+          height: `${exportHeight}px`,
+          position: 'static',
+          transform: 'none',
+          boxShadow: 'none',
+        },
+      })
+
+      const nomeLimpo = (nomeAluno || 'comercial').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-')
+      const baseFileName = `proposta-impacto-${nomeLimpo}-${anoLetivo}`
+
+      return { canvas, baseFileName }
+    } finally {
+      if (stage.parentNode) {
+        stage.parentNode.removeChild(stage)
       }
-    })
-
-    const nomeLimpo = (nomeAluno || 'comercial').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-')
-    const baseFileName = `proposta-impacto-${nomeLimpo}-${anoLetivo}`
-
-    return { canvas, baseFileName }
+    }
   }
 
   // Gera o arquivo PDF oficial no tamanho EXATO da proposta (Single Page, alta fidelidade e zero sobras em branco)
@@ -3899,7 +3935,7 @@ export default function ValoresPage() {
                               paddingBottom: 13,
                               borderBottom: '1px solid #f1f5f9'
                             }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', minWidth: 0, flex: 1 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'nowrap', minWidth: 0, flex: 1 }}>
                                 <div style={{
                                   width: 44,
                                   height: 44,
@@ -3912,7 +3948,7 @@ export default function ValoresPage() {
                                 }}>
                                   {theme.icon}
                                 </div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', minWidth: 0 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', minWidth: 0, flex: 1 }}>
                                   <span style={{ fontSize: 20, fontWeight: 900, color: '#0f172a', lineHeight: 1.2, whiteSpace: 'nowrap' }}>
                                     {sc.serie.nome}
                                   </span>
@@ -4173,8 +4209,8 @@ export default function ValoresPage() {
                                       flexDirection: 'column',
                                       gap: 2.5
                                     }}>
-                                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                        <span style={{ fontSize: 9.5, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em', lineHeight: 1.2 }}>
+                                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 4 }}>
+                                        <span style={{ fontSize: 9.5, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em', lineHeight: 1.2, whiteSpace: 'nowrap' }}>
                                           À Vista
                                         </span>
                                         <PropostaBadge
@@ -4219,8 +4255,8 @@ export default function ValoresPage() {
                                       flexDirection: 'column',
                                       gap: 2.5
                                     }}>
-                                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                        <span style={{ fontSize: 9.5, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em', lineHeight: 1.2 }}>
+                                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 4 }}>
+                                        <span style={{ fontSize: 9.5, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em', lineHeight: 1.2, whiteSpace: 'nowrap' }}>
                                           Até {numParcelasMatricula}x
                                         </span>
                                         <PropostaBadge

@@ -8,6 +8,7 @@ export const fetchCache = 'force-no-store'
 
 let memoryCache: any = null;
 let cacheTime: number = 0;
+let inFlightPromise: Promise<any[]> | null = null;
 
 export async function GET(request: Request) {
   try {
@@ -21,30 +22,30 @@ export async function GET(request: Request) {
       })
     }
 
-    const adminSupabase = getAdminClient()
-
-    const { data, error } = await adminSupabase.from('saida_config').select('id, dados')
-    if (error) {
-      console.error('[saida_config GET] Fetch error:', error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+    if (!inFlightPromise) {
+      inFlightPromise = (async () => {
+        const adminSupabase = getAdminClient()
+        const { data, error } = await adminSupabase.from('saida_config').select('id, dados')
+        if (error) throw new Error(error.message)
+        const result = (data || []).map(row => ({ id: row.id, ...(row.dados || {}) }))
+        memoryCache = result
+        cacheTime = Date.now()
+        return result
+      })().finally(() => {
+        inFlightPromise = null
+      })
     }
-    
-    // Extract everything from jsonb 'dados' to keep interface flat
-    const result = (data || []).map(row => ({ id: row.id, ...(row.dados || {}) }))
-    
-    // Update memory cache
-    memoryCache = result;
-    cacheTime = Date.now();
-    
+
+    const result = await inFlightPromise
     return NextResponse.json(result, {
       headers: { 
         'Cache-Control': 'no-store, max-age=0',
         'Pragma': 'no-cache'
       }
     })
-  } catch (err) {
+  } catch (err: any) {
     console.error('[saida_config GET] Unhandled error:', err)
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })
+    return NextResponse.json({ error: err?.message || 'Internal Server Error' }, { status: 500 })
   }
 }
 
@@ -62,6 +63,8 @@ export async function POST(request: Request) {
       const rows = body.map(buildRow)
       const { error } = await adminSupabase.from('saida_config').upsert(rows)
       if (error) throw new Error(error.message)
+      memoryCache = null;
+      cacheTime = 0;
       return NextResponse.json({ ok: true, count: rows.length })
     }
 
