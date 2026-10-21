@@ -14,15 +14,17 @@ import {
   TrendingDown,
   Sparkles,
   Download,
-  Calculator
+  Calculator,
+  Receipt
 } from 'lucide-react'
 import { CredImpactoEmprestimo, CredImpactoParcela } from '@/types/credimpacto'
 import { formatBrl } from '@/lib/credimpacto/engine'
+import { EmprestimoDetalhesSubTab } from './EmprestimoDetalhesModal'
 import { toast } from 'sonner'
 
 interface ColaboradorDashboardProps {
   emprestimos: CredImpactoEmprestimo[]
-  onOpenDetails: (loan: CredImpactoEmprestimo) => void
+  onOpenDetails: (loan: CredImpactoEmprestimo, initialTab?: EmprestimoDetalhesSubTab) => void
   onOpenSignModal: (loan: CredImpactoEmprestimo) => void
   onOpenPayoffModal: (loan: CredImpactoEmprestimo) => void
   onRefresh: () => void
@@ -356,6 +358,17 @@ export function ColaboradorDashboard({
                         >
                           <HandCoins size={14} />
                           <span>Quitação Antecipada</span>
+                        </button>
+                      )}
+
+                      {(loan.comprovanteLiberacaoUrl || loan.status === 'ativo' || loan.status === 'quitado') && (
+                        <button
+                          onClick={() => onOpenDetails(loan, 'comprovante')}
+                          className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-cyan-50 hover:bg-cyan-100 dark:bg-cyan-950/40 dark:hover:bg-cyan-900/40 border border-cyan-200 dark:border-cyan-800/50 text-cyan-700 dark:text-cyan-300 text-xs font-semibold transition-all active:scale-98"
+                          title="Visualizar Comprovante de Transferência"
+                        >
+                          <Receipt size={14} />
+                          <span>Ver Comprovante</span>
                         </button>
                       )}
 

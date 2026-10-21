@@ -631,7 +631,8 @@ export async function dbSaveEmprestimo(
         primeiraParcelaVencimento: updatedLoan.primeiraParcelaVencimento || updatedLoan.parcelas?.[0]?.dataVencimento,
         assinanteNome: updatedLoan.assinanteNome,
         aprovadoDiretoPorNome: updatedLoan.aprovadoDiretoPorNome,
-        aprovadoDiretoPorId: updatedLoan.aprovadoDiretoPorId
+        aprovadoDiretoPorId: updatedLoan.aprovadoDiretoPorId,
+        comprovanteLiberacaoUrl: updatedLoan.comprovanteLiberacaoUrl
       },
       created_at: updatedLoan.createdAt || nowIso,
       updated_at: nowIso
@@ -1130,7 +1131,7 @@ function mapDbRowToEmprestimo(e: any, parcelas: CredImpactoParcela[]): CredImpac
     finalidade: e.finalidade,
     contraproposta: e.contraproposta,
     dadosBancarios: e.dados_bancarios || e.dadosBancarios,
-    comprovanteLiberacaoUrl: e.comprovante_liberacao_url || e.comprovanteLiberacaoUrl,
+    comprovanteLiberacaoUrl: e.comprovante_liberacao_url || e.comprovanteLiberacaoUrl || e.dados?.comprovanteLiberacaoUrl,
     liberadoPorId: e.liberado_por_id || e.liberadoPorId,
     liberadoPorNome: e.liberado_por_nome || e.liberadoPorNome,
     dataLiberacao: e.data_liberacao || e.dataLiberacao,

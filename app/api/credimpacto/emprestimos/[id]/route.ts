@@ -585,6 +585,37 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
       return NextResponse.json(updated)
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // 7. AÇÃO: ATUALIZAR / ANEXAR COMPROVANTE DE TRANSFERÊNCIA
+    // ─────────────────────────────────────────────────────────────────────────
+    if (acao === 'atualizar_comprovante_liberacao') {
+      if (!resolved.isAdminOrFinance) {
+        return NextResponse.json(
+          { error: 'Apenas o setor financeiro ou direção pode anexar/alterar o comprovante de transferência.' },
+          { status: 403 }
+        )
+      }
+
+      const cleanUrl = String(body.comprovanteLiberacaoUrl || '').trim()
+      loan.comprovanteLiberacaoUrl = cleanUrl || undefined
+
+      if (cleanUrl && !loan.dataLiberacao) {
+        loan.dataLiberacao = new Date().toISOString()
+        loan.liberadoPorId = resolved.id
+        loan.liberadoPorNome = resolved.nome
+      }
+
+      const updated = await dbSaveEmprestimo(
+        loan,
+        { id: resolved.id, nome: resolved.nome, perfil: resolved.perfil },
+        'EDICAO',
+        cleanUrl
+          ? `Comprovante de transferência anexado/atualizado por ${resolved.nome}`
+          : `Comprovante de transferência removido por ${resolved.nome}`
+      )
+      return NextResponse.json(updated)
+    }
+
     return NextResponse.json({ error: 'Ação não reconhecida.' }, { status: 400 })
   } catch (err: any) {
     return NextResponse.json({ error: err.message || 'Erro ao processar alteração do empréstimo' }, { status: 400 })

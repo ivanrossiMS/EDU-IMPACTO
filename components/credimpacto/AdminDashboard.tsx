@@ -30,7 +30,8 @@ import {
   MessageCircle,
   Send,
   Phone,
-  BellRing
+  BellRing,
+  Receipt
 } from 'lucide-react'
 import { CredImpactoEmprestimo, StatusEmprestimo } from '@/types/credimpacto'
 import { formatBrl, METODOS_LABELS, roundMoney, simulateLoan } from '@/lib/credimpacto/engine'
@@ -41,12 +42,13 @@ import {
   getCredImpactoWhatsAppUrl
 } from '@/lib/credimpacto/whatsappTemplates'
 import { CredImpactoManualPushModal } from './CredImpactoPushCenter'
+import { EmprestimoDetalhesSubTab } from './EmprestimoDetalhesModal'
 import { toast } from 'sonner'
 
 interface AdminDashboardProps {
   emprestimos: CredImpactoEmprestimo[]
   colaboradoresList?: any[]
-  onOpenDetails: (loan: CredImpactoEmprestimo) => void
+  onOpenDetails: (loan: CredImpactoEmprestimo, initialTab?: EmprestimoDetalhesSubTab) => void
   onRefresh: () => void
   viewModeTab?: 'dashboard' | 'emprestimos' | 'analise' | 'liberacoes'
   onOpenFichaColaborador?: (colaboradorId: string) => void
@@ -1276,6 +1278,19 @@ export function AdminDashboard({
                             )}
 
                             <button
+                              type="button"
+                              onClick={() => onOpenDetails(loan, 'comprovante')}
+                              className={`p-1.5 rounded-lg border transition-all ${
+                                loan.comprovanteLiberacaoUrl
+                                  ? 'bg-cyan-50 hover:bg-cyan-100 dark:bg-cyan-950/40 dark:hover:bg-cyan-900/40 text-cyan-700 dark:text-cyan-300 border-cyan-200/70 dark:border-cyan-800/50'
+                                  : 'bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/40 dark:hover:bg-amber-900/40 text-amber-700 dark:text-amber-300 border-amber-200/70 dark:border-amber-800/50'
+                              }`}
+                              title={loan.comprovanteLiberacaoUrl ? 'Ver Comprovante de Transferência' : 'Anexar Comprovante de Transferência'}
+                            >
+                              <Receipt size={14} />
+                            </button>
+
+                            <button
                               onClick={() => onOpenDetails(loan)}
                               className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition-all"
                               title="Ver Detalhes"
@@ -1430,6 +1445,20 @@ export function AdminDashboard({
                               <UserCheck size={14} />
                             </button>
                           )}
+
+                          {/* Ação: Comprovante de Transferência */}
+                          <button
+                            type="button"
+                            onClick={() => onOpenDetails(loan, 'comprovante')}
+                            className={`p-1.5 rounded-lg border transition-all ${
+                              loan.comprovanteLiberacaoUrl
+                                ? 'bg-cyan-50 hover:bg-cyan-100 dark:bg-cyan-950/40 dark:hover:bg-cyan-900/40 text-cyan-700 dark:text-cyan-300 border-cyan-200/70 dark:border-cyan-800/50'
+                                : 'bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/40 dark:hover:bg-amber-900/40 text-amber-700 dark:text-amber-300 border-amber-200/70 dark:border-amber-800/50'
+                            }`}
+                            title={loan.comprovanteLiberacaoUrl ? 'Ver Comprovante de Transferência' : 'Anexar Comprovante de Transferência'}
+                          >
+                            <Receipt size={14} />
+                          </button>
 
                           {/* Ação 3: Ver Detalhes */}
                           <button
@@ -1656,7 +1685,20 @@ export function AdminDashboard({
                       </button>
                     )}
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={() => onOpenDetails(loan, 'comprovante')}
+                        className={`px-3 py-2 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all border shadow-xs ${
+                          loan.comprovanteLiberacaoUrl
+                            ? 'bg-cyan-50/90 hover:bg-cyan-100 dark:bg-cyan-950/40 text-cyan-700 dark:text-cyan-300 border-cyan-200/70 dark:border-cyan-800/50'
+                            : 'bg-amber-50/90 hover:bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200/70 dark:border-amber-800/50'
+                        }`}
+                        title={loan.comprovanteLiberacaoUrl ? 'Ver Comprovante de Transferência' : 'Anexar Comprovante de Transferência'}
+                      >
+                        <Receipt size={14} />
+                        <span>{loan.comprovanteLiberacaoUrl ? 'Ver Comprovante' : 'Comprovante'}</span>
+                      </button>
                       <button
                         onClick={() => onOpenDetails(loan)}
                         className="flex-1 py-2 rounded-xl bg-slate-100/90 hover:bg-slate-200/90 dark:bg-slate-800/90 dark:hover:bg-slate-700/90 border border-slate-200/80 dark:border-slate-700/80 text-slate-700 dark:text-slate-200 font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-xs"

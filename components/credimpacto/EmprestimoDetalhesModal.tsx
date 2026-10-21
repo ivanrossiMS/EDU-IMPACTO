@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   FileText,
   Calendar,
@@ -17,7 +17,9 @@ import {
   AlertCircle,
   Trash2,
   Copy,
-  MessageCircle
+  MessageCircle,
+  Receipt,
+  Upload
 } from 'lucide-react'
 import { CredImpactoEmprestimo } from '@/types/credimpacto'
 import { formatBrl, METODOS_LABELS } from '@/lib/credimpacto/engine'
@@ -28,28 +30,90 @@ import {
 } from '@/lib/credimpacto/whatsappTemplates'
 import { toast } from 'sonner'
 
+export type EmprestimoDetalhesSubTab = 'resumo' | 'parcelas' | 'contrato' | 'comprovante' | 'memoria'
+
 interface EmprestimoDetalhesModalProps {
   loan: CredImpactoEmprestimo | null
+  initialSubTab?: EmprestimoDetalhesSubTab
   onClose: () => void
   onOpenSignModal?: (loan: CredImpactoEmprestimo) => void
   onOpenPayoffModal?: (loan: CredImpactoEmprestimo) => void
   onDirectApprove?: (loan: CredImpactoEmprestimo) => void
   onDelete?: (loan: CredImpactoEmprestimo) => void
+  onRefresh?: () => void
   isAdminOrFinance: boolean
 }
 
 export function EmprestimoDetalhesModal({
   loan,
+  initialSubTab = 'resumo',
   onClose,
   onOpenSignModal,
   onOpenPayoffModal,
   onDirectApprove,
   onDelete,
+  onRefresh,
   isAdminOrFinance
 }: EmprestimoDetalhesModalProps) {
-  const [activeSubTab, setActiveSubTab] = useState<'resumo' | 'parcelas' | 'contrato' | 'memoria'>('resumo')
+  const [activeSubTab, setActiveSubTab] = useState<EmprestimoDetalhesSubTab>(initialSubTab)
+  const [localComprovanteUrl, setLocalComprovanteUrl] = useState<string | undefined>(loan?.comprovanteLiberacaoUrl)
+  const [isUploadingComprovante, setIsUploadingComprovante] = useState(false)
+
+  useEffect(() => {
+    setActiveSubTab(initialSubTab || 'resumo')
+  }, [loan?.id, initialSubTab])
+
+  useEffect(() => {
+    setLocalComprovanteUrl(loan?.comprovanteLiberacaoUrl)
+  }, [loan?.id, loan?.comprovanteLiberacaoUrl])
 
   if (!loan) return null
+
+  const effectiveComprovanteUrl = localComprovanteUrl || loan.comprovanteLiberacaoUrl
+  const isImageReceipt = Boolean(
+    effectiveComprovanteUrl &&
+      (/\.(png|jpe?g|webp|gif|bmp|svg)(\?.*)?$/i.test(effectiveComprovanteUrl) ||
+        effectiveComprovanteUrl.startsWith('data:image/'))
+  )
+
+  const handleUploadComprovante = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setIsUploadingComprovante(true)
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('pasta', 'liberacoes')
+
+      const upRes = await fetch('/api/credimpacto/comprovante', {
+        method: 'POST',
+        body: formData
+      })
+      const upData = await upRes.json()
+      if (!upRes.ok) throw new Error(upData.error || 'Erro no upload do comprovante')
+
+      const saveRes = await fetch(`/api/credimpacto/emprestimos/${loan.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          acao: 'atualizar_comprovante_liberacao',
+          comprovanteLiberacaoUrl: upData.url
+        })
+      })
+      const saveData = await saveRes.json()
+      if (!saveRes.ok) throw new Error(saveData.error || 'Erro ao vincular comprovante ao empréstimo')
+
+      setLocalComprovanteUrl(upData.url)
+      toast.success('Comprovante de transferência anexado com sucesso!')
+      onRefresh?.()
+    } catch (err: any) {
+      toast.error(err.message || 'Falha ao anexar comprovante de transferência')
+    } finally {
+      setIsUploadingComprovante(false)
+      e.target.value = ''
+    }
+  }
 
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text)
@@ -158,6 +222,21 @@ export function EmprestimoDetalhesModal({
           </div>
 
           <div className="flex items-center gap-2 flex-wrap justify-end">
+            {(effectiveComprovanteUrl || isAdminOrFinance) && (
+              <button
+                type="button"
+                onClick={() => setActiveSubTab('comprovante')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all ${
+                  effectiveComprovanteUrl
+                    ? 'bg-cyan-50 hover:bg-cyan-100 dark:bg-cyan-950/50 dark:hover:bg-cyan-900/50 border-cyan-200 dark:border-cyan-800/60 text-cyan-700 dark:text-cyan-300'
+                    : 'bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/50 dark:hover:bg-amber-900/50 border-amber-200 dark:border-amber-800/60 text-amber-700 dark:text-amber-300'
+                }`}
+                title={effectiveComprovanteUrl ? 'Ver Comprovante de Transferência' : 'Anexar Comprovante de Transferência'}
+              >
+                <Receipt size={14} />
+                <span>{effectiveComprovanteUrl ? 'Ver Comprovante' : 'Anexar Comprovante'}</span>
+              </button>
+            )}
             <button
               type="button"
               onClick={handleSendWhatsAppSchedule}
@@ -233,6 +312,20 @@ export function EmprestimoDetalhesModal({
             }`}
           >
             Contrato & Assinatura
+          </button>
+          <button
+            onClick={() => setActiveSubTab('comprovante')}
+            className={`pb-2.5 px-2 text-xs font-bold border-b-2 transition-all flex items-center gap-1.5 ${
+              activeSubTab === 'comprovante'
+                ? 'border-emerald-600 text-emerald-600 dark:border-emerald-400 dark:text-emerald-400'
+                : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            <Receipt size={13} />
+            <span>Comprovante de Transferência</span>
+            {effectiveComprovanteUrl && (
+              <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" title="Comprovante anexado" />
+            )}
           </button>
           <button
             onClick={() => setActiveSubTab('memoria')}
@@ -320,18 +413,41 @@ export function EmprestimoDetalhesModal({
 
                 {/* DADOS BANCÁRIOS E LIBERAÇÃO */}
                 <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800 rounded-xl p-4 space-y-2">
-                  <div className="font-bold text-slate-900 dark:text-slate-200 uppercase tracking-wider text-[11px] mb-2 flex items-center justify-between">
+                  <div className="font-bold text-slate-900 dark:text-slate-200 uppercase tracking-wider text-[11px] mb-2 flex items-center justify-between gap-2">
                     <span>Liberação Financeira:</span>
-                    {loan.comprovanteLiberacaoUrl && (
-                      <a
-                        href={loan.comprovanteLiberacaoUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-cyan-700 dark:text-cyan-400 underline font-semibold flex items-center gap-1"
-                      >
-                        <ExternalLink size={12} /> Comprovante
-                      </a>
-                    )}
+                    <div className="flex items-center gap-1.5 normal-case">
+                      {effectiveComprovanteUrl ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => setActiveSubTab('comprovante')}
+                            className="px-2 py-0.5 rounded-md bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:hover:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800/60 font-bold text-[10px] flex items-center gap-1 transition-colors"
+                            title="Visualizar comprovante de transferência"
+                          >
+                            <Receipt size={11} /> Ver Comprovante
+                          </button>
+                          <a
+                            href={effectiveComprovanteUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="px-2 py-0.5 rounded-md bg-cyan-50 hover:bg-cyan-100 dark:bg-cyan-950/60 dark:hover:bg-cyan-900/60 text-cyan-700 dark:text-cyan-300 border border-cyan-200/80 dark:border-cyan-800/60 font-bold text-[10px] flex items-center gap-1 transition-colors"
+                            title="Abrir comprovante em nova guia"
+                          >
+                            <ExternalLink size={11} /> Abrir
+                          </a>
+                        </>
+                      ) : isAdminOrFinance ? (
+                        <button
+                          type="button"
+                          onClick={() => setActiveSubTab('comprovante')}
+                          className="px-2 py-0.5 rounded-md bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/60 dark:hover:bg-amber-900/60 text-amber-700 dark:text-amber-300 border border-amber-200/80 dark:border-amber-800/60 font-bold text-[10px] flex items-center gap-1 transition-colors"
+                        >
+                          <Upload size={11} /> Anexar Comprovante
+                        </button>
+                      ) : (
+                        <span className="text-[10px] text-slate-400 font-medium">Sem comprovante</span>
+                      )}
+                    </div>
                   </div>
                   <div className="flex justify-between items-center gap-2">
                     <span className="text-slate-500 dark:text-slate-400 font-sans">Chave PIX:</span>
@@ -367,6 +483,20 @@ export function EmprestimoDetalhesModal({
                   <div className="flex justify-between">
                     <span className="text-slate-500 dark:text-slate-400 font-sans">Liberado por:</span>
                     <span className="text-slate-700 dark:text-slate-200">{loan.liberadoPorNome || '-'}</span>
+                  </div>
+                  <div className="flex justify-between items-center pt-1.5 border-t border-slate-200/70 dark:border-slate-700/70">
+                    <span className="text-slate-500 dark:text-slate-400 font-sans">Comprovante de Transferência:</span>
+                    {effectiveComprovanteUrl ? (
+                      <button
+                        type="button"
+                        onClick={() => setActiveSubTab('comprovante')}
+                        className="text-emerald-700 dark:text-emerald-400 hover:underline font-bold text-[11px] flex items-center gap-1"
+                      >
+                        <CheckCircle2 size={12} /> Visualizar comprovante anexado
+                      </button>
+                    ) : (
+                      <span className="text-slate-400 dark:text-slate-500 text-[11px] italic">Não anexado</span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -552,7 +682,128 @@ export function EmprestimoDetalhesModal({
             </div>
           )}
 
-          {/* ABA 4: MEMÓRIA DE CÁLCULO */}
+          {/* ABA 4: COMPROVANTE DE TRANSFERÊNCIA */}
+          {activeSubTab === 'comprovante' && (
+            <div className="space-y-4 animate-in fade-in duration-200 text-xs">
+              <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="space-y-1">
+                  <div className="font-bold text-slate-900 dark:text-white flex items-center gap-2 text-sm">
+                    <Receipt size={16} className="text-emerald-600 dark:text-emerald-400" />
+                    <span>Comprovante de Transferência (PIX / TED)</span>
+                  </div>
+                  <div className="text-slate-500 dark:text-slate-400 text-[11px]">
+                    Valor transferido: <strong className="text-slate-800 dark:text-slate-200 font-mono">{formatBrl(loan.valorAprovado)}</strong>
+                    {loan.dataLiberacao && (
+                      <>
+                        {' • '}Data: <strong className="text-slate-800 dark:text-slate-200">{new Date(loan.dataLiberacao).toLocaleDateString('pt-BR')}</strong>
+                      </>
+                    )}
+                    {loan.liberadoPorNome && (
+                      <>
+                        {' • '}Liberado por: <strong className="text-slate-800 dark:text-slate-200">{loan.liberadoPorNome}</strong>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 flex-wrap">
+                  {effectiveComprovanteUrl && (
+                    <>
+                      <a
+                        href={effectiveComprovanteUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="px-3 py-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-xs transition-colors"
+                      >
+                        <ExternalLink size={13} />
+                        <span>Abrir em Nova Guia</span>
+                      </a>
+                      <a
+                        href={effectiveComprovanteUrl}
+                        download={`comprovante-${loan.codigoOperacao}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs flex items-center gap-1.5 transition-colors"
+                      >
+                        <Download size={13} />
+                        <span>Baixar</span>
+                      </a>
+                    </>
+                  )}
+                  {isAdminOrFinance && (
+                    <label className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-xs transition-colors">
+                      <Upload size={13} />
+                      <span>
+                        {isUploadingComprovante
+                          ? 'Enviando...'
+                          : effectiveComprovanteUrl
+                          ? 'Substituir Comprovante'
+                          : 'Anexar Comprovante'}
+                      </span>
+                      <input
+                        type="file"
+                        accept="image/*,application/pdf"
+                        onChange={handleUploadComprovante}
+                        disabled={isUploadingComprovante}
+                        className="hidden"
+                      />
+                    </label>
+                  )}
+                </div>
+              </div>
+
+              {effectiveComprovanteUrl ? (
+                <div className="bg-slate-100 dark:bg-slate-950 rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col items-center justify-center min-h-[380px] p-3">
+                  {isImageReceipt ? (
+                    <img
+                      src={effectiveComprovanteUrl}
+                      alt={`Comprovante de transferência ${loan.codigoOperacao}`}
+                      className="max-h-[58vh] w-auto object-contain rounded-lg shadow-md border border-slate-200 dark:border-slate-800 bg-white"
+                    />
+                  ) : (
+                    <iframe
+                      src={effectiveComprovanteUrl}
+                      title={`Comprovante ${loan.codigoOperacao}`}
+                      className="w-full h-[58vh] rounded-lg border border-slate-200 dark:border-slate-800 bg-white"
+                    />
+                  )}
+                </div>
+              ) : (
+                <div className="bg-slate-50 dark:bg-slate-900/50 border border-dashed border-slate-300 dark:border-slate-700 rounded-xl p-10 text-center space-y-3">
+                  <div className="w-12 h-12 rounded-2xl bg-slate-200/70 dark:bg-slate-800 flex items-center justify-center mx-auto text-slate-500 dark:text-slate-400">
+                    <Receipt size={24} />
+                  </div>
+                  <div className="space-y-1 max-w-md mx-auto">
+                    <p className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                      Nenhum comprovante de transferência anexado a este empréstimo
+                    </p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      {isAdminOrFinance
+                        ? 'Você pode anexar o comprovante de transferência (PDF ou imagem do PIX/TED) clicando no botão abaixo.'
+                        : 'O setor financeiro ainda não disponibilizou o arquivo do comprovante de transferência para este contrato.'}
+                    </p>
+                  </div>
+                  {isAdminOrFinance && (
+                    <div className="pt-2">
+                      <label className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs cursor-pointer shadow-sm transition-colors">
+                        <Upload size={14} />
+                        <span>{isUploadingComprovante ? 'Enviando arquivo...' : 'Selecionar Arquivo (PDF ou Imagem)'}</span>
+                        <input
+                          type="file"
+                          accept="image/*,application/pdf"
+                          onChange={handleUploadComprovante}
+                          disabled={isUploadingComprovante}
+                          className="hidden"
+                        />
+                      </label>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ABA 5: MEMÓRIA DE CÁLCULO */}
           {activeSubTab === 'memoria' && (
             <div className="space-y-4 animate-in fade-in duration-200 text-xs">
               <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800 rounded-xl p-4 space-y-3">

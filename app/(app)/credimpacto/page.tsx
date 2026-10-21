@@ -17,7 +17,7 @@ import { RelatoriosTab } from '@/components/credimpacto/RelatoriosTab'
 import { RescisaoDesligamentoTab } from '@/components/credimpacto/RescisaoDesligamentoTab'
 import { ConfiguracoesTab } from '@/components/credimpacto/ConfiguracoesTab'
 import { AuditoriaTab } from '@/components/credimpacto/AuditoriaTab'
-import { EmprestimoDetalhesModal } from '@/components/credimpacto/EmprestimoDetalhesModal'
+import { EmprestimoDetalhesModal, EmprestimoDetalhesSubTab } from '@/components/credimpacto/EmprestimoDetalhesModal'
 import { AssinaturaEletronicaModal } from '@/components/credimpacto/AssinaturaEletronicaModal'
 import { QuitacaoAntecipadaModal } from '@/components/credimpacto/QuitacaoAntecipadaModal'
 import { CredImpactoConfig, CredImpactoEmprestimo } from '@/types/credimpacto'
@@ -142,8 +142,17 @@ function CredImpactoContent() {
 
   // Modais
   const [selectedLoanForDetails, setSelectedLoanForDetails] = useState<CredImpactoEmprestimo | null>(null)
+  const [detailsInitialTab, setDetailsInitialTab] = useState<EmprestimoDetalhesSubTab>('resumo')
   const [selectedLoanForSign, setSelectedLoanForSign] = useState<CredImpactoEmprestimo | null>(null)
   const [selectedLoanForPayoff, setSelectedLoanForPayoff] = useState<CredImpactoEmprestimo | null>(null)
+
+  const handleOpenLoanDetails = useCallback(
+    (loan: CredImpactoEmprestimo | null, initialTab: EmprestimoDetalhesSubTab = 'resumo') => {
+      setDetailsInitialTab(initialTab)
+      setSelectedLoanForDetails(loan)
+    },
+    []
+  )
 
   // Mantém modais abertos sincronizados em tempo real quando a lista de empréstimos atualiza
   useEffect(() => {
@@ -728,7 +737,7 @@ function CredImpactoContent() {
                   viewModeTab="dashboard"
                   emprestimos={emprestimos}
                   colaboradoresList={colaboradoresList}
-                  onOpenDetails={setSelectedLoanForDetails}
+                  onOpenDetails={handleOpenLoanDetails}
                   onRefresh={() => loadData()}
                   onOpenFichaColaborador={handleOpenFichaColaborador}
                 />
@@ -740,7 +749,7 @@ function CredImpactoContent() {
                   viewModeTab="emprestimos"
                   emprestimos={emprestimos}
                   colaboradoresList={colaboradoresList}
-                  onOpenDetails={setSelectedLoanForDetails}
+                  onOpenDetails={handleOpenLoanDetails}
                   onRefresh={() => loadData()}
                   onOpenFichaColaborador={handleOpenFichaColaborador}
                 />
@@ -752,7 +761,7 @@ function CredImpactoContent() {
                   viewModeTab="analise"
                   emprestimos={emprestimos}
                   colaboradoresList={colaboradoresList}
-                  onOpenDetails={setSelectedLoanForDetails}
+                  onOpenDetails={handleOpenLoanDetails}
                   onRefresh={() => loadData()}
                   onOpenFichaColaborador={handleOpenFichaColaborador}
                 />
@@ -764,7 +773,7 @@ function CredImpactoContent() {
                   viewModeTab="liberacoes"
                   emprestimos={emprestimos}
                   colaboradoresList={colaboradoresList}
-                  onOpenDetails={setSelectedLoanForDetails}
+                  onOpenDetails={handleOpenLoanDetails}
                   onRefresh={() => loadData()}
                   onOpenFichaColaborador={handleOpenFichaColaborador}
                 />
@@ -774,7 +783,7 @@ function CredImpactoContent() {
               {activeTab === 'parcelas' && viewMode === 'admin' && (
                 <ParcelasTab
                   emprestimos={emprestimos}
-                  onOpenDetails={setSelectedLoanForDetails}
+                  onOpenDetails={handleOpenLoanDetails}
                   onRefresh={() => loadData()}
                 />
               )}
@@ -785,7 +794,7 @@ function CredImpactoContent() {
                   emprestimos={emprestimos}
                   colaboradoresList={colaboradoresList}
                   config={config}
-                  onOpenDetails={setSelectedLoanForDetails}
+                  onOpenDetails={handleOpenLoanDetails}
                   onRefresh={() => loadData()}
                   initialSelectedColaboradorId={selectedColaboradorForFicha}
                 />
@@ -833,7 +842,7 @@ function CredImpactoContent() {
               {activeTab === 'relatorios' && viewMode === 'admin' && (
                 <RelatoriosTab
                   emprestimos={emprestimos}
-                  onOpenDetails={setSelectedLoanForDetails}
+                  onOpenDetails={handleOpenLoanDetails}
                 />
               )}
 
@@ -854,7 +863,7 @@ function CredImpactoContent() {
               {activeTab === 'meus_emprestimos' && (
                 <ColaboradorDashboard
                   emprestimos={emprestimos}
-                  onOpenDetails={setSelectedLoanForDetails}
+                  onOpenDetails={handleOpenLoanDetails}
                   onOpenSignModal={setSelectedLoanForSign}
                   onOpenPayoffModal={setSelectedLoanForPayoff}
                   onRefresh={() => loadData()}
@@ -887,7 +896,9 @@ function CredImpactoContent() {
       {/* MODAL DE DETALHES COMPLETOS & PARCELAS */}
       <EmprestimoDetalhesModal
         loan={selectedLoanForDetails}
+        initialSubTab={detailsInitialTab}
         onClose={() => setSelectedLoanForDetails(null)}
+        onRefresh={() => loadData({ silent: true })}
         onOpenSignModal={(l) => {
           setSelectedLoanForDetails(null)
           setSelectedLoanForSign(l)

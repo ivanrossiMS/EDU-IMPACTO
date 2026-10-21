@@ -51,12 +51,13 @@ import {
   WhatsAppEventType
 } from '@/lib/credimpacto/whatsappTemplates'
 import { toast } from 'sonner'
+import { EmprestimoDetalhesSubTab } from './EmprestimoDetalhesModal'
 
 interface FichaColaboradorTabProps {
   emprestimos: CredImpactoEmprestimo[]
   colaboradoresList?: any[]
   config: CredImpactoConfig
-  onOpenDetails: (loan: CredImpactoEmprestimo) => void
+  onOpenDetails: (loan: CredImpactoEmprestimo, initialTab?: EmprestimoDetalhesSubTab) => void
   onRefresh?: () => void
   initialSelectedColaboradorId?: string
 }
@@ -1983,6 +1984,23 @@ export function FichaColaboradorTab({
                               title="Copiar Contrato e Cronograma de Parcelas em Texto"
                             >
                               <Copy size={13} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => onOpenDetails(loan, 'comprovante')}
+                              className={`px-3 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all border shadow-xs ${
+                                loan.comprovanteLiberacaoUrl
+                                  ? 'bg-cyan-50 hover:bg-cyan-100 dark:bg-cyan-950/50 dark:hover:bg-cyan-900/50 text-cyan-700 dark:text-cyan-300 border-cyan-200 dark:border-cyan-800/60'
+                                  : 'bg-amber-50/80 hover:bg-amber-100 dark:bg-amber-950/40 dark:hover:bg-amber-900/50 text-amber-700 dark:text-amber-300 border-amber-200/80 dark:border-amber-800/50'
+                              }`}
+                              title={
+                                loan.comprovanteLiberacaoUrl
+                                  ? 'Visualizar Comprovante de Transferência deste Empréstimo'
+                                  : 'Anexar ou Visualizar Comprovante de Transferência'
+                              }
+                            >
+                              <Receipt size={13} />
+                              <span>{loan.comprovanteLiberacaoUrl ? 'Ver Comprovante' : 'Comprovante'}</span>
                             </button>
                             <button
                               type="button"
