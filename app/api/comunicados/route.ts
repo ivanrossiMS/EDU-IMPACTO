@@ -9,7 +9,7 @@ import { getResponsavelIdsForTargets, getStudentTargetsForComunicados, checkResp
 import { deleteStorageFilesByUrls } from '@/lib/upload/storageServer'
 import { isAlunoCursandoTurma, getAlunoTodasTurmasEGruposComHistorico, canStudentReceiveTurmaContent } from '@/lib/studentTurmaUtils'
 import { formatFriendlyStudentName } from '@/lib/studentNameHelper'
-import { getCachedTurmasAndGrupos, getCachedEquipes } from '@/lib/server/turmasGruposCache'
+import { getCachedTurmasAndGrupos, getCachedEquipes, getCachedSystemUsers } from '@/lib/server/turmasGruposCache'
 import { sanitizeAutorizacaoForViewer } from '@/lib/autorizacoes/autorizacaoUtils'
 import { sanitizeEnqueteForViewer } from '@/lib/enquetes/enqueteUtils'
 export const dynamic = 'force-dynamic'
@@ -34,6 +34,27 @@ function normalizeText(str?: string | null): string {
     .replace(/[\u0300-\u036f]/g, '');
 }
 
+function stripInlineBase64FromAnexos(anexos: any[]): any[] {
+  if (!Array.isArray(anexos) || anexos.length === 0) return [];
+  return anexos.map((item) => {
+    if (typeof item !== 'string' || !item.includes('payload:') || !item.includes('data:image')) {
+      return item;
+    }
+    try {
+      const parts = item.split('|');
+      const pIdx = parts.findIndex((p) => p.startsWith('payload:'));
+      if (pIdx === -1) return item;
+      const parsed = JSON.parse(parts[pIdx].substring(8));
+      if (parsed?.studentInfo?.avatarUrl && String(parsed.studentInfo.avatarUrl).startsWith('data:')) {
+        parsed.studentInfo.avatarUrl = null;
+        parts[pIdx] = `payload:${JSON.stringify(parsed)}`;
+        return parts.join('|');
+      }
+    } catch {}
+    return item;
+  });
+}
+
 function normalizeRow(row: any) {
   const merged = { ...row, ...(row.dados || {}) }
   // Ensure critical fields are always safe types
@@ -46,7 +67,10 @@ function normalizeRow(row: any) {
   merged.fixado = Boolean(merged.fixado)
   merged.exigeCiencia = Boolean(merged.exigeCiencia)
   merged.permiteResposta = Boolean(merged.permiteResposta)
-  merged.anexos = Array.isArray(merged.anexos) ? merged.anexos : []
+  merged.anexos = stripInlineBase64FromAnexos(Array.isArray(merged.anexos) ? merged.anexos : [])
+  if (merged.dados && Array.isArray(merged.dados.anexos)) {
+    merged.dados = { ...merged.dados, anexos: merged.anexos }
+  }
   merged.enquete = merged.enquete || row.dados?.enquete || row.enquete || null
   merged.autorizacao = merged.autorizacao || row.dados?.autorizacao || row.autorizacao || null
   merged.cobrancas = Array.isArray(merged.cobrancas) ? merged.cobrancas : (Array.isArray(row.dados?.cobrancas) ? row.dados.cobrancas : (merged.cobranca || row.dados?.cobranca ? [merged.cobranca || row.dados?.cobranca] : []))
@@ -889,8 +913,30 @@ export async function GET(request: Request) {
   const colabMetaId = colaboradorId ? String(colaboradorId) : (user.user_metadata?.colaborador_id ? String(user.user_metadata.colaborador_id) : '');
   const userSlugMeta = user.user_metadata?.slug ? String(user.user_metadata.slug) : '';
 
+  const cachedSysUsers = await getCachedSystemUsers().catch(() => [] as any[]);
+  const sysPhotoByKey = new Map<string, string>();
+  for (const su of cachedSysUsers) {
+    const f = su?.dados?.foto || su?.dados?.fotoUrl || su?.dados?.avatarUrl || su?.dados?.avatar;
+    if (f && typeof f === 'string') {
+      if (su.id) sysPhotoByKey.set(String(su.id).replace(/^f_?/, '').toLowerCase(), f);
+      if (su.auth_id) sysPhotoByKey.set(String(su.auth_id).toLowerCase(), f);
+      if (su.email) sysPhotoByKey.set(String(su.email).trim().toLowerCase(), f);
+      if (su.nome) sysPhotoByKey.set(normalizeText(su.nome), f);
+    }
+  }
+
   const normalized = (data || []).map((row: any) => {
      const merged = normalizeRow(row);
+     const rowAutorIdKey = String(merged.autorId || merged.autor_id || '').replace(/^f_?/, '').trim().toLowerCase();
+     const rowAutorNameKey = normalizeText(merged.autor || merged.autorNome || '');
+     const livePhoto = (rowAutorIdKey && sysPhotoByKey.get(rowAutorIdKey)) || (rowAutorNameKey && sysPhotoByKey.get(rowAutorNameKey)) || null;
+     if (livePhoto) {
+       merged.autorFoto = livePhoto;
+       if (merged.dados) merged.dados = { ...merged.dados, autorFoto: livePhoto };
+     } else if (typeof merged.autorFoto === 'string' && merged.autorFoto.includes('1790121540306_IMG_5891.jpg')) {
+       merged.autorFoto = null;
+       if (merged.dados) merged.dados = { ...merged.dados, autorFoto: null };
+     }
      
      // Merge das novas tabelas sobre o que eventualmente já estava no JSON (fallback para históricos)
       const itemReads = allReads.filter(r => r.content_id === String(row.id));
@@ -2005,7 +2051,7 @@ function buildRow(c: any) {
     stuIds: Array.isArray(rest.stuIds) ? rest.stuIds : (Array.isArray(c.stuIds) ? c.stuIds : []),
     leituras: (rest.leituras && typeof rest.leituras === 'object' && !Array.isArray(rest.leituras)) ? rest.leituras : {},
     ciencias: (rest.ciencias && typeof rest.ciencias === 'object' && !Array.isArray(rest.ciencias)) ? rest.ciencias : {},
-    anexos: Array.isArray(rest.anexos) ? rest.anexos : [],
+    anexos: stripInlineBase64FromAnexos(Array.isArray(rest.anexos) ? rest.anexos : []),
     enquete: rest.enquete || c.enquete || null,
     autorizacao: rest.autorizacao || c.autorizacao || null,
     cobranca: rest.cobranca || c.cobranca || (Array.isArray(rest.cobrancas) ? rest.cobrancas[0] : null) || (Array.isArray(c.cobrancas) ? c.cobrancas[0] : null) || null,

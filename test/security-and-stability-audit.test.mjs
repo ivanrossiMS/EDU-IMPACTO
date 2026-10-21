@@ -51,7 +51,8 @@ test('Account Hijacking Fix - /api/auth/update-password bloqueia troca não aute
     'Deve consultar o usuário Auth pelo e-mail já armazenado em responsaveis antes de criar/alterar'
   )
   assert.ok(
-    src.includes('existing.last_sign_in_at || (existingByStored && registeredEmail && registeredEmail.trim().toLowerCase() !== storedRespEmail)'),
+    src.includes('(existingByStored && registeredEmail && registeredEmail.trim().toLowerCase() !== storedRespEmail)') &&
+      src.includes('existing.last_sign_in_at'),
     'Deve bloquear tentativa de sobrescrever e-mail de conta já ativa sem sessão'
   )
   assert.ok(

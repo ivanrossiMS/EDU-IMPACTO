@@ -475,6 +475,16 @@ function SaidaProviderInner({ children, enabled = true }: { children: React.Reac
         )
         .on(
           'broadcast',
+          { event: 'SPECIAL_AUTH_NOTIFY' },
+          (payload: any) => {
+            const d = payload?.payload?.data || payload?.data || payload?.payload
+            if (d) {
+              emitRef.current('SPECIAL_AUTH_NOTIFY', d)
+            }
+          }
+        )
+        .on(
+          'broadcast',
           { event: 'CALL_EVENT' },
           (payload: any) => {
             const { event, data, eventId } = payload.payload || {}

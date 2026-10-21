@@ -22,8 +22,10 @@ export function setCachedColaboradores(key: string, data: any) {
 }
 
 import { invalidateAccessStartDateCache } from '@/lib/server/visibility'
+import { invalidateUsersCache } from '@/lib/server/turmasGruposCache'
 
 export function invalidateColaboradoresCache() {
   _colaboradoresCache.clear()
   invalidateAccessStartDateCache()
+  invalidateUsersCache()
 }

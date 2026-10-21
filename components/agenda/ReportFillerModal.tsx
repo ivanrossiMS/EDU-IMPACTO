@@ -7,7 +7,7 @@ import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 
 import { useData } from '@/lib/dataContext';
 import { isAlunoCursandoTurma, getAlunoTurmaCursando } from '@/lib/studentTurmaUtils';
-import { getCachedStudentPhoto, fetchStudentPhotos } from '@/lib/studentPhotoCache';
+import { getCachedStudentPhoto, setCachedStudentPhoto, fetchStudentPhotos } from '@/lib/studentPhotoCache';
 import { apiFetch } from '@/lib/api/apiClient';
 import { useQueryClient } from '@tanstack/react-query';
 
@@ -438,6 +438,12 @@ export function ReportFillerModal({ isOpen, anexoStr, onClose, onBack, currentUs
       })
 
 
+      const rawAlunoPhoto = getAlunoPhoto(aluno);
+      if (rawAlunoPhoto && aluno.id) {
+        setCachedStudentPhoto(aluno.id, rawAlunoPhoto);
+      }
+      const lightweightAvatarUrl = rawAlunoPhoto && !String(rawAlunoPhoto).startsWith('data:') ? rawAlunoPhoto : null;
+
       const studentPayload = {
          ...payload,
          template: template,
@@ -446,7 +452,7 @@ export function ReportFillerModal({ isOpen, anexoStr, onClose, onBack, currentUs
          studentInfo: {
             id: aluno.id,
             name: aluno.nome,
-            avatarUrl: getAlunoPhoto(aluno),
+            avatarUrl: lightweightAvatarUrl,
             turma: `${getTurmaName(aluno)} - ${aluno.dados?.anoLetivo || aluno.ano_letivo || aluno.ano || new Date().getFullYear().toString()}`
          }
       }
@@ -483,6 +489,11 @@ export function ReportFillerModal({ isOpen, anexoStr, onClose, onBack, currentUs
     })
 
     const colabAnexos = activeStudents.map(aluno => {
+       const rawAlunoPhoto = getAlunoPhoto(aluno);
+       if (rawAlunoPhoto && aluno.id) {
+         setCachedStudentPhoto(aluno.id, rawAlunoPhoto);
+       }
+       const lightweightAvatarUrl = rawAlunoPhoto && !String(rawAlunoPhoto).startsWith('data:') ? rawAlunoPhoto : null;
        const studentPayload = {
           ...payload,
           template: template,
@@ -491,7 +502,7 @@ export function ReportFillerModal({ isOpen, anexoStr, onClose, onBack, currentUs
           studentInfo: {
             id: aluno.id,
             name: aluno.nome,
-            avatarUrl: getAlunoPhoto(aluno),
+            avatarUrl: lightweightAvatarUrl,
             turma: `${getTurmaName(aluno)} - ${aluno.dados?.anoLetivo || aluno.ano_letivo || aluno.ano || new Date().getFullYear().toString()}`
           }
        }

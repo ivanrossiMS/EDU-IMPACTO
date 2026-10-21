@@ -312,6 +312,44 @@ export async function fetchAllDbReferences(
       }
     }),
 
+    // 9b. Funcionários (RH / Gestão de Pessoas)
+    () => safeQueryPaged('funcionarios', 'id, nome, dados', (row) => {
+      const url = row.dados?.fotoUrl || row.dados?.avatarUrl || row.dados?.foto || row.dados?.avatar
+      if (url && typeof url === 'string') {
+        refs.push({ url, table: 'funcionarios', id: row.id, label: `Foto do Funcionário: ${row.nome || row.id}` })
+      }
+    }),
+
+    // 9c. Supabase Auth Users (user_metadata.foto / avatar_url)
+    async () => {
+      if (!supabase?.auth?.admin?.listUsers) return
+      let page = 1
+      const perPage = 1000
+      while (true) {
+        try {
+          const { data, error } = await supabase.auth.admin.listUsers({ page, perPage })
+          if (error) {
+            if (strict) throw new Error(`Falha ao listar auth.users (página ${page}): ${error.message}`)
+            break
+          }
+          const users = data?.users || []
+          if (users.length === 0) break
+          for (const u of users) {
+            const url = u.user_metadata?.foto || u.user_metadata?.fotoUrl || u.user_metadata?.avatar_url || u.user_metadata?.avatarUrl
+            if (url && typeof url === 'string') {
+              refs.push({ url, table: 'auth_users', id: u.id, label: `Avatar Auth: ${u.email || u.id}` })
+            }
+          }
+          if (users.length < perPage) break
+          page++
+        } catch (err: any) {
+          console.warn('[orphanStorageCleaner] Aviso ao varrer auth.users:', err.message)
+          if (strict) throw err
+          break
+        }
+      }
+    },
+
     // 10. Comunicados e Mensagens da Agenda Digital (Anexos, imagens de capa, áudios e avatar do autor)
     // Excluímos AD-COM-REL-STU-% e AD-COM-REL-COLAB-% da leitura de dados->anexos (que contêm apenas JSON inline de 40KB-735KB)
     // para evitar descompressão TOAST de ~500MB e eliminar statement timeouts (57014).
