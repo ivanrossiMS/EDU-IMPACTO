@@ -65,11 +65,11 @@ export async function POST(request: Request) {
     const finalColabNome = colabUser?.nome || colaboradorNome
     const finalColabCargo = colabUser?.cargo || colabUser?.perfil || 'Colaborador(a)'
 
-    // 2. Dados do Remetente Autenticado (com fallback institucional)
+    // 2. Dados do Remetente Autenticado (sem URL órfã de storage deletada que gerava HTTP 400)
     const masterAdminNome = dbUser?.nome || user.user_metadata?.nome || 'Ivan Rossi'
     const masterAdminCargo = cargo || perfil || dbUser?.cargo || dbUser?.perfil || 'Administrador Master'
     const masterAdminId = dbUser?.id || user.id || 'master-dziia1l'
-    const masterAdminFoto = dbUser?.dados?.foto || dbUser?.dados?.avatar || user.user_metadata?.foto || 'https://lrpwerkkqrjkcauofhph.supabase.co/storage/v1/object/public/comunicados-midia/avatars/1789438579475_Captura_de_Tela_2026-09-13_a_s_07.57.46.webp'
+    const masterAdminFoto = dbUser?.dados?.foto || dbUser?.dados?.avatar || user.user_metadata?.foto || user.user_metadata?.fotoUrl || null
 
     // 3. Upload da Imagem do Infográfico (se fornecida via base64)
     let imageUrl: string | null = null

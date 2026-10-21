@@ -1337,7 +1337,11 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
     })
 
     // ── SAÍDA DE ALUNOS / PORTARIA ───────────────────────────────────────
-    createBinding('saida_calls', { event: '*', schema: 'public', table: 'saida_calls' }, payload => {
+    // Escuta eventos de saida_calls já recebidos pelo SaidaProvider (montado no AgendaDigitalLayout),
+    // evitando abrir uma 2ª inscrição postgres_changes redundante para saida_calls no mesmo cliente.
+    const handleSaidaCallsFromProvider = (e: Event) => {
+      const payload = (e as CustomEvent).detail
+      if (!payload) return
       const { eventType, old, new: newRow } = payload
       const row = eventType === 'DELETE' ? old : newRow
       const dados = row?.dados || row || {}
@@ -1402,7 +1406,11 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
           })
         }
       }
-    })
+    }
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('saida_calls:postgres_change', handleSaidaCallsFromProvider)
+    }
 
     // Inicia subscrição com pequeno debounce (180ms) para evitar abertura/fechamento
     // imediato durante dupla montagem do React StrictMode ou redirecionamentos rápidos
@@ -1427,6 +1435,7 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
         destroyChannelCleanly(ch)
       }
       if (typeof window !== 'undefined') {
+        window.removeEventListener('saida_calls:postgres_change', handleSaidaCallsFromProvider)
         document.removeEventListener('visibilitychange', handleVisibilityChange)
         window.removeEventListener('focus', handleAppResume)
         window.removeEventListener('online', handleAppResume)

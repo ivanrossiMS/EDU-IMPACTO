@@ -9,7 +9,7 @@ import { getResponsavelIdsForTargets, getStudentTargetsForComunicados, checkResp
 import { deleteStorageFilesByUrls } from '@/lib/upload/storageServer'
 import { isAlunoCursandoTurma, getAlunoTodasTurmasEGruposComHistorico, canStudentReceiveTurmaContent } from '@/lib/studentTurmaUtils'
 import { formatFriendlyStudentName } from '@/lib/studentNameHelper'
-import { getCachedTurmasAndGrupos } from '@/lib/server/turmasGruposCache'
+import { getCachedTurmasAndGrupos, getCachedEquipes } from '@/lib/server/turmasGruposCache'
 import { sanitizeAutorizacaoForViewer } from '@/lib/autorizacoes/autorizacaoUtils'
 import { sanitizeEnqueteForViewer } from '@/lib/enquetes/enqueteUtils'
 export const dynamic = 'force-dynamic'
@@ -21,6 +21,9 @@ const colabToStuIdsCache = new Map<string, { stuIds: string[]; timestamp: number
 
 // Cache de system_users por id/email (TTL 60s)
 const sysUsersCache = new Map<string, { users: any[]; timestamp: number }>();
+
+// Cache de autores/cargos de comunicados (TTL 60s) para evitar varredura repetida da tabela
+let autoresCache: { authors: string[]; roles: string[]; timestamp: number } | null = null;
 
 function normalizeText(str?: string | null): string {
   if (!str) return '';
@@ -158,17 +161,44 @@ export async function GET(request: Request) {
 
   const typeParam = searchParams.get('type');
   if (typeParam === 'autores') {
-    const { data: comAuthors, error: authErr } = await supabaseServer
-      .from('comunicados')
-      .select('autor, dados->>autorCargo')
-      .not('id', 'like', 'AD-COM-REL-STU-%');
-
-    if (authErr) {
-      return NextResponse.json({ error: authErr.message }, { status: 500 });
+    if (autoresCache && Date.now() - autoresCache.timestamp < 60_000) {
+      return NextResponse.json({ authors: autoresCache.authors, roles: autoresCache.roles }, {
+        headers: {
+          'Cache-Control': 'private, max-age=60, stale-while-revalidate=120'
+        }
+      });
     }
 
-    const authors = Array.from(new Set((comAuthors || []).map((c: any) => (c.autor || '').trim()).filter(Boolean)));
-    const roles = Array.from(new Set((comAuthors || []).map((c: any) => (c['dados->>autorCargo'] || '').trim()).filter(Boolean)));
+    // Evita descomprimir blobs TOAST (40KB-735KB) de AD-COM-REL-COLAB-% e AD-COM-REL-STU-% ao ler dados->>autorCargo
+    const [normalRes, colabRelRes] = await Promise.all([
+      supabaseServer
+        .from('comunicados')
+        .select('autor, dados->>autorCargo')
+        .not('id', 'like', 'AD-COM-REL-STU-%')
+        .not('id', 'like', 'AD-COM-REL-COLAB-%')
+        .order('data', { ascending: false })
+        .limit(500),
+      supabaseServer
+        .from('comunicados')
+        .select('autor')
+        .like('id', 'AD-COM-REL-COLAB-%')
+        .order('data', { ascending: false })
+        .limit(300)
+    ]);
+
+    if (normalRes.error) {
+      return NextResponse.json({ error: normalRes.error.message }, { status: 500 });
+    }
+
+    const normalRows = normalRes.data || [];
+    const colabRows = colabRelRes.data || [];
+    const authors = Array.from(new Set([
+      ...normalRows.map((c: any) => (c.autor || '').trim()),
+      ...colabRows.map((c: any) => (c.autor || '').trim())
+    ].filter(Boolean)));
+    const roles = Array.from(new Set(normalRows.map((c: any) => (c['dados->>autorCargo'] || '').trim()).filter(Boolean)));
+    autoresCache = { authors, roles, timestamp: Date.now() };
+
     return NextResponse.json({ authors, roles }, {
       headers: {
         'Cache-Control': 'private, max-age=60, stale-while-revalidate=120'
@@ -745,17 +775,21 @@ export async function GET(request: Request) {
              orFilters.push(`id.like.AD-COM-REL-STU-${p}%`);
            });
 
+           // Seleciona apenas colunas de topo (id, autor, created_at) sem tocar em dados (evita TOAST de 40KB-100KB)
            let stuQuery = supabaseServer
              .from('comunicados')
-             .select('id, autor, created_at, dados->>autorId');
+             .select('id, autor, created_at');
+
+           if (minTimestamp && maxTimestamp) {
+             stuQuery = stuQuery
+               .gte('created_at', new Date(minTimestamp).toISOString())
+               .lte('created_at', new Date(maxTimestamp).toISOString());
+           }
 
            if (orFilters.length > 0) {
              stuQuery = stuQuery.or(orFilters.join(','));
-           } else if (minTimestamp && maxTimestamp) {
-             stuQuery = stuQuery
-               .like('id', 'AD-COM-REL-STU-%')
-               .gte('created_at', new Date(minTimestamp).toISOString())
-               .lte('created_at', new Date(maxTimestamp).toISOString());
+           } else {
+             stuQuery = stuQuery.like('id', 'AD-COM-REL-STU-%');
            }
 
            const { data: candidateStus } = await stuQuery.limit(500);
@@ -765,15 +799,10 @@ export async function GET(request: Request) {
              const colabId = String(colab.id);
              const idMatch = colabId.match(/AD-COM-REL-[A-Za-z]+-(\d+)/);
              const colabTs = idMatch ? parseInt(idMatch[1], 10) : null;
-             const rawAutorId = colab.autorId || colab.autor_id || colabDados.autorId || colabDados.autor_id;
-             const cleanAutorId = rawAutorId ? String(rawAutorId).replace(/^f_?/, '').trim().toLowerCase() : '';
+             const colabAutorNorm = normalizeText(colab.autor || colabDados.autor || '');
 
              const matchedStuIds: string[] = [];
              (candidateStus || []).forEach((s: any) => {
-               const sRawAutorId = (s as any).autorId || s.autor_id || (s as any)['dados->>autorId'];
-               const sCleanAutorId = sRawAutorId ? String(sRawAutorId).replace(/^f_?/, '').trim().toLowerCase() : '';
-               const autorMatches = Boolean(cleanAutorId && sCleanAutorId && cleanAutorId === sCleanAutorId);
-
                const sMatch = String(s.id).match(/AD-COM-REL-STU-(\d+)/);
                let tsMatches = false;
                if (sMatch && colabTs) {
@@ -782,6 +811,9 @@ export async function GET(request: Request) {
                    tsMatches = true;
                  }
                }
+
+               const sAutorNorm = normalizeText(s.autor || '');
+               const autorMatches = Boolean(!colabTs && colabAutorNorm && sAutorNorm && colabAutorNorm === sAutorNorm);
 
                if (tsMatches || autorMatches) {
                  matchedStuIds.push(String(s.id));
@@ -1726,10 +1758,10 @@ export async function DELETE(request: Request) {
         const minDate = new Date(baseTime - 15 * 60000).toISOString();
         const maxDate = new Date(baseTime + 15 * 60000).toISOString();
 
-        // 4. Buscar candidatos no banco
+        // 4. Buscar candidatos no banco sem descomprimir o campo dados completo (TOAST)
         const { data: stusByDate } = await adminClient
           .from('comunicados')
-          .select('id, dados, titulo, created_at, autor')
+          .select('id, titulo, created_at, autor')
           .ilike('id', 'AD-COM-REL-STU-%')
           .gte('created_at', minDate)
           .lte('created_at', maxDate);
@@ -1739,7 +1771,7 @@ export async function DELETE(request: Request) {
           const tsPrefix = String(colabTs).substring(0, 8); // ~1.6 min window prefix
           const { data: prefixData } = await adminClient
             .from('comunicados')
-            .select('id, dados, titulo, created_at, autor')
+            .select('id, titulo, created_at, autor')
             .ilike('id', `AD-COM-REL-STU-${tsPrefix}%`);
           if (prefixData) stusByPrefix = prefixData;
         }
@@ -1877,12 +1909,12 @@ async function enrichGruposRecipients(row: any) {
     return row;
   }
   try {
-    const [gruposRes, equipesRes] = await Promise.allSettled([
-      supabaseServer.from('agenda_grupos').select('id, dados'),
-      supabaseServer.from('agenda_equipes').select('id, dados'),
+    const [turmasGruposRes, equipesRes] = await Promise.allSettled([
+      getCachedTurmasAndGrupos(),
+      getCachedEquipes(),
     ]);
-    const allGrupos = gruposRes.status === 'fulfilled' && gruposRes.value.data ? gruposRes.value.data : [];
-    const allEquipes = equipesRes.status === 'fulfilled' && equipesRes.value.data ? equipesRes.value.data : [];
+    const allGrupos = turmasGruposRes.status === 'fulfilled' ? (turmasGruposRes.value.allGrupos || []) : [];
+    const allEquipes = equipesRes.status === 'fulfilled' && Array.isArray(equipesRes.value) ? equipesRes.value : [];
 
     if (allGrupos.length === 0 && allEquipes.length === 0) return row;
 

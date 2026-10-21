@@ -373,14 +373,39 @@ ON public.comunicados USING GIN ((dados->'grupos') jsonb_path_ops);
 CREATE INDEX IF NOT EXISTS idx_comunicados_dados_autorid 
 ON public.comunicados ((dados->>'autorId'));
 
--- 3.5 Índice GIN geral sobre todo o objeto dados (cobre qualquer @> dinâmico adicional)
+-- 3.5 Índice B-Tree text_pattern_ops em id para suportar LIKE 'AD-COM-REL-STU-%' / 'AD-COM-REL-COLAB-%' em locale UTF-8
+CREATE INDEX IF NOT EXISTS idx_comunicados_id_pattern
+ON public.comunicados (id text_pattern_ops);
+
+-- 3.6 Índice parcial para o feed principal (ignora cópias individuais AD-COM-REL-STU-% direto no índice)
+CREATE INDEX IF NOT EXISTS idx_comunicados_feed_no_stu
+ON public.comunicados (data DESC, id DESC)
+WHERE id NOT LIKE 'AD-COM-REL-STU-%';
+
+-- 3.7 Índice GIN geral sobre todo o objeto dados (cobre qualquer @> dinâmico adicional)
 CREATE INDEX IF NOT EXISTS idx_comunicados_dados_gin 
 ON public.comunicados USING GIN (dados jsonb_path_ops);
 
 
 -- ==============================================================================
--- SEÇÃO 4: ÍNDICES DE PERFORMANCE PARA saida_calls, frequencias E alunos
+-- SEÇÃO 4: ÍNDICES DE PERFORMANCE PARA momentos, saida_calls, frequencias E alunos
 -- ==============================================================================
+
+-- 4.0 momentos: ordenação e filtros GIN do feed da Agenda Digital
+CREATE INDEX IF NOT EXISTS idx_momentos_created_at_desc
+ON public.momentos (created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_momentos_dados_targetclasses
+ON public.momentos USING GIN ((dados->'targetClasses') jsonb_path_ops);
+
+CREATE INDEX IF NOT EXISTS idx_momentos_dados_alunosids
+ON public.momentos USING GIN ((dados->'alunosIds') jsonb_path_ops);
+
+CREATE INDEX IF NOT EXISTS idx_momentos_dados_funcionariosids
+ON public.momentos USING GIN ((dados->'funcionariosIds') jsonb_path_ops);
+
+CREATE INDEX IF NOT EXISTS idx_momentos_dados_authorid
+ON public.momentos ((dados->>'authorId'));
 
 -- 4.1 saida_calls: busca e ordenação por created_at e studentId
 CREATE INDEX IF NOT EXISTS idx_saida_calls_created_at_desc 
@@ -389,12 +414,15 @@ ON public.saida_calls (created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_saida_calls_dados_studentid 
 ON public.saida_calls ((dados->>'studentId'));
 
--- 4.2 frequencias: busca por data (usado pelo painel de saída e presenças)
+-- 4.2 frequencias: busca por data e por aluno_id (usado pelo painel de saída e presenças)
 CREATE INDEX IF NOT EXISTS idx_frequencias_data_desc 
 ON public.frequencias (data DESC);
 
 CREATE INDEX IF NOT EXISTS idx_frequencias_data_turma 
 ON public.frequencias (data DESC, turma_id);
+
+CREATE INDEX IF NOT EXISTS idx_frequencias_aluno_data_desc
+ON public.frequencias (aluno_id, data DESC);
 
 -- 4.3 alunos: índice em id
 CREATE INDEX IF NOT EXISTS idx_alunos_id_status 

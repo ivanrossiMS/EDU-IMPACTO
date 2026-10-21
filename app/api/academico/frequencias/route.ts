@@ -128,31 +128,35 @@ export async function GET(request: Request) {
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     rows = pageData || []
   } else {
-    // Parallel pagination across chunks of 1,000 to fetch up to limit
+    // Paginação controlada em lotes de no máximo 3 queries simultâneas para não saturar o pool do PostgreSQL
     const effectiveTotal = Math.min(count, limit)
     const pageSize = 1000
     const numPages = Math.ceil(effectiveTotal / pageSize)
-    const pagePromises: Promise<any[]>[] = []
+    const CONCURRENCY_LIMIT = 3
 
-    for (let i = 0; i < numPages; i++) {
-      const from = i * pageSize
-      const to = Math.min(from + pageSize - 1, effectiveTotal - 1)
-      pagePromises.push(
-        applyFilters(
-          supabase
-            .from('frequencias')
-            .select('*')
-            .order('data', { ascending: false })
-            .range(from, to)
-        ).then((res: any) => {
-          if (res.error) throw res.error
-          return res.data || []
-        })
-      )
+    for (let i = 0; i < numPages; i += CONCURRENCY_LIMIT) {
+      const batchPromises: Promise<any[]>[] = []
+      for (let j = i; j < Math.min(i + CONCURRENCY_LIMIT, numPages); j++) {
+        const from = j * pageSize
+        const to = Math.min(from + pageSize - 1, effectiveTotal - 1)
+        batchPromises.push(
+          applyFilters(
+            supabase
+              .from('frequencias')
+              .select('*')
+              .order('data', { ascending: false })
+              .range(from, to)
+          ).then((res: any) => {
+            if (res.error) throw res.error
+            return res.data || []
+          })
+        )
+      }
+      const batchResults = await Promise.all(batchPromises)
+      for (const pageRows of batchResults) {
+        rows.push(...pageRows)
+      }
     }
-
-    const pageResults = await Promise.all(pagePromises)
-    rows = pageResults.flat()
   }
 
   // Deduplicate records keeping the most recent update per student per date

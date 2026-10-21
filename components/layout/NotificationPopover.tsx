@@ -207,50 +207,78 @@ export function NotificationPopover({
   }, [onRealtime, hydrated, currentUser, isColab])
 
   // 5. Escuta de eventos Realtime via Supabase (canal único compartilhado entre instâncias)
+  // Se SaidaProvider já estiver ativo na rota (/saida-alunos ou /agenda-digital),
+  // reaproveita o evento local 'saida_calls:postgres_change' sem abrir segundo canal postgres_changes.
   useEffect(() => {
     if (!hydrated || !currentUser || !isColab) return
+
+    const handleSaidaPostgresPayload = (payload: any) => {
+      if (!payload) return
+      const { eventType, new: newRow, old: oldRow } = payload
+      if (eventType === 'INSERT' || eventType === 'UPDATE') {
+        let rawDados = newRow?.dados || {}
+        if (typeof rawDados === 'string') {
+          try { rawDados = JSON.parse(rawDados) } catch (e) {}
+        }
+        if (rawDados.status === 'special_auth') {
+          const call = { id: newRow.id, ...rawDados }
+          updateSharedSaidaCalls(prev => {
+            const idx = prev.findIndex(c => c.id === call.id)
+            if (idx >= 0) {
+              const next = [...prev]
+              next[idx] = { ...next[idx], ...call }
+              return next
+            }
+            return [call, ...prev]
+          })
+        } else if (rawDados.status === 'confirmed') {
+          const sId = rawDados.studentId ? String(rawDados.studentId).trim() : ''
+          if (sId) {
+            updateSharedSaidaCalls(prev => prev.map(c => {
+              if (c.studentId && String(c.studentId).trim() === sId) {
+                return { ...c, confirmedOut: true, confirmedAt: rawDados.confirmedAt || rawDados.calledAt || new Date().toISOString() }
+              }
+              return c
+            }))
+          }
+        }
+      } else if (eventType === 'DELETE' && oldRow?.id) {
+        updateSharedSaidaCalls(prev => prev.filter(c => c.id !== oldRow.id))
+      }
+    }
+
+    const onWindowSaidaChange = (e: Event) => {
+      handleSaidaPostgresPayload((e as CustomEvent).detail)
+    }
+    if (typeof window !== 'undefined') {
+      window.addEventListener('saida_calls:postgres_change', onWindowSaidaChange)
+    }
+
+    const isSaidaProviderRoute = Boolean(
+      pathname?.startsWith('/saida-alunos') || pathname?.startsWith('/agenda-digital')
+    )
+    if (isSaidaProviderRoute) {
+      if (sharedRealtimeChannel) {
+        supabase.removeChannel(sharedRealtimeChannel).catch(() => {})
+        sharedRealtimeChannel = null
+        sharedRealtimeSubscribers = 0
+      }
+      return () => {
+        if (typeof window !== 'undefined') {
+          window.removeEventListener('saida_calls:postgres_change', onWindowSaidaChange)
+        }
+      }
+    }
 
     sharedRealtimeSubscribers += 1
     if (!sharedRealtimeChannel) {
       try {
-        sharedRealtimeChannel = supabase.channel('saida_calls_shared_room')
+        sharedRealtimeChannel = supabase.channel('saida_calls_popover_room')
         sharedRealtimeChannel
           .on(
             'postgres_changes',
             { event: '*', schema: 'public', table: 'saida_calls' },
-            (payload: any) => {
-              const { eventType, new: newRow, old: oldRow } = payload
-              if (eventType === 'INSERT' || eventType === 'UPDATE') {
-                let rawDados = newRow?.dados || {}
-                if (typeof rawDados === 'string') {
-                  try { rawDados = JSON.parse(rawDados) } catch (e) {}
-                }
-                if (rawDados.status === 'special_auth') {
-                  const call = { id: newRow.id, ...rawDados }
-                  updateSharedSaidaCalls(prev => {
-                    const idx = prev.findIndex(c => c.id === call.id)
-                    if (idx >= 0) {
-                      const next = [...prev]
-                      next[idx] = { ...next[idx], ...call }
-                      return next
-                    }
-                    return [call, ...prev]
-                  })
-                } else if (rawDados.status === 'confirmed') {
-                  const sId = rawDados.studentId ? String(rawDados.studentId).trim() : ''
-                  if (sId) {
-                    updateSharedSaidaCalls(prev => prev.map(c => {
-                      if (c.studentId && String(c.studentId).trim() === sId) {
-                        return { ...c, confirmedOut: true, confirmedAt: rawDados.confirmedAt || rawDados.calledAt || new Date().toISOString() }
-                      }
-                      return c
-                    }))
-                  }
-                }
-              } else if (eventType === 'DELETE' && oldRow?.id) {
-                updateSharedSaidaCalls(prev => prev.filter(c => c.id !== oldRow.id))
-              }
-            }
+            handleSaidaPostgresPayload
           )
           .on(
             'broadcast',
@@ -279,13 +307,16 @@ export function NotificationPopover({
     }
 
     return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('saida_calls:postgres_change', onWindowSaidaChange)
+      }
       sharedRealtimeSubscribers = Math.max(0, sharedRealtimeSubscribers - 1)
       if (sharedRealtimeSubscribers === 0 && sharedRealtimeChannel) {
-        supabase.removeChannel(sharedRealtimeChannel)
+        supabase.removeChannel(sharedRealtimeChannel).catch(() => {})
         sharedRealtimeChannel = null
       }
     }
-  }, [hydrated, currentUser, isColab])
+  }, [hydrated, currentUser, isColab, pathname])
 
   const myName = (currentUser?.nome || '').trim().toLowerCase()
   const myId = String(currentUser?.id || '').trim()

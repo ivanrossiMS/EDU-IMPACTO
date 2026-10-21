@@ -19,7 +19,9 @@ import {
  * ```
  */
 const VERIFIED_TOKEN_CACHE_TTL_MS = 45_000
+const REVOKED_TOKEN_CACHE_TTL_MS = 15_000
 const verifiedTokenCache = new Map<string, { user: any; expiresAt: number }>()
+const revokedTokenCache = new Map<string, number>()
 const inflightTokenVerifications = new Map<string, Promise<any | null>>()
 
 export async function verifyTokenWithDedup(token: string): Promise<any | null> {
@@ -29,6 +31,12 @@ export async function verifyTokenWithDedup(token: string): Promise<any | null> {
   }
 
   const now = Date.now()
+  const revokedUntil = revokedTokenCache.get(token)
+  if (revokedUntil) {
+    if (revokedUntil > now) return null
+    revokedTokenCache.delete(token)
+  }
+
   const cachedToken = verifiedTokenCache.get(token)
   if (cachedToken && cachedToken.expiresAt > now && cachedToken.user) {
     return cachedToken.user
@@ -49,6 +57,23 @@ export async function verifyTokenWithDedup(token: string): Promise<any | null> {
             expiresAt: tokenExpMs ? Math.min(cacheUntil, tokenExpMs) : cacheUntil
           })
           return res.data.user
+        }
+        if (res.error) {
+          const errCode = String((res.error as any).code || '').toLowerCase()
+          const errMsg = String(res.error.message || '').toLowerCase()
+          const errStatus = Number((res.error as any).status || 0)
+          if (
+            errCode === 'session_not_found' ||
+            errCode === 'user_not_found' ||
+            errCode === 'bad_jwt' ||
+            errMsg.includes('session from session_id claim in jwt does not exist') ||
+            errMsg.includes('invalid claim') ||
+            errStatus === 401 ||
+            errStatus === 403
+          ) {
+            if (revokedTokenCache.size > 500) revokedTokenCache.clear()
+            revokedTokenCache.set(token, Date.now() + REVOKED_TOKEN_CACHE_TTL_MS)
+          }
         }
       } catch {}
       return null

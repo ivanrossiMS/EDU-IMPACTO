@@ -86,14 +86,17 @@ export async function POST(request: NextRequest) {
     )
 
     let signInResult: any = null
+    const isShortPassword = String(password).length > 0 && String(password).length < 6
+    const primaryPassword = isShortPassword ? `${password}::imp6` : password
+    const secondaryPassword = isShortPassword ? password : null
     try {
       signInResult = await Promise.race([
-        supabase.auth.signInWithPassword({ email: resolvedEmail, password }),
+        supabase.auth.signInWithPassword({ email: resolvedEmail, password: primaryPassword }),
         new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT_SUPABASE')), 18000))
       ])
-      if (signInResult?.error && String(password).length > 0 && String(password).length < 6) {
+      if (signInResult?.error && secondaryPassword) {
         signInResult = await Promise.race([
-          supabase.auth.signInWithPassword({ email: resolvedEmail, password: `${password}::imp6` }),
+          supabase.auth.signInWithPassword({ email: resolvedEmail, password: secondaryPassword }),
           new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT_SUPABASE')), 18000))
         ])
       }
@@ -128,13 +131,13 @@ export async function POST(request: NextRequest) {
         
         if (resolvedEmail !== virtualEmail) {
           let fallbackAttempt: any = await Promise.race([
-            supabase.auth.signInWithPassword({ email: virtualEmail, password }),
+            supabase.auth.signInWithPassword({ email: virtualEmail, password: primaryPassword }),
             new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT_SUPABASE')), 8000))
           ]).catch(() => null)
 
-          if ((!fallbackAttempt || fallbackAttempt.error) && String(password).length > 0 && String(password).length < 6) {
+          if ((!fallbackAttempt || fallbackAttempt.error) && secondaryPassword) {
             fallbackAttempt = await Promise.race([
-              supabase.auth.signInWithPassword({ email: virtualEmail, password: `${password}::imp6` }),
+              supabase.auth.signInWithPassword({ email: virtualEmail, password: secondaryPassword }),
               new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT_SUPABASE')), 8000))
             ]).catch(() => null)
           }

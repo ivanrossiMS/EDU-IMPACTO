@@ -2965,6 +2965,12 @@ sup {
   user-select: none;
 }
 
+/* ──────── DIALOG BACKDROP (OCORRÊNCIAS QUICK DRAWER) ──────── */
+dialog::backdrop {
+  background-color: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(4px);
+}
+
 /* ──────── LIMPEZA GLOBAL PARA IMPRESSÃO ──────── */
 @media print {
   .sidebar,

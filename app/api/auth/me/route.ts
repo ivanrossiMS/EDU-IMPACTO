@@ -23,6 +23,11 @@ export async function GET(request: Request) {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+        detectSessionInUrl: false,
+      },
       cookies: {
         getAll() { return cookieStore.getAll() },
         setAll(cookiesToSet) {
@@ -55,8 +60,13 @@ export async function GET(request: Request) {
     }
   } else {
     const cookieToken = extractAccessTokenFromCookieList(cookieStore.getAll());
-    if (cookieToken && !isJwtTokenExpired(cookieToken, 0)) {
-      user = await verifyTokenWithDedup(cookieToken);
+    if (cookieToken) {
+      if (!isJwtTokenExpired(cookieToken, 0)) {
+        user = await verifyTokenWithDedup(cookieToken);
+      }
+      // Se cookieToken existe mas expirou, retorna 401 em 0ms para que o cliente
+      // renove de forma centralizada (refreshSessionCentralized), evitando
+      // race conditions (409 Conflict / 429) de refresh simultâneo Servidor vs Browser.
     } else {
       try {
         const res = await supabase.auth.getUser();

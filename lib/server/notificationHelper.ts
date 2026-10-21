@@ -16,7 +16,13 @@
 import { supabaseServer } from '@/lib/supabaseServer'
 import { isAlunoCursandoTurma } from '@/lib/studentTurmaUtils'
 import { getAllAuthUsersCached } from '@/lib/server/supabaseAdminSingleton'
-import { getCachedActiveAlunos } from '@/lib/server/turmasGruposCache'
+import {
+  getCachedActiveAlunos,
+  getCachedTurmasAndGrupos,
+  getCachedEquipes,
+  getCachedSystemUsers,
+  getCachedFuncionarios
+} from '@/lib/server/turmasGruposCache'
 
 async function fetchInChunks<T>(
   supabase: any,
@@ -177,12 +183,10 @@ export async function getResponsavelIdsForTargets(dados: TargetParams | null | u
       })
 
       if (allGroupTerms.length > 0) {
-        // 1. Resolver grupos na tabela agenda_grupos
-        const { data: allGrupos, error: gruposError } = await supabase
-          .from('agenda_grupos')
-          .select('id, dados')
+        // 1 & 2. Resolver grupos e turmas via cache compartilhado (60s TTL + dedup in-flight)
+        const { allTurmas, allGrupos } = await getCachedTurmasAndGrupos()
 
-        if (!gruposError && allGrupos) {
+        if (allGrupos && allGrupos.length > 0) {
           const matchedGrupos = allGrupos.filter(g => {
             const gId = String(g.id).toLowerCase()
             const gNome = String(g.dados?.nome || (g as any).nome || '').toLowerCase()
@@ -206,15 +210,7 @@ export async function getResponsavelIdsForTargets(dados: TargetParams | null | u
           })
         }
 
-        // 2. Resolver nomes/IDs de turmas para IDs reais no banco
-        const { data: allTurmas, error: turmasError } = await supabase
-          .from('turmas')
-          .select('id, codigo, nome, serie, turno, ano, dados')
-          .limit(500) // evitar full-table scan em escolas grandes
-
-        if (turmasError) {
-          console.error('[NotifHelper] Erro ao buscar turmas:', turmasError.message)
-        } else {
+        if (allTurmas) {
           const matchedTurmas = (allTurmas || []).filter((t: any) => {
             return allGroupTerms.some(turma => matchesTurmaTerm(t, turma))
           })
@@ -321,10 +317,7 @@ export async function getResponsavelIdsForTargets(dados: TargetParams | null | u
       const expandedSet = new Set(expandedRawIds)
       const finalAlunosSet = new Set(finalAlunosIds)
       try {
-        const { data: sysUsers } = await supabase
-          .from('system_users')
-          .select('id, auth_id, dados, email')
-          .limit(5000)
+        const sysUsers = await getCachedSystemUsers()
 
         if (sysUsers && sysUsers.length > 0) {
           sysUsers.forEach((u: any) => {
@@ -451,14 +444,15 @@ export async function getColaboradorIds(colaboradoresIds: string[]): Promise<str
   })
 
   try {
-    const supabase = supabaseServer
     const [sysRes, funcRes] = await Promise.allSettled([
-      supabase.from('system_users').select('id, auth_id, email, dados, status').or('status.neq.inativo,status.is.null').limit(3000),
-      supabase.from('funcionarios').select('id, codigo, email, dados, status').limit(3000),
+      getCachedSystemUsers(),
+      getCachedFuncionarios(),
     ])
 
-    const sysColabs = sysRes.status === 'fulfilled' && sysRes.value.data ? sysRes.value.data : []
-    const funcRows = funcRes.status === 'fulfilled' && funcRes.value.data ? funcRes.value.data : []
+    const sysColabs = sysRes.status === 'fulfilled' && Array.isArray(sysRes.value)
+      ? sysRes.value.filter((u: any) => !u.status || String(u.status).toLowerCase() !== 'inativo')
+      : []
+    const funcRows = funcRes.status === 'fulfilled' && Array.isArray(funcRes.value) ? funcRes.value : []
 
     const matchedEmails = new Set<string>()
     const matchedUserIds = new Set<string>()
@@ -667,11 +661,9 @@ export async function getStudentTargetsForComunicados(dados: TargetParams | null
       // Se nenhum colaborador ou grupo específico foi selecionado, envia para toda a equipe
       if (colaboradoresIds.length === 0 && allGroupTerms.length === 0) {
         try {
-          const { data: allSysUsers } = await supabase
-            .from('system_users')
-            .select('id, auth_id, email, status')
-            .or('status.neq.inativo,status.is.null')
-            .limit(3000)
+          const allSysUsers = (await getCachedSystemUsers()).filter(
+            (u: any) => !u.status || String(u.status).toLowerCase() !== 'inativo'
+          )
 
           if (allSysUsers) {
             allSysUsers.forEach((u: any) => {
@@ -685,19 +677,17 @@ export async function getStudentTargetsForComunicados(dados: TargetParams | null
         }
       }
     } else if (isTodos && !todosAnoMatch) {
-      // Busca TODOS os alunos (limit alto para escolas grandes, mas evita full scan sem limite)
-      const { data, error } = await supabase.from('alunos').select('id, nome').limit(5000)
-      if (!error && data) {
+      // Busca TODOS os alunos (via cache compartilhado)
+      const data = await getCachedActiveAlunos()
+      if (data) {
         alunosToProcess = data.map((d: any) => ({ id: String(d.id), nome: d.nome || '' }))
       }
 
       // Toda a Escola / Todos também inclui todos os colaboradores ativos!
       try {
-        const { data: allSysUsers } = await supabase
-          .from('system_users')
-          .select('id, auth_id, email, status')
-          .or('status.neq.inativo,status.is.null')
-          .limit(3000)
+        const allSysUsers = (await getCachedSystemUsers()).filter(
+          (u: any) => !u.status || String(u.status).toLowerCase() !== 'inativo'
+        )
 
         if (allSysUsers) {
           allSysUsers.forEach((u: any) => {
@@ -720,14 +710,15 @@ export async function getStudentTargetsForComunicados(dados: TargetParams | null
 
       // Adicionar turmas, grupos e equipes
       if (allGroupTerms.length > 0) {
-        // 1. Resolver grupos na tabela agenda_grupos e agenda_equipes
-        const [gruposRes, equipesRes] = await Promise.allSettled([
-          supabase.from('agenda_grupos').select('id, dados'),
-          supabase.from('agenda_equipes').select('id, dados')
+        // 1. Resolver grupos, turmas e equipes via cache compartilhado
+        const [turmasGruposRes, equipesRes] = await Promise.allSettled([
+          getCachedTurmasAndGrupos(),
+          getCachedEquipes()
         ])
 
-        const allGrupos = gruposRes.status === 'fulfilled' && gruposRes.value.data ? gruposRes.value.data : []
-        const allEquipes = equipesRes.status === 'fulfilled' && equipesRes.value.data ? equipesRes.value.data : []
+        const allGrupos = turmasGruposRes.status === 'fulfilled' ? (turmasGruposRes.value.allGrupos || []) : []
+        const allTurmas = turmasGruposRes.status === 'fulfilled' ? (turmasGruposRes.value.allTurmas || []) : []
+        const allEquipes = equipesRes.status === 'fulfilled' && Array.isArray(equipesRes.value) ? equipesRes.value : []
 
         if (allGrupos.length > 0) {
           const matchedGrupos = allGrupos.filter((g: any) => {
@@ -799,13 +790,8 @@ export async function getStudentTargetsForComunicados(dados: TargetParams | null
           })
         }
 
-        // 2. Resolver nomes/IDs de turmas para IDs reais no banco
-        const { data: allTurmas, error: turmasError } = await supabase
-          .from('turmas')
-          .select('id, codigo, nome, serie, turno, ano, dados')
-          .limit(500)
-
-        if (!turmasError && allTurmas) {
+        // 2. Resolver nomes/IDs de turmas para IDs reais no banco (usando allTurmas do cache)
+        if (allTurmas && allTurmas.length > 0) {
           const matchedTurmas = allTurmas.filter(t => {
             return allGroupTerms.some(turma => matchesTurmaTerm(t, turma))
           });
@@ -962,10 +948,7 @@ export async function getStudentTargetsForComunicados(dados: TargetParams | null
             })
           }
 
-          const { data: sysUsers } = await supabase
-            .from('system_users')
-            .select('id, auth_id, dados, email')
-            .limit(5000)
+          const sysUsers = await getCachedSystemUsers()
 
           if (sysUsers && sysUsers.length > 0) {
             sysUsers.forEach((u: any) => {
@@ -1048,12 +1031,14 @@ export async function getStudentTargetsForComunicados(dados: TargetParams | null
     if (finalColabIds.size > 0) {
       try {
         const [sysRes, funcRes] = await Promise.allSettled([
-          supabase.from('system_users').select('id, auth_id, email, dados, status').or('status.neq.inativo,status.is.null').limit(3000),
-          supabase.from('funcionarios').select('id, codigo, email, dados, status').limit(3000),
+          getCachedSystemUsers(),
+          getCachedFuncionarios(),
         ])
 
-        const sysColabs = sysRes.status === 'fulfilled' && sysRes.value.data ? sysRes.value.data : []
-        const funcRows = funcRes.status === 'fulfilled' && funcRes.value.data ? funcRes.value.data : []
+        const sysColabs = sysRes.status === 'fulfilled' && Array.isArray(sysRes.value)
+          ? sysRes.value.filter((u: any) => !u.status || String(u.status).toLowerCase() !== 'inativo')
+          : []
+        const funcRows = funcRes.status === 'fulfilled' && Array.isArray(funcRes.value) ? funcRes.value : []
 
         const matchedEmails = new Set<string>()
         const matchedUserIds = new Set<string>()

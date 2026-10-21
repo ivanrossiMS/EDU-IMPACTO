@@ -245,6 +245,16 @@ function addProcessedBroadcast(set: Set<string>, id: string) {
 
 // ─── Provider ─────────────────────────────────────────────────────────────────
 export function SaidaProvider({ children, enabled = true }: { children: React.ReactNode, enabled?: boolean }) {
+  const existingCtx = useContext(Ctx)
+  // Se já existe um SaidaProvider ancestral montado (ex: layout.tsx + page.tsx),
+  // reutiliza o contexto pai evitando canais Realtime e fetches duplicados.
+  if (existingCtx) {
+    return <>{children}</>
+  }
+  return <SaidaProviderInner enabled={enabled}>{children}</SaidaProviderInner>
+}
+
+function SaidaProviderInner({ children, enabled = true }: { children: React.ReactNode, enabled?: boolean }) {
   // `enabled` gates heavy data fetching (calls list, config) but Realtime channel
   // is ALWAYS active so all clients (including Família/mobile) receive live updates.
   // Polling é 0 pois o canal Realtime Supabase entrega as alterações de forma instantânea.
@@ -383,6 +393,9 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
           'postgres_changes',
           { event: '*', schema: 'public', table: 'saida_calls' },
           (payload: any) => {
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new CustomEvent('saida_calls:postgres_change', { detail: payload }))
+            }
             const { eventType, new: newRow, old: oldRow } = payload
             
             if (eventType === 'INSERT') {

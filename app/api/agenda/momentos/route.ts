@@ -9,7 +9,7 @@ import { getResponsavelIdsForTargets, getStudentTargetsForComunicados, checkResp
 import { deleteStorageFilesByUrls } from '@/lib/upload/storageServer'
 import { getAlunoTodasTurmasEGruposComHistorico, getAlunoVinculosComPeriodo, canStudentViewMomento, isAlunoCursandoTurma } from '@/lib/studentTurmaUtils'
 import { formatFriendlyStudentName } from '@/lib/studentNameHelper'
-import { getCachedTurmasAndGrupos } from '@/lib/server/turmasGruposCache'
+import { getCachedTurmasAndGrupos, getCachedEquipes } from '@/lib/server/turmasGruposCache'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -297,14 +297,11 @@ export async function GET(request: Request) {
         conditions.push(`dados->>authorId.eq.${clean}`);
       });
 
-      // Buscar grupos da agenda e equipes para resolução em memória (robusta)
-      const [gruposRes, equipesRes] = await Promise.all([
-        supabase.from('agenda_grupos').select('id, dados'),
-        supabase.from('agenda_equipes').select('id, dados')
+      // Buscar grupos da agenda e equipes via cache em memória (TTL 60s + dedup in-flight)
+      const [{ allTurmas: myTurmas, allGrupos: allGroups }, allEquipes] = await Promise.all([
+        getCachedTurmasAndGrupos(),
+        getCachedEquipes()
       ]);
-
-      const allGroups = gruposRes.data || [];
-      const allEquipes = equipesRes.data || [];
       const matchedGroupNames = new Set<string>();
       const matchedGroupIds = new Set<string>();
       const matchedSyncTurmaIds = new Set<string>();
@@ -378,7 +375,6 @@ export async function GET(request: Request) {
       });
 
       if (matchedSyncTurmaIds.size > 0 || matchedGroupNames.size > 0) {
-        const { allTurmas: myTurmas } = await getCachedTurmasAndGrupos();
         if (myTurmas) {
           myTurmas.forEach(t => {
             const tId = String(t.id);
