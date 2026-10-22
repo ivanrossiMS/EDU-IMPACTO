@@ -61,12 +61,63 @@ export interface GenerateBoletimImageParams {
   disciplinasAnuais?: BoletimImageDisciplinaAnual[]
 }
 
+export interface BoletimRemoteUrls {
+  id: string
+  fileName: string
+  serverDownloadUrl: string
+  externalDownloadUrl?: string
+  externalViewUrl?: string
+}
+
 export interface GeneratedBoletimImage {
   blob: Blob
   dataUrl: string
   fileName: string
   title: string
   shareText: string
+  remoteUrlsPromise: Promise<BoletimRemoteUrls | null>
+}
+
+function dataUrlToBlob(dataUrl: string): Blob {
+  const parts = dataUrl.split(',')
+  const mimeMatch = parts[0]?.match(/:(.*?);/)
+  const mime = mimeMatch?.[1] || 'image/png'
+  const bstr = atob(parts[1] || '')
+  let n = bstr.length
+  const u8arr = new Uint8Array(n)
+  while (n--) {
+    u8arr[n] = bstr.charCodeAt(n)
+  }
+  return new Blob([u8arr], { type: mime })
+}
+
+async function uploadBoletimImageForDownload(
+  blob: Blob,
+  fileName: string
+): Promise<BoletimRemoteUrls | null> {
+  try {
+    const formData = new FormData()
+    formData.append('file', blob, fileName)
+    formData.append('fileName', fileName)
+
+    const res = await fetch('/api/boletins/imagem-download', {
+      method: 'POST',
+      body: formData,
+    })
+    if (!res.ok) return null
+    const json = await res.json()
+    if (!json?.serverDownloadUrl) return null
+    return {
+      id: json.id,
+      fileName: json.fileName || fileName,
+      serverDownloadUrl: json.serverDownloadUrl,
+      externalDownloadUrl: json.externalDownloadUrl,
+      externalViewUrl: json.externalViewUrl,
+    }
+  } catch (err) {
+    console.warn('[boletimImageGenerator] Falha ao preparar URL de download:', err)
+    return null
+  }
 }
 
 /**
@@ -794,18 +845,9 @@ export async function generateBoletimImage(
   ctx.textAlign = 'right'
   ctx.fillText(emissaoStr, W - PAD_X - 4, footerY)
 
-  // Exporta o Canvas para PNG (Blob + DataURL)
+  // Exporta o Canvas para PNG (DataURL + conversão síncrona para Blob sem dupla codificação PNG)
   const dataUrl = canvas.toDataURL('image/png', 1.0)
-  const blob = await new Promise<Blob>((resolve, reject) => {
-    canvas.toBlob(
-      (b) => {
-        if (b) resolve(b)
-        else reject(new Error('Falha ao converter boletim em imagem PNG.'))
-      },
-      'image/png',
-      1.0
-    )
-  })
+  const blob = dataUrlToBlob(dataUrl)
 
   const rawStudent = (params.aluno?.nome || 'Aluno')
     .normalize('NFD')
@@ -823,11 +865,16 @@ export async function generateBoletimImage(
   const title = `Boletim Escolar - ${params.aluno?.nome || 'Aluno'} (${params.periodoTitulo} ${params.anoLetivo})`
   const shareText = `📊 Boletim Escolar (${params.periodoTitulo} - ${params.anoLetivo}) de ${params.aluno?.nome || 'Aluno'} • Média Global: ${(params.mediaGlobal || 0).toFixed(1)}`
 
+  // Pré-carrega em background no servidor/Storage para que no Android (WebView e Chrome)
+  // o download e compartilhamento funcionem instantaneamente ao toque do usuário
+  const remoteUrlsPromise = uploadBoletimImageForDownload(blob, fileName)
+
   return {
     blob,
     dataUrl,
     fileName,
     title,
     shareText,
+    remoteUrlsPromise,
   }
 }

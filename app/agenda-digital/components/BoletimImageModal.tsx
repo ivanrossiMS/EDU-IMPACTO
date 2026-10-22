@@ -5,13 +5,57 @@ import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Download, Share2, X, CheckCircle2, Sparkles, Image as ImageIcon, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
-import type { GeneratedBoletimImage } from './boletimImageGenerator'
+import { NativeSettings } from '@/lib/notifications/nativeSettings'
+import type { GeneratedBoletimImage, BoletimRemoteUrls } from './boletimImageGenerator'
 
 interface BoletimImageModalProps {
   isOpen: boolean
   onClose: () => void
   imageData: GeneratedBoletimImage | null
   isGenerating?: boolean
+}
+
+function getPlatformInfo() {
+  if (typeof window === 'undefined' || typeof navigator === 'undefined') {
+    return {
+      isAndroid: false,
+      isIOS: false,
+      isCapacitorNative: false,
+      isAndroidWebView: false,
+    }
+  }
+  const ua = navigator.userAgent || ''
+  const isAndroid = /Android/i.test(ua)
+  const isIOS =
+    /iPhone|iPad|iPod/i.test(ua) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+  const isCapacitorNative = Boolean((window as any).Capacitor?.isNativePlatform?.())
+  const isAndroidWebView =
+    isAndroid &&
+    (isCapacitorNative ||
+      /; wv\)|Version\/\d+\.\d+.*Chrome\/|Instagram|FBAN|FBAV|WhatsApp/i.test(ua))
+
+  return {
+    isAndroid,
+    isIOS,
+    isCapacitorNative,
+    isAndroidWebView,
+  }
+}
+
+async function resolveRemoteUrlsWithTimeout(
+  imageData: GeneratedBoletimImage,
+  timeoutMs = 4500
+): Promise<BoletimRemoteUrls | null> {
+  if (!imageData.remoteUrlsPromise) return null
+  try {
+    return await Promise.race([
+      imageData.remoteUrlsPromise,
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), timeoutMs)),
+    ])
+  } catch {
+    return null
+  }
 }
 
 export function BoletimImageModal({
@@ -22,6 +66,7 @@ export function BoletimImageModal({
 }: BoletimImageModalProps) {
   const [mounted, setMounted] = useState(false)
   const [savedSuccess, setSavedSuccess] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
   const [isSharing, setIsSharing] = useState(false)
 
   useEffect(() => {
@@ -31,6 +76,7 @@ export function BoletimImageModal({
   useEffect(() => {
     if (!isOpen) {
       setSavedSuccess(false)
+      setIsSaving(false)
       setIsSharing(false)
       return
     }
@@ -52,28 +98,95 @@ export function BoletimImageModal({
 
   if (!mounted || typeof document === 'undefined') return null
 
+  const triggerBlobDownload = (blob: Blob, fileName: string) => {
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = fileName
+    a.style.display = 'none'
+    document.body.appendChild(a)
+    a.click()
+
+    setTimeout(() => {
+      if (document.body.contains(a)) {
+        document.body.removeChild(a)
+      }
+      URL.revokeObjectURL(url)
+    }, 3000)
+  }
+
   const handleSaveToDevice = async () => {
-    if (!imageData) return
+    if (!imageData || isSaving) return
+    setIsSaving(true)
 
     try {
-      const isCapacitorNative = Boolean((window as any).Capacitor?.isNativePlatform?.())
+      const { isAndroid, isCapacitorNative, isAndroidWebView } = getPlatformInfo()
 
-      // Em WebViews nativas do Capacitor no iOS, <a download> com blob pode ser ignorado;
-      // acionamos o download padrão e, se em Capacitor iOS, oferecemos o Share Sheet nativo que possui "Salvar Imagem" (Rolo da Câmera)
-      const url = URL.createObjectURL(imageData.blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = imageData.fileName
-      a.style.display = 'none'
-      document.body.appendChild(a)
-      a.click()
-
-      setTimeout(() => {
-        if (document.body.contains(a)) {
-          document.body.removeChild(a)
+      // ── FLUXO ANDROID (Capacitor App, WebViews e Chrome/Samsung Internet) ──
+      if (isAndroid) {
+        // 1. Se estiver no app nativo Capacitor atualizado com saveImage nativo (MediaStore)
+        if (isCapacitorNative) {
+          try {
+            const nativeRes = await Promise.race([
+              NativeSettings.saveImage({
+                base64: imageData.dataUrl,
+                fileName: imageData.fileName,
+              }),
+              new Promise<{ saved?: boolean }>((resolve) =>
+                setTimeout(() => resolve({ saved: false }), 1200)
+              ),
+            ])
+            if (nativeRes?.saved) {
+              setSavedSuccess(true)
+              setTimeout(() => setSavedSuccess(false), 3500)
+              toast.success('Boletim salvo na Galeria do celular!')
+              return
+            }
+          } catch {
+            // Prossegue para download via URL externa/servidor
+          }
         }
-        URL.revokeObjectURL(url)
-      }, 2000)
+
+        // 2. Obtém a URL HTTP real (Content-Disposition: attachment) pré-carregada
+        // Em Android WebView / Capacitor Android, blob: URLs são ignoradas pelo WebView,
+        // enquanto URLs externas (Supabase Storage ?download=) acionam o Intent nativo
+        // no Bridge.java e URLs de servidor acionam o DownloadManager nativo do Chrome Android.
+        const remoteUrls = await resolveRemoteUrlsWithTimeout(imageData, 4500)
+
+        if (isAndroidWebView && remoteUrls?.externalDownloadUrl) {
+          window.location.href = remoteUrls.externalDownloadUrl
+          setSavedSuccess(true)
+          setTimeout(() => setSavedSuccess(false), 3500)
+          toast.success('Download do boletim iniciado no celular!')
+          return
+        }
+
+        if (remoteUrls?.serverDownloadUrl) {
+          window.location.href = remoteUrls.serverDownloadUrl
+          setSavedSuccess(true)
+          setTimeout(() => setSavedSuccess(false), 3500)
+          toast.success('Download do boletim iniciado no celular!')
+          return
+        }
+
+        if (remoteUrls?.externalDownloadUrl) {
+          window.location.href = remoteUrls.externalDownloadUrl
+          setSavedSuccess(true)
+          setTimeout(() => setSavedSuccess(false), 3500)
+          toast.success('Download do boletim iniciado no celular!')
+          return
+        }
+
+        // 3. Contingência offline via Blob URL
+        triggerBlobDownload(imageData.blob, imageData.fileName)
+        setSavedSuccess(true)
+        setTimeout(() => setSavedSuccess(false), 3500)
+        toast.success('Boletim em imagem salvo no celular!')
+        return
+      }
+
+      // ── FLUXO iOS & DESKTOP (Mantido 100% compatível) ──
+      triggerBlobDownload(imageData.blob, imageData.fileName)
 
       if (isCapacitorNative && typeof navigator.share === 'function' && typeof navigator.canShare === 'function') {
         try {
@@ -94,7 +207,9 @@ export function BoletimImageModal({
       toast.success('Boletim em imagem salvo no celular!')
     } catch (err) {
       console.error('Erro ao salvar imagem do boletim:', err)
-      toast.error('Não foi possível salvar a imagem automaticamente. Pressione e segure na imagem para salvar.')
+      toast.error('Não foi possível salvar a imagem automaticamente.')
+    } finally {
+      setIsSaving(false)
     }
   }
 
@@ -103,28 +218,95 @@ export function BoletimImageModal({
     setIsSharing(true)
 
     try {
+      const { isAndroid, isCapacitorNative } = getPlatformInfo()
+
+      // ── 1. Se for Android Capacitor Nativo: tenta plugin nativo FileProvider primeiro ──
+      // (No Android System WebView do Capacitor, navigator.share falha em <10ms com AbortError
+      // porque a interface Mojo ShareService não é vinculada no android_webview)
+      if (isAndroid && isCapacitorNative) {
+        try {
+          const nativeShareRes = await Promise.race([
+            NativeSettings.shareImage({
+              base64: imageData.dataUrl,
+              fileName: imageData.fileName,
+              title: imageData.title,
+              text: imageData.shareText,
+            }),
+            new Promise<{ shared?: boolean }>((resolve) =>
+              setTimeout(() => resolve({ shared: false }), 1200)
+            ),
+          ])
+          if (nativeShareRes?.shared) {
+            return
+          }
+        } catch {
+          // Prossegue para compartilhamento via Intent externo (WhatsApp / Link HD)
+        }
+
+        const remoteUrls = await resolveRemoteUrlsWithTimeout(imageData, 4500)
+        const publicImgUrl = remoteUrls?.externalViewUrl || remoteUrls?.externalDownloadUrl || ''
+        const waMessage = publicImgUrl
+          ? `${imageData.shareText}\n\n📄 *Visualizar / Baixar Boletim em Imagem:*\n${publicImgUrl}`
+          : imageData.shareText
+        const waUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(waMessage)}`
+        window.location.href = waUrl
+        return
+      }
+
+      // ── 2. Web Share API nativa (iOS Safari, iOS Capacitor, Android Chrome, macOS) ──
+      // Criamos o File de forma síncrona no tick 0 para preservar o User Activation no Android Chrome
       const file = new File([imageData.blob], imageData.fileName, {
         type: 'image/png',
         lastModified: Date.now(),
       })
 
-      // 1. Web Share API nativa com suporte a arquivo de imagem (iOS Safari, Android Chrome, macOS)
       if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
         const canShareFiles =
           typeof navigator.canShare === 'function' ? navigator.canShare({ files: [file] }) : true
 
         if (canShareFiles) {
-          await navigator.share({
-            files: [file],
-            title: imageData.title,
-            text: imageData.shareText,
-          })
-          toast.success('Boletim compartilhado com sucesso!')
-          return
+          const shareStartMs = Date.now()
+          try {
+            // No Android Chrome, enviar apenas { files: [file] } evita falhas de Intent
+            // em que a combinação de EXTRA_STREAM + EXTRA_TEXT descarta a imagem no WhatsApp/Android
+            if (isAndroid) {
+              await navigator.share({
+                files: [file],
+              })
+            } else {
+              await navigator.share({
+                files: [file],
+                title: imageData.title,
+                text: imageData.shareText,
+              })
+            }
+            toast.success('Boletim compartilhado com sucesso!')
+            return
+          } catch (shareErr: any) {
+            const elapsedMs = Date.now() - shareStartMs
+            // Em WebViews Android (WhatsApp/Instagram/WebView), o Mojo ShareService desconecta
+            // instantaneamente (<250ms) lançando AbortError sem abrir nenhum menu.
+            // Só tratamos AbortError como cancelamento manual se o menu ficou aberto (>300ms).
+            if (shareErr?.name === 'AbortError' && (!isAndroid || elapsedMs > 300)) {
+              return
+            }
+          }
         }
       }
 
-      // 2. Fallback: Copiar imagem para a área de transferência + baixar imagem
+      // ── 3. Fallback para Android WebViews onde navigator.share com arquivo não é suportado ──
+      if (isAndroid) {
+        const remoteUrls = await resolveRemoteUrlsWithTimeout(imageData, 4500)
+        const publicImgUrl = remoteUrls?.externalViewUrl || remoteUrls?.externalDownloadUrl || ''
+        const waMessage = publicImgUrl
+          ? `${imageData.shareText}\n\n📄 *Visualizar / Baixar Boletim em Imagem:*\n${publicImgUrl}`
+          : imageData.shareText
+        const waUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(waMessage)}`
+        window.location.href = waUrl
+        return
+      }
+
+      // ── 4. Fallback Desktop: Copiar imagem para a área de transferência ou baixar ──
       if (typeof navigator !== 'undefined' && navigator.clipboard && typeof ClipboardItem !== 'undefined') {
         try {
           await navigator.clipboard.write([
@@ -140,7 +322,6 @@ export function BoletimImageModal({
       await handleSaveToDevice()
     } catch (err: any) {
       if (err?.name === 'AbortError') {
-        // Usuário cancelou o menu de compartilhamento nativo
         return
       }
       console.warn('Compartilhamento nativo indisponível, salvando imagem:', err)
@@ -369,7 +550,7 @@ export function BoletimImageModal({
               <button
                 type="button"
                 onClick={handleSaveToDevice}
-                disabled={isGenerating || !imageData}
+                disabled={isGenerating || !imageData || isSaving}
                 style={{
                   height: 46,
                   borderRadius: 14,
@@ -383,12 +564,17 @@ export function BoletimImageModal({
                   alignItems: 'center',
                   justifyContent: 'center',
                   gap: 8,
-                  cursor: isGenerating || !imageData ? 'not-allowed' : 'pointer',
+                  cursor: isGenerating || !imageData || isSaving ? 'not-allowed' : 'pointer',
                   transition: 'all 0.2s ease',
                   boxShadow: '0 2px 6px rgba(15, 23, 42, 0.04)',
                 }}
               >
-                {savedSuccess ? (
+                {isSaving ? (
+                  <>
+                    <Loader2 size={17} color="#2563eb" style={{ animation: 'spin 1s linear infinite' }} />
+                    <span>Salvando...</span>
+                  </>
+                ) : savedSuccess ? (
                   <>
                     <CheckCircle2 size={17} color="#059669" strokeWidth={2.5} />
                     <span>Salvo!</span>
@@ -423,8 +609,17 @@ export function BoletimImageModal({
                   boxShadow: '0 6px 16px rgba(37, 99, 235, 0.28)',
                 }}
               >
-                <Share2 size={17} strokeWidth={2.4} />
-                <span>Compartilhar</span>
+                {isSharing ? (
+                  <>
+                    <Loader2 size={17} color="#ffffff" style={{ animation: 'spin 1s linear infinite' }} />
+                    <span>Abrindo...</span>
+                  </>
+                ) : (
+                  <>
+                    <Share2 size={17} strokeWidth={2.4} />
+                    <span>Compartilhar</span>
+                  </>
+                )}
               </button>
             </div>
           </motion.div>

@@ -681,17 +681,17 @@ export async function POST(req: Request) {
             console.error('[Portaria Integration Saida Frequencia Error]', freqUpdErr)
           }
 
-          // 2. Registrar na tabela saida_calls com timestamp único para cada saída do dia
-          const timeToken = localTimeStr.replace(':', '')
-          const callId = `saida-catraca-${alunoId}-${localDate}-${timeToken}`
+          // 2. Registrar na tabela saida_calls (apenas 1 registro consolidado por aluno/dia na catraca)
+          const callId = `saida-catraca-${alunoId}-${localDate}`
+          const confirmedIso = `${localDate}T${localTimeStr}:00-04:00`
           const callDados = {
             studentId: String(alunoId),
             studentName: alunoNome,
             studentClass: alunoTurma || '',
             guardianId: 'catraca-saida',
             guardianName: labelCatraca,
-            calledAt: `${localDate}T${localTimeStr}:00-04:00`,
-            confirmedAt: `${localDate}T${localTimeStr}:00-04:00`,
+            calledAt: confirmedIso,
+            confirmedAt: confirmedIso,
             status: 'confirmed',
             tipo: 'sozinho',
             origem: 'catraca_idface',
@@ -699,7 +699,7 @@ export async function POST(req: Request) {
             horaSaida: localTimeStr,
           }
 
-          const eventTimestampIso = new Date(`${localDate}T${localTimeStr}:00-04:00`).toISOString()
+          const eventTimestampIso = new Date(confirmedIso).toISOString()
 
           await supabase.from('saida_calls').upsert({
             id: callId,
@@ -707,12 +707,36 @@ export async function POST(req: Request) {
             created_at: eventTimestampIso
           }, { onConflict: 'id' })
 
-          // Atualiza também o ID geral do dia para retrocompatibilidade
-          await supabase.from('saida_calls').upsert({
-            id: `saida-catraca-${alunoId}-${localDate}`,
-            dados: callDados,
-            created_at: eventTimestampIso
-          }, { onConflict: 'id' })
+          // Se o aluno possuía chamadas em aberto (waiting/called) hoje, confirma-as automaticamente
+          try {
+            const startOfDayIso = new Date(`${localDate}T00:00:00-04:00`).toISOString()
+            const { data: openCalls } = await supabase
+              .from('saida_calls')
+              .select('id, dados')
+              .gte('created_at', startOfDayIso)
+              .eq('dados->>studentId', String(alunoId))
+
+            if (Array.isArray(openCalls) && openCalls.length > 0) {
+              for (const row of openCalls) {
+                if (!row || row.id === callId) continue
+                const d = typeof row.dados === 'string' ? JSON.parse(row.dados) : (row.dados || {})
+                if (d.status === 'waiting' || d.status === 'called') {
+                  await supabase
+                    .from('saida_calls')
+                    .update({
+                      dados: {
+                        ...d,
+                        status: 'confirmed',
+                        confirmedAt: d.confirmedAt || confirmedIso,
+                      }
+                    })
+                    .eq('id', row.id)
+                }
+              }
+            }
+          } catch (openUpdateErr) {
+            console.warn('[Portaria Webhook] Falha ao atualizar chamadas abertas do aluno:', openUpdateErr)
+          }
 
           // 3. Disparo do Push Notification para os Responsáveis na Agenda Digital
           try {

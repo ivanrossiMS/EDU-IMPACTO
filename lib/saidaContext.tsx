@@ -172,18 +172,23 @@ export function resolveSpecialAuthValidity(call: any, referenceTodayYmd?: string
 
 export function isSaiuSozinhoCall(call: any): boolean {
   if (!call) return false
-  const gName = (call.guardianName || '').toLowerCase().trim()
-  const gId = (call.guardianId || '').toLowerCase().trim()
-  const tipo = (call.tipo || '').toLowerCase().trim()
-  const origem = (call.origem || '').toLowerCase().trim()
-  const source = (call.source || '').toLowerCase().trim()
-  const dispNome = (call.dispositivoNome || '').toLowerCase().trim()
+  const raw = call.dados && typeof call.dados === 'object' ? { ...call.dados, ...call } : call
+  const stripAccents = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  const gName = stripAccents(String(raw.guardianName || '').toLowerCase().trim())
+  const gId = stripAccents(String(raw.guardianId || '').toLowerCase().trim())
+  const tipo = stripAccents(String(raw.tipo || '').toLowerCase().trim())
+  const origem = stripAccents(String(raw.origem || '').toLowerCase().trim())
+  const source = stripAccents(String(raw.source || '').toLowerCase().trim())
+  const dispNome = stripAccents(String(raw.dispositivoNome || '').toLowerCase().trim())
 
   // 1. Marcados como saiu sozinho
   if (
     gId === 'sozinho' ||
     gId === 'solo' ||
+    gId === 'saida-sozinho' ||
     tipo === 'sozinho' ||
+    tipo === 'saida_sozinho' ||
+    tipo === 'solo' ||
     gName === 'saiu sozinho' ||
     gName.startsWith('saiu sozinho') ||
     gName.includes('sozinho')
@@ -536,6 +541,28 @@ function SaidaProviderInner({ children, enabled = true }: { children: React.Reac
                   }
                   return [call, ...arr]
                 }
+                // Se a nova chamada já chega confirmada (ex: catraca de saída ou saiu sozinho), confirma também chamadas anteriores em aberto do mesmo aluno hoje
+                if (call.status === 'confirmed' && callStudentId && isFromTodayRef.current(call.confirmedAt || call.calledAt)) {
+                  const confirmIso = call.confirmedAt || call.calledAt
+                  const todayKey = getCampoGrandeDateStr(confirmIso)
+                  const synced = arr.map(c => {
+                    if (c.studentId == null || String(c.studentId) !== callStudentId) return c
+                    if (c.status === 'special_auth') {
+                      return { ...c, confirmedDates: { ...(c.confirmedDates || {}), [todayKey]: confirmIso } }
+                    }
+                    if ((c.status === 'waiting' || c.status === 'called') && isFromTodayRef.current(c.confirmedAt || c.calledAt)) {
+                      return { ...c, status: 'confirmed' as const, confirmedAt: c.confirmedAt || confirmIso }
+                    }
+                    return c
+                  })
+                  const idx = synced.findIndex(c => c.id === call.id)
+                  if (idx >= 0) {
+                    const updated = [...synced]
+                    updated[idx] = { ...updated[idx], ...call }
+                    return updated
+                  }
+                  return [call, ...synced]
+                }
                 // Protect confirmed students from being set back to waiting/called via DB triggers/inserts unless isRevert is set
                 const isAlreadyConfirmed = callStudentId ? arr.some(c => c.studentId != null && String(c.studentId) === callStudentId && c.status === 'confirmed' && isFromTodayRef.current(c.confirmedAt || c.calledAt)) : false
                 if (isAlreadyConfirmed && (call.status === 'waiting' || call.status === 'called') && !(call as any).isRevert) {
@@ -572,6 +599,25 @@ function SaidaProviderInner({ children, enabled = true }: { children: React.Reac
                     return updated
                   }
                   return [call, ...arr]
+                }
+                if (call.status === 'confirmed' && callStudentId && isFromTodayRef.current(call.confirmedAt || call.calledAt)) {
+                  const confirmIso = call.confirmedAt || call.calledAt
+                  const todayKey = getCampoGrandeDateStr(confirmIso)
+                  const synced = arr.map(c => {
+                    if (c.studentId == null || String(c.studentId) !== callStudentId) return c
+                    if (c.status === 'special_auth') {
+                      return { ...c, confirmedDates: { ...(c.confirmedDates || {}), [todayKey]: confirmIso } }
+                    }
+                    if ((c.status === 'waiting' || c.status === 'called') && isFromTodayRef.current(c.confirmedAt || c.calledAt)) {
+                      return { ...c, status: 'confirmed' as const, confirmedAt: c.confirmedAt || confirmIso }
+                    }
+                    return c
+                  })
+                  const idx = synced.findIndex(c => c.id === call.id)
+                  if (idx >= 0) {
+                    return synced.map(c => c.id === call.id ? { ...c, ...call } : c)
+                  }
+                  return [call, ...synced]
                 }
                 const isAlreadyConfirmed = callStudentId ? arr.some(c => c.studentId != null && String(c.studentId) === callStudentId && c.status === 'confirmed' && isFromTodayRef.current(c.confirmedAt || c.calledAt)) : false
                 if (isAlreadyConfirmed && (call.status === 'waiting' || call.status === 'called') && !(call as any).isRevert) {
@@ -632,6 +678,27 @@ function SaidaProviderInner({ children, enabled = true }: { children: React.Reac
                   }
                   return [data, ...arr]
                 }
+                if (data.status === 'confirmed' && dataStudentId && isFromTodayRef.current(data.confirmedAt || data.calledAt)) {
+                  const confirmIso = data.confirmedAt || data.calledAt
+                  const todayKey = getCampoGrandeDateStr(confirmIso)
+                  const synced = arr.map(c => {
+                    if (c.studentId == null || String(c.studentId) !== dataStudentId) return c
+                    if (c.status === 'special_auth') {
+                      return { ...c, confirmedDates: { ...(c.confirmedDates || {}), [todayKey]: confirmIso } }
+                    }
+                    if ((c.status === 'waiting' || c.status === 'called') && isFromTodayRef.current(c.confirmedAt || c.calledAt)) {
+                      return { ...c, status: 'confirmed' as const, confirmedAt: c.confirmedAt || confirmIso }
+                    }
+                    return c
+                  })
+                  const idx = synced.findIndex(c => c.id === data.id)
+                  if (idx >= 0) {
+                    const updated = [...synced]
+                    updated[idx] = { ...updated[idx], ...data }
+                    return updated
+                  }
+                  return [data, ...synced]
+                }
                 const isAlreadyConfirmed = dataStudentId ? arr.some(c => c.studentId != null && String(c.studentId) === dataStudentId && c.status === 'confirmed' && isFromTodayRef.current(c.confirmedAt || c.calledAt)) : false
                 if (isAlreadyConfirmed && data.status !== 'confirmed' && !data.isRevert) {
                   return arr.map(c => (c.studentId != null && String(c.studentId) === dataStudentId && c.status !== 'special_auth') ? { ...c, status: 'confirmed' } : c)
@@ -657,7 +724,15 @@ function SaidaProviderInner({ children, enabled = true }: { children: React.Reac
                   return c
                 }
                 if ((c.id === data.callId || (dataStudentId && c.studentId != null && String(c.studentId) === dataStudentId)) && isFromTodayRef.current(c.confirmedAt || c.calledAt)) {
-                  return { ...c, status: 'confirmed', confirmedAt: data.confirmedAt }
+                  return {
+                    ...c,
+                    ...(data.guardianId ? { guardianId: data.guardianId } : {}),
+                    ...(data.guardianName ? { guardianName: data.guardianName } : {}),
+                    ...(data.tipo ? { tipo: data.tipo } : {}),
+                    ...(data.origem ? { origem: data.origem } : {}),
+                    status: 'confirmed',
+                    confirmedAt: data.confirmedAt
+                  }
                 }
                 return c
               }))
@@ -745,6 +820,22 @@ function SaidaProviderInner({ children, enabled = true }: { children: React.Reac
             }
             return [d, ...arr]
           }
+          if (d.status === 'confirmed' && dStudentId && isFromTodayRef.current(d.confirmedAt || d.calledAt)) {
+            const confirmIso = d.confirmedAt || d.calledAt
+            const todayKey = getCampoGrandeDateStr(confirmIso)
+            const synced = arr.map(c => {
+              if (c.studentId == null || String(c.studentId) !== dStudentId) return c
+              if (c.status === 'special_auth') {
+                return { ...c, confirmedDates: { ...(c.confirmedDates || {}), [todayKey]: confirmIso } }
+              }
+              if ((c.status === 'waiting' || c.status === 'called') && isFromTodayRef.current(c.confirmedAt || c.calledAt)) {
+                return { ...c, status: 'confirmed' as const, confirmedAt: c.confirmedAt || confirmIso }
+              }
+              return c
+            })
+            if (synced.find(c => c.id === d.id)) return synced
+            return [d, ...synced]
+          }
           const isAlreadyConfirmed = dStudentId ? arr.some(c => c.studentId != null && String(c.studentId) === dStudentId && c.status === 'confirmed' && isFromTodayRef.current(c.confirmedAt || c.calledAt)) : false
           if (isAlreadyConfirmed && d.status !== 'confirmed' && !(d as any).isRevert) {
             return arr.map(c => (c.studentId != null && String(c.studentId) === dStudentId && c.status !== 'special_auth') ? { ...c, status: 'confirmed' } : c)
@@ -768,7 +859,15 @@ function SaidaProviderInner({ children, enabled = true }: { children: React.Reac
             return c
           }
           if ((c.id === d.callId || (dStudentId && c.studentId != null && String(c.studentId) === dStudentId)) && isFromTodayRef.current(c.confirmedAt || c.calledAt)) {
-            return { ...c, status: 'confirmed', confirmedAt: confirmIso }
+            return {
+              ...c,
+              ...(d.guardianId ? { guardianId: d.guardianId } : {}),
+              ...(d.guardianName ? { guardianName: d.guardianName } : {}),
+              ...(d.tipo ? { tipo: d.tipo } : {}),
+              ...(d.origem ? { origem: d.origem } : {}),
+              status: 'confirmed',
+              confirmedAt: confirmIso
+            }
           }
           return c
         }))
@@ -850,12 +949,21 @@ function SaidaProviderInner({ children, enabled = true }: { children: React.Reac
       return null
     }
 
+    const currentNow = now()
+    const isSoloCall = isSaiuSozinhoCall({ guardianId, guardianName })
     const call: PickupCall = {
       id: uid(), studentId: sIdStr, studentName, studentClass,
       studentPhoto: studentPhoto ?? null,
-      guardianId, guardianName, rfidCode,
-      calledAt: now(), status: 'waiting', source,
-      isRevert: existingConfirmed ? true : undefined,
+      guardianId: isSoloCall ? 'sozinho' : guardianId,
+      guardianName: isSoloCall ? 'Saiu Sozinho' : guardianName,
+      rfidCode,
+      calledAt: currentNow,
+      confirmedAt: isSoloCall ? currentNow : undefined,
+      status: isSoloCall ? 'confirmed' : 'waiting',
+      tipo: isSoloCall ? 'sozinho' : undefined,
+      origem: isSoloCall ? 'manual' : undefined,
+      source,
+      isRevert: existingConfirmed && !isSoloCall ? true : undefined,
       targetTime: targetTime || undefined,
     }
     setActiveCallsLocal?.(prev => [call, ...(prev || [])])
@@ -1249,21 +1357,42 @@ function SaidaProviderInner({ children, enabled = true }: { children: React.Reac
     return confirmedCall
   }, [activeCalls, setActiveCallsLocal, emit, addLog, sendBroadcast, persistSingleCall, isFromToday])
 
-  // ─── confirmSoloExit ───────────────────────────────────────────────────────
+            // ─── confirmSoloExit ───────────────────────────────────────────────────────
   const confirmSoloExit = useCallback((
     studentId: string, studentName: string, studentClass: string, studentPhoto?: string | null
   ): PickupCall | null => {
     const currentNow = now()
+    const todayKey = getCampoGrandeDateStr(currentNow)
     const sIdStr = studentId ? String(studentId) : ''
+    const sNameNorm = studentName ? studentName.trim().toLowerCase() : ''
+
+    // Atualiza confirmedDates[todayKey] nos registros special_auth ativos deste aluno
+    const specialAuthsToUpdate: PickupCall[] = activeCalls
+      .filter(c => {
+        if (c.status !== 'special_auth') return false
+        const cId = c.studentId ? String(c.studentId) : ''
+        const cName = c.studentName ? c.studentName.trim().toLowerCase() : ''
+        return (sIdStr && cId === sIdStr) || (sNameNorm && cName === sNameNorm)
+      })
+      .map(c => ({
+        ...c,
+        confirmedDates: { ...(c.confirmedDates || {}), [todayKey]: currentNow }
+      }))
 
     // 1. Se o aluno já tem chamada aguardando/chamado hoje, atualiza e confirma a chamada existente
     const existingWaiting = activeCalls.find(c =>
-      c.studentId != null && String(c.studentId) === sIdStr && (c.status === 'waiting' || c.status === 'called') &&
+      ((sIdStr && c.studentId != null && String(c.studentId) === sIdStr) ||
+       (sNameNorm && c.studentName && c.studentName.trim().toLowerCase() === sNameNorm)) &&
+      (c.status === 'waiting' || c.status === 'called') &&
       isFromToday(c.calledAt)
     )
 
     if (existingWaiting) {
-      const matchingCalls = activeCalls.filter(c => c.studentId != null && String(c.studentId) === sIdStr && c.status !== 'cancelled' && c.status !== 'special_auth' && isFromToday(c.confirmedAt || c.calledAt))
+      const matchingCalls = activeCalls.filter(c =>
+        ((sIdStr && c.studentId != null && String(c.studentId) === sIdStr) ||
+         (sNameNorm && c.studentName && c.studentName.trim().toLowerCase() === sNameNorm)) &&
+        c.status !== 'cancelled' && c.status !== 'special_auth' && isFromToday(c.confirmedAt || c.calledAt)
+      )
       const updatedCalls = matchingCalls.map(c => ({
         ...c,
         guardianId: 'sozinho',
@@ -1275,24 +1404,39 @@ function SaidaProviderInner({ children, enabled = true }: { children: React.Reac
       }))
       const primaryUpdated = updatedCalls.find(c => c.id === existingWaiting.id) || updatedCalls[0]
 
-      setActiveCallsLocal?.(prev => (prev || []).map(c => (c.studentId != null && String(c.studentId) === sIdStr && c.status !== 'cancelled' && c.status !== 'special_auth' && isFromToday(c.confirmedAt || c.calledAt)) ? { ...c, guardianId: 'sozinho', guardianName: 'Saiu Sozinho', status: 'confirmed', tipo: 'sozinho', origem: 'manual', confirmedAt: currentNow } : c))
+      setActiveCallsLocal?.(prev => (prev || []).map(c => {
+        const cId = c.studentId ? String(c.studentId) : ''
+        const cName = c.studentName ? c.studentName.trim().toLowerCase() : ''
+        const matchesStudent = (sIdStr && cId === sIdStr) || (sNameNorm && cName === sNameNorm)
+        if (!matchesStudent) return c
+        if (c.status === 'special_auth') {
+          return { ...c, confirmedDates: { ...(c.confirmedDates || {}), [todayKey]: currentNow } }
+        }
+        if (c.status !== 'cancelled' && isFromToday(c.confirmedAt || c.calledAt)) {
+          return { ...c, guardianId: 'sozinho', guardianName: 'Saiu Sozinho', status: 'confirmed', tipo: 'sozinho', origem: 'manual', confirmedAt: currentNow }
+        }
+        return c
+      }))
       updatedCalls.forEach(uCall => persistSingleCall(uCall))
-      emit('CONFIRM_PICKUP', { callId: existingWaiting.id, studentId: sIdStr, confirmedAt: currentNow, _remote: false })
-      sendBroadcast('CONFIRM_PICKUP', { callId: existingWaiting.id, studentId: sIdStr, confirmedAt: currentNow })
+      specialAuthsToUpdate.forEach(saCall => persistSingleCall(saCall))
+      emit('CONFIRM_PICKUP', { callId: existingWaiting.id, studentId: sIdStr, guardianId: 'sozinho', guardianName: 'Saiu Sozinho', tipo: 'sozinho', origem: 'manual', confirmedAt: currentNow, _remote: false })
+      sendBroadcast('CONFIRM_PICKUP', { callId: existingWaiting.id, studentId: sIdStr, guardianId: 'sozinho', guardianName: 'Saiu Sozinho', tipo: 'sozinho', origem: 'manual', confirmedAt: currentNow })
       addLog('CONFIRM', `Saída confirmada (Saiu Sozinho): ${studentName}`)
       return primaryUpdated
     }
 
     // 2. Se o aluno já teve uma saída confirmada hoje, retorna a chamada confirmada
     const existingConfirmed = activeCalls.find(c =>
-      c.studentId != null && String(c.studentId) === sIdStr && c.status === 'confirmed' &&
+      ((sIdStr && c.studentId != null && String(c.studentId) === sIdStr) ||
+       (sNameNorm && c.studentName && c.studentName.trim().toLowerCase() === sNameNorm)) &&
+      c.status === 'confirmed' &&
       isFromToday(c.confirmedAt || c.calledAt)
     )
     if (existingConfirmed) {
       return existingConfirmed
     }
 
-    // 3. Caso contrário, cria uma nova chamada já com status 'confirmed'
+    // 3. Caso contrário, cria uma nova chamada já com status 'confirmed' (sem acionar chamada na TV/som)
     const newCall: PickupCall = {
       id: uid(),
       studentId: sIdStr,
@@ -1309,12 +1453,24 @@ function SaidaProviderInner({ children, enabled = true }: { children: React.Reac
       source: 'manual',
     }
 
-    setActiveCallsLocal?.(prev => [newCall, ...(prev || [])])
+    setActiveCallsLocal?.(prev => {
+      const arr = (prev || []).map(c => {
+        if (c.status !== 'special_auth') return c
+        const cId = c.studentId ? String(c.studentId) : ''
+        const cName = c.studentName ? c.studentName.trim().toLowerCase() : ''
+        if ((sIdStr && cId === sIdStr) || (sNameNorm && cName === sNameNorm)) {
+          return { ...c, confirmedDates: { ...(c.confirmedDates || {}), [todayKey]: currentNow } }
+        }
+        return c
+      })
+      return [newCall, ...arr]
+    })
     persistSingleCall(newCall)
+    specialAuthsToUpdate.forEach(saCall => persistSingleCall(saCall))
     emit('CALL_STUDENT', { ...newCall })
     sendBroadcast('CALL_STUDENT', newCall)
-    emit('CONFIRM_PICKUP', { callId: newCall.id, studentId: sIdStr, confirmedAt: currentNow, _remote: false })
-    sendBroadcast('CONFIRM_PICKUP', { callId: newCall.id, studentId: sIdStr, confirmedAt: currentNow })
+    emit('CONFIRM_PICKUP', { callId: newCall.id, studentId: sIdStr, guardianId: 'sozinho', guardianName: 'Saiu Sozinho', tipo: 'sozinho', origem: 'manual', confirmedAt: currentNow, _remote: false })
+    sendBroadcast('CONFIRM_PICKUP', { callId: newCall.id, studentId: sIdStr, guardianId: 'sozinho', guardianName: 'Saiu Sozinho', tipo: 'sozinho', origem: 'manual', confirmedAt: currentNow })
 
     if (!studentPhoto && sIdStr) {
       fetchStudentPhotoFromDb(sIdStr).then(photo => {
@@ -1492,11 +1648,29 @@ function SaidaProviderInner({ children, enabled = true }: { children: React.Reac
   }, [sendBroadcast, emit])
 
   const filteredActiveCalls = useMemo(() => {
-    return (activeCalls || []).filter(c => {
+    const todayCalls = (activeCalls || []).filter(c => {
       if (c.status === 'special_auth') {
         return resolveSpecialAuthValidity(c, currentTodayStr).isActiveToday
       }
       return getCampoGrandeDateStr(c.confirmedAt || c.calledAt) === currentTodayStr
+    })
+
+    const confirmedIdsToday = new Set(
+      todayCalls
+        .filter(c => c.status === 'confirmed' && c.studentId != null)
+        .map(c => String(c.studentId))
+    )
+
+    return todayCalls.map(c => {
+      if (
+        (c.status === 'waiting' || c.status === 'called') &&
+        !(c as any).isRevert &&
+        c.studentId != null &&
+        confirmedIdsToday.has(String(c.studentId))
+      ) {
+        return { ...c, status: 'confirmed' as const }
+      }
+      return c
     })
   }, [activeCalls, currentTodayStr])
 

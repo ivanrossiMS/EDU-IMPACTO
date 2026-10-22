@@ -19,6 +19,30 @@ const getInitials = (name: string) => {
   return name.trim().split(/\s+/).map(n => n[0]).join('').toLowerCase()
 }
 
+const abbreviateStudentName = (name?: string, maxLen = 22): string => {
+  if (!name) return ''
+  const cleaned = name.trim().replace(/\s+/g, ' ')
+  if (cleaned.length <= maxLen) return cleaned
+
+  const parts = cleaned.split(' ')
+  if (parts.length <= 2) return cleaned
+
+  const connectors = new Set(['de', 'da', 'do', 'dos', 'das', 'e'])
+  const first = parts[0]
+  const last = parts[parts.length - 1]
+  const middleInitials = parts
+    .slice(1, -1)
+    .filter(p => !connectors.has(p.toLowerCase()))
+    .map(p => `${p.charAt(0).toUpperCase()}.`)
+
+  const fullAbbrev = [first, ...middleInitials, last].join(' ')
+  if (fullAbbrev.length <= maxLen || middleInitials.length <= 1) {
+    return fullAbbrev
+  }
+
+  return [first, middleInitials[0], last].join(' ')
+}
+
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { formatFirstAndSecondName } from '@/lib/utils'
 import {
@@ -259,7 +283,7 @@ const CallCard = React.memo(function CallCard({ call, onConfirm, onCancel, onRec
           fontFamily: 'Outfit, sans-serif', textShadow: '0 2px 8px rgba(0,0,0,0.8)',
           whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
         }} title={call.studentName}>
-          {call.studentName}
+          {abbreviateStudentName(call.studentName, 22)}
         </div>
         
         <div style={{
@@ -1534,7 +1558,7 @@ const StudentSearchRow = React.memo(function StudentSearchRow({ student, activeC
             justifyContent: 'center',
             gap: 4,
           }}>
-            {confirmedCall?.guardianName?.toLowerCase() === 'saiu sozinho' || confirmedCall?.guardianId === 'solo' ? (
+            {isSaiuSozinhoCall(confirmedCall) ? (
               <>
                 <span style={{ fontWeight: 900, fontSize: 13 }}>🚶‍♂️ SAIU SOZINHO</span>
                 <span style={{ fontSize: 11, fontWeight: 700, opacity: 0.8 }}>
@@ -2452,44 +2476,44 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
         </button>
       </div>
 
-      {/* COMPACT FORM GRID (SEARCH, AUTHORIZED PERSON, SUBMIT BUTTON) */}
+      {/* COMPACT FORM GRID (SEARCH, AUTHORIZED PERSON, TIME, DAYS, SUBMIT BUTTON) - SINGLE LINE ON DESKTOP */}
       <div style={{
         display: 'flex',
         alignItems: 'center',
-        gap: 8,
+        gap: 6,
         marginBottom: 10,
-        flexWrap: 'wrap',
+        flexWrap: isMobile ? 'wrap' : 'nowrap',
       }}>
         {/* COLUMN 1: STUDENT SEARCH OR SELECTION */}
-        <div style={{ flex: '2 1 200px', minWidth: 170, position: 'relative' }}>
+        <div style={{ flex: isMobile ? '1 1 100%' : '1.1 1 0%', minWidth: 0, position: 'relative' }}>
           {!selectedStudent ? (
             <div style={{ position: 'relative' }}>
-              <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#d97706' }}/>
+              <Search size={13} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: '#d97706' }}/>
               <input
                 value={search}
                 onChange={e => setSearch(e.target.value)}
                 placeholder="Buscar aluno..."
                 className="form-input"
                 style={{
-                  width: '100%', padding: '8px 10px 8px 30px',
-                  borderRadius: 12, border: '1px solid rgba(245, 158, 11, 0.45)',
-                  background: 'hsl(var(--bg-surface))', fontSize: 12,
+                  width: '100%', padding: '6px 8px 6px 26px',
+                  borderRadius: 10, border: '1px solid rgba(245, 158, 11, 0.45)',
+                  background: 'hsl(var(--bg-surface))', fontSize: 11.5,
                   color: 'hsl(var(--text-primary))', outline: 'none', boxSizing: 'border-box',
-                  height: 38,
+                  height: 36,
                 }}
               />
 
               {isSearching ? (
-                <div style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', display: 'flex', alignItems: 'center' }}>
+                <div style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', display: 'flex', alignItems: 'center' }}>
                   <RefreshCw size={12} className="spin" color="#f59e0b" />
                 </div>
               ) : search.trim().length > 0 ? (
                 <button
                   type="button"
                   onClick={(e) => { e.preventDefault(); e.stopPropagation(); setSearch(''); }}
-                  style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', padding: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', color: '#d97706' }}
+                  style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', padding: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', color: '#d97706' }}
                 >
-                  <X size={14} />
+                  <X size={13} />
                 </button>
               ) : null}
 
@@ -2497,6 +2521,7 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
               {results.length > 0 && (
                 <div style={{
                   position: 'absolute', left: 0, right: 0, top: 'calc(100% + 4px)',
+                  minWidth: 220,
                   background: 'hsl(var(--bg-surface))', border: '1px solid rgba(245, 158, 11, 0.45)',
                   borderRadius: 12, overflow: 'hidden', zIndex: 50,
                   boxShadow: 'var(--shadow-xl)',
@@ -2530,7 +2555,9 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
                         })()}
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontWeight: 700, fontSize: 12, color: 'hsl(var(--text-primary))', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.nome}</div>
+                        <div style={{ fontWeight: 700, fontSize: 12, color: 'hsl(var(--text-primary))', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={a.nome}>
+                          {abbreviateStudentName(a.nome, 24)}
+                        </div>
                         <div style={{ fontSize: 10, color: 'hsl(var(--text-muted))' }}>{a.turmaNome || a.turma}</div>
                       </div>
                     </div>
@@ -2541,16 +2568,16 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
           ) : (
             /* Selected Student Badge */
             <div style={{
-              display: 'flex', alignItems: 'center', gap: 6,
-              padding: '0 8px', borderRadius: 12, height: 38,
+              display: 'flex', alignItems: 'center', gap: 5,
+              padding: '0 6px', borderRadius: 10, height: 36,
               background: 'hsl(var(--bg-surface))', border: '1.5px dashed rgba(245, 158, 11, 0.45)',
               position: 'relative', boxSizing: 'border-box',
               boxShadow: 'var(--shadow-sm)',
             }}>
               <div style={{
-                width: 22, height: 22, borderRadius: 6, overflow: 'hidden',
+                width: 20, height: 20, borderRadius: 5, overflow: 'hidden',
                 background: 'rgba(245,158,11,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 9, fontWeight: 900, color: '#f59e0b', flexShrink: 0,
+                fontSize: 8.5, fontWeight: 900, color: '#f59e0b', flexShrink: 0,
               }}>
                 {(() => {
                   const selPhoto = selectedStudent.foto || selectedStudent.foto_url || selectedStudent.fotoUrl || selectedStudent.avatarUrl || selectedStudent.imagem1 || selectedStudent.dados?.foto || selectedStudent.dados?.avatarUrl || null
@@ -2562,11 +2589,11 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
                   )
                 })()}
               </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 800, fontSize: 10.5, color: 'hsl(var(--text-primary))', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {selectedStudent.nome}
+              <div style={{ flex: 1, minWidth: 0 }} title={selectedStudent.nome}>
+                <div style={{ fontWeight: 800, fontSize: 10, color: 'hsl(var(--text-primary))', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {abbreviateStudentName(selectedStudent.nome, 18)}
                 </div>
-                <div style={{ fontSize: 8.5, color: 'hsl(var(--text-muted))', lineHeight: 1 }}>
+                <div style={{ fontSize: 8, color: 'hsl(var(--text-muted))', lineHeight: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {selectedStudent.turmaNome || selectedStudent.turma}
                 </div>
               </div>
@@ -2575,41 +2602,41 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
                 onClick={(e) => { e.preventDefault(); e.stopPropagation(); setSelectedStudent(null); }}
                 style={{
                   background: 'none', border: 'none', cursor: 'pointer',
-                  color: 'hsl(var(--text-muted))', display: 'flex', padding: 2,
+                  color: 'hsl(var(--text-muted))', display: 'flex', padding: 2, flexShrink: 0,
                 }}
                 onMouseEnter={e => e.currentTarget.style.color = '#ef4444'}
                 onMouseLeave={e => e.currentTarget.style.color = 'hsl(var(--text-muted))'}
               >
-                <X size={13}/>
+                <X size={12}/>
               </button>
             </div>
           )}
         </div>
 
         {/* COLUMN 2: AUTHORIZED PERSON */}
-        <div style={{ flex: '1.2 1 150px', minWidth: 130 }}>
+        <div style={{ flex: isMobile ? '1 1 100%' : '0.95 1 0%', minWidth: 0 }}>
           <input
             value={authorizedPerson}
             onChange={e => setAuthorizedPerson(e.target.value)}
-            placeholder="Quem está autorizado a retirar?"
+            placeholder="Autorizado..."
             disabled={!selectedStudent}
             className="form-input"
             style={{
-              width: '100%', padding: '8px 10px',
-              borderRadius: 12, border: '1px solid rgba(245, 158, 11, 0.45)',
-              background: 'hsl(var(--bg-surface))', fontSize: 12,
+              width: '100%', padding: '6px 8px',
+              borderRadius: 10, border: '1px solid rgba(245, 158, 11, 0.45)',
+              background: 'hsl(var(--bg-surface))', fontSize: 11.5,
               color: 'hsl(var(--text-primary))', outline: 'none', boxSizing: 'border-box',
               opacity: selectedStudent ? 1 : 0.5,
-              height: 38,
+              height: 36,
             }}
           />
         </div>
 
         {/* COLUMN 3: SCHEDULED TIME */}
-        <div style={{ flex: '0 0 auto', minWidth: 108, position: 'relative' }}>
+        <div style={{ flex: isMobile ? '1 1 calc(50% - 4px)' : '0.9 1 0%', minWidth: 0, position: 'relative' }}>
           <div style={{
-            display: 'flex', alignItems: 'center', gap: 5, height: 38,
-            padding: '0 8px', borderRadius: 12,
+            display: 'flex', alignItems: 'center', gap: 4, height: 36, width: '100%', minWidth: 0,
+            padding: '0 6px', borderRadius: 10,
             border: '1px solid rgba(245, 158, 11, 0.45)',
             background: 'hsl(var(--bg-surface))',
             boxSizing: 'border-box',
@@ -2617,15 +2644,15 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
           }}
           title="Horário previsto para retirada"
           >
-            <Clock size={13} color="#d97706" style={{ flexShrink: 0 }} />
+            <Clock size={12} color="#d97706" style={{ flexShrink: 0 }} />
             <select
               value={specialAuthTime}
               onChange={e => setSpecialAuthTime(e.target.value)}
               disabled={!selectedStudent}
               style={{
                 border: 'none', background: 'transparent',
-                fontSize: 11.5, fontWeight: 700, color: 'hsl(var(--text-primary))',
-                outline: 'none', width: '100%', cursor: selectedStudent ? 'pointer' : 'not-allowed',
+                fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-primary))',
+                outline: 'none', flex: 1, width: '100%', minWidth: 0, cursor: selectedStudent ? 'pointer' : 'not-allowed',
               }}
             >
               {SPECIAL_AUTH_PRESET_TIMES.map(t => (
@@ -2636,10 +2663,10 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
         </div>
 
         {/* COLUMN 4: VALIDITY DAYS (QUANTIDADE DE DIAS DE VALIDADE) */}
-        <div style={{ flex: '0 0 auto', minWidth: isCustomDays ? 115 : 122, position: 'relative' }}>
+        <div style={{ flex: isMobile ? '1 1 calc(50% - 4px)' : '0.95 1 0%', minWidth: 0, position: 'relative' }}>
           <div style={{
-            display: 'flex', alignItems: 'center', gap: 5, height: 38,
-            padding: '0 8px', borderRadius: 12,
+            display: 'flex', alignItems: 'center', gap: 4, height: 36, width: '100%', minWidth: 0,
+            padding: '0 6px', borderRadius: 10,
             border: specialAuthDays > 1 ? '1.5px solid #d97706' : '1px solid rgba(245, 158, 11, 0.45)',
             background: specialAuthDays > 1 ? 'rgba(245, 158, 11, 0.08)' : 'hsl(var(--bg-surface))',
             boxSizing: 'border-box',
@@ -2652,7 +2679,7 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
               : 'Quantidade de dias que esta autorização ficará válida'
           }
           >
-            <Calendar size={13} color="#d97706" style={{ flexShrink: 0 }} />
+            <Calendar size={12} color="#d97706" style={{ flexShrink: 0 }} />
             {!isCustomDays ? (
               <select
                 value={SPECIAL_AUTH_PRESET_DAYS.some(d => d.value === specialAuthDays) ? String(specialAuthDays) : 'custom'}
@@ -2666,8 +2693,8 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
                 disabled={!selectedStudent}
                 style={{
                   border: 'none', background: 'transparent',
-                  fontSize: 11.5, fontWeight: 700, color: specialAuthDays > 1 ? '#b45309' : 'hsl(var(--text-primary))',
-                  outline: 'none', width: '100%', cursor: selectedStudent ? 'pointer' : 'not-allowed',
+                  fontSize: 11, fontWeight: 700, color: specialAuthDays > 1 ? '#b45309' : 'hsl(var(--text-primary))',
+                  outline: 'none', flex: 1, width: '100%', minWidth: 0, cursor: selectedStudent ? 'pointer' : 'not-allowed',
                 }}
               >
                 {SPECIAL_AUTH_PRESET_DAYS.map(d => (
@@ -2676,7 +2703,7 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
                 <option value="custom">Outro (digitar dias)...</option>
               </select>
             ) : (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 4, width: '100%' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 3, width: '100%', minWidth: 0 }}>
                 <input
                   type="number"
                   min={1}
@@ -2689,11 +2716,11 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
                   disabled={!selectedStudent}
                   style={{
                     border: 'none', background: 'transparent',
-                    fontSize: 12, fontWeight: 800, color: '#b45309',
-                    outline: 'none', width: 42, padding: 0,
+                    fontSize: 11.5, fontWeight: 800, color: '#b45309',
+                    outline: 'none', width: 34, padding: 0,
                   }}
                 />
-                <span style={{ fontSize: 10.5, fontWeight: 700, color: '#d97706', whiteSpace: 'nowrap' }}>
+                <span style={{ fontSize: 10, fontWeight: 700, color: '#d97706', whiteSpace: 'nowrap' }}>
                   {specialAuthDays === 1 ? 'dia' : 'dias'}
                 </span>
                 <button
@@ -2706,11 +2733,11 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
                   }}
                   title="Voltar para lista de opções"
                   style={{
-                    background: 'none', border: 'none', padding: 2, cursor: 'pointer',
-                    color: 'hsl(var(--text-muted))', display: 'flex', alignItems: 'center',
+                    background: 'none', border: 'none', padding: 1, cursor: 'pointer',
+                    color: 'hsl(var(--text-muted))', display: 'flex', alignItems: 'center', flexShrink: 0,
                   }}
                 >
-                  <X size={11} />
+                  <X size={10} />
                 </button>
               </div>
             )}
@@ -2723,14 +2750,15 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
           onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleConfirm(); }}
           disabled={!selectedStudent || !authorizedPerson.trim()}
           style={{
-            height: 38, padding: '0 14px', borderRadius: 12, flexShrink: 0,
+            flex: isMobile ? '1 1 100%' : '0 0 auto',
+            height: 36, padding: '0 11px', borderRadius: 10, flexShrink: 0,
             background: (!selectedStudent || !authorizedPerson.trim())
               ? 'hsl(var(--bg-elevated))'
               : 'linear-gradient(135deg, #f59e0b, #d97706)',
             border: (!selectedStudent || !authorizedPerson.trim()) ? '1px solid hsl(var(--border-subtle))' : 'none',
             color: (!selectedStudent || !authorizedPerson.trim()) ? 'hsl(var(--text-muted))' : '#fff',
-            fontWeight: 800, fontSize: 11, cursor: (!selectedStudent || !authorizedPerson.trim()) ? 'not-allowed' : 'pointer',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+            fontWeight: 800, fontSize: 10.5, cursor: (!selectedStudent || !authorizedPerson.trim()) ? 'not-allowed' : 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
             textTransform: 'uppercase', letterSpacing: '0.02em', whiteSpace: 'nowrap',
             boxShadow: (!selectedStudent || !authorizedPerson.trim()) ? 'none' : '0 4px 12px rgba(245, 158, 11, 0.25)',
             transition: 'all 0.2s',
@@ -2745,7 +2773,7 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
             e.currentTarget.style.transform = 'none'
           }}
         >
-          <CheckCircle2 size={13}/> Lançar
+          <CheckCircle2 size={12}/> Lançar
         </button>
       </div>
 
@@ -2818,8 +2846,12 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
                   display: 'flex',
                   alignItems: 'center',
                   gap: 4,
-                }}>
-                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{l.studentName}</span>
+                }}
+                title={l.studentName}
+                >
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {abbreviateStudentName(l.studentName, 22)}
+                  </span>
                 </div>
                 <div style={{ fontSize: 9, color: l.confirmedOut ? '#047857' : 'hsl(var(--text-muted))', marginTop: 1, lineHeight: 1.35, wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
                   retirado por: <span style={{ color: l.confirmedOut ? '#059669' : '#d97706', fontWeight: 800 }}>{l.authorizedPerson}</span>
@@ -3247,8 +3279,8 @@ function ProibidosRetiradaCard() {
                   )}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 800, fontSize: 12, color: 'hsl(var(--text-primary))', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {aluno.nome}
+                  <div style={{ fontWeight: 800, fontSize: 12, color: 'hsl(var(--text-primary))', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={aluno.nome}>
+                    {abbreviateStudentName(aluno.nome, 22)}
                   </div>
                   {aluno.restritos.map((r: any, idx: number) => (
                     <div key={idx} style={{ fontSize: 10, display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
@@ -3489,7 +3521,11 @@ function ChamadasContent() {
   }, [activeCalls])
 
   const allCalls = useMemo(() => {
-    const list = activeCalls.filter(c => c.status !== 'special_auth')
+    const list = activeCalls.filter(c => {
+      if (c.status === 'special_auth') return false
+      if ((c.status === 'waiting' || c.status === 'called') && c.studentId != null && confirmedStudentIds.has(String(c.studentId))) return false
+      return true
+    })
     const seen = new Set<string>()
     const dedup: any[] = []
     for (const c of list) {
@@ -3500,10 +3536,10 @@ function ChamadasContent() {
       }
     }
     return dedup
-  }, [activeCalls])
+  }, [activeCalls, confirmedStudentIds])
 
   const waiting = useMemo(() => 
-    activeCalls.filter(c => (c.status === 'waiting' || c.status === 'called') && c.studentId != null && !confirmedStudentIds.has(String(c.studentId))),
+    activeCalls.filter(c => (c.status === 'waiting' || c.status === 'called') && !isSaiuSozinhoCall(c) && c.studentId != null && !confirmedStudentIds.has(String(c.studentId))),
     [activeCalls, confirmedStudentIds]
   )
   const saiuSozinho = useMemo(() => {
@@ -3536,7 +3572,11 @@ function ChamadasContent() {
     list.sort((a, b) => b._parsedTime - a._parsedTime)
 
     if (filter === 'all') {
-      list = list.filter(c => c.status !== 'special_auth')
+      list = list.filter(c => {
+        if (c.status === 'special_auth') return false
+        if ((c.status === 'waiting' || c.status === 'called') && c.studentId != null && confirmedStudentIds.has(String(c.studentId))) return false
+        return true
+      })
       const seen = new Set<string>()
       list = list.filter(c => {
         if (c.status === 'confirmed') {
@@ -3547,7 +3587,7 @@ function ChamadasContent() {
         return true
       })
     }
-    else if (filter === 'waiting')   list = list.filter(c => (c.status === 'waiting' || c.status === 'called') && c.studentId != null && !confirmedStudentIds.has(String(c.studentId)))
+    else if (filter === 'waiting')   list = list.filter(c => (c.status === 'waiting' || c.status === 'called') && !isSaiuSozinhoCall(c) && c.studentId != null && !confirmedStudentIds.has(String(c.studentId)))
     else if (filter === 'confirmed') {
       list = list.filter(c => c.status === 'confirmed')
       const seen = new Set<string>()

@@ -9,6 +9,13 @@ import { registerPlugin, Capacitor } from '@capacitor/core'
 
 export interface NativeSettingsPlugin {
   openSettings(): Promise<{ opened?: boolean }>
+  saveImage(options: { base64: string; fileName: string }): Promise<{ saved?: boolean; uri?: string }>
+  shareImage(options: {
+    base64: string
+    fileName: string
+    title?: string
+    text?: string
+  }): Promise<{ shared?: boolean }>
 }
 
 export const NativeSettings = registerPlugin<NativeSettingsPlugin>('NativeSettings', {
@@ -17,6 +24,8 @@ export const NativeSettings = registerPlugin<NativeSettingsPlugin>('NativeSettin
       console.warn('[NativeSettings] Abertura de Ajustes não suportada no navegador web.')
       return { opened: false }
     },
+    saveImage: async () => ({ saved: false }),
+    shareImage: async () => ({ shared: false }),
   }),
 })
 

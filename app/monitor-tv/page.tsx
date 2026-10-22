@@ -1,6 +1,6 @@
 'use client'
 import React, { useState, useEffect, useRef, useMemo } from 'react'
-import { SaidaProvider, useSaida, PickupCall } from '@/lib/saidaContext'
+import { SaidaProvider, useSaida, PickupCall, isSaiuSozinhoCall } from '@/lib/saidaContext'
 import { useBroadcastRealtime } from '@/lib/hooks/useBroadcastRealtime'
 import { useVoice } from '@/lib/hooks/useVoice'
 import { useSupabaseArray } from '@/lib/useSupabaseCollection'
@@ -426,13 +426,14 @@ function MonitorContent() {
     setAudioUnlocked(true)
     if (config?.voiceEnabled && voice.isSupported) {
       voice.speak('', { volume: 0 })
-      // Apenas registrar chamadas muito antigas (> 10min) no spokenRef
+      // Apenas registrar chamadas muito antigas (> 10min), saídas sozinho ou já finalizadas no spokenRef
       // Chamadas ativas/recentes serão anunciadas normalmente.
       const tenMinsAgo = Date.now() - 10 * 60 * 1000
       activeCalls.forEach(c => {
          const ts = c.calledAt ? new Date(c.calledAt).getTime() : Date.now()
-         if (ts < tenMinsAgo) {
+         if (ts < tenMinsAgo || isSaiuSozinhoCall(c) || (c.status !== 'waiting' && c.status !== 'called')) {
            spokenRef.current.add(c.id + '_' + Math.floor(ts / 1000))
+           spokenRef.current.add(c.id)
          }
       })
     }
@@ -460,10 +461,18 @@ function MonitorContent() {
       const now = Date.now()
       const displayTimeMs = Math.max(0, Number(config?.tvDisplayTime ?? 0)) * 1000
 
+      // Alunos que saíram sozinhos (catraca ou manual) NUNCA aparecem na TV e removem chamadas anteriores imediatamente
+      const soloExitStudentIds = new Set(
+        activeCalls
+          .filter(c => c.studentId != null && c.status !== 'cancelled' && isSaiuSozinhoCall(c))
+          .map(c => String(c.studentId))
+      )
+
       const fullyConfirmedStudentIds = new Set(
         activeCalls
           .filter(c => {
             if (c.status !== 'confirmed' || c.studentId == null) return false
+            if (isSaiuSozinhoCall(c)) return true
             if (displayTimeMs <= 0) return true
             const confTime = c.confirmedAt ? new Date(c.confirmedAt).getTime() : 0
             return !confTime || (now - confTime) >= displayTimeMs
@@ -473,10 +482,16 @@ function MonitorContent() {
 
       const visibleCalls = activeCalls.filter(c => {
         if (c.studentId == null) return false
+        // Nunca exibir no Monitor TV alunos que estão saindo sozinhos (catraca ou registro manual)
+        if (isSaiuSozinhoCall(c)) return false
+        if (soloExitStudentIds.has(String(c.studentId))) return false
         if (fullyConfirmedStudentIds.has(String(c.studentId))) return false
         if (c.status === 'waiting' || c.status === 'called') return true
         if (c.status === 'confirmed' && displayTimeMs > 0 && c.confirmedAt) {
+          // Apenas mantém na TV por tvDisplayTime se a chamada existiu antes da confirmação (não foi criada direto como confirmada)
+          const calledTime = c.calledAt ? new Date(c.calledAt).getTime() : 0
           const confTime = new Date(c.confirmedAt).getTime()
+          if (!calledTime || Math.abs(confTime - calledTime) < 1500) return false
           return confTime > 0 && (now - confTime) < displayTimeMs
         }
         return false
@@ -504,7 +519,14 @@ function MonitorContent() {
     }
 
     displayCalls.forEach(call => {
-      if (call.status === 'blocked' || call.status === 'special_auth' || call.isRevert) return
+      // NUNCA anunciar no som saídas sozinho, confirmadas, canceladas, bloqueadas, autorizações especiais ou reversões
+      if (
+        (call.status !== 'waiting' && call.status !== 'called') ||
+        isSaiuSozinhoCall(call) ||
+        call.isRevert
+      ) {
+        return
+      }
       const ts = call.calledAt ? new Date(call.calledAt).getTime() : Date.now()
       
       // Ignorar chamadas com mais de 10 minutos para não tocar histórico antigo
@@ -514,6 +536,11 @@ function MonitorContent() {
       if (!spokenRef.current.has(speechKey)) {
         spokenRef.current.add(speechKey)
         setTimeout(() => {
+          // Revalida que a chamada continua ativa e não é saída sozinho no momento de falar
+          const currentCall = displayCallsRef.current.find(c => c.id === call.id)
+          if (!currentCall || (currentCall.status !== 'waiting' && currentCall.status !== 'called') || isSaiuSozinhoCall(currentCall)) {
+            return
+          }
           const tName = turmaNameMap.get(String(call.studentClass)) || call.studentClass
           const cName = config?.voiceTruncateTurma && config?.voiceTruncateChar ? tName.split(config.voiceTruncateChar)[0].trim() : tName
           
