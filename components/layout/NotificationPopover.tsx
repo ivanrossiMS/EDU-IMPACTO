@@ -271,10 +271,22 @@ export function NotificationPopover({
     }
 
     sharedRealtimeSubscribers += 1
-    if (!sharedRealtimeChannel) {
+    let retryTimer: ReturnType<typeof setTimeout> | null = null
+
+    const ensureSharedPopoverChannel = () => {
+      if (sharedRealtimeChannel && (sharedRealtimeChannel.state === 'joined' || sharedRealtimeChannel.state === 'joining')) {
+        return
+      }
+      if (sharedRealtimeChannel) {
+        try {
+          supabase.removeChannel(sharedRealtimeChannel).catch(() => {})
+        } catch {}
+        sharedRealtimeChannel = null
+      }
       try {
-        sharedRealtimeChannel = supabase.channel('saida_calls_popover_room')
-        sharedRealtimeChannel
+        const ch = supabase.channel('saida_calls_popover_room')
+        sharedRealtimeChannel = ch
+        ch
           .on(
             'postgres_changes',
             { event: '*', schema: 'public', table: 'saida_calls' },
@@ -300,15 +312,47 @@ export function NotificationPopover({
               }
             }
           )
-          .subscribe()
+          .subscribe((status: string) => {
+            if (sharedRealtimeChannel !== ch) return
+            if (status === 'CLOSED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+              if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
+              if (!retryTimer && sharedRealtimeSubscribers > 0) {
+                retryTimer = setTimeout(() => {
+                  retryTimer = null
+                  if (sharedRealtimeSubscribers > 0) {
+                    ensureSharedPopoverChannel()
+                  }
+                }, 8000)
+              }
+            }
+          })
       } catch (err) {
         console.warn('[NotificationPopover] Erro ao subscrever canal Realtime:', err)
       }
     }
 
+    ensureSharedPopoverChannel()
+
+    const handlePopoverReconnect = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
+      if (sharedRealtimeSubscribers > 0) {
+        ensureSharedPopoverChannel()
+      }
+    }
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('online', handlePopoverReconnect)
+      window.addEventListener('edu:network-reconnected', handlePopoverReconnect)
+      document.addEventListener('visibilitychange', handlePopoverReconnect)
+    }
+
     return () => {
+      if (retryTimer) clearTimeout(retryTimer)
       if (typeof window !== 'undefined') {
         window.removeEventListener('saida_calls:postgres_change', onWindowSaidaChange)
+        window.removeEventListener('online', handlePopoverReconnect)
+        window.removeEventListener('edu:network-reconnected', handlePopoverReconnect)
+        document.removeEventListener('visibilitychange', handlePopoverReconnect)
       }
       sharedRealtimeSubscribers = Math.max(0, sharedRealtimeSubscribers - 1)
       if (sharedRealtimeSubscribers === 0 && sharedRealtimeChannel) {

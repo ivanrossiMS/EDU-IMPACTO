@@ -303,19 +303,53 @@ function CredImpactoContent() {
       return false
     }
 
-    // Remove canais órfãos de HMR / StrictMode
-    try {
-      for (const ch of supabase.getChannels()) {
-        if (ch?.topic === 'realtime:credimpacto_realtime_room') {
+    let activeChannel: any = null
+    let retryTimer: ReturnType<typeof setTimeout> | null = null
+    let retryCount = 0
+
+    const destroyChannelCleanly = (ch: any) => {
+      if (!ch) return
+      try {
+        const wasJoined = ch.state === 'joined'
+        if (typeof ch.teardown === 'function') {
+          ch.teardown()
+        }
+        const rt = (supabase as any)?.realtime
+        if (rt && Array.isArray(rt.channels)) {
+          rt.channels = rt.channels.filter((item: any) => item !== ch && item?.topic !== ch?.topic)
+        }
+        if (wasJoined) {
           supabase.removeChannel(ch).catch(() => {})
         }
+      } catch (_) {}
+    }
+
+    const setupCredRealtime = () => {
+      if (!isMounted) return
+      if (retryTimer) {
+        clearTimeout(retryTimer)
+        retryTimer = null
       }
-    } catch (_) {}
+      if (activeChannel) {
+        const prev = activeChannel
+        activeChannel = null
+        destroyChannelCleanly(prev)
+      }
 
-    const channel = supabase.channel('credimpacto_realtime_room')
+      // Remove canais órfãos de HMR / StrictMode
+      try {
+        for (const ch of supabase.getChannels()) {
+          if (ch?.topic === 'realtime:credimpacto_realtime_room') {
+            destroyChannelCleanly(ch)
+          }
+        }
+      } catch (_) {}
 
-    channel
-      .on('broadcast', { event: 'CREDIMPACTO_EVENT' }, (msg: any) => {
+      const channel = supabase.channel('credimpacto_realtime_room')
+      activeChannel = channel
+
+      channel
+        .on('broadcast', { event: 'CREDIMPACTO_EVENT' }, (msg: any) => {
         if (!isMounted) return
         const payload = msg?.payload || {}
         if (rememberEventId(payload.eventId)) return
@@ -483,19 +517,43 @@ function CredImpactoContent() {
         }
       )
       .subscribe((status: string) => {
-        if (!isMounted) return
+        if (!isMounted || activeChannel !== channel) return
         if (status === 'SUBSCRIBED') {
+          retryCount = 0
           setRealtimeStatus('online')
+          if (retryTimer) {
+            clearTimeout(retryTimer)
+            retryTimer = null
+          }
         } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
           setRealtimeStatus('offline')
+          if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
+          retryCount += 1
+          const backoffMs = Math.min(6000 * Math.pow(1.4, retryCount - 1), 25000)
+          if (isMounted && !retryTimer) {
+            retryTimer = setTimeout(() => {
+              retryTimer = null
+              if (!isMounted || activeChannel !== channel) return
+              if (channel.state !== 'joined' && channel.state !== 'joining') {
+                setupCredRealtime()
+              }
+            }, backoffMs)
+          }
         } else {
           setRealtimeStatus('connecting')
         }
       })
+    }
+
+    setupCredRealtime()
 
     // Sincroniza silenciosamente ao focar a janela, voltar para a aba ou reconectar à rede
     const handleVisibilityOrFocus = () => {
       if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        if (!activeChannel || (activeChannel.state !== 'joined' && activeChannel.state !== 'joining')) {
+          retryCount = 0
+          setupCredRealtime()
+        }
         scheduleSilentRefresh(80)
         window.dispatchEvent(new CustomEvent('credimpacto:realtime-update'))
       }
@@ -503,27 +561,36 @@ function CredImpactoContent() {
 
     window.addEventListener('focus', handleVisibilityOrFocus)
     window.addEventListener('online', handleVisibilityOrFocus)
+    window.addEventListener('edu:network-reconnected', handleVisibilityOrFocus)
     document.addEventListener('visibilitychange', handleVisibilityOrFocus)
 
     // Heartbeat silencioso a cada 15s enquanto a página estiver visível (contingência p/ firewalls restritos)
     const heartbeatInterval = setInterval(() => {
       if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        if (!activeChannel || (activeChannel.state !== 'joined' && activeChannel.state !== 'joining')) {
+          setupCredRealtime()
+        }
         loadDataRef.current({ silent: true })
       }
     }, 15000)
 
     return () => {
       isMounted = false
+      if (retryTimer) {
+        clearTimeout(retryTimer)
+      }
       if (silentRefreshTimerRef.current) {
         clearTimeout(silentRefreshTimerRef.current)
       }
       clearInterval(heartbeatInterval)
       window.removeEventListener('focus', handleVisibilityOrFocus)
       window.removeEventListener('online', handleVisibilityOrFocus)
+      window.removeEventListener('edu:network-reconnected', handleVisibilityOrFocus)
       document.removeEventListener('visibilitychange', handleVisibilityOrFocus)
-      try {
-        supabase.removeChannel(channel).catch(() => {})
-      } catch (_) {}
+      if (activeChannel) {
+        destroyChannelCleanly(activeChannel)
+        activeChannel = null
+      }
     }
   }, [])
 

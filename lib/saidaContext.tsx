@@ -337,6 +337,7 @@ interface SaidaCtx {
   clearLog: () => void
   clearCalls: () => void
   refreshCalls: () => Promise<void>
+  ensureRealtimeConnected: () => void
 }
 
 const Ctx = createContext<SaidaCtx | null>(null)
@@ -414,21 +415,49 @@ function SaidaProviderInner({ children, enabled = true }: { children: React.Reac
 
   const channelRef = useRef<any>(null)
   const processedBroadcasts = useRef<Set<string>>(new Set())
+  const reconnectRealtimeRef = useRef<(() => void) | null>(null)
+  const refreshCallsRef = useRef<(() => Promise<void>) | null>(null)
+  const pendingBroadcastsRef = useRef<Array<{ event: string; data: any; eventId: string; queuedAt: number }>>([])
+
+  const ensureRealtimeConnected = useCallback(() => {
+    const ch = channelRef.current
+    if (!ch || ch.state !== 'joined') {
+      reconnectRealtimeRef.current?.()
+    }
+  }, [])
 
   const persistSingleCall = useCallback(async (call: PickupCall) => {
-    try {
-      invalidateCache('saida/calls')
-      const res = await apiFetch('/api/saida/calls', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(call)
-      })
-      if (!res.ok) {
+    const maxAttempts = 3
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        invalidateCache('saida/calls')
+        const res = await apiFetch('/api/saida/calls', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(call)
+        })
+        if (res.ok) {
+          // Se o HTTP funcionou, temos rede ativa: aproveita para curar o canal Realtime se estiver caído
+          if (!channelRef.current || channelRef.current.state !== 'joined') {
+            reconnectRealtimeRef.current?.()
+          }
+          return
+        }
         const errData = await res.json().catch(() => ({}))
-        console.warn('[saidaContext] Falha ao persistir chamada no banco:', res.status, errData)
+        console.warn(`[saidaContext] Falha ao persistir chamada no banco (tentativa ${attempt}/${maxAttempts}):`, res.status, errData)
+        if (attempt < maxAttempts && [408, 429, 500, 502, 503, 504].includes(res.status)) {
+          await new Promise(r => setTimeout(r, 1200 * attempt))
+          continue
+        }
+        return
+      } catch (e) {
+        console.warn(`[saidaContext] Oscilação de rede ao salvar chamada (tentativa ${attempt}/${maxAttempts}):`, e)
+        if (attempt < maxAttempts) {
+          await new Promise(r => setTimeout(r, 1500 * attempt))
+          continue
+        }
+        console.error('Failed to persist call after retries', e)
       }
-    } catch (e) {
-      console.error('Failed to persist call', e)
     }
   }, [])
 
@@ -455,8 +484,15 @@ function SaidaProviderInner({ children, enabled = true }: { children: React.Reac
 
     const sent = doSend()
     if (!sent) {
-      // Se canal ainda não estava no estado 'joined', tenta enviar uma vez após 200ms
-      setTimeout(doSend, 200)
+      // Enfileira o evento para ser disparado assim que o canal reconectar (janela de 25s)
+      const nowMs = Date.now()
+      pendingBroadcastsRef.current = [
+        ...pendingBroadcastsRef.current.filter(item => nowMs - item.queuedAt < 25000).slice(-19),
+        { event, data, eventId, queuedAt: nowMs }
+      ]
+      // Aciona reconexão imediata do canal Realtime se não estiver conectado
+      reconnectRealtimeRef.current?.()
+      setTimeout(doSend, 300)
     }
   }, [])
 
@@ -464,6 +500,22 @@ function SaidaProviderInner({ children, enabled = true }: { children: React.Reac
   useEffect(() => {
     let isMounted = true
     let channel: any = null
+    let retryTimer: ReturnType<typeof setTimeout> | null = null
+    let connectingWatchdogTimer: ReturnType<typeof setTimeout> | null = null
+    let retryCount = 0
+    let wasDisconnected = false
+    let lastReconnectAttemptAt = 0
+
+    const clearTimers = () => {
+      if (retryTimer) {
+        clearTimeout(retryTimer)
+        retryTimer = null
+      }
+      if (connectingWatchdogTimer) {
+        clearTimeout(connectingWatchdogTimer)
+        connectingWatchdogTimer = null
+      }
+    }
 
     const destroyChannelCleanly = (ch: any) => {
       if (!ch) return
@@ -482,8 +534,31 @@ function SaidaProviderInner({ children, enabled = true }: { children: React.Reac
       } catch (_) {}
     }
 
+    const scheduleReconnect = () => {
+      if (!isMounted || retryTimer) return
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
+      retryCount += 1
+      const backoffMs = Math.min(5000 * Math.pow(1.4, retryCount - 1), 25000)
+      retryTimer = setTimeout(() => {
+        retryTimer = null
+        if (!isMounted) return
+        if (!channel || channel.state !== 'joined') {
+          setupRealtime()
+        }
+      }, backoffMs)
+    }
+
     const setupRealtime = async () => {
+      if (!isMounted) return
+      clearTimers()
+      lastReconnectAttemptAt = Date.now()
       setRealtimeStatus('connecting')
+
+      if (channel) {
+        const prevCh = channel
+        channel = null
+        destroyChannelCleanly(prevCh)
+      }
       
       // Clean up any stale channel from React Strict Mode / HMR re-mounts synchronously
       try {
@@ -497,10 +572,22 @@ function SaidaProviderInner({ children, enabled = true }: { children: React.Reac
       if (!isMounted) return
 
       // Use a stable, shared channel room for network-wide broadcasts
-      channel = supabase.channel('saida_calls_shared_room')
-      channelRef.current = channel
+      const currentChannel = supabase.channel('saida_calls_shared_room')
+      channel = currentChannel
+      channelRef.current = currentChannel
 
-      channel
+      // Watchdog: se ficar preso em 'connecting' por mais de 14s, força recriação limpa
+      connectingWatchdogTimer = setTimeout(() => {
+        connectingWatchdogTimer = null
+        if (!isMounted || channel !== currentChannel) return
+        if (currentChannel.state !== 'joined') {
+          wasDisconnected = true
+          setRealtimeStatus('offline')
+          scheduleReconnect()
+        }
+      }, 14000)
+
+      currentChannel
         .on(
           'postgres_changes',
           { event: '*', schema: 'public', table: 'saida_calls' },
@@ -775,20 +862,97 @@ function SaidaProviderInner({ children, enabled = true }: { children: React.Reac
           }
         )
         .subscribe((status: string) => {
+          if (!isMounted || channel !== currentChannel) return
           if (status === 'SUBSCRIBED') {
-            if (isMounted) setRealtimeStatus('online')
+            clearTimers()
+            const shouldSyncAfterReconnect = wasDisconnected || retryCount > 0
+            retryCount = 0
+            wasDisconnected = false
+            setRealtimeStatus('online')
+
+            // Descarrega broadcasts pendentes enfileirados durante reconexão (ex: leitura de Tag RFID)
+            if (pendingBroadcastsRef.current.length > 0) {
+              const nowMs = Date.now()
+              const toFlush = pendingBroadcastsRef.current.filter(item => nowMs - item.queuedAt < 25000)
+              pendingBroadcastsRef.current = []
+              toFlush.forEach(item => {
+                currentChannel.send({
+                  type: 'broadcast',
+                  event: 'CALL_EVENT',
+                  payload: { event: item.event, data: item.data, eventId: item.eventId }
+                }).catch(() => {})
+              })
+            }
+
+            if (shouldSyncAfterReconnect) {
+              refreshCallsRef.current?.()
+            }
           } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-            if (isMounted) setRealtimeStatus('offline')
+            clearTimers()
+            wasDisconnected = true
+            setRealtimeStatus('offline')
+            scheduleReconnect()
           } else {
-            if (isMounted) setRealtimeStatus('connecting')
+            setRealtimeStatus('connecting')
           }
         })
     }
 
+    reconnectRealtimeRef.current = () => {
+      if (!isMounted) return
+      const nowMs = Date.now()
+      // Throttle de 2.5s para evitar tempestade de reconexões simultâneas
+      if (nowMs - lastReconnectAttemptAt < 2500) return
+      const isHealthy = channel && (channel.state === 'joined' || channel.state === 'joining')
+      if (!isHealthy) {
+        retryCount = 0
+        setupRealtime()
+      }
+    }
+
+    const handleNetworkOrFocusRecovery = () => {
+      if (!isMounted) return
+      const isHealthy = channel && channel.state === 'joined'
+      if (!isHealthy) {
+        retryCount = 0
+        wasDisconnected = true
+        setupRealtime()
+      } else {
+        refreshCallsRef.current?.()
+      }
+    }
+
+    const handleVisibilityRecovery = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        handleNetworkOrFocusRecovery()
+      }
+    }
+
     setupRealtime()
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('online', handleNetworkOrFocusRecovery)
+      window.addEventListener('focus', handleNetworkOrFocusRecovery)
+      window.addEventListener('edu:network-reconnected', handleNetworkOrFocusRecovery)
+      window.addEventListener('edu:auth-recovered', handleNetworkOrFocusRecovery)
+    }
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', handleVisibilityRecovery)
+    }
 
     return () => {
       isMounted = false
+      reconnectRealtimeRef.current = null
+      clearTimers()
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('online', handleNetworkOrFocusRecovery)
+        window.removeEventListener('focus', handleNetworkOrFocusRecovery)
+        window.removeEventListener('edu:network-reconnected', handleNetworkOrFocusRecovery)
+        window.removeEventListener('edu:auth-recovered', handleNetworkOrFocusRecovery)
+      }
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', handleVisibilityRecovery)
+      }
       if (channel) {
         destroyChannelCleanly(channel)
         channel = null
@@ -1529,6 +1693,11 @@ function SaidaProviderInner({ children, enabled = true }: { children: React.Reac
           headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }
         })
         if (res.ok) {
+          // Ponte HTTP -> Realtime: se o polling HTTP funcionou, a rede está ativa!
+          // Caso o canal WebSocket esteja offline/fechado, força a reconexão imediata.
+          if (!channelRef.current || channelRef.current.state !== 'joined') {
+            reconnectRealtimeRef.current?.()
+          }
           const data = await res.json()
           const arr = Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : []
           
@@ -1571,6 +1740,10 @@ function SaidaProviderInner({ children, enabled = true }: { children: React.Reac
     inFlightRefreshRef.current = promise
     return promise
   }, [getTodayStr, setActiveCalls, setActiveCallsLocal])
+
+  useEffect(() => {
+    refreshCallsRef.current = refreshCalls
+  }, [refreshCalls])
 
   // ── Virada automática de dia (meia-noite ou retorno de suspensão) ──
   // Preserva autorizações especiais de múltiplos dias vigentes e reseta confirmações do dia anterior
@@ -1682,7 +1855,7 @@ function SaidaProviderInner({ children, enabled = true }: { children: React.Reac
       realtimeStatus, isLoadingCalls,
       callStudent, blockAttempt, confirmPickup, cancelCall, recallStudent, revertCall, deleteCall, addSpecialAuth, confirmSpecialExit, confirmSoloExit,
       broadcastAnnouncement, cancelAnnouncement,
-      updateConfig, clearLog, clearCalls, refreshCalls,
+      updateConfig, clearLog, clearCalls, refreshCalls, ensureRealtimeConnected,
     }}>
       {children}
     </Ctx.Provider>

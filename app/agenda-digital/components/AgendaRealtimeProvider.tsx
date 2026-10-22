@@ -671,13 +671,20 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
         if (mainChannel !== c) return
 
         if (status === 'SUBSCRIBED') {
+          const wasReconnecting = retryCount > 0
           retryCount = 0
           console.log(`✅ [Realtime] Conectado ao canal consolidado da agenda (${activeBindings.length} tabelas)`)
           if (retryTimer) {
             clearTimeout(retryTimer)
             retryTimer = null
           }
-        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          if (wasReconnecting) {
+            queryClient.invalidateQueries({ queryKey: ['agenda'], refetchType: 'active' })
+            queryClient.invalidateQueries({ queryKey: ['frequencias-aluno'], refetchType: 'active' })
+            queryClient.invalidateQueries({ queryKey: ['portaria-eventos-aluno'], refetchType: 'active' })
+            queryClient.invalidateQueries({ queryKey: ['saida-calls-aluno'], refetchType: 'active' })
+          }
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
           // Se a aba estiver em segundo plano, aguarda voltar ao primeiro plano para reconectar sem loop
           if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
             return
@@ -732,6 +739,8 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
       document.addEventListener('visibilitychange', handleVisibilityChange)
       window.addEventListener('focus', handleAppResume)
       window.addEventListener('online', handleAppResume)
+      window.addEventListener('edu:network-reconnected', handleAppResume)
+      window.addEventListener('edu:auth-recovered', handleAppResume)
     }
 
     let capListenerHandle: any = null
@@ -1439,6 +1448,8 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
         document.removeEventListener('visibilitychange', handleVisibilityChange)
         window.removeEventListener('focus', handleAppResume)
         window.removeEventListener('online', handleAppResume)
+        window.removeEventListener('edu:network-reconnected', handleAppResume)
+        window.removeEventListener('edu:auth-recovered', handleAppResume)
       }
       if (capListenerHandle && typeof capListenerHandle.remove === 'function') {
         capListenerHandle.remove()

@@ -844,6 +844,9 @@ function ColaboradorComunicadosContent() {
         setComunicadoToDelete(null);
 
         queryClient.invalidateQueries({ queryKey: ['agenda', 'comunicados'] });
+        queryClient.invalidateQueries({ queryKey: ['ocorrencias'] });
+        queryClient.invalidateQueries({ queryKey: ['ocorrencias-colaborador'] });
+        queryClient.invalidateQueries({ queryKey: ['ocorrencias-familia'] });
         window.dispatchEvent(new CustomEvent('ad:comunicados-delete', { 
           detail: { 
             id: cId, 

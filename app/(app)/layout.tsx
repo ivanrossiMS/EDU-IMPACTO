@@ -252,8 +252,23 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     }
 
     checkAuth()
+
+    // Se iniciou sem conexão (offline_authorized), revalida automaticamente assim que a internet voltar
+    const handleReconnectAuth = () => {
+      if (typeof navigator !== 'undefined' && !navigator.onLine) return
+      checkAuth()
+    }
+    window.addEventListener('online', handleReconnectAuth)
+    window.addEventListener('edu:network-reconnected', handleReconnectAuth)
+    window.addEventListener('edu:auth-recovered', handleReconnectAuth)
+
+    return () => {
+      window.removeEventListener('online', handleReconnectAuth)
+      window.removeEventListener('edu:network-reconnected', handleReconnectAuth)
+      window.removeEventListener('edu:auth-recovered', handleReconnectAuth)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []) // Runs ONLY on mount
+  }, []) // Runs on mount + network recovery
 
   // Enquanto restaura auth, renderiza o shell do layout com conteúdo mascarado.
   if (authState === 'restoring') {

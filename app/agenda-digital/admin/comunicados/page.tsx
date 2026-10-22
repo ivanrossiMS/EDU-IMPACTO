@@ -756,6 +756,9 @@ export default function ADAdminComunicados() {
           }
           setSelectedComs([]);
           queryClient.invalidateQueries({ queryKey: ['agenda', 'comunicados'] });
+          queryClient.invalidateQueries({ queryKey: ['ocorrencias'] });
+          queryClient.invalidateQueries({ queryKey: ['ocorrencias-colaborador'] });
+          queryClient.invalidateQueries({ queryKey: ['ocorrencias-familia'] });
           refetchLocal();
           window.dispatchEvent(new CustomEvent('ad:comunicados-delete', { detail: { ids: selectedComs, old: selectedComs.map(id => ({ id })) } }));
           adAlert('Comunicados excluídos com sucesso.', 'Sucesso');
@@ -781,6 +784,9 @@ export default function ADAdminComunicados() {
           }
           setSelectedComs(prev => prev.filter(x => x !== id));
           queryClient.invalidateQueries({ queryKey: ['agenda', 'comunicados'] });
+          queryClient.invalidateQueries({ queryKey: ['ocorrencias'] });
+          queryClient.invalidateQueries({ queryKey: ['ocorrencias-colaborador'] });
+          queryClient.invalidateQueries({ queryKey: ['ocorrencias-familia'] });
           refetchLocal();
           window.dispatchEvent(new CustomEvent('ad:comunicados-delete', { detail: { ids: [id], old: [{ id }] } }));
           adAlert('Comunicado excluído com sucesso.', 'Sucesso');

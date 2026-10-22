@@ -708,7 +708,7 @@ function SiblingCallModal({
 
 function PainelTabletContent() {
   const isMobile = useIsMobile()
-  const { config, callStudent, blockAttempt, recallStudent, activeCalls, realtimeStatus, refreshCalls } = useSaida()
+  const { config, callStudent, blockAttempt, recallStudent, activeCalls, realtimeStatus, refreshCalls, ensureRealtimeConnected } = useSaida()
   const [turmas] = useSupabaseArray<any>('turmas')
 
 
@@ -802,6 +802,7 @@ function PainelTabletContent() {
           cache: 'no-store'
         })
         if (res.ok) {
+          ensureRealtimeConnected()
           const payload = await res.json()
           setManualStudents(payload.data || [])
         }
@@ -818,7 +819,7 @@ function PainelTabletContent() {
       clearTimeout(delayDebounce)
       controller.abort()
     }
-  }, [search])
+  }, [search, ensureRealtimeConnected])
 
   const doBlockReset = useCallback(() => {
     rfidRef.current?.clear()
@@ -833,21 +834,48 @@ function PainelTabletContent() {
   const handleRFIDCore = useCallback(async (code: string) => {
     setRfidError(null)
     setBlockInfo(null)
+    ensureRealtimeConnected()
 
-    // 1. Buscar responsável por RFID diretamente na API (Indexado e rápido)
+    // 1. Buscar responsável por RFID diretamente na API (Indexado, rápido e com auto-retry para oscilação Wi-Fi)
     console.log('Analisando leitura RFID:', code.trim());
     let resp: any = null;
+    let networkFailed = false;
     
     const cleanRfid = code.trim();
 
-    try {
-      const res = await fetch(`/api/responsaveis?rfid=${encodeURIComponent(cleanRfid)}`)
-      if (res.ok) {
-        const payload = await res.json()
-        resp = payload.data && payload.data.length > 0 ? payload.data[0] : null
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        const res = await fetch(`/api/responsaveis?rfid=${encodeURIComponent(cleanRfid)}`, {
+          cache: 'no-store'
+        })
+        if (res.ok) {
+          networkFailed = false
+          ensureRealtimeConnected()
+          const payload = await res.json()
+          resp = payload.data && payload.data.length > 0 ? payload.data[0] : null
+          break
+        } else if (attempt < 2 && [502, 503, 504].includes(res.status)) {
+          await new Promise(r => setTimeout(r, 700))
+          continue
+        }
+      } catch (error: any) {
+        networkFailed = true
+        console.error(`Erro ao buscar responsável via RFID (tentativa ${attempt}/2):`, error)
+        if (attempt < 2) {
+          await new Promise(r => setTimeout(r, 700))
+        }
       }
-    } catch (error: any) {
-      console.error('Erro ao buscar responsável via RFID:', error)
+    }
+
+    if (networkFailed && !resp) {
+      setRfidError('Oscilação na internet ao ler o cartão. Passe a Tag novamente em instantes.')
+      showToast('Sem conexão temporária. Tente novamente.', false)
+      rfidRef.current?.clear()
+      setTimeout(() => {
+        setRfidError(null); setMode('idle'); setRfidCode(undefined)
+        setRfidStudents([]); setMatchedGuardianName(''); setMatchedGuardianRole('')
+      }, 3000)
+      return
     }
 
     if (!resp) {
@@ -979,7 +1007,7 @@ function PainelTabletContent() {
     if (students.some(s => s.inativo || s._aut?.inativo)) {
       showToast('Atenção: Há aluno(s) inativo(s) vinculado(s).', false)
     }
-  }, [showToast, blockAttempt, doBlockReset])
+  }, [showToast, blockAttempt, doBlockReset, ensureRealtimeConnected])
 
   const handleRFID = useCallback(async (code: string) => {
     setIsProcessingRFID(true)

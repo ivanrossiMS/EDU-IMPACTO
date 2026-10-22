@@ -2196,6 +2196,7 @@ export async function DELETE(request: Request) {
 
   const urlsToDelete: string[] = []
   const idsToDelete = new Set<string>(initialIds)
+  const ocorrenciaIdsToDelete = new Set<string>()
 
   if (comunicados) {
     for (const com of comunicados) {
@@ -2326,12 +2327,108 @@ export async function DELETE(request: Request) {
           if (stu.dados?.anexos && Array.isArray(stu.dados.anexos)) {
             urlsToDelete.push(...stu.dados.anexos);
           }
+          const stuParts = String(stu.id || '').split('-');
+          if (stuParts.length >= 6) {
+            studentIdsFromAnexos.add(
+              String(stuParts[5] || '').replace(/^a_?/, '').replace(/^_*(ALU)?/, '').trim().toLowerCase()
+            );
+          }
+        }
+
+        // 6. Localizar ocorrências disciplinares (OC-REL-...) geradas por este relatório para exclusão em cascata
+        try {
+          const ocMap = new Map<string, any>();
+
+          const { data: ocsByColabId } = await adminClient
+            .from('ocorrencias')
+            .select('id, aluno_id, dados, created_at')
+            .eq('dados->>comunicadoColabId', String(com.id));
+          (ocsByColabId || []).forEach((o: any) => ocMap.set(o.id, o));
+
+          if (colabTs) {
+            const tsPrefix = String(colabTs).substring(0, 7);
+            const { data: ocsByPrefix } = await adminClient
+              .from('ocorrencias')
+              .select('id, aluno_id, dados, created_at')
+              .ilike('id', `OC-REL-${tsPrefix}%`);
+            (ocsByPrefix || []).forEach((o: any) => ocMap.set(o.id, o));
+          }
+
+          const { data: ocsByDate } = await adminClient
+            .from('ocorrencias')
+            .select('id, aluno_id, dados, created_at')
+            .ilike('id', 'OC-REL-%')
+            .gte('created_at', minDate)
+            .lte('created_at', maxDate);
+          (ocsByDate || []).forEach((o: any) => ocMap.set(o.id, o));
+
+          for (const oc of ocMap.values()) {
+            if (oc.dados?.comunicadoColabId === String(com.id) || idsToDelete.has(String(oc.dados?.comunicadoStuId || ''))) {
+              ocorrenciaIdsToDelete.add(oc.id);
+              continue;
+            }
+            const ocMatch = String(oc.id || '').match(/^OC-REL-(\d+)-([^-]+)-/);
+            const ocStuId = String(
+              (ocMatch ? ocMatch[2] : '') || oc.aluno_id || oc.dados?.alunoId || oc.dados?.aluno_id || ''
+            )
+              .replace(/^a_?/, '')
+              .replace(/^_*(ALU)?/, '')
+              .trim()
+              .toLowerCase();
+
+            if (ocMatch && colabTs) {
+              const ocTs = parseInt(ocMatch[1], 10);
+              if (!isNaN(ocTs) && Math.abs(ocTs - colabTs) < 60000) {
+                if (studentIdsFromAnexos.size === 0 || (ocStuId && studentIdsFromAnexos.has(ocStuId))) {
+                  ocorrenciaIdsToDelete.add(oc.id);
+                  continue;
+                }
+              }
+            }
+
+            if (oc.created_at && ocStuId && studentIdsFromAnexos.has(ocStuId)) {
+              const ocTime = new Date(oc.created_at).getTime();
+              if (!isNaN(ocTime) && Math.abs(ocTime - baseTime) < 60000) {
+                ocorrenciaIdsToDelete.add(oc.id);
+              }
+            }
+          }
+        } catch (ocErr) {
+          console.error('Erro ao localizar ocorrências vinculadas ao relatório para exclusão:', ocErr);
+        }
+      } else if (com.id && String(com.id).startsWith('AD-COM-REL-STU-')) {
+        // Caso um relatório individual de aluno (AD-COM-REL-STU-...) seja excluído diretamente
+        try {
+          const sMatch = String(com.id).match(/^AD-COM-REL-STU-(\d+)-([^-]+)-/);
+          const stuTs = sMatch ? parseInt(sMatch[1], 10) : null;
+          const stuId = sMatch
+            ? String(sMatch[2]).replace(/^a_?/, '').replace(/^_*(ALU)?/, '').trim().toLowerCase()
+            : '';
+          if (stuTs && stuId) {
+            const tsPrefix = String(stuTs).substring(0, 7);
+            const { data: stuOcs } = await adminClient
+              .from('ocorrencias')
+              .select('id, aluno_id, dados')
+              .ilike('id', `OC-REL-${tsPrefix}%`);
+            for (const oc of stuOcs || []) {
+              const ocMatch = String(oc.id || '').match(/^OC-REL-(\d+)-([^-]+)-/);
+              if (!ocMatch) continue;
+              const ocTs = parseInt(ocMatch[1], 10);
+              const ocStu = String(ocMatch[2]).replace(/^a_?/, '').replace(/^_*(ALU)?/, '').trim().toLowerCase();
+              if (ocStu === stuId && !isNaN(ocTs) && Math.abs(ocTs - stuTs) < 60000) {
+                ocorrenciaIdsToDelete.add(oc.id);
+              }
+            }
+          }
+        } catch (stuOcErr) {
+          console.error('Erro ao localizar ocorrência individual para exclusão:', stuOcErr);
         }
       }
     }
   }
 
   const finalIdsToDelete = Array.from(idsToDelete)
+  const finalOcorrenciaIdsToDelete = Array.from(ocorrenciaIdsToDelete)
 
   // 1. Buscar eventuais anexos em respostas de comunicados antes de deletar
   try {
@@ -2353,12 +2450,19 @@ export async function DELETE(request: Request) {
     console.error('Erro ao verificar anexos de comunicados_respostas:', err);
   }
 
-  // 2. Cascata: remover registros em tabelas filhas/associadas
+  // 2. Cascata: remover registros em tabelas filhas/associadas (incluindo ocorrências de relatório)
   await Promise.allSettled([
     adminClient.from('comunicados_respostas').delete().in('comunicado_id', finalIdsToDelete),
     adminClient.from('agenda_notification_reads').delete().in('content_id', finalIdsToDelete),
     adminClient.from('agenda_ciencias').delete().in('content_id', finalIdsToDelete),
     adminClient.from('agenda_cobrancas').delete().in('comunicado_id', finalIdsToDelete),
+    ...(finalOcorrenciaIdsToDelete.length > 0
+      ? [
+          adminClient.from('ocorrencias').delete().in('id', finalOcorrenciaIdsToDelete),
+          adminClient.from('agenda_notification_reads').delete().in('content_id', finalOcorrenciaIdsToDelete),
+          adminClient.from('agenda_ciencias').delete().in('content_id', finalOcorrenciaIdsToDelete),
+        ]
+      : []),
   ]);
 
   // 3. Excluir comunicados do banco com privilégio de admin

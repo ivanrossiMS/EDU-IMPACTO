@@ -827,8 +827,12 @@ export function GlobalNotificationProvider() {
     }
 
     // 3b. Listener Supabase Realtime multi-dispositivos (rede de computadores e smartphones)
+    let isMounted = true
     let realtimeChannel: any = null
     let credimpactoChannel: any = null
+    let saidaRetryTimer: ReturnType<typeof setTimeout> | null = null
+    let credRetryTimer: ReturnType<typeof setTimeout> | null = null
+
     const destroyChannelCleanly = (ch: any) => {
       if (!ch) return
       try {
@@ -846,13 +850,20 @@ export function GlobalNotificationProvider() {
       } catch (_) {}
     }
 
-    const subTimer = setTimeout(() => {
+    const setupSaidaGlobalChannel = () => {
+      if (!isMounted) return
+      if (saidaRetryTimer) {
+        clearTimeout(saidaRetryTimer)
+        saidaRetryTimer = null
+      }
+      if (realtimeChannel) {
+        const prev = realtimeChannel
+        realtimeChannel = null
+        destroyChannelCleanly(prev)
+      }
       try {
         for (const existing of supabase.getChannels()) {
-          if (
-            existing?.topic === 'realtime:saida_calls_shared_room_global_listener' ||
-            existing?.topic === 'realtime:credimpacto_push_global_room'
-          ) {
+          if (existing?.topic === 'realtime:saida_calls_shared_room_global_listener') {
             destroyChannelCleanly(existing)
           }
         }
@@ -863,22 +874,90 @@ export function GlobalNotificationProvider() {
           handleSpecialAuthPayload(ev.payload?.data || ev.payload)
         })
       realtimeChannel = ch
-      if (!(ch as any)?.channelAdapter?.getChannel?.()?.joinedOnce) {
-        ch.subscribe()
+      ch.subscribe((status: string) => {
+        if (!isMounted || realtimeChannel !== ch) return
+        if (status === 'CLOSED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
+          if (!saidaRetryTimer) {
+            saidaRetryTimer = setTimeout(() => {
+              saidaRetryTimer = null
+              if (isMounted && (!realtimeChannel || realtimeChannel.state !== 'joined')) {
+                setupSaidaGlobalChannel()
+              }
+            }, 8000)
+          }
+        }
+      })
+    }
+
+    const setupCredGlobalChannel = () => {
+      if (!isMounted) return
+      if (credRetryTimer) {
+        clearTimeout(credRetryTimer)
+        credRetryTimer = null
       }
+      if (credimpactoChannel) {
+        const prev = credimpactoChannel
+        credimpactoChannel = null
+        destroyChannelCleanly(prev)
+      }
+      try {
+        for (const existing of supabase.getChannels()) {
+          if (existing?.topic === 'realtime:credimpacto_push_global_room') {
+            destroyChannelCleanly(existing)
+          }
+        }
+      } catch (_) {}
 
       const credCh = supabase.channel('credimpacto_push_global_room')
         .on('broadcast', { event: 'CREDIMPACTO_PUSH_BANNER' }, (ev: any) => {
           handleCredImpactoPushPayload(ev.payload || ev)
         })
       credimpactoChannel = credCh
-      if (!(credCh as any)?.channelAdapter?.getChannel?.()?.joinedOnce) {
-        credCh.subscribe()
+      credCh.subscribe((status: string) => {
+        if (!isMounted || credimpactoChannel !== credCh) return
+        if (status === 'CLOSED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
+          if (!credRetryTimer) {
+            credRetryTimer = setTimeout(() => {
+              credRetryTimer = null
+              if (isMounted && (!credimpactoChannel || credimpactoChannel.state !== 'joined')) {
+                setupCredGlobalChannel()
+              }
+            }, 8000)
+          }
+        }
+      })
+    }
+
+    const handleGlobalReconnect = () => {
+      if (!isMounted) return
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
+      if (!realtimeChannel || (realtimeChannel.state !== 'joined' && realtimeChannel.state !== 'joining')) {
+        setupSaidaGlobalChannel()
       }
+      if (!credimpactoChannel || (credimpactoChannel.state !== 'joined' && credimpactoChannel.state !== 'joining')) {
+        setupCredGlobalChannel()
+      }
+    }
+
+    const subTimer = setTimeout(() => {
+      setupSaidaGlobalChannel()
+      setupCredGlobalChannel()
     }, 150)
 
+    window.addEventListener('online', handleGlobalReconnect)
+    window.addEventListener('edu:network-reconnected', handleGlobalReconnect)
+    document.addEventListener('visibilitychange', handleGlobalReconnect)
+
     return () => {
+      isMounted = false
       clearTimeout(subTimer)
+      if (saidaRetryTimer) clearTimeout(saidaRetryTimer)
+      if (credRetryTimer) clearTimeout(credRetryTimer)
+      window.removeEventListener('online', handleGlobalReconnect)
+      window.removeEventListener('edu:network-reconnected', handleGlobalReconnect)
+      document.removeEventListener('visibilitychange', handleGlobalReconnect)
       unsubLocal()
       if (realtimeChannel) {
         destroyChannelCleanly(realtimeChannel)
