@@ -1225,10 +1225,28 @@ const StudentSearchRow = React.memo(function StudentSearchRow({ student, activeC
 }) {
   const { confirmSoloExit } = useSaida()
 
-  // Read autorizados directly from aluno.saude (set in nova-matricula)
-  const saude: any = student.saude || {}
-  const autorizados: any[] = saude.autorizados || []
-  const autorizaSaida: boolean = student.autorizadoSairSozinho === true || saude.autorizaSaida === true   // can leave alone
+  // Read autorizados directly from aluno.saude / dados
+  const saude: any = student.saude || student.dados?.saude || {}
+  const autorizados: any[] = saude.autorizados || student.autorizados || student.dados?.autorizados || []
+  const autorizaSaida: boolean = (() => {
+    const candidates = [
+      student.autorizadoSairSozinho,
+      student.dados?.autorizadoSairSozinho,
+      student.sairSozinho,
+      student.dados?.sairSozinho,
+      saude.autorizaSaida,
+    ]
+    for (const c of candidates) {
+      if (typeof c === 'boolean') return c
+      if (typeof c === 'number') return c === 1
+      if (typeof c === 'string') {
+        const s = c.trim().toLowerCase()
+        if (['true', 'sim', 's', '1', 'autorizado'].includes(s)) return true
+        if (['false', 'nao', 'não', 'n', '0', 'nao autorizado', 'não autorizado'].includes(s)) return false
+      }
+    }
+    return false
+  })()
 
   const [showProibidoAlert, setShowProibidoAlert] = useState<{ name: string, message: string } | null>(null)
   const [showConfirmModal, setShowConfirmModal] = useState(false)
@@ -2310,7 +2328,9 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
     setIsSearching(true)
     const timer = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/alunos?search=${encodeURIComponent(q)}&limit=5&page=1&withPhoto=true&lightweight=true`)
+        const res = await fetch(`/api/alunos?search=${encodeURIComponent(q)}&limit=5&page=1&withPhoto=true&lightweight=true`, {
+          cache: 'no-store'
+        })
         if (!res.ok) throw new Error('Falha ao buscar')
         const json = await res.json()
         const data = json.data || []
@@ -3439,7 +3459,8 @@ function ChamadasContent() {
     const timer = setTimeout(async () => {
       try {
         const res = await fetch(`/api/alunos?search=${encodeURIComponent(q)}&limit=10&page=1&withPhoto=true&lightweight=true`, {
-          signal: controller.signal
+          signal: controller.signal,
+          cache: 'no-store'
         })
         if (!res.ok) throw new Error('Falha ao buscar alunos')
         const json = await res.json()
@@ -3451,9 +3472,11 @@ function ChamadasContent() {
         )
 
         const mapped = filtered.map((a: any) => {
-          const tName = turmaNameMap.get(String(a.turma)) || a.turma
+          const tName = turmaNameMap.get(String(a.turma)) || a.turma_nome || a.turma
           const p = a.foto || a.foto_url || a.fotoUrl || a.avatarUrl || a.imagem1 || a.dados?.foto || a.dados?.avatarUrl || null
-          return { ...a, foto: p, turmaNome: tName }
+          const rawSair = a.autorizadoSairSozinho ?? a.dados?.autorizadoSairSozinho ?? a.saude?.autorizaSaida ?? a.dados?.saude?.autorizaSaida
+          const isAutSair = rawSair === true || (typeof rawSair === 'string' && ['true', 'sim', 's', '1', 'autorizado'].includes(rawSair.trim().toLowerCase()))
+          return { ...a, foto: p, turmaNome: tName, autorizadoSairSozinho: isAutSair }
         })
 
         setSchoolResults(mapped)

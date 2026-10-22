@@ -153,11 +153,14 @@ export function invalidateEquipesCache() {
   equipesCache = null
 }
 
+export const lightweightAlunosCache = new Map<string, { data: any; ts: number }>()
+
 /**
  * Invalida o cache de alunos ativos.
  */
 export function invalidateAlunosCache() {
   activeAlunosCache = null
+  lightweightAlunosCache.clear()
 }
 
 /**

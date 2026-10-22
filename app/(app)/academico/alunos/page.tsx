@@ -2183,6 +2183,13 @@ export default function AlunosPage() {
                 ...prev,
                 aluno: {
                   ...prev.aluno,
+                  autorizadoSairSozinho: Boolean(
+                    full.autorizadoSairSozinho ??
+                    fullD.autorizadoSairSozinho ??
+                    full.saude?.autorizaSaida ??
+                    fullD.saude?.autorizaSaida ??
+                    prev.aluno.autorizadoSairSozinho
+                  ),
                   foto: full.foto ?? prev.aluno.foto,
                   cpf: full.cpf || fullD.cpf || prev.aluno.cpf,
                   rga: full.rga || fullD.rga || prev.aluno.rga,
@@ -2281,7 +2288,13 @@ export default function AlunosPage() {
   }
 
   const toggleSairSozinho = async (aluno: any) => {
-    const updated = { ...aluno, autorizadoSairSozinho: !aluno.autorizadoSairSozinho }
+    const currentSair = Boolean(aluno.autorizadoSairSozinho ?? aluno.dados?.autorizadoSairSozinho ?? aluno.saude?.autorizaSaida ?? aluno.dados?.saude?.autorizaSaida)
+    const nextSair = !currentSair
+    const updated = {
+      ...aluno,
+      autorizadoSairSozinho: nextSair,
+      dados: { ...(aluno.dados || {}), autorizadoSairSozinho: nextSair }
+    }
     const res = await fetch(`/api/alunos?id=${aluno.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },

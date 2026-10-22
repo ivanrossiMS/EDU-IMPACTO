@@ -24,6 +24,33 @@ import { invalidateAlunosCache, invalidateGruposCache, getCachedTurmasAndGrupos 
 
 export const dynamic = 'force-dynamic'
 
+function parseBooleanSairSozinho(val: any): boolean | undefined {
+  if (typeof val === 'boolean') return val
+  if (typeof val === 'number') return val === 1
+  if (typeof val === 'string') {
+    const s = val.trim().toLowerCase()
+    if (['true', 'sim', 's', '1', 'autorizado'].includes(s)) return true
+    if (['false', 'nao', 'não', 'n', '0', 'nao autorizado', 'não autorizado'].includes(s)) return false
+  }
+  return undefined
+}
+
+function resolveStudentAutorizadoSairSozinho(student: any, d: any = student?.dados || {}): boolean {
+  const candidates = [
+    student?.autorizadoSairSozinho,
+    d?.autorizadoSairSozinho,
+    student?.sairSozinho,
+    d?.sairSozinho,
+    student?.saude?.autorizaSaida,
+    d?.saude?.autorizaSaida,
+  ]
+  for (const c of candidates) {
+    const parsed = parseBooleanSairSozinho(c)
+    if (parsed !== undefined) return parsed
+  }
+  return false
+}
+
 function cleanNameString(str: any): string {
   if (!str) return ''
   const s = typeof str === 'object' ? (str.nome || str.name || str.nomeCompleto || str.nome_completo || '') : String(str)
@@ -657,6 +684,10 @@ export async function GET(request: Request) {
         const studentEmail = (student.email || d.email || d.emailAluno || d.email_aluno || '').trim()
         const studentTelefone = (student.telefone || d.telefone || d.celular || '').trim()
         const studentMatricula = (student.matricula || d.matricula || d.codigo || student.id || '').trim()
+        const resolvedAutorizadoSairSozinho = resolveStudentAutorizadoSairSozinho(student, d)
+        const resolvedSaude = (student.saude || d.saude)
+          ? { ...(d.saude || {}), ...(student.saude || {}), autorizaSaida: resolvedAutorizadoSairSozinho }
+          : { autorizaSaida: resolvedAutorizadoSairSozinho }
 
         return {
           ...student,
@@ -664,6 +695,7 @@ export async function GET(request: Request) {
           telefone: studentTelefone,
           matricula: studentMatricula,
           codigo: studentMatricula,
+          autorizadoSairSozinho: resolvedAutorizadoSairSozinho,
           isIntegralIntermediario: student.isIntegralIntermediario ?? d.isIntegralIntermediario,
           integral_tipo: student.integral_tipo || d.integral_tipo,
           modalidade: student.modalidade || d.modalidade,
@@ -677,7 +709,7 @@ export async function GET(request: Request) {
           responsavelFinanceiro: student.responsavel_financeiro || student.responsavelFinanceiro || d.responsavelFinanceiro,
           mae: d.mae || d.nomeMae || d.filiacao?.mae || null,
           pai: d.pai || d.nomePai || d.filiacao?.pai || null,
-          saude: student.saude || d.saude,
+          saude: resolvedSaude,
           autorizados: student.autorizados || d.autorizados,
           cpf_responsavel: student.cpf_responsavel || d.cpf_responsavel || d.cpfResponsavel,
           email_responsavel: student.email_responsavel || d.email_responsavel || d.emailResponsavel,
@@ -686,6 +718,8 @@ export async function GET(request: Request) {
           turma_anoLetivo: tObj?.ano !== undefined ? String(tObj.ano) : (student.anoLetivo || student.ano_letivo || d.anoLetivo || ''),
           dados: {
             ...(d || {}),
+            autorizadoSairSozinho: resolvedAutorizadoSairSozinho,
+            saude: resolvedSaude,
             historicoTurmas: Array.isArray(d.historicoTurmas) ? d.historicoTurmas : (Array.isArray(student.historicoTurmas) ? student.historicoTurmas : []),
             celular_responsavel: d.celular_responsavel,
             cpfResponsavel: d.cpfResponsavel,
@@ -742,7 +776,7 @@ export async function GET(request: Request) {
         limit
       }, {
         headers: {
-          'Cache-Control': 'private, max-age=60, stale-while-revalidate=120'
+          'Cache-Control': 'no-store, no-cache, must-revalidate'
         }
       })
     }
@@ -949,6 +983,10 @@ export async function GET(request: Request) {
       const studentEmail = (student.email || d.email || d.emailAluno || d.email_aluno || '').trim()
       const studentTelefone = (student.telefone || d.telefone || d.celular || '').trim()
       const studentMatricula = (student.matricula || d.matricula || d.codigo || student.id || '').trim()
+      const resolvedAutorizadoSairSozinho = resolveStudentAutorizadoSairSozinho(student, d)
+      const resolvedSaude = (student.saude || d.saude)
+        ? { ...(d.saude || {}), ...(student.saude || {}), autorizaSaida: resolvedAutorizadoSairSozinho }
+        : { autorizaSaida: resolvedAutorizadoSairSozinho }
 
       return {
         ...student,
@@ -957,12 +995,19 @@ export async function GET(request: Request) {
         telefone: studentTelefone,
         matricula: studentMatricula,
         codigo: studentMatricula,
+        autorizadoSairSozinho: resolvedAutorizadoSairSozinho,
+        saude: resolvedSaude,
         foto: resolvedFoto, // Garantir que foto resolvida estritamente sobrescreva qualquer dado inconsistente
         created_at: student.created_at, // Restore to ensure it's not overwritten
         responsaveis: finalResponsaveis,
         turma_nome: tObj?.nome || student.turma || '',
         turma_segmento: tObj?.dados?.segmento || student.segmento || student.dados?.segmento || '',
-        turma_anoLetivo: tObj?.ano !== undefined ? String(tObj.ano) : (student.anoLetivo || student.ano_letivo || student.dados?.anoLetivo || '')
+        turma_anoLetivo: tObj?.ano !== undefined ? String(tObj.ano) : (student.anoLetivo || student.ano_letivo || student.dados?.anoLetivo || ''),
+        dados: {
+          ...(d || {}),
+          autorizadoSairSozinho: resolvedAutorizadoSairSozinho,
+          saude: resolvedSaude
+        }
       }
     })
 
@@ -1439,7 +1484,17 @@ export async function PUT(request: Request) {
       if (!('email' in body) && existingStudent.email) row.email = existingStudent.email
       if (!('telefone' in body || 'celular' in body) && existingStudent.telefone) row.telefone = existingStudent.telefone
       row.dados = { ...(existingStudent.dados || {}), ...(row.dados || {}) }
+      delete row.dados.dados
       delete row.dados.removerFoto
+      if (row.dados && row.dados.autorizadoSairSozinho !== undefined) {
+        const parsedSair = parseBooleanSairSozinho(row.dados.autorizadoSairSozinho)
+        if (parsedSair !== undefined) {
+          row.dados.autorizadoSairSozinho = parsedSair
+          if (row.dados.saude && typeof row.dados.saude === 'object') {
+            row.dados.saude = { ...row.dados.saude, autorizaSaida: parsedSair }
+          }
+        }
+      }
       if (row.dados && Array.isArray(row.dados.historicoTurmas) && row.dados.historicoTurmas.length > 0) {
         const lastHist = row.dados.historicoTurmas[row.dados.historicoTurmas.length - 1];
         const isLastIntegral = Boolean(
@@ -2345,8 +2400,27 @@ function buildRow(a: any) {
     data_nascimento, responsavel, responsavel_financeiro, responsavel_pedagogico, 
     telefone, inadimplente, risco_evasao, media, frequencia, obs, unidade, foto,
     responsaveis, _responsaveis, historicoTurmas,
-    ...rest 
+    dados: incomingDados,
+    ...rawRest 
   } = a
+
+  const rest: any = {
+    ...(incomingDados && typeof incomingDados === 'object' ? incomingDados : {}),
+    ...rawRest,
+  }
+  delete rest.dados
+
+  const explicitSair = parseBooleanSairSozinho(
+    a.autorizadoSairSozinho !== undefined
+      ? a.autorizadoSairSozinho
+      : incomingDados?.autorizadoSairSozinho
+  )
+  if (explicitSair !== undefined) {
+    rest.autorizadoSairSozinho = explicitSair
+    if (rest.saude && typeof rest.saude === 'object') {
+      rest.saude = { ...rest.saude, autorizaSaida: explicitSair }
+    }
+  }
 
   // Map fields from the UI form if they are different
   const mappedNome = nome || a.nomeCompleto || ''

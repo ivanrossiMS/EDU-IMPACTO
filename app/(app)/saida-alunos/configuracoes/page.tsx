@@ -1769,7 +1769,8 @@ function TabRelatorios() {
   const rows = useMemo<AlunoRow[]>(() => {
     return (alunos || []).map((a: any) => {
       const autorizados: any[] = a.responsaveis || []
-      const autorizaSaida: boolean = !!a.autorizadoSairSozinho
+      const rawAutSaida = a.autorizadoSairSozinho ?? a.dados?.autorizadoSairSozinho ?? a.saude?.autorizaSaida ?? a.dados?.saude?.autorizaSaida
+      const autorizaSaida: boolean = rawAutSaida === true || (typeof rawAutSaida === 'string' && ['true', 'sim', 's', '1', 'autorizado'].includes(rawAutSaida.trim().toLowerCase()))
 
       const temRFID = autorizados.some(r => r.rfid && r.rfid.trim().length > 0)
       const algumBloqueado = autorizados.some(r => r.proibido === true)

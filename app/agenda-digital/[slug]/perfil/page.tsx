@@ -350,7 +350,17 @@ export default function ADPerfilPage() {
   const responsaveisList = (aluno as any).responsaveis || (aluno as any)._responsaveis || [
     { nome: aluno.responsavel || 'Responsável Financeiro', parentesco: 'Responsável', telefone: aluno.telefone, email: aluno.email, tipo: 'Ambos' }
   ]
-  const saude = (aluno as any).saude || {}
+  const rawSaude = (aluno as any).saude || (aluno as any).dados?.saude || {}
+  const rawAutSaida =
+    (aluno as any).autorizadoSairSozinho ??
+    (aluno as any).dados?.autorizadoSairSozinho ??
+    rawSaude.autorizaSaida
+  const saude = {
+    ...rawSaude,
+    autorizaSaida:
+      rawAutSaida === true ||
+      (typeof rawAutSaida === 'string' && ['true', 'sim', 's', '1', 'autorizado'].includes(rawAutSaida.trim().toLowerCase()))
+  }
 
   const containerVariants = {
     hidden: { opacity: 0 },

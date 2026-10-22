@@ -165,9 +165,38 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
       }
     }
 
+    const d = student.dados || {}
+    const parseBool = (val: any): boolean | undefined => {
+      if (typeof val === 'boolean') return val
+      if (typeof val === 'number') return val === 1
+      if (typeof val === 'string') {
+        const s = val.trim().toLowerCase()
+        if (['true', 'sim', 's', '1', 'autorizado'].includes(s)) return true
+        if (['false', 'nao', 'não', 'n', '0', 'nao autorizado', 'não autorizado'].includes(s)) return false
+      }
+      return undefined
+    }
+    const resolvedAutorizadoSairSozinho = (() => {
+      for (const c of [student.autorizadoSairSozinho, d.autorizadoSairSozinho, student.sairSozinho, d.sairSozinho, student.saude?.autorizaSaida, d.saude?.autorizaSaida]) {
+        const p = parseBool(c)
+        if (p !== undefined) return p
+      }
+      return false
+    })()
+    const resolvedSaude = (student.saude || d.saude)
+      ? { ...(d.saude || {}), ...(student.saude || {}), autorizaSaida: resolvedAutorizadoSairSozinho }
+      : { autorizaSaida: resolvedAutorizadoSairSozinho }
+
     const formattedStudent = {
       ...student,
-      ...(student.dados || {}),
+      ...d,
+      autorizadoSairSozinho: resolvedAutorizadoSairSozinho,
+      saude: resolvedSaude,
+      dados: {
+        ...d,
+        autorizadoSairSozinho: resolvedAutorizadoSairSozinho,
+        saude: resolvedSaude,
+      },
       responsaveis: finalResponsaveis,
       turma_nome: turmaInfo?.nome || student.turma || '',
       turma_segmento: turmaInfo?.dados?.segmento || turmaInfo?.segmento || student.segmento || student.dados?.segmento || '',

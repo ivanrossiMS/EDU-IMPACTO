@@ -2,13 +2,13 @@ import { NextResponse } from 'next/server'
 import { supabaseServer as supabase } from '@/lib/supabaseServer'
 import { requireAuth } from '@/lib/server/authGuard'
 import { isAlunoCursandoTurma } from '@/lib/studentTurmaUtils'
+import { lightweightAlunosCache as inMemoryCache } from '@/lib/server/turmasGruposCache'
 
 export const dynamic = 'force-dynamic'
 // Limita o tempo total da rota a 30 segundos (evita o hang de 66min)
 export const maxDuration = 30
 
 const CACHE_TTL_MS = 1000 * 60 * 5; // 5 minutos
-const inMemoryCache = new Map<string, { data: any; ts: number }>();
 
 export async function GET(req: Request) {
   try {
@@ -76,7 +76,9 @@ export async function GET(req: Request) {
         isIntegralIntermediario:dados->isIntegralIntermediario,
         integral_tipo:dados->integral_tipo,
         modalidade:dados->modalidade,
-        turno:dados->turno
+        turno:dados->turno,
+        autorizadoSairSozinho:dados->autorizadoSairSozinho,
+        saude:dados->saude
       `, { count: 'exact' })
       .or('status.neq.inativo,status.is.null')
       .order('nome')
@@ -131,6 +133,8 @@ export async function GET(req: Request) {
     let formatted = (data as Record<string, unknown>[] || []).map((aluno: Record<string, unknown>) => {
       const rawFoto = (aluno as any).fotoAlt || (aluno as any).fotoUrlAlt || null
       const safeFoto = (typeof rawFoto === 'string' && !rawFoto.startsWith('data:image/')) ? rawFoto : null
+      const rawSair = (aluno as any).autorizadoSairSozinho ?? (aluno as any).saude?.autorizaSaida
+      const autorizadoSairSozinho = rawSair === true || (typeof rawSair === 'string' && ['true', 'sim', 's', '1', 'autorizado'].includes(rawSair.trim().toLowerCase()))
 
       return {
         id: String(aluno.id),
@@ -147,6 +151,8 @@ export async function GET(req: Request) {
         integral_tipo: (aluno as any).integral_tipo,
         modalidade: (aluno as any).modalidade,
         turno: (aluno as any).turno,
+        autorizadoSairSozinho,
+        saude: { ...((aluno as any).saude || {}), autorizaSaida: autorizadoSairSozinho },
         status: aluno.status || 'ativo'
       }
     })

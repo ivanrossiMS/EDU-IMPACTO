@@ -158,7 +158,8 @@ export async function GET(request: Request) {
         const rawFoto = st.foto || st.dados?.foto || st.dados?.avatarUrl || st.dados?.fotoUrl || null
         const resolvedFoto = isValidStudentPhoto(rawFoto) ? rawFoto : null
         const turmaNome = turmasMap.get(String(st.turma)) || st.turma || st.dados?.turmaNome || 'Turma não informada'
-        const autorizaSaida = st.dados?.autorizadoSairSozinho === true
+        const rawAutSaida = st.autorizadoSairSozinho ?? st.dados?.autorizadoSairSozinho ?? st.saude?.autorizaSaida ?? st.dados?.saude?.autorizaSaida
+        const autorizaSaida = rawAutSaida === true || (typeof rawAutSaida === 'string' && ['true', 'sim', 's', '1', 'autorizado'].includes(rawAutSaida.trim().toLowerCase()))
         const isCurrent = currentStudentId ? sId === currentStudentId || String(st.matricula).trim() === currentStudentId : false
 
         return {

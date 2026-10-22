@@ -798,7 +798,8 @@ function PainelTabletContent() {
     const delayDebounce = setTimeout(async () => {
       try {
         const res = await fetch(`/api/alunos?search=${encodeURIComponent(q)}&status=ativo&limit=25&lightweight=true&withPhoto=true`, {
-          signal: controller.signal
+          signal: controller.signal,
+          cache: 'no-store'
         })
         if (res.ok) {
           const payload = await res.json()
@@ -1424,9 +1425,10 @@ function PainelTabletContent() {
                 </div>
               ) : (
                 manualStudents.map((a: any) => {
-                  const saude: any = a.saude || {}
-                  const autorizados: any[] = saude.autorizados || []
-                  const autorizaSaida: boolean = saude.autorizaSaida === true
+                  const saude: any = a.saude || a.dados?.saude || {}
+                  const autorizados: any[] = saude.autorizados || a.autorizados || a.dados?.autorizados || []
+                  const rawAutSaida = a.autorizadoSairSozinho ?? a.dados?.autorizadoSairSozinho ?? saude.autorizaSaida
+                  const autorizaSaida: boolean = rawAutSaida === true || (typeof rawAutSaida === 'string' && ['true', 'sim', 's', '1', 'autorizado'].includes(rawAutSaida.trim().toLowerCase()))
                   const alreadyCalled = activeCalls.some(c =>
                     c.studentId === a.id && (c.status === 'waiting' || c.status === 'called')
                   )
