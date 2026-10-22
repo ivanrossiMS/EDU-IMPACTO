@@ -36,6 +36,7 @@ import { ComunicadoViewModal } from '@/components/agenda/ComunicadoViewModal'
 import { MiniCalendarFilter } from '@/components/agenda/MiniCalendarFilter'
 import { seedComunicadosRespostasCache, prefetchComunicadoMessages, getGlobalCachedMessages } from '@/lib/comunicadosRespostasCache'
 import { RelatorioFrequenciaMensalModal } from '@/components/agenda/RelatorioFrequenciaMensalModal'
+import { apiFetch } from '@/lib/api/apiClient'
 
 const ClientPortal = ({ children }: { children: React.ReactNode }) => {
   const [mounted, setMounted] = useState(false);
@@ -2207,7 +2208,8 @@ export default function ADAdminComunicados() {
             setViewingCom(null);
             handleReenviar(c);
           }}
-          setOpenedReportPayload={(str) => setViewingReportPayload(str)}
+          setOpenedReportPayload={(str) => setViewingReportPayload({ string: str, editMode: false })}
+          onEditReportPayload={(str) => setViewingReportPayload({ string: str, editMode: true })}
         />
       )}
 
@@ -2218,6 +2220,78 @@ export default function ADAdminComunicados() {
         targetStudentId={viewingReportPayload?.studentId}
         targetStudentName={viewingReportPayload?.studentName}
         targetStudentAvatar={viewingReportPayload?.studentAvatar}
+        alunos={alunos}
+        canEdit={Boolean(viewingCom?.id || selectedCom?.id)}
+        initialEditMode={Boolean(typeof viewingReportPayload === 'object' && viewingReportPayload?.editMode)}
+        onSaveReport={async (updatedAttachmentStr, updatedPayload, studentId) => {
+          const targetComId = viewingCom?.id || selectedCom?.id;
+          if (!targetComId) return;
+          try {
+            const res = await apiFetch('/api/comunicados', {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                id: targetComId,
+                updatedStudentReport: {
+                  studentId,
+                  studentPayload: updatedPayload,
+                  updatedAnexoStr: updatedAttachmentStr
+                }
+              })
+            });
+            if (!res.ok) {
+              const err = await res.json().catch(() => ({}));
+              throw new Error(err.error || 'Falha ao atualizar o relatório individual.');
+            }
+            const updatedCom = await res.json();
+            setViewingReportPayload((prev: any) =>
+              typeof prev === 'string'
+                ? updatedAttachmentStr
+                : { ...(prev || {}), string: updatedAttachmentStr, editMode: false }
+            );
+            setViewingCom((prev: any) => {
+              if (!prev || String(prev.id) !== String(targetComId)) return prev;
+              const newAnexos = updatedCom?.anexos || prev.anexos;
+              return {
+                ...prev,
+                ...updatedCom,
+                anexos: newAnexos,
+                dados: { ...(prev.dados || {}), ...(updatedCom?.dados || {}), anexos: newAnexos }
+              };
+            });
+            setSelectedCom((prev: any) => {
+              if (!prev || String(prev.id) !== String(targetComId)) return prev;
+              const newAnexos = updatedCom?.anexos || prev.anexos;
+              return {
+                ...prev,
+                ...updatedCom,
+                anexos: newAnexos,
+                dados: { ...(prev.dados || {}), ...(updatedCom?.dados || {}), anexos: newAnexos }
+              };
+            });
+            setComunicadosLocally?.((prev: any) =>
+              (prev || []).map((c: any) => {
+                if (String(c.id) !== String(targetComId)) return c;
+                const newAnexos = updatedCom?.anexos || c.anexos;
+                return {
+                  ...c,
+                  ...updatedCom,
+                  anexos: newAnexos,
+                  dados: { ...(c.dados || {}), ...(updatedCom?.dados || {}), anexos: newAnexos }
+                };
+              })
+            );
+            queryClient.invalidateQueries({ queryKey: ['agenda', 'comunicados'], refetchType: 'active' });
+            queryClient.invalidateQueries({ queryKey: ['ocorrencias'] });
+            queryClient.invalidateQueries({ queryKey: ['ocorrencias-colaborador'] });
+            queryClient.invalidateQueries({ queryKey: ['ocorrencias-familia'] });
+            adAlert('Relatório individual atualizado com sucesso!', 'Sucesso');
+          } catch (e: any) {
+            console.error('Erro ao salvar relatório individual (admin):', e);
+            adAlert(e?.message || 'Erro ao atualizar o relatório individual.', 'Atenção');
+            throw e;
+          }
+        }}
       />
 
       

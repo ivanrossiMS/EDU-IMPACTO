@@ -101,7 +101,7 @@ export default function NotasPage() {
     ['boletins', turmaObj?.id || ''],
     `/api/boletins?turma_id=${turmaObj?.id}`,
     {},
-    { enabled: !!turmaObj?.id }
+    { enabled: !!turmaObj?.id, noCache: true }
   )
   const boletins = boletinsData?.data || []
 
@@ -123,8 +123,40 @@ export default function NotasPage() {
     })
   }, [turmas, anoLetivoSel, filtroBusca, filtroSeg])
 
+  const normalizeBimLabel = (raw: any): string => {
+    const str = String(raw || '').trim()
+    const m = str.match(/([1-4])/)
+    return m ? `${m[1]}º Bimestre` : str
+  }
+
   const getBoletinsAluno = (alunoId: string) => {
-    return (boletins || []).filter((b: any) => String(b.aluno_id) === String(alunoId))
+    const targetId = String(alunoId).replace(/^0+/, '')
+    const list = (boletins || []).filter((b: any) => String(b.aluno_id).replace(/^0+/, '') === targetId)
+
+    // Deduplica por bimestre mantendo sempre o registro mais recente (updated_at || created_at)
+    const byBim = new Map<string, any>()
+    for (const b of list) {
+      const d = typeof b.dados === 'string' ? JSON.parse(b.dados) : (b.dados || {})
+      const bim = normalizeBimLabel(b.bimestre || d?.bimestre)
+      const prev = byBim.get(bim)
+      if (!prev) {
+        byBim.set(bim, b)
+      } else {
+        const prevTime = new Date(prev.updated_at || prev.created_at || 0).getTime()
+        const curTime = new Date(b.updated_at || b.created_at || 0).getTime()
+        if (curTime >= prevTime) {
+          byBim.set(bim, b)
+        }
+      }
+    }
+
+    return Array.from(byBim.values()).sort((a: any, b: any) => {
+      const da = typeof a.dados === 'string' ? JSON.parse(a.dados) : (a.dados || {})
+      const db = typeof b.dados === 'string' ? JSON.parse(b.dados) : (b.dados || {})
+      const ba = normalizeBimLabel(a.bimestre || da?.bimestre)
+      const bb = normalizeBimLabel(b.bimestre || db?.bimestre)
+      return ba.localeCompare(bb, 'pt-BR')
+    })
   }
 
   // ── VISTA 0: Seleção do Ano Letivo ─────────────────────────────────────────
@@ -190,7 +222,7 @@ export default function NotasPage() {
                 {currentStep === 'upload' && (
                   <div style={{ textAlign: 'left' }}>
                     <h3 style={{ fontSize: 16, fontWeight: 700, color: '#0f172a', marginBottom: 4 }}>Importar Notas</h3>
-                    <p style={{ fontSize: 13, color: '#64748b', marginBottom: 16 }}>Copie o texto do PDF e cole no campo abaixo para processar.</p>
+                    <p style={{ fontSize: 13, color: '#64748b', marginBottom: 16 }}>Selecione um ou mais arquivos PDF de boletins para processar automaticamente.</p>
                     
                     <div style={{ position: 'relative', width: '100%', height: '200px', padding: '12px', border: '2px dashed #cbd5e1', borderRadius: '12px', background: '#f8fafc', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, cursor: 'pointer', transition: 'all 0.2s' }}
                          onMouseEnter={e => e.currentTarget.style.borderColor = '#2563eb'}
@@ -235,20 +267,33 @@ export default function NotasPage() {
                     </div>
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxHeight: '40vh', overflowY: 'auto', paddingRight: '8px' }}>
-                      {importData.map((data, index) => (
-                        <div key={index} style={{ padding: '16px', border: '1px solid #e2e8f0', borderRadius: '12px', background: '#f8fafc' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                            <div>
-                              <div style={{ fontSize: 14, fontWeight: 700, color: '#0f172a' }}>{data.nomeERP}</div>
-                              <div style={{ fontSize: 11, color: '#64748b' }}>ID Detectado: {data.codigo}</div>
+                      {importData.map((data, index) => {
+                        const existingForBim = getBoletinsAluno(data.id).some((b: any) => {
+                          const d = typeof b.dados === 'string' ? JSON.parse(b.dados) : (b.dados || {})
+                          return normalizeBimLabel(b.bimestre || d?.bimestre) === normalizeBimLabel(data.bimestre)
+                        })
+                        return (
+                          <div key={index} style={{ padding: '16px', border: '1px solid #e2e8f0', borderRadius: '12px', background: '#f8fafc' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                              <div>
+                                <div style={{ fontSize: 14, fontWeight: 700, color: '#0f172a' }}>{data.nomeERP}</div>
+                                <div style={{ fontSize: 11, color: '#64748b' }}>ID Detectado: {data.codigo}</div>
+                              </div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                {existingForBim && (
+                                  <span style={{ padding: '2px 8px', borderRadius: '4px', background: '#fef3c7', fontSize: 11, fontWeight: 700, color: '#b45309' }}>
+                                    Substituirá existente
+                                  </span>
+                                )}
+                                <span style={{ padding: '2px 8px', borderRadius: '4px', background: '#e2e8f0', fontSize: 11, fontWeight: 700, color: '#475569' }}>{data.bimestre}</span>
+                              </div>
                             </div>
-                            <span style={{ padding: '2px 8px', borderRadius: '4px', background: '#e2e8f0', fontSize: 11, fontWeight: 700, color: '#475569' }}>{data.bimestre}</span>
+                            <div style={{ fontSize: 12, color: '#64748b' }}>
+                              Disciplinas: {data.disciplinas.map((d:any) => `${d.nome} (Média: ${d.mediaF || d.mediaG})`).join(', ')}
+                            </div>
                           </div>
-                          <div style={{ fontSize: 12, color: '#64748b' }}>
-                            Disciplinas: {data.disciplinas.map((d:any) => `${d.nome} (Média: ${d.mediaF || d.mediaG})`).join(', ')}
-                          </div>
-                        </div>
-                      ))}
+                        )
+                      })}
                     </div>
 
                     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 24 }}>
@@ -629,6 +674,8 @@ export default function NotasPage() {
 
         return {
           ...data,
+          bimestre: normalizeBimLabel(data.bimestre),
+          ano: data.ano || anoLetivoSel || turmaObj?.ano || new Date().getFullYear(),
           id: alunoEncontrado?.id || data.codigo,
           nomeERP: alunoEncontrado?.nome || nomeFallback,
           turma_id: alunoEncontrado?.turma || alunoEncontrado?.turma_id || turmaObj?.id
@@ -698,7 +745,12 @@ export default function NotasPage() {
         return await postExtractPdf(batchFile)
       } catch (err: any) {
         lastErr = err
-        console.warn(`[handleFileUpload] Falha na tentativa ${attempt} de ${batchLabel}:`, err?.message || err)
+        const msg = String(err?.message || '')
+        console.warn(`[handleFileUpload] Falha na tentativa ${attempt} de ${batchLabel}:`, msg)
+        // Não faz retry em erros permanentes de autenticação ou saldo/cota (401/402/403)
+        if (msg.includes('402') || msg.includes('créditos') || msg.includes('401') || msg.includes('403')) {
+          break
+        }
       }
     }
     throw lastErr || new Error(`Falha ao ler ${batchLabel} após ${maxRetries + 1} tentativas`)
@@ -722,15 +774,18 @@ export default function NotasPage() {
         const originalPdf = await PDFDocument.load(arrayBuffer)
         const totalPages = originalPdf.getPageCount()
         
-        // BATCH_SIZE = 1 garante processamento ultra-rápido (~1.5s/pág) e zera qualquer risco de timeout (504)
-        const BATCH_SIZE = 1
+        // BATCH_SIZE = 10 processa lotes de 10 páginas em ~50ms via extração vetorial local
+        const BATCH_SIZE = 10
         const totalBatches = Math.ceil(totalPages / BATCH_SIZE)
 
-        // 2. Processar cada página individualmente
+        // 2. Processar cada lote
         for (let i = 0; i < totalBatches; i++) {
           const startPage = i * BATCH_SIZE
           const endPage = Math.min((i + 1) * BATCH_SIZE, totalPages)
-          const batchLabel = `Arquivo ${f + 1}/${filesArray.length}: Processando página ${startPage + 1} de ${totalPages}`
+          const pageRangeLabel = endPage - startPage === 1
+            ? `página ${startPage + 1} de ${totalPages}`
+            : `páginas ${startPage + 1} a ${endPage} de ${totalPages}`
+          const batchLabel = `Arquivo ${f + 1}/${filesArray.length}: Processando ${pageRangeLabel}`
           
           setStatusText(`${batchLabel}...`)
           
@@ -740,7 +795,7 @@ export default function NotasPage() {
           const progressoLoteAtual = ((i + 1) / totalBatches) * progressPorArquivo
           setProgress(Math.min(94, Math.floor(2 + progressoAcumuladoAnterior + progressoLoteAtual)))
 
-          // Cria um novo PDF apenas com a página deste lote
+          // Cria um novo PDF apenas com as páginas deste lote
           const newPdf = await PDFDocument.create()
           const pageIndices = Array.from({ length: endPage - startPage }, (_, idx) => startPage + idx)
           const copiedPages = await newPdf.copyPages(originalPdf, pageIndices)
@@ -751,11 +806,31 @@ export default function NotasPage() {
           const batchBlob = new Blob([pdfBytes as any], { type: 'application/pdf' })
           const batchFile = new File([batchBlob], `batch_${i + 1}.pdf`, { type: 'application/pdf' })
 
-          // Envia para a API com retry automático
-          const data = await extractWithRetry(batchFile, batchLabel, 2)
-          
-          if (Array.isArray(data) && data.length > 0) {
-            allAlunosDetectados = [...allAlunosDetectados, ...data]
+          // Envia para a API com retry automático (e fallback página a página caso seja PDF escaneado pesado)
+          try {
+            const data = await extractWithRetry(batchFile, batchLabel, 2)
+            if (Array.isArray(data) && data.length > 0) {
+              allAlunosDetectados = [...allAlunosDetectados, ...data]
+            }
+          } catch (batchErr: any) {
+            const errMsg = String(batchErr?.message || '')
+            if (endPage - startPage > 1 && !errMsg.includes('402') && !errMsg.includes('créditos')) {
+              for (let pIdx = startPage; pIdx < endPage; pIdx++) {
+                const singleLabel = `Arquivo ${f + 1}/${filesArray.length}: Processando página ${pIdx + 1} de ${totalPages}`
+                setStatusText(`${singleLabel}...`)
+                const singlePdf = await PDFDocument.create()
+                const [copiedPage] = await singlePdf.copyPages(originalPdf, [pIdx])
+                singlePdf.addPage(copiedPage)
+                const singleBytes = await singlePdf.save()
+                const singleFile = new File([new Blob([singleBytes as any], { type: 'application/pdf' })], `page_${pIdx + 1}.pdf`, { type: 'application/pdf' })
+                const singleData = await extractWithRetry(singleFile, singleLabel, 1)
+                if (Array.isArray(singleData) && singleData.length > 0) {
+                  allAlunosDetectados = [...allAlunosDetectados, ...singleData]
+                }
+              }
+            } else {
+              throw batchErr
+            }
           }
         }
       }
@@ -788,11 +863,12 @@ export default function NotasPage() {
         }
       }
       
-      // Mapeamento com cadastro de alunos do ERP
+      // Mapeamento com cadastro de alunos do ERP (prioriza alunos da turma aberta, se houver)
+      const searchPool = alunosDaTurma.length > 0 ? [...alunosDaTurma, ...(alunos || [])] : (alunos || [])
       const mappedData = consolidatedAlunos.map((data: any) => {
         const codigoLimpo = String(data.codigo).replace(/\D/g, '').replace(/^0+/, '')
         
-        let alunoEncontrado = (alunos || []).find((a: any) => {
+        let alunoEncontrado = searchPool.find((a: any) => {
           const idLimpo = String(a.id).replace(/\D/g, '').replace(/^0+/, '')
           const matriculaLimpa = String(a.matricula).replace(/\D/g, '').replace(/^0+/, '')
           return (idLimpo === codigoLimpo && idLimpo !== '') || (matriculaLimpa === codigoLimpo && matriculaLimpa !== '')
@@ -800,7 +876,7 @@ export default function NotasPage() {
         
         // Fallback 1: Match exato de nome (case-insensitive)
         if (!alunoEncontrado && data.nomeArquivo) {
-          alunoEncontrado = (alunos || []).find((a: any) => {
+          alunoEncontrado = searchPool.find((a: any) => {
             if (!a.nome) return false
             return a.nome.toLowerCase().trim() === data.nomeArquivo.toLowerCase().trim()
           })
@@ -810,7 +886,7 @@ export default function NotasPage() {
         if (!alunoEncontrado && data.nomeArquivo) {
           let bestMatch: any = null
           let bestScore = 0
-          ;(alunos || []).forEach((a: any) => {
+          searchPool.forEach((a: any) => {
             if (a.nome) {
               const score = stringSimilarity(a.nome, data.nomeArquivo)
               if (score > bestScore) {
@@ -828,6 +904,8 @@ export default function NotasPage() {
 
         return {
           ...data,
+          bimestre: normalizeBimLabel(data.bimestre),
+          ano: data.ano || anoLetivoSel || turmaObj?.ano || new Date().getFullYear(),
           id: alunoEncontrado?.id || data.codigo,
           codigo: alunoEncontrado ? (alunoEncontrado.matricula || alunoEncontrado.id) : data.codigo,
           nomeERP: alunoEncontrado?.nome || nomeFallback,
@@ -1018,8 +1096,8 @@ export default function NotasPage() {
                         return (
                           <div key={b.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
                             <div>
-                              <div style={{ fontSize: 13, fontWeight: 600, color: '#0f172a' }}>{dados.bimestre}</div>
-                              <div style={{ fontSize: 11, color: '#64748b' }}>{new Date(b.created_at).toLocaleDateString('pt-BR')}</div>
+                              <div style={{ fontSize: 13, fontWeight: 600, color: '#0f172a' }}>{dados.bimestre || b.bimestre}</div>
+                              <div style={{ fontSize: 11, color: '#64748b' }}>{new Date(b.updated_at || b.created_at).toLocaleDateString('pt-BR')}</div>
                             </div>
                             <div style={{ display: 'flex', gap: 12 }}>
                               <button 

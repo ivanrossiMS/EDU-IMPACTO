@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { X, CheckCircle2, XCircle, FileText, FileBarChart, Paperclip, ChevronDown, ChevronUp, Users, Loader2 } from 'lucide-react'
+import { X, CheckCircle2, XCircle, FileText, FileBarChart, Paperclip, ChevronDown, ChevronUp, Users, Loader2, Edit2 } from 'lucide-react'
 import { ADComunicado } from '@/lib/agendaDigitalContext'
 import { supabase } from '@/lib/supabase'
 import { EnqueteWidget } from '@/components/agenda/enquetes/EnqueteWidget'
@@ -463,7 +463,26 @@ export function ComunicadoReportModal({ selectedCom, alunosAtivos, turmas, chatG
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {filteredTargets.map(fam => {
               const isExpanded = !!expandedStudents[fam.id]
-              const hasReportAnexo = selectedCom.anexos?.find((anx: string) => typeof anx === 'string' && anx.startsWith('Relatório:'))
+              const cleanFamId = String(fam.id || '').replace(/^a_?/, '').replace(/^_*(ALU)?/, '').trim().toLowerCase()
+              const hasReportAnexo = selectedCom.anexos?.find((anx: string) => {
+                if (typeof anx !== 'string') return false
+                if (anx.startsWith('Relatório:')) return true
+                if (anx.includes('payload:')) {
+                  try {
+                    const pPart = anx.split('|').find((p: string) => p.startsWith('payload:'))
+                    if (pPart) {
+                      const parsed = JSON.parse(pPart.substring(8))
+                      const pStuId = String(parsed?.studentInfo?.id || Object.keys(parsed?.values || {})[0] || '')
+                        .replace(/^a_?/, '')
+                        .replace(/^_*(ALU)?/, '')
+                        .trim()
+                        .toLowerCase()
+                      if (pStuId && pStuId === cleanFamId) return true
+                    }
+                  } catch {}
+                }
+                return false
+              })
               
               return (
                 <div key={fam.id} style={{ background: '#fff', borderRadius: 12, border: '1px solid #e2e8f0', overflow: 'hidden' }}>
@@ -497,7 +516,7 @@ export function ComunicadoReportModal({ selectedCom, alunosAtivos, turmas, chatG
                   {isExpanded && (
                     <div style={{ padding: '8px 16px 16px 16px', borderTop: '1px solid #f1f5f9' }}>
                       {hasReportAnexo && (
-                        <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'flex-end' }}>
+                        <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'flex-end', gap: 8, flexWrap: 'wrap' }}>
                           <button 
                             onClick={(e) => {
                                 e.stopPropagation();
@@ -505,12 +524,28 @@ export function ComunicadoReportModal({ selectedCom, alunosAtivos, turmas, chatG
                                   string: typeof hasReportAnexo === 'string' ? hasReportAnexo : String(hasReportAnexo),
                                   studentId: fam.id,
                                   studentName: fam.nome,
-                                  studentAvatar: fam.avatarUrl
+                                  studentAvatar: fam.avatarUrl,
+                                  editMode: false
                                 });
                             }}
                             style={{ padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 700, background: 'rgba(124, 58, 237, 0.1)', color: '#7c3aed', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
                           >
                             <FileBarChart size={14} /> Ver Relatório Individual
+                          </button>
+                          <button 
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setViewingReportPayload({
+                                  string: typeof hasReportAnexo === 'string' ? hasReportAnexo : String(hasReportAnexo),
+                                  studentId: fam.id,
+                                  studentName: fam.nome,
+                                  studentAvatar: fam.avatarUrl,
+                                  editMode: true
+                                });
+                            }}
+                            style={{ padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 700, background: '#4f46e5', color: '#ffffff', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
+                          >
+                            <Edit2 size={13} /> Editar Relatório
                           </button>
                         </div>
                       )}

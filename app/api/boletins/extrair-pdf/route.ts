@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { GoogleGenAI, Type, Schema } from '@google/genai'
 import { requireStaff } from '@/lib/server/authGuard'
+import { extractBoletinsFromPdfBuffer } from '@/lib/server/boletimPdfExtractor'
 
 export const maxDuration = 60
 export const dynamic = 'force-dynamic'
@@ -19,11 +20,19 @@ export async function POST(req: Request) {
 
     const arrayBuffer = await file.arrayBuffer()
     const buffer = Buffer.from(arrayBuffer)
+
+    // 1. Extração vetorial determinística ultrarrápida (~20ms, sem custo de IA e sem risco de timeout 504)
+    const localAlunos = await extractBoletinsFromPdfBuffer(buffer)
+    if (localAlunos.length > 0) {
+      return NextResponse.json({ success: true, data: localAlunos, source: 'local' })
+    }
+
+    // 2. Fallback para Gemini AI apenas se o PDF for escaneado (imagem sem texto vetorial estruturado)
     const base64Data = buffer.toString('base64')
 
     const apiKey = process.env.GEMINI_API_KEY
     if (!apiKey) {
-      return NextResponse.json({ error: 'GEMINI_API_KEY não configurada no servidor.' }, { status: 500 })
+      return NextResponse.json({ error: 'Não foi possível extrair texto estruturado do PDF e a GEMINI_API_KEY não está configurada no servidor.' }, { status: 500 })
     }
 
     const ai = new GoogleGenAI({ apiKey })
@@ -166,6 +175,12 @@ Mantenha o formato original exatamente como impresso no PDF (números como "9,50
 
     if (!text) {
       console.error("[extrair-pdf] Todos os modelos falharam ou retornaram texto vazio:", lastError)
+      const errDetail = String(lastError?.message || lastError || '')
+      if (errDetail.includes('402') || errDetail.includes('prepayment credits are depleted') || errDetail.includes('RESOURCE_EXHAUSTED')) {
+        return NextResponse.json({
+          error: 'Não foi possível extrair texto digital deste PDF e os créditos da API do Google Gemini estão esgotados (Erro 402). Exporte o PDF original do sistema ou recarregue os créditos no Google AI Studio.'
+        }, { status: 402 })
+      }
       return NextResponse.json({ 
         error: 'A Inteligência Artificial não conseguiu ler esta página a tempo. Tente novamente em instantes.' 
       }, { status: 504 })

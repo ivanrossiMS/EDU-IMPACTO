@@ -1052,10 +1052,85 @@ function ColaboradorComunicadosContent() {
   
   const [openedFormStr, setOpenedFormStr] = useState<string | null>(null)
   const [openedReportPayloadStr, setOpenedReportPayloadStr] = useState<string | null>(null)
+  const [openedReportEditMode, setOpenedReportEditMode] = useState(false)
   const [maximizedImageStr, setMaximizedImageStr] = useState<string | null>(null)
   const [maximizedVideoStr, setMaximizedVideoStr] = useState<string | null>(null)
   const [maximizedPdfStr, setMaximizedPdfStr] = useState<string | null>(null)
   const [formResp, setFormResp] = useState<Record<string, any>>({})
+
+  const handleSaveIndividualReport = async (updatedAttachmentStr: string, updatedPayload: any, studentId: string) => {
+    if (isMirroring) {
+      adAlert('Você está em modo de espelhamento e não pode editar relatórios.', 'Ação não permitida');
+      return;
+    }
+    if (!selectedComunicado?.id) return;
+
+    try {
+      const res = await apiFetch('/api/comunicados', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: selectedComunicado.id,
+          updatedStudentReport: {
+            studentId,
+            studentPayload: updatedPayload,
+            updatedAnexoStr: updatedAttachmentStr
+          }
+        })
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Falha ao atualizar o relatório individual.');
+      }
+
+      const updatedCom = await res.json();
+      setOpenedReportPayloadStr(updatedAttachmentStr);
+      setOpenedReportEditMode(false);
+
+      setSelectedComunicado((prev: any) => {
+        if (!prev) return prev;
+        const newAnexos = updatedCom?.anexos || prev.anexos;
+        return {
+          ...prev,
+          ...updatedCom,
+          anexos: newAnexos,
+          dados: {
+            ...(prev.dados || {}),
+            ...(updatedCom?.dados || {}),
+            anexos: newAnexos
+          }
+        };
+      });
+
+      setComunicadosLocally?.((prev: any) =>
+        (prev || []).map((c: any) => {
+          if (String(c.id) !== String(selectedComunicado.id)) return c;
+          const newAnexos = updatedCom?.anexos || c.anexos;
+          return {
+            ...c,
+            ...updatedCom,
+            anexos: newAnexos,
+            dados: {
+              ...(c.dados || {}),
+              ...(updatedCom?.dados || {}),
+              anexos: newAnexos
+            }
+          };
+        })
+      );
+
+      queryClient.invalidateQueries({ queryKey: ['agenda', 'comunicados'], refetchType: 'active' });
+      queryClient.invalidateQueries({ queryKey: ['ocorrencias'] });
+      queryClient.invalidateQueries({ queryKey: ['ocorrencias-colaborador'] });
+      queryClient.invalidateQueries({ queryKey: ['ocorrencias-familia'] });
+      adAlert('Relatório individual atualizado com sucesso!', 'Sucesso');
+    } catch (e: any) {
+      console.error('Erro ao salvar relatório individual:', e);
+      adAlert(e?.message || 'Erro ao atualizar o relatório individual.', 'Atenção');
+      throw e;
+    }
+  }
   const openedFormObj: FormTemplate | undefined = forms.find(x => x.name === openedFormStr?.replace('Formulário: ', ''))
 
   const previousSubmission = openedFormObj 
@@ -2523,6 +2598,7 @@ function ColaboradorComunicadosContent() {
           // Os botões de editar e excluir só devem aparecer para quem enviou o comunicado, e para o administrador
           const canDeleteSelected = Boolean(isUserAdmin || isAuthor);
           const canEditSelected = Boolean((isUserAdmin || isAuthor) && !selectedComunicado.id?.startsWith('AD-COM-REL-'));
+          const canEditReportSelected = Boolean(!isMirroring && (isUserAdmin || isAuthor));
 
           return (
             <ComunicadoViewModal
@@ -2540,7 +2616,14 @@ function ColaboradorComunicadosContent() {
               setMaximizedVideoStr={setMaximizedVideoStr}
               setMaximizedPdfStr={setMaximizedPdfStr}
               setOpenedReportTask={setOpenedReportTaskStr}
-              setOpenedReportPayload={setOpenedReportPayloadStr}
+              setOpenedReportPayload={(str) => {
+                setOpenedReportEditMode(false);
+                setOpenedReportPayloadStr(str);
+              }}
+              onEditReportPayload={canEditReportSelected ? (str) => {
+                setOpenedReportEditMode(true);
+                setOpenedReportPayloadStr(str);
+              } : undefined}
               alunos={alunos}
               colaboradores={colaboradores}
               turmas={turmas}
@@ -2572,9 +2655,15 @@ function ColaboradorComunicadosContent() {
 
       <ReportPayloadView
         isOpen={!!openedReportPayloadStr}
-        onClose={() => setOpenedReportPayloadStr(null)}
+        onClose={() => {
+          setOpenedReportPayloadStr(null);
+          setOpenedReportEditMode(false);
+        }}
         attachmentString={openedReportPayloadStr || ''}
         alunos={alunos}
+        canEdit={Boolean(!isMirroring && selectedComunicado && (isMasterAdmin || checkIsComunicadoAuthor(selectedComunicado)))}
+        initialEditMode={openedReportEditMode}
+        onSaveReport={handleSaveIndividualReport}
       />
 
       <AnimatePresence>

@@ -519,8 +519,10 @@ export function ReportFillerModal({ isOpen, anexoStr, onClose, onBack, currentUs
       .filter(c => c.id && String(c.id).startsWith('AD-COM-REL-STU-'))
       .map(c => String(c.id));
 
+    const colabComunicadoId = `AD-COM-REL-COLAB-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+
     newComunicados.push({
-        id: `AD-COM-REL-COLAB-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+        id: colabComunicadoId,
         titulo: cleanColabTitle,
         conteudo: `Relatório dinâmico enviado para a turma.\n\nVocê pode visualizar o relatório individual de cada aluno clicando nos anexos abaixo.`,
         tipo: 'texto',
@@ -659,7 +661,8 @@ export function ReportFillerModal({ isOpen, anexoStr, onClose, onBack, currentUs
               ciencia_responsavel: false,
               status: 'aberta',
               origem: 'relatorio_agenda',
-              relatorioNome: template.name || 'Relatório de Rotina'
+              relatorioNome: template.name || 'Relatório de Rotina',
+              comunicadoColabId: colabComunicadoId
             });
           }
         });

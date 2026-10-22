@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/server/authGuard'
+import { extractBoletinsFromPdfBuffer } from '@/lib/server/boletimPdfExtractor'
 
 export async function POST(request: Request) {
   const { user, errorResponse } = await requireAuth()
@@ -17,6 +18,11 @@ export async function POST(request: Request) {
     console.log('API Route: Arquivo recebido:', file.name)
 
     const buffer = Buffer.from(await file.arrayBuffer())
+
+    const coordAlunos = await extractBoletinsFromPdfBuffer(buffer)
+    if (coordAlunos.length > 0) {
+      return NextResponse.json({ success: true, data: coordAlunos })
+    }
     
     // Importação dinâmica do pdf2json
     const PDFParser = require('pdf2json')

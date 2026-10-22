@@ -153,6 +153,7 @@ interface ComunicadoViewModalProps {
   setMaximizedPdfStr?: (url: string) => void
   setOpenedReportTask?: (anexo: string) => void
   setOpenedReportPayload?: (anexo: string) => void
+  onEditReportPayload?: (anexo: string) => void
   alunos?: any[]
   colaboradores?: any[]
   turmas?: any[]
@@ -177,6 +178,7 @@ export function ComunicadoViewModal({
   setMaximizedPdfStr,
   setOpenedReportTask,
   setOpenedReportPayload,
+  onEditReportPayload,
   alunos = [],
   colaboradores = [],
   turmas = [],
@@ -1560,6 +1562,37 @@ export function ComunicadoViewModal({
                                     </div>
                                   )}
                                 </div>
+                                {isReportPayload && onEditReportPayload && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      if (finalPhoto && cleanStuId) {
+                                        setCachedStudentPhoto(cleanStuId, finalPhoto);
+                                      }
+                                      onEditReportPayload(anexo);
+                                    }}
+                                    style={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: 5,
+                                      padding: '6px 11px',
+                                      borderRadius: 10,
+                                      border: '1px solid #ddd6fe',
+                                      background: '#f5f3ff',
+                                      color: '#6d28d9',
+                                      fontSize: 12,
+                                      fontWeight: 700,
+                                      cursor: 'pointer',
+                                      flexShrink: 0,
+                                      transition: 'all 0.15s ease'
+                                    }}
+                                    title="Editar relatório individual deste aluno"
+                                  >
+                                    <Edit2 size={13} />
+                                    <span>Editar</span>
+                                  </button>
+                                )}
                                 <ChevronRight size={18} color="#94a3b8" style={{ flexShrink: 0 }} />
                               </div>
                             );

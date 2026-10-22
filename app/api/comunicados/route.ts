@@ -1599,13 +1599,19 @@ export async function PUT(request: Request) {
     const body = await request.json()
     const id = body?.id
     const incomingDados = body?.dados && typeof body.dados === 'object' ? body.dados : body
-    if (!id || !incomingDados) return NextResponse.json({ error: 'id and dados required' }, { status: 400 })
+    if (!id || (!incomingDados && !body?.updatedStudentReport)) {
+      return NextResponse.json({ error: 'id and dados required' }, { status: 400 })
+    }
 
     const { data: existingCom } = await supabaseServer
       .from('comunicados')
-      .select('id, titulo, texto, autor, data, destino, fixado, dados')
+      .select('id, titulo, texto, autor, data, destino, fixado, dados, created_at')
       .eq('id', id)
       .maybeSingle()
+
+    if (!existingCom) {
+      return NextResponse.json({ error: 'Comunicado não encontrado.' }, { status: 404 })
+    }
 
     const normalize = (s?: string) =>
       (s || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
@@ -1613,34 +1619,466 @@ export async function PUT(request: Request) {
     const cNorm = normalize(cargo);
     const adminRoles = [
       'administrador', 'admin', 'administrador master', 'master',
-      'diretor geral', 'diretora geral', 'diretor', 'diretora', 'direcao', 'diretoria'
+      'diretor geral', 'diretora geral', 'diretor', 'diretora', 'direcao', 'diretoria',
+      'coordenador', 'coordenadora', 'coordenador(a) pedagogico(a)', 'gestor', 'auxiliar administrativo'
     ];
-    const isAdmin = adminRoles.some(r => 
+    let isAdmin = adminRoles.some(r => 
       pNorm === r || cNorm === r || 
       pNorm.includes('administrador') || cNorm.includes('administrador master') || 
-      pNorm.includes('diretor geral') || cNorm.includes('diretor geral')
+      pNorm.includes('diretor geral') || cNorm.includes('diretor geral') ||
+      pNorm.includes('coordenad') || cNorm.includes('coordenad')
     );
 
     if (!isAdmin) {
       const userCandidateIds = new Set<string>([
         String(user.id),
+        String(user.user_metadata?.id || ''),
         String(user.user_metadata?.colaborador_id || ''),
         String(user.user_metadata?.system_user_id || ''),
         String(user.user_metadata?.uid_legacy || '')
       ].filter(Boolean).map(s => s.replace(/^f_?/, '').trim().toLowerCase()));
 
-      const comAutorId = String(existingCom?.dados?.autorId || (existingCom as any)?.autor_id || '').replace(/^f_?/, '').trim().toLowerCase();
-      const comAutorNome = normalize(existingCom?.autor || existingCom?.dados?.autorNome);
-      const userNome = normalize(user.user_metadata?.nome || user.user_metadata?.name);
+      const userCandidateNames = new Set<string>(
+        [user.user_metadata?.nome, user.user_metadata?.name]
+          .filter(Boolean)
+          .map((n: any) => normalize(String(n)))
+      );
 
-      const isAuthor = Boolean(
+      const comAutorId = String(existingCom?.dados?.autorId || (existingCom as any)?.autor_id || '').replace(/^f_?/, '').trim().toLowerCase();
+      const comAutorNome = normalize(existingCom?.autor || existingCom?.dados?.autorNome || existingCom?.dados?.autor);
+
+      let isAuthor = Boolean(
         (comAutorId && userCandidateIds.has(comAutorId)) ||
-        (comAutorNome && userNome && comAutorNome === userNome)
+        (comAutorNome && userCandidateNames.has(comAutorNome))
       );
 
       if (!isAuthor) {
+        // Fallback: buscar vínculo em system_users caso user_metadata não tenha o ID legado do colaborador
+        const userEmail = (user.email || user.user_metadata?.email || '').trim().toLowerCase();
+        let sysQuery = supabaseServer.from('system_users').select('id, email, nome, perfil, cargo, auth_id, dados');
+        if (userEmail) {
+          sysQuery = sysQuery.or(`id.eq."${user.id}",auth_id.eq."${user.id}",email.ilike."${userEmail}"`);
+        } else {
+          sysQuery = sysQuery.or(`id.eq."${user.id}",auth_id.eq."${user.id}"`);
+        }
+        const { data: sysRows } = await sysQuery.limit(5);
+        for (const su of sysRows || []) {
+          const suPerfil = normalize(su.perfil);
+          const suCargo = normalize(su.cargo);
+          if (adminRoles.some(r => suPerfil === r || suCargo === r || suPerfil.includes('administrador') || suCargo.includes('administrador master') || suPerfil.includes('diretor geral') || suCargo.includes('diretor geral') || suPerfil.includes('coordenad') || suCargo.includes('coordenad'))) {
+            isAdmin = true;
+            break;
+          }
+          [su.id, su.auth_id, su.dados?.id, su.dados?.auth_id, su.dados?.uid_legacy, su.dados?.colaborador_id]
+            .filter(Boolean)
+            .forEach((cid: any) => userCandidateIds.add(String(cid).replace(/^f_?/, '').trim().toLowerCase()));
+          if (su.nome) userCandidateNames.add(normalize(su.nome));
+        }
+        if (!isAdmin) {
+          isAuthor = Boolean(
+            (comAutorId && userCandidateIds.has(comAutorId)) ||
+            (comAutorNome && userCandidateNames.has(comAutorNome))
+          );
+        }
+      }
+
+      if (!isAdmin && !isAuthor) {
         return NextResponse.json({ error: 'Acesso negado: Apenas quem enviou o comunicado ou um administrador pode editá-lo.' }, { status: 403 });
       }
+    }
+
+    // Edição cirúrgica de relatório individual de um aluno (sincroniza o comunicado consolidado COLAB e o individual STU)
+    if (body?.updatedStudentReport) {
+      const { studentId, studentPayload, updatedAnexoStr } = body.updatedStudentReport;
+      if (!studentId || !studentPayload) {
+        return NextResponse.json({ error: 'studentId and studentPayload required' }, { status: 400 });
+      }
+
+      const cleanTargetStuId = String(studentId).replace(/^a_?/, '').replace(/^_*(ALU)?/, '').trim().toLowerCase();
+
+      const sanitizedStudentPayload = {
+        ...studentPayload,
+        studentInfo: studentPayload.studentInfo ? {
+          ...studentPayload.studentInfo,
+          avatarUrl: (studentPayload.studentInfo.avatarUrl && String(studentPayload.studentInfo.avatarUrl).startsWith('data:'))
+            ? null
+            : studentPayload.studentInfo.avatarUrl
+        } : studentPayload.studentInfo
+      };
+
+      const matchesAnexoStudent = (anexoItem: any): boolean => {
+        const aStr = typeof anexoItem === 'string' ? anexoItem : String(anexoItem?.url || '');
+        if (!aStr.includes('payload:')) return false;
+        try {
+          const parts = aStr.split('|');
+          const pPart = parts.find((p: string) => p.startsWith('payload:'));
+          if (!pPart) return false;
+          const parsed = JSON.parse(pPart.substring(8));
+          const pStuId = String(parsed?.studentInfo?.id || Object.keys(parsed?.values || {})[0] || '')
+            .replace(/^a_?/, '')
+            .replace(/^_*(ALU)?/, '')
+            .trim()
+            .toLowerCase();
+          return Boolean(pStuId && pStuId === cleanTargetStuId);
+        } catch {
+          return false;
+        }
+      };
+
+      const buildUpdatedAnexoFromExisting = (existingAnexoStr: string, fallbackPrefix: string) => {
+        const parts = String(existingAnexoStr || '').split('|');
+        const prefix = parts[0] || fallbackPrefix;
+        return `${prefix}|payload:${JSON.stringify(sanitizedStudentPayload)}|report-payload`;
+      };
+
+      const existingDados = typeof existingCom.dados === 'string'
+        ? (() => { try { return JSON.parse(existingCom.dados); } catch { return {}; } })()
+        : (existingCom.dados || {});
+      const currentAnexos = Array.isArray(existingDados.anexos) ? [...existingDados.anexos] : [];
+
+      let previousStudentPayload: any = null;
+      let replacedInPrimary = false;
+      const updatedPrimaryAnexos = currentAnexos.map((item: any) => {
+        if (matchesAnexoStudent(item)) {
+          replacedInPrimary = true;
+          const aStr = typeof item === 'string' ? item : String(item?.url || '');
+          try {
+            const pPart = aStr.split('|').find((p: string) => p.startsWith('payload:'));
+            if (pPart) previousStudentPayload = JSON.parse(pPart.substring(8));
+          } catch {}
+          return updatedAnexoStr
+            ? stripInlineBase64FromAnexos([updatedAnexoStr])[0]
+            : buildUpdatedAnexoFromExisting(aStr, `Relatório Personalizado: ${sanitizedStudentPayload?.studentInfo?.name || 'Aluno'}`);
+        }
+        return item;
+      });
+
+      if (!replacedInPrimary && currentAnexos.length === 1 && String(id).startsWith('AD-COM-REL-STU-')) {
+        const aStr = typeof currentAnexos[0] === 'string' ? currentAnexos[0] : '';
+        try {
+          const pPart = aStr.split('|').find((p: string) => p.startsWith('payload:'));
+          if (pPart) previousStudentPayload = JSON.parse(pPart.substring(8));
+        } catch {}
+        updatedPrimaryAnexos[0] = updatedAnexoStr
+          ? stripInlineBase64FromAnexos([updatedAnexoStr])[0]
+          : buildUpdatedAnexoFromExisting(aStr, `Relatório Personalizado: ${sanitizedStudentPayload?.template?.name || 'Relatório Diário'}`);
+      }
+
+      const newPrimaryDados = {
+        ...existingDados,
+        anexos: stripInlineBase64FromAnexos(updatedPrimaryAnexos)
+      };
+
+      const { data: updatedPrimaryRow, error: primaryErr } = await supabaseServer
+        .from('comunicados')
+        .update({
+          dados: newPrimaryDados,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (primaryErr) {
+        return NextResponse.json({ error: primaryErr.message }, { status: 400 });
+      }
+
+      const isConsolidated = String(id).startsWith('AD-COM-REL-COLAB-') || String(id).startsWith('AD-COM-REL-TURMA-') || (String(id).startsWith('AD-COM-REL-') && !String(id).startsWith('AD-COM-REL-STU-'));
+      if (isConsolidated) {
+        try {
+          const candidateStuIds = new Set<string>();
+          if (Array.isArray(existingDados.stuIds)) {
+            existingDados.stuIds.forEach((sId: string) => {
+              if (sId) candidateStuIds.add(String(sId));
+            });
+          }
+
+          let stuRowsToInspect: any[] = [];
+          if (candidateStuIds.size > 0) {
+            const directMatchIds = Array.from(candidateStuIds).filter(sId => {
+              const parts = sId.split('-');
+              if (parts.length >= 6) {
+                const embId = String(parts[5] || '').replace(/^a_?/, '').replace(/^_*(ALU)?/, '').trim().toLowerCase();
+                return embId === cleanTargetStuId;
+              }
+              return false;
+            });
+
+            const idsToQuery = directMatchIds.length > 0 ? directMatchIds : Array.from(candidateStuIds);
+            const { data: fetchedStus } = await supabaseServer
+              .from('comunicados')
+              .select('id, dados')
+              .in('id', idsToQuery);
+            if (fetchedStus) stuRowsToInspect = fetchedStus;
+          }
+
+          if (stuRowsToInspect.length === 0) {
+            const idMatch = String(id).match(/AD-COM-REL-[A-Za-z]+-(\d+)/);
+            const colabTs = idMatch ? parseInt(idMatch[1], 10) : null;
+            const baseTime = colabTs || ((existingCom as any).created_at ? new Date((existingCom as any).created_at).getTime() : (existingDados.dataEnvio ? new Date(existingDados.dataEnvio).getTime() : Date.now()));
+            const minDate = new Date(baseTime - 15 * 60000).toISOString();
+            const maxDate = new Date(baseTime + 15 * 60000).toISOString();
+
+            const { data: stusByDate } = await supabaseServer
+              .from('comunicados')
+              .select('id, dados, created_at, autor')
+              .ilike('id', 'AD-COM-REL-STU-%')
+              .gte('created_at', minDate)
+              .lte('created_at', maxDate);
+
+            let stusByPrefix: any[] = [];
+            if (colabTs) {
+              const tsPrefix = String(colabTs).substring(0, 8);
+              const { data: prefixData } = await supabaseServer
+                .from('comunicados')
+                .select('id, dados, created_at, autor')
+                .ilike('id', `AD-COM-REL-STU-${tsPrefix}%`);
+              if (prefixData) stusByPrefix = prefixData;
+            }
+
+            const map = new Map<string, any>();
+            (stusByDate || []).forEach((s: any) => map.set(s.id, s));
+            stusByPrefix.forEach((s: any) => map.set(s.id, s));
+            stuRowsToInspect = Array.from(map.values());
+          }
+
+          for (const stuRow of stuRowsToInspect) {
+            const stuDados = typeof stuRow.dados === 'string'
+              ? (() => { try { return JSON.parse(stuRow.dados); } catch { return {}; } })()
+              : (stuRow.dados || {});
+
+            const stuParts = String(stuRow.id || '').split('-');
+            const stuAluId = stuParts.length >= 6
+              ? String(stuParts[5] || '').replace(/^a_?/, '').replace(/^_*(ALU)?/, '').trim().toLowerCase()
+              : '';
+            const stuDadosAlunos = (stuDados.alunosIds || []).map((aId: any) =>
+              String(aId).replace(/^a_?/, '').replace(/^_*(ALU)?/, '').trim().toLowerCase()
+            );
+            const stuAnexos = Array.isArray(stuDados.anexos) ? stuDados.anexos : [];
+
+            const isMatchingStudent =
+              (stuAluId && stuAluId === cleanTargetStuId) ||
+              stuDadosAlunos.includes(cleanTargetStuId) ||
+              stuAnexos.some((a: any) => matchesAnexoStudent(a));
+
+            if (isMatchingStudent) {
+              const templateName = sanitizedStudentPayload?.template?.name || 'Relatório de Rotina';
+              const existingFirstAnexo = typeof stuAnexos[0] === 'string' ? stuAnexos[0] : '';
+              const updatedStuAnexo = buildUpdatedAnexoFromExisting(
+                existingFirstAnexo,
+                `Relatório Personalizado: ${templateName}`
+              );
+              const updatedStuDados = {
+                ...stuDados,
+                anexos: stripInlineBase64FromAnexos([updatedStuAnexo])
+              };
+              await supabaseServer
+                .from('comunicados')
+                .update({
+                  dados: updatedStuDados,
+                  updated_at: new Date().toISOString()
+                })
+                .eq('id', stuRow.id);
+            }
+          }
+        } catch (syncErr) {
+          console.error('Erro ao sincronizar relatório individual do aluno (STU):', syncErr);
+        }
+      } else if (String(id).startsWith('AD-COM-REL-STU-')) {
+        try {
+          const sMatch = String(id).match(/AD-COM-REL-STU-(\d+)-/);
+          const stuTs = sMatch ? parseInt(sMatch[1], 10) : null;
+          if (stuTs) {
+            const tsPrefix = String(stuTs).substring(0, 7);
+            const { data: colabCandidates } = await supabaseServer
+              .from('comunicados')
+              .select('id, dados')
+              .ilike('id', `AD-COM-REL-COLAB-${tsPrefix}%`);
+
+            for (const colabRow of colabCandidates || []) {
+              const colabDados = typeof colabRow.dados === 'string'
+                ? (() => { try { return JSON.parse(colabRow.dados); } catch { return {}; } })()
+                : (colabRow.dados || {});
+              const colabAnexos = Array.isArray(colabDados.anexos) ? colabDados.anexos : [];
+              let foundInColab = false;
+              const newColabAnexos = colabAnexos.map((item: any) => {
+                if (matchesAnexoStudent(item)) {
+                  foundInColab = true;
+                  const aStr = typeof item === 'string' ? item : String(item?.url || '');
+                  return buildUpdatedAnexoFromExisting(aStr, `Relatório Personalizado: ${sanitizedStudentPayload?.studentInfo?.name || 'Aluno'}`);
+                }
+                return item;
+              });
+              if (foundInColab) {
+                await supabaseServer
+                  .from('comunicados')
+                  .update({
+                    dados: { ...colabDados, anexos: stripInlineBase64FromAnexos(newColabAnexos) },
+                    updated_at: new Date().toISOString()
+                  })
+                  .eq('id', colabRow.id);
+              }
+            }
+          }
+        } catch (revSyncErr) {
+          console.error('Erro ao sincronizar relatório consolidado (COLAB):', revSyncErr);
+        }
+      }
+
+      // Sincronizar campo de Ocorrências do relatório com a tabela de ocorrencias
+      // (refletindo imediatamente em /agenda-digital/colaborador/ocorrencias, /agenda-digital/[slug]/ocorrencias e /academico/ocorrencias)
+      try {
+        const templateSections = sanitizedStudentPayload?.template?.sections || previousStudentPayload?.template?.sections || [];
+        const allTemplateFields: any[] = [];
+        templateSections.forEach((sec: any) => {
+          (sec.fields || []).forEach((f: any) => allTemplateFields.push(f));
+        });
+        const ocorrenciaFields = allTemplateFields.filter((f: any) => normalize(f.label).includes('ocorrencia'));
+
+        if (ocorrenciaFields.length > 0) {
+          const extractOcorrenciaText = (payloadObj: any): string => {
+            if (!payloadObj?.values || typeof payloadObj.values !== 'object') return '';
+            const valKeys = Object.keys(payloadObj.values);
+            const stuKey = valKeys.find(k =>
+              String(k).replace(/^a_?/, '').replace(/^_*(ALU)?/, '').trim().toLowerCase() === cleanTargetStuId
+            ) || valKeys[0];
+            const stuAnswers = (stuKey ? payloadObj.values[stuKey] : {}) || {};
+            const texts: string[] = [];
+            ocorrenciaFields.forEach((ocField: any) => {
+              const rawVal = stuAnswers[ocField.id];
+              if (rawVal === undefined || rawVal === null) return;
+              const textVal = Array.isArray(rawVal) ? rawVal.join(', ').trim() : String(rawVal).trim();
+              if (
+                textVal !== '' &&
+                textVal.toLowerCase() !== 'não preenchido' &&
+                textVal.toLowerCase() !== 'nao preenchido'
+              ) {
+                texts.push(textVal);
+              }
+            });
+            return texts.join('\n\n').trim();
+          };
+
+          const prevOcorrenciaText = extractOcorrenciaText(previousStudentPayload);
+          const newOcorrenciaText = extractOcorrenciaText(sanitizedStudentPayload);
+
+          const idTsMatch = String(id).match(/AD-COM-REL-[A-Za-z]+-(\d+)/);
+          const reportTs = idTsMatch
+            ? parseInt(idTsMatch[1], 10)
+            : ((existingCom as any).created_at ? new Date((existingCom as any).created_at).getTime() : (existingDados.dataEnvio ? new Date(existingDados.dataEnvio).getTime() : Date.now()));
+          const reportDateStr = sanitizedStudentPayload?.dataReferencia
+            || (existingCom.data ? String(existingCom.data).split('T')[0] : new Date(reportTs).toISOString().split('T')[0]);
+
+          const { data: studentOcs } = await supabaseServer
+            .from('ocorrencias')
+            .select('*')
+            .or(`aluno_id.eq.${cleanTargetStuId},dados->>alunoId.eq.${cleanTargetStuId},dados->>aluno_id.eq.${cleanTargetStuId}`)
+            .order('created_at', { ascending: false })
+            .limit(50);
+
+          const getCleanOcBody = (desc?: string) => {
+            if (!desc) return '';
+            return String(desc)
+              .split('\n')
+              .filter(line => !line.startsWith('[Lançado por:') && !line.startsWith('[Editado por:') && !line.startsWith('[Confirmado por:'))
+              .join('\n')
+              .trim();
+          };
+
+          const reportOcs = (studentOcs || []).filter((oc: any) =>
+            String(oc.id || '').startsWith('OC-REL-') || oc.dados?.origem === 'relatorio_agenda'
+          );
+
+          const matchedOc =
+            reportOcs.find((oc: any) => oc.dados?.comunicadoColabId === String(id) || oc.dados?.comunicadoStuId === String(id)) ||
+            reportOcs.find((oc: any) => {
+              const ocMatch = String(oc.id || '').match(/^OC-REL-(\d+)-/);
+              if (ocMatch && reportTs) {
+                const ocTs = parseInt(ocMatch[1], 10);
+                if (!isNaN(ocTs) && Math.abs(ocTs - reportTs) < 15 * 60 * 1000) return true;
+              }
+              return false;
+            }) ||
+            reportOcs.find((oc: any) => {
+              if (oc.created_at && reportTs) {
+                const ocTime = new Date(oc.created_at).getTime();
+                if (!isNaN(ocTime) && Math.abs(ocTime - reportTs) < 15 * 60 * 1000) return true;
+              }
+              return false;
+            }) ||
+            (prevOcorrenciaText
+              ? reportOcs.find((oc: any) => getCleanOcBody(oc.descricao) === prevOcorrenciaText && (!oc.data || oc.data === reportDateStr))
+              : null) ||
+            reportOcs.find((oc: any) => oc.data === reportDateStr);
+
+          if (newOcorrenciaText) {
+            if (matchedOc) {
+              const existingLines = String(matchedOc.descricao || '').split('\n');
+              const lancadoLine = existingLines.find((l: string) => l.startsWith('[Lançado por:'))
+                || `[Lançado por: ${existingCom.autor || existingDados.autor || 'Colaborador'} em ${new Date(reportTs).toLocaleDateString('pt-BR')} às ${new Date(reportTs).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}]`;
+              const confirmadoLine = existingLines.find((l: string) => l.startsWith('[Confirmado por:'));
+              const descParts = [lancadoLine];
+              if (confirmadoLine) descParts.push(confirmadoLine);
+              descParts.push(newOcorrenciaText);
+
+              const ocDados = typeof matchedOc.dados === 'object' && matchedOc.dados ? matchedOc.dados : {};
+              await supabaseServer
+                .from('ocorrencias')
+                .update({
+                  descricao: descParts.join('\n'),
+                  dados: {
+                    ...ocDados,
+                    comunicadoColabId: String(id)
+                  }
+                })
+                .eq('id', matchedOc.id);
+            } else {
+              // O relatório não tinha ocorrência antes e agora passou a ter: cria registro em ocorrencias
+              const now = new Date();
+              const dataHora = now.toLocaleDateString('pt-BR') + ' às ' + now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+              const responsavelNome = String(existingCom.autor || existingDados.autor || user.user_metadata?.nome || 'Colaborador').trim();
+              const rawTurmaStr = String(sanitizedStudentPayload?.studentInfo?.turma || existingDados.turmas?.[0] || '').split(' - ')[0].trim();
+              const turmaAno = String(sanitizedStudentPayload?.anoLetivo || now.getFullYear());
+              const newOcId = `OC-REL-${reportTs || Date.now()}-${cleanTargetStuId}-${Math.random().toString(36).slice(2, 6)}`;
+              const newOcDescricao = `[Lançado por: ${responsavelNome} em ${dataHora}]\n${newOcorrenciaText}`;
+
+              await supabaseServer
+                .from('ocorrencias')
+                .upsert({
+                  id: newOcId,
+                  aluno_id: cleanTargetStuId,
+                  tipo_id: '',
+                  descricao: newOcDescricao,
+                  data: reportDateStr,
+                  status: 'aberta',
+                  dados: {
+                    alunoId: cleanTargetStuId,
+                    aluno_id: cleanTargetStuId,
+                    alunoNome: String(sanitizedStudentPayload?.studentInfo?.name || 'Aluno').trim(),
+                    turma: rawTurmaStr,
+                    turma_id: rawTurmaStr,
+                    ano: turmaAno,
+                    responsavel: responsavelNome,
+                    ciencia_responsavel: false,
+                    origem: 'relatorio_agenda',
+                    relatorioNome: sanitizedStudentPayload?.template?.name || 'Relatório de Rotina',
+                    comunicadoColabId: String(id)
+                  }
+                });
+            }
+          } else if (matchedOc) {
+            // O campo de ocorrência foi limpo no relatório: remove a ocorrência vinculada
+            await supabaseServer
+              .from('ocorrencias')
+              .delete()
+              .eq('id', matchedOc.id);
+          }
+        }
+      } catch (ocSyncErr) {
+        console.error('Erro ao sincronizar ocorrência do relatório individual:', ocSyncErr);
+      }
+
+      return NextResponse.json(normalizeRow(updatedPrimaryRow));
     }
 
     const mergedPayload = {

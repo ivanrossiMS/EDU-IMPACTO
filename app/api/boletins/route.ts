@@ -108,10 +108,20 @@ export async function GET(request: Request) {
       }
     })
 
-    return NextResponse.json({ data: enrichedData })
+    return NextResponse.json(
+      { data: enrichedData },
+      { headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } }
+    )
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
+}
+
+function normalizeBimestre(raw: any): string {
+  const str = String(raw || '').trim()
+  const match = str.match(/([1-4])/)
+  if (match) return `${match[1]}º Bimestre`
+  return str
 }
 
 export async function POST(request: Request) {
@@ -123,34 +133,68 @@ export async function POST(request: Request) {
     const body = await request.json()
     
     let targetId = `BL-${Math.random().toString(36).substring(2, 11)}`
+    const extraDuplicateIds: string[] = []
     
-    const aluno_id = body.aluno_id;
-    const turma_id = body.turma_id;
-    const bimestre = body.bimestre || body.dados?.bimestre;
-    const ano = body.dados?.ano;
+    const rawAlunoId = body.aluno_id != null ? String(body.aluno_id).trim() : ''
+    const aluno_id = rawAlunoId.replace(/^0+/, '') || rawAlunoId
+    const turma_id = body.turma_id != null ? String(body.turma_id).trim() : ''
+    const parsedDados = typeof body.dados === 'string' ? JSON.parse(body.dados) : (body.dados || {})
+    const bimestre = normalizeBimestre(body.bimestre || parsedDados?.bimestre)
+    const ano = parsedDados?.ano || body.ano || new Date().getFullYear()
     
-    if (aluno_id && turma_id && bimestre && ano) {
+    if (aluno_id && bimestre) {
+      const alunoIdsToCheck = Array.from(new Set([rawAlunoId, aluno_id].filter(Boolean)))
       const { data: existing } = await supabase
         .from('boletins')
-        .select('id, dados')
-        .eq('aluno_id', aluno_id)
-        .eq('turma_id', turma_id)
-        .eq('bimestre', bimestre);
+        .select('id, aluno_id, turma_id, bimestre, dados')
+        .in('aluno_id', alunoIdsToCheck)
         
       if (existing && existing.length > 0) {
-        const match = existing.find((e: any) => {
-           const d = typeof e.dados === 'string' ? JSON.parse(e.dados) : (e.dados || {});
-           return String(d.ano) === String(ano);
-        });
-        if (match) {
-           targetId = match.id;
+        const matches = existing.filter((e: any) => {
+          const d = typeof e.dados === 'string' ? JSON.parse(e.dados) : (e.dados || {})
+          const eBim = normalizeBimestre(e.bimestre || d?.bimestre)
+          if (eBim !== bimestre) return false
+          if (ano && d?.ano && String(d.ano) !== String(ano)) return false
+          return true
+        })
+
+        if (matches.length > 0) {
+          const sameTurmaMatch = matches.find((m: any) => String(m.turma_id) === turma_id)
+          const chosen = sameTurmaMatch || matches[0]
+          targetId = chosen.id
+
+          for (const m of matches) {
+            if (m.id !== targetId) {
+              extraDuplicateIds.push(m.id)
+            }
+          }
         }
       }
+    }
+
+    if (extraDuplicateIds.length > 0) {
+      await supabase.from('boletins').delete().in('id', extraDuplicateIds)
+    }
+
+    const nowIso = new Date().toISOString()
+    const normalizedDados = {
+      ...parsedDados,
+      bimestre,
+      ano,
     }
     
     const { data, error } = await supabase
       .from('boletins')
-      .upsert({ id: targetId, ...body })
+      .upsert({
+        ...body,
+        id: targetId,
+        aluno_id,
+        turma_id,
+        bimestre,
+        dados: normalizedDados,
+        created_at: nowIso,
+        updated_at: nowIso,
+      })
       .select()
       
     if (error) return NextResponse.json({ error: error.message }, { status: 400 })
