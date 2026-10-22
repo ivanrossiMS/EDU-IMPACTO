@@ -635,18 +635,40 @@ export function NotificationPopover({
     })
 
     // 5. Autorizações Especiais do Dia (Portaria)
+    const todayYmd = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/Campo_Grande',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date())
+
+    const toYmd = (iso?: string | null) => {
+      if (!iso) return ''
+      try {
+        const d = new Date(iso.includes('T') && !iso.endsWith('Z') && !iso.includes('-') && !iso.includes('+') ? `${iso}-04:00` : iso)
+        if (!isNaN(d.getTime())) {
+          return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Campo_Grande', year: 'numeric', month: '2-digit', day: '2-digit' }).format(d)
+        }
+      } catch {}
+      return String(iso).slice(0, 10)
+    }
+
     const confirmedMap = new Map<string, any>()
     ;(saidaCalls || []).forEach((ac: any) => {
       if (ac.status === 'confirmed') {
+        const acDate = toYmd(ac.confirmedAt || ac.calledAt)
+        if (acDate && acDate !== todayYmd) return
         if (ac.studentId) confirmedMap.set(String(ac.studentId).trim(), ac)
         if (ac.studentName) confirmedMap.set(ac.studentName.trim().toLowerCase(), ac)
       }
     })
 
     const specialAuthEntries = (saidaCalls || []).filter((c: any) => {
-      if (c.status === 'special_auth') return true
-      if (c.guardianId === 'special' || c.guardianId === 'special-auth') return true
-      return false
+      if (!(c.status === 'special_auth' || c.guardianId === 'special' || c.guardianId === 'special-auth')) return false
+      const callYmd = toYmd(c.calledAt) || todayYmd
+      const vFrom = (typeof c.validFrom === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(c.validFrom)) ? c.validFrom : callYmd
+      const vUntil = (typeof c.validUntil === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(c.validUntil)) ? c.validUntil : vFrom
+      return todayYmd >= vFrom && todayYmd <= vUntil
     })
 
     specialAuthEntries.forEach((c: any) => {
@@ -666,8 +688,10 @@ export function NotificationPopover({
       const sId = c.studentId ? String(c.studentId).trim() : ''
       const sName = c.studentName ? c.studentName.trim().toLowerCase() : ''
       const confirmedCall = (sId ? confirmedMap.get(sId) : null) || (sName ? confirmedMap.get(sName) : null)
-      const isConfirmed = !!c.confirmedOut || !!confirmedCall
-      const confirmedAtRaw = c.confirmedAt || confirmedCall?.confirmedAt || confirmedCall?.calledAt
+      const confirmedIsoFromDates = (c.confirmedDates && typeof c.confirmedDates === 'object') ? c.confirmedDates[todayYmd] : undefined
+      const legacyConfirmedToday = c.confirmedOut && (!c.confirmedAt || toYmd(c.confirmedAt) === todayYmd) ? c.confirmedAt : undefined
+      const confirmedAtRaw = confirmedIsoFromDates || confirmedCall?.confirmedAt || confirmedCall?.calledAt || legacyConfirmedToday
+      const isConfirmed = Boolean(confirmedIsoFromDates) || Boolean(confirmedCall) || Boolean(legacyConfirmedToday)
 
       let confirmedTimeStr = ''
       if (confirmedAtRaw) {

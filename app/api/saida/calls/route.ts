@@ -214,18 +214,89 @@ export async function GET(request: Request) {
         query = query.lte('created_at', `${effectiveTo}T23:59:59.999-04:00`)
       }
 
+      // Query adicional para autorizações especiais multi-dias criadas em dias anteriores mas vigentes no período
+      let multiDaySpecialQuery = supabase
+        .from('saida_calls')
+        .select('id, dados, created_at')
+        .eq('dados->>status', 'special_auth')
+        .gte('dados->>validUntil', effectiveFrom || todayStr)
+        .limit(200)
+
+      if (studentIdsToMatch.length === 1) {
+        multiDaySpecialQuery = multiDaySpecialQuery.eq('dados->>studentId', studentIdsToMatch[0])
+      } else if (studentIdsToMatch.length > 1) {
+        multiDaySpecialQuery = multiDaySpecialQuery.or(studentIdsToMatch.map(id => `dados->>studentId.eq.${id}`).join(','))
+      }
+      if (effectiveTo) {
+        multiDaySpecialQuery = multiDaySpecialQuery.lte('dados->>validFrom', effectiveTo)
+      }
+
+      const toCampoGrandeYmd = (dt?: string | null): string => {
+        if (!dt) return ''
+        if (/^\d{4}-\d{2}-\d{2}$/.test(dt.trim())) return dt.trim()
+        try {
+          const d = new Date(dt.includes('T') && !dt.endsWith('Z') && !dt.includes('-') && !dt.includes('+') ? `${dt}-04:00` : dt)
+          if (!isNaN(d.getTime())) {
+            return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Campo_Grande' }).format(d)
+          }
+        } catch {}
+        return dt.slice(0, 10)
+      }
+
+      const normalizeSpecialAuthForDate = (c: any, refDate: string) => {
+        if (c.status !== 'special_auth') return c
+        const confirmedDates: Record<string, string> =
+          c.confirmedDates && typeof c.confirmedDates === 'object' ? { ...c.confirmedDates } : {}
+        if (c.confirmedOut && c.confirmedAt) {
+          const legYmd = toCampoGrandeYmd(c.confirmedAt)
+          if (legYmd && !confirmedDates[legYmd]) {
+            confirmedDates[legYmd] = c.confirmedAt
+          }
+        }
+        const confirmedAtOnRef = confirmedDates[refDate] || undefined
+        return {
+          ...c,
+          confirmedDates,
+          confirmedOut: Boolean(confirmedAtOnRef),
+          confirmedAt: confirmedAtOnRef,
+        }
+      }
+
       // Fast-path para NotificationPopover: busca apenas saida_calls primeiro
       if (onlySpecialAuth) {
-        const callsRes = await query
+        const [callsRes, multiSpecialRes] = await Promise.all([
+          query,
+          Promise.resolve(multiDaySpecialQuery).catch(() => ({ data: [] as any[] }))
+        ])
         if (callsRes.error) throw new Error(callsRes.error.message)
-        let rawCalls: any[] = (callsRes.data || []).map((row: any) => ({ id: row.id, ...(row.dados || {}) }))
-        const specialAuths = rawCalls.filter((c: any) => c.status === 'special_auth' || c.guardianId === 'special' || c.guardianId === 'special-auth')
+        const mergedRowsMap = new Map<string, any>()
+        for (const row of (callsRes.data || [])) mergedRowsMap.set(row.id, row)
+        for (const row of ((multiSpecialRes as any)?.data || [])) {
+          if (!mergedRowsMap.has(row.id)) mergedRowsMap.set(row.id, row)
+        }
+        let rawCalls: any[] = Array.from(mergedRowsMap.values()).map((row: any) => ({ id: row.id, ...(row.dados || {}) }))
+        const specialAuths = rawCalls
+          .filter((c: any) => {
+            if (!(c.status === 'special_auth' || c.guardianId === 'special' || c.guardianId === 'special-auth')) return false
+            const callDate = toCampoGrandeYmd(c.calledAt || c.confirmedAt) || todayStr
+            const vFrom = (typeof c.validFrom === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(c.validFrom)) ? c.validFrom : callDate
+            const vUntil = (typeof c.validUntil === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(c.validUntil)) ? c.validUntil : vFrom
+            if (effectiveFrom && vUntil < effectiveFrom) return false
+            if (effectiveTo && vFrom > effectiveTo) return false
+            return true
+          })
+          .map((c: any) => normalizeSpecialAuthForDate(c, targetDate))
+
         if (specialAuths.length === 0) {
           return []
         }
         const specialAuthIds = new Set(specialAuths.map((c: any) => c.id))
         const specialStudentIds = Array.from(new Set(specialAuths.map((c: any) => String(c.studentId || '').trim()).filter(Boolean)))
-        const confirmedCalls = rawCalls.filter((c: any) => !specialAuthIds.has(c.id) && c.status === 'confirmed' && specialStudentIds.includes(String(c.studentId || '').trim()))
+        const confirmedCalls = rawCalls.filter((c: any) => {
+          if (specialAuthIds.has(c.id) || c.status !== 'confirmed' || !specialStudentIds.includes(String(c.studentId || '').trim())) return false
+          const cDate = toCampoGrandeYmd(c.confirmedAt || c.calledAt)
+          return !cDate || cDate === targetDate
+        })
         const combined = [...specialAuths, ...confirmedCalls]
         const missingPhotos = combined.filter((c: any) => !c.studentPhoto && c.studentId)
         if (missingPhotos.length > 0) {
@@ -283,35 +354,46 @@ export async function GET(request: Request) {
       freqQuery = freqQuery.limit(Math.min(limit, 1000))
 
       // Executa as consultas ao Supabase em paralelo para reduzir tempo de resposta
-      const [callsRes, freqRes, eventosRes] = await Promise.all([
+      const [callsRes, multiSpecialRes, freqRes, eventosRes] = await Promise.all([
         query,
+        Promise.resolve(multiDaySpecialQuery).catch(() => ({ data: [] as any[] })),
         freqQuery,
         Promise.resolve(eventosQuery).catch(() => ({ data: [] as any[] }))
       ])
       if (callsRes.error) throw new Error(callsRes.error.message)
       
-      const data = callsRes.data
+      const mergedDataMap = new Map<string, any>()
+      for (const row of (callsRes.data || [])) mergedDataMap.set(row.id, row)
+      for (const row of ((multiSpecialRes as any)?.data || [])) {
+        if (!mergedDataMap.has(row.id)) mergedDataMap.set(row.id, row)
+      }
+      const data = Array.from(mergedDataMap.values())
       const freqRecords: any[] = freqRes.data || []
       const exitEvents: any[] = (eventosRes && 'data' in eventosRes && Array.isArray((eventosRes as any).data)) ? (eventosRes as any).data : []
       let rawResult: any[] = (data || []).map((row: any) => ({ id: row.id, ...(row.dados || {}) }))
 
-      // Filtrar para garantir que apenas chamadas cuja data efetiva (calledAt / confirmedAt) corresponde ao período solicitado sejam retornadas
+      // Filtrar para garantir que apenas chamadas cuja data efetiva (calledAt / confirmedAt) ou período de validade (special_auth) corresponde ao período solicitado sejam retornadas
       if (effectiveFrom || effectiveTo) {
         rawResult = rawResult.filter((c: any) => {
+          if (c.status === 'special_auth') {
+            const callDate = toCampoGrandeYmd(c.calledAt || c.confirmedAt) || todayStr
+            const vFrom = (typeof c.validFrom === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(c.validFrom)) ? c.validFrom : callDate
+            const vUntil = (typeof c.validUntil === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(c.validUntil)) ? c.validUntil : vFrom
+            if (effectiveFrom && vUntil < effectiveFrom) return false
+            if (effectiveTo && vFrom > effectiveTo) return false
+            return true
+          }
           const dt = c.calledAt || c.confirmedAt
           if (!dt) return true
-          let callDate = dt.slice(0, 10)
-          try {
-            const d = new Date(dt.includes('T') && !dt.endsWith('Z') && !dt.includes('-') && !dt.includes('+') ? `${dt}-04:00` : dt)
-            if (!isNaN(d.getTime())) {
-              callDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Campo_Grande' }).format(d)
-            }
-          } catch {}
+          const callDate = toCampoGrandeYmd(dt)
           if (effectiveFrom && callDate < effectiveFrom) return false
           if (effectiveTo && callDate > effectiveTo) return false
           return true
         })
       }
+
+      // Normaliza o status diário de confirmação de autorizações especiais para a data alvo (targetDate)
+      rawResult = rawResult.map((c: any) => c.status === 'special_auth' ? normalizeSpecialAuthForDate(c, targetDate) : c)
 
       const getCallTimeKey = (sId: string, dtStr?: string) => {
         if (!sId || !dtStr) return ''
@@ -597,6 +679,9 @@ export async function POST(request: Request) {
               targetTime: row.dados?.targetTime,
               operatorName: row.dados?.operatorId,
               studentPhoto: row.dados?.studentPhoto,
+              validDays: row.dados?.validDays,
+              validFrom: row.dados?.validFrom,
+              validUntil: row.dados?.validUntil,
             })
           }
         }
@@ -701,16 +786,25 @@ export async function POST(request: Request) {
 
     const isConfirmed = data.dados?.status === 'confirmed'
 
-    // If this call is now confirmed, also update any other active/waiting call for this student created today in the DB
-    if (isConfirmed && studentId) {
+    // If this call is now confirmed (or reverted), also update any other active/waiting call created today AND any active special_auth for this student in the DB
+    if ((isConfirmed || isRevert) && studentId) {
       try {
-        const { data: siblingCalls } = await supabaseService
-          .from('saida_calls')
-          .select('id, dados')
-          .eq('dados->>studentId', studentId)
-          .gte('created_at', `${todayStr}T00:00:00-04:00`)
+        const [siblingRes, specialAuthRes] = await Promise.all([
+          isConfirmed
+            ? supabaseService
+                .from('saida_calls')
+                .select('id, dados')
+                .eq('dados->>studentId', studentId)
+                .gte('created_at', `${todayStr}T00:00:00-04:00`)
+            : Promise.resolve({ data: [] as any[] }),
+          supabaseService
+            .from('saida_calls')
+            .select('id, dados')
+            .eq('dados->>studentId', studentId)
+            .eq('dados->>status', 'special_auth')
+        ])
 
-        const updateSiblingPromises = (siblingCalls || []).map(async sRow => {
+        const updateSiblingPromises = (siblingRes.data || []).map(async sRow => {
           if (sRow.id === data.id) return
           let sDados = sRow.dados
           if (typeof sDados === 'string') { try { sDados = JSON.parse(sDados) } catch(e){} }
@@ -720,9 +814,41 @@ export async function POST(request: Request) {
             await supabaseService.from('saida_calls').update({ dados: sDados }).eq('id', sRow.id)
           }
         })
-        await Promise.all(updateSiblingPromises)
+
+        const updateSpecialAuthPromises = (specialAuthRes.data || []).map(async saRow => {
+          if (saRow.id === data.id) return
+          let saDados = saRow.dados
+          if (typeof saDados === 'string') { try { saDados = JSON.parse(saDados) } catch(e){} }
+          if (!saDados || saDados.status !== 'special_auth') return
+          const vUntil = typeof saDados.validUntil === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(saDados.validUntil)
+            ? saDados.validUntil
+            : (saDados.calledAt ? String(saDados.calledAt).slice(0, 10) : todayStr)
+          if (vUntil < todayStr) return
+
+          const prevConfirmedDates = saDados.confirmedDates && typeof saDados.confirmedDates === 'object'
+            ? { ...saDados.confirmedDates }
+            : {}
+
+          if (isConfirmed) {
+            const confTime = data.dados?.confirmedAt || new Date().toISOString()
+            prevConfirmedDates[todayStr] = confTime
+            saDados.confirmedDates = prevConfirmedDates
+            saDados.confirmedOut = true
+            saDados.confirmedAt = confTime
+            await supabaseService.from('saida_calls').update({ dados: saDados }).eq('id', saRow.id)
+          } else if (isRevert) {
+            delete prevConfirmedDates[todayStr]
+            saDados.confirmedDates = prevConfirmedDates
+            saDados.confirmedOut = false
+            delete saDados.confirmedAt
+            await supabaseService.from('saida_calls').update({ dados: saDados }).eq('id', saRow.id)
+          }
+        })
+
+        await Promise.all([...updateSiblingPromises, ...updateSpecialAuthPromises])
+        invalidateSaidaCallsCache()
       } catch (errSibling) {
-        console.error('Error updating sibling calls in DB:', errSibling)
+        console.error('Error updating sibling/special_auth calls in DB:', errSibling)
       }
     }
 
@@ -761,6 +887,9 @@ export async function POST(request: Request) {
           targetTime: data.dados?.targetTime,
           operatorName: data.dados?.operatorId,
           studentPhoto: data.dados?.studentPhoto,
+          validDays: data.dados?.validDays,
+          validFrom: data.dados?.validFrom,
+          validUntil: data.dados?.validUntil,
         })
       }
     }
@@ -794,6 +923,7 @@ export async function DELETE(request: Request) {
         .from('saida_calls')
         .delete()
         .gte('created_at', `${todayStr}T00:00:00-04:00`)
+        .neq('dados->>status', 'special_auth')
 
       if (error) throw new Error(error.message)
       invalidateSaidaCallsCache()
@@ -989,6 +1119,9 @@ async function dispatchSpecialAuthNotification({
   targetTime,
   operatorName,
   studentPhoto,
+  validDays,
+  validFrom,
+  validUntil,
 }: {
   callId: string
   studentId?: string
@@ -998,6 +1131,9 @@ async function dispatchSpecialAuthNotification({
   targetTime?: string
   operatorName?: string
   studentPhoto?: string | null
+  validDays?: number
+  validFrom?: string
+  validUntil?: string
 }) {
   try {
     const supabaseService = getAdminClient()
@@ -1022,6 +1158,9 @@ async function dispatchSpecialAuthNotification({
             operatorId: operatorName || 'Portaria',
             status: 'special_auth',
             calledAt: new Date().toISOString(),
+            validDays: validDays || 1,
+            validFrom,
+            validUntil,
             isTest: false
           }
         }

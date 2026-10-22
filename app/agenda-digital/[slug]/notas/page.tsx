@@ -8,9 +8,12 @@ import { useParams, useSearchParams } from 'next/navigation'
 import { 
   GraduationCap, Download, ChevronRight, ChevronDown, TrendingUp, TrendingDown, 
   AlertCircle, FileText, BarChart2, Sparkles, AlertTriangle, CheckCircle2, AlertOctagon,
-  Calculator
+  Calculator, Loader2
 } from 'lucide-react'
 import { EmptyStateCard } from '../../components/EmptyStateCard'
+import { BoletimImageModal } from '../../components/BoletimImageModal'
+import { generateBoletimImage, type GeneratedBoletimImage } from '../../components/boletimImageGenerator'
+import { toast } from 'sonner'
 import { useApiQuery } from '@/hooks/useApi'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useQueryClient } from '@tanstack/react-query'
@@ -397,6 +400,66 @@ export default function ADNotasPage({ params }: { params: any }) {
 
   const isAcima = mediaGlobal >= 7.0
 
+  const [boletimImageModalOpen, setBoletimImageModalOpen] = useState(false)
+  const [boletimImageData, setBoletimImageData] = useState<GeneratedBoletimImage | null>(null)
+  const [isGeneratingBoletimImage, setIsGeneratingBoletimImage] = useState(false)
+
+  const handleExportBoletim = async () => {
+    const isMobile =
+      typeof window !== 'undefined' &&
+      (window.innerWidth <= 768 ||
+        window.matchMedia?.('(max-width: 768px)').matches ||
+        /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile/i.test(navigator.userAgent || '') ||
+        Boolean((window as any).Capacitor?.isNativePlatform?.()))
+
+    if (!isMobile) {
+      window.print()
+      return
+    }
+
+    if (isMediaAnual && disciplinasAnuais.length === 0) {
+      toast.error('Não há notas lançadas para gerar a imagem da média anual.')
+      return
+    }
+    if (!isMediaAnual && (!boletimAtual || disciplinas.length === 0)) {
+      toast.error('Não há notas neste bimestre para gerar a imagem do boletim.')
+      return
+    }
+
+    setBoletimImageModalOpen(true)
+    setIsGeneratingBoletimImage(true)
+
+    try {
+      const respNome = currentUser?.nome || (aluno as any)?.responsavel || ''
+      const generated = await generateBoletimImage({
+        aluno: {
+          id: aluno?.id,
+          nome: aluno?.nome,
+          foto: aluno?.foto,
+          matricula: aluno?.matricula || (aluno as any)?.codigo,
+        },
+        responsavelNome: respNome,
+        turmaNome: turmaFormatada.nome || selectedTurma,
+        turno: turmaFormatada.turno,
+        anoLetivo: turmaFormatada.ano || selectedYear || new Date().getFullYear().toString(),
+        isMediaAnual,
+        periodoTitulo: isMediaAnual ? 'Média Anual' : (boletimAtual?.originalTitle || 'Boletim'),
+        totalBimestresLancados,
+        mediaGlobal: isMediaAnual ? mediaGlobalAnual : mediaGlobal,
+        diagnostico: isMediaAnual ? diagnosticoAnual : diagnostico,
+        disciplinasBimestre: disciplinas,
+        disciplinasAnuais,
+      })
+      setBoletimImageData(generated)
+    } catch (err) {
+      console.error('Erro ao gerar imagem do boletim:', err)
+      toast.error('Erro ao preparar a imagem do boletim. Tente novamente.')
+      setBoletimImageModalOpen(false)
+    } finally {
+      setIsGeneratingBoletimImage(false)
+    }
+  }
+
   if (!aluno) return null
 
   if (isLoading) {
@@ -648,9 +711,11 @@ export default function ADNotasPage({ params }: { params: any }) {
             </div>
           </div>
           
-          {/* Action Download / Imprimir PDF */}
+          {/* Action Download / Salvar Imagem no Celular ou Imprimir PDF no Desktop */}
           <button 
-            onClick={() => window.print()} 
+            type="button"
+            onClick={handleExportBoletim} 
+            disabled={isGeneratingBoletimImage}
             style={{ 
               display: 'flex', 
               alignItems: 'center', 
@@ -665,14 +730,18 @@ export default function ADNotasPage({ params }: { params: any }) {
               fontSize: 13,
               borderRadius: 16,
               boxShadow: '0 2px 8px rgba(15, 23, 42, 0.04), inset 0 1px 0 rgba(255,255,255,0.9)',
-              cursor: 'pointer',
+              cursor: isGeneratingBoletimImage ? 'wait' : 'pointer',
               flexShrink: 0,
               boxSizing: 'border-box',
               transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)'
             }} 
-            title="Baixar ou Imprimir Boletim em PDF"
+            title="Salvar ou Compartilhar Boletim"
           >
-            <Download size={16} color="#2563eb" strokeWidth={2.4} /> 
+            {isGeneratingBoletimImage ? (
+              <Loader2 size={16} color="#2563eb" style={{ animation: 'spin 1s linear infinite' }} />
+            ) : (
+              <Download size={16} color="#2563eb" strokeWidth={2.4} />
+            )}
             <span className="hide-on-mobile" style={{ whiteSpace: 'nowrap' }}>PDF</span>
           </button>
         </div>
@@ -1356,6 +1425,13 @@ export default function ADNotasPage({ params }: { params: any }) {
           }
         }
       `}} />
+
+      <BoletimImageModal
+        isOpen={boletimImageModalOpen}
+        onClose={() => setBoletimImageModalOpen(false)}
+        imageData={boletimImageData}
+        isGenerating={isGeneratingBoletimImage}
+      />
     </motion.div>
   )
 }

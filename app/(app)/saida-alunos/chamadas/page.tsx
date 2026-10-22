@@ -21,7 +21,16 @@ const getInitials = (name: string) => {
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { formatFirstAndSecondName } from '@/lib/utils'
-import { SaidaProvider, useSaida, PickupCall, isSaiuSozinhoCall } from '@/lib/saidaContext'
+import {
+  SaidaProvider,
+  useSaida,
+  PickupCall,
+  isSaiuSozinhoCall,
+  getCampoGrandeDateStr,
+  formatShortDateBR,
+  resolveSpecialAuthValidity,
+  addCalendarDays,
+} from '@/lib/saidaContext'
 import { useBroadcastRealtime } from '@/lib/hooks/useBroadcastRealtime'
 import { useData } from '@/lib/dataContext'
 import { useIsMobile } from '@/lib/hooks/useIsMobile'
@@ -29,7 +38,7 @@ import { useApp } from '@/lib/context'
 import {
   CheckCircle2, Clock, Search, Megaphone, X, GraduationCap,
   UserCheck, ChevronRight, RotateCcw, RefreshCw, Trash2, Pin,
-  Users, Sparkles, AlertCircle, Volume2, VolumeX, History
+  Users, Sparkles, AlertCircle, Volume2, VolumeX, History, Calendar
 } from 'lucide-react'
 
 type FilterType = 'all' | 'waiting' | 'confirmed' | 'saiu_sozinho' | 'cancelled' | 'blocked'
@@ -1756,6 +1765,12 @@ interface SpecialLaunch {
   loggedBy: string
   date: string
   time: string
+  targetTime?: string | null
+  validDays: number
+  validFrom: string
+  validUntil: string
+  dayIndex: number
+  remainingDays: number
   confirmedOut?: boolean
   confirmedAt?: string
 }
@@ -1768,6 +1783,22 @@ const SPECIAL_AUTH_PRESET_TIMES: string[] = [
     const minutes = totalMinutes % 60
     return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`
   })
+]
+
+const SPECIAL_AUTH_PRESET_DAYS: { value: number; label: string }[] = [
+  { value: 1, label: '1 dia (Hoje)' },
+  { value: 2, label: '2 dias' },
+  { value: 3, label: '3 dias' },
+  { value: 4, label: '4 dias' },
+  { value: 5, label: '5 dias (1 sem. útil)' },
+  { value: 7, label: '7 dias (1 semana)' },
+  { value: 10, label: '10 dias' },
+  { value: 14, label: '14 dias (2 semanas)' },
+  { value: 15, label: '15 dias (Quinzena)' },
+  { value: 20, label: '20 dias' },
+  { value: 30, label: '30 dias (1 mês)' },
+  { value: 60, label: '60 dias (2 meses)' },
+  { value: 90, label: '90 dias (3 meses)' },
 ]
 
 // ── Web Audio Chime para Novas Autorizações Especiais ────────────────────────
@@ -1857,7 +1888,10 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
   const [selectedStudent, setSelectedStudent] = useState<any | null>(null)
   const [authorizedPerson, setAuthorizedPerson] = useState('')
   const [specialAuthTime, setSpecialAuthTime] = useState('Indefinido')
+  const [specialAuthDays, setSpecialAuthDays] = useState<number>(1)
+  const [isCustomDays, setIsCustomDays] = useState<boolean>(false)
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
+  const [currentTodayStr, setCurrentTodayStr] = useState<string>(() => getCampoGrandeDateStr())
 
   // ── Alerta Sonoro de Autorização Especial ──
   const [soundEnabled, setSoundEnabled] = useState<boolean>(() => {
@@ -1913,14 +1947,49 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
     playSpecialAuthChime()
   }, [soundEnabled])
 
-  // ── Persistent accumulator: stores special_auth entries of today ──
+  // ── Persistent accumulator: stores special_auth entries active today ──
   const seenSpecialAuthsRef = useRef<Map<string, PickupCall>>(new Map())
   const [seenSpecialAuthsVersion, setSeenSpecialAuthsVersion] = useState(0)
 
-  // Escuta imediata de eventos broadcast (DELETE_CALL, CANCEL_CALL, SPECIAL_AUTH_NOTIFY e CALL_STUDENT para special_auth)
+  // Detecção automática de virada de dia (meia-noite): reseta o estado diário ("verde/confirmado")
+  // para o novo dia sem perder autorizações multi-dias ainda dentro da validade!
+  useEffect(() => {
+    const checkRollover = () => {
+      const nextToday = getCampoGrandeDateStr()
+      setCurrentTodayStr(prevToday => {
+        if (prevToday !== nextToday) {
+          let changed = false
+          for (const [id, call] of seenSpecialAuthsRef.current.entries()) {
+            const val = resolveSpecialAuthValidity(call, nextToday)
+            if (!val.isActiveToday) {
+              seenSpecialAuthsRef.current.delete(id)
+              changed = true
+            }
+          }
+          if (changed) setSeenSpecialAuthsVersion(v => v + 1)
+          return nextToday
+        }
+        return prevToday
+      })
+    }
+    const timer = setInterval(checkRollover, 30000)
+    const onVis = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        checkRollover()
+      }
+    }
+    document.addEventListener('visibilitychange', onVis)
+    return () => {
+      clearInterval(timer)
+      document.removeEventListener('visibilitychange', onVis)
+    }
+  }, [])
+
+  // Escuta imediata de eventos broadcast (DELETE_CALL, CANCEL_CALL, CONFIRM_PICKUP, REVERT_CALL, SPECIAL_AUTH_NOTIFY e CALL_STUDENT)
   useEffect(() => {
     const unsub = onRealtime('*', payload => {
       const d = payload.data as any
+      const todayKey = getCampoGrandeDateStr()
       if (payload.event === 'DELETE_CALL' && d?.callId) {
         if (seenSpecialAuthsRef.current.has(d.callId)) {
           seenSpecialAuthsRef.current.delete(d.callId)
@@ -1931,6 +2000,42 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
           seenSpecialAuthsRef.current.delete(d.callId)
           setSeenSpecialAuthsVersion(v => v + 1)
         }
+      } else if (payload.event === 'CONFIRM_PICKUP') {
+        const targetStudentId = d?.studentId ? String(d.studentId).trim() : ''
+        const confIso = d?.confirmedAt || new Date().toISOString()
+        let updated = false
+        for (const [id, entry] of seenSpecialAuthsRef.current.entries()) {
+          if (id === d?.callId || (targetStudentId && String(entry.studentId || '').trim() === targetStudentId)) {
+            const nextDates = { ...(entry.confirmedDates || {}), [todayKey]: confIso }
+            seenSpecialAuthsRef.current.set(id, {
+              ...entry,
+              confirmedDates: nextDates,
+              confirmedOut: true,
+              confirmedAt: confIso,
+            })
+            updated = true
+          }
+        }
+        if (updated) setSeenSpecialAuthsVersion(v => v + 1)
+      } else if (payload.event === 'REVERT_CALL') {
+        const targetStudentId = d?.studentId ? String(d.studentId).trim() : ''
+        let updated = false
+        for (const [id, entry] of seenSpecialAuthsRef.current.entries()) {
+          if (id === d?.callId || (targetStudentId && String(entry.studentId || '').trim() === targetStudentId)) {
+            const nextDates = { ...(entry.confirmedDates || {}) }
+            if (nextDates[todayKey] || entry.confirmedOut) {
+              delete nextDates[todayKey]
+              seenSpecialAuthsRef.current.set(id, {
+                ...entry,
+                confirmedDates: nextDates,
+                confirmedOut: false,
+                confirmedAt: undefined,
+              })
+              updated = true
+            }
+          }
+        }
+        if (updated) setSeenSpecialAuthsVersion(v => v + 1)
       } else if (
         (payload.event === 'SPECIAL_AUTH_NOTIFY' && !d?.isTest) ||
         (payload.event === 'CALL_STUDENT' && d?.status === 'special_auth')
@@ -1975,10 +2080,11 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
         const arr: PickupCall[] = Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : []
         if (!isSubscribed) return
         let changed = false
+        const todayYmd = getCampoGrandeDateStr()
 
         const dbCallMap = new Map(arr.map(c => [c.id, c]))
 
-        // Prunar autorizações que não existem mais ou foram canceladas no banco
+        // Prunar autorizações que não existem mais, expiraram ou foram canceladas no banco
         for (const [id, seenCall] of seenSpecialAuthsRef.current.entries()) {
           const dbCall = dbCallMap.get(id)
           if (!dbCall) {
@@ -1987,14 +2093,14 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
               seenSpecialAuthsRef.current.delete(id)
               changed = true
             }
-          } else if (dbCall.status === 'cancelled' || dbCall.status !== 'special_auth') {
+          } else if (dbCall.status === 'cancelled' || dbCall.status !== 'special_auth' || !resolveSpecialAuthValidity(dbCall, todayYmd).isActiveToday) {
             seenSpecialAuthsRef.current.delete(id)
             changed = true
           }
         }
 
         for (const c of arr) {
-          if (c.status === 'special_auth') {
+          if (c.status === 'special_auth' && resolveSpecialAuthValidity(c, todayYmd).isActiveToday) {
             playedSoundIdsRef.current.add(c.id)
             const existing = seenSpecialAuthsRef.current.get(c.id)
             const incomingTargetTime = c.targetTime || (c as any).target_time || (c as any).dados?.targetTime || (c as any).dados?.target_time || (c as any).horarioPrevisto || (c as any).scheduledTime || null
@@ -2039,13 +2145,18 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
   }, [])
 
   // Whenever activeCalls changes, absorb any special_auth entries into the accumulator,
-  // e remove aquelas canceladas (apenas sincroniza estado — NUNCA dispara som aqui)
+  // e remove aquelas canceladas ou expiradas (apenas sincroniza estado — NUNCA dispara som aqui)
   useEffect(() => {
     let changed = false
     const activeMap = new Map(activeCalls.map(c => [c.id, c]))
 
-    // 1. Prunar apenas se explicitamente cancelado em activeCalls
-    for (const [id] of seenSpecialAuthsRef.current.entries()) {
+    // 1. Prunar apenas se explicitamente cancelado ou expirado
+    for (const [id, seenCall] of seenSpecialAuthsRef.current.entries()) {
+      if (!resolveSpecialAuthValidity(seenCall, currentTodayStr).isActiveToday) {
+        seenSpecialAuthsRef.current.delete(id)
+        changed = true
+        continue
+      }
       const liveCall = activeMap.get(id)
       if (liveCall && (liveCall.status === 'cancelled' || (liveCall.status !== 'special_auth' && liveCall.status !== 'confirmed'))) {
         seenSpecialAuthsRef.current.delete(id)
@@ -2053,9 +2164,9 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
       }
     }
 
-    // 2. Absorver special_auth sem disparar som
+    // 2. Absorver special_auth vigentes hoje sem disparar som
     for (const c of activeCalls) {
-      if (c.status === 'special_auth') {
+      if (c.status === 'special_auth' && resolveSpecialAuthValidity(c, currentTodayStr).isActiveToday) {
         playedSoundIdsRef.current.add(c.id)
         const existing = seenSpecialAuthsRef.current.get(c.id)
         const incomingTargetTime = c.targetTime || (c as any).target_time || (c as any).dados?.targetTime || (c as any).dados?.target_time || (c as any).horarioPrevisto || (c as any).scheduledTime || null
@@ -2077,7 +2188,7 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
     }
     // Force a re-render if entries changed
     if (changed) setSeenSpecialAuthsVersion(v => v + 1)
-  }, [activeCalls])
+  }, [activeCalls, currentTodayStr])
 
   // Remove a specific special_auth from the accumulator (called from the delete handler)
   const removeFromAccumulator = useCallback((callId: string) => {
@@ -2085,28 +2196,31 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
     setSeenSpecialAuthsVersion(v => v + 1)
   }, [])
 
-  // Computed Launches — uses the ACCUMULATOR (persistent) as source + activeCalls for confirmed status
+  // Computed Launches — uses the ACCUMULATOR (persistent) as source + activeCalls for today's confirmed status
   const launches = useMemo(() => {
     // seenSpecialAuthsVersion is referenced here only to trigger re-computation when accumulator changes
     void seenSpecialAuthsVersion
     const specialAuthEntries = Array.from(seenSpecialAuthsRef.current.values())
+      .filter(c => resolveSpecialAuthValidity(c, currentTodayStr).isActiveToday)
 
     return specialAuthEntries.map(c => {
       const sId = c.studentId ? String(c.studentId).trim() : ''
       const sName = c.studentName ? c.studentName.trim().toLowerCase() : ''
+      const validity = resolveSpecialAuthValidity(c, currentTodayStr)
 
-      // Encontra a chamada confirmada do aluno (compara tanto por ID quanto por Nome do Aluno)
-      const pickUpCall = activeCalls.find(ac => {
+      // Encontra a chamada confirmada do aluno ESTRITAMENTE NO DIA DE HOJE (currentTodayStr)
+      // Isso garante que se foi confirmada ontem, hoje (novo dia dentro da validade) volte a aparecer não-confirmada!
+      const pickUpCallToday = activeCalls.find(ac => {
         if (ac.status !== 'confirmed') return false
+        const acDate = getCampoGrandeDateStr(ac.confirmedAt || ac.calledAt)
+        if (acDate !== currentTodayStr) return false
         const acId = ac.studentId ? String(ac.studentId).trim() : ''
         const acName = ac.studentName ? ac.studentName.trim().toLowerCase() : ''
         return (sId && acId && sId === acId) || (sName && acName && sName === acName)
       })
 
-      const d = new Date(c.calledAt)
-      const dateStr = !isNaN(d.getTime())
-        ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-        : c.calledAt.split('T')[0]
+      const isConfirmedToday = Boolean(pickUpCallToday) || validity.isConfirmedToday
+      const confirmedIsoToday = pickUpCallToday?.confirmedAt || pickUpCallToday?.calledAt || validity.confirmedAtToday
 
       // Resolução inteligente do horário inserido (targetTime)
       let resolvedTargetTime = 
@@ -2141,19 +2255,22 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
         studentPhoto: c.studentPhoto,
         authorizedPerson: c.guardianName,
         loggedBy: c.operatorId || 'Sistema',
-        date: dateStr,
+        date: validity.validFrom,
         time: fmtTime(c.calledAt),
         targetTime: resolvedTargetTime,
+        validDays: validity.validDays,
+        validFrom: validity.validFrom,
+        validUntil: validity.validUntil,
+        dayIndex: validity.dayIndex,
+        remainingDays: validity.remainingDays,
         calledAtMs: new Date(c.calledAt).getTime(),
-        confirmedOut: !!pickUpCall,
-        confirmedAt: pickUpCall
-          ? fmtTime(pickUpCall.confirmedAt || pickUpCall.calledAt)
-          : undefined
+        confirmedOut: isConfirmedToday,
+        confirmedAt: confirmedIsoToday ? fmtTime(confirmedIsoToday) : undefined
       }
     })
     // Mais recente primeiro
     .sort((a, b) => b.calledAtMs - a.calledAtMs)
-  }, [activeCalls, seenSpecialAuthsVersion])
+  }, [activeCalls, seenSpecialAuthsVersion, currentTodayStr])
 
 
 
@@ -2204,8 +2321,9 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
     const sClass = selectedStudent.turmaNome || selectedStudent.turma
     const sPhoto = selectedStudent.foto || selectedStudent.foto_url || selectedStudent.fotoUrl || selectedStudent.avatarUrl || selectedStudent.imagem1 || selectedStudent.dados?.foto || selectedStudent.dados?.avatarUrl || null
     const authPerson = authorizedPerson.trim()
+    const validDaysToUse = Math.max(1, Math.min(365, Math.round(Number(specialAuthDays) || 1)))
     
-    // Registra no histórico de lançamentos de autorização especial (apenas lança no card)
+    // Registra no histórico de lançamentos de autorização especial (com quantidade de dias de validade)
     const createdCall = addSpecialAuth(
       sId,
       sName,
@@ -2213,7 +2331,8 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
       authPerson,
       operatorName,
       sPhoto,
-      specialAuthTime || 'Indefinido'
+      specialAuthTime || 'Indefinido',
+      validDaysToUse
     )
 
     if (createdCall?.id) {
@@ -2224,13 +2343,20 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
       triggerSpecialAuthSound()
     }
 
-    showToast(`Autorização lançada no card para ${sName}! Clique no alto-falante 📣 para chamar.`, true)
+    if (validDaysToUse > 1) {
+      const untilDateBR = formatShortDateBR(addCalendarDays(currentTodayStr, validDaysToUse - 1))
+      showToast(`Autorização lançada para ${sName} por ${validDaysToUse} dias (válida até ${untilDateBR})!`, true)
+    } else {
+      showToast(`Autorização lançada no card para ${sName}! Clique no alto-falante 📣 para chamar.`, true)
+    }
 
     // Reset Form
     setSelectedStudent(null)
     setSearch('')
     setAuthorizedPerson('')
     setSpecialAuthTime('Indefinido')
+    setSpecialAuthDays(1)
+    setIsCustomDays(false)
   }
 
 
@@ -2480,7 +2606,7 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
         </div>
 
         {/* COLUMN 3: SCHEDULED TIME */}
-        <div style={{ flex: '0 0 auto', minWidth: 110, position: 'relative' }}>
+        <div style={{ flex: '0 0 auto', minWidth: 108, position: 'relative' }}>
           <div style={{
             display: 'flex', alignItems: 'center', gap: 5, height: 38,
             padding: '0 8px', borderRadius: 12,
@@ -2488,7 +2614,9 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
             background: 'hsl(var(--bg-surface))',
             boxSizing: 'border-box',
             opacity: selectedStudent ? 1 : 0.5,
-          }}>
+          }}
+          title="Horário previsto para retirada"
+          >
             <Clock size={13} color="#d97706" style={{ flexShrink: 0 }} />
             <select
               value={specialAuthTime}
@@ -2504,6 +2632,88 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
                 <option key={t} value={t}>{t === 'Indefinido' ? 'Indefinido' : t}</option>
               ))}
             </select>
+          </div>
+        </div>
+
+        {/* COLUMN 4: VALIDITY DAYS (QUANTIDADE DE DIAS DE VALIDADE) */}
+        <div style={{ flex: '0 0 auto', minWidth: isCustomDays ? 115 : 122, position: 'relative' }}>
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 5, height: 38,
+            padding: '0 8px', borderRadius: 12,
+            border: specialAuthDays > 1 ? '1.5px solid #d97706' : '1px solid rgba(245, 158, 11, 0.45)',
+            background: specialAuthDays > 1 ? 'rgba(245, 158, 11, 0.08)' : 'hsl(var(--bg-surface))',
+            boxSizing: 'border-box',
+            opacity: selectedStudent ? 1 : 0.5,
+            transition: 'all 0.2s',
+          }}
+          title={
+            specialAuthDays > 1
+              ? `Autorização válida por ${specialAuthDays} dias (de ${formatShortDateBR(currentTodayStr)} até ${formatShortDateBR(addCalendarDays(currentTodayStr, Math.max(1, specialAuthDays) - 1))})`
+              : 'Quantidade de dias que esta autorização ficará válida'
+          }
+          >
+            <Calendar size={13} color="#d97706" style={{ flexShrink: 0 }} />
+            {!isCustomDays ? (
+              <select
+                value={SPECIAL_AUTH_PRESET_DAYS.some(d => d.value === specialAuthDays) ? String(specialAuthDays) : 'custom'}
+                onChange={e => {
+                  if (e.target.value === 'custom') {
+                    setIsCustomDays(true)
+                  } else {
+                    setSpecialAuthDays(Math.max(1, parseInt(e.target.value, 10) || 1))
+                  }
+                }}
+                disabled={!selectedStudent}
+                style={{
+                  border: 'none', background: 'transparent',
+                  fontSize: 11.5, fontWeight: 700, color: specialAuthDays > 1 ? '#b45309' : 'hsl(var(--text-primary))',
+                  outline: 'none', width: '100%', cursor: selectedStudent ? 'pointer' : 'not-allowed',
+                }}
+              >
+                {SPECIAL_AUTH_PRESET_DAYS.map(d => (
+                  <option key={d.value} value={String(d.value)}>{d.label}</option>
+                ))}
+                <option value="custom">Outro (digitar dias)...</option>
+              </select>
+            ) : (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4, width: '100%' }}>
+                <input
+                  type="number"
+                  min={1}
+                  max={365}
+                  value={specialAuthDays}
+                  onChange={e => {
+                    const val = parseInt(e.target.value, 10)
+                    setSpecialAuthDays(isNaN(val) ? 1 : Math.max(1, Math.min(365, val)))
+                  }}
+                  disabled={!selectedStudent}
+                  style={{
+                    border: 'none', background: 'transparent',
+                    fontSize: 12, fontWeight: 800, color: '#b45309',
+                    outline: 'none', width: 42, padding: 0,
+                  }}
+                />
+                <span style={{ fontSize: 10.5, fontWeight: 700, color: '#d97706', whiteSpace: 'nowrap' }}>
+                  {specialAuthDays === 1 ? 'dia' : 'dias'}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsCustomDays(false)
+                    if (!SPECIAL_AUTH_PRESET_DAYS.some(d => d.value === specialAuthDays)) {
+                      setSpecialAuthDays(7)
+                    }
+                  }}
+                  title="Voltar para lista de opções"
+                  style={{
+                    background: 'none', border: 'none', padding: 2, cursor: 'pointer',
+                    color: 'hsl(var(--text-muted))', display: 'flex', alignItems: 'center',
+                  }}
+                >
+                  <X size={11} />
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
@@ -2541,9 +2751,18 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
 
       {/* TIMELINE LOG OF TODAY'S RELEASES */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-        <div style={{ borderTop: '1px solid rgba(245,158,11,0.22)', paddingTop: 10, marginBottom: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontSize: 10, fontWeight: 900, color: '#d97706', textTransform: 'uppercase', letterSpacing: '0.05em' }}>⚡ Lançados Hoje</span>
-          <span style={{ fontSize: 9, color: 'hsl(var(--text-muted))', fontWeight: 600 }}>{launches.length} total</span>
+        <div style={{ borderTop: '1px solid rgba(245,158,11,0.22)', paddingTop: 10, marginBottom: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 10, fontWeight: 900, color: '#d97706', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            ⚡ Autorizações Ativas Hoje ({formatShortDateBR(currentTodayStr)})
+          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {launches.some(l => l.confirmedOut) && (
+              <span style={{ fontSize: 9, color: '#10b981', fontWeight: 800 }}>
+                {launches.filter(l => l.confirmedOut).length} confirmada(s) hoje
+              </span>
+            )}
+            <span style={{ fontSize: 9, color: 'hsl(var(--text-muted))', fontWeight: 600 }}>{launches.length} total</span>
+          </div>
         </div>
 
         <div style={{
@@ -2559,19 +2778,26 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
             <div
               key={l.id}
               style={{
-                background: l.confirmedOut ? 'rgba(16,185,129,0.08)' : 'hsl(var(--bg-surface))', 
-                border: l.confirmedOut ? '1px solid rgba(16,185,129,0.3)' : '1px solid rgba(245,158,11,0.22)',
+                background: l.confirmedOut
+                  ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.16) 0%, rgba(5, 150, 105, 0.08) 100%)'
+                  : 'hsl(var(--bg-surface))', 
+                border: l.confirmedOut
+                  ? '1.5px solid rgba(16, 185, 129, 0.55)'
+                  : '1px solid rgba(245, 158, 11, 0.22)',
                 borderRadius: 12, padding: '8px 10px', display: 'flex', alignItems: 'center', gap: 8,
-                boxShadow: 'var(--shadow-sm)',
+                boxShadow: l.confirmedOut
+                  ? '0 4px 12px rgba(16, 185, 129, 0.14)'
+                  : 'var(--shadow-sm)',
                 transition: 'all 0.3s',
                 minWidth: 0,
               }}
             >
               <div style={{
                 width: 28, height: 28, borderRadius: 6, overflow: 'hidden',
-                background: l.confirmedOut ? 'rgba(16,185,129,0.2)' : 'rgba(245,158,11,0.12)', 
+                background: l.confirmedOut ? 'rgba(16,185,129,0.22)' : 'rgba(245,158,11,0.12)', 
+                border: l.confirmedOut ? '1.5px solid #10b981' : 'none',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 10, fontWeight: 900, color: l.confirmedOut ? '#10b981' : '#f59e0b', flexShrink: 0,
+                fontSize: 10, fontWeight: 900, color: l.confirmedOut ? '#059669' : '#f59e0b', flexShrink: 0,
               }}>
                 {l.studentPhoto ? (
                   // eslint-disable-next-line @next/next/no-img-element
@@ -2581,13 +2807,24 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
                 )}
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 800, fontSize: 11, color: 'hsl(var(--text-primary))', lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {l.studentName}
+                <div style={{
+                  fontWeight: 800,
+                  fontSize: 11,
+                  color: l.confirmedOut ? '#065f46' : 'hsl(var(--text-primary))',
+                  lineHeight: 1.2,
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 4,
+                }}>
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{l.studentName}</span>
                 </div>
-                <div style={{ fontSize: 9, color: 'hsl(var(--text-muted))', marginTop: 1, lineHeight: 1.35, wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
-                  retirado por: <span style={{ color: l.confirmedOut ? '#10b981' : '#d97706', fontWeight: 700 }}>{l.authorizedPerson}</span>
+                <div style={{ fontSize: 9, color: l.confirmedOut ? '#047857' : 'hsl(var(--text-muted))', marginTop: 1, lineHeight: 1.35, wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
+                  retirado por: <span style={{ color: l.confirmedOut ? '#059669' : '#d97706', fontWeight: 800 }}>{l.authorizedPerson}</span>
                 </div>
-                {/* ── Horário Inserido na Autorização (Prominente & Ultra Moderno) ── */}
+                {/* ── Horário Inserido & Validade de Dias na Autorização ── */}
                 <div style={{ marginTop: 2.5, marginBottom: 1, display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
                   {l.targetTime && l.targetTime !== 'Indefinido' ? (
                     <span style={{
@@ -2598,13 +2835,16 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
                       fontWeight: 900,
                       padding: '1.5px 7px',
                       borderRadius: 6,
-                      background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.22), rgba(217, 119, 6, 0.14))',
-                      color: '#b45309',
-                      border: '1px solid rgba(245, 158, 11, 0.4)',
-                      boxShadow: '0 1px 3px rgba(245, 158, 11, 0.12)',
+                      background: l.confirmedOut
+                        ? 'rgba(16, 185, 129, 0.18)'
+                        : 'linear-gradient(135deg, rgba(245, 158, 11, 0.22), rgba(217, 119, 6, 0.14))',
+                      color: l.confirmedOut ? '#047857' : '#b45309',
+                      border: l.confirmedOut
+                        ? '1px solid rgba(16, 185, 129, 0.35)'
+                        : '1px solid rgba(245, 158, 11, 0.4)',
                       letterSpacing: '0.02em',
                     }}>
-                      <Clock size={9.5} strokeWidth={2.5} color="#d97706" />
+                      <Clock size={9.5} strokeWidth={2.5} color={l.confirmedOut ? '#059669' : '#d97706'} />
                       <span>Horário: <strong>{l.targetTime}</strong></span>
                     </span>
                   ) : (
@@ -2616,24 +2856,68 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
                       fontWeight: 800,
                       padding: '1.5px 6.5px',
                       borderRadius: 6,
-                      background: 'rgba(100, 116, 139, 0.12)',
-                      color: '#475569',
-                      border: '1px solid rgba(100, 116, 139, 0.22)',
+                      background: l.confirmedOut ? 'rgba(16, 185, 129, 0.14)' : 'rgba(100, 116, 139, 0.12)',
+                      color: l.confirmedOut ? '#047857' : '#475569',
+                      border: l.confirmedOut ? '1px solid rgba(16, 185, 129, 0.28)' : '1px solid rgba(100, 116, 139, 0.22)',
                       letterSpacing: '0.01em',
                     }}>
-                      <Clock size={9.5} strokeWidth={2.4} color="#64748b" />
+                      <Clock size={9.5} strokeWidth={2.4} color={l.confirmedOut ? '#059669' : '#64748b'} />
                       <span>Horário: <strong>Indefinido</strong></span>
                     </span>
                   )}
+
+                  {/* Badge de Validade em Dias */}
+                  {l.validDays > 1 ? (
+                    <span
+                      title={`Autorização válida por ${l.validDays} dias: de ${formatShortDateBR(l.validFrom)} até ${formatShortDateBR(l.validUntil)} (Hoje: Dia ${l.dayIndex} de ${l.validDays})`}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 3.5,
+                        fontSize: 8.5,
+                        fontWeight: 900,
+                        padding: '1.5px 6.5px',
+                        borderRadius: 6,
+                        background: l.confirmedOut
+                          ? 'rgba(16, 185, 129, 0.18)'
+                          : 'rgba(59, 130, 246, 0.12)',
+                        color: l.confirmedOut ? '#047857' : '#1d4ed8',
+                        border: l.confirmedOut
+                          ? '1px solid rgba(16, 185, 129, 0.35)'
+                          : '1px solid rgba(59, 130, 246, 0.3)',
+                        letterSpacing: '0.01em',
+                      }}
+                    >
+                      <Calendar size={9} strokeWidth={2.5} color={l.confirmedOut ? '#059669' : '#2563eb'} />
+                      <span>
+                        {l.validDays} dias · Dia {l.dayIndex}/{l.validDays} (até {formatShortDateBR(l.validUntil)})
+                      </span>
+                    </span>
+                  ) : null}
                 </div>
-                <div style={{ fontSize: 8.5, color: 'hsl(var(--text-muted))', marginTop: 2, display: 'flex', gap: 4, fontWeight: 500, flexWrap: 'wrap' }}>
+                <div style={{ fontSize: 8.5, color: l.confirmedOut ? '#047857' : 'hsl(var(--text-muted))', marginTop: 2, display: 'flex', gap: 4, fontWeight: 500, flexWrap: 'wrap' }}>
                   <span>{l.time}</span>
                   <span>·</span>
-                  <span title={l.loggedBy}>por: <span style={{ color: 'hsl(var(--text-secondary))', fontWeight: 700 }}>{formatFirstAndSecondName(l.loggedBy)}</span></span>
+                  <span title={l.loggedBy}>por: <span style={{ color: l.confirmedOut ? '#065f46' : 'hsl(var(--text-secondary))', fontWeight: 700 }}>{formatFirstAndSecondName(l.loggedBy)}</span></span>
                 </div>
                 {l.confirmedOut && (
-                  <div style={{ fontSize: 8.5, color: '#10b981', fontWeight: 800, marginTop: 3, display: 'flex', alignItems: 'center', gap: 3, flexWrap: 'wrap', wordBreak: 'break-word' }}>
-                    <CheckCircle2 size={10} style={{ flexShrink: 0 }} /> Confirmada saída às {l.confirmedAt}
+                  <div style={{
+                    fontSize: 9,
+                    color: '#047857',
+                    background: 'rgba(16, 185, 129, 0.2)',
+                    border: '1px solid rgba(16, 185, 129, 0.38)',
+                    borderRadius: 6,
+                    padding: '2px 6px',
+                    fontWeight: 900,
+                    marginTop: 4,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 4,
+                    flexWrap: 'wrap',
+                    wordBreak: 'break-word',
+                  }}>
+                    <CheckCircle2 size={10.5} style={{ flexShrink: 0, color: '#059669' }} />
+                    <span>Saída confirmada hoje{l.confirmedAt ? ` às ${l.confirmedAt}` : ''}</span>
                   </div>
                 )}
               </div>
@@ -2673,7 +2957,7 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
                               undefined,
                               l.studentPhoto,
                               false,
-                              l.targetTime
+                              l.targetTime || undefined
                             )
                             showToast(`Aluno ${l.studentName} chamado na TV!`, true)
                           }
@@ -2707,8 +2991,20 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
                       e.preventDefault();
                       e.stopPropagation();
                       if (l.confirmedOut) {
-                        showToast(`Saída de ${l.studentName} já foi confirmada!`, false)
+                        showToast(`Saída de ${l.studentName} já foi confirmada hoje!`, false)
                         return
+                      }
+                      const nowIso = new Date().toISOString()
+                      const existingEntry = seenSpecialAuthsRef.current.get(l.id)
+                      if (existingEntry) {
+                        const nextDates = { ...(existingEntry.confirmedDates || {}), [currentTodayStr]: nowIso }
+                        seenSpecialAuthsRef.current.set(l.id, {
+                          ...existingEntry,
+                          confirmedDates: nextDates,
+                          confirmedOut: true,
+                          confirmedAt: nowIso,
+                        })
+                        setSeenSpecialAuthsVersion(v => v + 1)
                       }
                       confirmSpecialExit(
                         l.studentId,
@@ -2716,20 +3012,20 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
                         l.studentClass,
                         l.authorizedPerson,
                         l.studentPhoto,
-                        l.targetTime
+                        l.targetTime || undefined
                       )
-                      showToast(`Saída de ${l.studentName} confirmada!`, true)
+                      showToast(`Saída de ${l.studentName} confirmada hoje!`, true)
                     }}
                     disabled={l.confirmedOut}
-                    title={l.confirmedOut ? `Saída confirmada às ${l.confirmedAt}` : "Confirmar Saída do Aluno"}
+                    title={l.confirmedOut ? `Saída confirmada hoje às ${l.confirmedAt}` : "Confirmar Saída do Aluno Hoje"}
                     style={{
-                      background: l.confirmedOut ? 'rgba(16,185,129,0.2)' : 'rgba(16,185,129,0.12)',
+                      background: l.confirmedOut ? '#10b981' : 'rgba(16,185,129,0.12)',
                       border: 'none',
                       cursor: l.confirmedOut ? 'default' : 'pointer',
                       borderRadius: 6, width: 26, height: 24,
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      color: '#10b981', transition: 'all 0.2s', flexShrink: 0,
-                      opacity: l.confirmedOut ? 0.7 : 1,
+                      color: l.confirmedOut ? '#fff' : '#10b981', transition: 'all 0.2s', flexShrink: 0,
+                      boxShadow: l.confirmedOut ? '0 2px 6px rgba(16,185,129,0.35)' : 'none',
                     }}
                     onMouseEnter={e => {
                       if (l.confirmedOut) return

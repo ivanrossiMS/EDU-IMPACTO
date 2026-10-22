@@ -17,6 +17,9 @@ import { isAlunoCursandoTurma } from '@/lib/studentTurmaUtils'
 import { parseNotaValor, calcularDiagnosticoPedagogico, arredondarMediaImpacto, calcularMediaAnualDisciplina, type DiagnosticoPedagogico } from '@/lib/notasEngine'
 import { useCollaboratorTurmas } from '../hooks/useCollaboratorTurmas'
 import { TurmaDropdown } from '../components/TurmaDropdown'
+import { BoletimImageModal } from '../../components/BoletimImageModal'
+import { generateBoletimImage, type GeneratedBoletimImage } from '../../components/boletimImageGenerator'
+import { toast } from 'sonner'
 
 function getBimestreNumber(val: any): number {
   if (!val) return 0
@@ -725,6 +728,69 @@ export default function ColaboradorNotasPage() {
   }, [modalDisciplinas, modalMediaGlobal, modalDisciplinasAbaixo])
 
   const isModalMediaAcima = modalMediaGlobal >= 7.0
+
+  const [boletimImageModalOpen, setBoletimImageModalOpen] = useState(false)
+  const [boletimImageData, setBoletimImageData] = useState<GeneratedBoletimImage | null>(null)
+  const [isGeneratingBoletimImage, setIsGeneratingBoletimImage] = useState(false)
+
+  const handleExportModalBoletim = async () => {
+    const isMobile =
+      typeof window !== 'undefined' &&
+      (window.innerWidth <= 768 ||
+        window.matchMedia?.('(max-width: 768px)').matches ||
+        /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile/i.test(navigator.userAgent || '') ||
+        Boolean((window as any).Capacitor?.isNativePlatform?.()))
+
+    if (!isMobile) {
+      window.print()
+      return
+    }
+
+    if (!selectedStudentForModal) return
+
+    if (isMediaAnual && modalDisciplinasAnuais.length === 0) {
+      toast.error('Não há notas lançadas para gerar a imagem da média anual.')
+      return
+    }
+    if (!isMediaAnual && (!currentModalBoletim || modalDisciplinas.length === 0)) {
+      toast.error('Não há notas neste bimestre para gerar a imagem do boletim.')
+      return
+    }
+
+    setBoletimImageModalOpen(true)
+    setIsGeneratingBoletimImage(true)
+
+    try {
+      const turmaStr = String(currentModalBoletim?.nomeTurma || selectedStudentForModal.turmaDisplay || 'Turma')
+      const anoStr = String(modalAno || selectedAno || new Date().getFullYear())
+      const generated = await generateBoletimImage({
+        aluno: {
+          id: selectedStudentForModal.id,
+          nome: selectedStudentForModal.nome,
+          foto: selectedStudentForModal.foto || selectedStudentForModal.avatar_url || selectedStudentForModal.avatar,
+          matricula: selectedStudentForModal.matricula || selectedStudentForModal.codigo,
+        },
+        turmaNome: turmaStr,
+        anoLetivo: anoStr,
+        isMediaAnual,
+        periodoTitulo: isMediaAnual
+          ? 'Média Anual'
+          : (currentModalBoletim?.originalTitle || currentModalTab?.fullLabel || 'Boletim'),
+        totalBimestresLancados,
+        mediaGlobal: isMediaAnual ? modalMediaGlobalAnual : modalMediaGlobal,
+        diagnostico: isMediaAnual ? modalDiagnosticoAnual : modalDiagnostico,
+        disciplinasBimestre: modalDisciplinas,
+        disciplinasAnuais: modalDisciplinasAnuais,
+      })
+      setBoletimImageData(generated)
+    } catch (err) {
+      console.error('Erro ao gerar imagem do boletim:', err)
+      toast.error('Erro ao preparar a imagem do boletim. Tente novamente.')
+      setBoletimImageModalOpen(false)
+    } finally {
+      setIsGeneratingBoletimImage(false)
+    }
+  }
 
   return (
     <div className="notas-page-container" style={{ padding: '24px 20px 100px 20px', minHeight: '100vh', background: 'transparent', fontFamily: 'Outfit, Inter, sans-serif' }}>
@@ -1455,7 +1521,9 @@ export default function ColaboradorNotasPage() {
 
                 <div className="notas-modal-header-actions" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <button
-                    onClick={() => window.print()}
+                    type="button"
+                    onClick={handleExportModalBoletim}
+                    disabled={isGeneratingBoletimImage}
                     style={{
                       display: 'flex',
                       alignItems: 'center',
@@ -1467,9 +1535,9 @@ export default function ColaboradorNotasPage() {
                       fontSize: 13,
                       fontWeight: 700,
                       color: '#475569',
-                      cursor: 'pointer'
+                      cursor: isGeneratingBoletimImage ? 'wait' : 'pointer'
                     }}
-                    title="Imprimir Boletim"
+                    title="Salvar ou Imprimir Boletim"
                   >
                     <Printer size={16} color="#2563eb" />
                     <span className="hide-on-mobile">Imprimir</span>
@@ -2708,6 +2776,13 @@ export default function ColaboradorNotasPage() {
           }
         }
       `}} />
+
+      <BoletimImageModal
+        isOpen={boletimImageModalOpen}
+        onClose={() => setBoletimImageModalOpen(false)}
+        imageData={boletimImageData}
+        isGenerating={isGeneratingBoletimImage}
+      />
     </div>
   )
 }
