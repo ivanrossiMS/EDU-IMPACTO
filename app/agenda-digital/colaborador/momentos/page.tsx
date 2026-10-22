@@ -18,6 +18,7 @@ import { apiFetch } from '@/lib/api/apiClient'
 import { compressImage, compressVideo, formatFileSize, extractVideoThumbnail, thumbnailDataUrlToFile } from '@/lib/mediaCompressor'
 import { DestinatariosModal } from '@/components/agenda/DestinatariosModal'
 import { MomentoVideoPlayer } from '@/components/agenda/MomentoVideoPlayer'
+import { resolveMomentoRecipientGroups, formatMomentoTargetLabel, ResolvedMomentoGroup } from '@/components/agenda/MomentoPostCard'
 
 import { useQueryClient } from '@tanstack/react-query'
 import { useAgendaRealtime } from '@/hooks/useAgendaRealtime'
@@ -144,6 +145,8 @@ export default function ADMomentosPage() {
   const [commentInputs, setCommentInputs] = useState<Record<string, string>>({})
   const [currentMediaIndex, setCurrentMediaIndex] = useState<Record<string, number>>({})
   const [isDeleting, setIsDeleting] = useState<string | null>(null)
+  const [activeTargetsGroups, setActiveTargetsGroups] = useState<ResolvedMomentoGroup[] | null>(null)
+  const [expandedTargetGroups, setExpandedTargetGroups] = useState<Record<string, boolean>>({})
 
   // Suporte a swipe nos cards da timeline
   const touchStartMapRef = useRef<Record<string, { x: number; y: number }>>({})
@@ -1834,34 +1837,43 @@ export default function ADMomentosPage() {
                     </div>
                     <div style={{ minWidth: 0 }}>
                       <div style={{ fontSize: 14, fontWeight: 700, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.author}</div>
-                      <div style={{ fontSize: 11, color: '#64748b', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '340px' }}>
+                      <div style={{ fontSize: 11, color: '#64748b', fontWeight: 500, display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap', maxWidth: '340px' }}>
                         {(() => {
-                          const hasAlunos = m.alunosIds && m.alunosIds.length > 0;
-                          const label = (() => {
-                            if (hasAlunos) {
-                              const names = m.alunosNomes || [];
-                              if (names.length > 0) {
-                                if (names.length > 2) return `${names.length} Alunos`;
-                                return names.join(', ');
-                              }
-                              return `${m.alunosIds?.length || 0} Aluno(s)`;
-                            }
-                            const classes = m.targetClasses || [];
-                            if (classes.some((c: string) => c.toLowerCase() === 'todos' || c.toLowerCase() === 'toda a escola' || c.toLowerCase() === 'todas')) return 'Toda a Escola';
-                            const classNames = classes.map((c: string) => {
-                              const turmaMatch = turmas.find((t: any) => String(t.id) === String(c) || String(t.codigo) === String(c) || String(t.nome).trim().toLowerCase() === String(c).trim().toLowerCase());
-                              if (turmaMatch) return turmaMatch.nome;
-                              const equipeMatch = equipeEscolarGrupos.find(eg => eg.id === c || eg.nome.toLowerCase() === c.toLowerCase());
-                              if (equipeMatch) return `${equipeMatch.nome} (Equipe)`;
-                              return c;
-                            });
-                            if (classNames.length > 2) return `${classNames.length} Destinos`;
-                            return classNames.join(', ');
-                          })()
-                          const hasTurmaMatch = (m.targetClasses || []).some((c: string) => turmas.some((t: any) => String(t.id) === String(c) || String(t.codigo) === String(c) || String(t.nome).trim().toLowerCase() === String(c).trim().toLowerCase()));
-                          const isEquipeOnly = !hasAlunos && !hasTurmaMatch && (m.targetClasses || []).some((c: string) => equipeEscolarGrupos.some(eg => eg.id === c || eg.nome.toLowerCase() === c.toLowerCase()));
-                          return `${hasAlunos ? 'Alunos' : (isEquipeOnly ? 'Equipe' : 'Turma')}: ${label}`;
-                        })()} • {displayTime}
+                          const { isAllSchool, groups: resolvedGroups } = resolveMomentoRecipientGroups(m, turmas, chatGroups, alunos || []);
+                          const label = formatMomentoTargetLabel(isAllSchool, resolvedGroups);
+                          const isClickable = !isAllSchool && resolvedGroups.length > 0;
+                          return (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (!isClickable) return;
+                                setExpandedTargetGroups({});
+                                setActiveTargetsGroups(resolvedGroups);
+                              }}
+                              style={{
+                                background: isClickable ? '#eef2ff' : 'transparent',
+                                border: isClickable ? '1px solid #e0e7ff' : 'none',
+                                borderRadius: 6,
+                                padding: isClickable ? '1px 7px' : 0,
+                                margin: 0,
+                                color: isClickable ? '#4f46e5' : '#64748b',
+                                fontSize: 11,
+                                fontWeight: 600,
+                                cursor: isClickable ? 'pointer' : 'default',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 3,
+                                fontFamily: 'inherit',
+                                maxWidth: 220,
+                              }}
+                              title={isClickable ? 'Clique para ver as turmas/grupos e alunos destinatários' : ''}
+                            >
+                              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
+                              {isClickable && <ChevronDown size={11} style={{ flexShrink: 0 }} />}
+                            </button>
+                          );
+                        })()}
+                        <span>• {displayTime}</span>
                       </div>
                     </div>
                     {/* Delete Button (ultra modern) */}
@@ -2122,6 +2134,125 @@ export default function ADMomentosPage() {
           </div>
         )}
       </div>
+
+      {/* MODAL: GRUPOS / TURMAS DESTINATÁRIOS COM EXPANSÃO DE ALUNOS */}
+      {isMounted && activeTargetsGroups && (
+        <ClientPortal>
+          <div
+            onClick={() => setActiveTargetsGroups(null)}
+            style={{
+              position: 'fixed',
+              inset: 0,
+              background: 'rgba(15, 23, 42, 0.55)',
+              backdropFilter: 'blur(4px)',
+              zIndex: 9999,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: 20,
+            }}
+          >
+            <div
+              onClick={e => e.stopPropagation()}
+              style={{
+                background: '#ffffff',
+                borderRadius: 20,
+                padding: 24,
+                width: '100%',
+                maxWidth: 460,
+                border: '1px solid #e2e8f0',
+                boxShadow: '0 24px 60px rgba(15, 23, 42, 0.2)',
+                display: 'flex',
+                flexDirection: 'column',
+                maxHeight: '82vh',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16, gap: 12 }}>
+                <div>
+                  <h3 style={{ margin: 0, color: '#0f172a', fontSize: 16, fontWeight: 800 }}>
+                    Grupos / Turmas Selecionados
+                  </h3>
+                  <p style={{ margin: '4px 0 0', color: '#64748b', fontSize: 12 }}>
+                    {activeTargetsGroups.length}{' '}
+                    {activeTargetsGroups.length === 1 ? 'grupo/turma neste momento' : 'grupos/turmas neste momento'} • Clique na turma para ver os alunos
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setActiveTargetsGroups(null)}
+                  style={{ background: '#f1f5f9', border: 'none', borderRadius: 8, padding: 8, cursor: 'pointer', color: '#64748b', display: 'flex' }}
+                >
+                  <X size={16} />
+                </button>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, overflowY: 'auto', paddingRight: 2 }}>
+                {activeTargetsGroups.map((group, i) => {
+                  const isExpanded = !!expandedTargetGroups[group.name];
+                  return (
+                    <div
+                      key={`${group.name}_${i}`}
+                      style={{
+                        borderRadius: 12,
+                        border: isExpanded ? '1.5px solid #818cf8' : '1px solid #e2e8f0',
+                        background: '#ffffff',
+                        overflow: 'hidden',
+                      }}
+                    >
+                      <button
+                        type="button"
+                        aria-expanded={isExpanded}
+                        onClick={() => setExpandedTargetGroups(prev => ({ ...prev, [group.name]: !prev[group.name] }))}
+                        style={{
+                          width: '100%',
+                          padding: '12px 14px',
+                          background: isExpanded ? '#eef2ff' : '#f8fafc',
+                          border: 'none',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          gap: 10,
+                          textAlign: 'left',
+                          fontFamily: 'inherit',
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: 1 }}>
+                          <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#6366f1', flexShrink: 0 }} />
+                          <span style={{ color: isExpanded ? '#312e81' : '#1e293b', fontSize: 13.5, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {group.name}
+                          </span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                          <span style={{ fontSize: 11, fontWeight: 600, color: '#4f46e5', background: isExpanded ? '#ffffff' : '#eef2ff', border: '1px solid #e0e7ff', padding: '2px 8px', borderRadius: 999 }}>
+                            {group.students.length} aluno{group.students.length !== 1 ? 's' : ''}
+                          </span>
+                          {isExpanded ? <ChevronUp size={16} color="#4f46e5" /> : <ChevronDown size={16} color="#64748b" />}
+                        </div>
+                      </button>
+                      {isExpanded && (
+                        <div style={{ borderTop: '1px solid #e2e8f0', padding: '10px 12px', background: '#ffffff', display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 240, overflowY: 'auto' }}>
+                          {group.students.length > 0 ? (
+                            group.students.map((studentName, sIdx) => (
+                              <div key={sIdx} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderRadius: 8, background: '#f8fafc', border: '1px solid #f1f5f9' }}>
+                                <span style={{ color: '#4f46e5', fontSize: 11, fontWeight: 700, minWidth: 18 }}>{sIdx + 1}.</span>
+                                <span style={{ color: '#334155', fontSize: 12.5, fontWeight: 500 }}>{studentName}</span>
+                              </div>
+                            ))
+                          ) : (
+                            <div style={{ color: '#94a3b8', fontSize: 12, textAlign: 'center', padding: '8px 0' }}>
+                              Nenhum aluno listado nesta turma.
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </ClientPortal>
+      )}
 
       {/* LIGHTBOX / GALLERY MODAL COM SUPORTE A ZOOM */}
       <MomentoLightbox

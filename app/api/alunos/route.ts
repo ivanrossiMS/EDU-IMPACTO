@@ -1305,15 +1305,26 @@ export async function POST(request: Request) {
       const { data: configData } = await supabase.from('configuracoes').select('valor').eq('chave', 'ad_config').maybeSingle()
       if (configData && configData.valor?.saudacao?.ativa) {
         const saudacao = configData.valor.saudacao;
-        const msg = (saudacao.mensagem || '')
-          .replace(/{nome_aluno}/g, savedStudent.nome)
-          .replace(/{nome_responsavel}/g, responsaveis[0]?.nome || 'Família')
+        const nomeAlunoStr = savedStudent.nome || 'Aluno(a)';
+        const nomeRespStr = responsaveis[0]?.nome || 'Família';
+        const turmaStr = savedStudent.turma || 'sua turma';
+        const anoStr = savedStudent.anoLetivo || new Date().getFullYear().toString();
+
+        const replaceVars = (str: string) =>
+          (str || '')
+            .replace(/{nome_aluno}/g, nomeAlunoStr)
+            .replace(/{nome_responsavel}/g, nomeRespStr)
+            .replace(/{turma}/g, turmaStr)
+            .replace(/{ano_letivo}/g, anoStr);
+
+        const msg = replaceVars(saudacao.mensagem || '');
+        const tituloFinal = replaceVars(saudacao.titulo || 'Mensagem de Boas-vindas');
         
         const anexos = saudacao.imagemUrl ? [{ type: 'image', url: saudacao.imagemUrl, nome: 'boas-vindas.jpg' }] : [];
         const novoId = `COM-${Date.now()}-${Math.random().toString(36).slice(2,6)}`;
         
         let autorNome = 'Ivan Rossi'
-        let autorCargo = 'Diretor Geral'
+        let autorCargo = saudacao.autorCargo || 'Diretor Geral'
         let autorFoto = 'https://github.com/ivanrossi.png'
         
         try {
@@ -1321,29 +1332,34 @@ export async function POST(request: Request) {
           const { data: masterData } = await supabaseAdmin.from('system_users').select('nome, cargo, dados').eq('email', 'direcao@colegioimpacto.net').maybeSingle()
           if (masterData) {
             if (masterData.nome) autorNome = masterData.nome
-            if (masterData.cargo) autorCargo = masterData.cargo
+            if (!saudacao.autorCargo && masterData.cargo) autorCargo = masterData.cargo
             if (masterData.dados?.foto) autorFoto = masterData.dados.foto
           }
         } catch(e) {
           console.error('[Saudacao] Erro ao buscar foto do master', e)
         }
 
+        const isFixado = saudacao.fixado !== undefined ? Boolean(saudacao.fixado) : true;
+        const exigeCiencia = Boolean(saudacao.exigeCiencia);
+        const permiteResposta = saudacao.permiteResposta !== undefined ? Boolean(saudacao.permiteResposta) : true;
+        const prioridade = saudacao.prioridade || 'normal';
+
         await supabase.from('comunicados').insert({
           id: novoId,
-          titulo: saudacao.titulo || 'Mensagem de Boas-vindas',
+          titulo: tituloFinal,
           texto: msg,
           autor: autorNome,
           data: new Date().toISOString(),
           destino: 'selecionados',
-          fixado: true,
+          fixado: isFixado,
           dados: {
             autorFoto: autorFoto,
             autorCargo: autorCargo,
             tipo: saudacao.imagemUrl ? 'arquivo' : 'texto',
             status: 'enviado',
-            prioridade: 'normal',
-            permiteResposta: true,
-            exigeCiencia: false,
+            prioridade: prioridade,
+            permiteResposta: permiteResposta,
+            exigeCiencia: exigeCiencia,
             alunosIds: [savedStudent.id],
             turmas: [],
             leituras: {},

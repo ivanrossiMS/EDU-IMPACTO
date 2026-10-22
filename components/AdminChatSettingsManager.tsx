@@ -205,7 +205,29 @@ export function AdminChatSettingsManager({
   ]
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+    <div className="ad-chat-settings-root" style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+      <style dangerouslySetInnerHTML={{__html: `
+        @media (max-width: 768px) {
+          .ad-chat-settings-root .ad-ajustes-card-header {
+            padding: 18px 16px !important;
+          }
+          .ad-chat-settings-root .ad-ajustes-card-body {
+            padding: 16px !important;
+            gap: 18px !important;
+          }
+          .ad-chat-settings-root select,
+          .ad-chat-settings-root input[type="time"],
+          .ad-chat-settings-root textarea {
+            font-size: 16px !important;
+            min-height: 48px !important;
+          }
+          .ad-chat-settings-save-btn {
+            width: 100% !important;
+            justify-content: center !important;
+            min-height: 48px !important;
+          }
+        }
+      `}} />
       {/* ── CARD HEADER ── */}
       <div className="ad-ajustes-card-header" style={{ padding: '24px 32px', borderBottom: '1px solid hsl(var(--border-subtle))' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
@@ -947,6 +969,7 @@ export function AdminChatSettingsManager({
         <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: 10 }}>
           <button
             type="button"
+            className="ad-chat-settings-save-btn"
             onClick={handleSaveSettings}
             disabled={isSaving}
             style={{

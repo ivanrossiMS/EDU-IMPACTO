@@ -602,13 +602,15 @@ export default function ADAdminMomentos() {
       </div>
 
       {/* === GRID === */}
-      <div className="ad-momentos-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 24 }}>
+      <div className="ad-momentos-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(290px, 1fr))', gap: 20, alignItems: 'stretch' }}>
         {pagedFeed.map((post, i) => (
           <MomentoPostCard
             key={post.id}
             post={post}
             index={(page - 1) * PAGE_SIZE + i}
             onDelete={id => handleDelete(id)}
+            alunos={alunos}
+            turmas={turmas}
           />
         ))}
       </div>

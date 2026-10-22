@@ -62,7 +62,7 @@ export default function AgendaDigitalLayout({ children }: { children: React.Reac
 }
 
 function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
-  const { bannerUrl, adLoading, isLoaded, pageLoading, pageLoadingLabel } = useAgendaDigital()
+  const { bannerUrl, adLoading, isLoaded, pageLoading, pageLoadingLabel, adConfig } = useAgendaDigital()
   const { currentUser, hydrated, loadingPath, setLoadingPath, moduleTransition } = useApp()
   const { perfis, perfisLoading } = useData()
   const router = useRouter()
@@ -211,14 +211,33 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
     pageLoading && pageLoadingLabel ? pageLoadingLabel :
     'Carregando página e dados...'
 
+  const personalizacao = (adConfig as any)?.personalizacao || {}
+  const temaMesh = personalizacao.temaMesh || 'padrao'
+  const corPrimaria = personalizacao.corPrimaria || '#4f46e5'
+  const exibirBanner = personalizacao.exibirBanner !== false
+  const ajusteBanner = personalizacao.ajusteBanner || 'cover'
+  const alturaBanner = personalizacao.alturaBanner || 'padrao'
+  const bannerMaxHeightDesktop = alturaBanner === 'compacto' ? '240px' : alturaBanner === 'expandido' ? '440px' : '360px'
+
+  const meshMap: Record<string, string> = {
+    padrao: 'radial-gradient(ellipse at top right, rgba(216, 180, 254, 0.45) 0%, transparent 70%), radial-gradient(ellipse at bottom left, rgba(186, 230, 253, 0.45) 0%, transparent 70%)',
+    oceano: 'radial-gradient(ellipse at top right, rgba(147, 197, 253, 0.48) 0%, transparent 70%), radial-gradient(ellipse at bottom left, rgba(103, 232, 249, 0.42) 0%, transparent 70%)',
+    esmeralda: 'radial-gradient(ellipse at top right, rgba(110, 231, 183, 0.42) 0%, transparent 70%), radial-gradient(ellipse at bottom left, rgba(153, 246, 228, 0.42) 0%, transparent 70%)',
+    cosmos: 'radial-gradient(ellipse at top right, rgba(196, 181, 253, 0.5) 0%, transparent 70%), radial-gradient(ellipse at bottom left, rgba(249, 168, 212, 0.42) 0%, transparent 70%)',
+    solar: 'radial-gradient(ellipse at top right, rgba(253, 230, 138, 0.48) 0%, transparent 70%), radial-gradient(ellipse at bottom left, rgba(254, 215, 170, 0.45) 0%, transparent 70%)',
+    neutro: 'radial-gradient(ellipse at top right, rgba(226, 232, 240, 0.65) 0%, transparent 70%), radial-gradient(ellipse at bottom left, rgba(241, 245, 249, 0.65) 0%, transparent 70%)'
+  }
+  const activeMesh = meshMap[temaMesh] || meshMap.padrao
+
   return (
     <>
 
       <div className="agenda-digital-wrapper ad-mesh-bg" style={{ display: 'flex', height: '100dvh', width: '100vw', overflow: 'hidden' }}>
         <style dangerouslySetInnerHTML={{__html: `
           :root {
-            --ad-bg-mesh: radial-gradient(ellipse at top right, rgba(216, 180, 254, 0.45) 0%, transparent 70%), radial-gradient(ellipse at bottom left, rgba(186, 230, 253, 0.45) 0%, transparent 70%);
+            --ad-bg-mesh: ${activeMesh};
             --ad-bg-color: #ffffff;
+            --ad-accent-primary: ${corPrimaria};
           }
           .ad-mesh-bg {
             background-color: var(--ad-bg-color) !important;
@@ -268,7 +287,7 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
             overflow: hidden;
             aspect-ratio: 1600 / 400;
             min-height: 110px;
-            max-height: 360px;
+            max-height: ${bannerMaxHeightDesktop};
           }
 
           .ad-banner-global img,
@@ -278,8 +297,8 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
             height: 100%;
             aspect-ratio: 1600 / 400;
             min-height: 110px;
-            max-height: 360px;
-            object-fit: cover;
+            max-height: ${bannerMaxHeightDesktop};
+            object-fit: ${ajusteBanner};
             margin: 0;
             transform: translateZ(0);
             backface-visibility: hidden;
@@ -341,7 +360,7 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
               aspect-ratio: 1600 / 400 !important;
               min-height: 105px !important;
               max-height: 260px !important;
-              object-fit: cover !important;
+              object-fit: ${ajusteBanner} !important;
               margin: 0 !important;
             }
 
@@ -368,7 +387,7 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
 
         <div className="ad-main-scroll no-scrollbar">
           <div className="ad-mobile-status-bar" />
-          {bannerUrl ? (
+          {exibirBanner && bannerUrl ? (
             <div className="ad-banner-global">
               <img 
                 src={bannerUrl} 
@@ -379,11 +398,11 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
                 className="ad-banner-img"
               />
             </div>
-          ) : !isLoaded ? (
+          ) : exibirBanner && !isLoaded ? (
             <div className="ad-banner-global ad-banner-skeleton" />
           ) : null}
 
-          <main className={`ad-content-inner ${bannerUrl || !isLoaded ? 'ad-has-banner' : ''}`}>
+          <main className={`ad-content-inner ${exibirBanner && (bannerUrl || !isLoaded) ? 'ad-has-banner' : ''}`}>
             {children}
           </main>
 

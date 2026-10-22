@@ -230,43 +230,61 @@ export async function GET(request: Request) {
     });
   }
 
-  if (typeParam === 'comentarios_ids') {
+  const resolveCommentedComunicadoIds = async (): Promise<string[]> => {
     const { data: respRows, error: respErr } = await supabaseServer
       .from('comunicados_respostas')
       .select('comunicado_id');
 
-    if (respErr) {
-      return NextResponse.json({ error: respErr.message }, { status: 500 });
-    }
+    if (respErr || !respRows) return [];
 
-    const allRespComIds = Array.from(new Set((respRows || []).map((r: any) => r.comunicado_id).filter(Boolean)));
-    const directIds = allRespComIds.filter(id => !id.startsWith('AD-COM-REL-STU-'));
+    const allRespComIds = Array.from(new Set(respRows.map((r: any) => String(r.comunicado_id || '')).filter(Boolean)));
+    const rawDirectIds = allRespComIds.filter(id => !id.startsWith('AD-COM-REL-STU-'));
     const stuIds = allRespComIds.filter(id => id.startsWith('AD-COM-REL-STU-'));
 
-    const stuTimestamps = stuIds.map(id => {
-      const m = id.match(/AD-COM-REL-STU-(\d+)/);
-      return m ? parseInt(m[1], 10) : null;
-    }).filter((ts): ts is number => ts !== null);
+    const [directCheckRes, stuRowsRes, colabsRes] = await Promise.all([
+      rawDirectIds.length > 0
+        ? supabaseServer.from('comunicados').select('id').in('id', rawDirectIds)
+        : Promise.resolve({ data: [] as any[] }),
+      stuIds.length > 0
+        ? supabaseServer.from('comunicados').select('id, autor').in('id', stuIds)
+        : Promise.resolve({ data: [] as any[] }),
+      stuIds.length > 0
+        ? supabaseServer.from('comunicados').select('id, autor').like('id', 'AD-COM-REL-COLAB-%')
+        : Promise.resolve({ data: [] as any[] }),
+    ]);
 
-    let matchedColabs: string[] = [];
-    if (stuTimestamps.length > 0) {
-      const { data: colabs } = await supabaseServer
-        .from('comunicados')
-        .select('id')
-        .like('id', 'AD-COM-REL-COLAB-%');
+    const validDirectIds = (directCheckRes.data || []).map((r: any) => String(r.id));
+    const stuMetaList = (stuRowsRes.data || []).map((s: any) => {
+      const m = String(s.id).match(/AD-COM-REL-STU-(\d+)/);
+      return {
+        id: String(s.id),
+        ts: m ? parseInt(m[1], 10) : null,
+        autorNorm: normalizeText(s.autor || '')
+      };
+    }).filter(s => s.ts !== null) as { id: string; ts: number; autorNorm: string }[];
 
-      (colabs || []).forEach((c: any) => {
+    const matchedColabs: string[] = [];
+    if (stuMetaList.length > 0) {
+      (colabsRes.data || []).forEach((c: any) => {
         const m = String(c.id).match(/AD-COM-REL-COLAB-(\d+)/);
-        if (m) {
-          const colabTs = parseInt(m[1], 10);
-          if (stuTimestamps.some(ts => Math.abs(ts - colabTs) < 180000)) {
-            matchedColabs.push(String(c.id));
-          }
+        if (!m) return;
+        const colabTs = parseInt(m[1], 10);
+        const colabAutorNorm = normalizeText(c.autor || '');
+        const hasMatch = stuMetaList.some(stu => {
+          const sameAutor = Boolean(colabAutorNorm && stu.autorNorm && colabAutorNorm === stu.autorNorm);
+          return sameAutor && Math.abs(stu.ts - colabTs) < 15000;
+        });
+        if (hasMatch) {
+          matchedColabs.push(String(c.id));
         }
       });
     }
 
-    const allCommentedIds = Array.from(new Set([...directIds, ...matchedColabs]));
+    return Array.from(new Set([...validDirectIds, ...matchedColabs]));
+  };
+
+  if (typeParam === 'comentarios_ids') {
+    const allCommentedIds = await resolveCommentedComunicadoIds();
     return NextResponse.json({ ids: allCommentedIds }, {
       headers: {
         'Cache-Control': 'private, max-age=15, stale-while-revalidate=30'
@@ -364,7 +382,7 @@ export async function GET(request: Request) {
     }
   }
 
-  let query = supabase.from('comunicados').select('*');
+  let query = supabase.from('comunicados').select('*', { count: 'exact' });
 
   if (accessStartDate) {
     const adjustedStartDate = new Date(accessStartDate.getTime() - 60000); // 1 min buffer para clock skew
@@ -622,38 +640,7 @@ export async function GET(request: Request) {
 
   // Filtro por comentários/conversas
   if (temComentariosParam === 'true') {
-    const { data: respRows } = await supabaseServer
-      .from('comunicados_respostas')
-      .select('comunicado_id');
-
-    const allRespComIds = Array.from(new Set((respRows || []).map((r: any) => r.comunicado_id).filter(Boolean)));
-    const directIds = allRespComIds.filter(id => !id.startsWith('AD-COM-REL-STU-'));
-    const stuIds = allRespComIds.filter(id => id.startsWith('AD-COM-REL-STU-'));
-
-    const stuTimestamps = stuIds.map(id => {
-      const m = id.match(/AD-COM-REL-STU-(\d+)/);
-      return m ? parseInt(m[1], 10) : null;
-    }).filter((ts): ts is number => ts !== null);
-
-    let matchedColabs: string[] = [];
-    if (stuTimestamps.length > 0) {
-      const { data: colabs } = await supabaseServer
-        .from('comunicados')
-        .select('id')
-        .like('id', 'AD-COM-REL-COLAB-%');
-
-      (colabs || []).forEach((c: any) => {
-        const m = String(c.id).match(/AD-COM-REL-COLAB-(\d+)/);
-        if (m) {
-          const colabTs = parseInt(m[1], 10);
-          if (stuTimestamps.some(ts => Math.abs(ts - colabTs) < 180000)) {
-            matchedColabs.push(String(c.id));
-          }
-        }
-      });
-    }
-
-    const allCommentedIds = Array.from(new Set([...directIds, ...matchedColabs]));
+    const allCommentedIds = await resolveCommentedComunicadoIds();
     if (allCommentedIds.length > 0) {
       query = query.in('id', allCommentedIds);
     } else {
@@ -671,7 +658,7 @@ export async function GET(request: Request) {
      query = query.limit(30);
   }
 
-  let { data, error } = await query;
+  let { data, error, count } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
   // Blindagem rigorosa para comunicados do aluno:
@@ -729,6 +716,7 @@ export async function GET(request: Request) {
   let allReads: any[] = [];
   let allCiencias: any[] = [];
   let allRespostas: any[] = [];
+  const colabToStuIds = new Map<string, string[]>();
 
   if (itemIds.length > 0) {
      // 1. Identificar relatórios consolidados (COLAB / TURMA) que necessitam de agregação dos relatórios de alunos (STU)
@@ -740,8 +728,6 @@ export async function GET(request: Request) {
        )
      );
 
-     // Mapeamento em memória: colabId -> Set de stuIds
-     const colabToStuIds = new Map<string, string[]>();
      const uncachedColabs: any[] = [];
 
      if (colabs.length > 0) {
@@ -816,7 +802,7 @@ export async function GET(request: Request) {
              stuQuery = stuQuery.like('id', 'AD-COM-REL-STU-%');
            }
 
-           const { data: candidateStus } = await stuQuery.limit(500);
+           const { data: candidateStus } = await stuQuery.limit(1000);
 
            // Associar cada stu ao seu respectivo colab em memória (tempo de CPU < 1ms)
            for (const { colab, colabDados } of uncachedColabs) {
@@ -831,15 +817,17 @@ export async function GET(request: Request) {
                let tsMatches = false;
                if (sMatch && colabTs) {
                  const sTs = parseInt(sMatch[1], 10);
-                 if (!isNaN(sTs) && Math.abs(sTs - colabTs) < 120000) {
+                 if (!isNaN(sTs) && Math.abs(sTs - colabTs) < 15000) {
                    tsMatches = true;
                  }
                }
 
                const sAutorNorm = normalizeText(s.autor || '');
-               const autorMatches = Boolean(!colabTs && colabAutorNorm && sAutorNorm && colabAutorNorm === sAutorNorm);
+               const sameAutor = Boolean(!colabAutorNorm || !sAutorNorm || colabAutorNorm === sAutorNorm);
 
-               if (tsMatches || autorMatches) {
+               if (tsMatches && sameAutor) {
+                 matchedStuIds.push(String(s.id));
+               } else if (!colabTs && colabAutorNorm && sAutorNorm && colabAutorNorm === sAutorNorm) {
                  matchedStuIds.push(String(s.id));
                }
              });
@@ -858,17 +846,39 @@ export async function GET(request: Request) {
      colabToStuIds.forEach(ids => ids.forEach(id => allStuIdsSet.add(id)));
      const allStuIds = Array.from(allStuIdsSet);
 
-     // 2. BUSCA UNIFICADA: Consulta reads, ciencias e respostas para TODOS os comunicados e stus em UM ÚNICO Promise.all
+     // 2. BUSCA UNIFICADA EM LOTES (evita UND_ERR_HEADERS_OVERFLOW em páginas grandes de 30, 50 ou 100 itens)
      const combinedReadsAndRespostasIds = Array.from(new Set([...itemIds, ...allStuIds]));
+     const CHUNK_SIZE = 120;
+     const idChunks: string[][] = [];
+     for (let i = 0; i < combinedReadsAndRespostasIds.length; i += CHUNK_SIZE) {
+       idChunks.push(combinedReadsAndRespostasIds.slice(i, i + CHUNK_SIZE));
+     }
 
-     const [readsRes, cienciasRes, respostasRes] = await Promise.all([
-        supabaseServer.from('agenda_notification_reads').select('content_id, usuario_id, read_at, aluno_id').in('content_id', combinedReadsAndRespostasIds),
-        supabaseServer.from('agenda_ciencias').select('content_id, usuario_id, ciente_em, aluno_id').in('content_id', itemIds),
-        supabaseServer.from('comunicados_respostas').select('id, comunicado_id, remetente_id, remetente_nome, conteudo, anexos, is_admin, created_at').in('comunicado_id', combinedReadsAndRespostasIds).order('created_at', { ascending: true })
+     const [readsChunks, cienciasRes, respostasChunks] = await Promise.all([
+       Promise.all(
+         idChunks.map(chunk =>
+           supabaseServer
+             .from('agenda_notification_reads')
+             .select('content_id, usuario_id, read_at, aluno_id')
+             .in('content_id', chunk)
+         )
+       ),
+       supabaseServer.from('agenda_ciencias').select('content_id, usuario_id, ciente_em, aluno_id').in('content_id', itemIds),
+       Promise.all(
+         idChunks.map(chunk =>
+           supabaseServer
+             .from('comunicados_respostas')
+             .select('id, comunicado_id, remetente_id, remetente_nome, conteudo, anexos, is_admin, created_at')
+             .in('comunicado_id', chunk)
+             .order('created_at', { ascending: true })
+         )
+       )
      ]);
-     allReads = readsRes.data || [];
+     allReads = readsChunks.flatMap(r => r.data || []);
      allCiencias = cienciasRes.data || [];
-     allRespostas = respostasRes.data || [];
+     allRespostas = respostasChunks
+       .flatMap(r => r.data || [])
+       .sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
 
      // 3. Replicar leituras e respostas dos relatórios individuais (STU) para os seus respectivos consolidados (COLAB)
      if (colabToStuIds.size > 0) {
@@ -881,11 +891,13 @@ export async function GET(request: Request) {
 
          allReads.forEach(r => {
            if (stuIdSet.has(String(r.content_id))) {
+             const stuMatch = String(r.content_id).match(/AD-COM-REL-STU-\d+-([^-]+)-/);
+             const inferredAlunoId = r.aluno_id || (stuMatch ? stuMatch[1] : null);
              extraReads.push({
                content_id: colabId,
                usuario_id: r.usuario_id,
                read_at: r.read_at,
-               aluno_id: r.aluno_id
+               aluno_id: inferredAlunoId
              });
            }
          });
@@ -940,13 +952,71 @@ export async function GET(request: Request) {
      
      // Merge das novas tabelas sobre o que eventualmente já estava no JSON (fallback para históricos)
       const itemReads = allReads.filter(r => r.content_id === String(row.id));
+      const studentIdsReadByGuardian = new Set<string>();
+      const studentIdsReadByStudent = new Set<string>();
+      const readStudentIdsSet = new Set<string>();
+
       itemReads.forEach(r => {
-         const cleanUsuarioId = r.usuario_id ? r.usuario_id.split('#')[0] : r.usuario_id;
-         const key = r.aluno_id ? `${cleanUsuarioId}_${r.aluno_id}` : cleanUsuarioId;
-         merged.leituras[key] = r.read_at;
+         const rawUserParts = r.usuario_id ? String(r.usuario_id).split('#') : [''];
+         const cleanUsuarioId = rawUserParts[0] || '';
+         const hashAlunoId = rawUserParts[1] ? String(rawUserParts[1]).replace(/^(a_|_ALU|_)/i, '').trim() : '';
+         const cleanAlunoId = r.aluno_id
+           ? String(r.aluno_id).replace(/^(a_|_ALU|_)/i, '').trim()
+           : hashAlunoId;
+         const key = cleanAlunoId ? `${cleanUsuarioId}_${cleanAlunoId}` : cleanUsuarioId;
+         if (key) merged.leituras[key] = r.read_at;
          if (cleanUsuarioId) merged.leituras[cleanUsuarioId] = r.read_at;
-         if (r.aluno_id) merged.leituras[r.aluno_id] = r.read_at;
+
+         if (cleanAlunoId) {
+           readStudentIdsSet.add(cleanAlunoId);
+           if (cleanUsuarioId === cleanAlunoId || cleanUsuarioId === `aluno_${cleanAlunoId}`) {
+             studentIdsReadByStudent.add(cleanAlunoId);
+             merged.leituras[cleanAlunoId] = r.read_at;
+             merged.leituras[`${cleanAlunoId}_${cleanAlunoId}`] = r.read_at;
+           } else {
+             studentIdsReadByGuardian.add(cleanAlunoId);
+           }
+         }
       });
+
+      // Higienizar chaves legadas [alunoId] em dados.leituras que foram gravadas por leitura de responsável
+      // sem que o próprio aluno tenha aberto o comunicado
+      Object.keys(merged.leituras).forEach(k => {
+        if (k.includes('_')) {
+          const [prefix, suffix] = k.split('_');
+          const cleanSuffix = suffix ? String(suffix).replace(/^(a_|_ALU|_)/i, '').trim() : '';
+          if (cleanSuffix) readStudentIdsSet.add(cleanSuffix);
+          if (suffix && (prefix === suffix || prefix === 'aluno')) {
+            studentIdsReadByStudent.add(suffix);
+          } else if (suffix && prefix) {
+            studentIdsReadByGuardian.add(suffix);
+          }
+        }
+      });
+      studentIdsReadByGuardian.forEach(alId => {
+        if (!studentIdsReadByStudent.has(alId) && merged.leituras[alId]) {
+          delete merged.leituras[alId];
+        }
+      });
+
+      merged.leituras_alunos_ids = Array.from(readStudentIdsSet);
+
+      const resolvedColabStuIds = colabToStuIds.get(String(row.id));
+      if (resolvedColabStuIds && resolvedColabStuIds.length > 0) {
+        const extractedStuTargetIds = Array.from(
+          new Set(
+            resolvedColabStuIds
+              .map(sId => {
+                const m = String(sId).match(/AD-COM-REL-STU-\d+-([^-]+)-/);
+                return m ? String(m[1]).replace(/^(a_|_ALU|_)/i, '').trim() : '';
+              })
+              .filter(Boolean)
+          )
+        );
+        if (extractedStuTargetIds.length > 0) {
+          merged.stu_target_ids = extractedStuTargetIds;
+        }
+      }
 
       const itemCiencias = allCiencias.filter(c => c.content_id === String(row.id));
       itemCiencias.forEach(c => {
@@ -973,8 +1043,33 @@ export async function GET(request: Request) {
 
         if (temConversas) {
           ultimaRespostaAt = myThreadMessages[myThreadMessages.length - 1].created_at;
+          const isViewerStudent = Boolean(
+            user.user_metadata?.perfil === 'Aluno' ||
+            user.user_metadata?.cargo === 'Aluno' ||
+            (alunoMetaId && !responsavelParamId && user.user_metadata?.cargo !== 'Responsável')
+          );
+          const viewerReadKeys = new Set<string>(
+            isViewerStudent
+              ? [
+                  alunoMetaId,
+                  studentParamId,
+                  studentParamId ? `${studentParamId}_${studentParamId}` : '',
+                  studentParamId ? `aluno_${studentParamId}` : '',
+                  currentUserId,
+                  studentParamId && currentUserId ? `${currentUserId}_${studentParamId}` : ''
+                ].filter(Boolean)
+              : [
+                  responsavelParamId,
+                  studentParamId && responsavelParamId ? `${responsavelParamId}_${studentParamId}` : '',
+                  currentUserId,
+                  studentParamId && currentUserId ? `${currentUserId}_${studentParamId}` : '',
+                  userSlugMeta,
+                  studentParamId && userSlugMeta ? `${userSlugMeta}_${studentParamId}` : ''
+                ].filter(Boolean)
+          );
+
           let readTime = 0;
-          studentKeys.forEach(k => {
+          viewerReadKeys.forEach(k => {
             if (merged.leituras[k]) {
               const t = new Date(merged.leituras[k]).getTime();
               if (t > readTime) readTime = t;
@@ -987,7 +1082,7 @@ export async function GET(request: Request) {
           hasUnread = unreadCount > 0;
 
           if (hasUnread) {
-            studentKeys.forEach(k => {
+            viewerReadKeys.forEach(k => {
               delete merged.leituras[k];
             });
             merged._has_unread_reply = true;
@@ -1193,6 +1288,7 @@ export async function GET(request: Request) {
   return NextResponse.json(filtered, {
     headers: {
       'Cache-Control': 'private, max-age=5, stale-while-revalidate=15',
+      'X-Total-Count': String(count ?? filtered.length),
     },
   })
 }

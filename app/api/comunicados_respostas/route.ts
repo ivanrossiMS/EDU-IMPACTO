@@ -160,17 +160,29 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'comunicado_id or comunicado_ids is required' }, { status: 400 });
   }
 
-  // Se for um comunicado de relatório agrupado (COLAB), auto-detecta autor e timestamp se não vieram na query
-  if (!groupedAutorId && comunicadoId && comunicadoId.startsWith('AD-COM-REL-COLAB-')) {
+  // Se for um comunicado de relatório agrupado (COLAB / TURMA), auto-detecta stuIds, autor e timestamp
+  let resolvedReportStuIds: string[] = [];
+  let parentAutorNorm = '';
+  if (comunicadoId && comunicadoId.startsWith('AD-COM-REL-') && !comunicadoId.startsWith('AD-COM-REL-STU-')) {
     const { data: parentData } = await supabase
       .from('comunicados')
-      .select('created_at, dados')
+      .select('autor, created_at, dados')
       .eq('id', comunicadoId)
       .maybeSingle();
-    if (parentData?.dados?.autorId) {
-      groupedAutorId = parentData.dados.autorId;
-      const gDate = new Date(parentData.created_at || parentData.dados?.dataEnvio || 0).getTime();
-      groupedTime = String(gDate);
+
+    if (parentData) {
+      parentAutorNorm = normalizeRole(parentData.autor || parentData.dados?.autor || parentData.dados?.autorNome);
+      if (Array.isArray(parentData.dados?.stuIds) && parentData.dados.stuIds.length > 0) {
+        resolvedReportStuIds = parentData.dados.stuIds.map(String);
+      }
+      if (!groupedAutorId && parentData.dados?.autorId) {
+        groupedAutorId = String(parentData.dados.autorId);
+      }
+      if (!groupedTime) {
+        const idMatch = comunicadoId.match(/AD-COM-REL-[A-Za-z]+-(\d+)/);
+        const colabTs = idMatch ? parseInt(idMatch[1], 10) : new Date(parentData.created_at || parentData.dados?.dataEnvio || 0).getTime();
+        if (colabTs) groupedTime = String(colabTs);
+      }
     }
   }
 
@@ -188,21 +200,38 @@ export async function GET(request: Request) {
     .select('*')
     .order('created_at', { ascending: true });
 
-  if (groupedAutorId && groupedTime) {
-    // Busca os IDs dos relatórios filhos no banco
-    const timeNum = parseInt(groupedTime, 10);
-    const minTime = new Date(timeNum - 60000).toISOString();
-    const maxTime = new Date(timeNum + 60000).toISOString();
-    
-    const { data: relatedComs } = await supabase
-      .from('comunicados')
-      .select('id')
-      .eq('dados->>autorId', groupedAutorId)
-      .like('id', 'AD-COM-REL-STU%')
-      .gte('created_at', minTime)
-      .lte('created_at', maxTime);
-      
-    const idsArray = relatedComs?.map(c => c.id) || [];
+  if (resolvedReportStuIds.length > 0) {
+    const idsArray = Array.from(new Set([...resolvedReportStuIds, ...(comunicadoId ? [comunicadoId] : [])]));
+    query = query.in('comunicado_id', idsArray);
+  } else if ((comunicadoId && comunicadoId.startsWith('AD-COM-REL-') && !comunicadoId.startsWith('AD-COM-REL-STU-')) || (groupedAutorId && groupedTime)) {
+    // Busca os IDs dos relatórios filhos no banco por prefixo de timestamp e autor
+    const idMatch = comunicadoId ? comunicadoId.match(/AD-COM-REL-[A-Za-z]+-(\d+)/) : null;
+    const timeNum = (idMatch ? parseInt(idMatch[1], 10) : 0) || (groupedTime ? parseInt(groupedTime, 10) : 0);
+    let idsArray: string[] = [];
+
+    if (timeNum > 0) {
+      const prefix = String(timeNum).substring(0, 7);
+      const { data: relatedComs } = await supabase
+        .from('comunicados')
+        .select('id, autor, dados')
+        .like('id', `AD-COM-REL-STU-${prefix}%`)
+        .limit(300);
+
+      idsArray = (relatedComs || [])
+        .filter((c: any) => {
+          const sMatch = String(c.id).match(/AD-COM-REL-STU-(\d+)/);
+          const sTs = sMatch ? parseInt(sMatch[1], 10) : 0;
+          if (!sTs || Math.abs(sTs - timeNum) >= 15000) return false;
+          const sAutorNorm = normalizeRole(c.autor || c.dados?.autor || '');
+          const sAutorId = String(c.dados?.autorId || '').replace(/^f_?/, '').toLowerCase();
+          const gAutorClean = String(groupedAutorId || '').replace(/^f_?/, '').toLowerCase();
+          if (parentAutorNorm && sAutorNorm) return parentAutorNorm === sAutorNorm;
+          if (gAutorClean && sAutorId) return gAutorClean === sAutorId;
+          return true;
+        })
+        .map((c: any) => String(c.id));
+    }
+
     if (comunicadoId && !idsArray.includes(comunicadoId)) {
       idsArray.push(comunicadoId);
     }

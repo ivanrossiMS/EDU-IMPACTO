@@ -90,27 +90,68 @@ export function ReportFiller({ templateId, onNavigate }: Props) {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'hsl(var(--bg-main))', margin: '-24px -24px 0 -24px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', padding: '16px 24px', background: 'hsl(var(--bg-surface))', borderBottom: '1px solid hsl(var(--border-subtle))' }}>
-        <button className="btn btn-ghost" style={{ padding: '8px', marginRight: 16 }} onClick={() => onNavigate('list')}><ArrowLeft size={20} /></button>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          padding: '16px 22px',
+          background: '#ffffff',
+          border: '1px solid #e2e8f0',
+          borderRadius: 18,
+          boxShadow: '0 4px 20px -4px rgba(15, 23, 42, 0.04)'
+        }}
+      >
+        <button
+          className="btn btn-ghost"
+          style={{
+            width: 38,
+            height: 38,
+            padding: 0,
+            marginRight: 14,
+            borderRadius: 11,
+            border: '1px solid #e2e8f0',
+            background: '#f8fafc',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}
+          onClick={() => onNavigate('list')}
+        >
+          <ArrowLeft size={18} />
+        </button>
         <div>
-          <h2 style={{ fontSize: 18, fontWeight: 800, margin: 0 }}>Preenchimento</h2>
-          <div style={{ fontSize: 12, color: 'hsl(var(--text-muted))' }}>Preencha os campos do relatório abaixo</div>
+          <h2 style={{ fontSize: 18, fontWeight: 800, margin: 0, color: '#0f172a' }}>Simulação de Preenchimento</h2>
+          <div style={{ fontSize: 12.5, color: '#64748b' }}>Visualize e teste os campos do relatório abaixo</div>
         </div>
       </div>
 
-      <div style={{ flex: 1, overflowY: 'auto', padding: 32, background: 'hsl(var(--bg-main))' }}>
-        <div className="card" style={{ width: '100%', maxWidth: 640, overflow: 'hidden', margin: '0 auto', display: 'flex', flexDirection: 'column' }}>
-          <div style={{ height: 16, background: tpl.color }} />
-          <div style={{ padding: 32, borderBottom: '1px solid hsl(var(--border-subtle))' }}>
-             <h1 style={{ fontSize: 28, fontWeight: 800, fontFamily: 'Outfit', margin: '0 0 12px 0' }}>{tpl.name}</h1>
-             <p style={{ fontSize: 15, color: 'hsl(var(--text-secondary))', margin: 0, lineHeight: 1.6 }}>{tpl.description}</p>
+      <div style={{ flex: 1 }}>
+        <div
+          style={{
+            width: '100%',
+            maxWidth: 680,
+            background: '#ffffff',
+            borderRadius: 20,
+            border: '1px solid #e2e8f0',
+            boxShadow: '0 8px 30px -6px rgba(15, 23, 42, 0.06)',
+            overflow: 'hidden',
+            margin: '0 auto',
+            display: 'flex',
+            flexDirection: 'column'
+          }}
+        >
+          <div style={{ height: 12, background: tpl.color || '#4f46e5' }} />
+          <div style={{ padding: '24px 32px', borderBottom: '1px solid #f1f5f9' }}>
+            <h1 style={{ fontSize: 24, fontWeight: 800, fontFamily: 'Outfit, sans-serif', margin: 0, color: '#0f172a' }}>{tpl.name}</h1>
+            {tpl.description && (
+              <p style={{ fontSize: 14, color: '#64748b', margin: '6px 0 0 0', lineHeight: 1.5 }}>{tpl.description}</p>
+            )}
           </div>
 
-          <div style={{ padding: 32, display: 'flex', flexDirection: 'column', gap: 40 }}>
+          <div style={{ padding: '28px 32px', display: 'flex', flexDirection: 'column', gap: 28 }}>
             {tpl.sections.map(sec => (
               <div key={sec.id}>
-                <h2 style={{ fontSize: 20, fontWeight: 800, marginBottom: 24, color: 'hsl(var(--text-main))', paddingBottom: 8, borderBottom: '2px solid rgba(0,0,0,0.05)' }}>{sec.title}</h2>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
                   {sec.fields.map(f => {
                     // Check Conditional Rules

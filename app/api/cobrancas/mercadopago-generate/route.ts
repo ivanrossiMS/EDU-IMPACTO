@@ -17,7 +17,7 @@ export async function POST(request: Request) {
     // Busca destinatário e valida vínculo com cobranca_id para impedir manipulação de preço
     const { data: existingDest } = await supabase
       .from('agenda_cobrancas_destinatarios')
-      .select('id, cobranca_id, aluno_id, url_pagamento, status, pagador_usuario_id')
+      .select('id, cobranca_id, aluno_id, destinatario_nome, url_pagamento, status, pagador_usuario_id, pagador_usuario_nome')
       .eq('id', cobranca_destinatario_id)
       .maybeSingle()
 
@@ -28,7 +28,14 @@ export async function POST(request: Request) {
       )
     }
 
-    if (existingDest.status === 'RECEIVED' || existingDest.status === 'pago') {
+    if (existingDest.status === 'RECEIVED' || existingDest.status === 'CONFIRMED' || existingDest.status === 'pago') {
+      if (existingDest.url_pagamento) {
+        return NextResponse.json({
+          success: true,
+          invoiceUrl: existingDest.url_pagamento,
+          pix: null
+        })
+      }
       return NextResponse.json({ error: 'Esta cobrança já se encontra quitada' }, { status: 400 })
     }
 
@@ -89,7 +96,10 @@ export async function POST(request: Request) {
       })
     }
 
-    const nome = user.user_metadata?.name || user.email?.split('@')[0] || 'Cliente'
+    const isGeneratedByAdmin = Boolean(body.from_admin) && !isFamilyOrStudent
+    const nome = isGeneratedByAdmin
+      ? (existingDest.destinatario_nome || 'Cliente')
+      : (user.user_metadata?.name || user.email?.split('@')[0] || 'Cliente')
     const email = user.email || 'email@naocadastrado.com'
 
     // 1. Buscar dados da cobrança original no Supabase
@@ -106,6 +116,10 @@ export async function POST(request: Request) {
     // 2. Criar a Preferência no Mercado Pago (Checkout Pro)
     const expirationDate = new Date(cobranca.vencimento);
     expirationDate.setDate(expirationDate.getDate() + 5); // Adiciona 5 dias de tolerância após vencimento
+    const minFutureDate = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000);
+    if (isNaN(expirationDate.getTime()) || expirationDate < minFutureDate) {
+      expirationDate.setTime(minFutureDate.getTime());
+    }
 
     const mpPayload = {
       items: [
@@ -145,15 +159,19 @@ export async function POST(request: Request) {
     }
 
     // 3. Salvar os IDs no Supabase (Reaproveitando colunas antigas para evitar migrations)
+    const updatePayload: Record<string, any> = {
+      asaas_customer_id: mpData.client_id || 'MP_CLIENT', // Apenas para preencher algo
+      asaas_payment_id: mpData.id, // ID da preference no MP
+      url_pagamento: mpData.init_point // Link de pagamento real
+    }
+    if (!isGeneratedByAdmin) {
+      updatePayload.pagador_usuario_id = user.id
+      updatePayload.pagador_usuario_nome = nome
+    }
+
     const { error: errUpdate } = await supabase
       .from('agenda_cobrancas_destinatarios')
-      .update({
-        asaas_customer_id: mpData.client_id || 'MP_CLIENT', // Apenas para preencher algo
-        asaas_payment_id: mpData.id, // ID da preference no MP
-        url_pagamento: mpData.init_point, // Link de pagamento real
-        pagador_usuario_id: user.id,
-        pagador_usuario_nome: nome
-      })
+      .update(updatePayload)
       .eq('id', cobranca_destinatario_id)
 
     if (errUpdate) {

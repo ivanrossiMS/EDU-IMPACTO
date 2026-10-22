@@ -14,28 +14,82 @@ export async function POST(request: Request) {
     const body = await request.json()
     const { tipo, ids, alunoId } = body
 
-    let isFamily = user.user_metadata?.perfil === 'Família' || user.user_metadata?.perfil === 'Responsável' || user.user_metadata?.perfil === 'Aluno' || user.user_metadata?.cargo === 'Aluno' || user.user_metadata?.cargo === 'Responsável' || !!user.user_metadata?.responsavel_id || !!user.user_metadata?.aluno_id;
-    if (!isFamily) {
-      const { data: dbUser } = await supabase.from('system_users').select('perfil, cargo').eq('id', user.id).maybeSingle();
+    let resolvedRespId = user.user_metadata?.responsavel_id ? String(user.user_metadata.responsavel_id) : '';
+    let resolvedAlunoId = user.user_metadata?.aluno_id ? String(user.user_metadata.aluno_id) : '';
+    let isStudentReader =
+      user.user_metadata?.perfil === 'Aluno' ||
+      user.user_metadata?.cargo === 'Aluno' ||
+      (!!resolvedAlunoId && !resolvedRespId && user.user_metadata?.cargo !== 'Responsável');
+
+    let isFamily =
+      user.user_metadata?.perfil === 'Família' ||
+      user.user_metadata?.perfil === 'Responsável' ||
+      isStudentReader ||
+      user.user_metadata?.cargo === 'Responsável' ||
+      !!resolvedRespId ||
+      !!resolvedAlunoId;
+
+    if (!resolvedRespId && !resolvedAlunoId) {
+      const { data: dbUser } = await supabase
+        .from('system_users')
+        .select('perfil, cargo, dados')
+        .or(`id.eq."${user.id}",auth_id.eq."${user.id}"`)
+        .maybeSingle();
+
       if (dbUser) {
-        isFamily = dbUser.perfil === 'Família' || dbUser.perfil === 'Responsável' || dbUser.perfil === 'Aluno' || dbUser.cargo === 'Aluno' || dbUser.cargo === 'Responsável'
-      } else {
-        // Fallback to check if it's in responsaveis or alunos directly
-        const { data: respUser } = await supabase.from('responsaveis').select('id').eq('id', user.id).maybeSingle();
-        if (respUser) {
+        if (dbUser.dados?.responsavel_id) resolvedRespId = String(dbUser.dados.responsavel_id);
+        if (dbUser.dados?.aluno_id) resolvedAlunoId = String(dbUser.dados.aluno_id);
+        if (dbUser.perfil === 'Aluno' || dbUser.cargo === 'Aluno') isStudentReader = true;
+        if (
+          dbUser.perfil === 'Família' ||
+          dbUser.perfil === 'Responsável' ||
+          dbUser.cargo === 'Responsável' ||
+          isStudentReader ||
+          !!resolvedRespId ||
+          !!resolvedAlunoId
+        ) {
+          isFamily = true;
+        }
+      }
+
+      if (!resolvedRespId && !isStudentReader) {
+        const respConds = [`id.eq."${user.id}"`, `dados->>auth_id.eq."${user.id}"`, `dados->>user_id.eq."${user.id}"`];
+        if (user.email) respConds.push(`email.ilike."${user.email}"`);
+        const { data: respUser } = await supabase
+          .from('responsaveis')
+          .select('id')
+          .or(respConds.join(','))
+          .limit(1)
+          .maybeSingle();
+        if (respUser?.id) {
+          resolvedRespId = String(respUser.id);
           isFamily = true;
         } else {
-          const { data: alunoUser } = await supabase.from('alunos').select('id').eq('id', user.id).maybeSingle();
-          if (alunoUser) isFamily = true;
+          const alunoConds = [`id.eq."${user.id}"`, `dados->>auth_id.eq."${user.id}"`, `dados->>user_id.eq."${user.id}"`];
+          if (user.email) alunoConds.push(`email.ilike."${user.email}"`);
+          const { data: alunoUser } = await supabase
+            .from('alunos')
+            .select('id')
+            .or(alunoConds.join(','))
+            .limit(1)
+            .maybeSingle();
+          if (alunoUser?.id) {
+            resolvedAlunoId = String(alunoUser.id);
+            isStudentReader = true;
+            isFamily = true;
+          }
         }
       }
     }
-    let readerId = user.id
+
+    let readerId = String(user.id);
     if (isFamily) {
-      if (user.user_metadata?.responsavel_id) {
-        readerId = String(user.user_metadata.responsavel_id);
-      } else if (user.user_metadata?.aluno_id) {
-        readerId = String(user.user_metadata.aluno_id);
+      if (isStudentReader && (resolvedAlunoId || alunoId)) {
+        readerId = String(resolvedAlunoId || alunoId);
+      } else if (resolvedRespId) {
+        readerId = String(resolvedRespId);
+      } else if (resolvedAlunoId) {
+        readerId = String(resolvedAlunoId);
       }
     }
 
@@ -61,26 +115,43 @@ export async function POST(request: Request) {
     const now = new Date().toISOString()
     
     try {
-      const readRecords: any[] = [];
-      ids.forEach((id: string) => {
-        readRecords.push({
-          usuario_id: readerId,
+      const readRecordsMap = new Map<string, any>();
+      const addReadRecord = (uid: string, alId: string | null) => {
+        if (!uid) return;
+        const k = `${uid}|${tipo}`;
+        readRecordsMap.set(k, {
+          usuario_id: uid,
           perfil: isFamily ? 'aluno' : 'admin',
           content_type: tipo,
-          content_id: String(id),
+          content_id: '', // preenchido por id
           read_at: now,
-          aluno_id: alunoId ? String(alunoId) : null
+          aluno_id: alId
         });
-        if (alunoId && `${readerId}#${alunoId}` !== readerId) {
-          readRecords.push({
-            usuario_id: `${readerId}#${alunoId}`,
-            perfil: isFamily ? 'aluno' : 'admin',
-            content_type: tipo,
-            content_id: String(id),
-            read_at: now,
-            aluno_id: String(alunoId)
-          });
+      };
+
+      const cleanAlunoId = alunoId ? String(alunoId) : null;
+      addReadRecord(readerId, cleanAlunoId);
+      if (cleanAlunoId && `${readerId}#${cleanAlunoId}` !== readerId) {
+        addReadRecord(`${readerId}#${cleanAlunoId}`, cleanAlunoId);
+      }
+      if (user.id && String(user.id) !== readerId) {
+        addReadRecord(String(user.id), cleanAlunoId);
+        if (cleanAlunoId) {
+          addReadRecord(`${user.id}#${cleanAlunoId}`, cleanAlunoId);
         }
+      }
+      if (isStudentReader && cleanAlunoId) {
+        addReadRecord(`aluno_${cleanAlunoId}`, cleanAlunoId);
+      }
+
+      const readRecords: any[] = [];
+      ids.forEach((id: string) => {
+        readRecordsMap.forEach((template) => {
+          readRecords.push({
+            ...template,
+            content_id: String(id)
+          });
+        });
       });
 
       // Upsert para garantir que read_at seja atualizado para 'now', refletindo abertura recente de conversas
@@ -100,9 +171,24 @@ export async function POST(request: Request) {
             if (com && com.dados) {
               const curLeituras = { ...(com.dados.leituras || {}) };
               curLeituras[readerId] = now;
-              if (alunoId) {
-                curLeituras[String(alunoId)] = now;
-                curLeituras[`${readerId}_${alunoId}`] = now;
+              if (user.id && String(user.id) !== readerId) {
+                curLeituras[String(user.id)] = now;
+              }
+              if (cleanAlunoId) {
+                curLeituras[`${readerId}_${cleanAlunoId}`] = now;
+                if (user.id && String(user.id) !== readerId) {
+                  curLeituras[`${user.id}_${cleanAlunoId}`] = now;
+                }
+                if (isStudentReader) {
+                  curLeituras[cleanAlunoId] = now;
+                  curLeituras[`aluno_${cleanAlunoId}`] = now;
+                  curLeituras[`${cleanAlunoId}_${cleanAlunoId}`] = now;
+                } else {
+                  // Se o responsável está lendo e havia chave legada [alunoId] poluída sem leitura real do aluno, limpa a poluição
+                  if (curLeituras[cleanAlunoId] && !curLeituras[`${cleanAlunoId}_${cleanAlunoId}`] && !curLeituras[`aluno_${cleanAlunoId}`]) {
+                    delete curLeituras[cleanAlunoId];
+                  }
+                }
               }
               await supabase.from('comunicados').update({
                 dados: { ...com.dados, leituras: curLeituras }

@@ -3,6 +3,7 @@ import { motion } from 'framer-motion'
 import { X, CheckCircle2, XCircle, FileText, FileBarChart, Paperclip, ChevronDown, ChevronUp, Users, Loader2, Edit2 } from 'lucide-react'
 import { ADComunicado } from '@/lib/agendaDigitalContext'
 import { supabase } from '@/lib/supabase'
+import { isAlunoCursandoTurma } from '@/lib/studentTurmaUtils'
 import { EnqueteWidget } from '@/components/agenda/enquetes/EnqueteWidget'
 import { AutorizacaoWidget } from '@/components/agenda/autorizacoes/AutorizacaoWidget'
 
@@ -12,6 +13,7 @@ interface TargetStudent {
   turma: string
   avatarUrl?: string
   leu: boolean
+  hasGuardianRead?: boolean
   leuEm?: string
   responsaveis: TargetParent[]
 }
@@ -132,15 +134,67 @@ export function ComunicadoReportModal({ selectedCom, alunosAtivos, turmas, chatG
         });
       }
 
-      const targetTurmasIds = turmas.filter(t => targetTurmas.includes(t.nome) || targetTurmas.includes(t.name) || targetTurmas.includes(String(t.id)) || explicitTurmasIds.includes(String(t.id))).map(t => String(t.id));
+      const cleanStuId = (val: any): string =>
+        String(val || '')
+          .replace(/^a_?/i, '')
+          .replace(/^_*(ALU)?_?/i, '')
+          .trim();
+
+      const explicitStudentIds = new Set<string>();
+      targetAlunosIds.forEach((idRaw: any) => {
+        const c = cleanStuId(idRaw);
+        if (c) explicitStudentIds.add(c);
+      });
+      const stuTargetIds = (selectedCom as any).stu_target_ids || (selectedCom as any).dados?.stu_target_ids || [];
+      if (Array.isArray(stuTargetIds)) {
+        stuTargetIds.forEach((idRaw: any) => {
+          const c = cleanStuId(idRaw);
+          if (c) explicitStudentIds.add(c);
+        });
+      }
+      const rawStuIds = (selectedCom as any).dados?.stuIds || [];
+      if (Array.isArray(rawStuIds)) {
+        rawStuIds.forEach((sId: any) => {
+          const m = String(sId).match(/AD-COM-REL-STU-\d+-([^-]+)-/);
+          if (m && m[1]) {
+            const c = cleanStuId(m[1]);
+            if (c) explicitStudentIds.add(c);
+          }
+        });
+      }
+      const rawAnexos = selectedCom.anexos || (selectedCom as any).dados?.anexos || [];
+      if (Array.isArray(rawAnexos)) {
+        rawAnexos.forEach((anx: any) => {
+          if (typeof anx !== 'string' || !anx.includes('payload:')) return;
+          try {
+            const pPart = anx.split('|').find((p: string) => p.startsWith('payload:'));
+            if (pPart) {
+              const parsed = JSON.parse(pPart.substring(8));
+              const pStuId = cleanStuId(parsed?.studentInfo?.id || Object.keys(parsed?.values || {})[0] || '');
+              if (pStuId) explicitStudentIds.add(pStuId);
+            }
+          } catch {}
+        });
+      }
+
+      const matchedTurmaObjects = (turmas || []).filter(t =>
+        targetTurmas.includes(t.nome) ||
+        targetTurmas.includes(t.name) ||
+        targetTurmas.includes(String(t.id)) ||
+        explicitTurmasIds.includes(String(t.id))
+      );
+      const targetTurmasIds = matchedTurmaObjects.map(t => String(t.id));
       const mergedTurmasIds = Array.from(new Set([...targetTurmasIds, ...explicitTurmasIds.map(String)]));
 
       const baseTargets = alunosAtivos.filter(a => {
+        const aIdPlain = cleanStuId(a.id);
+        if (explicitStudentIds.size > 0) {
+          return explicitStudentIds.has(aIdPlain);
+        }
         if (isGlobal) return true;
         if (mergedTurmasIds.includes(String(a.turma)) || targetTurmas.includes(a.turma)) return true;
-        const aIdPlain = String(a.id || '').replace(/^_*(ALU)?_?/, '')
-        if (targetAlunosIds.some((idRaw: any) => String(idRaw).replace(/^_*(ALU)?_?/, '') === aIdPlain)) return true;
-        if (grupoAlunosIds.has(String(a.id))) return true;
+        if (matchedTurmaObjects.some(t => isAlunoCursandoTurma(a, t, t.ano))) return true;
+        if (grupoAlunosIds.has(String(a.id)) || grupoAlunosIds.has(aIdPlain)) return true;
         return false;
       })
 
@@ -181,17 +235,44 @@ export function ComunicadoReportModal({ selectedCom, alunosAtivos, turmas, chatG
         }
       }
 
+      const readAlunosSet = new Set<string>(
+        ((selectedCom as any).leituras_alunos_ids || []).map((id: any) => cleanStuId(id)).filter(Boolean)
+      );
+
       const families: TargetStudent[] = baseTargets.map(a => {
-        const plainId = String(a.id || '').replace(/^_*(ALU)?_?/, '')
-        const studentLeuAt = selectedCom.leituras?.[a.id] || selectedCom.leituras?.[plainId]
+        const plainId = cleanStuId(a.id)
+        const leiturasMap = selectedCom.leituras || {}
+        const readKeys = Object.keys(leiturasMap)
+        const hasGuardianReadForStudent = readAlunosSet.has(plainId) || readKeys.some(k => {
+          if (!k.endsWith(`_${plainId}`)) return false
+          const prefix = k.slice(0, -(plainId.length + 1))
+          return Boolean(prefix && prefix !== plainId && prefix !== 'aluno')
+        })
+        const hasExplicitStudentRead = Boolean(
+          leiturasMap[`${plainId}_${plainId}`] ||
+          leiturasMap[`aluno_${plainId}`]
+        )
+        const studentLeuAt =
+          leiturasMap[`${plainId}_${plainId}`] ||
+          leiturasMap[`aluno_${plainId}`] ||
+          ((!hasGuardianReadForStudent || hasExplicitStudentRead)
+            ? (leiturasMap[a.id] || leiturasMap[plainId])
+            : undefined)
         
         const parentList = responsaveisMap[plainId] || responsaveisMap[a.id] || []
         
         const responsaveis: TargetParent[] = parentList.map((resp: any) => {
-          const readKeys = Object.keys(selectedCom.leituras || {})
           const exactKey = `${resp.id}_${plainId}`
-          const specificReadKey = readKeys.find(k => k === exactKey || k === resp.id || k === resp.cpf)
-          const respLeuAt = specificReadKey ? selectedCom.leituras[specificReadKey] : undefined
+          const authId = resp.auth_id || resp.user_id || resp.dados?.auth_id || resp.dados?.user_id
+          const exactAuthKey = authId ? `${authId}_${plainId}` : null
+          const specificReadKey = readKeys.find(k =>
+            k === exactKey ||
+            k === String(resp.id) ||
+            (exactAuthKey && k === exactAuthKey) ||
+            (authId && k === String(authId)) ||
+            (resp.cpf && k === String(resp.cpf))
+          )
+          const respLeuAt = specificReadKey ? leiturasMap[specificReadKey] : undefined
           
           return {
             id: resp.id,
@@ -205,14 +286,13 @@ export function ComunicadoReportModal({ selectedCom, alunosAtivos, turmas, chatG
           }
         }).filter(Boolean) as TargetParent[]
 
-        const anyRespLeuAt = responsaveis.find(r => r.leu)?.leuEm;
-
         return {
           id: a.id,
           nome: a.nome,
           turma: getTurmaName(a.turma),
           avatarUrl: a.foto_url || a.foto || a.dados?.avatarUrl || null,
           leu: !!studentLeuAt,
+          hasGuardianRead: hasGuardianReadForStudent,
           leuEm: studentLeuAt ? new Date(studentLeuAt).toLocaleString('pt-BR') : undefined,
           responsaveis
         }
@@ -297,7 +377,7 @@ export function ComunicadoReportModal({ selectedCom, alunosAtivos, turmas, chatG
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 24 }}>
            <div style={{ background: '#fff', padding: 16, borderRadius: 12, border: '1px solid #e2e8f0' }}>
              <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600, textTransform: 'uppercase' }}>Famílias que Leram</div>
-             <div style={{ fontSize: 28, fontWeight: 800, color: '#3b82f6' }}>{targets.filter(t => t.leu || t.responsaveis.some(r => r.leu)).length} <span style={{ fontSize: 14, color: '#94a3b8', fontWeight: 600 }}>/ {targets.length}</span></div>
+             <div style={{ fontSize: 28, fontWeight: 800, color: '#3b82f6' }}>{targets.filter(t => t.leu || t.hasGuardianRead || t.responsaveis.some(r => r.leu)).length} <span style={{ fontSize: 14, color: '#94a3b8', fontWeight: 600 }}>/ {targets.length}</span></div>
            </div>
            {selectedCom.exigeCiencia && (
              <div style={{ background: '#fff', padding: 16, borderRadius: 12, border: '1px solid #e2e8f0' }}>
@@ -427,10 +507,11 @@ export function ComunicadoReportModal({ selectedCom, alunosAtivos, turmas, chatG
         </div>
 
         {(() => {
+          const isFamilyRead = (fam: TargetStudent) => Boolean(fam.leu || fam.hasGuardianRead || fam.responsaveis.some(r => r.leu));
           const filteredTargets = targets.filter(fam => {
             if (readFilter === 'todos') return true;
-            if (readFilter === 'lido') return fam.leu || fam.responsaveis.some(r => r.leu);
-            if (readFilter === 'nao-lido') return !(fam.leu || fam.responsaveis.some(r => r.leu));
+            if (readFilter === 'lido') return isFamilyRead(fam);
+            if (readFilter === 'nao-lido') return !isFamilyRead(fam);
             return true;
           });
 
@@ -502,9 +583,9 @@ export function ComunicadoReportModal({ selectedCom, alunosAtivos, turmas, chatG
                     </div>
                     
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                      {/* Badge Student Status */}
-                      {fam.leu ? (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#10b981', fontSize: 12, fontWeight: 600 }} title={fam.leuEm}><CheckCircle2 size={16}/> Lido</div>
+                      {/* Badge Student / Family Status */}
+                      {isFamilyRead(fam) ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#10b981', fontSize: 12, fontWeight: 600 }} title={fam.leuEm || fam.responsaveis.find(r => r.leu)?.leuEm}><CheckCircle2 size={16}/> Lido</div>
                       ) : (
                         <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#ef4444', fontSize: 12, fontWeight: 600 }}><XCircle size={16}/> Não lido</div>
                       )}

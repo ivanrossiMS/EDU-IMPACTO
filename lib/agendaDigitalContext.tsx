@@ -138,6 +138,18 @@ export interface ADConfig {
     titulo: string
     mensagem: string
     imagemUrl?: string
+    fixado?: boolean
+    exigeCiencia?: boolean
+    permiteResposta?: boolean
+    prioridade?: "normal" | "alta" | "urgente"
+    autorCargo?: string
+  }
+  personalizacao?: {
+    temaMesh?: "padrao" | "oceano" | "esmeralda" | "cosmos" | "solar" | "neutro"
+    corPrimaria?: string
+    exibirBanner?: boolean
+    ajusteBanner?: "cover" | "contain"
+    alturaBanner?: "compacto" | "padrao" | "expandido"
   }
   contatosWhatsapp?: Array<{
     id: string

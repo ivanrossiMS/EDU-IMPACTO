@@ -5,7 +5,7 @@ import { useSupabaseArray } from '@/lib/useSupabaseCollection';
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useAgendaDigital, ADComunicado } from '@/lib/agendaDigitalContext'
-import { useQueryComunicados } from '@/lib/hooks/useAgendaQueries'
+import { useQueryComunicadosPaginated } from '@/lib/hooks/useAgendaQueries'
 import { useData } from '@/lib/dataContext'
 import { useFormularios } from '@/lib/formulariosContext'
 import { useRelatorios } from '@/lib/relatoriosContext'
@@ -14,7 +14,8 @@ import {
   Bell, Search, Plus, Filter, Pin, FileText, CheckCircle2, XCircle, 
   Send as SendIcon, Clock, Paperclip, MoreHorizontal, X,
   Bold, Italic, Link as LinkIcon, List, Underline, BadgeDollarSign, Smile, FileBarChart,
-  ClipboardList, BookOpen, GraduationCap, Calendar, Users, User, MessageSquare, Layout, FileCheck, Menu, Loader2, Activity, Trash, RotateCw, ChevronDown
+  ClipboardList, BookOpen, GraduationCap, Calendar, Users, User, MessageSquare, Layout, FileCheck, Menu, Loader2, Activity, Trash, RotateCw, ChevronDown,
+  ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Eye, Layers
 } from 'lucide-react'
 import { DestinatariosModal } from '../../components/agenda/DestinatariosModal'
 import NovoComunicadoModal from '../../components/agenda/NovoComunicadoModal'
@@ -282,9 +283,11 @@ export default function ADAdminComunicados() {
 
   const [showComposer, setShowComposer] = useState(false)
   const [viewingCom, setViewingCom] = useState<ADComunicado | null>(null)
+  const [viewingComFocusComments, setViewingComFocusComments] = useState(false)
   const [viewingReportPayload, setViewingReportPayload] = useState<any>(null)
   const [activePreviewStudent, setActivePreviewStudent] = useState<any>(null)
   const [viewingDestCom, setViewingDestCom] = useState<ADComunicado | null>(null)
+  const listScrollContainerRef = useRef<HTMLDivElement>(null)
   
   const [authorFilter, setAuthorFilter] = useState<string>('todos');
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
@@ -300,11 +303,14 @@ export default function ADAdminComunicados() {
   const [dbRoles, setDbRoles] = useState<string[]>([]);
 
   const [selectedComs, setSelectedComs] = useState<string[]>([]);
-  const [isFetchingMore, setIsFetchingMore] = useState(false);
+  const [storedPageSize, setStoredPageSize] = useLocalStorage<number>('ad-admin-comunicados-pagesize-v1', 10);
+  const pageSize = useMemo(() => ([10, 30, 50, 100].includes(Number(storedPageSize)) ? Number(storedPageSize) : 10), [storedPageSize]);
+  const [currentPage, setCurrentPage] = useState<number>(1);
 
   useEffect(() => {
     setSelectedComs([]);
-  }, [tab, debouncedSearch, authorFilter, attachmentFilter, selectedDate, filterComentarios, filterRelatorio]);
+    setCurrentPage(1);
+  }, [tab, debouncedSearch, authorFilter, attachmentFilter, selectedDate, filterComentarios, filterRelatorio, pageSize]);
 
   useEffect(() => {
     const fetchColaboradoresAndAuthors = async () => {
@@ -402,16 +408,15 @@ export default function ADAdminComunicados() {
   }, [tab, authorFilter, debouncedSearch, currentUser, colaboradores, selectedDate, filterComentarios, filterRelatorio]);
 
   const {
-    data: localQueryData,
+    data: paginatedData,
     isLoading: isLocalLoading,
     isFetching: isLocalFetching,
     refetch: refetchLocal,
-    hasNextPage: hasNextPageComunicados,
-    fetchNextPage: fetchNextPageComunicados,
-    isFetchingNextPage: isFetchingNextPageComunicados
-  } = useQueryComunicados(endpoint, 25, { enabled: true });
+  } = useQueryComunicadosPaginated(endpoint, currentPage, pageSize, { enabled: true });
 
-  const comunicados = useMemo(() => localQueryData?.pages?.flat() || [], [localQueryData?.pages]);
+  const comunicados = useMemo(() => paginatedData?.items || [], [paginatedData?.items]);
+  const totalCount = paginatedData?.totalCount ?? comunicados.length;
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
   const isDataLoading = isLocalLoading || isLocalFetching;
 
   // Cache instantâneo de IDs com respostas na base de dados
@@ -824,13 +829,20 @@ export default function ADAdminComunicados() {
 
       // Filtro: Tem Comentários
       if (filterComentarios) {
-        const hasConversas = Boolean(
-          idsWithReplies.has(String(c.id)) ||
-          c.conversas_info?.tem_conversas || 
-          (c.conversas_info?.total && c.conversas_info.total > 0) ||
-          (Array.isArray(c.respostas) && c.respostas.length > 0) ||
-          (getGlobalCachedMessages(c.id)?.length)
-        );
+        const hasServerInfo = c.conversas_info !== undefined && c.conversas_info !== null;
+        const cachedMsgs = getGlobalCachedMessages(c.id);
+        const hasConversas = hasServerInfo
+          ? Boolean(
+              c.conversas_info.tem_conversas ||
+              (c.conversas_info.total && c.conversas_info.total > 0) ||
+              (Array.isArray(c.respostas) && c.respostas.length > 0) ||
+              (cachedMsgs && cachedMsgs.length > 0)
+            )
+          : Boolean(
+              idsWithReplies.has(String(c.id)) ||
+              (Array.isArray(c.respostas) && c.respostas.length > 0) ||
+              (cachedMsgs && cachedMsgs.length > 0)
+            );
         if (!hasConversas) return false;
       }
 
@@ -859,23 +871,330 @@ export default function ADAdminComunicados() {
     });
   }, [comunicados, selectedDate, filterComentarios, filterRelatorio, idsWithReplies]);
 
-  const handleLoadMore = useCallback(async () => {
-    if (isFetchingMore || isFetchingNextPageComunicados) return;
-    setIsFetchingMore(true);
-    try {
-      if (hasNextPageComunicados && fetchNextPageComunicados) {
-        await fetchNextPageComunicados();
-      }
-    } catch (err) {
-      console.error('Erro ao carregar mais comunicados:', err);
-    } finally {
-      setIsFetchingMore(false);
+  const cleanStuId = useCallback((val: any): string => {
+    return String(val || '')
+      .replace(/^a_?/i, '')
+      .replace(/^_*(ALU)?_?/i, '')
+      .trim();
+  }, []);
+
+  const activeStudentCleanIdsSet = useMemo(() => {
+    const s = new Set<string>();
+    alunosAtivos.forEach(a => {
+      const c = cleanStuId(a.id);
+      if (c) s.add(c);
+    });
+    return s;
+  }, [alunosAtivos, cleanStuId]);
+
+  const computeComunicadoMetrics = useCallback((c: any) => {
+    const isGlobal = c.destino === 'todos';
+    const targetTurmas: string[] = c.turmas || c.dados?.turmas || [];
+    const targetAlunosIds: any[] = c.alunosIds || c.dados?.alunosIds || [];
+    const targetGrupos: string[] = c.grupos || c.dados?.grupos || [];
+    const targetFuncsIds: any[] = c.funcionariosIds || c.dados?.funcionariosIds || [];
+    const explicitTurmasIds: any[] = c.turmasIds || c.dados?.turmasIds || [];
+
+    const explicitStudentIds = new Set<string>();
+    targetAlunosIds.forEach(idRaw => {
+      const clean = cleanStuId(idRaw);
+      if (clean) explicitStudentIds.add(clean);
+    });
+    const stuTargetIds = c.stu_target_ids || c.dados?.stu_target_ids || [];
+    if (Array.isArray(stuTargetIds)) {
+      stuTargetIds.forEach(idRaw => {
+        const clean = cleanStuId(idRaw);
+        if (clean) explicitStudentIds.add(clean);
+      });
     }
-  }, [isFetchingMore, isFetchingNextPageComunicados, hasNextPageComunicados, fetchNextPageComunicados]);
+    const rawStuIds = c.dados?.stuIds || [];
+    if (Array.isArray(rawStuIds)) {
+      rawStuIds.forEach((sId: any) => {
+        const m = String(sId).match(/AD-COM-REL-STU-\d+-([^-]+)-/);
+        if (m && m[1]) {
+          const clean = cleanStuId(m[1]);
+          if (clean) explicitStudentIds.add(clean);
+        }
+      });
+    }
+    const rawAnexos = c.anexos || c.dados?.anexos || [];
+    if (Array.isArray(rawAnexos)) {
+      rawAnexos.forEach((anx: any) => {
+        if (typeof anx !== 'string' || !anx.includes('payload:')) return;
+        try {
+          const pPart = anx.split('|').find((p: string) => p.startsWith('payload:'));
+          if (pPart) {
+            const parsed = JSON.parse(pPart.substring(8));
+            const pStuId = cleanStuId(parsed?.studentInfo?.id || Object.keys(parsed?.values || {})[0] || '');
+            if (pStuId) explicitStudentIds.add(pStuId);
+          }
+        } catch {}
+      });
+    }
+
+    const grupoAlunosIds = new Set<string>();
+    const grupoFuncsIds = new Set<string>();
+    if (targetGrupos.length > 0 && chatGroups) {
+      const matchedGroups = chatGroups.filter((g: any) =>
+        targetGrupos.some((gName: string) => String(gName).toLowerCase().trim() === String(g.nome).toLowerCase().trim())
+      );
+      matchedGroups.forEach((g: any) => {
+        let aIds = g.alunosIds || [];
+        if (typeof aIds === 'string') { try { aIds = JSON.parse(aIds); } catch { aIds = []; } }
+        if (Array.isArray(aIds)) aIds.forEach((id: any) => { const clean = cleanStuId(id); if (clean) grupoAlunosIds.add(clean); });
+
+        let cIds = g.colaboradoresIds || [];
+        if (typeof cIds === 'string') { try { cIds = JSON.parse(cIds); } catch { cIds = []; } }
+        if (Array.isArray(cIds)) cIds.forEach((id: any) => grupoFuncsIds.add(String(id).replace(/^f_?/, '').trim()));
+      });
+    }
+
+    const targetStudentIds = new Set<string>();
+    if (explicitStudentIds.size > 0) {
+      if (activeStudentCleanIdsSet.size > 0) {
+        explicitStudentIds.forEach(sId => {
+          if (activeStudentCleanIdsSet.has(sId)) targetStudentIds.add(sId);
+        });
+        if (targetStudentIds.size === 0) {
+          explicitStudentIds.forEach(sId => targetStudentIds.add(sId));
+        }
+      } else {
+        explicitStudentIds.forEach(sId => targetStudentIds.add(sId));
+      }
+    } else if (isGlobal) {
+      activeStudentCleanIdsSet.forEach(sId => targetStudentIds.add(sId));
+    } else {
+      const matchedTurmaObjects = (turmas || []).filter(t =>
+        targetTurmas.includes(t.nome) ||
+        targetTurmas.includes((t as any).name) ||
+        targetTurmas.includes(String(t.id)) ||
+        explicitTurmasIds.includes(String(t.id))
+      );
+      const targetTurmasIds = matchedTurmaObjects.map(t => String(t.id));
+      const mergedTurmasIds = new Set([...targetTurmasIds, ...explicitTurmasIds.map(String)]);
+
+      alunosAtivos.forEach(a => {
+        const aIdPlain = cleanStuId(a.id);
+        if (!aIdPlain) return;
+        if (
+          mergedTurmasIds.has(String(a.turma)) ||
+          targetTurmas.includes(a.turma) ||
+          matchedTurmaObjects.some(t => isAlunoCursandoTurma(a, t, t.ano)) ||
+          grupoAlunosIds.has(aIdPlain)
+        ) {
+          targetStudentIds.add(aIdPlain);
+        }
+      });
+    }
+
+    const targetFuncIds = new Set<string>();
+    if (isGlobal && explicitStudentIds.size === 0) {
+      (colaboradores || []).forEach(col => {
+        const fId = String(col.id || '').replace(/^f_?/, '').trim();
+        if (fId) targetFuncIds.add(fId);
+      });
+    } else if (explicitStudentIds.size === 0) {
+      targetFuncsIds.forEach(idRaw => {
+        const fId = String(idRaw).replace(/^f_?/, '').trim();
+        if (fId) targetFuncIds.add(fId);
+      });
+      grupoFuncsIds.forEach(fId => {
+        if (fId) targetFuncIds.add(fId);
+      });
+    }
+
+    const readStudentIds = new Set<string>();
+    if (Array.isArray(c.leituras_alunos_ids)) {
+      c.leituras_alunos_ids.forEach((idRaw: any) => {
+        const clean = cleanStuId(idRaw);
+        if (clean) readStudentIds.add(clean);
+      });
+    }
+    const leiturasMap = c.leituras || {};
+    Object.keys(leiturasMap).forEach(k => {
+      if (k.includes('_')) {
+        const parts = k.split('_');
+        const suffix = cleanStuId(parts[parts.length - 1]);
+        if (suffix) readStudentIds.add(suffix);
+      } else {
+        const cleanKey = cleanStuId(k);
+        if (cleanKey && targetStudentIds.has(cleanKey)) {
+          readStudentIds.add(cleanKey);
+        }
+      }
+    });
+
+    let studentReadsCount = 0;
+    if (targetStudentIds.size > 0) {
+      targetStudentIds.forEach(sId => {
+        if (readStudentIds.has(sId)) studentReadsCount++;
+      });
+    } else if (explicitStudentIds.size > 0) {
+      explicitStudentIds.forEach(sId => {
+        if (readStudentIds.has(sId)) studentReadsCount++;
+      });
+    }
+
+    let funcReadsCount = 0;
+    targetFuncIds.forEach(fId => {
+      if (leiturasMap[fId] || leiturasMap[`f_${fId}`]) {
+        funcReadsCount++;
+      }
+    });
+
+    const targetCount = targetStudentIds.size + targetFuncIds.size;
+    const lidas = targetCount > 0 ? Math.min(targetCount, studentReadsCount + funcReadsCount) : 0;
+    const progresso = targetCount > 0 ? Math.min(100, (lidas / targetCount) * 100) : 0;
+
+    return {
+      isGlobal,
+      targetTurmas,
+      explicitStudentIds: Array.from(explicitStudentIds),
+      targetCount,
+      lidas,
+      progresso
+    };
+  }, [alunosAtivos, activeStudentCleanIdsSet, turmas, chatGroups, colaboradores, cleanStuId]);
+
+  const pageSummary = useMemo(() => {
+    let totalReadPct = 0;
+    let validReadCards = 0;
+    let withComments = 0;
+    let withUnreadComments = 0;
+    let reportsCount = 0;
+
+    filtered.forEach(c => {
+      const m = computeComunicadoMetrics(c);
+      if (m.targetCount > 0) {
+        totalReadPct += m.progresso;
+        validReadCards++;
+      }
+      const hasServerInfo = c.conversas_info !== undefined && c.conversas_info !== null;
+      const cachedMsgs = getGlobalCachedMessages(c.id);
+      const hasConv = hasServerInfo
+        ? Boolean(
+            c.conversas_info.tem_conversas ||
+            (c.conversas_info.total && c.conversas_info.total > 0) ||
+            (Array.isArray(c.respostas) && c.respostas.length > 0) ||
+            (cachedMsgs && cachedMsgs.length > 0)
+          )
+        : Boolean(idsWithReplies.has(String(c.id)));
+      if (hasConv) withComments++;
+      if (c.conversas_info?.has_unread || (c.conversas_info?.nao_lidas && c.conversas_info.nao_lidas > 0) || c._has_unread_reply) {
+        withUnreadComments++;
+      }
+      if (c.id?.startsWith('AD-COM-REL-') || c.tipo === 'relatorio' || (c as any).dados?.tipo === 'relatorio') {
+        reportsCount++;
+      }
+    });
+
+    return {
+      avgReadPct: validReadCards > 0 ? Math.round(totalReadPct / validReadCards) : 0,
+      withComments,
+      withUnreadComments,
+      reportsCount
+    };
+  }, [filtered, computeComunicadoMetrics, idsWithReplies]);
+
+  const handlePageChange = useCallback((nextPage: number) => {
+    const clamped = Math.max(1, Math.min(totalPages, nextPage));
+    if (clamped === currentPage) return;
+    setCurrentPage(clamped);
+    setSelectedComs([]);
+    if (listScrollContainerRef.current) {
+      listScrollContainerRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+    } else if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }, [currentPage, totalPages]);
+
+  const visiblePageNumbers = useMemo(() => {
+    const pages: (number | 'ellipsis-start' | 'ellipsis-end')[] = [];
+    if (totalPages <= 7) {
+      for (let i = 1; i <= totalPages; i++) pages.push(i);
+      return pages;
+    }
+    pages.push(1);
+    const start = Math.max(2, currentPage - 1);
+    const end = Math.min(totalPages - 1, currentPage + 1);
+    if (start > 2) pages.push('ellipsis-start');
+    for (let i = start; i <= end; i++) pages.push(i);
+    if (end < totalPages - 1) pages.push('ellipsis-end');
+    pages.push(totalPages);
+    return pages;
+  }, [currentPage, totalPages]);
+
+  const rangeStart = totalCount === 0 ? 0 : (currentPage - 1) * pageSize + 1;
+  const rangeEnd = totalCount === 0 ? 0 : Math.min(totalCount, (currentPage - 1) * pageSize + filtered.length);
 
   return (
     <div className="ad-admin-page-container ad-mobile-optimized" style={{ display: 'flex', flexDirection: 'column', height: '100%', position: 'relative' }}>
       <style dangerouslySetInnerHTML={{__html: `
+        .ad-comunicado-card {
+          position: relative;
+          background: #ffffff;
+          border-radius: 18px;
+          border: 1px solid rgba(226, 232, 240, 0.9);
+          padding: 16px 20px 16px 22px;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          gap: 20px;
+          transition: transform 0.18s cubic-bezier(0.2, 0, 0, 1), box-shadow 0.18s cubic-bezier(0.2, 0, 0, 1), border-color 0.18s ease;
+          box-shadow: 0 1px 3px rgba(15, 23, 42, 0.03), 0 1px 2px rgba(15, 23, 42, 0.02);
+        }
+        .ad-comunicado-card.ad-below-fold {
+          content-visibility: auto;
+          contain-intrinsic-size: auto 116px;
+        }
+        .ad-comunicado-card:hover {
+          border-color: rgba(99, 102, 241, 0.45);
+          box-shadow: 0 10px 24px -8px rgba(79, 70, 229, 0.12), 0 4px 10px -4px rgba(15, 23, 42, 0.04);
+          transform: translateY(-1px);
+        }
+        .ad-comunicado-card.is-selected {
+          background: linear-gradient(135deg, rgba(238, 242, 255, 0.65) 0%, #ffffff 100%);
+          border-color: #6366f1;
+        }
+        .ad-page-btn {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          min-width: 34px;
+          height: 34px;
+          padding: 0 10px;
+          border-radius: 10px;
+          font-size: 13px;
+          font-weight: 700;
+          border: 1px solid #e2e8f0;
+          background: #ffffff;
+          color: #475569;
+          cursor: pointer;
+          transition: all 0.15s ease;
+          user-select: none;
+        }
+        .ad-page-btn:hover:not(:disabled):not(.is-active) {
+          background: #f8fafc;
+          border-color: #cbd5e1;
+          color: #0f172a;
+        }
+        .ad-page-btn.is-active {
+          background: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%);
+          border-color: #4f46e5;
+          color: #ffffff;
+          box-shadow: 0 4px 10px rgba(79, 70, 229, 0.25);
+        }
+        .ad-page-btn:disabled {
+          opacity: 0.45;
+          cursor: not-allowed;
+        }
+        @keyframes adPulseDot {
+          0%, 100% { transform: scale(1); opacity: 1; }
+          50% { transform: scale(1.35); opacity: 0.65; }
+        }
+        .ad-unread-dot {
+          animation: adPulseDot 1.6s ease-in-out infinite;
+        }
         @media (max-width: 768px) {
           .ad-mobile-optimized {
             height: auto !important;
@@ -909,6 +1228,10 @@ export default function ADAdminComunicados() {
             justify-content: center !important;
             font-size: 12px !important;
             padding: 0 10px !important;
+          }
+          .ad-kpi-strip {
+            grid-template-columns: repeat(2, 1fr) !important;
+            gap: 8px !important;
           }
           .ad-comunicados-filter-bar {
             margin-top: 12px !important;
@@ -959,7 +1282,7 @@ export default function ADAdminComunicados() {
             padding: 4px !important;
             border-radius: 12px !important;
             gap: 4px !important;
-            margin-bottom: 14px !important;
+            margin-bottom: 12px !important;
             box-sizing: border-box !important;
           }
           .ad-comunicados-tabs .tab-trigger {
@@ -981,12 +1304,6 @@ export default function ADAdminComunicados() {
             gap: 12px !important;
             padding: 14px 16px !important;
             border-radius: 16px !important;
-          }
-          .ad-comunicado-card-top {
-            display: flex !important;
-            align-items: flex-start !important;
-            gap: 10px !important;
-            width: 100% !important;
           }
           .ad-comunicado-title {
             font-size: 15px !important;
@@ -1024,12 +1341,10 @@ export default function ADAdminComunicados() {
             justify-content: flex-end !important;
             gap: 8px !important;
           }
-          .ad-com-btn-refresh {
-            width: 38px !important;
-            height: 38px !important;
-            min-width: 38px !important;
-            min-height: 38px !important;
-            padding: 0 !important;
+          .ad-pagination-bar {
+            flex-direction: column !important;
+            align-items: stretch !important;
+            gap: 12px !important;
           }
           .ad-comunicados-scroll-container {
             padding-right: 0 !important;
@@ -1047,54 +1362,70 @@ export default function ADAdminComunicados() {
           display: inline-flex !important;
           align-items: center !important;
           justify-content: center !important;
-          width: 36px !important;
-          height: 36px !important;
-          min-width: 36px !important;
-          min-height: 36px !important;
-          border-radius: 50% !important;
+          width: 38px !important;
+          height: 38px !important;
+          min-width: 38px !important;
+          min-height: 38px !important;
+          border-radius: 12px !important;
           padding: 0 !important;
-          background: rgba(255, 255, 255, 0.75) !important;
+          background: #ffffff !important;
           color: #64748b !important;
-          border: 1px solid rgba(226, 232, 240, 0.9) !important;
+          border: 1px solid #e2e8f0 !important;
           box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03) !important;
           cursor: pointer !important;
           transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
           flex-shrink: 0 !important;
-          backdrop-filter: blur(8px) !important;
-          -webkit-backdrop-filter: blur(8px) !important;
         }
         .ad-com-btn-refresh:hover:not(:disabled) {
-          background: #ffffff !important;
+          background: #f8fafc !important;
           color: #4f46e5 !important;
           border-color: #cbd5e1 !important;
-          transform: translateY(-1px) scale(1.05) !important;
-          box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06) !important;
-        }
-        .ad-com-btn-refresh:active:not(:disabled) {
-          transform: scale(0.95) !important;
-        }
-        .ad-com-btn-refresh:disabled {
-          opacity: 0.6 !important;
-          cursor: not-allowed !important;
-        }
-        .ad-com-btn-refresh.is-loading {
-          color: #4f46e5 !important;
-          border-color: rgba(99, 102, 241, 0.3) !important;
+          transform: translateY(-1px) !important;
         }
       `}} />
 
-      <div className="ad-comunicados-header" style={{ marginBottom: 20, position: 'relative', zIndex: showNovoMenu ? 9999 : 50 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 16 }}>
-          <div>
-            <h2 style={{ fontSize: 24, fontWeight: 800, fontFamily: 'Outfit, sans-serif', color: '#0f172a', margin: '0 0 4px 0', letterSpacing: '-0.02em' }}>
-              Caixa de Comunicados
-            </h2>
-            <p style={{ color: '#64748b', fontSize: 14, margin: 0, fontWeight: 500 }}>
-              Gerencie comunicados, acompanhe relatórios de leitura e interaja com conversas escolares.
-            </p>
+      {/* Top Header + KPI Strip */}
+      <div className="ad-comunicados-header" style={{ marginBottom: 14, position: 'relative', zIndex: showNovoMenu ? 9999 : 50 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+            <div style={{
+              width: 44,
+              height: 44,
+              borderRadius: 14,
+              background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#ffffff',
+              boxShadow: '0 8px 18px -4px rgba(79, 70, 229, 0.35)',
+              flexShrink: 0
+            }}>
+              <Bell size={20} strokeWidth={2.2} />
+            </div>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <h2 style={{ fontSize: 22, fontWeight: 800, fontFamily: 'Outfit, sans-serif', color: '#0f172a', margin: 0, letterSpacing: '-0.02em' }}>
+                  Central de Comunicados
+                </h2>
+                <span style={{
+                  fontSize: 11,
+                  fontWeight: 800,
+                  padding: '3px 9px',
+                  borderRadius: 99,
+                  background: '#eef2ff',
+                  color: '#4f46e5',
+                  border: '1px solid rgba(99, 102, 241, 0.2)'
+                }}>
+                  {totalCount} {totalCount === 1 ? 'registro' : 'registros'}
+                </span>
+              </div>
+              <p style={{ color: '#64748b', fontSize: 13, margin: '2px 0 0 0', fontWeight: 500 }}>
+                Gestão de comunicados, relatórios pedagógicos, taxa de leitura por família e conversas privadas.
+              </p>
+            </div>
           </div>
 
-          {/* Action Buttons group: Relatório Mensal, Engajamento, Refresh */}
+          {/* Action Buttons group */}
           <div className="ad-comunicados-actions-row" style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', position: 'relative', zIndex: showNovoMenu ? 10000 : 2 }}>
             <button
               onClick={() => setShowMonthlyReport(true)}
@@ -1114,16 +1445,6 @@ export default function ADAdminComunicados() {
                 cursor: 'pointer',
                 transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)'
               }}
-              onMouseEnter={e => {
-                e.currentTarget.style.borderColor = '#cbd5e1';
-                e.currentTarget.style.background = '#f8fafc';
-                e.currentTarget.style.transform = 'translateY(-1px)';
-              }}
-              onMouseLeave={e => {
-                e.currentTarget.style.borderColor = '#e2e8f0';
-                e.currentTarget.style.background = '#ffffff';
-                e.currentTarget.style.transform = 'translateY(0)';
-              }}
             >
               <Calendar size={15} style={{ color: '#6366f1' }} />
               <span>Relatório Mensal</span>
@@ -1142,20 +1463,9 @@ export default function ADAdminComunicados() {
                 fontWeight: 700,
                 background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.08), rgba(79, 70, 229, 0.12))',
                 color: '#4f46e5',
-                border: '1px solid rgba(99, 102, 241, 0.2)',
-                boxShadow: '0 1px 2px rgba(79, 70, 229, 0.05)',
+                border: '1px solid rgba(99, 102, 241, 0.22)',
                 cursor: 'pointer',
                 transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)'
-              }}
-              onMouseEnter={e => {
-                e.currentTarget.style.borderColor = 'rgba(99, 102, 241, 0.4)';
-                e.currentTarget.style.background = 'linear-gradient(135deg, rgba(99, 102, 241, 0.14), rgba(79, 70, 229, 0.18))';
-                e.currentTarget.style.transform = 'translateY(-1px)';
-              }}
-              onMouseLeave={e => {
-                e.currentTarget.style.borderColor = 'rgba(99, 102, 241, 0.2)';
-                e.currentTarget.style.background = 'linear-gradient(135deg, rgba(99, 102, 241, 0.08), rgba(79, 70, 229, 0.12))';
-                e.currentTarget.style.transform = 'translateY(0)';
               }}
             >
               <Activity size={15} />
@@ -1169,20 +1479,6 @@ export default function ADAdminComunicados() {
               type="button"
               title="Atualizar lista de comunicados"
               aria-label="Atualizar lista de comunicados"
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                width: 38,
-                height: 38,
-                borderRadius: 12,
-                background: '#ffffff',
-                color: '#64748b',
-                border: '1px solid #e2e8f0',
-                cursor: isRefreshing ? 'not-allowed' : 'pointer',
-                transition: 'all 0.2s',
-                boxShadow: '0 1px 2px rgba(0,0,0,0.03)'
-              }}
             >
               <RotateCw size={15} strokeWidth={2.2} className={isRefreshing ? 'ad-spin-icon' : ''} />
             </button>
@@ -1209,14 +1505,6 @@ export default function ADAdminComunicados() {
                   cursor: 'pointer',
                   transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)'
                 }}
-                onMouseEnter={e => {
-                  e.currentTarget.style.transform = 'translateY(-1px)';
-                  e.currentTarget.style.boxShadow = '0 6px 16px rgba(79, 70, 229, 0.4)';
-                }}
-                onMouseLeave={e => {
-                  e.currentTarget.style.transform = 'translateY(0)';
-                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(79, 70, 229, 0.3)';
-                }}
               >
                 <Plus size={15} strokeWidth={2.5} style={{ transform: showNovoMenu ? 'rotate(45deg)' : 'none', transition: 'transform 0.2s ease' }} />
                 <span>Novo</span>
@@ -1234,10 +1522,10 @@ export default function ADAdminComunicados() {
                       position: 'absolute',
                       top: 'calc(100% + 8px)',
                       right: 0,
-                      width: 184,
+                      width: 192,
                       background: '#FFFFFF',
                       borderRadius: 14,
-                      padding: 5,
+                      padding: 6,
                       boxShadow: '0 20px 45px -10px rgba(15, 23, 42, 0.28), 0 0 0 1px rgba(226, 232, 240, 0.95)',
                       zIndex: 10002,
                       display: 'flex',
@@ -1245,7 +1533,6 @@ export default function ADAdminComunicados() {
                       gap: 2
                     }}
                   >
-                    {/* OPÇÃO 1: NOVO COMUNICADO */}
                     <button
                       type="button"
                       onClick={(e) => {
@@ -1264,17 +1551,14 @@ export default function ADAdminComunicados() {
                         background: 'transparent',
                         cursor: 'pointer',
                         textAlign: 'left',
-                        width: '100%',
-                        transition: 'background 0.15s ease'
+                        width: '100%'
                       }}
-                      onMouseEnter={(e) => e.currentTarget.style.background = '#F8FAFC'}
-                      onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
                     >
                       <div style={{
                         width: 28,
                         height: 28,
                         borderRadius: 8,
-                        background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.12) 0%, rgba(139, 92, 246, 0.14) 100%)',
+                        background: 'rgba(99, 102, 241, 0.12)',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
@@ -1283,12 +1567,11 @@ export default function ADAdminComunicados() {
                       }}>
                         <SendIcon size={14} />
                       </div>
-                      <span style={{ fontSize: 13, fontWeight: 700, color: '#0F172A', whiteSpace: 'nowrap' }}>Novo Comunicado</span>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: '#0F172A' }}>Novo Comunicado</span>
                     </button>
 
                     <div style={{ height: 1, background: '#F1F5F9', margin: '1px 6px' }} />
 
-                    {/* OPÇÃO 2: NOVO RELATÓRIO */}
                     <button
                       type="button"
                       onClick={(e) => {
@@ -1307,17 +1590,14 @@ export default function ADAdminComunicados() {
                         background: 'transparent',
                         cursor: 'pointer',
                         textAlign: 'left',
-                        width: '100%',
-                        transition: 'background 0.15s ease'
+                        width: '100%'
                       }}
-                      onMouseEnter={(e) => e.currentTarget.style.background = '#F8FAFC'}
-                      onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
                     >
                       <div style={{
                         width: 28,
                         height: 28,
                         borderRadius: 8,
-                        background: 'linear-gradient(135deg, rgba(14, 165, 233, 0.12) 0%, rgba(2, 132, 199, 0.14) 100%)',
+                        background: 'rgba(14, 165, 233, 0.12)',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
@@ -1326,7 +1606,7 @@ export default function ADAdminComunicados() {
                       }}>
                         <FileBarChart size={14} />
                       </div>
-                      <span style={{ fontSize: 13, fontWeight: 700, color: '#0F172A', whiteSpace: 'nowrap' }}>Novo Relatório</span>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: '#0F172A' }}>Novo Relatório</span>
                     </button>
                   </motion.div>
                 )}
@@ -1335,27 +1615,89 @@ export default function ADAdminComunicados() {
           </div>
         </div>
 
+        {/* Compact KPI Strip for current page */}
+        <div
+          className="ad-kpi-strip"
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+            gap: 10,
+            marginTop: 14
+          }}
+        >
+          <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 14, padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.03em' }}>Total na Aba</div>
+              <div style={{ fontSize: 18, fontWeight: 800, color: '#0f172a', marginTop: 1 }}>{totalCount}</div>
+            </div>
+            <div style={{ width: 34, height: 34, borderRadius: 10, background: '#f1f5f9', color: '#475569', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Layers size={16} />
+            </div>
+          </div>
+
+          <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 14, padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.03em' }}>Média de Leitura</div>
+              <div style={{ fontSize: 18, fontWeight: 800, color: pageSummary.avgReadPct >= 75 ? '#059669' : '#4f46e5', marginTop: 1 }}>{pageSummary.avgReadPct}%</div>
+            </div>
+            <div style={{ width: 34, height: 34, borderRadius: 10, background: pageSummary.avgReadPct >= 75 ? '#ecfdf5' : '#eef2ff', color: pageSummary.avgReadPct >= 75 ? '#059669' : '#4f46e5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <CheckCircle2 size={16} />
+            </div>
+          </div>
+
+          <div
+            onClick={() => setFilterComentarios(prev => !prev)}
+            style={{ background: filterComentarios ? '#eef2ff' : '#ffffff', border: `1px solid ${filterComentarios ? '#818cf8' : '#e2e8f0'}`, borderRadius: 14, padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, cursor: 'pointer' }}
+            title="Clique para filtrar comunicados com comentários"
+          >
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.03em' }}>Com Comentários</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 1 }}>
+                <span style={{ fontSize: 18, fontWeight: 800, color: '#0f172a' }}>{pageSummary.withComments}</span>
+                {pageSummary.withUnreadComments > 0 && (
+                  <span style={{ fontSize: 10, fontWeight: 800, padding: '2px 6px', borderRadius: 99, background: '#fef2f2', color: '#dc2626', border: '1px solid rgba(239,68,68,0.25)' }}>
+                    {pageSummary.withUnreadComments} {pageSummary.withUnreadComments === 1 ? 'novo' : 'novos'}
+                  </span>
+                )}
+              </div>
+            </div>
+            <div style={{ width: 34, height: 34, borderRadius: 10, background: pageSummary.withUnreadComments > 0 ? '#fef2f2' : '#f8fafc', color: pageSummary.withUnreadComments > 0 ? '#dc2626' : '#6366f1', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <MessageSquare size={16} />
+            </div>
+          </div>
+
+          <div
+            onClick={() => setFilterRelatorio(prev => !prev)}
+            style={{ background: filterRelatorio ? '#f5f3ff' : '#ffffff', border: `1px solid ${filterRelatorio ? '#a78bfa' : '#e2e8f0'}`, borderRadius: 14, padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, cursor: 'pointer' }}
+            title="Clique para filtrar relatórios pedagógicos"
+          >
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.03em' }}>Relatórios na Página</div>
+              <div style={{ fontSize: 18, fontWeight: 800, color: '#7c3aed', marginTop: 1 }}>{pageSummary.reportsCount}</div>
+            </div>
+            <div style={{ width: 34, height: 34, borderRadius: 10, background: '#f5f3ff', color: '#7c3aed', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <FileBarChart size={16} />
+            </div>
+          </div>
+        </div>
+
         {/* Filter bar container */}
         <div 
           className="ad-comunicados-filter-bar"
           style={{ 
-            marginTop: 16, 
+            marginTop: 12, 
             display: 'flex', 
             alignItems: 'center', 
             gap: 10, 
             flexWrap: 'wrap',
-            background: 'rgba(255, 255, 255, 0.8)',
-            backdropFilter: 'blur(12px)',
-            WebkitBackdropFilter: 'blur(12px)',
+            background: '#ffffff',
             padding: '10px 14px',
             borderRadius: 16,
             border: '1px solid #e2e8f0',
-            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.02)'
+            boxShadow: '0 2px 6px rgba(15, 23, 42, 0.02)'
           }}
         >
-          {/* Subrow on mobile: Calendar & Author */}
           <div className="ad-filter-subrow" style={{ display: 'flex', alignItems: 'center', gap: 10, flex: '1 1 auto' }}>
-            {/* Mini Calendar Filter */}
             <div style={{ flexShrink: 0 }}>
               <MiniCalendarFilter
                 selectedDate={selectedDate}
@@ -1366,27 +1708,25 @@ export default function ADAdminComunicados() {
 
             <div className="ad-filter-divider" style={{ width: 1, height: 24, background: '#e2e8f0', margin: '0 2px' }} />
 
-            {/* Author filter */}
-            <div className="ad-filter-author-box" style={{ position: 'relative', flex: '1 1 200px', minWidth: 160 }}>
+            <div className="ad-filter-author-box" style={{ position: 'relative', flex: '1 1 190px', minWidth: 150 }}>
               <Filter size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', pointerEvents: 'none' }} />
               <select 
                 value={authorFilter}
                 onChange={e => setAuthorFilter(e.target.value)}
                 style={{
                   width: '100%',
-                  height: 38,
+                  height: 36,
                   paddingLeft: 34,
                   paddingRight: 28,
-                  borderRadius: 12,
+                  borderRadius: 10,
                   border: '1px solid #e2e8f0',
-                  background: '#ffffff',
+                  background: '#f8fafc',
                   color: '#1e293b',
                   fontSize: 13,
                   fontWeight: 600,
                   appearance: 'none',
                   cursor: 'pointer',
-                  outline: 'none',
-                  transition: 'border-color 0.2s'
+                  outline: 'none'
                 }}
               >
                 <option value="todos">Todos os Autores</option>
@@ -1407,26 +1747,24 @@ export default function ADAdminComunicados() {
 
           <div className="ad-filter-divider" style={{ width: 1, height: 24, background: '#e2e8f0', margin: '0 2px' }} />
 
-          {/* Search bar with clear button */}
-          <div className="ad-filter-search-box" style={{ position: 'relative', flex: '1 1 240px', minWidth: 200 }}>
+          <div className="ad-filter-search-box" style={{ position: 'relative', flex: '1.4 1 220px', minWidth: 190 }}>
             <Search size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', pointerEvents: 'none' }} />
             <input 
-              placeholder="Buscar título, texto ou autor..." 
+              placeholder="Buscar título, conteúdo ou autor..." 
               value={search}
               onChange={e => setSearch(e.target.value)}
               style={{
                 width: '100%',
-                height: 38,
+                height: 36,
                 paddingLeft: 34,
                 paddingRight: search ? 32 : 12,
-                borderRadius: 12,
+                borderRadius: 10,
                 border: '1px solid #e2e8f0',
-                background: '#ffffff',
+                background: '#f8fafc',
                 color: '#1e293b',
                 fontSize: 13,
                 fontWeight: 500,
-                outline: 'none',
-                transition: 'border-color 0.2s'
+                outline: 'none'
               }}
             />
             {search && (
@@ -1455,131 +1793,187 @@ export default function ADAdminComunicados() {
 
           <div className="ad-filter-divider" style={{ width: 1, height: 24, background: '#e2e8f0', margin: '0 2px' }} />
 
-          {/* Quick Filters Chips */}
           <div className="ad-filter-chips-row" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <button
               type="button"
               onClick={() => setFilterComentarios(prev => !prev)}
-              title="Filtrar apenas comunicados que possuem comentários/conversas particulares"
               style={{
-                height: 38,
-                padding: '0 13px',
-                borderRadius: 12,
+                height: 36,
+                padding: '0 12px',
+                borderRadius: 10,
                 border: filterComentarios ? '1px solid #4f46e5' : '1px solid #e2e8f0',
                 background: filterComentarios ? 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)' : '#ffffff',
                 color: filterComentarios ? '#ffffff' : '#475569',
-                fontSize: 13,
+                fontSize: 12,
                 fontWeight: 700,
                 display: 'inline-flex',
                 alignItems: 'center',
-                gap: 7,
+                gap: 6,
                 cursor: 'pointer',
-                boxShadow: filterComentarios ? '0 4px 12px rgba(79, 70, 229, 0.3)' : '0 1px 2px rgba(0,0,0,0.02)',
-                transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-                whiteSpace: 'nowrap',
-                flexShrink: 0
+                whiteSpace: 'nowrap'
               }}
             >
-              <MessageSquare size={14} fill={filterComentarios ? '#ffffff' : 'none'} />
+              <MessageSquare size={13} fill={filterComentarios ? '#ffffff' : 'none'} />
               <span>Comentários</span>
-              {filterComentarios && (
-                <span style={{ width: 16, height: 16, borderRadius: '50%', background: 'rgba(255,255,255,0.25)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 900 }}>
-                  ✓
-                </span>
-              )}
             </button>
 
             <button
               type="button"
               onClick={() => setFilterRelatorio(prev => !prev)}
-              title="Filtrar apenas comunicados que possuem relatório pedagógico anexado"
               style={{
-                height: 38,
-                padding: '0 13px',
-                borderRadius: 12,
+                height: 36,
+                padding: '0 12px',
+                borderRadius: 10,
                 border: filterRelatorio ? '1px solid #7c3aed' : '1px solid #e2e8f0',
                 background: filterRelatorio ? 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)' : '#ffffff',
                 color: filterRelatorio ? '#ffffff' : '#475569',
-                fontSize: 13,
+                fontSize: 12,
                 fontWeight: 700,
                 display: 'inline-flex',
                 alignItems: 'center',
-                gap: 7,
+                gap: 6,
                 cursor: 'pointer',
-                boxShadow: filterRelatorio ? '0 4px 12px rgba(124, 58, 237, 0.3)' : '0 1px 2px rgba(0,0,0,0.02)',
-                transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-                whiteSpace: 'nowrap',
-                flexShrink: 0
+                whiteSpace: 'nowrap'
               }}
             >
-              <FileBarChart size={14} />
+              <FileBarChart size={13} />
               <span>Relatórios</span>
-              {filterRelatorio && (
-                <span style={{ width: 16, height: 16, borderRadius: '50%', background: 'rgba(255,255,255,0.25)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 900 }}>
-                  ✓
-                </span>
-              )}
             </button>
           </div>
         </div>
       </div>
 
-      <div className="tab-list ad-comunicados-tabs" style={{ marginBottom: 16, width: 'fit-content' }}>
-        <button className={`tab-trigger ${tab === 'enviados' ? 'active' : ''}`} onClick={() => setTab('enviados')}>
-          <SendIcon size={14} /> Enviados
-        </button>
-        <button className={`tab-trigger ${tab === 'agendados' ? 'active' : ''}`} onClick={() => setTab('agendados')}>
-          <Clock size={14} /> Agendados
-        </button>
-        <button className={`tab-trigger ${tab === 'rascunhos' ? 'active' : ''}`} onClick={() => setTab('rascunhos')}>
-          <FileText size={14} /> Rascunhos
-        </button>
+      {/* Tabs + Bulk Action + Top Page Size Selector */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+          <div className="tab-list ad-comunicados-tabs" style={{ marginBottom: 0, width: 'fit-content' }}>
+            <button className={`tab-trigger ${tab === 'enviados' ? 'active' : ''}`} onClick={() => setTab('enviados')}>
+              <SendIcon size={14} /> Enviados
+            </button>
+            <button className={`tab-trigger ${tab === 'agendados' ? 'active' : ''}`} onClick={() => setTab('agendados')}>
+              <Clock size={14} /> Agendados
+            </button>
+            <button className={`tab-trigger ${tab === 'rascunhos' ? 'active' : ''}`} onClick={() => setTab('rascunhos')}>
+              <FileText size={14} /> Rascunhos
+            </button>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <input 
+              type="checkbox"
+              checked={filtered.length > 0 && selectedComs.length === filtered.length}
+              onChange={(e) => {
+                if (e.target.checked) {
+                  setSelectedComs(filtered.map(c => c.id));
+                } else {
+                  setSelectedComs([]);
+                }
+              }}
+              style={{ width: 16, height: 16, cursor: 'pointer', accentColor: '#4f46e5' }}
+              title="Selecionar todos os comunicados desta página"
+            />
+            <span style={{ fontSize: 12, fontWeight: 600, color: '#64748b' }}>
+              {selectedComs.length > 0 ? `${selectedComs.length} selecionado(s)` : 'Selecionar página'}
+            </span>
+            {selectedComs.length > 0 && (
+              <button 
+                className="btn" 
+                onClick={handleBulkDelete} 
+                style={{ display: 'inline-flex', gap: 6, alignItems: 'center', background: '#ef4444', color: '#fff', border: 'none', padding: '5px 10px', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}
+              >
+                <Trash size={13} /> Excluir ({selectedComs.length})
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Top Pagination & Items per page selector */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 12, fontWeight: 600, color: '#64748b' }}>
+            {totalCount > 0 ? `Mostrando ${rangeStart}–${rangeEnd} de ${totalCount}` : '0 registros'}
+          </span>
+          <div style={{ display: 'inline-flex', alignItems: 'center', background: '#f1f5f9', padding: 3, borderRadius: 10, border: '1px solid #e2e8f0', gap: 2 }}>
+            {[10, 30, 50, 100].map(size => {
+              const active = pageSize === size;
+              return (
+                <button
+                  key={size}
+                  type="button"
+                  onClick={() => setStoredPageSize(size)}
+                  style={{
+                    height: 26,
+                    padding: '0 9px',
+                    borderRadius: 7,
+                    border: 'none',
+                    fontSize: 11,
+                    fontWeight: 800,
+                    cursor: 'pointer',
+                    background: active ? '#ffffff' : 'transparent',
+                    color: active ? '#4f46e5' : '#64748b',
+                    boxShadow: active ? '0 1px 3px rgba(15, 23, 42, 0.08)' : 'none',
+                    transition: 'all 0.15s ease'
+                  }}
+                  title={`Exibir ${size} comunicados por página`}
+                >
+                  {size}
+                </button>
+              );
+            })}
+            <span style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', padding: '0 6px' }}>/ pág</span>
+          </div>
+        </div>
       </div>
 
       {/* Active Filters Indicator Banner */}
-      {(selectedDate || filterComentarios || filterRelatorio) && (
-        <motion.div
-          initial={{ opacity: 0, y: -6 }}
-          animate={{ opacity: 1, y: 0 }}
+      {(selectedDate || filterComentarios || filterRelatorio || authorFilter !== 'todos' || debouncedSearch.trim()) && (
+        <div
           style={{
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            padding: '10px 16px',
-            background: 'linear-gradient(135deg, rgba(79, 70, 229, 0.08), rgba(99, 102, 241, 0.04))',
+            padding: '8px 14px',
+            background: 'linear-gradient(135deg, rgba(79, 70, 229, 0.07), rgba(99, 102, 241, 0.03))',
             border: '1px solid rgba(79, 70, 229, 0.18)',
-            borderRadius: 14,
-            marginBottom: 16,
-            gap: 12,
+            borderRadius: 12,
+            marginBottom: 12,
+            gap: 10,
             flexWrap: 'wrap'
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 13, fontWeight: 700, color: '#1e293b' }}>
-              Filtros ativos ({filtered.length} {filtered.length === 1 ? 'encontrado' : 'encontrados'}):
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: '#1e293b' }}>
+              Filtros ativos ({totalCount} {totalCount === 1 ? 'resultado' : 'resultados'}):
             </span>
 
             {selectedDate && (
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#ffffff', border: '1px solid rgba(79, 70, 229, 0.25)', padding: '4px 10px', borderRadius: 8, fontSize: 12, fontWeight: 700, color: '#4f46e5' }}>
-                <Calendar size={13} />
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: '#ffffff', border: '1px solid rgba(79, 70, 229, 0.25)', padding: '3px 9px', borderRadius: 8, fontSize: 11, fontWeight: 700, color: '#4f46e5' }}>
+                <Calendar size={12} />
                 <span>{selectedDateFormatted}</span>
-                <span role="button" onClick={() => setSelectedDate(null)} style={{ cursor: 'pointer', opacity: 0.7, marginLeft: 2 }} title="Remover filtro de data">×</span>
+                <span role="button" onClick={() => setSelectedDate(null)} style={{ cursor: 'pointer', opacity: 0.7, marginLeft: 2 }}>×</span>
               </span>
             )}
 
             {filterComentarios && (
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#ffffff', border: '1px solid rgba(79, 70, 229, 0.25)', padding: '4px 10px', borderRadius: 8, fontSize: 12, fontWeight: 700, color: '#4f46e5' }}>
-                <MessageSquare size={13} />
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: '#ffffff', border: '1px solid rgba(79, 70, 229, 0.25)', padding: '3px 9px', borderRadius: 8, fontSize: 11, fontWeight: 700, color: '#4f46e5' }}>
+                <MessageSquare size={12} />
                 <span>Com Comentários</span>
-                <span role="button" onClick={() => setFilterComentarios(false)} style={{ cursor: 'pointer', opacity: 0.7, marginLeft: 2 }} title="Remover filtro de comentários">×</span>
+                <span role="button" onClick={() => setFilterComentarios(false)} style={{ cursor: 'pointer', opacity: 0.7, marginLeft: 2 }}>×</span>
               </span>
             )}
 
             {filterRelatorio && (
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#ffffff', border: '1px solid rgba(124, 58, 237, 0.25)', padding: '4px 10px', borderRadius: 8, fontSize: 12, fontWeight: 700, color: '#7c3aed' }}>
-                <FileBarChart size={13} />
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: '#ffffff', border: '1px solid rgba(124, 58, 237, 0.25)', padding: '3px 9px', borderRadius: 8, fontSize: 11, fontWeight: 700, color: '#7c3aed' }}>
+                <FileBarChart size={12} />
                 <span>Com Relatório</span>
-                <span role="button" onClick={() => setFilterRelatorio(false)} style={{ cursor: 'pointer', opacity: 0.7, marginLeft: 2 }} title="Remover filtro de relatório">×</span>
+                <span role="button" onClick={() => setFilterRelatorio(false)} style={{ cursor: 'pointer', opacity: 0.7, marginLeft: 2 }}>×</span>
+              </span>
+            )}
+
+            {authorFilter !== 'todos' && (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: '#ffffff', border: '1px solid rgba(79, 70, 229, 0.25)', padding: '3px 9px', borderRadius: 8, fontSize: 11, fontWeight: 700, color: '#4f46e5' }}>
+                <User size={12} />
+                <span>{authorFilter.replace(/^(autor:|cargo:)/, '')}</span>
+                <span role="button" onClick={() => setAuthorFilter('todos')} style={{ cursor: 'pointer', opacity: 0.7, marginLeft: 2 }}>×</span>
               </span>
             )}
           </div>
@@ -1589,74 +1983,46 @@ export default function ADAdminComunicados() {
               setSelectedDate(null);
               setFilterComentarios(false);
               setFilterRelatorio(false);
+              setAuthorFilter('todos');
+              setSearch('');
             }}
             style={{
               display: 'inline-flex',
               alignItems: 'center',
-              gap: 6,
-              fontSize: 12,
+              gap: 5,
+              fontSize: 11,
               fontWeight: 700,
               color: '#4f46e5',
               background: '#ffffff',
               border: '1px solid rgba(79, 70, 229, 0.25)',
-              padding: '5px 12px',
+              padding: '4px 10px',
               borderRadius: 8,
-              cursor: 'pointer',
-              boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
-              transition: 'all 0.15s'
+              cursor: 'pointer'
             }}
           >
-            <X size={13} /> Limpar todos os filtros
+            <X size={12} /> Limpar filtros
           </button>
-        </motion.div>
+        </div>
       )}
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <input 
-            type="checkbox"
-            checked={filtered.length > 0 && selectedComs.length === filtered.length}
-            onChange={(e) => {
-              if (e.target.checked) {
-                setSelectedComs(filtered.map(c => c.id));
-              } else {
-                setSelectedComs([]);
-              }
-            }}
-            style={{ width: 18, height: 18, cursor: 'pointer', accentColor: '#4f46e5' }}
-            title="Selecionar todos os comunicados carregados"
-          />
-          <span style={{ fontSize: 13, fontWeight: 600, color: '#64748b' }}>
-            {selectedComs.length > 0 ? `${selectedComs.length} selecionados` : 'Selecionar comunicados'}
-          </span>
-        </div>
-        {selectedComs.length > 0 && (
-          <button 
-            className="btn" 
-            onClick={handleBulkDelete} 
-            style={{ display: 'flex', gap: 8, alignItems: 'center', background: '#ef4444', color: '#fff', border: 'none', padding: '6px 12px', borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}
-          >
-            <Trash size={14} /> Excluir Selecionados
-          </button>
-        )}
-      </div>
-
-      <div className="ad-comunicados-scroll-container" style={{ flex: 1, overflowY: 'auto', paddingRight: 8 }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {/* Main Scrollable List */}
+      <div ref={listScrollContainerRef} className="ad-comunicados-scroll-container" style={{ flex: 1, overflowY: 'auto', paddingRight: 4 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {filtered.length === 0 && isDataLoading && (
-            <div style={{ textAlign: 'center', padding: '80px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
-              <Loader2 size={48} className="animate-spin" color="#00D2FF" style={{ filter: 'drop-shadow(0 0 10px rgba(0,210,255,0.5))' }} />
+            <div style={{ textAlign: 'center', padding: '72px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 14 }}>
+              <Loader2 size={42} className="animate-spin" color="#4f46e5" />
+              <span style={{ fontSize: 13, fontWeight: 600, color: '#64748b' }}>Carregando comunicados...</span>
             </div>
           )}
           {filtered.length === 0 && !isDataLoading && (
-            <div style={{ textAlign: 'center', padding: '80px 20px', background: 'rgba(0,0,0,0.02)', borderRadius: 20, border: '2px dashed hsl(var(--border-subtle))' }}>
-              <Bell size={48} style={{ opacity: 0.1, marginBottom: 16 }} />
-              {(selectedDate || filterComentarios || filterRelatorio) ? (
+            <div style={{ textAlign: 'center', padding: '72px 20px', background: '#ffffff', borderRadius: 20, border: '1px dashed #cbd5e1' }}>
+              <Bell size={44} style={{ opacity: 0.15, marginBottom: 12, color: '#4f46e5' }} />
+              {(selectedDate || filterComentarios || filterRelatorio || authorFilter !== 'todos' || debouncedSearch.trim()) ? (
                 <div>
-                  <p style={{ color: 'hsl(var(--text-main))', fontSize: 16, fontWeight: 700, margin: '0 0 6px 0' }}>
+                  <p style={{ color: '#0f172a', fontSize: 16, fontWeight: 700, margin: '0 0 6px 0' }}>
                     Nenhum comunicado encontrado com os filtros selecionados.
                   </p>
-                  <p style={{ color: 'hsl(var(--text-muted))', fontSize: 14, margin: '0 0 16px 0' }}>
+                  <p style={{ color: '#64748b', fontSize: 13, margin: '0 0 16px 0' }}>
                     Tente ajustar ou limpar os filtros para visualizar outros comunicados.
                   </p>
                   <button
@@ -1664,6 +2030,8 @@ export default function ADAdminComunicados() {
                       setSelectedDate(null);
                       setFilterComentarios(false);
                       setFilterRelatorio(false);
+                      setAuthorFilter('todos');
+                      setSearch('');
                     }}
                     style={{
                       background: '#4f46e5',
@@ -1673,320 +2041,481 @@ export default function ADAdminComunicados() {
                       borderRadius: 10,
                       fontSize: 13,
                       fontWeight: 700,
-                      cursor: 'pointer',
-                      boxShadow: '0 4px 12px rgba(79, 70, 229, 0.25)'
+                      cursor: 'pointer'
                     }}
                   >
                     Limpar filtros
                   </button>
                 </div>
               ) : (
-                <p style={{ color: 'hsl(var(--text-muted))', fontSize: 16, fontWeight: 500 }}>Nenhum comunicado encontrado nesta aba.</p>
+                <p style={{ color: '#64748b', fontSize: 15, fontWeight: 600, margin: 0 }}>Nenhum comunicado encontrado nesta aba.</p>
               )}
             </div>
           )}
-          {filtered.map(c => {
-             const isGlobal = c.destino === 'todos';
-             let targetCount = 0;
-             if (isGlobal) {
-               targetCount = alunosAtivos.length + (colaboradores?.length || 0);
-             } else {
-               const targetTurmas = c.turmas || ((c as any).dados?.turmas) || [];
-               const targetAlunosIds = c.alunosIds || ((c as any).dados?.alunosIds) || [];
-               const targetGrupos = c.grupos || ((c as any).dados?.grupos) || [];
-               const targetFuncsIds = c.funcionariosIds || ((c as any).dados?.funcionariosIds) || [];
 
-               const targetTurmasIds = turmas.filter(t => targetTurmas.includes(t.nome) || targetTurmas.includes((t as any).name) || targetTurmas.includes(String(t.id))).map(t => String(t.id));
+          {filtered.map((c, idx) => {
+            const metrics = computeComunicadoMetrics(c);
+            const { isGlobal, targetTurmas, targetCount, lidas, progresso } = metrics;
+            const pctRounded = Math.round(progresso);
+            const dateObj = (c.dataEnvio || (c as any).data || (c as any).created_at)
+              ? new Date(c.dataEnvio || (c as any).data || (c as any).created_at)
+              : null;
 
-               const alTargets = alunosAtivos.filter(a => targetTurmasIds.includes(String(a.turma)) || targetTurmas.includes(a.turma) || targetAlunosIds.some((idRaw: any) => String(idRaw).replace(/^_*(ALU)?/, '') === String(a.id).replace(/^_*(ALU)?/, '')));
-               
-               let grupoAlunosIds = new Set<string>();
-               let grupoFuncsIds = new Set<string>();
-               if (targetGrupos.length > 0 && chatGroups) {
-                 const matchedGroups = chatGroups.filter((g: any) => targetGrupos.some((gName: string) => String(gName).toLowerCase().trim() === String(g.nome).toLowerCase().trim()));
-                 matchedGroups.forEach((g: any) => {
-                   let aIds = g.alunosIds || [];
-                   if (typeof aIds === 'string') { try { aIds = JSON.parse(aIds); } catch(e) { aIds = []; } }
-                   if (Array.isArray(aIds)) aIds.forEach((id: any) => grupoAlunosIds.add(String(id)));
-                   
-                   let cIds = g.colaboradoresIds || [];
-                   if (typeof cIds === 'string') { try { cIds = JSON.parse(cIds); } catch(e) { cIds = []; } }
-                   if (Array.isArray(cIds)) cIds.forEach((id: any) => grupoFuncsIds.add(String(id).replace(/^f_?/, '')));
-                 });
-               }
-               
-               const additionalAlunosFromGrupos = alunosAtivos.filter(a => !alTargets.includes(a) && grupoAlunosIds.has(String(a.id)));
-               const totalAlunosCount = alTargets.length + additionalAlunosFromGrupos.length;
-               
-               const allFuncsIds = new Set([
-                 ...targetFuncsIds.map((id: any) => String(id).replace(/^f_?/, '')),
-                 ...Array.from(grupoFuncsIds)
-               ]);
-               const totalFuncsCount = allFuncsIds.size;
-               
-               targetCount = totalAlunosCount + totalFuncsCount;
-             }
-             
-             const lidas = Object.keys(c.leituras || {}).length
-             const progresso = targetCount > 0 ? Math.min(100, (lidas / targetCount) * 100) : 0
-             const dateObj = (c.dataEnvio || (c as any).data) ? new Date(c.dataEnvio || (c as any).data) : null
+            const hasServerConversasInfo = c.conversas_info !== undefined && c.conversas_info !== null;
+            const cachedMsgs = getGlobalCachedMessages(c.id);
+            const hasConversas = hasServerConversasInfo
+              ? Boolean(
+                  c.conversas_info.tem_conversas ||
+                  (c.conversas_info.total && c.conversas_info.total > 0) ||
+                  (Array.isArray(c.respostas) && c.respostas.length > 0) ||
+                  (cachedMsgs && cachedMsgs.length > 0)
+                )
+              : Boolean(
+                  idsWithReplies.has(String(c.id)) ||
+                  (Array.isArray(c.respostas) && c.respostas.length > 0) ||
+                  (cachedMsgs && cachedMsgs.length > 0)
+                );
 
-             const hasConversas = Boolean(
-               idsWithReplies.has(String(c.id)) ||
-               c.conversas_info?.tem_conversas || 
-               (c.conversas_info?.total && c.conversas_info.total > 0) ||
-               (Array.isArray(c.respostas) && c.respostas.length > 0) ||
-               (getGlobalCachedMessages(c.id)?.length)
-             );
-             const conversasCount = c.conversas_info?.total || (Array.isArray(c.respostas) ? c.respostas.length : 0) || (getGlobalCachedMessages(c.id)?.length || 0) || (idsWithReplies.has(String(c.id)) ? 1 : 0);
-             const hasUnreadConversation = Boolean(
-               c.conversas_info?.has_unread || 
-               (c.conversas_info?.nao_lidas && c.conversas_info.nao_lidas > 0) ||
-               c._has_unread_reply
-             );
+            const conversasCount =
+              c.conversas_info?.total ||
+              (Array.isArray(c.respostas) ? c.respostas.length : 0) ||
+              (cachedMsgs?.length || 0) ||
+              (hasConversas ? 1 : 0);
 
-              return (
-               <motion.div 
+            const hasUnreadConversation = Boolean(
+              hasConversas && (
+                c.conversas_info?.has_unread ||
+                (c.conversas_info?.nao_lidas && c.conversas_info.nao_lidas > 0) ||
+                c._has_unread_reply
+              )
+            );
+
+            const isReportCard = Boolean(
+              c.id?.startsWith('AD-COM-REL-') ||
+              c.tipo === 'relatorio' ||
+              (c as any).dados?.tipo === 'relatorio' ||
+              (c.titulo && c.titulo.toLowerCase().includes('relatório'))
+            );
+
+            const accentColor = hasUnreadConversation
+              ? '#ef4444'
+              : isReportCard
+              ? '#7c3aed'
+              : isGlobal
+              ? '#10b981'
+              : '#4f46e5';
+
+            const readAccentColor = pctRounded >= 80
+              ? '#059669'
+              : pctRounded >= 40
+              ? '#4f46e5'
+              : pctRounded > 0
+              ? '#d97706'
+              : '#64748b';
+
+            const readBarBg = pctRounded >= 80
+              ? 'linear-gradient(90deg, #10b981, #059669)'
+              : pctRounded >= 40
+              ? 'linear-gradient(90deg, #6366f1, #4f46e5)'
+              : pctRounded > 0
+              ? 'linear-gradient(90deg, #f59e0b, #d97706)'
+              : '#cbd5e1';
+
+            const isSelected = selectedComs.includes(c.id);
+
+            return (
+              <div
                 key={c.id}
-                layout
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                onClick={() => setViewingCom(c)}
+                onClick={() => {
+                  setViewingComFocusComments(false);
+                  setViewingCom(c);
+                }}
                 onPointerDown={() => prefetchComunicadoMessages(c, true)}
-                className="ad-comunicado-card"
-                style={{ 
-                  background: '#ffffff',
-                  borderRadius: 20,
-                  border: '1px solid #e2e8f0',
-                  padding: '20px 24px',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 24,
-                  transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.02)'
-                }}
-                onMouseEnter={e => {
-                  e.currentTarget.style.borderColor = '#818cf8'
-                  e.currentTarget.style.boxShadow = '0 12px 24px -10px rgba(99, 102, 241, 0.15)'
-                  e.currentTarget.style.transform = 'translateY(-2px)'
-                }}
-                onMouseLeave={e => {
-                  e.currentTarget.style.borderColor = '#e2e8f0'
-                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.02)'
-                  e.currentTarget.style.transform = 'translateY(0)'
+                className={`ad-comunicado-card ${idx >= 8 ? 'ad-below-fold' : ''} ${isSelected ? 'is-selected' : ''}`}
+                style={{
+                  borderLeft: `4px solid ${accentColor}`
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', paddingRight: 8 }}>
+                {/* Selection Checkbox */}
+                <div style={{ display: 'flex', alignItems: 'center' }} onClick={e => e.stopPropagation()}>
                   <input 
                     type="checkbox" 
-                    checked={selectedComs.includes(c.id)}
+                    checked={isSelected}
                     onChange={(e) => {
-                      e.stopPropagation();
                       if (e.target.checked) {
                         setSelectedComs(prev => [...prev, c.id]);
                       } else {
                         setSelectedComs(prev => prev.filter(id => id !== c.id));
                       }
                     }}
-                    onClick={e => e.stopPropagation()}
-                    style={{ width: 18, height: 18, cursor: 'pointer', accentColor: '#4f46e5' }}
+                    style={{ width: 17, height: 17, cursor: 'pointer', accentColor: '#4f46e5' }}
                   />
                 </div>
-                {/* Content Column */}
-                <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                    <h3 className="ad-comunicado-title" style={{ margin: 0, fontSize: 17, fontWeight: 800, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', letterSpacing: '-0.01em' }}>
+
+                {/* Main Content Column */}
+                <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 5 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <span style={{
+                      fontSize: 10,
+                      fontWeight: 800,
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.04em',
+                      padding: '2px 7px',
+                      borderRadius: 6,
+                      background: isReportCard ? 'rgba(124, 58, 237, 0.1)' : 'rgba(79, 70, 229, 0.08)',
+                      color: isReportCard ? '#7c3aed' : '#4f46e5',
+                      flexShrink: 0
+                    }}>
+                      {isReportCard ? 'Relatório' : (c.tipo || 'Comunicado')}
+                    </span>
+
+                    <h3 className="ad-comunicado-title" style={{ margin: 0, fontSize: 15.5, fontWeight: 800, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', letterSpacing: '-0.01em' }}>
                       {c.titulo}
                     </h3>
-                    {c.fixado && <span style={{ background: 'rgba(245, 158, 11, 0.1)', color: '#f59e0b', padding: '2px 6px', borderRadius: 6, display: 'flex', alignItems: 'center' }}><Pin size={12} fill="#f59e0b" /></span>}
-                    {hasConversas && (
-                      <span 
-                        title={`${conversasCount} comentários/conversas registradas`}
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: 4,
-                          background: hasUnreadConversation ? 'rgba(239, 68, 68, 0.12)' : 'rgba(79, 70, 229, 0.1)',
-                          color: hasUnreadConversation ? '#dc2626' : '#4f46e5',
-                          border: `1px solid ${hasUnreadConversation ? 'rgba(239, 68, 68, 0.25)' : 'rgba(79, 70, 229, 0.2)'}`,
-                          padding: '2px 8px',
-                          borderRadius: 8,
-                          fontSize: 11,
-                          fontWeight: 800,
-                          flexShrink: 0
-                        }}
-                      >
-                        <MessageSquare size={12} fill={hasUnreadConversation ? '#dc2626' : '#4f46e5'} fillOpacity={0.25} />
-                        <span>{conversasCount}</span>
-                        {hasUnreadConversation && (
-                          <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#dc2626', display: 'inline-block' }} />
-                        )}
+
+                    {c.fixado && (
+                      <span style={{ background: 'rgba(245, 158, 11, 0.12)', color: '#d97706', padding: '2px 6px', borderRadius: 6, display: 'inline-flex', alignItems: 'center' }}>
+                        <Pin size={12} fill="#f59e0b" />
                       </span>
                     )}
-                  </div>
-                  
-                  <p className="ad-comunicado-snippet" style={{ margin: 0, fontSize: 14, color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 500 }}>
-                    {(c.conteudo || (c as any).texto || '').replace(/<[^>]*>/g, '').replace(/[\*\#\_]/g, '')}
-                  </p>
-                  
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 6, flexWrap: 'wrap' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f8fafc', border: '1px solid #e2e8f0', padding: '4px 12px', borderRadius: 12 }}>
-                      <User size={13} color="#64748b" />
-                      <span style={{ fontSize: 12, fontWeight: 700, color: '#475569' }}>
-                        {c.autor || 'Sistema'}
-                        {(c.autorCargo || (c as any).dados?.autorCargo) && <span style={{ fontWeight: 500, color: '#94a3b8' }}> • {c.autorCargo || (c as any).dados?.autorCargo}</span>}
-                      </span>
-                    </div>
-                    {isGlobal ? (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.2)', padding: '4px 12px', borderRadius: 12, fontSize: 12, fontWeight: 700, color: '#059669' }}>
-                        <Users size={13} /> Toda a Escola
-                      </div>
-                    ) : (
-                      ((c.turmas && c.turmas.length > 0) || (c.alunosIds && c.alunosIds.length > 0) || (c.funcionariosIds && c.funcionariosIds.length > 0) || (c.grupos && c.grupos.length > 0)) && (
-                        <button 
-                          onClick={e => { e.stopPropagation(); setViewingDestCom(c); }}
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: 6,
-                            background: 'rgba(79, 70, 229, 0.05)',
-                            border: '1px solid rgba(79, 70, 229, 0.15)',
-                            padding: '4px 12px',
-                            borderRadius: 12,
-                            fontSize: 12,
-                            fontWeight: 700,
-                            color: '#4f46e5',
-                            cursor: 'pointer',
-                            transition: 'all 0.2s',
-                          }}
-                          onMouseEnter={e => { e.currentTarget.style.background = 'rgba(79, 70, 229, 0.1)' }}
-                          onMouseLeave={e => { e.currentTarget.style.background = 'rgba(79, 70, 229, 0.05)' }}
-                        >
-                          <Menu size={13} />
-                          Ver Destinatários ({(c.turmas?.length || 0) + (c.grupos?.length || 0) + (c.funcionariosIds?.length || 0) + (c.alunosIds?.length || 0)})
-                        </button>
-                      )
-                    )}
+
                     {hasConversas && (
-                      <div 
-                        title={`${conversasCount} comentário(s) em conversas particulares. Clique para abrir.`}
+                      <button
+                        type="button"
+                        title={hasUnreadConversation ? `${conversasCount} comentário(s) — há nova mensagem não lida! Clique para abrir a conversa.` : `${conversasCount} comentário(s) registrado(s). Clique para ver o comentário.`}
                         onClick={e => {
                           e.stopPropagation();
+                          setViewingComFocusComments(true);
                           setViewingCom(c);
                         }}
                         style={{
                           display: 'inline-flex',
                           alignItems: 'center',
                           gap: 5,
-                          background: hasUnreadConversation ? 'rgba(239, 68, 68, 0.08)' : 'rgba(79, 70, 229, 0.06)',
+                          background: hasUnreadConversation ? '#fef2f2' : '#eef2ff',
                           color: hasUnreadConversation ? '#dc2626' : '#4f46e5',
-                          border: `1px solid ${hasUnreadConversation ? 'rgba(239, 68, 68, 0.25)' : 'rgba(79, 70, 229, 0.2)'}`,
-                          padding: '4px 10px',
-                          borderRadius: 12,
-                          fontSize: 12,
-                          fontWeight: 700,
+                          border: `1px solid ${hasUnreadConversation ? 'rgba(239, 68, 68, 0.35)' : 'rgba(99, 102, 241, 0.28)'}`,
+                          padding: '2px 9px',
+                          borderRadius: 99,
+                          fontSize: 11,
+                          fontWeight: 800,
                           cursor: 'pointer',
-                          transition: 'all 0.15s'
+                          flexShrink: 0
                         }}
                       >
-                        <MessageSquare size={13} />
-                        <span>{conversasCount} {conversasCount === 1 ? 'comentário' : 'comentários'}</span>
+                        <MessageSquare size={11.5} fill={hasUnreadConversation ? '#dc2626' : '#4f46e5'} fillOpacity={0.2} />
+                        <span>{conversasCount}</span>
                         {hasUnreadConversation && (
-                          <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#dc2626', display: 'inline-block' }} />
+                          <span className="ad-unread-dot" style={{ width: 6, height: 6, borderRadius: '50%', background: '#dc2626', display: 'inline-block' }} />
                         )}
+                      </button>
+                    )}
+                  </div>
+                  
+                  <p className="ad-comunicado-snippet" style={{ margin: 0, fontSize: 13.5, color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 500 }}>
+                    {(c.conteudo || (c as any).texto || '').replace(/<[^>]*>/g, '').replace(/[\*\#\_]/g, '')}
+                  </p>
+                  
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4, flexWrap: 'wrap' }}>
+                    {/* Author chip */}
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#f8fafc', border: '1px solid #e2e8f0', padding: '3px 10px', borderRadius: 99 }}>
+                      <User size={12} color="#64748b" />
+                      <span style={{ fontSize: 11.5, fontWeight: 700, color: '#334155' }}>
+                        {c.autor || 'Sistema'}
+                        {(c.autorCargo || (c as any).dados?.autorCargo) && (
+                          <span style={{ fontWeight: 500, color: '#94a3b8' }}> • {c.autorCargo || (c as any).dados?.autorCargo}</span>
+                        )}
+                      </span>
+                    </div>
+
+                    {/* Turma chip when single or few turmas */}
+                    {!isGlobal && targetTurmas.length > 0 && (
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#f5f3ff', border: '1px solid rgba(124, 58, 237, 0.18)', padding: '3px 10px', borderRadius: 99, fontSize: 11.5, fontWeight: 700, color: '#6d28d9' }}>
+                        <GraduationCap size={12} />
+                        <span>{targetTurmas.length === 1 ? targetTurmas[0] : `${targetTurmas[0]} +${targetTurmas.length - 1}`}</span>
                       </div>
                     )}
-                    <div style={{ fontSize: 12, fontWeight: 600, color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 4 }}>
-                      <Clock size={13} />
+
+                    {/* Recipients badge */}
+                    {isGlobal ? (
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#ecfdf5', border: '1px solid rgba(16, 185, 129, 0.25)', padding: '3px 10px', borderRadius: 99, fontSize: 11.5, fontWeight: 700, color: '#059669' }}>
+                        <Users size={12} /> Toda a Escola ({targetCount})
+                      </div>
+                    ) : (
+                      <button 
+                        type="button"
+                        onClick={e => { e.stopPropagation(); setViewingDestCom(c); }}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 5,
+                          background: '#f8fafc',
+                          border: '1px solid #cbd5e1',
+                          padding: '3px 10px',
+                          borderRadius: 99,
+                          fontSize: 11.5,
+                          fontWeight: 700,
+                          color: '#334155',
+                          cursor: 'pointer'
+                        }}
+                        title="Ver lista de turmas e alunos destinatários"
+                      >
+                        <Users size={12} color="#4f46e5" />
+                        <span>Destinatários ({targetCount})</span>
+                      </button>
+                    )}
+
+                    {/* Interactive Comment Pill */}
+                    {hasConversas && (
+                      <button
+                        type="button"
+                        title="Clique para abrir e ler os comentários deste comunicado"
+                        onClick={e => {
+                          e.stopPropagation();
+                          setViewingComFocusComments(true);
+                          setViewingCom(c);
+                        }}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 5,
+                          background: hasUnreadConversation ? '#fef2f2' : '#eef2ff',
+                          color: hasUnreadConversation ? '#dc2626' : '#4f46e5',
+                          border: `1px solid ${hasUnreadConversation ? 'rgba(239, 68, 68, 0.35)' : 'rgba(99, 102, 241, 0.25)'}`,
+                          padding: '3px 10px',
+                          borderRadius: 99,
+                          fontSize: 11.5,
+                          fontWeight: 800,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        <MessageSquare size={12} />
+                        <span>
+                          {hasUnreadConversation ? 'Novo comentário • ' : ''}
+                          {conversasCount} {conversasCount === 1 ? 'comentário' : 'comentários'}
+                        </span>
+                        {hasUnreadConversation && (
+                          <span className="ad-unread-dot" style={{ width: 6, height: 6, borderRadius: '50%', background: '#dc2626', display: 'inline-block' }} />
+                        )}
+                      </button>
+                    )}
+
+                    {/* Date & Time */}
+                    <div style={{ fontSize: 11.5, fontWeight: 600, color: '#94a3b8', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                      <Clock size={12} />
                       {dateObj ? `${dateObj.toLocaleDateString('pt-BR')} às ${dateObj.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : '--'}
                     </div>
                   </div>
                 </div>
 
-                {/* Column: Stats */}
-                <div className="ad-comunicado-stats" style={{ minWidth: 160, display: 'flex', alignItems: 'center', gap: 16, borderLeft: '1px solid #e2e8f0', paddingLeft: 24 }}>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                      <span style={{ fontSize: 11, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Leitura</span>
-                      <span style={{ fontSize: 12, fontWeight: 800, color: progresso >= 100 ? '#059669' : '#4f46e5' }}>{Math.round(progresso)}%</span>
+                {/* Column: Leitura % Interactive Card Widget */}
+                <div
+                  className="ad-comunicado-stats"
+                  onClick={e => {
+                    e.stopPropagation();
+                    setSelectedCom(c);
+                  }}
+                  title="Clique para abrir o relatório detalhado de leitura por família"
+                  style={{
+                    minWidth: 185,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 12,
+                    borderLeft: '1px solid #f1f5f9',
+                    paddingLeft: 18
+                  }}
+                >
+                  <div style={{
+                    flex: 1,
+                    background: '#f8fafc',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: 12,
+                    padding: '8px 12px'
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6, gap: 8 }}>
+                      <span style={{ fontSize: 10.5, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                        Leitura
+                      </span>
+                      <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                        <span style={{ fontSize: 13.5, fontWeight: 900, color: readAccentColor }}>
+                          {pctRounded}%
+                        </span>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: '#64748b' }}>
+                          ({lidas}/{targetCount})
+                        </span>
+                      </div>
                     </div>
-                    <div style={{ height: 8, background: '#f1f5f9', borderRadius: 10, overflow: 'hidden', boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.05)' }}>
-                      <motion.div 
-                        initial={{ width: 0 }}
-                        animate={{ width: `${progresso}%` }}
-                        transition={{ duration: 0.8, ease: "easeOut" }}
-                        style={{ height: '100%', background: progresso >= 100 ? '#10b981' : 'linear-gradient(90deg, #6366f1, #4f46e5)', borderRadius: 10 }} 
+                    <div style={{ height: 6, background: '#e2e8f0', borderRadius: 99, overflow: 'hidden' }}>
+                      <div
+                        style={{
+                          width: `${pctRounded}%`,
+                          height: '100%',
+                          background: readBarBg,
+                          borderRadius: 99,
+                          transition: 'width 0.4s ease'
+                        }}
                       />
                     </div>
-                  </div>
-                  <div style={{ fontSize: 13, fontWeight: 800, color: '#475569', background: '#f8fafc', padding: '6px 12px', borderRadius: 10, minWidth: 54, textAlign: 'center', border: '1px solid #e2e8f0' }}>
-                    {lidas}/{targetCount}
                   </div>
                 </div>
 
                 {/* Column: Actions */}
-                <div className="ad-comunicado-actions" style={{ display: 'flex', gap: 8, paddingLeft: 12 }}>
-                   <button className="btn btn-ghost btn-sm" style={{ width: 36, height: 36, padding: 0, borderRadius: 12, color: '#64748b' }} onClick={e => { e.stopPropagation(); handleReenviar(c) }} title="Reenviar"><SendIcon size={16} /></button>
-                   <button className="btn btn-primary btn-sm" style={{ padding: '0 16px', height: 36, borderRadius: 12, fontSize: 12, fontWeight: 800, background: '#0f172a', borderColor: '#0f172a' }} onClick={e => { e.stopPropagation(); setSelectedCom(c) }}>
-                      Detalhes
-                   </button>
+                <div className="ad-comunicado-actions" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    style={{ width: 34, height: 34, padding: 0, borderRadius: 10, color: '#64748b', border: '1px solid #e2e8f0', background: '#ffffff' }}
+                    onClick={e => { e.stopPropagation(); handleReenviar(c); }}
+                    title="Reenviar / Encaminhar"
+                  >
+                    <SendIcon size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm"
+                    style={{
+                      padding: '0 13px',
+                      height: 34,
+                      borderRadius: 10,
+                      fontSize: 12,
+                      fontWeight: 800,
+                      background: '#0f172a',
+                      borderColor: '#0f172a',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 5
+                    }}
+                    onClick={e => { e.stopPropagation(); setSelectedCom(c); }}
+                  >
+                    <Eye size={13} />
+                    <span>Leituras</span>
+                  </button>
                 </div>
-              </motion.div>
-             )
+              </div>
+            );
           })}
 
-          {hasNextPageComunicados && (
-            <div style={{ display: 'flex', justifyContent: 'center', marginTop: 16, marginBottom: 32 }}>
-              <button 
-                onClick={handleLoadMore}
-                disabled={isFetchingMore || isFetchingNextPageComunicados}
-                style={{
-                  background: '#f1f5f9',
-                  color: '#475569',
-                  border: '1px solid #e2e8f0',
-                  padding: '10px 24px',
-                  borderRadius: 20,
-                  fontSize: 14,
-                  fontWeight: 700,
-                  cursor: (isFetchingMore || isFetchingNextPageComunicados) ? 'not-allowed' : 'pointer',
-                  opacity: (isFetchingMore || isFetchingNextPageComunicados) ? 0.7 : 1,
-                  transition: 'all 0.2s',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                }}
-                onMouseEnter={e => {
-                  if (!(isFetchingMore || isFetchingNextPageComunicados)) e.currentTarget.style.background = '#e2e8f0'
-                }}
-                onMouseLeave={e => {
-                  if (!(isFetchingMore || isFetchingNextPageComunicados)) e.currentTarget.style.background = '#f1f5f9'
-                }}
-              >
-                {(isFetchingMore || isFetchingNextPageComunicados) ? (
-                  <>
-                    <Loader2 size={16} className="animate-spin" /> Carregando...
-                  </>
-                ) : (
-                  'Carregar mais'
-                )}
-              </button>
-            </div>
-          )}
-          {!hasNextPageComunicados && filtered.length > 0 && !isDataLoading && (
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 8,
-              marginTop: 16,
-              marginBottom: 32,
-              color: '#94a3b8',
-              fontSize: 13,
-              fontWeight: 600,
-            }}>
-              <CheckCircle2 size={15} style={{ opacity: 0.7, color: '#10b981' }} />
-              <span>Todos os comunicados foram carregados</span>
+          {/* Modern Full Pagination Footer */}
+          {totalCount > 0 && (
+            <div
+              className="ad-pagination-bar"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 16,
+                marginTop: 8,
+                marginBottom: 28,
+                padding: '12px 18px',
+                background: '#ffffff',
+                borderRadius: 16,
+                border: '1px solid #e2e8f0',
+                boxShadow: '0 2px 6px rgba(15, 23, 42, 0.02)',
+                flexWrap: 'wrap'
+              }}
+            >
+              {/* Left: Page Size Selector (10, 30, 50, 100) + Item Counter */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 12.5, fontWeight: 700, color: '#475569' }}>Comunicados por página:</span>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', background: '#f1f5f9', padding: 3, borderRadius: 10, border: '1px solid #e2e8f0', gap: 2 }}>
+                    {[10, 30, 50, 100].map(size => {
+                      const active = pageSize === size;
+                      return (
+                        <button
+                          key={size}
+                          type="button"
+                          onClick={() => setStoredPageSize(size)}
+                          style={{
+                            height: 28,
+                            padding: '0 10px',
+                            borderRadius: 7,
+                            border: 'none',
+                            fontSize: 12,
+                            fontWeight: 800,
+                            cursor: 'pointer',
+                            background: active ? '#4f46e5' : 'transparent',
+                            color: active ? '#ffffff' : '#475569',
+                            boxShadow: active ? '0 2px 6px rgba(79, 70, 229, 0.25)' : 'none',
+                            transition: 'all 0.15s ease'
+                          }}
+                        >
+                          {size}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+                <span style={{ fontSize: 12.5, fontWeight: 600, color: '#64748b' }}>
+                  Exibindo <strong>{rangeStart}–{rangeEnd}</strong> de <strong>{totalCount}</strong> comunicados (Página {currentPage} de {totalPages})
+                </span>
+              </div>
+
+              {/* Right: Page Navigation Buttons */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  className="ad-page-btn"
+                  onClick={() => handlePageChange(1)}
+                  disabled={currentPage <= 1 || isDataLoading}
+                  title="Primeira página"
+                >
+                  <ChevronsLeft size={15} />
+                </button>
+                <button
+                  type="button"
+                  className="ad-page-btn"
+                  onClick={() => handlePageChange(currentPage - 1)}
+                  disabled={currentPage <= 1 || isDataLoading}
+                  title="Página anterior"
+                  style={{ gap: 4, padding: '0 12px' }}
+                >
+                  <ChevronLeft size={15} />
+                  <span>Anterior</span>
+                </button>
+
+                {visiblePageNumbers.map((item) => {
+                  if (item === 'ellipsis-start' || item === 'ellipsis-end') {
+                    return (
+                      <span key={item} style={{ padding: '0 4px', color: '#94a3b8', fontWeight: 700, fontSize: 13 }}>
+                        …
+                      </span>
+                    );
+                  }
+                  return (
+                    <button
+                      key={item}
+                      type="button"
+                      className={`ad-page-btn ${currentPage === item ? 'is-active' : ''}`}
+                      onClick={() => handlePageChange(item)}
+                      disabled={isDataLoading}
+                    >
+                      {item}
+                    </button>
+                  );
+                })}
+
+                <button
+                  type="button"
+                  className="ad-page-btn"
+                  onClick={() => handlePageChange(currentPage + 1)}
+                  disabled={currentPage >= totalPages || isDataLoading}
+                  title="Próxima página"
+                  style={{ gap: 4, padding: '0 12px' }}
+                >
+                  <span>Próxima</span>
+                  <ChevronRight size={15} />
+                </button>
+                <button
+                  type="button"
+                  className="ad-page-btn"
+                  onClick={() => handlePageChange(totalPages)}
+                  disabled={currentPage >= totalPages || isDataLoading}
+                  title="Última página"
+                >
+                  <ChevronsRight size={15} />
+                </button>
+              </div>
             </div>
           )}
         </div>
@@ -2194,6 +2723,7 @@ export default function ADAdminComunicados() {
           allComunicados={comunicados}
           isAdminMode={true}
           isStaff={true}
+          initialFocusComments={viewingComFocusComments}
           alunos={alunos}
           colaboradores={colaboradores}
           turmas={turmas}
@@ -2201,16 +2731,22 @@ export default function ADAdminComunicados() {
           currentUserName={currentUser?.nome || 'Administrador'}
           currentUserAvatar={currentUser?.foto || undefined}
           onCiencia={() => {}}
-          onClose={() => setViewingCom(null)}
+          onClose={() => {
+            setViewingComFocusComments(false);
+            setViewingCom(null);
+          }}
           onEdit={(c) => {
+            setViewingComFocusComments(false);
             setViewingCom(null);
             openEdit(c);
           }}
           onDelete={(id) => {
+            setViewingComFocusComments(false);
             setViewingCom(null);
             handleDeleteSingleComunicado(id);
           }}
           onForward={(c) => {
+            setViewingComFocusComments(false);
             setViewingCom(null);
             handleReenviar(c);
           }}
@@ -2356,21 +2892,25 @@ export default function ADAdminComunicados() {
                     )}
                   </div>
                 </div>
-                {viewingDestCom.alunosIds && viewingDestCom.alunosIds.length > 0 && (
-                  <div>
-                    <strong style={{ fontSize: 11, color: 'hsl(var(--text-muted))', textTransform: 'uppercase', letterSpacing: 0.5 }}>Alunos Específicos ({viewingDestCom.alunosIds.length})</strong>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 12 }}>
-                      {viewingDestCom.alunosIds.map((aId, idx) => {
-                        const alunoObj = (alunos || []).find(al => String(al.id) === String(aId) || String(al.id).replace(/^_+/, '') === String(aId).replace(/^_+/, ''));
-                        return (
-                          <span key={idx} className="badge" style={{ background: 'rgba(16,185,129,0.06)', color: '#10b981', border: '1px solid rgba(16,185,129,0.12)', fontSize: 11, padding: '4px 10px', fontWeight: 600 }}>
-                            {alunoObj ? alunoObj.nome : `ID: ${aId}`}
-                          </span>
-                        )
-                      })}
+                {(() => {
+                  const destStuIds = computeComunicadoMetrics(viewingDestCom).explicitStudentIds;
+                  if (destStuIds.length === 0) return null;
+                  return (
+                    <div>
+                      <strong style={{ fontSize: 11, color: 'hsl(var(--text-muted))', textTransform: 'uppercase', letterSpacing: 0.5 }}>Alunos Destinatários ({destStuIds.length})</strong>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 12 }}>
+                        {destStuIds.map((aId, idx) => {
+                          const alunoObj = (alunos || []).find(al => cleanStuId(al.id) === cleanStuId(aId));
+                          return (
+                            <span key={idx} className="badge" style={{ background: 'rgba(16,185,129,0.06)', color: '#10b981', border: '1px solid rgba(16,185,129,0.12)', fontSize: 11, padding: '4px 10px', fontWeight: 600 }}>
+                              {alunoObj ? alunoObj.nome : `ID: ${aId}`}
+                            </span>
+                          )
+                        })}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  );
+                })()}
                 {viewingDestCom.funcionariosIds && viewingDestCom.funcionariosIds.length > 0 && (
                   <div>
                     <strong style={{ fontSize: 11, color: 'hsl(var(--text-muted))', textTransform: 'uppercase', letterSpacing: 0.5 }}>Colaboradores ({viewingDestCom.funcionariosIds.length})</strong>

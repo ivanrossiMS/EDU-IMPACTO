@@ -160,6 +160,7 @@ interface ComunicadoViewModalProps {
   onEdit?: (comunicado: any) => void
   onDelete?: (id: string) => void
   onForward?: (comunicado: any) => void
+  initialFocusComments?: boolean
 }
 
 export function ComunicadoViewModal({
@@ -184,7 +185,8 @@ export function ComunicadoViewModal({
   turmas = [],
   onEdit,
   onDelete,
-  onForward
+  onForward,
+  initialFocusComments = false
 }: ComunicadoViewModalProps) {
   const [comunicado, setComunicado] = useState<any>(initialComunicado)
   const [isLoadingFull, setIsLoadingFull] = useState(!initialComunicado.conteudo && !initialComunicado.texto)
@@ -371,6 +373,8 @@ export function ComunicadoViewModal({
   const [activeReactionMsgId, setActiveReactionMsgId] = useState<string | null>(null)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const commentsSectionRef = useRef<HTMLDivElement>(null)
+  const hasAutoFocusedCommentsRef = useRef(false)
   const bodyRef = useRef<HTMLDivElement>(null)
   const [keyboardOffset, setKeyboardOffset] = useState(0)
 
@@ -505,6 +509,24 @@ export function ComunicadoViewModal({
   
   const messagesToShow = isAdminMode ? (selectedThreadId ? adminThreads.find(t => t.studentId === selectedThreadId)?.messages || [] : []) : messages;
 
+  useEffect(() => {
+    if (!initialFocusComments || hasAutoFocusedCommentsRef.current) return;
+    if (isAdminMode && adminThreads.length > 0) {
+      hasAutoFocusedCommentsRef.current = true;
+      if (adminThreads.length === 1 && !selectedThreadId) {
+        setSelectedThreadId(adminThreads[0].studentId);
+      }
+      setTimeout(() => {
+        commentsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 120);
+    } else if (!isAdminMode && messages.length > 0) {
+      hasAutoFocusedCommentsRef.current = true;
+      setTimeout(() => {
+        commentsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 120);
+    }
+  }, [initialFocusComments, isAdminMode, adminThreads, selectedThreadId, messages.length]);
+
   const destinatariosStr = useMemo(() => {
     if (!isAdminMode && !isStaff) return null;
     const destTurmas = comunicado.turmas || comunicado.dados?.turmas || [];
@@ -606,8 +628,8 @@ export function ComunicadoViewModal({
       const autorId = comunicado.autorId || comunicado.dados?.autorId;
       if (isAdminMode) {
         if (isGroupedReport && autorId) {
-          const gDate = new Date(comunicado.dataEnvio || comunicado.created_at || 0).getTime();
-          url = `/api/comunicados_respostas?grouped_autor_id=${encodeURIComponent(autorId)}&grouped_time=${gDate}&admin=true${espelharParam}`;
+          const gDate = new Date(comunicado.created_at || comunicado.dataEnvio || 0).getTime();
+          url = `/api/comunicados_respostas?comunicado_id=${encodeURIComponent(comunicado.id)}&grouped_autor_id=${encodeURIComponent(autorId)}&grouped_time=${gDate}&admin=true${espelharParam}`;
         } else {
           url = `/api/comunicados_respostas?comunicado_id=${encodeURIComponent(comunicado.id)}&admin=true${espelharParam}`;
         }
@@ -621,8 +643,8 @@ export function ComunicadoViewModal({
         if (Array.isArray(data)) {
           const authorized = filterAuthorizedMessages(data);
           const unique = Array.from(new Map(authorized.map((m: any) => [m.id, m])).values()) as ChatMessage[];
-          setMessages(unique);
-          if (isAdminMode) {
+          setMessages(prev => (unique.length === 0 && prev.length > 0 && isGroupedReport) ? prev : unique);
+          if (isAdminMode && unique.length > 0) {
             setGlobalCachedMessages(comunicado.id, unique);
           }
           if (typeof window !== 'undefined' && unique.length > 0) {
@@ -1854,7 +1876,7 @@ export function ComunicadoViewModal({
 
             {/* Comments Feed Area */}
             {canReply && (
-              <div style={{ marginTop: 24, maxWidth: 800, width: '100%', margin: '0 auto' }}>
+              <div ref={commentsSectionRef} style={{ marginTop: 24, maxWidth: 800, width: '100%', margin: '0 auto' }}>
                 {isAdminMode && !selectedThreadId ? (
                   adminThreads.length > 0 ? (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -1863,7 +1885,12 @@ export function ComunicadoViewModal({
                           <MessageSquare size={16} color="#6366f1" /> Conversas Privadas ({adminThreads.length})
                         </h3>
                       </div>
-                      {adminThreads.map(thread => (
+                      {adminThreads.map(thread => {
+                         const lastMsg = thread.messages[thread.messages.length - 1];
+                         const lastSnippet = lastMsg?.conteudo
+                           ? `${lastMsg.remetente_nome ? formatShortName(lastMsg.remetente_nome) + ': ' : ''}${lastMsg.conteudo}`
+                           : `${thread.messages.length} ${thread.messages.length === 1 ? 'mensagem' : 'mensagens'} nesta conversa`;
+                         return (
                          <div 
                            key={thread.studentId} 
                            onClick={() => setSelectedThreadId(thread.studentId)} 
@@ -1908,14 +1935,20 @@ export function ComunicadoViewModal({
                                    color: '#0f172a',
                                    whiteSpace: 'nowrap',
                                    overflow: 'hidden',
-                                   textOverflow: 'ellipsis'
+                                   textOverflow: 'ellipsis',
+                                   display: 'flex',
+                                   alignItems: 'center',
+                                   gap: 8
                                  }}
                                  title={thread.studentName}
                                >
-                                 {formatShortName(thread.studentName)}
+                                 <span>{formatShortName(thread.studentName)}</span>
+                                 <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 7px', borderRadius: 99, background: '#eef2ff', color: '#4f46e5' }}>
+                                   {thread.messages.length} {thread.messages.length === 1 ? 'msg' : 'msgs'}
+                                 </span>
                                </div>
-                               <div style={{ fontSize: 13, color: '#64748b', marginTop: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                 {thread.messages.length} {thread.messages.length === 1 ? 'mensagem' : 'mensagens'} nesta conversa
+                               <div style={{ fontSize: 13, color: '#475569', marginTop: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                 {lastSnippet}
                                </div>
                              </div>
                            </div>
@@ -1928,7 +1961,8 @@ export function ComunicadoViewModal({
                              </div>
                            </div>
                          </div>
-                      ))}
+                         );
+                      })}
                     </div>
                   ) : loadingMsg ? (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '4px 0' }}>

@@ -156,21 +156,39 @@ export default function ADComunicadosPage({ params }: { params: any }) {
     const isMirroring = !!(espelharRespId || espelharAluno || espelharColabId);
 
     const nowIso = new Date().toISOString();
+    const isViewerStudent = isMirroring
+      ? espelharAluno
+      : Boolean(
+          currentUser?.cargo === 'Aluno' ||
+          currentUser?.perfil === 'Aluno' ||
+          (currentUser as any)?.userType === 'aluno' ||
+          ((currentUser as any)?.aluno_id && currentUser?.cargo !== 'Responsável' && !(currentUser as any)?.responsavel_id)
+        );
     const currentReaderId = isMirroring ? (espelharRespId || espelharColabId || resolvedParams.slug) : (currentUser?.id || '');
-    const legacyResponsavelId = isMirroring ? espelharRespId : ((currentUser as any)?.responsavel_id || (currentUser as any)?.user_metadata?.responsavel_id || '');
-    const legacyAlunoId = isMirroring ? (espelharAluno ? resolvedParams.slug : '') : ((currentUser as any)?.aluno_id || (currentUser as any)?.user_metadata?.aluno_id || '');
+    const legacyResponsavelId = isMirroring
+      ? espelharRespId
+      : ((currentUser as any)?.responsavel_id || (currentUser as any)?.dados?.responsavel_id || (currentUser as any)?.user_metadata?.responsavel_id || '');
+    const legacyAlunoId = isMirroring
+      ? (espelharAluno ? resolvedParams.slug : '')
+      : (isViewerStudent ? ((currentUser as any)?.aluno_id || (currentUser as any)?.user_metadata?.aluno_id || resolvedParams.slug) : '');
     const readerIdWithSlug = legacyResponsavelId ? `${legacyResponsavelId}_${resolvedParams.slug}` : '';
     const currentReaderWithSlug = currentReaderId ? `${currentReaderId}_${resolvedParams.slug}` : '';
 
     const updatedLeituras = {
       ...(comunicadoItem.leituras || {}),
       ...(currentReaderId ? { [currentReaderId]: nowIso } : {}),
-      ...(resolvedParams.slug ? { [resolvedParams.slug]: nowIso } : {}),
+      ...(isViewerStudent && resolvedParams.slug
+        ? {
+            [resolvedParams.slug]: nowIso,
+            [`aluno_${resolvedParams.slug}`]: nowIso,
+            [`${resolvedParams.slug}_${resolvedParams.slug}`]: nowIso
+          }
+        : {}),
       ...(legacyResponsavelId ? { [legacyResponsavelId]: nowIso } : {}),
-      ...(legacyAlunoId ? { [legacyAlunoId]: nowIso } : {}),
+      ...(legacyAlunoId ? { [legacyAlunoId]: nowIso, [`${legacyAlunoId}_${resolvedParams.slug}`]: nowIso } : {}),
       ...(readerIdWithSlug ? { [readerIdWithSlug]: nowIso } : {}),
       ...(currentReaderWithSlug ? { [currentReaderWithSlug]: nowIso } : {}),
-      ...(currentUser?.id ? { [currentUser.id]: nowIso, [`${currentUser.id}_${resolvedParams.slug}`]: nowIso } : {})
+      ...(!isMirroring && currentUser?.id ? { [currentUser.id]: nowIso, [`${currentUser.id}_${resolvedParams.slug}`]: nowIso } : {})
     };
 
     const updatedConversasInfo = {
@@ -1189,10 +1207,14 @@ export default function ADComunicadosPage({ params }: { params: any }) {
             const isMirroring = !!(espelharRespId || espelharAluno || espelharColabId);
             
             const currentReaderId = isMirroring ? (espelharRespId || espelharColabId || resolvedParams.slug) : (currentUser?.id || '');
-            const legacyResponsavelId = isMirroring ? espelharRespId : ((currentUser as any)?.responsavel_id || (currentUser as any)?.user_metadata?.responsavel_id || '');
-            const legacyAlunoId = isMirroring ? (espelharAluno ? resolvedParams.slug : '') : ((currentUser as any)?.aluno_id || (currentUser as any)?.user_metadata?.aluno_id || '');
+            const legacyResponsavelId = isMirroring
+              ? espelharRespId
+              : ((currentUser as any)?.responsavel_id || (currentUser as any)?.dados?.responsavel_id || (currentUser as any)?.user_metadata?.responsavel_id || '');
+            const legacyAlunoId = isMirroring
+              ? (espelharAluno ? resolvedParams.slug : '')
+              : (isAlunoLogado ? ((currentUser as any)?.aluno_id || (currentUser as any)?.user_metadata?.aluno_id || resolvedParams.slug) : '');
             const readerIdWithSlug = legacyResponsavelId ? `${legacyResponsavelId}_${resolvedParams.slug}` : '';
-            const currentReaderWithSlug = `${currentReaderId}_${resolvedParams.slug}`;
+            const currentReaderWithSlug = currentReaderId ? `${currentReaderId}_${resolvedParams.slug}` : '';
 
             const hasUnreadConversation = Boolean(
               c.conversas_info?.has_unread || 
@@ -1206,19 +1228,36 @@ export default function ADComunicadosPage({ params }: { params: any }) {
               (getGlobalCachedMessages(c.id)?.length)
             );
 
-            const isRead = !hasUnreadConversation && (locallyReadIds.has(String(c.id)) || !!(
-              (c.leituras || {})[currentReaderId] || 
-              (c.leituras || {})[resolvedParams?.slug] || 
-              (legacyResponsavelId && (c.leituras || {})[legacyResponsavelId]) || 
-              (legacyAlunoId && (c.leituras || {})[legacyAlunoId]) ||
-              (readerIdWithSlug && (c.leituras || {})[readerIdWithSlug]) ||
-              (c.leituras || {})[currentReaderWithSlug] ||
-              (c.leituras && typeof c.leituras === 'object' && Object.keys(c.leituras).some(k => 
-                (resolvedParams?.slug && (k === resolvedParams.slug || k.endsWith(`_${resolvedParams.slug}`) || k.startsWith(`${resolvedParams.slug}_`))) ||
-                (currentUser?.id && (k === currentUser.id || k.startsWith(`${currentUser.id}_`) || k.endsWith(`_${currentUser.id}`))) ||
-                (legacyResponsavelId && (k === legacyResponsavelId || k.startsWith(`${legacyResponsavelId}_`) || k.endsWith(`_${legacyResponsavelId}`)))
-              ))
-            ));
+            const leiturasObj = (c.leituras && typeof c.leituras === 'object') ? c.leituras : {};
+            const isReadByCurrentViewer = isAlunoLogado
+              ? Boolean(
+                  (resolvedParams?.slug && (
+                    leiturasObj[resolvedParams.slug] ||
+                    leiturasObj[`aluno_${resolvedParams.slug}`] ||
+                    leiturasObj[`${resolvedParams.slug}_${resolvedParams.slug}`]
+                  )) ||
+                  (legacyAlunoId && (
+                    leiturasObj[legacyAlunoId] ||
+                    leiturasObj[`${legacyAlunoId}_${resolvedParams?.slug}`]
+                  )) ||
+                  (!isMirroring && currentUser?.id && (
+                    leiturasObj[currentUser.id] ||
+                    leiturasObj[`${currentUser.id}_${resolvedParams?.slug}`]
+                  ))
+                )
+              : Boolean(
+                  (currentReaderId && leiturasObj[currentReaderId]) ||
+                  (currentReaderWithSlug && leiturasObj[currentReaderWithSlug]) ||
+                  (legacyResponsavelId && leiturasObj[legacyResponsavelId]) ||
+                  (readerIdWithSlug && leiturasObj[readerIdWithSlug]) ||
+                  Object.keys(leiturasObj).some(k =>
+                    (!isMirroring && currentUser?.id && (k === currentUser.id || k.startsWith(`${currentUser.id}_`))) ||
+                    (legacyResponsavelId && (k === legacyResponsavelId || k.startsWith(`${legacyResponsavelId}_`))) ||
+                    (isMirroring && currentReaderId && (k === currentReaderId || k.startsWith(`${currentReaderId}_`)))
+                  )
+                );
+
+            const isRead = !hasUnreadConversation && (locallyReadIds.has(String(c.id)) || isReadByCurrentViewer);
 
             const isCiencia = locallyCienteIds.has(String(c.id)) || !!(
               (c.ciencias || {})[currentReaderId] || 
