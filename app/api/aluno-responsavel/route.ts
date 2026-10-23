@@ -5,6 +5,7 @@ import {
   getAuthorizedResponsavelIdsForUser,
 } from '@/lib/server/authGuard'
 import { supabaseServer as supabase } from '@/lib/supabaseServer'
+import { getAllAuthUsersCached } from '@/lib/server/supabaseAdminSingleton'
 
 export const dynamic = 'force-dynamic'
 
@@ -184,15 +185,63 @@ export async function GET(request: Request) {
       return NextResponse.json({ responsaveis: [] })
     }
 
-    // Fetch the actual responsavel records
+    // Fetch the actual responsavel records and cached Auth users in parallel
     const respIds = links.map((l: any) => l.responsavel_id).filter(Boolean)
-    const { data: respData, error: respError } = await supabase
-      .from('responsaveis')
-      .select('*')
-      .in('id', respIds)
+    const [respQueryRes, authUsers] = await Promise.all([
+      supabase.from('responsaveis').select('*').in('id', respIds),
+      getAllAuthUsersCached().catch(() => [] as any[]),
+    ])
+    const respData = respQueryRes.data
+    const respError = respQueryRes.error
 
     if (respError) {
       return NextResponse.json({ error: respError.message }, { status: 400 })
+    }
+
+    const enrichResp = (resp: any, link: any) => {
+      const rIdStr = String(resp.id || link.responsavel_id || '').trim()
+      const rIdClean = rIdStr.replace(/^0+/, '')
+      const rEmail = String(resp.email || resp.dados?.email || '').toLowerCase().trim()
+      const rCpf = String(resp.cpf || resp.dados?.cpf || '').replace(/\D/g, '')
+      const rPhone = String(resp.telefone || resp.celular || resp.dados?.telefone || resp.dados?.celular || '')
+      const rPhoneDigits = rPhone.replace(/\D/g, '').slice(-8)
+
+      const authUser = (authUsers || []).find((u: any) => {
+        if (resp.auth_id && String(u.id) === String(resp.auth_id)) return true
+        const uEmail = String(u.email || u.user_metadata?.email || '').toLowerCase().trim()
+        const uMetaRespId = String(u.user_metadata?.responsavel_id || u.user_metadata?.responsavelId || '').trim()
+        const uCpf = String(u.user_metadata?.cpf || '').replace(/\D/g, '')
+        const uPhoneDigits = String(u.phone || u.user_metadata?.telefone || u.user_metadata?.celular || '').replace(/\D/g, '').slice(-8)
+        return (
+          (rEmail && uEmail === rEmail) ||
+          (uMetaRespId && (uMetaRespId === rIdStr || (rIdClean && uMetaRespId.replace(/^0+/, '') === rIdClean))) ||
+          (rCpf.length >= 11 && uCpf.length >= 11 && rCpf === uCpf) ||
+          (rPhoneDigits.length >= 8 && uPhoneDigits.length >= 8 && rPhoneDigits === uPhoneDigits)
+        )
+      })
+
+      const ultimoAcesso = authUser?.last_sign_in_at || resp.ultimo_acesso || resp.dados?.ultimo_acesso || null
+      const temContaAtiva = Boolean(
+        authUser && (authUser.last_sign_in_at || authUser.user_metadata?.password_confirmed_at)
+      )
+
+      return {
+        ...resp,
+        cpf: resp.cpf || resp.dados?.cpf || '',
+        telefone: resp.telefone || resp.celular || resp.dados?.telefone || resp.dados?.celular || '',
+        email: resp.email || resp.dados?.email || authUser?.email || '',
+        auth_id: resp.auth_id || authUser?.id || null,
+        temContaAtiva,
+        appInstalado: Boolean(temContaAtiva || resp.app_instalado || resp.appInstalado),
+        ultimoAcesso,
+        ultimo_acesso: ultimoAcesso,
+        parentesco: link.parentesco,
+        isFinanceiro: link.resp_financeiro,
+        respFinanceiro: link.resp_financeiro,
+        isPedagogico: link.resp_pedagogico,
+        respPedagogico: link.resp_pedagogico,
+        isOutro: link.resp_outro,
+      }
     }
 
     // If multiple IDs requested, return a map
@@ -205,15 +254,9 @@ export async function GET(request: Request) {
         if (!map[studentId]) map[studentId] = []
         
         const resp = (respData || []).find((r: any) => String(r.id).trim() === String(l.responsavel_id).trim()) || {}
-        map[studentId].push({
-          ...resp,
-          parentesco: l.parentesco,
-          isFinanceiro: l.resp_financeiro,
-          respFinanceiro: l.resp_financeiro,
-          isPedagogico: l.resp_pedagogico,
-          respPedagogico: l.resp_pedagogico,
-          isOutro: l.resp_outro,
-        })
+        if (resp.id) {
+          map[studentId].push(enrichResp(resp, l))
+        }
       })
       
       // Remove empty entries or duplicates if any
@@ -230,17 +273,9 @@ export async function GET(request: Request) {
       .filter((l: any) => refsStr.includes(String(l.aluno_id).trim()))
       .map((l: any) => {
         const resp = (respData || []).find((r: any) => String(r.id).trim() === String(l.responsavel_id).trim()) || {}
-        return {
-          ...resp,
-          parentesco: l.parentesco,
-          isFinanceiro: l.resp_financeiro,
-          respFinanceiro: l.resp_financeiro,
-          isPedagogico: l.resp_pedagogico,
-          respPedagogico: l.resp_pedagogico,
-          isOutro: l.resp_outro,
-        }
+        return resp.id ? enrichResp(resp, l) : null
       })
-      .filter((r: any) => r.id)
+      .filter(Boolean)
 
     return NextResponse.json({ responsaveis })
   } catch (e: any) {

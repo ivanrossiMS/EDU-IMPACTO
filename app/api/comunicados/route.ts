@@ -105,10 +105,10 @@ export async function GET(request: Request) {
   const tipoParam = searchParams.get('tipo');
   const filtroRelatorioParam = searchParams.get('filtro_relatorio');
   
-  // VERIFICAÇÃO DE PERFIL — usa user_metadata para evitar round-trip ao banco na maioria dos casos
+  // VERIFICAÇÃO DE PERFIL — usa user_metadata/app_metadata para evitar round-trip ao banco na maioria dos casos
   let isFamilyOrStudent = false;
-  const perfil = user.user_metadata?.perfil || '';
-  const cargo = user.user_metadata?.cargo || '';
+  const perfil = user.user_metadata?.perfil || user.app_metadata?.perfil || '';
+  const cargo = user.user_metadata?.cargo || user.app_metadata?.cargo || '';
   const hasDualRole = Boolean(user.user_metadata?.hasDualRole || user.user_metadata?.responsavel_id);
 
   if (
@@ -122,10 +122,11 @@ export async function GET(request: Request) {
     isFamilyOrStudent = true;
   } else if (!perfil && !cargo) {
     // Só consulta o banco se os metadados estão vazios (caso raro)
-    const { data: dbUser } = await supabase
+    const { data: dbUser } = await supabaseServer
       .from('system_users')
       .select('perfil, cargo, dados')
-      .eq('id', user.id)
+      .or(`id.eq."${user.id}",auth_id.eq."${user.id}"`)
+      .limit(1)
       .maybeSingle();
     
     const dbPerfil = dbUser?.perfil || '';
@@ -145,17 +146,18 @@ export async function GET(request: Request) {
   }
 
   let isAdmin = false;
-  const perfisAdmin = ['Diretor Geral', 'Administrador', 'Admin', 'Coordenador', 'Gestor'];
-  const cargosAdmin = ['Administrador Master', 'Diretor Geral', 'Auxiliar Administrativo', 'Coordenador(a) Pedagógico(a)'];
+  const perfisAdmin = ['Diretor Geral', 'Administrador', 'Admin', 'Coordenador', 'Gestor', 'Direção', 'Diretor(a)', 'ADM'];
+  const cargosAdmin = ['Administrador Master', 'Diretor Geral', 'Auxiliar Administrativo', 'Coordenador(a) Pedagógico(a)', 'Direção', 'Diretor(a)', 'Administrador', 'ADM'];
   
   if (perfisAdmin.includes(perfil) || cargosAdmin.includes(cargo)) {
     isAdmin = true;
   } else if (!perfil && !cargo) {
     // Buscar banco se metadata falhar para checar admin
-    const { data: dbUserAdmin } = await supabase
+    const { data: dbUserAdmin } = await supabaseServer
       .from('system_users')
       .select('perfil, cargo')
-      .eq('id', user.id)
+      .or(`id.eq."${user.id}",auth_id.eq."${user.id}"`)
+      .limit(1)
       .maybeSingle();
     
     if (dbUserAdmin && (perfisAdmin.includes(dbUserAdmin.perfil) || cargosAdmin.includes(dbUserAdmin.cargo))) {
@@ -296,7 +298,8 @@ export async function GET(request: Request) {
   let resolvedTurmas: string[] = [];
   if (turmaId) resolvedTurmas.push(turmaId);
   let studentGroups: string[] = [];
-  let accessStartDate = await getLoggedUserAccessStartDate();
+  const isAdminScopeRequest = (scopeParam === 'admin' || scopeParam === 'true') && isAdmin;
+  let accessStartDate = isAdminScopeRequest ? null : await getLoggedUserAccessStartDate(false, user);
   let alunoDataForFilter: any = null;
   let allTurmasForFilter: any[] = [];
 

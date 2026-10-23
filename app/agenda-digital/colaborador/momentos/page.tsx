@@ -1493,6 +1493,8 @@ export default function ADMomentosPage() {
       </div>
 
       <style dangerouslySetInnerHTML={{ __html: `
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Outfit:wght@300;400;600;800&display=swap');
+
         .media-item-hover .expand-overlay {
           opacity: 0 !important;
           transition: opacity 0.2s ease !important;
@@ -2029,9 +2031,39 @@ export default function ADMomentosPage() {
                   {/* Rodapé Polaroid */}
                   <div style={{ display: 'flex', flexDirection: 'column', flex: 1, padding: '0 4px' }}>
                     
-                    <div style={{ fontSize: 18, lineHeight: 1.5, color: '#334155', fontFamily: '"Caveat", "Comic Sans MS", cursive', fontWeight: 500, marginBottom: 16 }}>
-                       {m.desc}
-                    </div>
+                    {m.desc && m.desc.trim() && (
+                      <div
+                        style={{
+                          background: 'linear-gradient(145deg, #f8fafc 0%, rgba(241, 245, 249, 0.65) 100%)',
+                          border: '1px solid rgba(226, 232, 240, 0.9)',
+                          borderLeft: '3.5px solid #6366f1',
+                          borderRadius: 12,
+                          padding: '12px 15px',
+                          marginBottom: 16,
+                          boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 1px 2px rgba(15, 23, 42, 0.02)',
+                        }}
+                      >
+                        <p
+                          style={{
+                            margin: 0,
+                            fontSize: 'clamp(0.9rem, 0.875rem + 0.15vw, 0.95rem)',
+                            lineHeight: 1.65,
+                            color: '#1e293b',
+                            fontFamily: "'Plus Jakarta Sans', 'Inter', 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif",
+                            fontWeight: 500,
+                            letterSpacing: '-0.011em',
+                            textAlign: 'start',
+                            whiteSpace: 'pre-line',
+                            textWrap: 'pretty',
+                            overflowWrap: 'break-word',
+                            WebkitFontSmoothing: 'antialiased',
+                            MozOsxFontSmoothing: 'grayscale',
+                          }}
+                        >
+                          {m.desc.trim()}
+                        </p>
+                      </div>
+                    )}
 
                     <div style={{ display: 'flex', gap: 16, marginBottom: 12 }}>
                        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 6 }}>

@@ -6,6 +6,7 @@ import { useSupabaseArray } from './useSupabaseCollection'
 import { useQueryComunicados, useQueryMomentos } from '@/lib/hooks/useAgendaQueries'
 import { useQueryClient } from '@tanstack/react-query'
 import { usePathname } from 'next/navigation'
+import { apiFetch } from '@/lib/api/apiClient'
 
 export interface ADComunicado {
   id: string
@@ -274,23 +275,58 @@ export function AgendaDigitalProvider({ children, isFamily = false }: { children
       return updater;
     }
 
-    // Se o cache ainda não foi inicializado (oldData nulo), criamos a estrutura
-    // vazia para que o updater seja aplicado normalmente (fix: atualização otimista
-    // não aparecia quando o comunicado era enviado antes do primeiro fetch terminar)
-    const safeOldData = (!oldData || !oldData.pages)
-      ? { pages: [[]], pageParams: [0] }
-      : oldData;
+    // Suporte para queries paginadas ({ items: ADComunicado[], totalCount: number })
+    if (oldData && typeof oldData === 'object' && Array.isArray(oldData.items)) {
+      if (typeof updater === 'function') {
+        const prevItems = oldData.items;
+        const nextItems = updater(prevItems);
+        if (nextItems === prevItems || !Array.isArray(nextItems)) {
+          return oldData;
+        }
+        const delta = nextItems.length - prevItems.length;
+        const prevTotal = typeof oldData.totalCount === 'number' ? oldData.totalCount : prevItems.length;
+        return {
+          ...oldData,
+          items: nextItems,
+          totalCount: Math.max(nextItems.length, prevTotal + delta),
+        };
+      }
+      if (Array.isArray(updater)) {
+        return { ...oldData, items: updater, totalCount: updater.length };
+      }
+      return oldData;
+    }
+
+    // Se o cache ainda não foi inicializado (oldData nulo/undefined), só inicializa
+    // se o updater realmente injetar novos itens (ex: inserção otimista). Caso contrário,
+    // preserva undefined para não sobrescrever queries pendentes com lista vazia.
+    if (!oldData || !Array.isArray(oldData.pages)) {
+      if (typeof updater === 'function') {
+        const initialItems = updater([]);
+        if (!Array.isArray(initialItems) || initialItems.length === 0) {
+          return oldData;
+        }
+        return { pages: [initialItems.slice(0, limit)], pageParams: [0] };
+      }
+      return oldData;
+    }
 
     if (typeof updater === 'function') {
-      const flatArray = safeOldData.pages.flat();
+      const flatArray = oldData.pages.flat();
       const newFlatArray = updater(flatArray);
+      if (newFlatArray === flatArray || !Array.isArray(newFlatArray)) {
+        return oldData;
+      }
+      const pageSize = (Array.isArray(oldData.pages[0]) && oldData.pages[0].length > limit)
+        ? oldData.pages[0].length
+        : limit;
       const newPages = [];
-      for(let i = 0; i < newFlatArray.length; i += limit) {
-        newPages.push(newFlatArray.slice(i, i + limit));
+      for (let i = 0; i < newFlatArray.length; i += pageSize) {
+        newPages.push(newFlatArray.slice(i, i + pageSize));
       }
       const pageList = newPages.length ? newPages : [[]];
-      const pageParams = pageList.map((_, idx) => idx * limit);
-      return { ...safeOldData, pages: pageList, pageParams };
+      const pageParams = pageList.map((_, idx) => idx * pageSize);
+      return { ...oldData, pages: pageList, pageParams };
     }
     return updater;
   }
@@ -537,10 +573,15 @@ export function AgendaDigitalProvider({ children, isFamily = false }: { children
   // Auto-Publish Cron Client-Side
   useEffect(() => {
     const interval = setInterval(() => {
+      const now = new Date();
       setComunicadosState((prev: ADComunicado[]) => {
-        if (!prev || !prev.length) return prev;
+        if (!Array.isArray(prev) || prev.length === 0) return prev;
+        const hasScheduledReady = prev.some(
+          c => c && c.status === 'agendado' && c.dataAgendamento && new Date(c.dataAgendamento) <= now
+        );
+        if (!hasScheduledReady) return prev;
+
         let hasChanges = false;
-        const now = new Date();
         const publishedNow: ADComunicado[] = [];
         const updated = prev.map(c => {
           if (c.status === 'agendado' && c.dataAgendamento) {
@@ -556,7 +597,7 @@ export function AgendaDigitalProvider({ children, isFamily = false }: { children
         });
         if (publishedNow.length > 0) {
           publishedNow.forEach(c => {
-            fetch('/api/comunicados', {
+            apiFetch('/api/comunicados', {
               method: 'PUT',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(c)

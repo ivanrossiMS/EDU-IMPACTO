@@ -94,22 +94,22 @@ export default function ADAdminComunicados() {
     if (isRefreshing) return
     setIsRefreshing(true)
     try {
-      await Promise.allSettled([
-        queryClient.invalidateQueries({ queryKey: ['agenda', 'comunicados'], refetchType: 'all' }),
-        queryClient.refetchQueries({ queryKey: ['agenda', 'comunicados'] })
-      ])
+      await queryClient.invalidateQueries({ queryKey: ['agenda', 'comunicados'], refetchType: 'active' })
     } finally {
       setTimeout(() => setIsRefreshing(false), 500)
     }
   }, [queryClient, isRefreshing])
 
-  // Ao entrar na tela ou voltar de outras abas, sincroniza de imediato
+  // Escuta de eventos em tempo real com injeção otimista em 0ms e sincronização com debounce
   useEffect(() => {
-    queryClient.invalidateQueries({ queryKey: ['agenda', 'comunicados'], refetchType: 'all' })
-  }, [queryClient])
+    let syncTimer: ReturnType<typeof setTimeout> | null = null
+    const triggerDebouncedSync = () => {
+      if (syncTimer) clearTimeout(syncTimer)
+      syncTimer = setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ['agenda', 'comunicados'], refetchType: 'active' })
+      }, 800)
+    }
 
-  // Escuta de eventos em tempo real com injeção otimista em 0ms
-  useEffect(() => {
     const handleInsert = (e: any) => {
       const payload = e.detail
       const rawItem = payload?.item || payload?.new || payload
@@ -131,14 +131,14 @@ export default function ADAdminComunicados() {
           destino: rawItem.destino || 'todos'
         }
         setComunicadosLocally?.((prev: any) => {
-          const list = Array.isArray(prev) ? prev : []
-          if (list.some((c: any) => String(c.id) === String(normalized.id))) {
-            return list.map((c: any) => String(c.id) === String(normalized.id) ? { ...c, ...normalized } : c)
+          if (!Array.isArray(prev)) return prev
+          if (prev.some((c: any) => String(c.id) === String(normalized.id))) {
+            return prev.map((c: any) => String(c.id) === String(normalized.id) ? { ...c, ...normalized } : c)
           }
-          return [normalized, ...list]
+          return [normalized, ...prev]
         })
       }
-      queryClient.invalidateQueries({ queryKey: ['agenda', 'comunicados'], refetchType: 'all' })
+      triggerDebouncedSync()
     }
 
     const handleUpdate = (e: any) => {
@@ -146,11 +146,12 @@ export default function ADAdminComunicados() {
       const rawItem = payload?.item || payload?.new || payload
       if (rawItem && rawItem.id) {
         setComunicadosLocally?.((prev: any) => {
-          const list = Array.isArray(prev) ? prev : []
-          return list.map((c: any) => String(c.id) === String(rawItem.id) ? { ...c, ...rawItem } : c)
+          if (!Array.isArray(prev)) return prev
+          if (!prev.some((c: any) => String(c.id) === String(rawItem.id))) return prev
+          return prev.map((c: any) => String(c.id) === String(rawItem.id) ? { ...c, ...rawItem } : c)
         })
       }
-      queryClient.invalidateQueries({ queryKey: ['agenda', 'comunicados'], refetchType: 'all' })
+      triggerDebouncedSync()
     }
 
     const handleDelete = (e: any) => {
@@ -160,11 +161,12 @@ export default function ADAdminComunicados() {
       if (ids.length > 0) {
         const idSet = new Set(ids.map(String))
         setComunicadosLocally?.((prev: any) => {
-          const list = Array.isArray(prev) ? prev : []
-          return list.filter((c: any) => !idSet.has(String(c.id)))
+          if (!Array.isArray(prev)) return prev
+          const filteredList = prev.filter((c: any) => !idSet.has(String(c.id)))
+          return filteredList.length === prev.length ? prev : filteredList
         })
       }
-      queryClient.invalidateQueries({ queryKey: ['agenda', 'comunicados'], refetchType: 'all' })
+      triggerDebouncedSync()
     }
 
     window.addEventListener('ad:comunicados-insert', handleInsert)
@@ -173,7 +175,7 @@ export default function ADAdminComunicados() {
 
     const handleVisibilityOrOnline = () => {
       if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
-        queryClient.invalidateQueries({ queryKey: ['agenda', 'comunicados'] })
+        queryClient.invalidateQueries({ queryKey: ['agenda', 'comunicados'], refetchType: 'active' })
       }
     }
     document.addEventListener('visibilitychange', handleVisibilityOrOnline)
@@ -182,11 +184,12 @@ export default function ADAdminComunicados() {
     // Contingência leve a cada 60s apenas se a aba estiver visível e em primeiro plano
     const pollTimer = setInterval(() => {
       if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
-        queryClient.invalidateQueries({ queryKey: ['agenda', 'comunicados'] })
+        queryClient.invalidateQueries({ queryKey: ['agenda', 'comunicados'], refetchType: 'active' })
       }
     }, 60000)
 
     return () => {
+      if (syncTimer) clearTimeout(syncTimer)
       window.removeEventListener('ad:comunicados-insert', handleInsert)
       window.removeEventListener('ad:comunicados-update', handleUpdate)
       window.removeEventListener('ad:comunicados-delete', handleDelete)
@@ -316,8 +319,8 @@ export default function ADAdminComunicados() {
     const fetchColaboradoresAndAuthors = async () => {
       try {
         const [usersRes, authorsRes] = await Promise.allSettled([
-          fetch('/api/configuracoes/usuarios?type=colaboradores&limit=1000'),
-          fetch('/api/comunicados?type=autores')
+          apiFetch('/api/configuracoes/usuarios?type=colaboradores&limit=1000'),
+          apiFetch('/api/comunicados?type=autores')
         ]);
 
         let colabsList: any[] = [];
@@ -410,21 +413,28 @@ export default function ADAdminComunicados() {
   const {
     data: paginatedData,
     isLoading: isLocalLoading,
+    isPending: isLocalPending,
     isFetching: isLocalFetching,
+    isError: isLocalError,
     refetch: refetchLocal,
   } = useQueryComunicadosPaginated(endpoint, currentPage, pageSize, { enabled: true });
 
-  const comunicados = useMemo(() => paginatedData?.items || [], [paginatedData?.items]);
-  const totalCount = paginatedData?.totalCount ?? comunicados.length;
+  const comunicados = useMemo<any[]>(() => {
+    if (Array.isArray(paginatedData?.items)) return paginatedData.items;
+    if (Array.isArray((paginatedData as any)?.pages)) return (paginatedData as any).pages.flat();
+    if (Array.isArray(paginatedData)) return paginatedData;
+    return [];
+  }, [paginatedData]);
+  const totalCount = typeof paginatedData?.totalCount === 'number' ? paginatedData.totalCount : comunicados.length;
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
-  const isDataLoading = isLocalLoading || isLocalFetching;
+  const isDataLoading = !currentUser || isLocalPending || isLocalLoading || (isLocalFetching && comunicados.length === 0);
 
   // Cache instantâneo de IDs com respostas na base de dados
   const [idsWithReplies, setIdsWithReplies] = useState<Set<string>>(new Set());
 
   const fetchIdsWithReplies = useCallback(() => {
-    fetch('/api/comunicados?type=comentarios_ids')
-      .then(res => res.json())
+    apiFetch('/api/comunicados?type=comentarios_ids')
+      .then(res => (res.ok ? res.json() : null))
       .then(data => {
         if (Array.isArray(data?.ids)) {
           setIdsWithReplies(new Set(data.ids.map(String)));
@@ -456,6 +466,7 @@ export default function ADAdminComunicados() {
       if (setComunicadosLocally) {
         setComunicadosLocally((prev: any[]) => {
           if (!Array.isArray(prev)) return prev;
+          if (!prev.some(c => String(c.id) === String(detail.comunicadoId))) return prev;
           return prev.map(c => {
             if (String(c.id) === String(detail.comunicadoId)) {
               return {
@@ -580,11 +591,15 @@ export default function ADAdminComunicados() {
         destino: selectedDest.length === 0 ? 'todos' : 'selecionados'
       }
 
-      fetch('/api/comunicados', {
+      apiFetch('/api/comunicados', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: editComId, dados: updatedCom })
-      }).catch(err => console.error("Erro ao salvar comunicado", err))
+      })
+        .then(() => {
+          queryClient.invalidateQueries({ queryKey: ['agenda', 'comunicados'], refetchType: 'active' })
+        })
+        .catch(err => console.error("Erro ao salvar comunicado", err))
 
       if (setComunicadosLocally) {
         setComunicadosLocally(prev => prev.map(c => c.id === editComId ? updatedCom : c))
@@ -623,11 +638,15 @@ export default function ADAdminComunicados() {
         status: (asRascunho ? 'rascunho' : dataAgendamento ? 'agendado' : 'enviado') as 'rascunho' | 'agendado' | 'enviado'
       }
 
-      fetch('/api/comunicados', {
+      apiFetch('/api/comunicados', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newCom)
-      }).catch(err => console.error("Erro ao salvar comunicado", err))
+      })
+        .then(() => {
+          queryClient.invalidateQueries({ queryKey: ['agenda', 'comunicados'], refetchType: 'active' })
+        })
+        .catch(err => console.error("Erro ao salvar comunicado", err))
 
       if (setComunicadosLocally) {
         setComunicadosLocally(prev => [newCom, ...prev])
@@ -752,7 +771,7 @@ export default function ADAdminComunicados() {
   const handleBulkDelete = () => {
     adConfirm(`Tem certeza que deseja excluir ${selectedComs.length} comunicado(s)? Esta ação é irreversível.`, 'Excluir Comunicados', async () => {
       try {
-        const res = await fetch(`/api/comunicados?ids=${selectedComs.join(',')}`, { method: 'DELETE' });
+        const res = await apiFetch(`/api/comunicados?ids=${selectedComs.join(',')}`, { method: 'DELETE' });
         if (res.ok) {
           if (setComunicadosLocally) {
             setComunicadosLocally(prev => prev.filter(c => !selectedComs.includes(c.id)));
@@ -780,7 +799,7 @@ export default function ADAdminComunicados() {
   const handleDeleteSingleComunicado = (id: string) => {
     adConfirm('Tem certeza que deseja excluir este comunicado? Esta ação é irreversível.', 'Excluir Comunicado', async () => {
       try {
-        const res = await fetch(`/api/comunicados?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+        const res = await apiFetch(`/api/comunicados?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
         if (res.ok) {
           if (setComunicadosLocally) {
             setComunicadosLocally(prev => prev.filter(c => c.id !== id));
@@ -2017,7 +2036,31 @@ export default function ADAdminComunicados() {
           {filtered.length === 0 && !isDataLoading && (
             <div style={{ textAlign: 'center', padding: '72px 20px', background: '#ffffff', borderRadius: 20, border: '1px dashed #cbd5e1' }}>
               <Bell size={44} style={{ opacity: 0.15, marginBottom: 12, color: '#4f46e5' }} />
-              {(selectedDate || filterComentarios || filterRelatorio || authorFilter !== 'todos' || debouncedSearch.trim()) ? (
+              {isLocalError ? (
+                <div>
+                  <p style={{ color: '#0f172a', fontSize: 16, fontWeight: 700, margin: '0 0 6px 0' }}>
+                    Não foi possível carregar os comunicados no momento.
+                  </p>
+                  <p style={{ color: '#64748b', fontSize: 13, margin: '0 0 16px 0' }}>
+                    Verifique sua conexão e tente atualizar a lista novamente.
+                  </p>
+                  <button
+                    onClick={() => refetchLocal()}
+                    style={{
+                      background: '#4f46e5',
+                      color: '#ffffff',
+                      border: 'none',
+                      padding: '8px 18px',
+                      borderRadius: 10,
+                      fontSize: 13,
+                      fontWeight: 700,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Tentar novamente
+                  </button>
+                </div>
+              ) : (selectedDate || filterComentarios || filterRelatorio || authorFilter !== 'todos' || debouncedSearch.trim()) ? (
                 <div>
                   <p style={{ color: '#0f172a', fontSize: 16, fontWeight: 700, margin: '0 0 6px 0' }}>
                     Nenhum comunicado encontrado com os filtros selecionados.

@@ -93,8 +93,13 @@ async function getActiveClientSessionFast(): Promise<any | null> {
     try {
       let session: any = null
       try {
-        const { data } = await supabase.auth.getSession()
-        session = data?.session
+        const res = await Promise.race([
+          supabase.auth.getSession(),
+          new Promise<{ data: { session: null } }>((resolve) =>
+            setTimeout(() => resolve({ data: { session: null } }), 2000)
+          ),
+        ])
+        session = res?.data?.session
       } catch {}
 
       if (!session) {
@@ -107,6 +112,13 @@ async function getActiveClientSessionFast(): Promise<any | null> {
           const { session: refreshedSession } = await refreshSessionCentralized(supabase)
           if (refreshedSession && isValidSessionObject(refreshedSession)) {
             session = refreshedSession
+          } else {
+            const tierSession = await getSessionFromStorageTiers()
+            if (tierSession && isValidSessionObject(tierSession) && !isSessionExpiredOrExpiringSoon(tierSession, 10)) {
+              session = tierSession
+            } else if (isSessionExpiredOrExpiringSoon(session, 0)) {
+              return null
+            }
           }
         }
         cachedClientSession = { session, timestamp: Date.now() }

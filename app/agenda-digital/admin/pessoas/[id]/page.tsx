@@ -1,70 +1,188 @@
 'use client'
-import { useState, useEffect, useMemo } from 'react'
-import { useSupabaseArray } from '@/lib/useSupabaseCollection'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useData } from '@/lib/dataContext'
 import { useParams, useRouter } from 'next/navigation'
 import {
-  ArrowLeft, User, MessageSquare, MoreHorizontal, ShieldAlert, Key, Ban,
+  ArrowLeft, User, MessageSquare, MoreHorizontal, Key,
   Mail, Phone, Calendar as CalendarIcon, FileText, Download, TrendingUp,
-  CheckCircle2, Filter, AlertTriangle, Lock, Unlock, Loader2, Eye,
+  CheckCircle2, AlertTriangle, Lock, Unlock, Loader2, Eye,
   ExternalLink, Copy, Check, Smartphone, RefreshCw, X, AlertCircle, Clock,
-  LogIn, LogOut, UserCheck
+  LogIn, LogOut, UserCheck, Search, RotateCcw, CreditCard, Bell
 } from 'lucide-react'
 import Link from 'next/link'
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 import { UserAvatar } from '@/components/UserAvatar'
 import { getWhatsAppShareUrl } from '@/lib/whatsapp'
 
-// Helper function to format any date into clean, human-readable Portuguese text
-function formatDatePtBr(rawDate: any): string {
-  if (!rawDate) return 'Recente'
+const SCHOOL_TZ = 'America/Campo_Grande'
+
+function getSchoolTodayYmd(): string {
+  try {
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: SCHOOL_TZ,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    }).format(new Date())
+  } catch {
+    return new Date().toISOString().slice(0, 10)
+  }
+}
+
+function getSchoolYesterdayYmd(): string {
+  try {
+    const d = new Date(Date.now() - 86400000)
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: SCHOOL_TZ,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    }).format(d)
+  } catch {
+    return ''
+  }
+}
+
+/**
+ * Conforme documentado em /api/portaria/webhook/route.ts:
+ * portaria_eventos.data_hora armazena os dígitos já no horário local da escola (America/Campo_Grande)
+ * com sufixo UTC ('Z' ou '+00:00'). Ex: "2026-10-21T07:18:00.000Z" representa 07:18 local.
+ * Esta função normaliza a string para o offset real '-04:00', evitando desconto duplo de 4 horas.
+ */
+function normalizePortariaTimestamp(rawDate: any): string | null {
+  if (!rawDate) return null
+  const str = String(rawDate).trim()
+  if (!str) return null
+  const isoLike = str.replace(' ', 'T')
+  // Se termina com Z ou +00 / +00:00, substitui pelo fuso local da escola (-04:00)
+  if (/(?:Z|\+00(?::00)?)$/i.test(isoLike)) {
+    return isoLike.replace(/(?:Z|\+00(?::00)?)$/i, '-04:00')
+  }
+  // Se tem T mas não tem offset explícito no final
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(isoLike) && !/[+-]\d{2}:?\d{2}$/.test(isoLike)) {
+    return `${isoLike}-04:00`
+  }
+  return isoLike
+}
+
+/**
+ * Converte qualquer data/hora para timestamp numérico seguro (ms) considerando datas puras YYYY-MM-DD
+ * no meio-dia local da escola (-04:00) para nunca recuar 1 dia.
+ */
+function parseSafeTimestamp(rawDate: any): number {
+  if (!rawDate) return 0
+  if (typeof rawDate === 'number') return rawDate
+  const str = String(rawDate).trim()
+  if (!str) return 0
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+    const d = new Date(`${str}T12:00:00-04:00`)
+    return isNaN(d.getTime()) ? 0 : d.getTime()
+  }
+
+  // Formato DD/MM/YYYY opcionalmente com hora
+  const brMatch = str.match(/^(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}):(\d{2}))?/)
+  if (brMatch) {
+    const [, dd, mm, yyyy, hh = '12', min = '00'] = brMatch
+    const d = new Date(`${yyyy}-${mm}-${dd}T${hh}:${min}:00-04:00`)
+    return isNaN(d.getTime()) ? 0 : d.getTime()
+  }
+
+  const normalized =
+    str.includes('T') && !str.endsWith('Z') && !/[+-]\d{2}:?\d{2}$/.test(str)
+      ? `${str}-04:00`
+      : str
+
+  const d = new Date(normalized)
+  return isNaN(d.getTime()) ? 0 : d.getTime()
+}
+
+/**
+ * Formata datas puras (YYYY-MM-DD) apenas como DD/MM/AAAA (sem hora fictícia "às 20:00")
+ * e timestamps completos como "Hoje às HH:mm", "Ontem às HH:mm" ou "DD/MM/AAAA às HH:mm"
+ * sempre no fuso America/Campo_Grande.
+ */
+function formatDatePtBr(rawDate: any, options?: { dateOnly?: boolean }): string {
+  if (!rawDate) return '—'
+  const str = String(rawDate).trim()
+  if (!str) return '—'
+
   if (
-    typeof rawDate === 'string' &&
-    (rawDate.includes('Hoje') ||
-      rawDate.includes('Ontem') ||
-      rawDate.includes('Segunda') ||
-      rawDate.includes('Terça') ||
-      rawDate.includes('Quarta') ||
-      rawDate.includes('Quinta') ||
-      rawDate.includes('Sexta') ||
-      rawDate.includes('Sábado') ||
-      rawDate.includes('Domingo') ||
-      rawDate.includes('dias'))
+    str.includes('Hoje') ||
+    str.includes('Ontem') ||
+    str.includes('Segunda') ||
+    str.includes('Terça') ||
+    str.includes('Quarta') ||
+    str.includes('Quinta') ||
+    str.includes('Sexta') ||
+    str.includes('Sábado') ||
+    str.includes('Domingo')
   ) {
-    return rawDate
+    return str
+  }
+
+  const todayYmd = getSchoolTodayYmd()
+  const yesterdayYmd = getSchoolYesterdayYmd()
+
+  // Caso 1: Data pura YYYY-MM-DD (ex: vencimento de boleto, data de frequência, data de nascimento)
+  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+    const [yyyy, mm, dd] = str.split('-')
+    if (!options?.dateOnly) {
+      if (str === todayYmd) return `Hoje (${dd}/${mm})`
+      if (str === yesterdayYmd) return `Ontem (${dd}/${mm})`
+    }
+    return `${dd}/${mm}/${yyyy}`
+  }
+
+  // Caso 2: Data já em DD/MM/YYYY
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(str)) {
+    return str
   }
 
   try {
-    const d = new Date(rawDate)
-    if (isNaN(d.getTime())) return String(rawDate)
+    const ts = parseSafeTimestamp(str)
+    if (!ts) return str
+    const d = new Date(ts)
 
-    const now = new Date()
-    const isToday = d.toDateString() === now.toDateString()
-    const yesterday = new Date(now)
-    yesterday.setDate(now.getDate() - 1)
-    const isYesterday = d.toDateString() === yesterday.toDateString()
+    const itemYmd = new Intl.DateTimeFormat('en-CA', {
+      timeZone: SCHOOL_TZ,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    }).format(d)
 
-    const timeStr = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+    const dateStr = d.toLocaleDateString('pt-BR', { timeZone: SCHOOL_TZ })
+    if (options?.dateOnly) return dateStr
 
-    if (isToday) return `Hoje às ${timeStr}`
-    if (isYesterday) return `Ontem às ${timeStr}`
+    const timeStr = d.toLocaleTimeString('pt-BR', {
+      timeZone: SCHOOL_TZ,
+      hour: '2-digit',
+      minute: '2-digit'
+    })
 
-    return `${d.toLocaleDateString('pt-BR')} às ${timeStr}`
-  } catch (e) {
-    return String(rawDate)
+    if (itemYmd === todayYmd) return `Hoje às ${timeStr}`
+    if (itemYmd === yesterdayYmd) return `Ontem às ${timeStr}`
+
+    return `${dateStr} às ${timeStr}`
+  } catch {
+    return str
   }
 }
 
 export default function ADAdminPessoaDetail() {
   const { id } = useParams()
   const router = useRouter()
-  const { turmas = [] } = useData()
-  const [alunos, setAlunos, { loading: isAlunosLoading }] = useSupabaseArray<any>('alunos')
-  const { adAlert, adConfirm, comunicados = [] } = useAgendaDigital()
+  const { turmas = [], alunos: contextAlunos = [] } = useData()
+  const { adAlert, adConfirm } = useAgendaDigital()
 
-  // State for fetched guardians, occurrences, financial titles, iDFace events, saida calls & roll call attendance
+  // Aluno individual carregado via /api/alunos/[id] (sem baixar a tabela inteira de alunos)
+  const [fetchedAluno, setFetchedAluno] = useState<any | null>(null)
+  const [isLoadingAluno, setIsLoadingAluno] = useState(true)
+
+  // Estados de dados reais
   const [dbResponsaveis, setDbResponsaveis] = useState<any[]>([])
   const [isLoadingResponsaveis, setIsLoadingResponsaveis] = useState(true)
+  const [pushDevicesByResp, setPushDevicesByResp] = useState<Record<string, any>>({})
   const [realOcorrencias, setRealOcorrencias] = useState<any[]>([])
   const [isLoadingOcorrencias, setIsLoadingOcorrencias] = useState(true)
   const [realTitulos, setRealTitulos] = useState<any[]>([])
@@ -74,258 +192,197 @@ export default function ADAdminPessoaDetail() {
   const [realSaidaCalls, setRealSaidaCalls] = useState<any[]>([])
   const [isLoadingSaidaCalls, setIsLoadingSaidaCalls] = useState(true)
   const [realFrequenciaDb, setRealFrequenciaDb] = useState<any[]>([])
+  const [isLoadingFrequencia, setIsLoadingFrequencia] = useState(true)
   const [realComunicados, setRealComunicados] = useState<any[]>([])
   const [isLoadingComunicados, setIsLoadingComunicados] = useState(true)
-  
-  // Instant local simulated logs override
-  const [localSimulatedLogs, setLocalSimulatedLogs] = useState<any[] | null>(null)
+  const [isRefreshingAll, setIsRefreshingAll] = useState(false)
 
   // UI States
-  const [logFilter, setLogFilter] = useState<'todos' | 'comunicados' | 'financeiro' | 'ocorrencias' | 'acessos' | 'portaria'>('todos')
-  const [showFilterDropdown, setShowFilterDropdown] = useState(false)
-  const [visibleLogCount, setVisibleLogCount] = useState(10)
+  const [logFilter, setLogFilter] = useState<'todos' | 'portaria' | 'comunicados' | 'financeiro' | 'ocorrencias' | 'acessos'>('todos')
+  const [periodFilter, setPeriodFilter] = useState<'todos' | 'hoje' | '7d' | '30d'>('todos')
+  const [comunicadoStatusFilter, setComunicadoStatusFilter] = useState<'todos' | 'lidos' | 'pendentes'>('todos')
+  const [logSearch, setLogSearch] = useState('')
+  const [visibleLogCount, setVisibleLogCount] = useState(15)
   const [selectedRespModal, setSelectedRespModal] = useState<any | null>(null)
   const [showActionsMenu, setShowActionsMenu] = useState(false)
   const [copiedField, setCopiedField] = useState<string | null>(null)
+  const [actionBusyId, setActionBusyId] = useState<string | null>(null)
 
-  // Find target student strictly or loosely by id, matricula, or codigo
-  const aluno = useMemo(() => {
-    if (!alunos || alunos.length === 0 || !id) return null
+  // Fallback imediato do contexto enquanto a API individual responde
+  const contextAluno = useMemo(() => {
+    if (!contextAlunos || contextAlunos.length === 0 || !id) return null
     const paramIdStr = String(id).trim()
-    return (alunos || []).find((a: any) =>
+    return (contextAlunos || []).find((a: any) =>
       String(a.id) === paramIdStr ||
       String(a.matricula) === paramIdStr ||
       String(a.dados?.codigo) === paramIdStr ||
       String(a.codigo) === paramIdStr
-    )
-  }, [alunos, id])
+    ) || null
+  }, [contextAlunos, id])
 
-  // Fetch real comunicados for this student directly from Supabase API (/api/comunicados)
-  useEffect(() => {
-    let isMounted = true
-    async function loadComunicados() {
-      if (!id) return
-      setIsLoadingComunicados(true)
-      try {
-        const studentId = aluno?.id || id
-        const res = await fetch(`/api/comunicados?aluno_id=${encodeURIComponent(String(studentId))}`)
-        if (res.ok) {
-          const data = await res.json()
-          const list = Array.isArray(data) ? data : (Array.isArray(data?.data) ? data.data : [])
-          if (isMounted) {
-            setRealComunicados(list)
-          }
-        }
-      } catch (err) {
-        console.error('Erro ao carregar comunicados do aluno:', err)
-      } finally {
-        if (isMounted) setIsLoadingComunicados(false)
-      }
-    }
-    loadComunicados()
-    return () => { isMounted = false }
-  }, [id, aluno?.id])
+  const aluno = fetchedAluno || contextAluno
 
-  // Fetch real guardians from Supabase API (/api/aluno-responsavel)
-  useEffect(() => {
-    let isMounted = true
-    async function loadResponsaveis() {
-      if (!id) return
+  // Função centralizada para carregar todos os dados do aluno em paralelo
+  const fetchAllStudentData = useCallback(async (silent = false) => {
+    if (!id) return
+    if (!silent) {
+      setIsLoadingAluno(true)
       setIsLoadingResponsaveis(true)
-      try {
-        const studentId = aluno?.id || id
-        const res = await fetch(`/api/aluno-responsavel?aluno_id=${encodeURIComponent(String(studentId))}`)
-        if (res.ok) {
-          const data = await res.json()
-          if (isMounted && data.responsaveis) {
-            setDbResponsaveis(data.responsaveis)
-          }
-        }
-      } catch (err) {
-        console.error('Erro ao carregar responsáveis reais:', err)
-      } finally {
-        if (isMounted) setIsLoadingResponsaveis(false)
-      }
-    }
-    loadResponsaveis()
-    return () => { isMounted = false }
-  }, [id, aluno?.id])
-
-  // Fetch real occurrences from Supabase API (/api/ocorrencias)
-  useEffect(() => {
-    let isMounted = true
-    async function loadOcorrencias() {
-      if (!id) return
+      setIsLoadingComunicados(true)
       setIsLoadingOcorrencias(true)
-      try {
-        const studentId = aluno?.id || id
-        const res = await fetch(`/api/ocorrencias?aluno_id=${encodeURIComponent(String(studentId))}`)
-        if (res.ok) {
-          const data = await res.json()
-          if (isMounted && Array.isArray(data)) {
-            setRealOcorrencias(data)
-          }
-        }
-      } catch (err) {
-        console.error('Erro ao carregar ocorrências:', err)
-      } finally {
-        if (isMounted) setIsLoadingOcorrencias(false)
-      }
-    }
-    loadOcorrencias()
-    return () => { isMounted = false }
-  }, [id, aluno?.id])
-
-  // Fetch real financial titles / boletos from Supabase API (/api/financeiro/titulos)
-  useEffect(() => {
-    let isMounted = true
-    async function loadTitulos() {
-      if (!id) return
       setIsLoadingTitulos(true)
-      try {
-        const studentId = aluno?.id || id
-        const res = await fetch(`/api/financeiro/titulos?alunoId=${encodeURIComponent(String(studentId))}`)
-        if (res.ok) {
-          const data = await res.json()
-          if (isMounted && Array.isArray(data)) {
-            setRealTitulos(data)
-          }
-        }
-      } catch (err) {
-        console.error('Erro ao carregar títulos financeiros:', err)
-      } finally {
-        if (isMounted) setIsLoadingTitulos(false)
-      }
-    }
-    loadTitulos()
-    return () => { isMounted = false }
-  }, [id, aluno?.id])
-
-  // Fetch Catraca iDFace recognition / entrance events from (/api/portaria/eventos)
-  useEffect(() => {
-    let isMounted = true
-    async function loadPortariaEventos() {
-      if (!id) return
       setIsLoadingPortaria(true)
-      try {
-        const studentId = aluno?.id || id
-        const studentMatricula = aluno?.matricula || aluno?.dados?.codigo || id
-        const res = await fetch(`/api/portaria/eventos?aluno_id=${encodeURIComponent(String(studentId))}&matricula=${encodeURIComponent(String(studentMatricula))}&limit=50`)
-        if (res.ok) {
-          const data = await res.json()
-          const eventsList = Array.isArray(data) ? data : (Array.isArray(data?.data) ? data.data : [])
-          if (isMounted) {
-            setRealPortariaEventos(eventsList)
-          }
-        }
-      } catch (err) {
-        console.error('Erro ao carregar eventos da catraca iDFace:', err)
-      } finally {
-        if (isMounted) setIsLoadingPortaria(false)
-      }
-    }
-    loadPortariaEventos()
-    return () => { isMounted = false }
-  }, [id, aluno?.id, aluno?.matricula])
-
-  // Fetch confirmed departure calls from Painel Chamadas (/api/saida/calls)
-  useEffect(() => {
-    let isMounted = true
-    async function loadSaidaCalls() {
-      if (!id) return
       setIsLoadingSaidaCalls(true)
-      try {
-        const studentId = aluno?.id || id
-        const res = await fetch(`/api/saida/calls?studentId=${encodeURIComponent(String(studentId))}&from=2020-01-01&to=2030-12-31`)
-        if (res.ok) {
-          const data = await res.json()
-          if (isMounted && Array.isArray(data)) {
-            setRealSaidaCalls(data)
+      setIsLoadingFrequencia(true)
+    } else {
+      setIsRefreshingAll(true)
+    }
+
+    const paramId = String(id).trim()
+
+    try {
+      // 1. Busca o aluno individual (rápido, 1 registro)
+      const alunoRes = await fetch(`/api/alunos/${encodeURIComponent(paramId)}`).catch(() => null)
+      let resolvedStudent: any = contextAluno
+      if (alunoRes && alunoRes.ok) {
+        const alunoJson = await alunoRes.json().catch(() => null)
+        if (alunoJson?.data) {
+          resolvedStudent = alunoJson.data
+          setFetchedAluno(alunoJson.data)
+          if (Array.isArray(alunoJson.data.responsaveis) && alunoJson.data.responsaveis.length > 0) {
+            setDbResponsaveis(alunoJson.data.responsaveis)
           }
         }
-      } catch (err) {
-        console.error('Erro ao carregar chamadas de saída:', err)
-      } finally {
-        if (isMounted) setIsLoadingSaidaCalls(false)
       }
-    }
-    loadSaidaCalls()
-    return () => { isMounted = false }
-  }, [id, aluno?.id])
+      setIsLoadingAluno(false)
 
-  // Fetch roll call attendance records from (/api/academico/frequencias)
+      const studentId = String(resolvedStudent?.id || paramId).trim()
+      const studentMatricula = String(resolvedStudent?.matricula || resolvedStudent?.dados?.codigo || paramId).trim()
+      const studentTurma = String(resolvedStudent?.turma || '').trim()
+
+      // 2. Dispara todas as consultas específicas em paralelo (sem waterfall)
+      await Promise.allSettled([
+        // Responsáveis enriquecidos com status real de Auth (last_sign_in_at / temContaAtiva)
+        fetch(`/api/aluno-responsavel?aluno_id=${encodeURIComponent(studentId)}`)
+          .then(async res => {
+            if (res.ok) {
+              const data = await res.json()
+              if (Array.isArray(data?.responsaveis) && data.responsaveis.length > 0) {
+                setDbResponsaveis(data.responsaveis)
+              }
+            }
+          })
+          .finally(() => setIsLoadingResponsaveis(false)),
+
+        // Comunicados do aluno (com limite ampliado para cálculo fiel de leitura)
+        fetch(`/api/comunicados?aluno_id=${encodeURIComponent(studentId)}&limit=100`)
+          .then(async res => {
+            if (res.ok) {
+              const data = await res.json()
+              const list = Array.isArray(data) ? data : (Array.isArray(data?.data) ? data.data : [])
+              setRealComunicados(list)
+            }
+          })
+          .finally(() => setIsLoadingComunicados(false)),
+
+        // Ocorrências pedagógicas
+        fetch(`/api/ocorrencias?aluno_id=${encodeURIComponent(studentId)}`)
+          .then(async res => {
+            if (res.ok) {
+              const data = await res.json()
+              if (Array.isArray(data)) setRealOcorrencias(data)
+            }
+          })
+          .finally(() => setIsLoadingOcorrencias(false)),
+
+        // Títulos financeiros / Boletos
+        fetch(`/api/financeiro/titulos?alunoId=${encodeURIComponent(studentId)}`)
+          .then(async res => {
+            if (res.ok) {
+              const data = await res.json()
+              if (Array.isArray(data)) setRealTitulos(data)
+            }
+          })
+          .finally(() => setIsLoadingTitulos(false)),
+
+        // Eventos da Catraca ControliD iDFace
+        fetch(`/api/portaria/eventos?aluno_id=${encodeURIComponent(studentId)}&matricula=${encodeURIComponent(studentMatricula)}&limit=100`)
+          .then(async res => {
+            if (res.ok) {
+              const data = await res.json()
+              const list = Array.isArray(data) ? data : (Array.isArray(data?.data) ? data.data : [])
+              setRealPortariaEventos(list)
+            }
+          })
+          .finally(() => setIsLoadingPortaria(false)),
+
+        // Chamadas de Saída (Painel de Chamadas)
+        fetch(`/api/saida/calls?studentId=${encodeURIComponent(studentId)}&from=2020-01-01&to=2030-12-31&limit=100`)
+          .then(async res => {
+            if (res.ok) {
+              const data = await res.json()
+              if (Array.isArray(data)) setRealSaidaCalls(data)
+            }
+          })
+          .finally(() => setIsLoadingSaidaCalls(false)),
+
+        // Frequência / Diário de Classe
+        fetch(`/api/academico/frequencias?aluno_id=${encodeURIComponent(studentId)}${studentTurma ? `&turma_id=${encodeURIComponent(studentTurma)}` : ''}&limit=200`)
+          .then(async res => {
+            if (res.ok) {
+              const data = await res.json()
+              if (Array.isArray(data)) setRealFrequenciaDb(data)
+            }
+          })
+          .finally(() => setIsLoadingFrequencia(false)),
+
+        // Enriquecimento opcional de aparelhos Push OneSignal reais (não bloqueante)
+        fetch(`/api/agenda/push/test?aluno_id=${encodeURIComponent(studentId)}`)
+          .then(async res => {
+            if (res.ok) {
+              const data = await res.json()
+              if (Array.isArray(data?.responsaveis)) {
+                const map: Record<string, any> = {}
+                data.responsaveis.forEach((r: any) => {
+                  if (r.responsavel_id) map[String(r.responsavel_id).trim()] = r
+                  if (r.email) map[String(r.email).toLowerCase().trim()] = r
+                })
+                setPushDevicesByResp(map)
+              }
+            }
+          })
+          .catch(() => null)
+      ])
+    } finally {
+      setIsLoadingAluno(false)
+      setIsRefreshingAll(false)
+    }
+  }, [id, contextAluno])
+
   useEffect(() => {
-    let isMounted = true
-    async function loadFrequenciaDb() {
-      if (!id || !aluno?.turma) return
-      try {
-        const studentId = aluno?.id || id
-        const res = await fetch(`/api/academico/frequencias?aluno_id=${encodeURIComponent(String(studentId))}&turma_id=${encodeURIComponent(String(aluno.turma))}`)
-        if (res.ok) {
-          const data = await res.json()
-          if (isMounted && Array.isArray(data)) {
-            setRealFrequenciaDb(data)
-          }
-        }
-      } catch (err) {
-        console.error('Erro ao carregar diário de classe:', err)
-      }
-    }
-    loadFrequenciaDb()
-    return () => { isMounted = false }
-  }, [id, aluno?.id, aluno?.turma])
+    fetchAllStudentData(false)
+  }, [id])
 
-  // Combine comunicados from React Context AND direct API fetch
-  const allComunicadosToFilter = useMemo(() => {
-    const map = new Map<string, any>()
-    ;(comunicados || []).forEach((c: any) => {
-      if (c && c.id) map.set(String(c.id), c)
-    })
-    ;(realComunicados || []).forEach((c: any) => {
-      if (c && c.id) map.set(String(c.id), c)
-      else if (c && c.dados?.id) map.set(String(c.dados.id), c)
-    })
-    return Array.from(map.values())
-  }, [comunicados, realComunicados])
+  // Resolução de Turma
+  const turmaObj = (turmas || []).find((t: any) => String(t.id) === String(aluno?.turma)) ||
+                   (turmas || []).find((t: any) => String(t.nome) === String(aluno?.turma))
+  const resolvedTurmaNome = turmaObj?.nome || aluno?.turma_nome || aluno?.turma || 'Sem Turma'
 
-  // Skeleton loader when initial data loading is in progress
-  if (isAlunosLoading && !aluno) {
-    return (
-      <div style={{ padding: 60, textAlign: 'center', color: 'hsl(var(--text-muted))' }}>
-        <Loader2 size={48} className="animate-spin" style={{ margin: '0 auto 16px', opacity: 0.5 }} />
-        <h3 style={{ fontSize: 18, fontWeight: 600 }}>Carregando dados do usuário...</h3>
-      </div>
-    )
-  }
-
-  if (!aluno && !isAlunosLoading) {
-    return (
-      <div style={{ padding: 60, textAlign: 'center', color: 'hsl(var(--text-muted))' }}>
-        <User size={48} style={{ opacity: 0.2, margin: '0 auto 16px' }} />
-        <h3 style={{ fontSize: 18, fontWeight: 600, color: 'hsl(var(--text-main))' }}>Usuário não encontrado</h3>
-        <p style={{ fontSize: 14, margin: '8px 0 16px' }}>Não foi possível localizar um aluno com o identificador informado ({String(id)}).</p>
-        <button className="btn btn-secondary" onClick={() => router.push('/agenda-digital/admin/pessoas')}>
-          <ArrowLeft size={16} style={{ marginRight: 6 }} /> Voltar para Pessoas
-        </button>
-      </div>
-    )
-  }
-
-  // Turma lookup
-  const turmaObj = (turmas || []).find((t: any) => String(t.id) === String(aluno.turma)) ||
-                   (turmas || []).find((t: any) => String(t.nome) === String(aluno.turma))
-
-  // Map Responsáveis combining database records and student object fallbacks
+  // Mapeamento de Responsáveis com enriquecimento de conta ativa, último login e aparelhos Push
   const responsaveis: any[] = []
-  if (dbResponsaveis && dbResponsaveis.length > 0) {
-    dbResponsaveis.forEach((r: any) => {
-      if (!r.nome) return
+  const rawRespSource = dbResponsaveis && dbResponsaveis.length > 0
+    ? dbResponsaveis
+    : (Array.isArray(aluno?.responsaveis) && aluno.responsaveis.length > 0 ? aluno.responsaveis : [])
+
+  if (rawRespSource.length > 0) {
+    rawRespSource.forEach((r: any) => {
+      if (!r || !r.nome) return
       let tipo = 'Responsável'
       let color = 'hsl(var(--text-secondary))'
       let badgeBg = 'hsl(var(--bg-overlay))'
-      
-      const isFin = r.isFinanceiro || r.respFinanceiro || r.resp_financeiro
-      const isPed = r.isPedagogico || r.respPedagogico || r.resp_pedagogico
+
+      const isFin = Boolean(r.isFinanceiro || r.respFinanceiro || r.resp_financeiro)
+      const isPed = Boolean(r.isPedagogico || r.respPedagogico || r.resp_pedagogico)
 
       if (isFin && isPed) {
         tipo = 'Financeiro & Pedagógico'
@@ -340,296 +397,528 @@ export default function ADAdminPessoaDetail() {
         color = '#4f46e5'
         badgeBg = 'rgba(99,102,241,0.1)'
       }
-      responsaveis.push({ ...r, tipo, color, badgeBg })
+
+      const rIdKey = String(r.id || r.responsavel_id || '').trim()
+      const rEmailKey = String(r.email || '').toLowerCase().trim()
+      const pushInfo = (rIdKey && pushDevicesByResp[rIdKey]) || (rEmailKey && pushDevicesByResp[rEmailKey]) || null
+
+      const ultimoAcesso = r.ultimoAcesso || r.ultimo_acesso || pushInfo?.ultimoAcesso || null
+      const temContaAtiva = Boolean(r.temContaAtiva || pushInfo?.temContaAtiva || ultimoAcesso || r.appInstalado || r.app_instalado)
+      const dispositivosAtivos = typeof pushInfo?.dispositivosAtivos === 'number' ? pushInfo.dispositivosAtivos : 0
+      const totalDispositivos = typeof pushInfo?.totalDispositivos === 'number' ? pushInfo.totalDispositivos : 0
+
+      responsaveis.push({
+        ...r,
+        id: r.id || r.responsavel_id,
+        auth_id: r.auth_id || pushInfo?.authId || null,
+        email: r.email || pushInfo?.email || '',
+        telefone: r.telefone || r.celular || pushInfo?.telefone || '',
+        cpf: r.cpf || r.dados?.cpf || '',
+        tipo,
+        color,
+        badgeBg,
+        ultimoAcesso,
+        temContaAtiva,
+        dispositivosAtivos,
+        totalDispositivos,
+        dispositivos: pushInfo?.dispositivos || []
+      })
     })
-  } else if (aluno.responsaveis && aluno.responsaveis.length > 0) {
-    aluno.responsaveis.forEach((r: any) => {
-      if (!r.nome) return
-      let tipo = 'Responsável'
-      let color = 'hsl(var(--text-secondary))'
-      let badgeBg = 'hsl(var(--bg-overlay))'
-      if (r.respFinanceiro || r.isFinanceiro) { tipo = 'Financeiro'; color = '#10b981'; badgeBg = 'rgba(16,185,129,0.1)' }
-      else if (r.respPedagogico || r.isPedagogico) { tipo = 'Pedagógico'; color = '#4f46e5'; badgeBg = 'rgba(99,102,241,0.1)' }
-      responsaveis.push({ ...r, tipo, color, badgeBg })
-    })
-  } else {
-    if (aluno.responsavelFinanceiro) {
-      responsaveis.push({ nome: aluno.responsavelFinanceiro, tipo: 'Financeiro', color: '#10b981', badgeBg: 'rgba(16,185,129,0.1)', parentesco: 'Responsável Financeiro' })
+  } else if (aluno) {
+    if (aluno.responsavelFinanceiro || aluno.responsavel_financeiro) {
+      responsaveis.push({
+        nome: aluno.responsavelFinanceiro || aluno.responsavel_financeiro,
+        tipo: 'Financeiro',
+        color: '#10b981',
+        badgeBg: 'rgba(16,185,129,0.1)',
+        parentesco: 'Responsável Financeiro',
+        temContaAtiva: false
+      })
     }
-    if (aluno.responsavelPedagogico) {
-      responsaveis.push({ nome: aluno.responsavelPedagogico, tipo: 'Pedagógico', color: '#4f46e5', badgeBg: 'rgba(99,102,241,0.1)', parentesco: 'Responsável Pedagógico' })
+    if (aluno.responsavelPedagogico || aluno.responsavel_pedagogico) {
+      responsaveis.push({
+        nome: aluno.responsavelPedagogico || aluno.responsavel_pedagogico,
+        tipo: 'Pedagógico',
+        color: '#4f46e5',
+        badgeBg: 'rgba(99,102,241,0.1)',
+        parentesco: 'Responsável Pedagógico',
+        temContaAtiva: false
+      })
     }
     if (aluno.responsavel && aluno.responsavel !== aluno.responsavelFinanceiro && aluno.responsavel !== aluno.responsavelPedagogico) {
-      responsaveis.push({ nome: aluno.responsavel, tipo: 'Outro', color: 'hsl(var(--text-secondary))', badgeBg: 'hsl(var(--bg-overlay))', parentesco: 'Responsável Geral' })
+      responsaveis.push({
+        nome: aluno.responsavel,
+        tipo: 'Responsável',
+        color: 'hsl(var(--text-secondary))',
+        badgeBg: 'hsl(var(--bg-overlay))',
+        parentesco: 'Responsável Geral',
+        temContaAtiva: false
+      })
     }
   }
 
-  // Calculate strict relevant comunicados for THIS student & turma
-  const studentIdClean = String(aluno.id).replace(/^a_?/, '')
-  const studentMatriculaClean = aluno.matricula ? String(aluno.matricula) : ''
-  const studentCodigoClean = aluno.dados?.codigo ? String(aluno.dados.codigo) : ''
-  const studentTurmaId = aluno.turma ? String(aluno.turma) : ''
-  const studentTurmaName = turmaObj?.nome ? String(turmaObj.nome) : studentTurmaId
+  // Identificadores limpos do aluno para checagem de leitura de comunicados
+  const studentIdClean = String(aluno?.id || id || '').replace(/^(a_|_ALU|_)/i, '').trim()
+  const studentMatriculaClean = aluno?.matricula ? String(aluno.matricula).trim() : ''
 
-
-
-  const relevantComunicados = (allComunicadosToFilter || []).filter((c: any) => {
-    if (!c) return false
-    
-    // Ignore draft status
-    if (c.status && c.status !== 'enviado' && c.status !== 'publicado') return false
-
-    // If fetched directly by student_id API, it is already targeted to this student
-    if (realComunicados.some((rc: any) => String(rc.id) === String(c.id) || rc === c || (c.dados?.id && String(rc.id) === String(c.dados.id)))) {
-      return true
-    }
-
-    // 1. Check Explicit Global Broadcast / Destino Todos
-    const destinoStr = String(c.destino || c.dados?.destino || c.destinatarios || c.dados?.destinatarios || '').toLowerCase()
-    if (
-      destinoStr === 'todos' ||
-      c.isGlobal === true ||
-      c.dados?.isGlobal === true ||
-      c.para === 'todos'
-    ) {
-      return true
-    }
-
-    // 2. Direct student targeting
-    const targetAlunos = Array.isArray(c.alunosIds)
-      ? c.alunosIds
-      : (Array.isArray(c.dados?.alunosIds) ? c.dados.alunosIds : (Array.isArray(c.alunos) ? c.alunos : []))
-
-    if (targetAlunos.length > 0) {
-      const isTargeted = targetAlunos.some((aid: any) => {
-        const cleanAid = String(aid).replace(/^(a_|_ALU)/, '')
-        return cleanAid === studentIdClean || cleanAid === studentMatriculaClean || cleanAid === studentCodigoClean
-      })
-      if (isTargeted) return true
-    }
-
-    // 3. Turma targeting with flexible string matching (e.g. "NÍVEL 1" vs "NÍVEL 1 - MATUTINO")
-    const targetTurmas = Array.isArray(c.turmas)
-      ? c.turmas
-      : (Array.isArray(c.dados?.turmas) ? c.dados.turmas : (c.turma ? [c.turma] : (c.dados?.turma ? [c.dados.turma] : [])))
-
-    if (targetTurmas.length > 0) {
-      const isTurmaTargeted = targetTurmas.some((t: any) => {
-        const tStr = String(t).trim().toLowerCase()
-        const tIdStr = studentTurmaId.toLowerCase()
-        const tNameStr = studentTurmaName.toLowerCase()
-
-        if (tStr === 'todas' || tStr === 'todos') return true
-        if (tStr === tIdStr || tStr === tNameStr) return true
-        if (tNameStr && (tNameStr.startsWith(tStr) || tStr.startsWith(tNameStr))) return true
-        return false
-      })
-      if (isTurmaTargeted) return true
-    }
-
-    return false
-  })
-
-  const readComunicados = relevantComunicados.filter((c: any) => {
+  // Função auxiliar que verifica se o comunicado foi lido por esta família/aluno e extrai o timestamp real da leitura
+  const getComunicadoReadInfo = (c: any): { isRead: boolean; hasCiencia: boolean; readAt: string | null } => {
     const leituras = c.leituras || c.dados?.leituras || {}
     const ciencias = c.ciencias || c.dados?.ciencias || {}
-    const studentId = String(aluno.id)
-    const studentMatricula = String(aluno.matricula || '')
-    if (leituras[studentId] || ciencias[studentId] || (studentMatricula && (leituras[studentMatricula] || ciencias[studentMatricula]))) return true
-    return responsaveis.some((r: any) => r.id && (leituras[r.id] || ciencias[r.id] || leituras[String(r.id)] || ciencias[String(r.id)]))
-  })
+    const leiturasAlunosIds: string[] = Array.isArray(c.leituras_alunos_ids)
+      ? c.leituras_alunos_ids.map((x: any) => String(x).replace(/^(a_|_ALU|_)/i, '').trim())
+      : []
 
-  const totalComunicados = relevantComunicados.length
+    let readAt: string | null = null
+    let hasCiencia = false
+
+    const pickTimestamp = (val: any) => {
+      if (typeof val === 'string' && val.length >= 8 && val !== 'true') {
+        if (!readAt || parseSafeTimestamp(val) > parseSafeTimestamp(readAt)) {
+          readAt = val
+        }
+      }
+    }
+
+    // 1. Checar se o aluno está em leituras_alunos_ids (populado por /api/comunicados)
+    let isRead = leiturasAlunosIds.includes(studentIdClean) || (Boolean(studentMatriculaClean) && leiturasAlunosIds.includes(studentMatriculaClean))
+
+    // 2. Checar chaves diretas e compostas (usuarioId_alunoId) em leituras e ciencias
+    Object.entries(leituras).forEach(([k, val]) => {
+      const cleanK = String(k).trim()
+      if (
+        cleanK === studentIdClean ||
+        cleanK === String(aluno?.id || '') ||
+        (studentMatriculaClean && cleanK === studentMatriculaClean) ||
+        cleanK.endsWith(`_${studentIdClean}`) ||
+        (studentMatriculaClean && cleanK.endsWith(`_${studentMatriculaClean}`))
+      ) {
+        isRead = true
+        pickTimestamp(val)
+      }
+    })
+
+    Object.entries(ciencias).forEach(([k, val]) => {
+      const cleanK = String(k).trim()
+      if (
+        cleanK === studentIdClean ||
+        cleanK === String(aluno?.id || '') ||
+        (studentMatriculaClean && cleanK === studentMatriculaClean) ||
+        cleanK.endsWith(`_${studentIdClean}`) ||
+        (studentMatriculaClean && cleanK.endsWith(`_${studentMatriculaClean}`))
+      ) {
+        isRead = true
+        hasCiencia = true
+        pickTimestamp(val)
+      }
+    })
+
+    // 3. Checar pelos IDs e auth_ids dos responsáveis vinculados
+    responsaveis.forEach((r: any) => {
+      const candidateKeys = [r.id, r.auth_id].filter(Boolean).map(String)
+      candidateKeys.forEach(rk => {
+        if (leituras[rk]) {
+          isRead = true
+          pickTimestamp(leituras[rk])
+        }
+        if (leituras[`${rk}_${studentIdClean}`]) {
+          isRead = true
+          pickTimestamp(leituras[`${rk}_${studentIdClean}`])
+        }
+        if (ciencias[rk]) {
+          isRead = true
+          hasCiencia = true
+          pickTimestamp(ciencias[rk])
+        }
+        if (ciencias[`${rk}_${studentIdClean}`]) {
+          isRead = true
+          hasCiencia = true
+          pickTimestamp(ciencias[`${rk}_${studentIdClean}`])
+        }
+      })
+    })
+
+    return { isRead, hasCiencia, readAt }
+  }
+
+  // Comunicados relevantes vindos da rota oficial filtrada para o aluno (/api/comunicados?aluno_id=...)
+  const relevantComunicados = useMemo(() => {
+    return (realComunicados || []).filter((c: any) => {
+      if (!c) return false
+      if (c.status && c.status !== 'enviado' && c.status !== 'publicado') return false
+      return true
+    })
+  }, [realComunicados])
+
+  const comunicadosWithReadInfo = useMemo(() => {
+    return relevantComunicados.map((c: any) => ({
+      comunicado: c,
+      ...getComunicadoReadInfo(c)
+    }))
+  }, [relevantComunicados, responsaveis, studentIdClean, studentMatriculaClean])
+
+  const readComunicadosCount = comunicadosWithReadInfo.filter(item => item.isRead).length
+  const totalComunicados = comunicadosWithReadInfo.length
   const readingRate = totalComunicados > 0
-    ? Math.round((readComunicados.length / totalComunicados) * 100)
+    ? Math.round((readComunicadosCount / totalComunicados) * 100)
     : 0
 
-  // Count connected devices/accounts for the family
-  const connectedDevices = responsaveis.length > 0
-    ? responsaveis.length
-    : (aluno.status === 'matriculado' || aluno.status === 'ativo' ? 1 : 0)
+  // Métricas reais de contas e dispositivos conectados
+  const activeAccountsCount = responsaveis.filter(r => r.temContaAtiva).length
+  const totalPushDevices = responsaveis.reduce((acc, r) => acc + (r.dispositivosAtivos || 0), 0)
+  const hasPushDataLoaded = Object.keys(pushDevicesByResp).length > 0
 
-  // Calculate Attendance Stats (Roll call + iDFace entries)
-  const idfaceEntriesCount = realPortariaEventos.filter((e: any) => {
-    const s = String(e.status || '').toLowerCase()
-    return s === 'sucesso' || s === 'liberado' || s === 'autorizado' || s === 'ok' || s === 'permitido' || s === 'entrada' || !e.status
-  }).length
+  // Separar eventos da catraca iDFace (Entradas vs Saídas) e corrigir o fuso horário
+  const validIdfaceEntries = useMemo(() => {
+    return (realPortariaEventos || [])
+      .filter((e: any) => {
+        if (!e || !e.data_hora) return false
+        const s = String(e.status || '').toLowerCase().trim()
+        const isOk = !s || ['sucesso', 'liberado', 'autorizado', 'ok', 'permitido', 'entrada'].includes(s)
+        const tipo = String(e.tipo || e.sentido || 'entrada').toLowerCase().trim()
+        return isOk && tipo !== 'saida'
+      })
+      .map((e: any) => {
+        const normalizedIso = normalizePortariaTimestamp(e.data_hora) || e.data_hora
+        return {
+          ...e,
+          normalizedIso,
+          timestamp: parseSafeTimestamp(normalizedIso)
+        }
+      })
+      .sort((a, b) => b.timestamp - a.timestamp)
+  }, [realPortariaEventos])
 
-  const confirmedSaidasCount = realSaidaCalls.filter((c: any) => c.status === 'confirmed' || c.status === 'called' || c.status === 'waiting').length
+  // Filtrar chamadas de saída reais (confirmadas ou chamadas com data real) e ordenar da mais recente para a mais antiga
+  const validSaidaCalls = useMemo(() => {
+    return (realSaidaCalls || [])
+      .filter((sc: any) => {
+        if (!sc) return false
+        // Ignorar autorizações permanentes/multi-dias que não tiveram saída confirmada
+        if (sc.status === 'special_auth' && !sc.confirmedOut && !sc.confirmedAt) return false
+        return sc.status === 'confirmed' || sc.status === 'called' || sc.status === 'waiting' || Boolean(sc.confirmedOut)
+      })
+      .map((sc: any) => {
+        const rawDt = sc.confirmedAt || sc.calledAt || sc.created_at || sc.updated_at || null
+        const timestamp = parseSafeTimestamp(rawDt)
+        return {
+          ...sc,
+          effectiveDate: rawDt,
+          timestamp
+        }
+      })
+      .sort((a, b) => b.timestamp - a.timestamp)
+  }, [realSaidaCalls])
 
-  const latestIdfaceEvent = realPortariaEventos[0]
-  const latestSaidaCall = realSaidaCalls[0]
+  const confirmedSaidasCount = validSaidaCalls.filter(
+    (c: any) => c.status === 'confirmed' || Boolean(c.confirmedOut)
+  ).length
 
-  // Aggregate REAL Timeline Logs
-  const combinedLogs: any[] = []
+  const latestIdfaceEvent = validIdfaceEntries[0] || null
+  const latestSaidaCall = validSaidaCalls[0] || null
 
-  // 1. Real Catraca iDFace Entry Events
-  realPortariaEventos.forEach((e: any) => {
-    const rawDate = e.data_hora || Date.now()
-    const isSuccess = !e.status || ['sucesso', 'liberado', 'autorizado', 'ok', 'permitido', 'entrada'].includes(String(e.status).toLowerCase())
-    
-    combinedLogs.push({
-      id: `idface-${e.id}`,
-      type: isSuccess ? 'check' : 'alert',
-      category: 'portaria',
-      title: `Entrada reconhecida via Catraca iDFace`,
-      time: formatDatePtBr(rawDate),
-      timestamp: new Date(rawDate).getTime() || Date.now(),
-      color: isSuccess ? '#10b981' : '#ef4444',
-      details: `Equipamento: ${e.dispositivo_nome || 'Portaria iDFace'} • Status: ${isSuccess ? 'Liberado / Acesso Concedido' : (e.status || 'Não Reconhecido')}`,
-      categoryLabel: 'Catraca iDFace'
+  // Status de HOJE na escola (para visão rápida da secretaria/coordenação)
+  const todayYmd = getSchoolTodayYmd()
+  const todayEntry = useMemo(() => {
+    return validIdfaceEntries.find(e => {
+      if (!e.normalizedIso) return false
+      return String(e.normalizedIso).slice(0, 10) === todayYmd
+    }) || null
+  }, [validIdfaceEntries, todayYmd])
+
+  const todayExit = useMemo(() => {
+    return validSaidaCalls.find(sc => {
+      if (!sc.timestamp) return false
+      const ymd = new Intl.DateTimeFormat('en-CA', { timeZone: SCHOOL_TZ }).format(new Date(sc.timestamp))
+      return ymd === todayYmd
+    }) || null
+  }, [validSaidaCalls, todayYmd])
+
+  // Estatísticas de Frequência Acadêmica (Diário de Classe)
+  const attendanceStats = useMemo(() => {
+    const total = realFrequenciaDb.length
+    const faltasInjustificadas = realFrequenciaDb.filter((f: any) => f.presente === false && !String(f.justificativa || '').toLowerCase().includes('justifica')).length
+    const faltasJustificadas = realFrequenciaDb.filter((f: any) => f.presente === false && String(f.justificativa || '').toLowerCase().includes('justifica')).length
+    const presencas = Math.max(0, total - faltasInjustificadas - faltasJustificadas)
+    const pct = total > 0 ? Math.round(((presencas + faltasJustificadas) / total) * 100) : 100
+    return { total, presencas, faltasInjustificadas, faltasJustificadas, pct }
+  }, [realFrequenciaDb])
+
+  // Estatísticas Financeiras
+  const financialStats = useMemo(() => {
+    const pagos = realTitulos.filter((t: any) => t.status === 'pago' || t.status === 'quitado')
+    const vencidos = realTitulos.filter((t: any) => {
+      if (t.status === 'pago' || t.status === 'quitado' || t.status === 'cancelado') return false
+      if (t.status === 'atrasado' || t.status === 'vencido') return true
+      if (t.vencimento && /^\d{4}-\d{2}-\d{2}$/.test(String(t.vencimento)) && String(t.vencimento) < todayYmd) return true
+      return false
     })
-  })
-
-  // 2. Real Confirmed Departure Calls (Saída de Aluno / Painel Chamadas)
-  realSaidaCalls.forEach((sc: any) => {
-    const rawDate = sc.created_at || sc.updated_at || Date.now()
-    const isConfirmed = sc.status === 'confirmed'
-    
-    combinedLogs.push({
-      id: `saida-${sc.id}`,
-      type: 'check',
-      category: 'portaria',
-      title: `Saída de aluno confirmada no Painel de Chamadas`,
-      time: formatDatePtBr(rawDate),
-      timestamp: new Date(rawDate).getTime() || Date.now(),
-      color: isConfirmed ? '#10b981' : '#4f46e5',
-      details: `Liberado para: ${sc.guardianName || sc.responsavelNome || 'Responsável Cadastrado'} • Status: ${isConfirmed ? 'Saída Confirmada' : 'Aguardando na Portaria'}`,
-      categoryLabel: 'Saída Chamada'
+    const pendentes = realTitulos.filter((t: any) => {
+      if (t.status === 'pago' || t.status === 'quitado' || t.status === 'cancelado') return false
+      return !vencidos.includes(t)
     })
-  })
+    return { total: realTitulos.length, pagos: pagos.length, vencidos: vencidos.length, pendentes: pendentes.length }
+  }, [realTitulos, todayYmd])
 
-  // 3. Real Roll Call Absences / Presences from Academic Module
-  realFrequenciaDb.forEach((f: any) => {
-    const rawDate = f.data ? `${f.data}T12:00:00Z` : Date.now()
-    const isPresent = f.presente !== false && !f.falta
-    const isJustified = f.justificativa?.toLowerCase().includes('justifica')
-    
-    if (!isPresent) {
+  // ============================================================================
+  // CONSTRUÇÃO DA TIMELINE CRONOLÓGICA REAL (SEM DATAS FALSAS / SEM DUPLICATAS)
+  // ============================================================================
+  const sortedLogs = useMemo(() => {
+    const combinedLogs: any[] = []
+
+    // 1. Entradas na Catraca iDFace (com fuso corrigido e separadas de saídas)
+    ;(realPortariaEventos || []).forEach((e: any) => {
+      if (!e || !e.data_hora) return
+      const tipo = String(e.tipo || e.sentido || 'entrada').toLowerCase().trim()
+      // Saídas da catraca já vêm unificadas em /api/saida/calls; evitamos duplicar na timeline
+      if (tipo === 'saida') return
+
+      const normalizedIso = normalizePortariaTimestamp(e.data_hora) || e.data_hora
+      const ts = parseSafeTimestamp(normalizedIso)
+      if (!ts) return
+
+      const s = String(e.status || '').toLowerCase().trim()
+      const isSuccess = !s || ['sucesso', 'liberado', 'autorizado', 'ok', 'permitido', 'entrada'].includes(s)
+
+      combinedLogs.push({
+        id: `idface-${e.id}`,
+        type: isSuccess ? 'login' : 'alert',
+        category: 'portaria',
+        title: isSuccess ? 'Entrada reconhecida via Catraca iDFace' : 'Tentativa de passagem na Catraca iDFace',
+        time: formatDatePtBr(normalizedIso),
+        timestamp: ts,
+        color: isSuccess ? '#10b981' : '#ef4444',
+        details: `Equipamento: ${e.dispositivo_nome || 'Portaria iDFace'} • Status: ${isSuccess ? 'Acesso Liberado' : (e.status || 'Não Reconhecido')}`,
+        categoryLabel: 'Catraca iDFace'
+      })
+    })
+
+    // 2. Saídas Confirmadas no Painel de Chamadas / Catraca de Saída
+    validSaidaCalls.forEach((sc: any) => {
+      if (!sc.effectiveDate || !sc.timestamp) return
+      const isConfirmed = sc.status === 'confirmed' || Boolean(sc.confirmedOut)
+      const isCatracaExit = sc.source === 'catraca' || sc.origem === 'catraca_idface'
+
+      combinedLogs.push({
+        id: `saida-${sc.id}`,
+        type: 'logout',
+        category: 'portaria',
+        title: isCatracaExit
+          ? 'Saída registrada via Catraca iDFace'
+          : isConfirmed
+            ? 'Saída de aluno confirmada na Portaria'
+            : 'Chamada de saída solicitada na Portaria',
+        time: formatDatePtBr(sc.effectiveDate),
+        timestamp: sc.timestamp,
+        color: isConfirmed ? '#4f46e5' : '#f59e0b',
+        details: `Liberado para: ${sc.guardianName || sc.responsavelNome || 'Responsável Cadastrado'} • Status: ${isConfirmed ? 'Saída Confirmada' : 'Aguardando na Portaria'}`,
+        categoryLabel: isCatracaExit ? 'Catraca Saída' : 'Saída Chamada'
+      })
+    })
+
+    // 3. Faltas em Sala de Aula (Diário de Classe)
+    ;(realFrequenciaDb || []).forEach((f: any) => {
+      const isPresent = f.presente !== false && !f.falta
+      if (isPresent || !f.data) return
+      const isJustified = String(f.justificativa || '').toLowerCase().includes('justifica')
+      const ts = parseSafeTimestamp(f.data)
+
       combinedLogs.push({
         id: `freq-${f.id || f.data}`,
         type: 'alert',
         category: 'ocorrencias',
-        title: `Registro de Falta em Sala de Aula`,
-        time: formatDatePtBr(rawDate),
-        timestamp: new Date(rawDate).getTime() || Date.now(),
+        title: isJustified ? 'Falta Justificada em Sala de Aula' : 'Falta Registrada em Sala de Aula',
+        time: formatDatePtBr(f.data, { dateOnly: true }),
+        timestamp: ts,
         color: isJustified ? '#f59e0b' : '#ef4444',
-        details: `Data: ${f.data} • Status: ${isJustified ? 'Falta Justificada' : 'Falta Não Justificada'}`,
+        details: `Data da aula: ${formatDatePtBr(f.data, { dateOnly: true })}${f.registradoPor ? ` • Lançado por: ${f.registradoPor}` : ''}`,
         categoryLabel: 'Frequência'
       })
-    }
-  })
-
-  // 4. Real Comunicados events matching THIS student
-  relevantComunicados.forEach((c: any) => {
-    const isRead = readComunicados.includes(c)
-    const rawDate = c.dataEnvio || c.data || c.created_at || c.dados?.dataEnvio || c.dados?.created_at || Date.now()
-    const tituloStr = c.titulo || c.assunto || c.dados?.titulo || c.dados?.assunto || 'Informativo Escolar'
-    combinedLogs.push({
-      id: `com-${c.id || Math.random()}`,
-      type: 'doc',
-      category: 'comunicados',
-      title: `${isRead ? 'Visualizou' : 'Recebeu'} Comunicado: "${tituloStr}"`,
-      time: formatDatePtBr(rawDate),
-      timestamp: new Date(rawDate).getTime() || Date.now(),
-      color: isRead ? '#4f46e5' : '#8b5cf6',
-      details: c.categoria || c.dados?.categoria || 'Geral',
-      categoryLabel: 'Comunicado'
     })
-  })
 
-  // 5. Real Ocorrências events
-  realOcorrencias.forEach((oc: any) => {
-    const rawDate = oc.created_at || oc.data || Date.now()
-    combinedLogs.push({
-      id: `oc-${oc.id}`,
-      type: 'alert',
-      category: 'ocorrencias',
-      title: `Ocorrência registrada: ${oc.titulo || oc.tipo || 'Registro Pedagógico'}`,
-      time: formatDatePtBr(rawDate),
-      timestamp: new Date(rawDate).getTime() || Date.now(),
-      color: '#ef4444',
-      details: oc.descricao || oc.observacao || '',
-      categoryLabel: 'Ocorrência'
-    })
-  })
+    // 4. Comunicados (com distinção real entre Lido/Ciente com data da leitura vs Pendente de leitura)
+    comunicadosWithReadInfo.forEach(({ comunicado: c, isRead, hasCiencia, readAt }) => {
+      const sentDate = c.dataEnvio || c.data || c.created_at || c.dados?.dataEnvio || c.dados?.created_at
+      // Se foi lido e temos o timestamp da leitura, ordenamos e exibimos pela data real da leitura!
+      const effectiveDate = (isRead && readAt) ? readAt : sentDate
+      const ts = parseSafeTimestamp(effectiveDate)
+      if (!ts) return
 
-  // 6. Real Financial Titles / Boletos events
-  realTitulos.forEach((t: any) => {
-    const isPaid = t.status === 'pago' || t.status === 'quitado'
-    const isOverdue = t.status === 'atrasado' || t.status === 'vencido'
-    const rawDate = t.pagamento || t.vencimento || t.created_at || Date.now()
-    const formattedValor = Number(t.valor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })
-    
-    combinedLogs.push({
-      id: `tit-${t.id}`,
-      type: isPaid ? 'check' : isOverdue ? 'alert' : 'download',
-      category: 'financeiro',
-      title: `${isPaid ? 'Boleto Quitado' : isOverdue ? 'Boleto em Atraso' : 'Boleto Disponibilizado'}: ${t.descricao || t.eventoDescricao || 'Mensalidade Escolar'} (R$ ${formattedValor})`,
-      time: formatDatePtBr(rawDate),
-      timestamp: new Date(rawDate).getTime() || Date.now(),
-      color: isPaid ? '#10b981' : isOverdue ? '#ef4444' : '#f59e0b',
-      details: `Vencimento: ${t.vencimento ? formatDatePtBr(t.vencimento) : 'A definir'} • Status: ${t.status || 'Pendente'}`,
-      categoryLabel: 'Financeiro'
-    })
-  })
+      const tituloStr = c.titulo || c.assunto || c.dados?.titulo || c.dados?.assunto || 'Informativo Escolar'
+      const autorStr = c.autor || c.dados?.autor || 'Coordenação'
+      const sentFormatted = sentDate ? formatDatePtBr(sentDate) : ''
 
-  // 7. Real Guardians App Accesses (ONLY if actual login date exists - NOT created_at)
-  responsaveis.forEach((r: any) => {
-    const lastAccess = r.ultimoAcesso || r.ultimo_acesso || r.last_access || r.ultimo_login
-    if (lastAccess) {
       combinedLogs.push({
-        id: `resp-access-${r.id || r.cpf || r.nome}`,
-        type: 'check',
-        category: 'acessos',
-        title: `Acesso no aplicativo por ${r.nome}`,
-        time: formatDatePtBr(lastAccess),
-        timestamp: new Date(lastAccess).getTime() || Date.now(),
-        color: '#10b981',
-        details: `Dispositivo / App iOS & Android • Vínculo: ${r.tipo}`,
-        categoryLabel: 'Acesso App'
+        id: `com-${c.id}`,
+        type: 'doc',
+        category: 'comunicados',
+        isRead,
+        hasCiencia,
+        title: hasCiencia
+          ? `Confirmou Ciência no Comunicado: "${tituloStr}"`
+          : isRead
+            ? `Visualizou Comunicado: "${tituloStr}"`
+            : `Comunicado Pendente de Leitura: "${tituloStr}"`,
+        time: formatDatePtBr(effectiveDate),
+        timestamp: ts,
+        color: hasCiencia ? '#10b981' : isRead ? '#4f46e5' : '#f59e0b',
+        details: isRead && readAt && sentFormatted
+          ? `Lido pela família em ${formatDatePtBr(readAt)} • Enviado por ${autorStr} (${sentFormatted})`
+          : `Enviado por ${autorStr} • Categoria: ${c.categoria || c.dados?.categoria || 'Geral'} • Status: ${isRead ? 'Lido pela família' : 'Ainda não lido'}`,
+        categoryLabel: hasCiencia ? 'Ciente' : isRead ? 'Comunicado Lido' : 'Não Lido'
       })
-    }
-  })
+    })
 
-  // 8. Simulated logs ONLY if explicitly generated by the user
-  const simulatedLogsSource = localSimulatedLogs || (aluno.agendaLogsSimulados ? aluno.agendaLogs : null)
-  if (simulatedLogsSource && Array.isArray(simulatedLogsSource)) {
-    simulatedLogsSource.forEach((l: any) => {
-      const logId = String(l.id || Math.random())
-      if (!combinedLogs.some(existing => String(existing.id) === logId)) {
+    // 5. Ocorrências Pedagógicas
+    ;(realOcorrencias || []).forEach((oc: any) => {
+      const rawDate = oc.created_at || oc.data
+      const ts = parseSafeTimestamp(rawDate)
+      if (!ts) return
+      const hasCienciaResp = Boolean(oc.ciencia_responsavel || oc.dados?.ciencia_responsavel)
+
+      combinedLogs.push({
+        id: `oc-${oc.id}`,
+        type: 'alert',
+        category: 'ocorrencias',
+        title: `Ocorrência: ${oc.titulo || oc.tipo || oc.tipo_id || 'Registro Pedagógico'}`,
+        time: formatDatePtBr(rawDate),
+        timestamp: ts,
+        color: '#ef4444',
+        details: `${oc.descricao || oc.observacao || 'Sem descrição detalhada'}${hasCienciaResp ? ' • ✅ Família ciente' : ' • ⏳ Aguardando ciência da família'}`,
+        categoryLabel: 'Ocorrência'
+      })
+    })
+
+    // 6. Títulos Financeiros / Boletos (sem shift de -1 dia no vencimento)
+    ;(realTitulos || []).forEach((t: any) => {
+      const isPaid = t.status === 'pago' || t.status === 'quitado'
+      const isOverdue =
+        !isPaid &&
+        (t.status === 'atrasado' ||
+          t.status === 'vencido' ||
+          (t.vencimento && /^\d{4}-\d{2}-\d{2}$/.test(String(t.vencimento)) && String(t.vencimento) < todayYmd))
+
+      const rawDate = (isPaid && (t.data_pagamento || t.pagamento)) || t.vencimento || t.created_at
+      const ts = parseSafeTimestamp(rawDate)
+      if (!ts) return
+
+      const formattedValor = Number(t.valor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })
+      const vencStr = t.vencimento ? formatDatePtBr(t.vencimento, { dateOnly: true }) : 'A definir'
+
+      combinedLogs.push({
+        id: `tit-${t.id}`,
+        type: isPaid ? 'check' : isOverdue ? 'alert' : 'download',
+        category: 'financeiro',
+        title: `${isPaid ? 'Boleto Quitado' : isOverdue ? 'Boleto Vencido' : 'Boleto em Aberto'}: ${t.descricao || t.eventoDescricao || 'Mensalidade Escolar'} (R$ ${formattedValor})`,
+        time: formatDatePtBr(rawDate, { dateOnly: /^\d{4}-\d{2}-\d{2}$/.test(String(rawDate || '')) }),
+        timestamp: ts,
+        color: isPaid ? '#10b981' : isOverdue ? '#ef4444' : '#f59e0b',
+        details: `Vencimento: ${vencStr}${isPaid && (t.data_pagamento || t.pagamento) ? ` • Pago em: ${formatDatePtBr(t.data_pagamento || t.pagamento, { dateOnly: true })}` : ''} • Status: ${isPaid ? 'Quitado' : isOverdue ? 'Em Atraso' : 'A vencer'}`,
+        categoryLabel: 'Financeiro'
+      })
+    })
+
+    // 7. Último Login Real dos Responsáveis no App (vindo do Supabase Auth last_sign_in_at)
+    responsaveis.forEach((r: any) => {
+      const lastAccess = r.ultimoAcesso || r.ultimo_acesso
+      const ts = parseSafeTimestamp(lastAccess)
+      if (ts > 0) {
         combinedLogs.push({
-          id: logId,
-          type: l.type || 'check',
-          category: l.category || (l.type === 'download' ? 'financeiro' : (l.type === 'doc' ? 'comunicados' : 'acessos')),
-          title: l.title,
-          time: formatDatePtBr(l.time),
-          timestamp: typeof l.id === 'number' ? l.id : Date.now(),
-          color: l.color || '#10b981',
-          details: l.details || '',
-          categoryLabel: l.categoryLabel || 'Demonstração'
+          id: `resp-access-${r.id || r.cpf || r.nome}`,
+          type: 'check',
+          category: 'acessos',
+          title: `Último login no App por ${r.nome}`,
+          time: formatDatePtBr(lastAccess),
+          timestamp: ts,
+          color: '#10b981',
+          details: `Vínculo: ${r.tipo}${r.dispositivosAtivos ? ` • ${r.dispositivosAtivos} aparelho(s) Push ativo(s)` : ''}`,
+          categoryLabel: 'Login App'
         })
       }
     })
+
+    // Deduplicar por ID e ordenar do mais recente para o mais antigo
+    const uniqueMap = new Map<string, any>()
+    combinedLogs.forEach(item => {
+      if (!uniqueMap.has(item.id)) {
+        uniqueMap.set(item.id, item)
+      }
+    })
+
+    return Array.from(uniqueMap.values()).sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
+  }, [realPortariaEventos, validSaidaCalls, realFrequenciaDb, comunicadosWithReadInfo, realOcorrencias, realTitulos, responsaveis, todayYmd])
+
+  // Contadores por categoria para as abas rápidas
+  const categoryCounts = useMemo(() => {
+    const counts = {
+      todos: sortedLogs.length,
+      portaria: 0,
+      comunicados: 0,
+      financeiro: 0,
+      ocorrencias: 0,
+      acessos: 0
+    }
+    sortedLogs.forEach(l => {
+      if (l.category && counts[l.category as keyof typeof counts] !== undefined) {
+        counts[l.category as keyof typeof counts]++
+      }
+    })
+    return counts
+  }, [sortedLogs])
+
+  // Aplicação combinada de filtros (Categoria + Período + Status de Comunicado + Busca textual)
+  const filteredLogs = useMemo(() => {
+    const now = Date.now()
+    const query = logSearch.trim().toLowerCase()
+
+    return sortedLogs.filter(log => {
+      if (logFilter !== 'todos' && log.category !== logFilter) return false
+
+      if (logFilter === 'comunicados' && comunicadoStatusFilter !== 'todos') {
+        if (comunicadoStatusFilter === 'lidos' && !log.isRead) return false
+        if (comunicadoStatusFilter === 'pendentes' && log.isRead) return false
+      }
+
+      if (periodFilter !== 'todos' && log.timestamp) {
+        if (periodFilter === 'hoje') {
+          const itemYmd = new Intl.DateTimeFormat('en-CA', { timeZone: SCHOOL_TZ }).format(new Date(log.timestamp))
+          if (itemYmd !== todayYmd) return false
+        } else if (periodFilter === '7d') {
+          if (now - log.timestamp > 7 * 86400000) return false
+        } else if (periodFilter === '30d') {
+          if (now - log.timestamp > 30 * 86400000) return false
+        }
+      }
+
+      if (query) {
+        const hay = `${log.title || ''} ${log.details || ''} ${log.categoryLabel || ''} ${log.time || ''}`.toLowerCase()
+        if (!hay.includes(query)) return false
+      }
+
+      return true
+    })
+  }, [sortedLogs, logFilter, periodFilter, comunicadoStatusFilter, logSearch, todayYmd])
+
+  // Retornos condicionais de carregamento / não encontrado posicionados APÓS todos os Hooks (Rules of Hooks)
+  if (isLoadingAluno && !aluno) {
+    return (
+      <div style={{ padding: 60, textAlign: 'center', color: 'hsl(var(--text-muted))', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
+        <Loader2 size={36} className="animate-spin" style={{ color: '#4f46e5' }} />
+        <p style={{ margin: 0, fontWeight: 500 }}>Carregando ficha completa do aluno e família...</p>
+      </div>
+    )
   }
 
-  // Deduplicate by ID and Sort timeline newest first
-  const uniqueLogsMap = new Map<string, any>()
-  combinedLogs.forEach(item => {
-    if (!uniqueLogsMap.has(item.id)) {
-      uniqueLogsMap.set(item.id, item)
-    }
-  })
-  const sortedLogs = Array.from(uniqueLogsMap.values()).sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
+  if (!aluno) {
+    return (
+      <div style={{ padding: 48, textAlign: 'center' }}>
+        <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 16 }}>Pessoa / Aluno não encontrado</h2>
+        <button className="btn btn-secondary" onClick={() => router.back()}>Voltar</button>
+      </div>
+    )
+  }
 
-  // Filtered timeline
-  const filteredLogs = sortedLogs.filter(log => {
-    if (logFilter === 'todos') return true
-    if (logFilter === 'portaria') return log.category === 'portaria'
-    return log.category === logFilter
-  })
-
-  // Actions: Block / Unblock student access
+  // Ação: Bloquear / Desbloquear acesso da família à Agenda Digital
   const handleToggleBlockAccess = () => {
     const isCurrentlyBlocked = Boolean(aluno.bloqueadoAgenda || aluno.bloqueadoAgendaDigital)
     const actionLabel = isCurrentlyBlocked ? 'Desbloquear' : 'Bloquear'
@@ -640,19 +929,21 @@ export default function ADAdminPessoaDetail() {
       async () => {
         try {
           const nextBlocked = !isCurrentlyBlocked
-          await setAlunos((prev: any[]) =>
-            prev.map((a: any) => (a.id === aluno.id ? { ...a, bloqueadoAgenda: nextBlocked, bloqueadoAgendaDigital: nextBlocked } : a))
-          )
-          try {
-            const fullRes = await fetch(`/api/alunos/${encodeURIComponent(aluno.id)}`).catch(() => null)
-            const fullData = fullRes && fullRes.ok ? await fullRes.json().catch(() => null) : null
-            const baseAluno = fullData || aluno
-            await fetch(`/api/alunos?id=${encodeURIComponent(aluno.id)}`, {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ ...baseAluno, bloqueadoAgenda: nextBlocked, bloqueadoAgendaDigital: nextBlocked })
+          setFetchedAluno((prev: any) => ({
+            ...(prev || aluno),
+            bloqueadoAgenda: nextBlocked,
+            bloqueadoAgendaDigital: nextBlocked
+          }))
+
+          await fetch(`/api/alunos?id=${encodeURIComponent(aluno.id)}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              ...aluno,
+              bloqueadoAgenda: nextBlocked,
+              bloqueadoAgendaDigital: nextBlocked
             })
-          } catch (_) {}
+          })
           adAlert(`Acesso ${isCurrentlyBlocked ? 'liberado' : 'bloqueado'} com sucesso!`, 'Atualização Salva')
         } catch (err) {
           console.error('Erro ao atualizar bloqueio:', err)
@@ -662,51 +953,79 @@ export default function ADAdminPessoaDetail() {
     )
   }
 
-  // Actions: Reset password for guardian
-  const handleResetPassword = (resp: any) => {
-    const targetEmail = resp.email || resp.usuarioEmail
+  // Ação Real 1: Enviar link de recuperação de senha por e-mail (/api/auth/recover-password)
+  const handleSendPasswordRecoveryEmail = (resp: any) => {
+    const targetEmail = (resp.email || resp.usuarioEmail || '').trim()
+    if (!targetEmail) {
+      adAlert(
+        `O responsável ${resp.nome} não possui um endereço de e-mail cadastrado. Cadastre o e-mail ou utilize a opção "Reiniciar 1º Acesso".`,
+        'E-mail Ausente'
+      )
+      return
+    }
+
     adConfirm(
-      `Enviar e-mail de redefinição de senha para ${resp.nome}${targetEmail ? ` (${targetEmail})` : ''}?`,
-      'Resetar Senha',
+      `Enviar link de redefinição de senha para ${resp.nome} (${targetEmail})?`,
+      'Enviar Redefinição de Senha',
       async () => {
+        const busyKey = `recover-${resp.id || resp.nome}`
+        setActionBusyId(busyKey)
         try {
-          if (targetEmail) {
-            await fetch('/api/auth/reset-password', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ email: targetEmail })
-            }).catch(() => null)
+          const res = await fetch('/api/auth/recover-password', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: targetEmail, origin: window.location.origin })
+          })
+          const data = await res.json().catch(() => ({}))
+          if (res.ok) {
+            adAlert(`Link de redefinição enviado com sucesso para ${targetEmail}!`, 'E-mail Enviado')
+          } else if (data?.needsFirstAccess) {
+            adAlert(
+              `${resp.nome} ainda não realizou o Primeiro Acesso no aplicativo. Oriente a família a clicar em "Primeiro Acesso" na tela de login.`,
+              'Pendente de 1º Acesso'
+            )
+          } else {
+            adAlert(data?.error || 'Não foi possível enviar o e-mail de recuperação.', 'Atenção')
           }
-          adAlert(`Instruções de redefinição de senha enviadas para ${resp.nome}!`, 'Solicitação Concluída')
-        } catch (err) {
-          adAlert('Solicitação enviada com sucesso.', 'Recuperação de Senha')
+        } catch {
+          adAlert('Erro de conexão ao tentar enviar e-mail de recuperação.', 'Erro')
+        } finally {
+          setActionBusyId(null)
         }
       }
     )
   }
 
-  // Action: Generate simulated logs (persist in React state and Supabase)
-  const generateSimulatedLogs = () => {
+  // Ação Real 2: Reiniciar 1º Acesso no Supabase Auth (/api/auth/reset-access)
+  const handleResetFirstAccess = (resp: any) => {
+    if (!resp.id) {
+      adAlert('Este responsável não possui ID vinculado na tabela de responsáveis para reiniciar o acesso.', 'Aviso')
+      return
+    }
+
     adConfirm(
-      'Isto irá gerar um histórico simulado de demonstração no perfil desta família. Continuar?',
-      'Gerar Histórico Simulados',
+      `Isto irá apagar a credencial atual de ${resp.nome} no Auth e liberar o cadastro para fazer um novo "Primeiro Acesso" do zero. Confirmar?`,
+      'Reiniciar 1º Acesso',
       async () => {
-        const sampleLogs = [
-          { id: Date.now() + 1, type: 'check', category: 'acessos', title: 'Responsável confirmou presença na Reunião de Pais', time: 'Hoje às 11:32', color: '#10b981', categoryLabel: 'Demonstração' },
-          { id: Date.now() + 2, type: 'doc', category: 'comunicados', title: 'Visualizou o Comunicado: "Feriado Prolongado e Atividades"', time: 'Ontem às 08:15', color: '#4f46e5', categoryLabel: 'Demonstração' },
-          { id: Date.now() + 3, type: 'download', category: 'financeiro', title: 'Fez o download do Boleto da Mensalidade de Abril', time: 'Segunda-feira', color: '#f59e0b', categoryLabel: 'Demonstração' }
-        ]
-        
-        // Update local React state instantly for immediate UI rendering
-        setLocalSimulatedLogs(sampleLogs)
-        
+        const busyKey = `reset-${resp.id}`
+        setActionBusyId(busyKey)
         try {
-          await setAlunos((prev: any[]) =>
-            prev.map((a: any) => (a.id === aluno.id ? { ...a, agendaLogs: sampleLogs, agendaLogsSimulados: true } : a))
-          )
-          adAlert('Dados simulados gerados para exibição.', 'Sucesso')
-        } catch (err) {
-          console.error('Erro ao salvar no banco:', err)
+          const res = await fetch('/api/auth/reset-access', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ type: 'responsavel', id: resp.id })
+          })
+          const data = await res.json().catch(() => ({}))
+          if (res.ok) {
+            adAlert(data?.message || `Acesso de ${resp.nome} reiniciado! Já está livre para o Primeiro Acesso.`, 'Acesso Reiniciado')
+            fetchAllStudentData(true)
+          } else {
+            adAlert(data?.error || 'Não foi possível reiniciar o acesso.', 'Erro')
+          }
+        } catch {
+          adAlert('Falha na comunicação com o servidor.', 'Erro')
+        } finally {
+          setActionBusyId(null)
         }
       }
     )
@@ -721,27 +1040,64 @@ export default function ADAdminPessoaDetail() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', paddingBottom: 60 }}>
-      {/* Top Breadcrumb & Navigation */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
+      <style dangerouslySetInnerHTML={{ __html: `
+        .ad-timeline-deferred-item {
+          content-visibility: auto;
+          contain-intrinsic-size: auto none auto 76px;
+        }
+        @media (max-width: 960px) {
+          .ad-pessoa-main-grid {
+            grid-template-columns: 1fr !important;
+          }
+          .ad-pessoa-today-strip {
+            grid-template-columns: 1fr 1fr !important;
+          }
+        }
+        @media (max-width: 600px) {
+          .ad-pessoa-today-strip {
+            grid-template-columns: 1fr !important;
+          }
+          .ad-pessoa-hero-card {
+            flex-direction: column !important;
+            align-items: flex-start !important;
+          }
+        }
+      ` }} />
+
+      {/* Top Breadcrumb & Refresh Action */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <button
+            className="btn btn-secondary btn-sm"
+            onClick={() => router.push('/agenda-digital/admin/pessoas')}
+            style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+          >
+            <ArrowLeft size={16} /> Voltar para Pessoas
+          </button>
+          <span style={{ color: 'hsl(var(--text-muted))', fontSize: 13 }}>/</span>
+          <span style={{ color: 'hsl(var(--text-muted))', fontSize: 13 }}>Pessoas</span>
+          <span style={{ color: 'hsl(var(--text-muted))', fontSize: 13 }}>/</span>
+          <span style={{ fontWeight: 600, fontSize: 13 }}>{aluno.nome}</span>
+        </div>
+
         <button
-          className="btn btn-secondary btn-sm"
-          onClick={() => router.push('/agenda-digital/admin/pessoas')}
-          style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+          className="btn btn-ghost btn-sm"
+          onClick={() => fetchAllStudentData(true)}
+          disabled={isRefreshingAll}
+          style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'hsl(var(--text-secondary))' }}
+          title="Recarregar dados em tempo real"
         >
-          <ArrowLeft size={16} /> Voltar para Pessoas
+          <RefreshCw size={14} className={isRefreshingAll ? 'animate-spin' : ''} />
+          {isRefreshingAll ? 'Atualizando...' : 'Atualizar dados'}
         </button>
-        <span style={{ color: 'hsl(var(--text-muted))', fontSize: 13 }}>/</span>
-        <span style={{ color: 'hsl(var(--text-muted))', fontSize: 13 }}>Pessoas</span>
-        <span style={{ color: 'hsl(var(--text-muted))', fontSize: 13 }}>/</span>
-        <span style={{ fontWeight: 600, fontSize: 13 }}>{aluno.nome}</span>
       </div>
 
       {/* Header / Hero Card */}
       <div
-        className="card"
+        className="card ad-pessoa-hero-card"
         style={{
-          padding: 28,
-          marginBottom: 32,
+          padding: 24,
+          marginBottom: 16,
           display: 'flex',
           alignItems: 'center',
           gap: 24,
@@ -752,11 +1108,11 @@ export default function ADAdminPessoaDetail() {
           position: 'relative'
         }}
       >
-        <UserAvatar userId={aluno.id} name={aluno.nome} fotoUrl={aluno.foto} size={100} style={{ borderRadius: 24, fontSize: 36 }} />
-        
+        <UserAvatar userId={aluno.id} name={aluno.nome} fotoUrl={aluno.foto} size={88} style={{ borderRadius: 22, fontSize: 32 }} />
+
         <div style={{ flex: 1 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8, flexWrap: 'wrap' }}>
-            <h1 style={{ fontSize: 28, fontWeight: 800, fontFamily: 'Outfit, sans-serif', margin: 0 }}>{aluno.nome}</h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6, flexWrap: 'wrap' }}>
+            <h1 style={{ fontSize: 26, fontWeight: 800, fontFamily: 'Outfit, sans-serif', margin: 0 }}>{aluno.nome}</h1>
             {aluno.status === 'matriculado' || aluno.status === 'ativo' ? (
               <span className="badge badge-success" style={{ fontWeight: 700, padding: '4px 10px', fontSize: 12 }}>
                 Ativo no App
@@ -773,9 +1129,9 @@ export default function ADAdminPessoaDetail() {
               </span>
             )}
           </div>
-          
-          <div style={{ display: 'flex', gap: 16, color: 'hsl(var(--text-muted))', fontSize: 14, flexWrap: 'wrap', alignItems: 'center' }}>
-            <span>Código / Matrícula: <strong>{aluno.codigo || aluno.matricula || aluno.dados?.codigo || aluno.id}</strong></span>
+
+          <div style={{ display: 'flex', gap: 14, color: 'hsl(var(--text-muted))', fontSize: 13.5, flexWrap: 'wrap', alignItems: 'center' }}>
+            <span>Código / Matrícula: <strong style={{ color: 'hsl(var(--text-main))' }}>{aluno.codigo || aluno.matricula || aluno.dados?.codigo || aluno.id}</strong></span>
             <span>•</span>
             <span>
               Turma:{' '}
@@ -784,20 +1140,20 @@ export default function ADAdminPessoaDetail() {
                   {turmaObj.nome}
                 </Link>
               ) : (
-                <strong>{aluno.turma || 'Sem Turma'}</strong>
+                <strong style={{ color: 'hsl(var(--text-main))' }}>{resolvedTurmaNome}</strong>
               )}
             </span>
-            {aluno.dados?.data_nascimento && (
+            {(aluno.data_nascimento || aluno.dados?.data_nascimento) && (
               <>
                 <span>•</span>
-                <span>Nascimento: <strong>{aluno.dados.data_nascimento}</strong></span>
+                <span>Nascimento: <strong style={{ color: 'hsl(var(--text-main))' }}>{formatDatePtBr(aluno.data_nascimento || aluno.dados?.data_nascimento, { dateOnly: true })}</strong></span>
               </>
             )}
           </div>
         </div>
 
         {/* Quick Action Buttons */}
-        <div style={{ display: 'flex', gap: 12, alignItems: 'center', position: 'relative' }}>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', position: 'relative' }}>
           <Link
             href={`/agenda-digital/admin/espelhar?aluno=${encodeURIComponent(aluno.id)}`}
             className="btn btn-secondary"
@@ -811,18 +1167,18 @@ export default function ADAdminPessoaDetail() {
             className="btn btn-ghost"
             style={{ padding: '10px 14px', position: 'relative' }}
             onClick={() => setShowActionsMenu(!showActionsMenu)}
+            aria-label="Mais ações"
           >
             <MoreHorizontal size={20} />
           </button>
 
-          {/* Action Dropdown Menu */}
           {showActionsMenu && (
             <div
               style={{
                 position: 'absolute',
                 top: 48,
                 right: 0,
-                width: 240,
+                width: 245,
                 background: 'hsl(var(--bg-surface))',
                 border: '1px solid hsl(var(--border-subtle))',
                 borderRadius: 12,
@@ -870,6 +1226,17 @@ export default function ADAdminPessoaDetail() {
                 style={{ width: '100%', justifyContent: 'flex-start' }}
                 onClick={() => {
                   setShowActionsMenu(false)
+                  router.push(`/agenda-digital/admin/testar-push?aluno_id=${aluno.id}`)
+                }}
+              >
+                <Bell size={14} style={{ marginRight: 8 }} /> Diagnosticar Push / Aparelhos
+              </button>
+
+              <button
+                className="btn btn-ghost btn-sm"
+                style={{ width: '100%', justifyContent: 'flex-start' }}
+                onClick={() => {
+                  setShowActionsMenu(false)
                   router.push(`/academico/ocorrencias?aluno_id=${aluno.id}`)
                 }}
               >
@@ -894,53 +1261,200 @@ export default function ADAdminPessoaDetail() {
         </div>
       </div>
 
+      {/* Barra Objetiva de Status Escolar & Hoje na Escola */}
+      <div
+        className="ad-pessoa-today-strip"
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+          gap: 14,
+          marginBottom: 24
+        }}
+      >
+        {/* 1. Entrada Hoje */}
+        <div className="card" style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{
+            width: 38, height: 38, borderRadius: 10,
+            background: todayEntry ? 'rgba(16,185,129,0.12)' : 'hsl(var(--bg-overlay))',
+            color: todayEntry ? '#10b981' : 'hsl(var(--text-muted))',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
+          }}>
+            <LogIn size={18} />
+          </div>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-muted))', textTransform: 'uppercase' }}>Entrada Hoje (iDFace)</div>
+            <div style={{ fontSize: 14, fontWeight: 800, color: todayEntry ? '#10b981' : 'hsl(var(--text-main))', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {isLoadingPortaria ? 'Consultando...' : todayEntry ? formatDatePtBr(todayEntry.normalizedIso).replace('Hoje às ', '') : 'Sem leitura hoje'}
+            </div>
+            <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {todayEntry ? (todayEntry.dispositivo_nome || 'Portaria iDFace') : (latestIdfaceEvent ? `Última: ${formatDatePtBr(latestIdfaceEvent.normalizedIso)}` : 'Nenhum acesso')}
+            </div>
+          </div>
+        </div>
+
+        {/* 2. Saída Hoje */}
+        <div className="card" style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{
+            width: 38, height: 38, borderRadius: 10,
+            background: todayExit ? 'rgba(79,70,229,0.12)' : 'hsl(var(--bg-overlay))',
+            color: todayExit ? '#4f46e5' : 'hsl(var(--text-muted))',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
+          }}>
+            <LogOut size={18} />
+          </div>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-muted))', textTransform: 'uppercase' }}>Saída Hoje (Portaria)</div>
+            <div style={{ fontSize: 14, fontWeight: 800, color: todayExit ? '#4f46e5' : 'hsl(var(--text-main))', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {isLoadingSaidaCalls ? 'Consultando...' : todayExit ? formatDatePtBr(todayExit.effectiveDate).replace('Hoje às ', '') : 'Sem saída hoje'}
+            </div>
+            <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {todayExit
+                ? `Com: ${todayExit.guardianName || 'Responsável'}`
+                : latestSaidaCall
+                  ? `Última: ${formatDatePtBr(latestSaidaCall.effectiveDate)}`
+                  : 'Nenhuma saída registrada'}
+            </div>
+          </div>
+        </div>
+
+        {/* 3. Frequência Escolar */}
+        <div className="card" style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{
+            width: 38, height: 38, borderRadius: 10,
+            background: attendanceStats.faltasInjustificadas > 5 ? 'rgba(239,68,68,0.12)' : 'rgba(16,185,129,0.12)',
+            color: attendanceStats.faltasInjustificadas > 5 ? '#ef4444' : '#10b981',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
+          }}>
+            <UserCheck size={18} />
+          </div>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-muted))', textTransform: 'uppercase' }}>Assiduidade (Diário)</div>
+            <div style={{ fontSize: 14, fontWeight: 800, color: 'hsl(var(--text-main))' }}>
+              {isLoadingFrequencia ? 'Calculando...' : `${attendanceStats.pct}% Presença`}
+            </div>
+            <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>
+              {attendanceStats.faltasInjustificadas} falta(s) • {attendanceStats.faltasJustificadas} justificada(s)
+            </div>
+          </div>
+        </div>
+
+        {/* 4. Situação Financeira */}
+        <div
+          className="card"
+          style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer' }}
+          onClick={() => setLogFilter(logFilter === 'financeiro' ? 'todos' : 'financeiro')}
+          title="Clique para filtrar boletos no histórico"
+        >
+          <div style={{
+            width: 38, height: 38, borderRadius: 10,
+            background: financialStats.vencidos > 0 ? 'rgba(239,68,68,0.12)' : 'rgba(16,185,129,0.12)',
+            color: financialStats.vencidos > 0 ? '#ef4444' : '#10b981',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
+          }}>
+            <CreditCard size={18} />
+          </div>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-muted))', textTransform: 'uppercase' }}>Financeiro / Boletos</div>
+            <div style={{ fontSize: 14, fontWeight: 800, color: financialStats.vencidos > 0 ? '#ef4444' : '#10b981' }}>
+              {isLoadingTitulos
+                ? 'Consultando...'
+                : financialStats.vencidos > 0
+                  ? `${financialStats.vencidos} em atraso`
+                  : 'Em dia'}
+            </div>
+            <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>
+              {financialStats.pagos} quitado(s) • {financialStats.pendentes} a vencer
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Grid Layout: Left (Guardians & Metrics) | Right (Timeline History) */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(320px, 1fr) 2fr', gap: 32 }}>
-        
+      <div className="ad-pessoa-main-grid" style={{ display: 'grid', gridTemplateColumns: 'minmax(330px, 1fr) 2fr', gap: 28 }}>
+
         {/* Left Column */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-          
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
+
           {/* Card: Engajamento (Família) */}
-          <div className="card" style={{ padding: 24 }}>
-            <h3 style={{ fontSize: 16, fontWeight: 700, margin: '0 0 16px 0', display: 'flex', alignItems: 'center', gap: 8 }}>
-              <TrendingUp size={18} color="#4f46e5" /> Engajamento (Família)
+          <div className="card" style={{ padding: 22 }}>
+            <h3 style={{ fontSize: 15, fontWeight: 700, margin: '0 0 16px 0', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <TrendingUp size={18} color="#4f46e5" /> Engajamento da Família
             </h3>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
               <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
                   <span style={{ fontSize: 13, fontWeight: 600 }}>Leitura de Comunicados</span>
-                  <span style={{ fontSize: 13, fontWeight: 700, color: readingRate > 50 ? '#10b981' : 'hsl(var(--text-muted))' }}>
-                    {readingRate}%
+                  <span style={{ fontSize: 13, fontWeight: 800, color: readingRate >= 50 ? '#10b981' : readingRate >= 25 ? '#f59e0b' : '#ef4444' }}>
+                    {isLoadingComunicados ? '...' : `${readingRate}%`}
                   </span>
                 </div>
-                <div style={{ width: '100%', height: 6, background: 'rgba(16,185,129,0.1)', borderRadius: 3, overflow: 'hidden' }}>
-                  <div style={{ width: `${readingRate}%`, height: '100%', background: readingRate > 50 ? '#10b981' : '#f59e0b', transition: 'width 0.5s ease' }} />
+                <div style={{ width: '100%', height: 7, background: 'hsl(var(--bg-overlay))', borderRadius: 4, overflow: 'hidden' }}>
+                  <div
+                    style={{
+                      width: `${readingRate}%`,
+                      height: '100%',
+                      background: readingRate >= 50 ? '#10b981' : readingRate >= 25 ? '#f59e0b' : '#ef4444',
+                      transition: 'width 0.4s ease'
+                    }}
+                  />
                 </div>
-                <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', marginTop: 6 }}>
-                  {totalComunicados > 0 ? `${readComunicados.length} de ${totalComunicados} comunicados lidos` : '0 de 0 comunicados lidos'}
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11.5, color: 'hsl(var(--text-muted))', marginTop: 6 }}>
+                  <span>{readComunicadosCount} de {totalComunicados} comunicados lidos</span>
+                  {totalComunicados - readComunicadosCount > 0 && (
+                    <button
+                      onClick={() => {
+                        setLogFilter('comunicados')
+                        setComunicadoStatusFilter('pendentes')
+                      }}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        padding: 0,
+                        color: '#4f46e5',
+                        fontWeight: 700,
+                        fontSize: 11.5,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Ver {totalComunicados - readComunicadosCount} não lido(s)
+                    </button>
+                  )}
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 4 }}>
-                <div style={{ padding: 12, background: 'hsl(var(--bg-main))', borderRadius: 8, border: '1px solid hsl(var(--border-subtle))' }}>
-                  <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>Dispositivos</div>
-                  <div style={{ fontSize: 18, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
-                    <Smartphone size={16} color={connectedDevices > 0 ? '#4f46e5' : 'hsl(var(--text-muted))'} />
-                    {connectedDevices === 0 ? 'Nenhum' : connectedDevices === 1 ? '1 Dispositivo' : `${connectedDevices} Dispositivos`}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <div style={{ padding: 12, background: 'hsl(var(--bg-main))', borderRadius: 10, border: '1px solid hsl(var(--border-subtle))' }}>
+                  <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>Contas / Push Ativos</div>
+                  <div style={{ fontSize: 16, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 6, marginTop: 3 }}>
+                    <Smartphone size={15} color={(activeAccountsCount > 0 || totalPushDevices > 0) ? '#10b981' : 'hsl(var(--text-muted))'} />
+                    {hasPushDataLoaded && totalPushDevices > 0
+                      ? `${totalPushDevices} Aparelho(s)`
+                      : activeAccountsCount > 0
+                        ? `${activeAccountsCount} Conta(s) Ativa(s)`
+                        : 'Sem login ativo'}
+                  </div>
+                  <div style={{ fontSize: 10.5, color: 'hsl(var(--text-muted))', marginTop: 2 }}>
+                    {responsaveis.length} responsável(is) no ERP
                   </div>
                 </div>
 
-                <div style={{ padding: 12, background: 'hsl(var(--bg-main))', borderRadius: 8, border: '1px solid hsl(var(--border-subtle))' }}>
+                <div
+                  style={{ padding: 12, background: 'hsl(var(--bg-main))', borderRadius: 10, border: '1px solid hsl(var(--border-subtle))', cursor: 'pointer' }}
+                  onClick={() => setLogFilter(logFilter === 'ocorrencias' ? 'todos' : 'ocorrencias')}
+                >
                   <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>Ocorrências</div>
-                  <div style={{ fontSize: 18, fontWeight: 700, color: realOcorrencias.length > 0 ? '#ef4444' : 'inherit', marginTop: 2 }}>
+                  <div style={{ fontSize: 16, fontWeight: 800, color: realOcorrencias.length > 0 ? '#ef4444' : 'inherit', marginTop: 3 }}>
                     {isLoadingOcorrencias ? (
-                      <Loader2 size={16} className="animate-spin" />
+                      <Loader2 size={15} className="animate-spin" />
                     ) : realOcorrencias.length > 0 ? (
-                      `${realOcorrencias.length} Reg.`
+                      `${realOcorrencias.length} Registro(s)`
                     ) : (
                       'Nenhuma'
                     )}
+                  </div>
+                  <div style={{ fontSize: 10.5, color: 'hsl(var(--text-muted))', marginTop: 2 }}>
+                    {attendanceStats.faltasInjustificadas} falta(s) em aula
                   </div>
                 </div>
               </div>
@@ -948,17 +1462,20 @@ export default function ADAdminPessoaDetail() {
           </div>
 
           {/* Card: Portaria & Frequência (iDFace e Saída) */}
-          <div className="card" style={{ padding: 24 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
-                <LogIn size={18} color="#10b981" /> Portaria & Frequência
+          <div className="card" style={{ padding: 22 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+              <h3 style={{ fontSize: 15, fontWeight: 700, margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <LogIn size={18} color="#10b981" /> Histórico de Portaria
               </h3>
-              {(isLoadingPortaria || isLoadingSaidaCalls) && <Loader2 size={16} className="animate-spin text-muted" />}
+              {(isLoadingPortaria || isLoadingSaidaCalls) && <Loader2 size={15} className="animate-spin text-muted" />}
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {/* Catraca iDFace Summary */}
-              <div style={{ border: '1px solid hsl(var(--border-subtle))', borderRadius: 10, padding: 12, background: 'hsl(var(--bg-main))' }}>
+              <div
+                style={{ border: '1px solid hsl(var(--border-subtle))', borderRadius: 10, padding: 12, background: 'hsl(var(--bg-main))', cursor: 'pointer' }}
+                onClick={() => setLogFilter(logFilter === 'portaria' ? 'todos' : 'portaria')}
+              >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'rgba(16,185,129,0.1)', color: '#10b981', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -970,18 +1487,25 @@ export default function ADAdminPessoaDetail() {
                     </div>
                   </div>
                   <span className="badge badge-success" style={{ fontWeight: 700, fontSize: 11 }}>
-                    {idfaceEntriesCount} Acesso(s)
+                    {validIdfaceEntries.length} Acesso(s)
                   </span>
                 </div>
-                {latestIdfaceEvent && (
-                  <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', marginTop: 8, paddingTop: 8, borderTop: '1px dashed hsl(var(--border-subtle))' }}>
-                    Última entrada: <strong>{formatDatePtBr(latestIdfaceEvent.data_hora)}</strong> ({latestIdfaceEvent.dispositivo_nome || 'Portaria iDFace'})
-                  </div>
-                )}
+                <div style={{ fontSize: 11.5, color: 'hsl(var(--text-muted))', marginTop: 8, paddingTop: 8, borderTop: '1px dashed hsl(var(--border-subtle))' }}>
+                  {latestIdfaceEvent ? (
+                    <>
+                      Última entrada: <strong style={{ color: 'hsl(var(--text-main))' }}>{formatDatePtBr(latestIdfaceEvent.normalizedIso)}</strong> ({latestIdfaceEvent.dispositivo_nome || 'Portaria iDFace'})
+                    </>
+                  ) : (
+                    'Nenhum registro facial de entrada localizado.'
+                  )}
+                </div>
               </div>
 
               {/* Saídas Confirmadas Summary */}
-              <div style={{ border: '1px solid hsl(var(--border-subtle))', borderRadius: 10, padding: 12, background: 'hsl(var(--bg-main))' }}>
+              <div
+                style={{ border: '1px solid hsl(var(--border-subtle))', borderRadius: 10, padding: 12, background: 'hsl(var(--bg-main))', cursor: 'pointer' }}
+                onClick={() => setLogFilter(logFilter === 'portaria' ? 'todos' : 'portaria')}
+              >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'rgba(79, 70, 229, 0.1)', color: '#4f46e5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -989,81 +1513,156 @@ export default function ADAdminPessoaDetail() {
                     </div>
                     <div>
                       <div style={{ fontSize: 13, fontWeight: 700 }}>Saídas Confirmadas</div>
-                      <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>Painel de Chamadas</div>
+                      <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>Painel de Chamadas / Portaria</div>
                     </div>
                   </div>
                   <span className="badge" style={{ background: 'rgba(79, 70, 229, 0.1)', color: '#4f46e5', fontWeight: 700, fontSize: 11 }}>
-                    {confirmedSaidasCount} Chamada(s)
+                    {confirmedSaidasCount} Saída(s)
                   </span>
                 </div>
-                {latestSaidaCall && (
-                  <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', marginTop: 8, paddingTop: 8, borderTop: '1px dashed hsl(var(--border-subtle))' }}>
-                    Última saída: <strong>{formatDatePtBr(latestSaidaCall.created_at)}</strong> (Para: {latestSaidaCall.guardianName || 'Responsável'})
-                  </div>
-                )}
+                <div style={{ fontSize: 11.5, color: 'hsl(var(--text-muted))', marginTop: 8, paddingTop: 8, borderTop: '1px dashed hsl(var(--border-subtle))' }}>
+                  {latestSaidaCall && latestSaidaCall.effectiveDate ? (
+                    <>
+                      Última saída: <strong style={{ color: 'hsl(var(--text-main))' }}>{formatDatePtBr(latestSaidaCall.effectiveDate)}</strong> (Para: {latestSaidaCall.guardianName || latestSaidaCall.responsavelNome || 'Responsável'})
+                    </>
+                  ) : (
+                    'Nenhuma saída confirmada registrada.'
+                  )}
+                </div>
               </div>
             </div>
           </div>
 
           {/* Card: Credenciais (Responsáveis) */}
-          <div className="card" style={{ padding: 24 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>Credenciais (Responsáveis)</h3>
-              {isLoadingResponsaveis && <Loader2 size={16} className="animate-spin text-muted" />}
+          <div className="card" style={{ padding: 22 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+              <h3 style={{ fontSize: 15, fontWeight: 700, margin: 0 }}>Credenciais (Responsáveis)</h3>
+              {isLoadingResponsaveis && <Loader2 size={15} className="animate-spin text-muted" />}
             </div>
-            
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               {responsaveis.length > 0 ? (
-                responsaveis.map((resp, i) => (
-                  <div key={resp.id || i} style={{ border: '1px solid hsl(var(--border-subtle))', borderRadius: 12, padding: 16, background: 'hsl(var(--bg-main))' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
-                      <div>
-                        <div style={{ fontWeight: 700, fontSize: 15, color: 'hsl(var(--text-main))' }}>{resp.nome}</div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
-                          <span className="badge" style={{ background: resp.badgeBg, color: resp.color, fontSize: 11, padding: '2px 8px', fontWeight: 600 }}>
-                            {resp.tipo}
-                          </span>
-                          <span style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>
-                            • {resp.appInstalado || resp.app_instalado || resp.ultimoAcesso || resp.ultimo_acesso ? 'App Instalado (Ativo)' : 'Cadastro Sincronizado'}
-                          </span>
+                responsaveis.map((resp, i) => {
+                  const isBusyRecover = actionBusyId === `recover-${resp.id || resp.nome}`
+                  const isBusyReset = actionBusyId === `reset-${resp.id}`
+                  return (
+                    <div
+                      key={resp.id || i}
+                      style={{
+                        border: '1px solid hsl(var(--border-subtle))',
+                        borderRadius: 12,
+                        padding: 15,
+                        background: 'hsl(var(--bg-main))'
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
+                        <div>
+                          <div style={{ fontWeight: 700, fontSize: 14.5, color: 'hsl(var(--text-main))' }}>{resp.nome}</div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 5, flexWrap: 'wrap' }}>
+                            <span className="badge" style={{ background: resp.badgeBg, color: resp.color, fontSize: 10.5, padding: '2px 8px', fontWeight: 700 }}>
+                              {resp.tipo}
+                            </span>
+                            <span
+                              className="badge"
+                              style={{
+                                background: resp.temContaAtiva ? 'rgba(16,185,129,0.12)' : 'rgba(245,158,11,0.12)',
+                                color: resp.temContaAtiva ? '#10b981' : '#d97706',
+                                fontSize: 10.5,
+                                padding: '2px 7px',
+                                fontWeight: 700
+                              }}
+                            >
+                              {resp.temContaAtiva ? '● Conta Ativa' : '○ Pendente 1º Acesso'}
+                            </span>
+                            {resp.dispositivosAtivos > 0 && (
+                              <span className="badge badge-ghost" style={{ fontSize: 10, padding: '2px 6px' }}>
+                                📱 {resp.dispositivosAtivos} Push
+                              </span>
+                            )}
+                          </div>
                         </div>
+
+                        <button
+                          className="btn btn-ghost btn-sm"
+                          title="Ver todos os detalhes do responsável"
+                          style={{ padding: 6 }}
+                          onClick={() => setSelectedRespModal(resp)}
+                        >
+                          <Eye size={14} />
+                        </button>
+                      </div>
+
+                      {resp.ultimoAcesso && (
+                        <div style={{ fontSize: 11.5, color: '#10b981', fontWeight: 600, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 5 }}>
+                          <Clock size={12} /> Último login: {formatDatePtBr(resp.ultimoAcesso)}
+                        </div>
+                      )}
+
+                      {(resp.email || resp.telefone || resp.cpf) && (
+                        <div style={{ fontSize: 12, color: 'hsl(var(--text-muted))', marginBottom: 12, display: 'flex', flexDirection: 'column', gap: 5 }}>
+                          {resp.email && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'space-between' }}>
+                              <span style={{ display: 'flex', alignItems: 'center', gap: 6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                <Mail size={12} style={{ flexShrink: 0 }} /> {resp.email}
+                              </span>
+                              <button
+                                className="btn btn-ghost btn-sm"
+                                style={{ padding: '2px 5px', height: 'auto' }}
+                                title="Copiar e-mail"
+                                onClick={() => copyToClipboard(resp.email, `email-${i}`)}
+                              >
+                                {copiedField === `email-${i}` ? <Check size={12} color="#10b981" /> : <Copy size={12} />}
+                              </button>
+                            </div>
+                          )}
+                          {resp.telefone && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'space-between' }}>
+                              <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <Phone size={12} style={{ flexShrink: 0 }} /> {resp.telefone}
+                              </span>
+                              <a
+                                href={getWhatsAppShareUrl(resp.telefone)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="btn btn-ghost btn-sm"
+                                style={{ padding: '2px 6px', height: 'auto', fontSize: 11, color: '#10b981', fontWeight: 700, textDecoration: 'none' }}
+                                title="Abrir conversa no WhatsApp"
+                              >
+                                WhatsApp <ExternalLink size={11} style={{ marginLeft: 3 }} />
+                              </a>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                        <button
+                          className="btn btn-secondary btn-sm"
+                          style={{ flex: 1, fontSize: 11.5, padding: '6px 8px' }}
+                          disabled={isBusyRecover}
+                          onClick={() => handleSendPasswordRecoveryEmail(resp)}
+                          title="Envia link por e-mail para o responsável redefinir a senha"
+                        >
+                          {isBusyRecover ? <Loader2 size={13} className="animate-spin" style={{ marginRight: 4 }} /> : <Key size={13} style={{ marginRight: 4 }} />}
+                          Link de Senha
+                        </button>
+
+                        {resp.id && (
+                          <button
+                            className="btn btn-ghost btn-sm"
+                            style={{ fontSize: 11.5, padding: '6px 8px', border: '1px solid hsl(var(--border-subtle))' }}
+                            disabled={isBusyReset}
+                            onClick={() => handleResetFirstAccess(resp)}
+                            title="Apaga o vínculo de Auth atual e libera novamente o Primeiro Acesso"
+                          >
+                            {isBusyReset ? <Loader2 size={13} className="animate-spin" style={{ marginRight: 4 }} /> : <RotateCcw size={13} style={{ marginRight: 4 }} />}
+                            Reiniciar 1º Acesso
+                          </button>
+                        )}
                       </div>
                     </div>
-
-                    {(resp.email || resp.telefone || resp.cpf) && (
-                      <div style={{ fontSize: 12, color: 'hsl(var(--text-muted))', marginBottom: 14, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                        {resp.email && (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                            <Mail size={12} /> {resp.email}
-                          </div>
-                        )}
-                        {resp.telefone && (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                            <Phone size={12} /> {resp.telefone}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                    
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                      <button
-                        className="btn btn-secondary btn-sm"
-                        style={{ flex: 1 }}
-                        onClick={() => handleResetPassword(resp)}
-                      >
-                        <Key size={14} style={{ marginRight: 4 }} /> Resetar Senha
-                      </button>
-
-                      <button
-                        className="btn btn-ghost btn-sm"
-                        title="Ver detalhes de contato"
-                        onClick={() => setSelectedRespModal(resp)}
-                      >
-                        <Eye size={14} />
-                      </button>
-                    </div>
-                  </div>
-                ))
+                  )
+                })
               ) : (
                 <div style={{ padding: 24, textAlign: 'center', color: 'hsl(var(--text-muted))', border: '1px dashed hsl(var(--border-subtle))', borderRadius: 8 }}>
                   Nenhum responsável vinculado encontrado neste cadastro.
@@ -1074,152 +1673,255 @@ export default function ADAdminPessoaDetail() {
         </div>
 
         {/* Right Column: Timeline / History */}
-        <div className="card" style={{ display: 'flex', flexDirection: 'column', minHeight: 500 }}>
+        <div className="card" style={{ display: 'flex', flexDirection: 'column', minHeight: 540 }}>
+          {/* Header + Search + Period Filter */}
           <div
             style={{
-              padding: '20px 24px',
+              padding: '18px 22px 14px',
               borderBottom: '1px solid hsl(var(--border-subtle))',
               display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              position: 'relative'
+              flexDirection: 'column',
+              gap: 14
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <h3 style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>Histórico Recente (Logs do App)</h3>
-              {filteredLogs.length > 0 && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <h3 style={{ fontSize: 17, fontWeight: 800, margin: 0 }}>Histórico Unificado (Aluno & Família)</h3>
                 <span className="badge badge-ghost" style={{ fontSize: 11, fontWeight: 700 }}>
                   {filteredLogs.length} evento(s)
                 </span>
-              )}
+              </div>
+
+              {/* Busca rápida + Filtro de período */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <div style={{ position: 'relative' }}>
+                  <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'hsl(var(--text-muted))' }} />
+                  <input
+                    className="form-input"
+                    placeholder="Buscar no histórico..."
+                    value={logSearch}
+                    onChange={e => {
+                      setLogSearch(e.target.value)
+                      setVisibleLogCount(15)
+                    }}
+                    style={{ padding: '5px 10px 5px 30px', fontSize: 12.5, width: 190, height: 32 }}
+                  />
+                </div>
+
+                <select
+                  className="form-input"
+                  value={periodFilter}
+                  onChange={e => {
+                    setPeriodFilter(e.target.value as any)
+                    setVisibleLogCount(15)
+                  }}
+                  style={{ padding: '4px 10px', fontSize: 12.5, height: 32, width: 'auto' }}
+                >
+                  <option value="todos">Todo o período</option>
+                  <option value="hoje">Somente Hoje</option>
+                  <option value="7d">Últimos 7 dias</option>
+                  <option value="30d">Últimos 30 dias</option>
+                </select>
+              </div>
             </div>
 
-            {/* Filter Toggle */}
-            <div style={{ position: 'relative' }}>
-              <button
-                className="btn btn-secondary btn-sm"
-                onClick={() => setShowFilterDropdown(!showFilterDropdown)}
-                style={{ display: 'flex', alignItems: 'center', gap: 6 }}
-              >
-                <Filter size={14} /> {logFilter === 'todos' ? 'Filtrar' : `Filtro: ${logFilter}`}
-              </button>
-
-              {showFilterDropdown && (
-                <div
-                  style={{
-                    position: 'absolute',
-                    top: 36,
-                    right: 0,
-                    width: 220,
-                    background: 'hsl(var(--bg-surface))',
-                    border: '1px solid hsl(var(--border-subtle))',
-                    borderRadius: 10,
-                    boxShadow: '0 10px 25px -5px rgba(0,0,0,0.15)',
-                    zIndex: 90,
-                    padding: 6
-                  }}
-                >
-                  {[
-                    { id: 'todos', label: 'Todos os Logs' },
-                    { id: 'portaria', label: 'Portaria (iDFace & Saída)' },
-                    { id: 'comunicados', label: 'Comunicados' },
-                    { id: 'ocorrencias', label: 'Ocorrências' },
-                    { id: 'financeiro', label: 'Financeiro' },
-                    { id: 'acessos', label: 'Acessos / App' }
-                  ].map(item => (
-                    <button
-                      key={item.id}
-                      className="btn btn-ghost btn-sm"
+            {/* Abas de Categoria Rápidas (1 clique, com contadores) */}
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {[
+                { id: 'todos', label: 'Todos', count: categoryCounts.todos },
+                { id: 'portaria', label: 'Portaria & Saída', count: categoryCounts.portaria },
+                { id: 'comunicados', label: 'Comunicados', count: categoryCounts.comunicados },
+                { id: 'financeiro', label: 'Financeiro', count: categoryCounts.financeiro },
+                { id: 'ocorrencias', label: 'Pedagógico & Faltas', count: categoryCounts.ocorrencias },
+                { id: 'acessos', label: 'Logins App', count: categoryCounts.acessos }
+              ].map(tab => {
+                const isActive = logFilter === tab.id
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => {
+                      setLogFilter(tab.id as any)
+                      setVisibleLogCount(15)
+                    }}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      padding: '5px 11px',
+                      borderRadius: 999,
+                      fontSize: 12,
+                      fontWeight: isActive ? 700 : 600,
+                      border: isActive ? '1px solid #4f46e5' : '1px solid hsl(var(--border-subtle))',
+                      background: isActive ? 'rgba(79, 70, 229, 0.1)' : 'hsl(var(--bg-main))',
+                      color: isActive ? '#4f46e5' : 'hsl(var(--text-secondary))',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    <span>{tab.label}</span>
+                    <span
                       style={{
-                        width: '100%',
-                        justifyContent: 'flex-start',
-                        fontWeight: logFilter === item.id ? 700 : 400,
-                        background: logFilter === item.id ? 'hsl(var(--bg-overlay))' : 'transparent'
-                      }}
-                      onClick={() => {
-                        setLogFilter(item.id as any)
-                        setShowFilterDropdown(false)
+                        fontSize: 10.5,
+                        padding: '1px 6px',
+                        borderRadius: 999,
+                        background: isActive ? '#4f46e5' : 'hsl(var(--bg-overlay))',
+                        color: isActive ? '#fff' : 'hsl(var(--text-muted))',
+                        fontWeight: 700
                       }}
                     >
-                      {item.label}
-                    </button>
-                  ))}
-                </div>
-              )}
+                      {tab.count}
+                    </span>
+                  </button>
+                )
+              })}
             </div>
+
+            {/* Sub-filtro exclusivo quando a aba Comunicados está selecionada */}
+            {logFilter === 'comunicados' && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingTop: 2 }}>
+                <span style={{ fontSize: 11.5, color: 'hsl(var(--text-muted))', fontWeight: 600 }}>Status de leitura:</span>
+                {[
+                  { id: 'todos', label: `Todos (${totalComunicados})` },
+                  { id: 'lidos', label: `Lidos pela família (${readComunicadosCount})` },
+                  { id: 'pendentes', label: `Não lidos (${Math.max(0, totalComunicados - readComunicadosCount)})` }
+                ].map(sub => (
+                  <button
+                    key={sub.id}
+                    type="button"
+                    onClick={() => setComunicadoStatusFilter(sub.id as any)}
+                    style={{
+                      padding: '3px 9px',
+                      borderRadius: 6,
+                      fontSize: 11.5,
+                      fontWeight: comunicadoStatusFilter === sub.id ? 700 : 500,
+                      border: '1px solid hsl(var(--border-subtle))',
+                      background: comunicadoStatusFilter === sub.id ? 'hsl(var(--bg-overlay))' : 'transparent',
+                      color: 'hsl(var(--text-main))',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {sub.label}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
-          
-          <div style={{ padding: 24, flex: 1, display: 'flex', flexDirection: 'column' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 20, position: 'relative', flex: 1 }}>
+
+          {/* Lista Cronológica */}
+          <div style={{ padding: 22, flex: 1, display: 'flex', flexDirection: 'column' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 18, position: 'relative', flex: 1 }}>
               {filteredLogs.length > 0 && (
-                <div style={{ position: 'absolute', left: 19, top: 20, bottom: 20, width: 2, background: 'hsl(var(--border-subtle))', zIndex: 0 }} />
+                <div style={{ position: 'absolute', left: 18, top: 18, bottom: 18, width: 2, background: 'hsl(var(--border-subtle))', zIndex: 0 }} />
               )}
 
               {filteredLogs.length > 0 ? (
-                filteredLogs.slice(0, visibleLogCount).map((log: any) => {
+                filteredLogs.slice(0, visibleLogCount).map((log: any, index: number) => {
                   let IconRender = CheckCircle2
                   if (log.type === 'doc') IconRender = FileText
                   else if (log.type === 'download') IconRender = Download
                   else if (log.type === 'alert') IconRender = AlertTriangle
+                  else if (log.type === 'login') IconRender = LogIn
+                  else if (log.type === 'logout') IconRender = LogOut
+
+                  const isSolidGreen = log.type === 'check' || log.type === 'login'
+                  const isSolidIndigo = log.type === 'logout'
 
                   return (
-                    <div key={log.id} style={{ display: 'flex', gap: 16, position: 'relative', zIndex: 1 }}>
+                    <div
+                      key={log.id}
+                      className={index >= 8 ? 'ad-timeline-deferred-item' : undefined}
+                      style={{ display: 'flex', gap: 14, position: 'relative', zIndex: 1 }}
+                    >
                       <div
                         style={{
-                          width: 40,
-                          height: 40,
+                          width: 38,
+                          height: 38,
                           borderRadius: '50%',
-                          background: log.type === 'check' ? '#10b981' : log.type === 'alert' ? 'rgba(239, 68, 68, 0.15)' : 'hsl(var(--bg-overlay))',
-                          color: log.type === 'check' ? 'white' : log.color,
+                          background: isSolidGreen
+                            ? '#10b981'
+                            : isSolidIndigo
+                              ? '#4f46e5'
+                              : log.type === 'alert'
+                                ? 'rgba(239, 68, 68, 0.12)'
+                                : 'hsl(var(--bg-surface))',
+                          color: isSolidGreen || isSolidIndigo ? 'white' : log.color,
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
                           flexShrink: 0,
-                          border: log.type !== 'check' ? '1px solid hsl(var(--border-subtle))' : 'none'
+                          border: isSolidGreen || isSolidIndigo ? 'none' : `1.5px solid ${log.color || 'hsl(var(--border-subtle))'}`
                         }}
                       >
-                        <IconRender size={20} />
+                        <IconRender size={17} />
                       </div>
 
-                      <div style={{ paddingTop: 2, flex: 1 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                          <span style={{ fontSize: 14, fontWeight: 700, color: 'hsl(var(--text-main))' }}>{log.title}</span>
-                          {log.categoryLabel && (
-                            <span className="badge badge-ghost" style={{ fontSize: 10, padding: '1px 6px' }}>
-                              {log.categoryLabel}
-                            </span>
-                          )}
+                      <div style={{ paddingTop: 1, flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                            <span style={{ fontSize: 13.5, fontWeight: 700, color: 'hsl(var(--text-main))' }}>{log.title}</span>
+                            {log.categoryLabel && (
+                              <span
+                                className="badge badge-ghost"
+                                style={{
+                                  fontSize: 10,
+                                  padding: '1px 7px',
+                                  fontWeight: 700,
+                                  color: log.categoryLabel === 'Não Lido' ? '#d97706' : undefined,
+                                  background: log.categoryLabel === 'Não Lido' ? 'rgba(245,158,11,0.12)' : undefined
+                                }}
+                              >
+                                {log.categoryLabel}
+                              </span>
+                            )}
+                          </div>
+
+                          <div style={{ fontSize: 11.5, color: 'hsl(var(--text-muted))', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+                            <Clock size={12} /> {log.time}
+                          </div>
                         </div>
 
                         {log.details && (
-                          <div style={{ fontSize: 12, color: 'hsl(var(--text-muted))', marginTop: 4 }}>{log.details}</div>
+                          <div style={{ fontSize: 12, color: 'hsl(var(--text-muted))', marginTop: 3, lineHeight: 1.4 }}>
+                            {log.details}
+                          </div>
                         )}
-
-                        <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', marginTop: 6, display: 'flex', alignItems: 'center', gap: 4 }}>
-                          <Clock size={12} /> {log.time}
-                        </div>
                       </div>
                     </div>
                   )
                 })
               ) : (
                 <div style={{ padding: 40, textAlign: 'center', color: 'hsl(var(--text-muted))', border: '1px dashed hsl(var(--border-subtle))', borderRadius: 12, display: 'flex', flexDirection: 'column', alignItems: 'center', margin: 'auto 0' }}>
-                  <AlertTriangle size={32} style={{ marginBottom: 16, opacity: 0.5 }} />
-                  <h4 style={{ fontSize: 16, fontWeight: 600, color: 'hsl(var(--text-main))', margin: '0 0 8px 0' }}>Sem dados recentes</h4>
-                  <p style={{ margin: 0, fontSize: 14, maxWidth: 360 }}>
-                    Esta família ainda não possui histórico de interações com o App.
+                  <AlertTriangle size={32} style={{ marginBottom: 12, opacity: 0.45 }} />
+                  <h4 style={{ fontSize: 15, fontWeight: 700, color: 'hsl(var(--text-main))', margin: '0 0 6px 0' }}>Nenhum evento encontrado para este filtro</h4>
+                  <p style={{ margin: 0, fontSize: 13, maxWidth: 360 }}>
+                    Altere a categoria ou o período selecionado acima para visualizar mais registros.
                   </p>
+                  {(logFilter !== 'todos' || periodFilter !== 'todos' || logSearch) && (
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      style={{ marginTop: 14 }}
+                      onClick={() => {
+                        setLogFilter('todos')
+                        setPeriodFilter('todos')
+                        setComunicadoStatusFilter('todos')
+                        setLogSearch('')
+                      }}
+                    >
+                      Limpar filtros
+                    </button>
+                  )}
                 </div>
               )}
             </div>
-            
+
             {filteredLogs.length > visibleLogCount && (
               <button
                 className="btn btn-secondary"
-                style={{ width: '100%', marginTop: 28 }}
-                onClick={() => setVisibleLogCount(prev => prev + 10)}
+                style={{ width: '100%', marginTop: 24 }}
+                onClick={() => setVisibleLogCount(prev => prev + 20)}
               >
-                Carregar logs mais antigos ({filteredLogs.length - visibleLogCount} restantes)
+                Carregar mais eventos ({filteredLogs.length - visibleLogCount} restantes)
               </button>
             )}
           </div>
@@ -1227,7 +1929,7 @@ export default function ADAdminPessoaDetail() {
 
       </div>
 
-      {/* Modal: Guardians Contact & Info */}
+      {/* Modal: Detalhes Completos do Responsável */}
       {selectedRespModal && (
         <div
           style={{
@@ -1245,30 +1947,57 @@ export default function ADAdminPessoaDetail() {
         >
           <div
             className="card"
-            style={{ width: '100%', maxWidth: 440, padding: 24, background: 'hsl(var(--bg-surface))' }}
+            style={{ width: '100%', maxWidth: 460, padding: 24, background: 'hsl(var(--bg-surface))' }}
             onClick={e => e.stopPropagation()}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
               <h3 style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>Detalhes do Responsável</h3>
               <button className="btn btn-ghost btn-sm" onClick={() => setSelectedRespModal(null)}>
                 <X size={18} />
               </button>
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div>
                 <label style={{ fontSize: 11, color: 'hsl(var(--text-muted))', textTransform: 'uppercase', fontWeight: 700 }}>Nome Completo</label>
                 <div style={{ fontSize: 16, fontWeight: 700, marginTop: 2 }}>{selectedRespModal.nome}</div>
               </div>
 
-              <div>
-                <label style={{ fontSize: 11, color: 'hsl(var(--text-muted))', textTransform: 'uppercase', fontWeight: 700 }}>Vínculo / Papel</label>
-                <div style={{ marginTop: 4 }}>
-                  <span className="badge" style={{ background: selectedRespModal.badgeBg, color: selectedRespModal.color, fontWeight: 600 }}>
-                    {selectedRespModal.tipo || 'Responsável'}
-                  </span>
+              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                <div>
+                  <label style={{ fontSize: 11, color: 'hsl(var(--text-muted))', textTransform: 'uppercase', fontWeight: 700 }}>Vínculo / Papel</label>
+                  <div style={{ marginTop: 4 }}>
+                    <span className="badge" style={{ background: selectedRespModal.badgeBg, color: selectedRespModal.color, fontWeight: 600 }}>
+                      {selectedRespModal.tipo || 'Responsável'}
+                    </span>
+                  </div>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: 11, color: 'hsl(var(--text-muted))', textTransform: 'uppercase', fontWeight: 700 }}>Status no App</label>
+                  <div style={{ marginTop: 4 }}>
+                    <span
+                      className="badge"
+                      style={{
+                        background: selectedRespModal.temContaAtiva ? 'rgba(16,185,129,0.12)' : 'rgba(245,158,11,0.12)',
+                        color: selectedRespModal.temContaAtiva ? '#10b981' : '#d97706',
+                        fontWeight: 700
+                      }}
+                    >
+                      {selectedRespModal.temContaAtiva ? 'Conta Ativa' : 'Pendente 1º Acesso'}
+                    </span>
+                  </div>
                 </div>
               </div>
+
+              {selectedRespModal.ultimoAcesso && (
+                <div>
+                  <label style={{ fontSize: 11, color: 'hsl(var(--text-muted))', textTransform: 'uppercase', fontWeight: 700 }}>Último Login Registrado</label>
+                  <div style={{ fontSize: 14, fontWeight: 600, marginTop: 2 }}>
+                    {formatDatePtBr(selectedRespModal.ultimoAcesso)}
+                  </div>
+                </div>
+              )}
 
               {selectedRespModal.cpf && (
                 <div>
@@ -1312,16 +2041,46 @@ export default function ADAdminPessoaDetail() {
                       target="_blank"
                       rel="noopener noreferrer"
                       className="btn btn-secondary btn-sm"
-                      style={{ padding: '2px 8px', fontSize: 11, marginLeft: 'auto' }}
+                      style={{ padding: '2px 8px', fontSize: 11, marginLeft: 'auto', textDecoration: 'none' }}
                     >
                       WhatsApp <ExternalLink size={12} style={{ marginLeft: 4 }} />
                     </a>
                   </div>
                 </div>
               )}
+
+              {Array.isArray(selectedRespModal.dispositivos) && selectedRespModal.dispositivos.length > 0 && (
+                <div>
+                  <label style={{ fontSize: 11, color: 'hsl(var(--text-muted))', textTransform: 'uppercase', fontWeight: 700 }}>
+                    Aparelhos Push Conectados ({selectedRespModal.dispositivosAtivos}/{selectedRespModal.totalDispositivos})
+                  </label>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 6 }}>
+                    {selectedRespModal.dispositivos.map((dev: any, idx: number) => (
+                      <div
+                        key={dev.id || idx}
+                        style={{
+                          fontSize: 12,
+                          padding: '6px 10px',
+                          borderRadius: 8,
+                          background: 'hsl(var(--bg-main))',
+                          border: '1px solid hsl(var(--border-subtle))',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center'
+                        }}
+                      >
+                        <span>{dev.device_model || dev.device_type || 'Dispositivo Mobile/Web'}</span>
+                        <span style={{ color: dev.isSubscribed ? '#10b981' : '#ef4444', fontWeight: 700, fontSize: 11 }}>
+                          {dev.isSubscribed ? 'Ativo' : 'Inativo'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
-            <div style={{ marginTop: 24, display: 'flex', justifyContent: 'flex-end' }}>
+            <div style={{ marginTop: 22, display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
               <button className="btn btn-secondary" onClick={() => setSelectedRespModal(null)}>
                 Fechar
               </button>

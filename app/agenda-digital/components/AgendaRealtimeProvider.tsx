@@ -802,18 +802,29 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
         // Atualização otimista em 0ms no cache do React Query (evita refetch HTTP em cascata a cada leitura/ciência)
         if (eventType === 'INSERT') {
           queryClient.setQueriesData({ queryKey: ['agenda', 'comunicados'] }, (oldData: any) => {
-            if (!oldData || !oldData.pages) return oldData
-            const firstPage = oldData.pages[0] || []
-            if (firstPage.some((x: any) => String(x.id) === String(normalizedItem.id))) return oldData
-            return {
-              ...oldData,
-              pages: [[normalizedItem, ...firstPage], ...oldData.pages.slice(1)]
+            if (!oldData) return oldData
+            if (Array.isArray(oldData.pages)) {
+              const firstPage = oldData.pages[0] || []
+              if (firstPage.some((x: any) => String(x.id) === String(normalizedItem.id))) return oldData
+              return {
+                ...oldData,
+                pages: [[normalizedItem, ...firstPage], ...oldData.pages.slice(1)]
+              }
             }
+            return oldData
           })
           queryClient.invalidateQueries({ queryKey: ['agenda', 'comunicados'], refetchType: 'active' })
         } else if (eventType === 'UPDATE') {
           queryClient.setQueriesData({ queryKey: ['agenda', 'comunicados'] }, (oldData: any) => {
-            if (!oldData || !oldData.pages) return oldData
+            if (!oldData) return oldData
+            if (Array.isArray(oldData.items)) {
+              if (!oldData.items.some((x: any) => String(x.id) === String(normalizedItem.id))) return oldData
+              return {
+                ...oldData,
+                items: oldData.items.map((x: any) => String(x.id) === String(normalizedItem.id) ? { ...x, ...normalizedItem } : x)
+              }
+            }
+            if (!Array.isArray(oldData.pages)) return oldData
             return {
               ...oldData,
               pages: oldData.pages.map((p: any[]) => p.map((x: any) => String(x.id) === String(normalizedItem.id) ? { ...x, ...normalizedItem } : x))
@@ -822,7 +833,18 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
         } else if (eventType === 'DELETE') {
           const delId = String(row.id)
           queryClient.setQueriesData({ queryKey: ['agenda', 'comunicados'] }, (oldData: any) => {
-            if (!oldData || !oldData.pages) return oldData
+            if (!oldData) return oldData
+            if (Array.isArray(oldData.items)) {
+              const nextItems = oldData.items.filter((x: any) => String(x.id) !== delId)
+              if (nextItems.length === oldData.items.length) return oldData
+              const prevTotal = typeof oldData.totalCount === 'number' ? oldData.totalCount : oldData.items.length
+              return {
+                ...oldData,
+                items: nextItems,
+                totalCount: Math.max(nextItems.length, prevTotal - (oldData.items.length - nextItems.length))
+              }
+            }
+            if (!Array.isArray(oldData.pages)) return oldData
             return {
               ...oldData,
               pages: oldData.pages.map((p: any[]) => p.filter((x: any) => String(x.id) !== delId))

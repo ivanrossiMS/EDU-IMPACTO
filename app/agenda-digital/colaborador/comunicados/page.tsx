@@ -433,6 +433,7 @@ function ColaboradorComunicadosContent() {
   const { 
     data: comunicadosData, 
     isLoading: comunicadosLoadingLocal, 
+    isPending: comunicadosPendingLocal,
     isFetching: comunicadosFetchingLocal, 
     refetch: refetchComunicados, 
     hasNextPage: hasNextPageComunicados, 
@@ -440,8 +441,12 @@ function ColaboradorComunicadosContent() {
     isFetchingNextPage: isFetchingNextPageComunicados 
   } = useQueryComunicados(endpoint, 20, { enabled: true })
 
-  const comunicados = useMemo(() => comunicadosData?.pages?.flat() || [], [comunicadosData?.pages])
-  const comunicadosLoading = comunicadosLoadingLocal || comunicadosFetchingLocal
+  const comunicados = useMemo<any[]>(() => {
+    if (Array.isArray(comunicadosData?.pages)) return comunicadosData.pages.flat()
+    if (Array.isArray((comunicadosData as any)?.items)) return (comunicadosData as any).items
+    return []
+  }, [comunicadosData])
+  const comunicadosLoading = !currentUser || comunicadosPendingLocal || comunicadosLoadingLocal || (comunicadosFetchingLocal && comunicados.length === 0)
 
   useEffect(() => {
     if (comunicados && comunicados.length > 0) {
@@ -462,11 +467,6 @@ function ColaboradorComunicadosContent() {
       setTimeout(() => setIsRefreshing(false), 500)
     }
   }, [isRefreshing, refetchComunicados])
-
-  // Ao entrar na tela ou voltar de outras abas, sincroniza apenas as queries ativas
-  useEffect(() => {
-    queryClient.invalidateQueries({ queryKey: ['agenda', 'comunicados'], refetchType: 'active' })
-  }, [queryClient])
 
   // Escuta de eventos em tempo real com injeção otimista em 0ms e sincronização com debounce
   useEffect(() => {

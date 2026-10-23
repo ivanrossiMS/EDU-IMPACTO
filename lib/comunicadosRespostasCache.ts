@@ -1,5 +1,7 @@
 'use client';
 
+import { apiFetch } from '@/lib/api/apiClient';
+
 export interface ChatMessageReaction {
   emoji: string;
   user_id: string;
@@ -165,7 +167,7 @@ export async function prefetchComunicadoMessages(
 
   const promise = (async () => {
     try {
-      const res = await fetch(url);
+      const res = await apiFetch(url);
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data)) {

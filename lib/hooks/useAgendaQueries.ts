@@ -36,6 +36,8 @@ export function useQueryComunicadosPaginated(
     placeholderData: keepPreviousData,
     staleTime: 1000 * 30,
     gcTime: 1000 * 60 * 10,
+    retry: 2,
+    retryDelay: (attemptIndex) => Math.min(1000 * (attemptIndex + 1), 3000),
     refetchOnWindowFocus: false,
     refetchOnMount: 'always',
     enabled: isEnabled,
@@ -73,6 +75,8 @@ export function useQueryComunicados(
     },
     staleTime: 1000 * 30, // 30s de retenção para estabilidade e navegação ágil
     gcTime: 1000 * 60 * 10, // 10 min na memória para exibição em 0ms
+    retry: 2,
+    retryDelay: (attemptIndex) => Math.min(1000 * (attemptIndex + 1), 3000),
     refetchOnWindowFocus: false, // Evita re-fetch automático que cancela paginação ao clicar
     refetchOnMount: 'always',
     enabled: isEnabled

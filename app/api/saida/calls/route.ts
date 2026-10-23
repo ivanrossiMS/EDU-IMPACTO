@@ -370,7 +370,7 @@ export async function GET(request: Request) {
       const data = Array.from(mergedDataMap.values())
       const freqRecords: any[] = freqRes.data || []
       const exitEvents: any[] = (eventosRes && 'data' in eventosRes && Array.isArray((eventosRes as any).data)) ? (eventosRes as any).data : []
-      let rawResult: any[] = (data || []).map((row: any) => ({ id: row.id, ...(row.dados || {}) }))
+      let rawResult: any[] = (data || []).map((row: any) => ({ id: row.id, created_at: row.created_at, ...(row.dados || {}) }))
 
       // Filtrar para garantir que apenas chamadas cuja data efetiva (calledAt / confirmedAt) ou período de validade (special_auth) corresponde ao período solicitado sejam retornadas
       if (effectiveFrom || effectiveTo) {
@@ -449,7 +449,7 @@ export async function GET(request: Request) {
             : (fRecord.dados?.saidaHorario ? [{
                 hora: fRecord.dados.saidaHorario,
                 dispositivo: fRecord.dados.saidaResponsavel,
-                data_hora: fRecord.dados?.horaRegistro ? `${recordDate}T${fRecord.dados.horaRegistro}:00.000Z` : undefined
+                data_hora: fRecord.dados?.horaRegistro ? `${recordDate}T${fRecord.dados.horaRegistro}:00-04:00` : undefined
               }] : [])
 
           for (const s of todasSaidas) {
@@ -459,7 +459,9 @@ export async function GET(request: Request) {
             if (sHorario || sResp) {
               const isCatraca = sOrigem === 'catraca' || (sResp && String(sResp).toLowerCase().includes('catraca'))
               const isSolo = isCatraca || (sResp && String(sResp).toLowerCase().includes('sozinho'))
-              const callTime = s.data_hora || `${recordDate}T${sHorario}:00-04:00`
+              const callTime = s.data_hora
+                ? String(s.data_hora).replace(/(?:Z|\+00(?::00)?)$/i, '-04:00')
+                : `${recordDate}T${sHorario || '12:00'}:00-04:00`
               const callKey = getCallTimeKey(aId, callTime)
               if (!existingCallKeys.has(callKey)) {
                 existingCallKeys.add(callKey)
@@ -473,6 +475,7 @@ export async function GET(request: Request) {
                   guardianName: sResp || (isSolo ? 'Saiu Sozinho' : 'Responsável Cadastrado'),
                   calledAt: callTime,
                   confirmedAt: callTime,
+                  created_at: callTime,
                   status: 'confirmed',
                   source: isCatraca ? 'catraca' : 'frequencia',
                   tipo: isSolo ? 'sozinho' : undefined,
@@ -489,11 +492,13 @@ export async function GET(request: Request) {
           const aId = String(ev.aluno_id || '').trim()
           if (!aId) continue
           const dispNome = ev.dispositivo_nome || 'Catraca de Saída'
-          const evTimeKey = getCallTimeKey(aId, ev.data_hora)
+          const recordDate = ev.data_hora ? ev.data_hora.slice(0, 10) : targetDate
+          const rawTimePart = ev.data_hora ? ev.data_hora.slice(11, 19) : '12:00:00'
+          const normalizedExitIso = `${recordDate}T${rawTimePart.length === 5 ? rawTimePart + ':00' : (rawTimePart || '12:00:00')}-04:00`
+          const evTimeKey = getCallTimeKey(aId, normalizedExitIso)
           if (!existingCallKeys.has(evTimeKey)) {
             existingCallKeys.add(evTimeKey)
             const al = unifiedAlunosMap[aId]
-            const recordDate = ev.data_hora ? ev.data_hora.slice(0, 10) : targetDate
             const timeToken = ev.data_hora ? ev.data_hora.slice(11, 16).replace(':', '') : '1200'
             rawResult.push({
               id: `catraca-saida-${aId}-${recordDate}-${timeToken}`,
@@ -503,8 +508,9 @@ export async function GET(request: Request) {
               studentPhoto: al?.foto || al?.foto_url || null,
               guardianId: 'catraca-saida',
               guardianName: `Saiu Sozinho (${dispNome})`,
-              calledAt: ev.data_hora || `${recordDate}T12:00:00-04:00`,
-              confirmedAt: ev.data_hora || `${recordDate}T12:00:00-04:00`,
+              calledAt: normalizedExitIso,
+              confirmedAt: normalizedExitIso,
+              created_at: normalizedExitIso,
               status: 'confirmed',
               tipo: 'sozinho',
               origem: 'catraca_idface',
@@ -543,19 +549,24 @@ export async function GET(request: Request) {
         }
       }
 
-    // Build set of studentIds that have a confirmed call today
-    const confirmedStudentIds = new Set(
+    // Build set of studentId+date keys that have a confirmed call on that specific day
+    const confirmedStudentDates = new Set(
       rawResult
         .filter((c: any) => c.status === 'confirmed' && c.studentId != null)
-        .map((c: any) => String(c.studentId))
+        .map((c: any) => `${c.studentId}_${toCampoGrandeYmd(c.confirmedAt || c.calledAt || c.created_at) || todayStr}`)
     )
 
-      // Normalize: if a student has a confirmed call, mark any un-reverted waiting/called calls for that student as confirmed
+      // Normalize: if a student has a confirmed call on that day, mark any un-reverted waiting/called calls for that student on that same day as confirmed
       const result = rawResult.map((c: any) => {
-        if (c.studentId != null && confirmedStudentIds.has(String(c.studentId)) && (c.status === 'waiting' || c.status === 'called') && !c.isRevert) {
+        const cDateKey = `${c.studentId}_${toCampoGrandeYmd(c.confirmedAt || c.calledAt || c.created_at) || todayStr}`
+        if (c.studentId != null && confirmedStudentDates.has(cDateKey) && (c.status === 'waiting' || c.status === 'called') && !c.isRevert) {
           return { ...c, status: 'confirmed' }
         }
         return c
+      }).sort((a: any, b: any) => {
+        const tsA = new Date(a.confirmedAt || a.calledAt || a.created_at || 0).getTime() || 0
+        const tsB = new Date(b.confirmedAt || b.calledAt || b.created_at || 0).getTime() || 0
+        return tsB - tsA
       })
       return result
     })()

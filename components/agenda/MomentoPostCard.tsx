@@ -979,19 +979,35 @@ export function MomentoPostCard({ post, index, onDelete, alunos: propAlunos, tur
           }}
         >
           {descText ? (
-            <div>
+            <div
+              style={{
+                background: 'linear-gradient(145deg, #f8fafc 0%, rgba(241, 245, 249, 0.65) 100%)',
+                border: '1px solid rgba(226, 232, 240, 0.9)',
+                borderLeft: `3.5px solid ${theme.accentColor}`,
+                borderRadius: 11,
+                padding: '10px 13px',
+                boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.9)',
+              }}
+            >
               <p
                 style={{
                   margin: 0,
-                  color: '#334155',
-                  fontSize: 13.5,
-                  fontWeight: 450,
-                  lineHeight: 1.55,
+                  color: '#1e293b',
+                  fontFamily: "'Plus Jakarta Sans', 'Inter', 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif",
+                  fontSize: '0.875rem',
+                  fontWeight: 500,
+                  lineHeight: 1.65,
+                  letterSpacing: '-0.011em',
+                  textAlign: 'start',
+                  whiteSpace: 'pre-line',
+                  textWrap: 'pretty',
+                  overflowWrap: 'break-word',
+                  WebkitFontSmoothing: 'antialiased',
+                  MozOsxFontSmoothing: 'grayscale',
                   display: isDescExpanded ? 'block' : '-webkit-box',
                   WebkitLineClamp: isDescExpanded ? undefined : 3,
                   WebkitBoxOrient: isDescExpanded ? undefined : 'vertical',
                   overflow: isDescExpanded ? 'visible' : 'hidden',
-                  wordBreak: 'break-word',
                 }}
               >
                 {descText}
