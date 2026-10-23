@@ -756,13 +756,13 @@ def processar_eventos_detectados(eventos_por_catraca, estado):
         reconhecidos = [l for l in logs if l.get("user_id", 0) > 0]
         max_log_id = max([l.get("id", 0) for l in logs], default=0)
 
-        # Atualiza o cursor para o maior ID do lote atual
-        if max_log_id > 0 and max_log_id != estado.get(cat_key, 0):
-            estado[cat_key] = max_log_id
-            estado_alterado = True
-
         if not reconhecidos:
+            if max_log_id > 0 and max_log_id != estado.get(cat_key, 0):
+                estado[cat_key] = max_log_id
+                estado_alterado = True
             continue
+
+        houve_erro_envio = False
 
         cat_ip = cat.get("ip", "")
         cat_id = cat.get("id", "")
@@ -815,12 +815,14 @@ def processar_eventos_detectados(eventos_por_catraca, estado):
                 res = enviar_para_webhook(log, cat, tipo_override="saida")
                 latencia = time.time() - t_inicio
                 registrar_cache_saida(lid)
+                saidas_enviadas.add(lid)
                 print(f"\n  ==============================================================")
                 print(f"  [SAIDA CONFIRMADA] {nome_disp}")
                 print(f"     Aluno ID: {uid:<6} | Hora: {hora} | Log #{lid}")
                 print(f"     [SYNC] Notificacao & ERP sincronizados em {latencia:.2f}s!")
                 print(f"  ==============================================================")
             except Exception as e:
+                houve_erro_envio = True
                 print(f"  [ERRO] Erro ao enviar SAIDA do aluno {uid}: {e}")
 
         # ── PROCESSAR ENTRADAS ──
@@ -842,6 +844,7 @@ def processar_eventos_detectados(eventos_por_catraca, estado):
                 ultimo_ts = ULTIMA_ENTRADA_ALUNO.get(uid, 0)
                 if ultimo_ts > 0 and (agora_ts - ultimo_ts) < 120:
                     registrar_cache_entrada_log(lid)
+                    entradas_logs_atuais.add(lid)
                     continue
 
             t_inicio = time.time()
@@ -849,10 +852,12 @@ def processar_eventos_detectados(eventos_por_catraca, estado):
             try:
                 res = enviar_para_webhook(log, cat, tipo_override="entrada")
                 latencia = time.time() - t_inicio
+                is_reentrada = multiplas_entradas and (uid in entradas_atuais)
                 registrar_cache_entrada(uid)
                 registrar_cache_entrada_log(lid)
+                entradas_atuais.add(uid)
+                entradas_logs_atuais.add(lid)
                 ULTIMA_ENTRADA_ALUNO[uid] = time.time()
-                is_reentrada = multiplas_entradas and (uid in entradas_atuais)
                 tag_tipo = "REENTRADA CONFIRMADA" if is_reentrada else "ENTRADA CONFIRMADA"
                 print(f"\n  ==============================================================")
                 print(f"  [{tag_tipo}] {cat['nome']}")
@@ -860,7 +865,13 @@ def processar_eventos_detectados(eventos_por_catraca, estado):
                 print(f"     [SYNC] Presenca registrada no ERP em {latencia:.2f}s!")
                 print(f"  ==============================================================")
             except Exception as e:
+                houve_erro_envio = True
                 print(f"  [ERRO] Erro ao enviar ENTRADA do aluno {uid}: {e}")
+
+        # Atualiza o cursor apenas se todos os envios do lote tiveram sucesso
+        if not houve_erro_envio and max_log_id > 0 and max_log_id != estado.get(cat_key, 0):
+            estado[cat_key] = max_log_id
+            estado_alterado = True
 
     if estado_alterado:
         salvar_estado_catracas(estado)

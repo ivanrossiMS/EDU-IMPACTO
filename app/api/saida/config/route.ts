@@ -44,8 +44,29 @@ export async function GET(request: Request) {
       }
     })
   } catch (err: any) {
+    if (memoryCache) {
+      console.warn('[saida_config GET] Transient error fetching from Supabase, serving stale memoryCache:', err?.message || err)
+      return NextResponse.json(memoryCache, {
+        headers: {
+          'Cache-Control': 'no-store, max-age=0',
+          'Pragma': 'no-cache',
+          'X-Cache-Stale': '1',
+        },
+      })
+    }
+    const errMsg = String(err?.message || 'Internal Server Error')
+    const isNetworkErr =
+      errMsg.toLowerCase().includes('fetch failed') ||
+      errMsg.toLowerCase().includes('network') ||
+      errMsg.toLowerCase().includes('econnreset') ||
+      errMsg.toLowerCase().includes('etimedout') ||
+      errMsg.toLowerCase().includes('enotfound')
+    if (isNetworkErr) {
+      console.warn('[saida_config GET] Transient network error:', errMsg)
+      return NextResponse.json({ error: errMsg, isNetworkError: true }, { status: 503 })
+    }
     console.error('[saida_config GET] Unhandled error:', err)
-    return NextResponse.json({ error: err?.message || 'Internal Server Error' }, { status: 500 })
+    return NextResponse.json({ error: errMsg }, { status: 500 })
   }
 }
 

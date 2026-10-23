@@ -85,6 +85,41 @@ function getLocalIsoString(dia: string, hora: string): string {
   }
 }
 
+function normalizeSearchText(val: any): string {
+  return String(val || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim()
+}
+
+function normalizeAlunoIdKey(id: any): string {
+  const s = String(id ?? '').trim()
+  return s.replace(/^0+/, '') || s
+}
+
+function isRegistroApenasSaida(f: any): boolean {
+  if (!f) return false
+  const regPor = String(f.registradoPor || f.dados?.registradoPor || '').toLowerCase()
+  const origem = String(f.origem || f.dados?.origem || '').toLowerCase()
+  if (origem === 'catraca_saida' || regPor.includes('saída') || regPor.includes('saida')) {
+    return true
+  }
+  const rawTempos = f.tempos || f.dados?.tempos
+  const hasTempos = Boolean(
+    rawTempos &&
+    typeof rawTempos === 'object' &&
+    Object.values(rawTempos).some(v => v === 'P' || v === 'F' || v === 'J')
+  )
+  const hEntrada = f.dados?.horaEntrada
+  const hSaida = f.dados?.saidaHorario || f.saidaHorario
+  const hReg = f.horaRegistro || f.dados?.horaRegistro
+  if (!hEntrada && !hasTempos && Boolean(hSaida) && (!hReg || hReg === hSaida)) {
+    return true
+  }
+  return false
+}
+
 function getOrigemFrequenciaCompleta(
   alunoId: string,
   dataStr: string,
@@ -97,16 +132,14 @@ function getOrigemFrequenciaCompleta(
   isStatusDash?: boolean,
   isSaidaCleared?: boolean
 ): OrigemFrequenciaCompleta {
-  if (isStatusDash) {
-    return { entrada: null, saida: null }
-  }
   const targetId = String(alunoId).trim()
+  const targetIdKey = normalizeAlunoIdKey(targetId)
 
   // Evento de portaria (Catraca iDFace) para o aluno nesta data
   const portariaEvEntrada = (portariaEvents || []).find((ev: any) => {
-    const evAlunoId = String(ev.aluno_id || ev.alunoId || '').trim()
-    const evEquipId = String(ev.user_id_equipamento || '').trim()
-    const matchesAluno = (evAlunoId && evAlunoId === targetId) || (evEquipId && evEquipId === targetId)
+    const evAlunoId = normalizeAlunoIdKey(ev.aluno_id || ev.alunoId || '')
+    const evEquipId = normalizeAlunoIdKey(ev.user_id_equipamento || '')
+    const matchesAluno = (evAlunoId && evAlunoId === targetIdKey) || (evEquipId && evEquipId === targetIdKey)
     if (!matchesAluno) return false
     if (ev.status && ev.status !== 'sucesso') return false
     const evDateStr = String(ev.data_hora || ev.created_at || ev.data || '').split('T')[0]
@@ -116,9 +149,9 @@ function getOrigemFrequenciaCompleta(
   })
 
   const portariaEvSaida = (portariaEvents || []).find((ev: any) => {
-    const evAlunoId = String(ev.aluno_id || ev.alunoId || '').trim()
-    const evEquipId = String(ev.user_id_equipamento || '').trim()
-    const matchesAluno = (evAlunoId && evAlunoId === targetId) || (evEquipId && evEquipId === targetId)
+    const evAlunoId = normalizeAlunoIdKey(ev.aluno_id || ev.alunoId || '')
+    const evEquipId = normalizeAlunoIdKey(ev.user_id_equipamento || '')
+    const matchesAluno = (evAlunoId && evAlunoId === targetIdKey) || (evEquipId && evEquipId === targetIdKey)
     if (!matchesAluno) return false
     if (ev.status && ev.status !== 'sucesso') return false
     const evDateStr = String(ev.data_hora || ev.created_at || ev.data || '').split('T')[0]
@@ -142,10 +175,10 @@ function getOrigemFrequenciaCompleta(
   // --- LOGICA ENTRADA ---
   let entrada: OrigemBadgeItem | null = null
 
-  if (freqRecord) {
+  if (!isStatusDash && freqRecord) {
     const registradoPor = String(freqRecord.registradoPor || freqRecord.dados?.registradoPor || '')
     const origem = String(freqRecord.origem || freqRecord.dados?.origem || '')
-    const isSaidaOnlyRecord = registradoPor.toLowerCase().includes('saída') || registradoPor.toLowerCase().includes('saida')
+    const isSaidaOnlyRecord = isRegistroApenasSaida(freqRecord)
 
     const isIndefinido = horarioEntradaState === 'indefinido' ||
                          Boolean(freqRecord?.dados?.horarioIndefinido) ||
@@ -154,7 +187,7 @@ function getOrigemFrequenciaCompleta(
     const horaEntradaExplicit = isIndefinido ? null : (
       horarioEntradaState ||
       freqRecord.dados?.horaEntrada || 
-      (!isSaidaOnlyRecord && (freqRecord.horaRegistro || freqRecord.dados?.horaRegistro) ? (freqRecord.horaRegistro || freqRecord.dados?.horaRegistro) : null) || 
+      (!isSaidaOnlyRecord && freqRecord.presente !== false && (freqRecord.horaRegistro || freqRecord.dados?.horaRegistro) ? (freqRecord.horaRegistro || freqRecord.dados?.horaRegistro) : null) || 
       horaCatracaEntrada
     )
 
@@ -165,17 +198,21 @@ function getOrigemFrequenciaCompleta(
       (registradoPor.toLowerCase().includes('idface') && !isSaidaOnlyRecord) ||
       !!portariaEvEntrada)
 
-    const isTotem = !isIndefinido && (origem === 'totem' || registradoPor.toLowerCase().includes('totem'))
+    const isTotem = !isIndefinido && !isSaidaOnlyRecord && (origem === 'totem' || registradoPor.toLowerCase().includes('totem'))
 
-    const temposArray = freqRecord?.tempos ? Object.values(freqRecord.tempos) : []
-    const hasActiveTempos = temposArray.length > 0
-      ? temposArray.some(v => v === 'P' || v === 'F' || v === 'J')
-      : (freqRecord?.presente !== null && freqRecord?.presente !== undefined)
+    const rawTempos = freqRecord?.tempos || freqRecord?.dados?.tempos
+    const temposArray = rawTempos ? Object.values(rawTempos) : []
+    const hasPresencaTempos = temposArray.length > 0
+      ? temposArray.some(v => v === 'P')
+      : Boolean(freqRecord?.presente)
 
-    const hasEntradaExplicit = !!horarioEntradaState ||
-                               (!!freqRecord.dados?.horaEntrada && hasActiveTempos) ||
-                               (isIndefinido && hasActiveTempos) ||
-                               (freqRecord.origem === 'manual' && !isSaidaOnlyRecord && hasActiveTempos && (freqRecord.horaRegistro || freqRecord.presente))
+    const hasEntradaExplicit =
+      !isSaidaOnlyRecord &&
+      hasPresencaTempos &&
+      (!!horarioEntradaState ||
+        !!freqRecord.dados?.horaEntrada ||
+        isIndefinido ||
+        (origem === 'manual' && (freqRecord.horaRegistro || freqRecord.presente)))
 
     if (isCatraca) {
       const entradasArr = Array.isArray(freqRecord?.dados?.entradas) ? freqRecord.dados.entradas : []
@@ -222,7 +259,7 @@ function getOrigemFrequenciaCompleta(
         detalhes: detalhesText
       }
     }
-  } else if (portariaEvEntrada && horarioEntradaState !== 'indefinido') {
+  } else if (!isStatusDash && portariaEvEntrada && horarioEntradaState !== 'indefinido') {
     entrada = {
       tipo: 'catraca',
       label: 'iDFace',
@@ -230,7 +267,7 @@ function getOrigemFrequenciaCompleta(
       dispositivo: portariaEvEntrada.dispositivo_nome || 'iDFace',
       detalhes: 'Entrada registrada no equipamento iDFace'
     }
-  } else if (horarioEntradaState) {
+  } else if (!isStatusDash && horarioEntradaState) {
     const isIndef = horarioEntradaState === 'indefinido'
     entrada = {
       tipo: 'manual',
@@ -805,30 +842,23 @@ export default function FrequenciaPage() {
     ['all-frequencias'],
     '/api/academico/frequencias',
     { limit: 5000 },
-    { staleTime: 30_000, gcTime: 180_000 }
+    { noCache: true, staleTime: 15_000, gcTime: 180_000, refetchInterval: 30_000 }
   )
 
   // Eventos de acesso de portaria (Catraca) com cache inteligente
-  const { data: portariaEventsResponse } = useApiQuery<any>(
+  const { data: portariaEventsResponse, refetch: refetchPortariaEvents } = useApiQuery<any>(
     ['portaria-eventos-relatorio'],
     '/api/portaria/eventos',
-    { limit: 2000 },
-    { staleTime: 45_000, gcTime: 180_000 }
+    { limit: 1000 },
+    { noCache: true, staleTime: 15_000, gcTime: 180_000, refetchInterval: 30_000 }
   )
-
-  const portariaEventsList = useMemo(() => {
-    if (!portariaEventsResponse) return []
-    if (Array.isArray(portariaEventsResponse)) return portariaEventsResponse
-    if (Array.isArray(portariaEventsResponse.data)) return portariaEventsResponse.data
-    return []
-  }, [portariaEventsResponse])
 
   // Saídas confirmadas em /chamadas (/api/saida/calls) com cache inteligente
   const { data: saidaCallsResponse, refetch: refetchSaidaCalls } = useApiQuery<any>(
     ['saida-calls-frequencia'],
     '/api/saida/calls',
     { limit: 2000 },
-    { staleTime: 45_000, gcTime: 180_000 }
+    { staleTime: 30_000, gcTime: 180_000 }
   )
 
   const saidaCallsList = useMemo(() => {
@@ -837,62 +867,6 @@ export default function FrequenciaPage() {
     if (Array.isArray(saidaCallsResponse.data)) return saidaCallsResponse.data
     return []
   }, [saidaCallsResponse])
-
-  // Mesclar registros do Context com os carregados via API e Eventos de Catraca/Portaria
-  const combinedFreqs = useMemo(() => {
-    const map = new Map<string, any>()
-    ;(contextFreqs || []).forEach((f: any) => {
-      const aId = String(f.aluno_id || f.alunoId || f.aluno || '')
-      const dt = String(f.data || '').slice(0, 10)
-      if (aId && dt) {
-        const tVals = f.tempos ? Object.values(f.tempos) : []
-        const isAllDash = tVals.length > 0 && tVals.every(v => v === '-')
-        if (!isAllDash) map.set(`${aId}_${dt}`, f)
-      }
-    })
-    ;(allFreqs || []).forEach((f: any) => {
-      const aId = String(f.aluno_id || f.alunoId || f.aluno || '')
-      const dt = String(f.data || '').slice(0, 10)
-      if (aId && dt) {
-        const tVals = f.tempos ? Object.values(f.tempos) : []
-        const isAllDash = tVals.length > 0 && tVals.every(v => v === '-')
-        if (isAllDash) {
-          map.delete(`${aId}_${dt}`)
-        } else {
-          map.set(`${aId}_${dt}`, f)
-        }
-      }
-    })
-
-    // Sintetizar presença a partir de eventos da portaria/catraca caso não haja registro explícito
-    ;(portariaEventsList || []).forEach((ev: any) => {
-      if (ev.status === 'sucesso' && ev.aluno_id) {
-        const aId = String(ev.aluno_id)
-        const dt = String(ev.data_hora || ev.created_at || '').slice(0, 10)
-        const key = `${aId}_${dt}`
-        if (aId && dt && !map.has(key)) {
-          const studentObj = (alunos || []).find((a: any) => String(a.id) === aId)
-          const tId = studentObj?.turma || studentObj?.dados?.turma || ev.turma_id
-          const localTimeStr = ev.data_hora ? (String(ev.data_hora).split('T')[1]?.slice(0, 5) || formatTimeFromIso(ev.data_hora) || 'Catraca') : 'Catraca'
-          map.set(key, {
-            id: `CATRACA-${ev.id}`,
-            aluno_id: aId,
-            turma_id: tId,
-            data: dt,
-            presente: true,
-            justificativa: null,
-            dados: {
-              tempos: { '1': 'P', '2': 'P', '3': 'P', '4': 'P', '5': 'P' },
-              registradoPor: 'Catraca iDFace',
-              horaRegistro: localTimeStr
-            }
-          })
-        }
-      }
-    })
-
-    return Array.from(map.values())
-  }, [contextFreqs, allFreqs, portariaEventsList, alunos])
 
   const isSameDay = useCallback((fData: any, targetDayStr: string): boolean => {
     if (!fData || !targetDayStr) return false
@@ -973,6 +947,7 @@ export default function FrequenciaPage() {
   const [absencesManual, setAbsencesManual] = useState<Record<string, Record<string, PresStatus>>>({})
   const [salvandoManual, setSalvandoManual] = useState(false)
   const [padraoHorarioIndefinido, setPadraoHorarioIndefinido] = useState(false)
+  const [mostrarJaFaltososManual, setMostrarJaFaltososManual] = useState(false)
 
   // Estados específicos para Educação Infantil (Horários de Entrada, Saída e Responsáveis)
   const [horariosEntrada, setHorariosEntrada] = useState<Record<string, Record<string, string>>>({})
@@ -1075,6 +1050,113 @@ export default function FrequenciaPage() {
     { enabled: !!turmaId, noCache: true }
   )
 
+  // Query dedicada em tempo real para a data ativa (garante 100% dos registros do dia sem depender de cache ou limite de paginação)
+  const activeTargetDate = showRegistroManualModal ? (registroManualData || dataSel) : dataSel
+
+  const { data: freqDia, isFetching: fetchingFreqDia, refetch: refetchFreqDia } = useApiQuery<any[]>(
+    ['frequencias-dia', activeTargetDate],
+    '/api/academico/frequencias',
+    { data: activeTargetDate, limit: 2000 },
+    { enabled: !!activeTargetDate, noCache: true, staleTime: 5_000, refetchInterval: 20_000 }
+  )
+
+  const { data: portariaEventsDiaResp, refetch: refetchPortariaDia } = useApiQuery<any>(
+    ['portaria-eventos-dia', activeTargetDate],
+    '/api/portaria/eventos',
+    { data_inicio: `${activeTargetDate}T00:00:00`, data_fim: `${activeTargetDate}T23:59:59`, limit: 1000 },
+    { enabled: !!activeTargetDate, noCache: true, staleTime: 5_000, refetchInterval: 20_000 }
+  )
+
+  const portariaEventsList = useMemo(() => {
+    const map = new Map<string, any>()
+    const addEvents = (resp: any) => {
+      const arr = Array.isArray(resp) ? resp : (Array.isArray(resp?.data) ? resp.data : [])
+      arr.forEach((ev: any) => {
+        if (ev?.id) map.set(String(ev.id), ev)
+      })
+    }
+    addEvents(portariaEventsResponse)
+    addEvents(portariaEventsDiaResp)
+    return Array.from(map.values())
+  }, [portariaEventsResponse, portariaEventsDiaResp])
+
+  // Mesclar registros do Context com allFreqs, freqDia, freqTurma e Eventos de Catraca/Portaria
+  const combinedFreqs = useMemo(() => {
+    const map = new Map<string, any>()
+    const alunoByNormId = new Map<string, any>()
+    ;(alunos || []).forEach((a: any) => {
+      if (a?.id !== undefined && a?.id !== null) {
+        alunoByNormId.set(normalizeAlunoIdKey(a.id), a)
+        alunoByNormId.set(String(a.id).trim(), a)
+      }
+    })
+
+    const upsertFreqSource = (list: any[] | undefined) => {
+      ;(list || []).forEach((f: any) => {
+        const rawAId = String(f.aluno_id || f.alunoId || f.aluno || '').trim()
+        const normKey = normalizeAlunoIdKey(rawAId)
+        const studentObj = alunoByNormId.get(normKey) || alunoByNormId.get(rawAId)
+        const canonicalAId = studentObj ? String(studentObj.id) : rawAId
+        const dt = String(f.data || '').slice(0, 10)
+        if (canonicalAId && dt) {
+          const rawTempos = f.tempos || f.dados?.tempos
+          const tVals = rawTempos && typeof rawTempos === 'object' ? Object.values(rawTempos) : []
+          const isAllDash = tVals.length > 0 && tVals.every(v => v === '-')
+          if (isAllDash) {
+            map.delete(`${canonicalAId}_${dt}`)
+          } else {
+            map.set(`${canonicalAId}_${dt}`, { ...f, aluno_id: canonicalAId })
+          }
+        }
+      })
+    }
+
+    upsertFreqSource(contextFreqs)
+    upsertFreqSource(allFreqs)
+    upsertFreqSource(freqTurma)
+    upsertFreqSource(freqDia)
+
+    // Sintetizar presença a partir de eventos de ENTRADA da portaria/catraca caso não haja registro explícito de entrada
+    ;(portariaEventsList || []).forEach((ev: any) => {
+      const sentido = String(ev.sentido || ev.tipo || '').toLowerCase()
+      if (ev.status === 'sucesso' && sentido !== 'saida' && (ev.aluno_id || ev.user_id_equipamento)) {
+        const rawAId = String(ev.aluno_id || ev.user_id_equipamento).trim()
+        const normKey = normalizeAlunoIdKey(rawAId)
+        const studentObj = alunoByNormId.get(normKey) || alunoByNormId.get(rawAId)
+        const canonicalAId = studentObj ? String(studentObj.id) : rawAId
+        const dt = String(ev.data_hora || ev.created_at || '').slice(0, 10)
+        const key = `${canonicalAId}_${dt}`
+        const existingInMap = map.get(key)
+        if (canonicalAId && dt && (!existingInMap || isRegistroApenasSaida(existingInMap))) {
+          const tId = studentObj?.turma || studentObj?.dados?.turma || ev.turma_id || existingInMap?.turma_id
+          const localTimeStr = ev.data_hora ? (String(ev.data_hora).split('T')[1]?.slice(0, 5) || formatTimeFromIso(ev.data_hora) || 'Catraca') : 'Catraca'
+          map.set(key, {
+            ...(existingInMap || {}),
+            id: existingInMap?.id || `CATRACA-${ev.id}`,
+            aluno_id: canonicalAId,
+            turma_id: tId,
+            data: dt,
+            presente: true,
+            justificativa: null,
+            origem: 'catraca',
+            registradoPor: 'Catraca iDFace',
+            horaEntrada: localTimeStr,
+            horaRegistro: localTimeStr,
+            dados: {
+              ...(existingInMap?.dados || {}),
+              origem: 'catraca',
+              registradoPor: 'Catraca iDFace',
+              horaEntrada: localTimeStr,
+              horaRegistro: localTimeStr
+            }
+          })
+        }
+      }
+    })
+
+    return Array.from(map.values())
+  }, [contextFreqs, allFreqs, freqTurma, freqDia, portariaEventsList, alunos])
+
   const alunosDaTurma = useMemo(() => {
     if (!turmaSel) return []
     const targetTurma = turmaObj || turmas.find(t => String(t.id) === String(turmaSel) || String(t.codigo) === String(turmaSel) || String(t.nome) === String(turmaSel)) || turmaSel
@@ -1084,16 +1166,27 @@ export default function FrequenciaPage() {
     })
     const ordenados = ordenarPorChamada(lista)
     return ordenados.map((aluno: any) => {
-      const aId = String(aluno.id);
-      const freqRecord = freqTurma?.find(f => String(f.aluno_id) === aId && String(f.data).startsWith(dataSel));
+      const aIdKey = normalizeAlunoIdKey(aluno.id)
+      const freqRecord =
+        freqTurma?.find(f => normalizeAlunoIdKey(f.aluno_id || f.alunoId) === aIdKey && isSameDay(f.data, dataSel)) ||
+        combinedFreqs?.find(f => normalizeAlunoIdKey(f.aluno_id || f.alunoId) === aIdKey && isSameDay(f.data, dataSel))
+      const isSaidaOnly = isRegistroApenasSaida(freqRecord)
       return {
         ...aluno,
-        horaRegistro: freqRecord?.dados?.horaRegistro || freqRecord?.horaRegistro || null
+        horaRegistro: !isSaidaOnly ? (freqRecord?.dados?.horaEntrada || freqRecord?.dados?.horaRegistro || freqRecord?.horaRegistro || null) : null
       }
     })
-  }, [alunos, turmaSel, turmaObj, turmas, ordenarPorChamada, freqTurma, dataSel])
+  }, [alunos, turmaSel, turmaObj, turmas, ordenarPorChamada, freqTurma, combinedFreqs, dataSel, isSameDay])
   
-  const alunosFiltrados = useMemo(() => !buscaAluno ? alunosDaTurma : alunosDaTurma.filter((a: any) => a.nome.toLowerCase().includes(buscaAluno.toLowerCase())), [alunosDaTurma, buscaAluno])
+  const alunosFiltrados = useMemo(() => {
+    if (!buscaAluno.trim()) return alunosDaTurma
+    const q = normalizeSearchText(buscaAluno)
+    return alunosDaTurma.filter((a: any) =>
+      normalizeSearchText(a.nome).includes(q) ||
+      normalizeSearchText(a.id).includes(q) ||
+      normalizeSearchText(a.matricula).includes(q)
+    )
+  }, [alunosDaTurma, buscaAluno])
 
   const [absences, setAbsences] = useState<Record<string, Record<string, Record<string, PresStatus>>>>({})
 
@@ -1109,11 +1202,18 @@ export default function FrequenciaPage() {
         const aId = String(f.aluno_id || f.alunoId)
         if (!newAbsences[aId]) newAbsences[aId] = {}
         const dia = String(f.data).split('T')[0]
+        const isSaidaOnly = isRegistroApenasSaida(f)
+        const rawTempos = f.tempos || f.dados?.tempos
+        const hasValidTempos = Boolean(
+          rawTempos &&
+          typeof rawTempos === 'object' &&
+          Object.values(rawTempos).some(v => v === 'P' || v === 'F' || v === 'J')
+        )
         
-        if (f.tempos) {
-          newAbsences[aId][dia] = { ...f.tempos }
-        } else {
-          // Mapeia registros antigos/binários para todos os tempos da turma
+        if (hasValidTempos) {
+          newAbsences[aId][dia] = { ...rawTempos }
+        } else if (!isSaidaOnly) {
+          // Mapeia registros de entrada/binários para todos os tempos da turma
           const overallStatus: PresStatus = f.justificativa === 'Justificada' ? 'J' : (f.presente ? 'P' : 'F')
           const schedule = getTurmaSchedule(turmaObj)
           const temposMap: Record<string, PresStatus> = {}
@@ -1123,7 +1223,9 @@ export default function FrequenciaPage() {
           newAbsences[aId][dia] = temposMap
         }
 
-        const hEntrada = f.dados?.horaEntrada || f.dados?.horaRegistro || f.horaRegistro
+        const hEntrada = (!isSaidaOnly && f.presente !== false)
+          ? (f.dados?.horaEntrada || f.dados?.horaRegistro || f.horaRegistro)
+          : null
         const hSaida = f.dados?.saidaHorario || f.saidaHorario
         const rSaida = f.dados?.saidaResponsavel || f.saidaResponsavel
 
@@ -1241,7 +1343,11 @@ export default function FrequenciaPage() {
       })
 
       // 3. Salvar o registro de saída na API de frequências sem alterar os tempos nem criar entrada manual fictícia
-      const existing = freqTurma?.find(f => String(f.aluno_id) === aId && String(f.data).startsWith(dia))
+      const existing = (freqTurma || combinedFreqs)?.find(f => normalizeAlunoIdKey(f.aluno_id || f.alunoId) === normalizeAlunoIdKey(aId) && isSameDay(f.data, dia))
+      const existingEntrada = !isRegistroApenasSaida(existing)
+        ? (horariosEntrada[aId]?.[dia] || existing?.dados?.horaEntrada || existing?.horaRegistro || existing?.dados?.horaRegistro || undefined)
+        : undefined
+      const isIndef = existingEntrada === 'indefinido' || Boolean(existing?.dados?.horarioIndefinido || existing?.horarioIndefinido)
 
       const recordsToSave = [{
         id: existing?.id,
@@ -1251,13 +1357,17 @@ export default function FrequenciaPage() {
         anoLetivo: filtroAno,
         presente: existing?.presente ?? true,
         justificativa: existing?.justificativa || '',
-        tempos: existing?.tempos || null,
+        tempos: existing?.tempos || existing?.dados?.tempos || null,
         notifyPush: false,
-        registradoPor: existing?.registradoPor || null,
-        origem: existing?.origem || null,
-        horaRegistro: existing?.horaRegistro || null,
+        registradoPor: existing?.registradoPor || existing?.dados?.registradoPor || null,
+        origem: existing?.origem || existing?.dados?.origem || null,
+        horaRegistro: isIndef ? null : existingEntrada,
+        horaEntrada: isIndef ? null : existingEntrada,
+        horarioIndefinido: isIndef,
         dados: {
           ...(existing?.dados || {}),
+          ...(existingEntrada && !isIndef ? { horaEntrada: existingEntrada, horaRegistro: existingEntrada } : {}),
+          horarioIndefinido: isIndef,
           saidaHorario: confirmedAtIso,
           saidaResponsavel: quemRetirou,
           saidaOrigem: 'manual',
@@ -1272,6 +1382,7 @@ export default function FrequenciaPage() {
       })
 
       if (refetchFreq) refetchFreq()
+      if (refetchFreqDia) refetchFreqDia()
       if (refetchAllFreqs) refetchAllFreqs()
       if (refetchSaidaCalls) refetchSaidaCalls()
 
@@ -1415,13 +1526,15 @@ export default function FrequenciaPage() {
           return
         }
 
-        const targetId = String(a.id).trim()
+        const targetIdKey = normalizeAlunoIdKey(a.id)
         const portariaEv = (portariaEventsList || []).find((ev: any) => {
-          const evAlunoId = String(ev.aluno_id || ev.alunoId || '').trim()
-          const evEquipId = String(ev.user_id_equipamento || '').trim()
-          const matchesAluno = (evAlunoId && evAlunoId === targetId) || (evEquipId && evEquipId === targetId)
+          const evAlunoId = normalizeAlunoIdKey(ev.aluno_id || ev.alunoId || '')
+          const evEquipId = normalizeAlunoIdKey(ev.user_id_equipamento || '')
+          const matchesAluno = (evAlunoId && evAlunoId === targetIdKey) || (evEquipId && evEquipId === targetIdKey)
           if (!matchesAluno) return false
           if (ev.status && ev.status !== 'sucesso') return false
+          const sentido = String(ev.sentido || ev.tipo || '').toLowerCase()
+          if (sentido === 'saida') return false
           const evDateStr = String(ev.data_hora || ev.created_at || ev.data || '').split('T')[0]
           return evDateStr === dia
         })
@@ -1441,15 +1554,31 @@ export default function FrequenciaPage() {
           }
         }
 
-        const isCatraca = !!portariaEv || existing?.origem === 'catraca' || String(existing?.registradoPor || '').toLowerCase().includes('catraca') || String(existing?.registradoPor || '').toLowerCase().includes('idface')
+        const isExistingSaidaOnly = isRegistroApenasSaida(existing)
+        const existingRegPor = String(existing?.registradoPor || existing?.dados?.registradoPor || '')
+        const existingOrigem = String(existing?.origem || existing?.dados?.origem || '')
+        const isCatraca =
+          !!portariaEv ||
+          (!isExistingSaidaOnly && (
+            existingOrigem === 'catraca' ||
+            existingRegPor.toLowerCase().includes('catraca') ||
+            existingRegPor.toLowerCase().includes('idface')
+          ))
         const nowTime = new Date().toLocaleTimeString('pt-BR', { timeZone: 'America/Campo_Grande', hour: '2-digit', minute: '2-digit' })
         
         const customEntrada = horariosEntrada[String(a.id)]?.[dia]
         const customSaida = horariosSaida[String(a.id)]?.[dia]
         const customRespSaida = responsaveisSaida[String(a.id)]?.[dia]
 
-        const isHorarioIndefinido = customEntrada === 'indefinido' || (customEntrada === undefined && Boolean(existing?.dados?.horarioIndefinido || existing?.horarioIndefinido))
-        const finalHoraEntrada = isHorarioIndefinido ? null : (customEntrada || horaCatraca || existing?.horaRegistro || nowTime)
+        const isHorarioIndefinido =
+          calc.presente &&
+          (customEntrada === 'indefinido' || (customEntrada === undefined && Boolean(existing?.dados?.horarioIndefinido || existing?.horarioIndefinido)))
+        const existingHoraEntrada = (!isExistingSaidaOnly && existing?.presente !== false)
+          ? (existing?.dados?.horaEntrada || existing?.horaRegistro || existing?.dados?.horaRegistro)
+          : null
+        const finalHoraEntrada = (!calc.presente || isHorarioIndefinido)
+          ? null
+          : (customEntrada || horaCatraca || existingHoraEntrada || nowTime)
 
         // Verificar se houve alteração real em relação ao registro existente no banco
         const existingTempos = (existing?.tempos || existing?.dados?.tempos || {}) as Record<string, string>
@@ -1471,9 +1600,10 @@ export default function FrequenciaPage() {
           justificativa: calc.justificativa,
           tempos: calc.temposEfetivos,
           notifyPush: hasChanged,
-          registradoPor: isCatraca && !isHorarioIndefinido ? (existing?.registradoPor || 'Catraca iDFace') : 'Manual',
-          origem: isCatraca && !isHorarioIndefinido ? 'catraca' : 'manual',
+          registradoPor: isCatraca && calc.presente && !isHorarioIndefinido ? (!isExistingSaidaOnly && existingRegPor ? existingRegPor : 'Catraca iDFace') : 'Manual',
+          origem: isCatraca && calc.presente && !isHorarioIndefinido ? 'catraca' : 'manual',
           horaRegistro: finalHoraEntrada,
+          horaEntrada: finalHoraEntrada,
           horarioIndefinido: isHorarioIndefinido,
           dados: {
             ...(existing?.dados || {}),
@@ -1508,6 +1638,7 @@ export default function FrequenciaPage() {
 
       setSalvo(true)
       if (refetchFreq) refetchFreq()
+      if (refetchFreqDia) refetchFreqDia()
       if (refetchAllFreqs) refetchAllFreqs()
       setTimeout(() => {
         setSalvo(false)
@@ -1535,13 +1666,14 @@ export default function FrequenciaPage() {
       const studentDay = absencesManual[alunoId] || {}
       
       const tempos: Record<string, PresStatus> = {}
-      const existingFreq = allFreqs?.find(f => String(f.aluno_id) === String(aluno.id) && String(f.data).startsWith(registroManualData))
+      const existingFreq = combinedFreqs?.find(f => normalizeAlunoIdKey(f.aluno_id || f.alunoId) === normalizeAlunoIdKey(aluno.id) && isSameDay(f.data, registroManualData))
+      const rawExistingTempos = existingFreq?.tempos || existingFreq?.dados?.tempos
 
       schedule.tempos.forEach(t => {
         if (studentDay[t.id]) {
            tempos[t.id] = studentDay[t.id]
-        } else if (existingFreq && existingFreq.tempos) {
-           tempos[t.id] = existingFreq.tempos[t.id] || '-'
+        } else if (rawExistingTempos && rawExistingTempos[t.id]) {
+           tempos[t.id] = rawExistingTempos[t.id] || '-'
         } else {
            tempos[t.id] = '-'
         }
@@ -1549,13 +1681,15 @@ export default function FrequenciaPage() {
       
       const calc = calcularFrequenciaDia(tempos, schedule.segmento)
       
-      const targetId = String(aluno.id).trim()
+      const targetIdKey = normalizeAlunoIdKey(aluno.id)
       const portariaEv = (portariaEventsList || []).find((ev: any) => {
-        const evAlunoId = String(ev.aluno_id || ev.alunoId || '').trim()
-        const evEquipId = String(ev.user_id_equipamento || '').trim()
-        const matchesAluno = (evAlunoId && evAlunoId === targetId) || (evEquipId && evEquipId === targetId)
+        const evAlunoId = normalizeAlunoIdKey(ev.aluno_id || ev.alunoId || '')
+        const evEquipId = normalizeAlunoIdKey(ev.user_id_equipamento || '')
+        const matchesAluno = (evAlunoId && evAlunoId === targetIdKey) || (evEquipId && evEquipId === targetIdKey)
         if (!matchesAluno) return false
         if (ev.status && ev.status !== 'sucesso') return false
+        const sentido = String(ev.sentido || ev.tipo || '').toLowerCase()
+        if (sentido === 'saida') return false
         const evDateStr = String(ev.data_hora || ev.created_at || ev.data || '').split('T')[0]
         return evDateStr === registroManualData
       })
@@ -1575,20 +1709,31 @@ export default function FrequenciaPage() {
         }
       }
 
-      const isCatraca = !!portariaEv || existingFreq?.origem === 'catraca' || String(existingFreq?.registradoPor || '').toLowerCase().includes('catraca') || String(existingFreq?.registradoPor || '').toLowerCase().includes('idface')
+      const isExistingSaidaOnly = isRegistroApenasSaida(existingFreq)
+      const existingRegPor = String(existingFreq?.registradoPor || existingFreq?.dados?.registradoPor || '')
+      const existingOrigem = String(existingFreq?.origem || existingFreq?.dados?.origem || '')
+      const isCatraca =
+        !!portariaEv ||
+        (!isExistingSaidaOnly && (
+          existingOrigem === 'catraca' ||
+          existingRegPor.toLowerCase().includes('catraca') ||
+          existingRegPor.toLowerCase().includes('idface')
+        ))
       const nowTime = new Date().toLocaleTimeString('pt-BR', { timeZone: 'America/Campo_Grande', hour: '2-digit', minute: '2-digit' })
 
       const manualHora = horariosEntrada[aluno.id]?.[registroManualData]
-      const isHorarioIndefinido = manualHora === 'indefinido' || (manualHora === undefined && Boolean(existingFreq?.dados?.horarioIndefinido || existingFreq?.horarioIndefinido))
+      const isHorarioIndefinido =
+        calc.presente &&
+        (manualHora === 'indefinido' || (manualHora === undefined && Boolean(existingFreq?.dados?.horarioIndefinido || existingFreq?.horarioIndefinido)))
 
       let finalHoraRegistro: string | null = null
-      if (!isHorarioIndefinido) {
+      if (calc.presente && !isHorarioIndefinido) {
         if (manualHora && manualHora !== 'indefinido') {
           finalHoraRegistro = manualHora
         } else if (horaCatraca) {
           finalHoraRegistro = horaCatraca
-        } else if (existingFreq?.horaRegistro || existingFreq?.dados?.horaRegistro || existingFreq?.dados?.horaEntrada) {
-          finalHoraRegistro = existingFreq?.horaRegistro || existingFreq?.dados?.horaRegistro || existingFreq?.dados?.horaEntrada
+        } else if (!isExistingSaidaOnly && existingFreq?.presente !== false && (existingFreq?.dados?.horaEntrada || existingFreq?.horaRegistro || existingFreq?.dados?.horaRegistro)) {
+          finalHoraRegistro = existingFreq?.dados?.horaEntrada || existingFreq?.horaRegistro || existingFreq?.dados?.horaRegistro
         } else {
           finalHoraRegistro = nowTime
         }
@@ -1603,9 +1748,10 @@ export default function FrequenciaPage() {
         presente: calc.presente,
         justificativa: calc.justificativa,
         tempos: calc.temposEfetivos,
-        registradoPor: isCatraca && !isHorarioIndefinido ? (existingFreq?.registradoPor || 'Catraca iDFace') : 'Manual',
-        origem: isCatraca && !isHorarioIndefinido ? 'catraca' : 'manual',
+        registradoPor: isCatraca && calc.presente && !isHorarioIndefinido ? (!isExistingSaidaOnly && existingRegPor ? existingRegPor : 'Catraca iDFace') : 'Manual',
+        origem: isCatraca && calc.presente && !isHorarioIndefinido ? 'catraca' : 'manual',
         horaRegistro: finalHoraRegistro,
+        horaEntrada: finalHoraRegistro,
         horarioIndefinido: isHorarioIndefinido,
         dados: {
           ...(existingFreq?.dados || {}),
@@ -1630,7 +1776,9 @@ export default function FrequenciaPage() {
       })
 
       if (response.ok) {
+        if (refetchFreqDia) refetchFreqDia()
         if (refetchAllFreqs) refetchAllFreqs()
+        if (turmaSel && refetchFreq) refetchFreq()
         setAbsencesManual({})
         setTimeout(() => {
           setSalvandoManual(false)
@@ -1675,22 +1823,36 @@ export default function FrequenciaPage() {
     return totalContabilizado > 0 ? Math.round((presencas / totalContabilizado) * 100) : 100
   }, [absences, turmaObj, getStatus])
 
-  // Obter lista de alunos ausentes no dia (respeitando escopo global ou de turma)
+  // Obter lista de alunos ausentes / sem registro no dia (respeitando escopo global ou de turma)
   const getAbsenteesList = useCallback((overrideData?: string) => {
     const targetData = overrideData || dataSel
     const list: any[] = []
     
-    // Obter todas as frequências correspondentes à data selecionada
-    const freqsNoDia = (allFreqs || []).filter(f => String(f.data).startsWith(targetData))
+    // Obter todas as frequências correspondentes à data selecionada (mesclando combinedFreqs com freqDia e freqTurma)
+    const freqsNoDia = (combinedFreqs || []).filter(f => isSameDay(f.data, targetData))
     
-    // Criar um mapeamento rápido de frequência por aluno
+    // Criar um mapeamento rápido de frequência por aluno (indexado por ID bruto e normalizado)
     const freqMap = new Map<string, any>()
     freqsNoDia.forEach(f => {
-      freqMap.set(String(f.aluno_id), f)
+      const rawKey = String(f.aluno_id || f.alunoId || '').trim()
+      const normKey = normalizeAlunoIdKey(rawKey)
+      if (rawKey) freqMap.set(rawKey, f)
+      if (normKey) freqMap.set(normKey, f)
     })
 
-    // Identificar turmas que tiveram chamada lançada no dia (pelo menos um registro na tabela frequencias)
-    const turmasComChamada = new Set(freqsNoDia.map(f => String(f.turma_id)))
+    // Mapeamento de eventos de ENTRADA na catraca para a data selecionada
+    const portariaEntradaMap = new Map<string, any>()
+    ;(portariaEventsList || []).forEach((ev: any) => {
+      if (ev?.status !== 'sucesso') return
+      const sentido = String(ev.sentido || ev.tipo || '').toLowerCase()
+      if (sentido === 'saida') return
+      const evDateStr = String(ev.data_hora || ev.created_at || ev.data || '').split('T')[0]
+      if (evDateStr !== targetData) return
+      const k1 = normalizeAlunoIdKey(ev.aluno_id || ev.alunoId || '')
+      const k2 = normalizeAlunoIdKey(ev.user_id_equipamento || '')
+      if (k1) portariaEntradaMap.set(k1, ev)
+      if (k2) portariaEntradaMap.set(k2, ev)
+    })
 
     // Filtrar alunos baseados na seleção da turma e filtros globais
     const targetAlunos = (turmaSel && !overrideData) 
@@ -1700,12 +1862,12 @@ export default function FrequenciaPage() {
           const tObj = turmas.find(t => String(t.id) === String(aluno.turma) || t.nome === aluno.turma || t.codigo === aluno.turma)
           if (!tObj) return true
           const matchesSegmento = !filtroSegmento || (tObj as any).dados?.segmento === filtroSegmento
-          const term = (filtroBusca || '').trim().toLowerCase()
+          const term = normalizeSearchText(filtroBusca)
           const matchesBusca = !term ||
-            tObj.nome.toLowerCase().includes(term) ||
-            aluno.nome.toLowerCase().includes(term) ||
-            String(aluno.id).toLowerCase().includes(term) ||
-            (aluno.matricula && String(aluno.matricula).toLowerCase().includes(term))
+            normalizeSearchText(tObj.nome).includes(term) ||
+            normalizeSearchText(aluno.nome).includes(term) ||
+            normalizeSearchText(aluno.id).includes(term) ||
+            (aluno.matricula && normalizeSearchText(aluno.matricula).includes(term))
           return matchesSegmento && matchesBusca
         })
 
@@ -1713,7 +1875,10 @@ export default function FrequenciaPage() {
       const tObj = turmas.find(t => String(t.id) === String(aluno.turma) || t.nome === aluno.turma || t.codigo === aluno.turma)
       const turmaNome = tObj?.nome || aluno.turma_nome || aluno.turma || 'Sem Turma'
       const schedule = tObj ? getTurmaSchedule(tObj) : { segmento: aluno.segmento || 'Ensino Fundamental I', tempos: [{ id: '1' }, { id: '2' }, { id: '3' }, { id: '4' }, { id: '5' }] }
-      const freqRecord = freqMap.get(String(aluno.id))
+      const normId = normalizeAlunoIdKey(aluno.id)
+      const freqRecord = freqMap.get(String(aluno.id).trim()) || freqMap.get(normId)
+      const portariaEvEntrada = portariaEntradaMap.get(normId)
+      const isSaidaOnly = isRegistroApenasSaida(freqRecord) && !portariaEvEntrada
 
       const isIntegral = Boolean(
         isAlunoIntegralIntermediario(aluno, turmas) ||
@@ -1724,18 +1889,32 @@ export default function FrequenciaPage() {
       
       let tempos: Record<string, PresStatus> = {}
       
-      if (freqRecord) {
-        // Tem registro no banco para esse dia
-        if (freqRecord.tempos) {
-          tempos = { ...freqRecord.tempos }
+      if (freqRecord && !isSaidaOnly) {
+        // Tem registro válido de entrada/frequência no banco para esse dia
+        const rawTempos = freqRecord.tempos || freqRecord.dados?.tempos
+        const hasValidTempos = Boolean(
+          rawTempos &&
+          typeof rawTempos === 'object' &&
+          Object.values(rawTempos).some(v => v === 'P' || v === 'F' || v === 'J')
+        )
+        if (hasValidTempos) {
+          const fallbackStatus: PresStatus = freqRecord.presente ? 'P' : '-'
+          schedule.tempos.forEach(t => {
+            tempos[t.id] = rawTempos[t.id] || fallbackStatus
+          })
         } else {
           const overallStatus: PresStatus = freqRecord.justificativa === 'Justificada' ? 'J' : (freqRecord.presente ? 'P' : 'F')
           schedule.tempos.forEach(t => {
             tempos[t.id] = overallStatus
           })
         }
+      } else if (portariaEvEntrada) {
+        // Passou na catraca de entrada -> Presente em todos os tempos
+        schedule.tempos.forEach(t => {
+          tempos[t.id] = 'P'
+        })
       } else {
-        // Não tem registro no banco para esse dia.
+        // Não tem registro de entrada/frequência no banco para esse dia (ou apenas saída isolada)
         const defaultStatus: PresStatus = '-'
         schedule.tempos.forEach(t => {
           tempos[t.id] = defaultStatus
@@ -1756,7 +1935,7 @@ export default function FrequenciaPage() {
         }
       })
 
-      // Adicionamos à lista se o aluno tiver alguma Falta Efetiva OU se estiver totalmente Sem Registro
+      // Adicionamos à lista se o aluno tiver alguma Falta Efetiva OU se estiver Sem Registro
       if (temposFaltosos.length > 0 || temposSemRegistro.length > 0) {
         const totalTempos = schedule.tempos.length
         const isInfantilOuFundI = schedule.segmento === 'Educação Infantil' || schedule.segmento === 'Ensino Fundamental I'
@@ -1790,17 +1969,18 @@ export default function FrequenciaPage() {
           isIntegral: isIntegral,
           responsavel_telefone: aluno.responsavel_telefone || aluno.telefone || '',
           faltasStr: faltasStr,
+          onlySemRegistro: onlySemRegistro,
           faltasCount: temposFaltosos.length,
           totalTempos: totalTempos,
           temposFalta: temposFaltosos,
           temposSemRegistro: temposSemRegistro,
-          horaRegistro: freqRecord?.dados?.horaRegistro || freqRecord?.horaRegistro || null
+          horaRegistro: !isSaidaOnly ? (freqRecord?.dados?.horaEntrada || freqRecord?.dados?.horaRegistro || freqRecord?.horaRegistro || null) : null
         })
       }
     })
 
     return list
-  }, [alunos, turmas, turmaSel, dataSel, filtroSegmento, filtroBusca, allFreqs, alunosDaTurma])
+  }, [alunos, turmas, turmaSel, dataSel, filtroSegmento, filtroBusca, combinedFreqs, portariaEventsList, alunosDaTurma, isSameDay])
 
   // Ação de Impressão do Relatório de Faltas
   const handlePrintRelatorio = (overrideList?: any[], overrideData?: string) => {
@@ -4236,12 +4416,14 @@ export default function FrequenciaPage() {
     if (!showRegistroManualModal) return null
 
     const allAbsentees = getAbsenteesList(registroManualData)
-    
-    // Filtro do próprio modal
-    const filteredAbsentees = allAbsentees.filter(a => {
-      const matchBusca = a.nome.toLowerCase().includes(buscaRegistroManual.toLowerCase()) ||
-                         a.id.toLowerCase().includes(buscaRegistroManual.toLowerCase()) ||
-                         a.turmaNome.toLowerCase().includes(buscaRegistroManual.toLowerCase())
+    const qManual = normalizeSearchText(buscaRegistroManual)
+
+    // Filtro base (busca, ano, turno)
+    const baseFilteredAbsentees = allAbsentees.filter(a => {
+      const matchBusca = !qManual ||
+                         normalizeSearchText(a.nome).includes(qManual) ||
+                         normalizeSearchText(a.id).includes(qManual) ||
+                         normalizeSearchText(a.turmaNome).includes(qManual)
       
       const matchAno = !registroManualAno || a.anoLetivo === registroManualAno
       const matchTurno = !registroManualTurno || 
@@ -4249,6 +4431,14 @@ export default function FrequenciaPage() {
       
       return matchBusca && matchAno && matchTurno
     })
+
+    const totalJaFaltosos = baseFilteredAbsentees.filter(a => !a.onlySemRegistro).length
+
+    // Por padrão exibe apenas alunos pendentes ("Sem Registro") ou em edição na sessão atual,
+    // permitindo alternar para visualizar também os alunos já lançados como Faltosos
+    const filteredAbsentees = baseFilteredAbsentees.filter(a =>
+      a.onlySemRegistro || Boolean(absencesManual[a.id]) || mostrarJaFaltososManual
+    )
 
     // Agrupar por turma
     const groupedByTurma = filteredAbsentees.reduce((acc: Record<string, any[]>, student) => {
@@ -4317,7 +4507,10 @@ export default function FrequenciaPage() {
               className="form-input"
               style={{ width: '140px', height: '38px', borderRadius: '10px', background: '#fff', border: '1px solid #cbd5e1', fontSize: '13px', fontWeight: 600, padding: '0 10px', color: '#0f172a' }}
               value={registroManualData}
-              onChange={e => setRegistroManualData(e.target.value)}
+              onChange={e => {
+                setRegistroManualData(e.target.value)
+                setAbsencesManual({})
+              }}
             />
 
             <select
@@ -4369,6 +4562,33 @@ export default function FrequenciaPage() {
               <span>Horário Indefinido</span>
               {padraoHorarioIndefinido && <CheckCircle size={14} style={{ color: '#16a34a' }} />}
             </button>
+
+            {totalJaFaltosos > 0 && (
+              <button
+                type="button"
+                onClick={() => setMostrarJaFaltososManual(p => !p)}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  height: '38px',
+                  padding: '0 12px',
+                  borderRadius: '10px',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  border: mostrarJaFaltososManual ? '1.5px solid #dc2626' : '1px solid #cbd5e1',
+                  background: mostrarJaFaltososManual ? '#fee2e2' : '#fff',
+                  color: mostrarJaFaltososManual ? '#b91c1c' : '#475569',
+                  transition: 'all 0.2s',
+                  whiteSpace: 'nowrap'
+                }}
+                title="Exibir ou ocultar alunos que já tiveram falta lançada manualmente nesta data"
+              >
+                <XCircle size={15} style={{ color: mostrarJaFaltososManual ? '#dc2626' : '#64748b' }} />
+                <span>{mostrarJaFaltososManual ? `Ocultar Faltosos (${totalJaFaltosos})` : `Ver Faltosos (${totalJaFaltosos})`}</span>
+              </button>
+            )}
 
             <span style={{ fontSize: '12px', color: '#64748b', fontWeight: 700, padding: '6px 12px', background: '#e2e8f0', borderRadius: '20px' }}>
               Exibindo {filteredAbsentees.length} alunos
@@ -4480,15 +4700,17 @@ export default function FrequenciaPage() {
                     {/* Cards de Alunos da Turma */}
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                       {turmaStudents.map(aluno => {
-                        const existingFreq = allFreqs?.find(f => String(f.aluno_id) === String(aluno.id) && String(f.data).startsWith(registroManualData))
+                        const existingFreq = combinedFreqs?.find(f => normalizeAlunoIdKey(f.aluno_id || f.alunoId) === normalizeAlunoIdKey(aluno.id) && isSameDay(f.data, registroManualData))
+                        const isExistingSaidaOnly = isRegistroApenasSaida(existingFreq)
+                        const rawExistingTempos = existingFreq?.tempos || existingFreq?.dados?.tempos
                         const infoOrigem = getOrigemFrequenciaCompleta(aluno.id, registroManualData, existingFreq, portariaEventsList, saidaCallsList)
                         
                         let currentStatus: PresStatus = '-'
                         if (absencesManual[aluno.id] && absencesManual[aluno.id]['1']) {
                           currentStatus = absencesManual[aluno.id]['1']
-                        } else if (existingFreq && existingFreq.tempos) {
-                          currentStatus = existingFreq.tempos['1'] || '-'
-                        } else if (existingFreq && existingFreq.presente !== undefined) {
+                        } else if (!isExistingSaidaOnly && rawExistingTempos && rawExistingTempos['1']) {
+                          currentStatus = rawExistingTempos['1'] || '-'
+                        } else if (!isExistingSaidaOnly && existingFreq && existingFreq.presente !== undefined) {
                           currentStatus = existingFreq.justificativa === 'Justificada' ? 'J' : (existingFreq.presente ? 'P' : 'F')
                         } else if (infoOrigem.entrada) {
                           currentStatus = 'P' // Aluno com entrada iDFace/Catraca é padrão PRESENTE
@@ -4713,17 +4935,18 @@ export default function FrequenciaPage() {
   // Estatísticas para a visão de Diretor
   const statsGlobal = useMemo(() => {
     const totalTurmas = turmas.length
-    const freqs = allFreqs || []
+    const freqs = (combinedFreqs || []).filter(f => !isRegistroApenasSaida(f))
     
     const turmasComChamadaHoje = turmas.filter(t => {
       const alunosDaEstaTurma = alunos.filter((a: any) => isAlunoCursandoTurma(a, t, undefined, turmas))
-      const alunosIdsDaTurma = new Set(alunosDaEstaTurma.map((a: any) => String(a.id)))
+      const alunosIdsDaTurma = new Set(alunosDaEstaTurma.map((a: any) => normalizeAlunoIdKey(a.id)))
 
       const temDirect = freqs.some(f => String(f.turma_id) === String(t.id) && isSameDay(f.data, dataSel))
-      const temAlunosFreq = freqs.some(f => alunosIdsDaTurma.has(String(f.aluno_id || f.alunoId)) && isSameDay(f.data, dataSel))
+      const temAlunosFreq = freqs.some(f => alunosIdsDaTurma.has(normalizeAlunoIdKey(f.aluno_id || f.alunoId)) && isSameDay(f.data, dataSel))
       const temCatraca = (portariaEventsList || []).some((ev: any) =>
         ev.status === 'sucesso' &&
-        alunosIdsDaTurma.has(String(ev.aluno_id || ev.user_id_equipamento)) &&
+        String(ev.sentido || ev.tipo || '').toLowerCase() !== 'saida' &&
+        (alunosIdsDaTurma.has(normalizeAlunoIdKey(ev.aluno_id)) || alunosIdsDaTurma.has(normalizeAlunoIdKey(ev.user_id_equipamento))) &&
         isSameDay(ev.data_hora || ev.created_at || ev.data, dataSel)
       )
       const temManual = alunosDaEstaTurma.some((a: any) => !!horariosEntrada[a.id]?.[dataSel])
@@ -4735,26 +4958,26 @@ export default function FrequenciaPage() {
     let totalAulas = 0
     
     const grouped = freqs.reduce((acc: any, f) => {
-      const key = `${f.data}-${f.turma_id}`
+      const key = `${String(f.data).slice(0, 10)}___${f.turma_id}`
       if (!acc[key]) acc[key] = []
       acc[key].push(f)
       return acc
     }, {})
     
     Object.entries(grouped).forEach(([key, regs]: [string, any]) => {
-      const turmaIdStr = key.split('-')[1]
+      const turmaIdStr = key.split('___')[1]
       const tObj = turmas.find(t => String(t.id) === turmaIdStr)
       if (!tObj) return
       
       const schedule = getTurmaSchedule(tObj)
-      const totalContabilizadoTurma = 0
       let totalContabilizadoTurmaVal = 0
       let faltasContabilizadasTurma = 0
       
       regs.forEach((r: any) => {
         let tempos: Record<string, PresStatus> = {}
-        if (r.tempos) {
-          tempos = { ...r.tempos }
+        const rawTempos = r.tempos || r.dados?.tempos
+        if (rawTempos && typeof rawTempos === 'object' && Object.keys(rawTempos).length > 0) {
+          tempos = { ...rawTempos }
         } else {
           const overallStatus: PresStatus = r.justificativa === 'Justificada' ? 'J' : (r.presente ? 'P' : 'F')
           schedule.tempos.forEach(t => {
@@ -4779,7 +5002,7 @@ export default function FrequenciaPage() {
     const alunosEmRisco = alunos.filter(a => {
       const tObj = turmas.find(t => t.nome === a.turma || String(t.id) === String(a.turma))
       if (!tObj) return false
-      const regs = freqs.filter(f => String(f.turma_id) === String(tObj.id) && String(f.aluno_id) === String(a.id))
+      const regs = freqs.filter(f => String(f.turma_id) === String(tObj.id) && normalizeAlunoIdKey(f.aluno_id || f.alunoId) === normalizeAlunoIdKey(a.id))
       if (!regs.length) return false
       
       const schedule = getTurmaSchedule(tObj)
@@ -4788,8 +5011,9 @@ export default function FrequenciaPage() {
       
       regs.forEach((r: any) => {
         let tempos: Record<string, PresStatus> = {}
-        if (r.tempos) {
-          tempos = { ...r.tempos }
+        const rawTempos = r.tempos || r.dados?.tempos
+        if (rawTempos && typeof rawTempos === 'object' && Object.keys(rawTempos).length > 0) {
+          tempos = { ...rawTempos }
         } else {
           const overallStatus: PresStatus = r.justificativa === 'Justificada' ? 'J' : (r.presente ? 'P' : 'F')
           schedule.tempos.forEach(t => {
@@ -4807,7 +5031,7 @@ export default function FrequenciaPage() {
     }).length
 
     return { totalTurmas, turmasComChamadaHoje, mediaPresenca, alunosEmRisco }
-  }, [turmas, allFreqs, alunos, dataSel])
+  }, [turmas, combinedFreqs, portariaEventsList, horariosEntrada, alunos, dataSel, isSameDay])
 
   // ── HOME (VISÃO DE DIRETOR) ───────────────────────────────────────────────
   if (!turmaSel) {
@@ -4818,14 +5042,14 @@ export default function FrequenciaPage() {
       
       let matchesBusca = true
       if (filtroBusca.trim()) {
-        const term = filtroBusca.trim().toLowerCase()
-        const matchesTurmaNome = t.nome.toLowerCase().includes(term) || (t.codigo && String(t.codigo).toLowerCase().includes(term)) || (t.serie && String(t.serie).toLowerCase().includes(term))
+        const term = normalizeSearchText(filtroBusca)
+        const matchesTurmaNome = normalizeSearchText(t.nome).includes(term) || (t.codigo && normalizeSearchText(t.codigo).includes(term)) || (t.serie && normalizeSearchText(t.serie).includes(term))
         const matchesAluno = (alunos || []).some((a: any) =>
           isAlunoCursandoTurma(a, t, undefined, turmas) && (
-            a.nome?.toLowerCase().includes(term) ||
-            String(a.id || '').toLowerCase().includes(term) ||
-            (a.matricula && String(a.matricula).toLowerCase().includes(term)) ||
-            (a.codigo && String(a.codigo).toLowerCase().includes(term))
+            normalizeSearchText(a.nome).includes(term) ||
+            normalizeSearchText(a.id).includes(term) ||
+            (a.matricula && normalizeSearchText(a.matricula).includes(term)) ||
+            (a.codigo && normalizeSearchText(a.codigo).includes(term))
           )
         )
         matchesBusca = matchesTurmaNome || matchesAluno
@@ -5073,11 +5297,15 @@ export default function FrequenciaPage() {
 
             <button 
               onClick={() => {
-                setRegistroManualAno(filtroAno)
+                setRegistroManualAno(filtroAno && filtroAno !== 'todos' ? filtroAno : '')
                 setRegistroManualData(dataSel)
-                setRegistroManualTurno('')
-                setBuscaRegistroManual('')
+                setRegistroManualTurno(filtroTurno || '')
+                setBuscaRegistroManual(filtroBusca.trim())
+                setMostrarJaFaltososManual(false)
                 setAbsencesManual({})
+                if (refetchFreqDia) refetchFreqDia()
+                if (refetchPortariaDia) refetchPortariaDia()
+                if (refetchAllFreqs) refetchAllFreqs()
                 setShowRegistroManualModal(true)
               }}
               style={{ height: '42px', padding: '0 20px', background: '#f59e0b', color: '#fff', border: 'none', borderRadius: '10px', fontSize: '14px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 4px 6px -1px rgba(245, 158, 11, 0.2)' }}
@@ -5319,23 +5547,24 @@ export default function FrequenciaPage() {
                    turmasFiltradas.map(turma => {
                     const alunosDaEstaTurma = alunos.filter((a: any) => isAlunoCursandoTurma(a, turma, undefined, turmas))
                     const totalAlunosTurma = alunosDaEstaTurma.length
-                    const alunosIdsDaTurma = new Set(alunosDaEstaTurma.map((a: any) => String(a.id)))
+                    const alunosIdsDaTurma = new Set(alunosDaEstaTurma.map((a: any) => normalizeAlunoIdKey(a.id)))
 
-                    const searchTerm = (filtroBusca || '').trim().toLowerCase()
+                    const searchTerm = normalizeSearchText(filtroBusca)
                     const alunosMatchBusca = searchTerm ? alunosDaEstaTurma.filter((a: any) => 
-                      a.nome?.toLowerCase().includes(searchTerm) ||
-                      String(a.id || '').toLowerCase().includes(searchTerm) ||
-                      (a.matricula && String(a.matricula).toLowerCase().includes(searchTerm)) ||
-                      (a.codigo && String(a.codigo).toLowerCase().includes(searchTerm))
+                      normalizeSearchText(a.nome).includes(searchTerm) ||
+                      normalizeSearchText(a.id).includes(searchTerm) ||
+                      (a.matricula && normalizeSearchText(a.matricula).includes(searchTerm)) ||
+                      (a.codigo && normalizeSearchText(a.codigo).includes(searchTerm))
                     ) : []
 
-                    const freqs = allFreqs || []
-                    const regs = freqs.filter(f => String(f.turma_id) === String(turma.id) || alunosIdsDaTurma.has(String(f.aluno_id || f.alunoId)))
+                    const freqs = (combinedFreqs || []).filter(f => !isRegistroApenasSaida(f))
+                    const regs = freqs.filter(f => String(f.turma_id) === String(turma.id) || alunosIdsDaTurma.has(normalizeAlunoIdKey(f.aluno_id || f.alunoId)))
 
                     const temHojeDirect = regs.some(f => isSameDay(f.data, dataSel))
                     const temHojeCatraca = (portariaEventsList || []).some((ev: any) => 
                       ev.status === 'sucesso' && 
-                      alunosIdsDaTurma.has(String(ev.aluno_id || ev.user_id_equipamento)) && 
+                      String(ev.sentido || ev.tipo || '').toLowerCase() !== 'saida' &&
+                      (alunosIdsDaTurma.has(normalizeAlunoIdKey(ev.aluno_id)) || alunosIdsDaTurma.has(normalizeAlunoIdKey(ev.user_id_equipamento))) && 
                       isSameDay(ev.data_hora || ev.created_at || ev.data, dataSel)
                     )
                     const temHojeManual = alunosDaEstaTurma.some((a: any) => !!horariosEntrada[a.id]?.[dataSel])
@@ -5348,8 +5577,9 @@ export default function FrequenciaPage() {
                     
                     regs.forEach((r: any) => {
                       let tempos: Record<string, any> = {}
-                      if (r.tempos) {
-                        tempos = { ...r.tempos }
+                      const rawTempos = r.tempos || r.dados?.tempos
+                      if (rawTempos && typeof rawTempos === 'object' && Object.keys(rawTempos).length > 0) {
+                        tempos = { ...rawTempos }
                       } else {
                         const overallStatus = r.justificativa === 'Justificada' ? 'J' : (r.presente ? 'P' : 'F')
                         schedule.tempos.forEach((t: any) => {
@@ -5443,6 +5673,13 @@ export default function FrequenciaPage() {
           onClose={() => setShowAcessosModal(false)}
           initialStartDate={today}
           initialEndDate={today}
+          onSuccess={() => {
+            if (refetchFreqDia) refetchFreqDia()
+            if (refetchPortariaDia) refetchPortariaDia()
+            if (refetchPortariaEvents) refetchPortariaEvents()
+            if (refetchAllFreqs) refetchAllFreqs()
+            if (refetchSaidaCalls) refetchSaidaCalls()
+          }}
         />
       </div>
     )
@@ -5479,7 +5716,12 @@ export default function FrequenciaPage() {
       <div className="freq-detail-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
           <button 
-            onClick={() => setTurmaSel(null)} 
+            onClick={() => {
+              setTurmaSel(null)
+              if (refetchFreqDia) refetchFreqDia()
+              if (refetchPortariaDia) refetchPortariaDia()
+              if (refetchAllFreqs) refetchAllFreqs()
+            }} 
             style={{ border: '1px solid #e2e8f0', background: '#fff', width: '44px', height: '44px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#0f172a', boxShadow: '0 1px 2px rgba(0,0,0,0.05)', transition: 'all 0.2s', flexShrink: 0 }}
             onMouseEnter={e => { e.currentTarget.style.background = '#f8fafc'; e.currentTarget.style.borderColor = '#cbd5e1'; }}
             onMouseLeave={e => { e.currentTarget.style.background = '#fff'; e.currentTarget.style.borderColor = '#e2e8f0'; }}
@@ -5711,7 +5953,7 @@ export default function FrequenciaPage() {
                   totalJustificadas += calc.justificadasContabilizadas
                 })
 
-                const freqRecordDia = combinedFreqs?.find(f => String(f.aluno_id || f.alunoId) === String(aluno.id) && isSameDay(f.data, dataSel))
+                const freqRecordDia = combinedFreqs?.find(f => normalizeAlunoIdKey(f.aluno_id || f.alunoId) === normalizeAlunoIdKey(aluno.id) && isSameDay(f.data, dataSel))
                 const status1 = getStatus(aluno.id, dataSel, '1')
                 const isStatusDash = status1 === '-'
                 const isSaidaCleared = horariosSaida[aluno.id] !== undefined && !horariosSaida[aluno.id]?.[dataSel]
@@ -5950,12 +6192,8 @@ export default function FrequenciaPage() {
                     <td style={{ padding: '10px 6px', textAlign: 'center', borderTop: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9', borderRight: '1px solid #f1f5f9', borderTopRightRadius: '10px', borderBottomRightRadius: '10px' }}>
                       {diasPeriodo.map(dia => {
                         const status1 = getStatus(aluno.id, dia, '1')
-                        const hSaida = horariosSaida[aluno.id]?.[dia]
-                        const rSaida = responsaveisSaida[aluno.id]?.[dia]
-
-                        if (status1 !== 'P') {
-                          return <span key={dia} style={{ color: '#cbd5e1', fontSize: '11px' }}>—</span>
-                        }
+                        const hSaida = horariosSaida[aluno.id]?.[dia] || origemInfoCompleta.saida?.horario
+                        const rSaida = responsaveisSaida[aluno.id]?.[dia] || origemInfoCompleta.saida?.responsavel
 
                         if (hSaida && rSaida) {
                           return (
@@ -5998,6 +6236,10 @@ export default function FrequenciaPage() {
                               </div>
                             </div>
                           )
+                        }
+
+                        if (status1 !== 'P') {
+                          return <span key={dia} style={{ color: '#cbd5e1', fontSize: '11px' }}>—</span>
                         }
 
                         return (
@@ -6046,6 +6288,9 @@ export default function FrequenciaPage() {
         initialStartDate={today}
         initialEndDate={today}
         onSuccess={() => {
+          if (refetchFreqDia) refetchFreqDia()
+          if (refetchPortariaDia) refetchPortariaDia()
+          if (refetchPortariaEvents) refetchPortariaEvents()
           if (refetchAllFreqs) refetchAllFreqs()
           if (turmaSel && refetchFreq) refetchFreq()
           if (refetchSaidaCalls) refetchSaidaCalls()

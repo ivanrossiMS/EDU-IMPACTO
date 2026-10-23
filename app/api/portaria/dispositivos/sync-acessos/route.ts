@@ -32,8 +32,8 @@ export async function POST(req: NextRequest) {
 
   let timeFilter: any = {}
   if (startDateStr && endDateStr) {
-    const startT = Math.floor(new Date(`${startDateStr}T00:00:00-03:00`).getTime() / 1000)
-    const endT = Math.floor(new Date(`${endDateStr}T23:59:59-03:00`).getTime() / 1000)
+    const startT = Math.floor(new Date(`${startDateStr}T00:00:00-04:00`).getTime() / 1000)
+    const endT = Math.floor(new Date(`${endDateStr}T23:59:59-04:00`).getTime() / 1000)
     timeFilter = { ">=": startT, "<=": endT }
   } else {
     const timestamp = Math.floor(Date.now() / 1000) - (3 * 24 * 60 * 60)
@@ -116,7 +116,8 @@ export async function POST(req: NextRequest) {
             let deviceLogs: any[] = []
             
             while (keepFetching) {
-              const res = await fetch(`${baseUrl}/load_objects.fcgi`, {
+              const sessionToken = encodeURIComponent((client as any).session || '')
+              const res = await fetch(`${baseUrl}/load_objects.fcgi?session=${sessionToken}`, {
                 method: 'POST',
                 headers: {
                   'Content-Type': 'application/json',
@@ -148,10 +149,13 @@ export async function POST(req: NextRequest) {
             }
 
             // Aplicar o filtro de data localmente para garantir que o limitador funcionou perfeitamente
+            // NOTA: l.time na Control iD já vem com os dígitos locais codificados como epoch UTC
             if (startDateStr && endDateStr) {
-               const startT = Math.floor(new Date(`${startDateStr}T00:00:00-03:00`).getTime() / 1000)
-               const endT = Math.floor(new Date(`${endDateStr}T23:59:59-03:00`).getTime() / 1000)
-               deviceLogs = deviceLogs.filter((l: any) => l.time >= startT && l.time <= endT)
+               const startUtc = Math.floor(new Date(`${startDateStr}T00:00:00Z`).getTime() / 1000)
+               const endUtc = Math.floor(new Date(`${endDateStr}T23:59:59Z`).getTime() / 1000)
+               const startLocal = Math.floor(new Date(`${startDateStr}T00:00:00-04:00`).getTime() / 1000)
+               const endLocal = Math.floor(new Date(`${endDateStr}T23:59:59-04:00`).getTime() / 1000)
+               deviceLogs = deviceLogs.filter((l: any) => (l.time >= startUtc && l.time <= endUtc) || (l.time >= startLocal && l.time <= endLocal))
             }
 
             allLogs = allLogs.concat(deviceLogs.map((l: any) => ({ ...l, device_id: device.id || l.device_id })))
@@ -190,45 +194,78 @@ export async function POST(req: NextRequest) {
 
         // ── ETAPA 2: Calcular os IDs determinísticos de cada log ─────────────────
         // O mesmo algoritmo usado no webhook para gerar eventId
-        type LogWithEventId = { log: any; eventId: string }
+        type LogWithEventId = { log: any; eventId: string; logDate: string }
         const logsWithIds: LogWithEventId[] = allLogs.map((log) => {
-          // Resolver dispositivo serial para o ID
-          const deviceSerial = log.device_id || ''
-          // Construir eventId determinístico igual ao webhook
+          const deviceSerial = String(log.device_id || '').trim()
+          const isMasterOr154 = deviceSerial === '0M0200/02638E' || deviceSerial === '0M0200/0263A6' || deviceSerial === '192.168.1.150' || deviceSerial === '192.168.1.154'
+          const prefix = isMasterOr154 ? 'idface-mestre' : `idface-${deviceSerial}`
           let eventId = ''
           if (log.id) {
-            // Precisamos do dispositivoId resolvido — usaremos device_id direto aqui
-            eventId = `idface-${deviceSerial}-${log.id}`
+            eventId = `${prefix}-${log.id}`
           } else {
-            // Sem ID do log, não temos como deduplicar — será gerado uuid no webhook
-            // Vamos usar um hash do conteúdo para evitar duplicados
-            eventId = `idface-${deviceSerial}-${log.user_id || ''}-${log.time || ''}`
+            eventId = `${prefix}-${log.user_id || ''}-${log.time || ''}`
           }
-          return { log, eventId }
+          const logDate = log.time ? new Date(Number(log.time) * 1000).toISOString().slice(0, 10) : ''
+          return { log, eventId, logDate }
         })
 
-        // ── ETAPA 3: Verificar quais IDs já existem no Supabase ──────────────────
+        // ── ETAPA 3: Verificar quais IDs já existem no Supabase (mesma data + frequência garantida) ──
         send({ status: 'checking', total: totalFromDevice, message: 'Verificando registros já existentes no sistema...' })
 
         const eventIds = logsWithIds.map(x => x.eventId).filter(id => !id.includes('undefined') && id.length > 10)
 
         // Buscar em lotes de 500 para evitar limite de URL
         const BATCH_SIZE = 500
-        const existingIds = new Set<string>()
+        const existingEventDateMap = new Map<string, string>()
         for (let i = 0; i < eventIds.length; i += BATCH_SIZE) {
           const chunk = eventIds.slice(i, i + BATCH_SIZE)
           const { data: existing } = await supabase
             .from('portaria_eventos')
-            .select('id')
+            .select('id, data_hora')
             .in('id', chunk)
           if (existing) {
-            existing.forEach(r => existingIds.add(r.id))
+            existing.forEach((r: any) => {
+              existingEventDateMap.set(r.id, String(r.data_hora || '').slice(0, 10))
+            })
           }
         }
 
-        const alreadyExisting = existingIds.size
-        const newLogs = logsWithIds.filter(x => !existingIds.has(x.eventId))
+        // Também verificar quais frequências já existem nas datas dos logs para garantir que nenhum aluno com evento na catraca fique sem frequência
+        const logDates = Array.from(new Set(logsWithIds.map(x => x.logDate).filter(Boolean)))
+        const existingFreqValidSet = new Set<string>()
+        if (logDates.length > 0) {
+          const { data: freqRows } = await supabase
+            .from('frequencias')
+            .select('aluno_id, data, presente, dados')
+            .in('data', logDates)
+          if (freqRows) {
+            freqRows.forEach((f: any) => {
+              const dt = String(f.data || '').slice(0, 10)
+              const aId = String(f.aluno_id || '').trim()
+              const regPor = String(f.dados?.registradoPor || '').toLowerCase()
+              const isSaidaOnly = f.dados?.origem === 'catraca_saida' || regPor.includes('saída') || regPor.includes('saida')
+              if (aId && dt && f.presente && !isSaidaOnly && f.dados?.horaEntrada) {
+                existingFreqValidSet.add(`${aId}_${dt}`)
+              }
+            })
+          }
+        }
+
+        const newLogs = logsWithIds.filter(x => {
+          const existingDate = existingEventDateMap.get(x.eventId)
+          // Se o eventId existe mas é de outra data (colisão de ID de log após reset de memória da catraca), reprocessar!
+          if (!existingDate || (x.logDate && existingDate !== x.logDate)) {
+            return true
+          }
+          // Se for evento reconhecido de entrada e o aluno ainda não tem entrada válida em frequencias nessa data, reprocessar!
+          const uid = x.log.user_id ? String(x.log.user_id).trim() : ''
+          if (uid && uid !== '0' && x.logDate && !existingFreqValidSet.has(`${uid}_${x.logDate}`)) {
+            return true
+          }
+          return false
+        })
         const toInsert = newLogs.length
+        const alreadyExisting = totalFromDevice - toInsert
 
         // Emitir o resumo pré-processamento para a UI
         send({

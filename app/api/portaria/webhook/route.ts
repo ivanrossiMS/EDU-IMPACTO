@@ -559,6 +559,7 @@ export async function POST(req: Request) {
       tipo: dispositivoSentido,
       status: eventStatus,
       data_hora: eventTime,
+      created_at: new Date().toISOString(),
       // Guardar o user_id numérico original da catraca para diagnóstico
       user_id_equipamento: userIdNum !== null ? String(userIdNum) : '',
       confianca: payload.score || payload.confidence || 0,
@@ -654,13 +655,34 @@ export async function POST(req: Request) {
 
           console.log(`🚪 [Portaria Webhook] Registrando SAÍDA para ${alunoNome} às ${localTimeStr} via ${dispositivoNome} (Total saídas hoje: ${saidasExistentes.length})`)
 
+          const existingRegPorSaida = String(existingFreq?.dados?.registradoPor || '')
+          const existingOrigemSaida = String(existingFreq?.dados?.origem || '')
+          const existingTemposSaida = existingFreq?.dados?.tempos || existingFreq?.tempos
+          const hasExistingTemposSaida = Boolean(
+            existingTemposSaida &&
+            typeof existingTemposSaida === 'object' &&
+            Object.values(existingTemposSaida).some(v => v === 'P' || v === 'F' || v === 'J')
+          )
+          const hasValidExistingEntry = Boolean(
+            existingFreq?.dados?.horaEntrada ||
+            hasExistingTemposSaida ||
+            (existingFreq &&
+              existingOrigemSaida !== 'catraca_saida' &&
+              !existingRegPorSaida.toLowerCase().includes('saída') &&
+              !existingRegPorSaida.toLowerCase().includes('saida') &&
+              existingFreq.dados?.horaRegistro)
+          )
+
           // 1. Atualizar ou criar registro de frequência com o histórico de saídas
+          // CRÍTICO: Se o aluno NÃO tinha registro de entrada anterior, marcamos claramente como
+          // registro exclusivo de saída ('Catraca iDFace (Saída)' / 'catraca_saida') e NÃO preenchemos
+          // horaRegistro com o horário da saída para jamais ser confundido com Entrada Manual.
           const { error: freqUpdErr } = await supabase.from('frequencias').upsert({
             id: freqId,
             aluno_id: alunoId,
             turma_id: alunoTurma || existingFreq?.turma_id || null,
             data: localDate,
-            presente: existingFreq?.presente ?? true,
+            presente: hasValidExistingEntry ? (existingFreq?.presente ?? true) : false,
             justificativa: existingFreq?.justificativa || '',
             dados: {
               ...(existingFreq?.dados || {}),
@@ -672,8 +694,10 @@ export async function POST(req: Request) {
               saidaOrigem: 'catraca',
               anoLetivo: currentYear,
               diarioId: existingFreq?.dados?.diarioId || diarioId,
+              registradoPor: hasValidExistingEntry ? (existingFreq?.dados?.registradoPor || 'Catraca iDFace') : 'Catraca iDFace (Saída)',
+              origem: hasValidExistingEntry ? (existingFreq?.dados?.origem || 'catraca') : 'catraca_saida',
               horaEntrada: existingFreq?.dados?.horaEntrada || '',
-              horaRegistro: existingFreq?.dados?.horaRegistro || localTimeStr,
+              horaRegistro: hasValidExistingEntry ? (existingFreq?.dados?.horaRegistro || existingFreq?.dados?.horaEntrada || '') : '',
             }
           })
 
@@ -782,8 +806,21 @@ export async function POST(req: Request) {
           // ══════════════════════════════════════════════════════════════
           const permitirMultiplas = !!config.permitir_multiplas_entradas
 
-          // 2. Verificar se já existe lançamento de frequência para este aluno neste dia
-          if (existingFreq) {
+          const existingRegPor = String(existingFreq?.dados?.registradoPor || '')
+          const existingOrigem = String(existingFreq?.dados?.origem || '')
+          const isExistingSaidaOnly =
+            existingOrigem === 'catraca_saida' ||
+            existingRegPor.toLowerCase().includes('saída') ||
+            existingRegPor.toLowerCase().includes('saida') ||
+            (!existingFreq?.dados?.horaEntrada && !existingFreq?.dados?.tempos && Boolean(existingFreq?.dados?.saidaHorario))
+          const naoTinhaEntradaValida =
+            !existingFreq ||
+            !existingFreq.dados?.horaEntrada ||
+            existingFreq.presente === false ||
+            isExistingSaidaOnly
+
+          // 2. Verificar se já existe lançamento de ENTRADA válida para este aluno neste dia
+          if (existingFreq && !naoTinhaEntradaValida) {
             if (!permitirMultiplas) {
               console.log(`ℹ️ [Portaria Integration] Aluno ${alunoNome} (ID: ${alunoId}) já possui registro de entrada em ${localDate}. Modo 'Apenas 1ª entrada' ativo: registro preservado sem sobreposição.`)
             } else {
@@ -876,18 +913,32 @@ export async function POST(req: Request) {
               }
             }
           } else {
-            // 3. Salvar registro de PRIMEIRA entrada (sem tempos de aula)
+            // 3. Salvar ou atualizar registro de PRIMEIRA entrada (inclusive quando havia falta prévia ou apenas saída)
+            const prevDados = existingFreq?.dados || {}
+            let updatedTempos = prevDados.tempos
+            if (updatedTempos && typeof updatedTempos === 'object') {
+              const newT: Record<string, string> = {}
+              for (const [k, v] of Object.entries(updatedTempos)) {
+                newT[k] = (v === 'F' || v === '-') ? 'P' : String(v)
+              }
+              updatedTempos = newT
+            }
+
             const row = {
               id: freqId,
               aluno_id: alunoId,
-              turma_id: alunoTurma || null,
+              turma_id: alunoTurma || existingFreq?.turma_id || null,
               data: localDate,
               presente: true,
               justificativa: '',
               dados: {
-                diarioId,
+                ...prevDados,
+                ...(updatedTempos ? { tempos: updatedTempos } : {}),
+                diarioId: prevDados.diarioId || diarioId,
                 anoLetivo: currentYear,
                 registradoPor: 'Catraca iDFace',
+                origem: 'catraca',
+                horarioIndefinido: false,
                 horaEntrada: localTimeStr,
                 horaRegistro: localTimeStr,
                 entradas: [
@@ -903,7 +954,7 @@ export async function POST(req: Request) {
               }
             }
 
-            const { error: insertErr } = await supabase.from('frequencias').insert(row)
+            const { error: insertErr } = await supabase.from('frequencias').upsert(row)
             if (insertErr) {
               console.error('[Portaria Integration Frequencia Insert Error]', insertErr)
             } else {

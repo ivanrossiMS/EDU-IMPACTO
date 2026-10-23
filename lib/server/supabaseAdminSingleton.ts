@@ -11,6 +11,106 @@
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 
+function isTransientServerFetchError(err: any): boolean {
+  if (!err) return false
+  if (err.name === 'AbortError') return false
+  const msg = String(err.message || '').toLowerCase()
+  const causeMsg = String(err.cause?.message || '').toLowerCase()
+  const causeCode = String(err.cause?.code || err.code || '').toUpperCase()
+  return (
+    msg.includes('fetch failed') ||
+    msg.includes('network') ||
+    msg.includes('socket') ||
+    msg.includes('econnreset') ||
+    msg.includes('etimedout') ||
+    msg.includes('enotfound') ||
+    msg.includes('eai_again') ||
+    causeMsg.includes('fetch failed') ||
+    causeMsg.includes('other side closed') ||
+    causeMsg.includes('socket') ||
+    causeCode === 'ECONNRESET' ||
+    causeCode === 'ETIMEDOUT' ||
+    causeCode === 'ENOTFOUND' ||
+    causeCode === 'EAI_AGAIN' ||
+    causeCode === 'ECONNREFUSED' ||
+    causeCode.startsWith('UND_ERR_')
+  )
+}
+
+function createServerSyntheticAuthErrorResponse(err: any): Response {
+  const errMsg = err?.message || 'TypeError: fetch failed'
+  const res = new Response(
+    JSON.stringify({
+      message: errMsg,
+      error: 'service_unavailable',
+    }),
+    {
+      status: 503,
+      statusText: 'Service Unavailable',
+      headers: { 'Content-Type': 'application/json' },
+    }
+  )
+  try {
+    Object.defineProperty(res, 'message', {
+      value: errMsg,
+      enumerable: false,
+      configurable: true,
+    })
+  } catch {}
+  return res
+}
+
+/**
+ * Fetch resiliente para clientes Supabase no servidor Node.js:
+ * Recupera automaticamente de conexões keep-alive fechadas pelo Cloudflare/undici
+ * (TypeError: fetch failed / UND_ERR_SOCKET / ECONNRESET) e erros transitórios 502/503/504.
+ */
+export const serverSupabaseFetch: typeof fetch = async (input, init) => {
+  const urlStr =
+    typeof input === 'string'
+      ? input
+      : input instanceof URL
+      ? input.href
+      : (input as Request)?.url || ''
+  const isAuthEndpoint = urlStr.includes('/auth/v1/')
+  const method = (
+    init?.method ||
+    (typeof input === 'object' && input && 'method' in input ? (input as Request).method : 'GET') ||
+    'GET'
+  ).toUpperCase()
+  const isIdempotent = ['GET', 'HEAD', 'OPTIONS'].includes(method) || urlStr.includes('/auth/v1/user')
+  const maxAttempts = isIdempotent ? 3 : 2
+  const fetchOpts: RequestInit = { ...init, cache: init?.cache || 'no-store' }
+
+  let lastErr: any = null
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const res = await fetch(input, fetchOpts)
+      if (isIdempotent && attempt < maxAttempts && [502, 503, 504, 522].includes(res.status)) {
+        if (init?.signal?.aborted) return res
+        await new Promise(r => setTimeout(r, attempt * 250))
+        continue
+      }
+      return res
+    } catch (err: any) {
+      lastErr = err
+      if (init?.signal?.aborted || !isTransientServerFetchError(err)) {
+        break
+      }
+      if (attempt < maxAttempts) {
+        await new Promise(r => setTimeout(r, attempt * 250))
+        continue
+      }
+    }
+  }
+
+  if (isAuthEndpoint && lastErr && isTransientServerFetchError(lastErr)) {
+    return createServerSyntheticAuthErrorResponse(lastErr)
+  }
+
+  throw lastErr
+}
+
 let _adminClient: SupabaseClient | null = null
 
 export function getAdminClient(): SupabaseClient {
@@ -19,6 +119,9 @@ export function getAdminClient(): SupabaseClient {
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!,
       {
+        global: {
+          fetch: serverSupabaseFetch,
+        },
         auth: {
           autoRefreshToken: false,
           persistSession: false,

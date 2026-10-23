@@ -10,6 +10,8 @@ export interface ApiQueryOptions {
   noCache?: boolean
   /** Desativa a query completamente enquanto false */
   enabled?: boolean
+  /** Intervalo en ms para re-fetch automático en segundo plano */
+  refetchInterval?: number | false
 }
 
 /**
@@ -23,7 +25,7 @@ export function useApiQuery<T>(
   params?: Record<string, any>,
   options: ApiQueryOptions = {}
 ) {
-  const { staleTime = 30_000, gcTime = 300_000, noCache = false, enabled = true } = options
+  const { staleTime = 30_000, gcTime = 300_000, noCache = false, enabled = true, refetchInterval } = options
 
   let queryStr = ''
   if (params) {
@@ -40,6 +42,7 @@ export function useApiQuery<T>(
     enabled,
     staleTime,
     gcTime,
+    ...(refetchInterval !== undefined ? { refetchInterval } : {}),
     queryFn: async () => {
       // noCache só para módulos que exigem dados absolutamente ao vivo (ex: caixa, PDV)
       const hasQuery = url.includes('?') || queryStr.includes('?');

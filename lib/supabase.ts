@@ -231,6 +231,83 @@ const customStorage = {
 
 const isBrowser = typeof window !== 'undefined'
 
+function createSyntheticRetryableAuthResponse(err: any): Response {
+  const errMsg = err?.message || 'Failed to fetch (transient network error)'
+  const res = new Response(
+    JSON.stringify({
+      message: errMsg,
+      error: 'service_unavailable',
+    }),
+    {
+      status: 503,
+      statusText: 'Service Unavailable',
+      headers: { 'Content-Type': 'application/json' },
+    }
+  )
+  try {
+    Object.defineProperty(res, 'message', {
+      value: errMsg,
+      enumerable: false,
+      configurable: true,
+    })
+  } catch {}
+  return res
+}
+
+/**
+ * Fetch resiliente para o cliente Supabase:
+ * 1. Usa a referência nativa de fetch (evitando frames intermediários desnecessários).
+ * 2. Faz 1 retry rápido (350ms) em leituras idempotentes (/rest/v1/, etc.) diante de micro-oscilações.
+ * 3. Para /auth/v1/, converte TypeError: Failed to fetch em Response HTTP 503 para que o
+ *    @supabase/auth-js dispare AuthRetryableFetchError via handleError(503) sem executar
+ *    console.error(TypeError) no Next.js Dev Overlay a cada tentativa de backoff.
+ */
+const supabaseResilientFetch: typeof fetch = async (input, init) => {
+  const baseFetch: typeof fetch =
+    typeof window !== 'undefined' && typeof (window as any).__eduNativeFetch === 'function'
+      ? (window as any).__eduNativeFetch
+      : fetch
+
+  const urlStr =
+    typeof input === 'string'
+      ? input
+      : input instanceof URL
+      ? input.href
+      : (input as Request)?.url || ''
+  const isAuthEndpoint = urlStr.includes('/auth/v1/')
+  const method = (
+    init?.method ||
+    (typeof input === 'object' && input && 'method' in input ? (input as Request).method : 'GET') ||
+    'GET'
+  ).toUpperCase()
+  const isRetryableMethod = ['GET', 'HEAD', 'OPTIONS'].includes(method)
+
+  try {
+    return await baseFetch(input, init)
+  } catch (err: any) {
+    if (err?.name === 'AbortError' || init?.signal?.aborted) {
+      throw err
+    }
+
+    if (!isAuthEndpoint && isRetryableMethod && (typeof navigator === 'undefined' || navigator.onLine)) {
+      await new Promise(r => setTimeout(r, 350))
+      if (!init?.signal?.aborted) {
+        try {
+          return await baseFetch(input, init)
+        } catch (retryErr: any) {
+          err = retryErr
+        }
+      }
+    }
+
+    if (isAuthEndpoint) {
+      return createSyntheticRetryableAuthResponse(err)
+    }
+
+    throw err
+  }
+}
+
 // Singleton instance to prevent Next.js Fast Refresh or multiple imports
 // from creating multiple instances and fighting for the auth lock.
 let client: ReturnType<typeof createClient>
@@ -282,6 +359,9 @@ if (isBrowser) {
 
   if (!(window as any)._supabaseClient) {
     const newClient = createClient(supabaseUrl, supabaseAnonKey, {
+      global: {
+        fetch: supabaseResilientFetch,
+      },
       auth: {
         storage: customStorage,
         autoRefreshToken: true,
@@ -342,7 +422,14 @@ if (isBrowser) {
     // Se uma instância anterior do HMR tinha Web Worker de heartbeat ativo, encerra-o
     // para evitar colisão de duplo heartbeat com o timer nativo do Phoenix Socket.
     try {
-      const rt = (window as any)._supabaseClient?.realtime
+      const existingClient = (window as any)._supabaseClient
+      if (existingClient?.auth) {
+        existingClient.auth.fetch = supabaseResilientFetch
+      }
+      if (existingClient?.rest) {
+        existingClient.rest.fetch = supabaseResilientFetch
+      }
+      const rt = existingClient?.realtime
       if (rt) {
         rt.worker = false
         if (typeof rt._terminateWorker === 'function') {
@@ -355,12 +442,15 @@ if (isBrowser) {
 } else {
   // During SSR, we don't have localStorage and we don't want to persist/refresh the session
   client = createClient(supabaseUrl, supabaseAnonKey, {
+    global: {
+      fetch: supabaseResilientFetch,
+    },
     auth: {
       storage: undefined,
       autoRefreshToken: false,
       persistSession: false,
       detectSessionInUrl: false,
-    }
+    },
   })
 }
 

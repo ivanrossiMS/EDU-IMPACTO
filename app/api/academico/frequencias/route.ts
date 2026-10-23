@@ -122,7 +122,12 @@ export async function GET(request: Request) {
   let rows: any[] = []
   if (count <= 1000 || limit <= 1000) {
     const singleQuery = applyFilters(
-      supabase.from('frequencias').select('*').order('data', { ascending: false }).limit(limit)
+      supabase
+        .from('frequencias')
+        .select('*')
+        .order('data', { ascending: false })
+        .order('id', { ascending: true })
+        .limit(limit)
     )
     const { data: pageData, error } = await singleQuery
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
@@ -145,6 +150,7 @@ export async function GET(request: Request) {
               .from('frequencias')
               .select('*')
               .order('data', { ascending: false })
+              .order('id', { ascending: true })
               .range(from, to)
           ).then((res: any) => {
             if (res.error) throw res.error
@@ -213,14 +219,31 @@ export async function POST(request: Request) {
         .in('id', rowIds)
       if (!existingRows || existingRows.length === 0) return rowsToSave
       const existingMap = new Map<string, any>(existingRows.map(r => [String(r.id), r.dados || {}]))
-      const preserveKeys = ['saidas', 'entradas', 'totalSaidas', 'totalEntradas', 'saidaHorario', 'saidaResponsavel', 'horaEntrada']
+      const preserveKeys = ['saidas', 'entradas', 'totalSaidas', 'totalEntradas', 'ultimaSaida', 'ultimaEntrada', 'saidaHorario', 'saidaResponsavel', 'saidaOrigem', 'horaEntrada']
       return rowsToSave.map(r => {
         const prevDados = existingMap.get(String(r.id))
         if (!prevDados) return r
         const mergedDados: Record<string, any> = { ...(r.dados || {}) }
         for (const k of preserveKeys) {
-          if (mergedDados[k] === undefined && prevDados[k] !== undefined) {
+          if ((mergedDados[k] === undefined || mergedDados[k] === null) && prevDados[k] !== undefined && prevDados[k] !== null) {
             mergedDados[k] = prevDados[k]
+          }
+        }
+        // Se o registro anterior no banco já possuía entrada biométrica na catraca (e não era apenas saída),
+        // preservar a origem e o horário da catraca quando o aluno permanece presente e não foi marcado como horário indefinido
+        const prevRegPor = String(prevDados.registradoPor || '').toLowerCase()
+        const prevWasSaidaOnly = prevDados.origem === 'catraca_saida' || prevRegPor.includes('saída') || prevRegPor.includes('saida')
+        const prevWasCatracaEntrada =
+          !prevWasSaidaOnly &&
+          Boolean(prevDados.horaEntrada) &&
+          (prevDados.origem === 'catraca' || prevRegPor.includes('catraca') || prevRegPor.includes('idface') || (Array.isArray(prevDados.entradas) && prevDados.entradas.length > 0))
+
+        if (prevWasCatracaEntrada && r.presente !== false && !mergedDados.horarioIndefinido) {
+          mergedDados.origem = 'catraca'
+          mergedDados.registradoPor = prevDados.registradoPor || 'Catraca iDFace'
+          if (!r.dados?.horaEntrada || r.dados?.origem === 'manual') {
+            mergedDados.horaEntrada = prevDados.horaEntrada
+            mergedDados.horaRegistro = prevDados.horaEntrada
           }
         }
         return { ...r, dados: mergedDados }
@@ -443,10 +466,17 @@ function buildRow(f: any, userName?: string, userId?: string) {
     finalRegistradoPor = 'Manual'
   }
 
-  const isHorarioIndefinido = Boolean(f.horarioIndefinido || mergedExtra.horarioIndefinido || horaRegistro === null || horaRegistro === 'indefinido')
-  const finalHoraRegistro = isHorarioIndefinido
+  const isPresente = presente !== undefined ? Boolean(presente) : true
+  const isHorarioIndefinido = Boolean(
+    f.horarioIndefinido === true ||
+    mergedExtra.horarioIndefinido === true ||
+    horaRegistro === 'indefinido' ||
+    mergedExtra.horaEntrada === 'indefinido'
+  )
+  const rawHoraEntrada = f.horaEntrada ?? mergedExtra.horaEntrada ?? horaRegistro ?? mergedExtra.horaRegistro
+  const finalHoraRegistro = (!isPresente || isHorarioIndefinido)
     ? null
-    : (horaRegistro || mergedExtra.horaRegistro || (presente ? new Date().toLocaleTimeString('pt-BR', { timeZone: 'America/Campo_Grande', hour: '2-digit', minute: '2-digit' }) : null))
+    : (rawHoraEntrada || new Date().toLocaleTimeString('pt-BR', { timeZone: 'America/Campo_Grande', hour: '2-digit', minute: '2-digit' }))
 
   const schoolTodayDate = new Intl.DateTimeFormat('en-CA', {
     timeZone: 'America/Campo_Grande',
@@ -458,7 +488,7 @@ function buildRow(f: any, userName?: string, userId?: string) {
     aluno_id: alunoId || f.aluno_id || '',
     turma_id: turmaId || f.turma_id || '',
     data: data || schoolTodayDate,
-    presente: presente !== undefined ? Boolean(presente) : true,
+    presente: isPresente,
     justificativa: justificativa || '',
     dados: {
       ...mergedExtra,

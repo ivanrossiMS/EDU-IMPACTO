@@ -80,12 +80,30 @@ function extractSameOriginApiUrl(input: RequestInfo | URL): string | null {
   return null
 }
 
+let nativeFetchRef: typeof window.fetch | null = null
+
+export function getNativeFetch(): typeof window.fetch {
+  if (nativeFetchRef) return nativeFetchRef
+  if (typeof window !== 'undefined' && typeof window.fetch === 'function') {
+    const existing = (window as any).__eduNativeFetch
+    if (typeof existing === 'function') {
+      nativeFetchRef = existing
+      return existing
+    }
+    return window.fetch.bind(window)
+  }
+  return fetch
+}
+
 export function ensureFetchTrackerInstalled() {
   if (typeof window === 'undefined' || isFetchPatched) return
   isFetchPatched = true
 
-  const originalFetch = window.fetch.bind(window)
-  window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+  const originalFetch = ((window as any).__eduNativeFetch as typeof window.fetch) || window.fetch.bind(window)
+  ;(window as any).__eduNativeFetch = originalFetch
+  nativeFetchRef = originalFetch
+
+  window.fetch = (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const apiUrl = extractSameOriginApiUrl(input)
     const method = (init?.method || (typeof input === 'object' && 'method' in input ? input.method : 'GET') || 'GET').toUpperCase()
 
@@ -97,13 +115,11 @@ export function ensureFetchTrackerInstalled() {
     activeRequests.set(reqId, { url: apiUrl, startTime: Date.now() })
     notifyListeners()
 
-    try {
-      return await originalFetch(input, init)
-    } finally {
+    return originalFetch(input, init).finally(() => {
       activeRequests.delete(reqId)
       lastRequestEndTime = Date.now()
       notifyListeners()
-    }
+    })
   }
 }
 

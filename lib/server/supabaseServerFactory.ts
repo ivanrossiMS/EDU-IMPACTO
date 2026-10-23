@@ -12,7 +12,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { createServerClient } from '@supabase/ssr'
 import { cookies, headers } from 'next/headers'
-import { getAdminClient } from './supabaseAdminSingleton'
+import { getAdminClient, serverSupabaseFetch } from './supabaseAdminSingleton'
 
 /**
  * Extrai o timestamp de expiração (em ms) do payload de um JWT sem precisar de chamada de rede.
@@ -132,9 +132,7 @@ export async function createProtectedClient(bearerToken?: string) {
           headers: {
             Authorization: `Bearer ${effectiveBearer}`
           },
-          fetch: (url, options) => {
-            return fetch(url, { ...options, cache: 'no-store' })
-          }
+          fetch: serverSupabaseFetch
         },
         auth: {
           persistSession: false,
@@ -195,9 +193,7 @@ export async function createProtectedClient(bearerToken?: string) {
         autoRefreshToken: false,
       },
       global: {
-        fetch: (url, options) => {
-          return fetch(url, { ...options, cache: 'no-store' })
-        }
+        fetch: serverSupabaseFetch
       }
     }
   )

@@ -247,13 +247,13 @@ export function useSupabaseCollection<T>(
     }).then(async r => {
       const contentType = r.headers.get('content-type')
       if (r.ok && contentType && contentType.includes('text/html')) {
-        console.error(`[useSupabaseCollection] Endpoint /${endpoint} returned HTML on success (likely auth redirect).`)
+        console.warn(`[useSupabaseCollection] Endpoint /${endpoint} returned HTML on success (likely auth redirect).`)
         throw new Error(`Auth Redirect`)
       }
       if (!r.ok) {
         let errText = ''
         try { errText = await r.text() } catch {}
-        console.error(`[useSupabaseCollection] API Error for /${endpoint}: HTTP ${r.status} - ${errText}`)
+        console.warn(`[useSupabaseCollection] API Error for /${endpoint}: HTTP ${r.status} - ${errText.substring(0, 200)}`)
         throw new Error(`HTTP ${r.status} - ${errText}`)
       }
       const text = await r.text()
