@@ -48,20 +48,23 @@ function formatTimeFromIso(isoStr?: string): string | undefined {
       const parts = str.split(':')
       return `${parts[0].padStart(2, '0')}:${parts[1].padStart(2, '0')}`
     }
-    // As catracas/portaria gravam o horário local nos dígitos ISO (ex: "2026-09-25T06:56:52+00:00").
-    // Extrai o HH:mm diretamente para evitar shifts indevidos de fuso pelo navegador.
-    if (str.includes('T')) {
+    // As catracas (portaria_eventos.data_hora) gravam o horário local sem milissegundos com "+00:00"
+    // (ex: "2026-10-23T06:56:18+00:00"). Já os timestamps reais em UTC do servidor/JS possuem
+    // milissegundos ou terminam em "Z" (ex: "2026-10-23T16:07:09.324Z") e devem ser convertidos para America/Campo_Grande.
+    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?(\+00(:00)?)?$/.test(str)) {
       const timePart = str.split('T')[1]
       if (timePart && timePart.length >= 5) {
         return timePart.slice(0, 5)
       }
     }
-    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(str)) {
-      str += '-04:00'
-    }
     const d = new Date(str)
     if (!isNaN(d.getTime())) {
-      return d.toLocaleTimeString('pt-BR', { timeZone: 'America/Campo_Grande', hour: '2-digit', minute: '2-digit' })
+      return d.toLocaleTimeString('pt-BR', {
+        timeZone: 'America/Campo_Grande',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+      })
     }
   } catch {}
   return undefined
@@ -282,12 +285,20 @@ function getOrigemFrequenciaCompleta(
 
   // 1. Verificar em /chamadas (saidaCalls)
   const chamadaConfirmada = (saidaCalls || []).find((c: any) => {
-    const cStudentId = String(c.studentId || c.alunoId || c.aluno_id || '').trim()
-    if (cStudentId !== targetId) return false
+    const cStudentId = normalizeAlunoIdKey(c.studentId || c.alunoId || c.aluno_id || '')
+    if (cStudentId !== targetIdKey) return false
     const cStatus = String(c.status || '').toLowerCase()
     if (cStatus === 'cancelled' || cStatus === 'cancelado' || c.isRevert) return false
     if (cStatus !== 'confirmed' && cStatus !== 'confirmado') return false
-    const cDate = String(c.confirmedAt || c.calledAt || c.created_at || '').split('T')[0]
+    const rawDt = String(c.confirmedAt || c.calledAt || c.created_at || '').trim()
+    if (!rawDt) return false
+    let cDate = rawDt.split('T')[0]
+    try {
+      const d = new Date(rawDt)
+      if (!isNaN(d.getTime())) {
+        cDate = d.toLocaleDateString('en-CA', { timeZone: 'America/Campo_Grande' })
+      }
+    } catch {}
     return cDate === dataStr
   })
 
@@ -297,24 +308,46 @@ function getOrigemFrequenciaCompleta(
 
   const freqSaidaHorario = (rawFreqHorario && String(rawFreqHorario) !== 'null') ? rawFreqHorario : null
   const freqSaidaResp = (rawFreqResp && String(rawFreqResp) !== 'null') ? rawFreqResp : null
-  const freqSaidaOrigem = (rawFreqOrigem && String(rawFreqOrigem) !== 'null') ? rawFreqOrigem : null
+  const freqSaidaOrigem = (rawFreqOrigem && String(rawFreqOrigem) !== 'null') ? String(rawFreqOrigem).toLowerCase() : null
 
   const horaSaidaRaw = horarioSaidaState ||
                        (chamadaConfirmada ? (chamadaConfirmada.confirmedAt || chamadaConfirmada.calledAt) : null) ||
                        freqSaidaHorario ||
                        horaCatracaSaida
 
-  const horaSaidaFormatted = formatTimeFromIso(horaSaidaRaw) || (horaSaidaRaw ? String(horaSaidaRaw).slice(11, 16) : undefined)
+  const horaSaidaFormatted = formatTimeFromIso(horaSaidaRaw)
   const respSaida = responsavelSaidaState || chamadaConfirmada?.guardianName || chamadaConfirmada?.responsavel || freqSaidaResp
 
   if (isSaidaCleared) {
     saida = null
   } else if (horaSaidaFormatted || chamadaConfirmada || portariaEvSaida || (freqRecord && (freqSaidaHorario || freqSaidaResp))) {
+    const callSourceNorm = String(chamadaConfirmada?.source || '').toLowerCase()
+    const callGuardianIdNorm = String(chamadaConfirmada?.guardianId || '').toLowerCase()
+    const respNorm = String(respSaida || '').toLowerCase()
+
     const isCatracaSaida = !!portariaEvSaida ||
                            freqSaidaOrigem === 'catraca' ||
                            freqSaidaOrigem === 'idface' ||
-                           chamadaConfirmada?.source === 'idface' ||
-                           chamadaConfirmada?.source === 'catraca'
+                           callSourceNorm === 'idface' ||
+                           callSourceNorm === 'catraca' ||
+                           callGuardianIdNorm === 'catraca-saida' ||
+                           respNorm.includes('rua das garças') ||
+                           respNorm.includes('catraca')
+
+    const isRfidSaida = !isCatracaSaida && (
+                          freqSaidaOrigem === 'rfid' ||
+                          callSourceNorm === 'rfid' ||
+                          callGuardianIdNorm.startsWith('rfid-')
+                        )
+
+    const isPortariaSaida = !isCatracaSaida && !isRfidSaida && (
+                              freqSaidaOrigem === 'chamadas' ||
+                              freqSaidaOrigem === 'portaria' ||
+                              freqSaidaOrigem === 'qrcode' ||
+                              (!!chamadaConfirmada &&
+                               callGuardianIdNorm !== 'manual-infantil' &&
+                               callGuardianIdNorm !== 'frequencia-diario')
+                            )
 
     if (isCatracaSaida) {
       saida = {
@@ -324,13 +357,29 @@ function getOrigemFrequenciaCompleta(
         responsavel: respSaida,
         detalhes: `Saída biométrica iDFace${respSaida ? ` (${respSaida})` : ''}`
       }
+    } else if (isRfidSaida) {
+      saida = {
+        tipo: 'chamadas',
+        label: 'Cartão RFID',
+        horario: horaSaidaFormatted,
+        responsavel: respSaida,
+        detalhes: `Saída via Cartão RFID na Portaria${respSaida ? ` (Retirado por: ${respSaida})` : ''}`
+      }
+    } else if (isPortariaSaida) {
+      saida = {
+        tipo: 'chamadas',
+        label: 'Portaria',
+        horario: horaSaidaFormatted,
+        responsavel: respSaida,
+        detalhes: `Saída confirmada na Portaria (/chamadas)${respSaida ? ` (Retirado por: ${respSaida})` : ''}`
+      }
     } else {
       saida = {
         tipo: 'manual',
         label: 'Manual',
         horario: horaSaidaFormatted,
         responsavel: respSaida,
-        detalhes: `Saída confirmada em /chamadas${respSaida ? ` (Retirado por: ${respSaida})` : ''}`
+        detalhes: `Saída registrada manualmente${respSaida ? ` (Retirado por: ${respSaida})` : ''}`
       }
     }
   }
@@ -1368,7 +1417,7 @@ export default function FrequenciaPage() {
           ...(existing?.dados || {}),
           ...(existingEntrada && !isIndef ? { horaEntrada: existingEntrada, horaRegistro: existingEntrada } : {}),
           horarioIndefinido: isIndef,
-          saidaHorario: confirmedAtIso,
+          saidaHorario: horaSaida,
           saidaResponsavel: quemRetirou,
           saidaOrigem: 'manual',
           anoLetivo: filtroAno

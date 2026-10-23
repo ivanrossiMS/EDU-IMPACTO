@@ -447,39 +447,44 @@ export async function GET(request: Request) {
           const todasSaidas = Array.isArray(fRecord.dados?.saidas) && fRecord.dados.saidas.length > 0
             ? fRecord.dados.saidas
             : (fRecord.dados?.saidaHorario ? [{
-                hora: fRecord.dados.saidaHorario,
+                hora: formatHoraSaida(fRecord.dados.saidaHorario),
                 dispositivo: fRecord.dados.saidaResponsavel,
-                data_hora: fRecord.dados?.horaRegistro ? `${recordDate}T${fRecord.dados.horaRegistro}:00-04:00` : undefined
+                data_hora: String(fRecord.dados.saidaHorario).includes('T')
+                  ? fRecord.dados.saidaHorario
+                  : `${recordDate}T${formatHoraSaida(fRecord.dados.saidaHorario)}:00-04:00`
               }] : [])
 
           for (const s of todasSaidas) {
-            const sHorario = s.hora
+            const sHorario = s.hora ? formatHoraSaida(s.hora) : undefined
             const sResp = s.dispositivo || fRecord.dados?.saidaResponsavel
             const sOrigem = fRecord.dados?.saidaOrigem
             if (sHorario || sResp) {
               const isCatraca = sOrigem === 'catraca' || (sResp && String(sResp).toLowerCase().includes('catraca'))
+              const isRfid = sOrigem === 'rfid'
               const isSolo = isCatraca || (sResp && String(sResp).toLowerCase().includes('sozinho'))
               const callTime = s.data_hora
-                ? String(s.data_hora).replace(/(?:Z|\+00(?::00)?)$/i, '-04:00')
+                ? (String(s.data_hora).includes('T') && (String(s.data_hora).endsWith('Z') || /\.\d+/.test(String(s.data_hora)))
+                    ? String(s.data_hora)
+                    : String(s.data_hora).replace(/(?:Z|\+00(?::00)?)$/i, '-04:00'))
                 : `${recordDate}T${sHorario || '12:00'}:00-04:00`
               const callKey = getCallTimeKey(aId, callTime)
               if (!existingCallKeys.has(callKey)) {
                 existingCallKeys.add(callKey)
                 rawResult.push({
-                  id: `freq-saida-${aId}-${recordDate}-${String(sHorario).replace(':', '')}`,
+                  id: `freq-saida-${aId}-${recordDate}-${String(sHorario || '').replace(':', '')}`,
                   studentId: aId,
                   studentName: al?.nome || aId,
                   studentClass: al?.turma || fRecord.turma_id || '',
                   studentPhoto: al?.foto || al?.foto_url || null,
-                  guardianId: isCatraca ? 'catraca-saida' : (isSolo ? 'sozinho' : 'frequencia-diario'),
+                  guardianId: isCatraca ? 'catraca-saida' : (isRfid ? 'rfid' : (isSolo ? 'sozinho' : 'frequencia-diario')),
                   guardianName: sResp || (isSolo ? 'Saiu Sozinho' : 'Responsável Cadastrado'),
                   calledAt: callTime,
                   confirmedAt: callTime,
                   created_at: callTime,
                   status: 'confirmed',
-                  source: isCatraca ? 'catraca' : 'frequencia',
+                  source: isCatraca ? 'catraca' : (isRfid ? 'rfid' : (sOrigem === 'chamadas' ? 'chamadas' : 'frequencia')),
                   tipo: isSolo ? 'sozinho' : undefined,
-                  origem: isCatraca ? 'catraca_idface' : (isSolo ? 'manual' : undefined)
+                  origem: isCatraca ? 'catraca_idface' : (isRfid ? 'rfid' : (sOrigem || (isSolo ? 'manual' : undefined)))
                 })
               }
             }
@@ -663,6 +668,8 @@ export async function POST(request: Request) {
             studentClass: row.dados?.studentClass,
             confirmedAt: row.dados?.confirmedAt,
             guardianName: row.dados?.guardianName,
+            source: row.dados?.source,
+            guardianId: row.dados?.guardianId,
           })
         } else if ((row.dados?.status === 'waiting' || row.dados?.status === 'called') && !row.dados?.isRevert && studentId) {
           const isNewCall = !existing
@@ -871,6 +878,8 @@ export async function POST(request: Request) {
         studentClass: data.dados?.studentClass,
         confirmedAt: data.dados?.confirmedAt,
         guardianName: data.dados?.guardianName,
+        source: data.dados?.source,
+        guardianId: data.dados?.guardianId,
       })
     } else if ((data.dados?.status === 'waiting' || data.dados?.status === 'called') && !isRevert && studentId) {
       const isNewCall = !existingRow
@@ -1046,6 +1055,8 @@ async function dispatchSaidaConfirmadaPush({
   studentClass,
   confirmedAt,
   guardianName,
+  source,
+  guardianId,
 }: {
   callId: string
   studentId: string
@@ -1053,6 +1064,8 @@ async function dispatchSaidaConfirmadaPush({
   studentClass?: string
   confirmedAt?: string
   guardianName?: string
+  source?: string
+  guardianId?: string
 }) {
   try {
     const { sendAgendaPushNotification } = await import('@/lib/server/agendaNotifications')
@@ -1078,20 +1091,38 @@ async function dispatchSaidaConfirmadaPush({
     const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Campo_Grande', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
     const freqId = `FREQ-${rawStudentId}-${today}`
     const anoLetivo = new Date().getFullYear().toString()
+    const horaSaida = formatHoraSaida(confirmedAt)
+
+    const srcNorm = String(source || '').toLowerCase()
+    const guardIdNorm = String(guardianId || '').toLowerCase()
+    let resolvedSaidaOrigem = 'chamadas'
+    if (srcNorm === 'rfid' || guardIdNorm.startsWith('rfid-')) {
+      resolvedSaidaOrigem = 'rfid'
+    } else if (srcNorm === 'idface' || srcNorm === 'catraca' || guardIdNorm === 'catraca-saida') {
+      resolvedSaidaOrigem = 'catraca'
+    } else if (guardIdNorm === 'manual-infantil' || guardIdNorm === 'frequencia-diario') {
+      resolvedSaidaOrigem = 'manual'
+    }
 
     const { data: existingFreq } = await supabaseService.from('frequencias').select('presente, dados').eq('id', freqId).maybeSingle()
+    const hasValidExistingEntry = Boolean(
+      existingFreq &&
+      existingFreq.presente !== false &&
+      (existingFreq.dados?.horaEntrada ||
+       (existingFreq.dados?.tempos && Object.values(existingFreq.dados.tempos).some((v: any) => v === 'P' || v === 'J')))
+    )
 
     await supabaseService.from('frequencias').upsert({
       id: freqId,
       aluno_id: rawStudentId,
       turma_id: turmaAluno,
       data: today,
-      presente: existingFreq?.presente ?? true,
+      presente: hasValidExistingEntry ? true : (existingFreq?.presente ?? false),
       dados: {
         ...(existingFreq?.dados || {}),
-        saidaHorario: confirmedAt || new Date().toISOString(),
+        saidaHorario: horaSaida,
         saidaResponsavel: guardianName || '',
-        saidaOrigem: 'manual',
+        saidaOrigem: resolvedSaidaOrigem,
         anoLetivo,
         diarioId: `DIARIO-${turmaAluno}-${anoLetivo}`
       }
@@ -1099,7 +1130,6 @@ async function dispatchSaidaConfirmadaPush({
 
     const targetIds = await getResponsavelIdsForTargets({ targetStudents: studentTargets })
     if (targetIds.length > 0) {
-      const horaSaida = formatHoraSaida(confirmedAt)
       const pushItemId = `saida_${callId}_${Date.now()}`
 
       await sendAgendaPushNotification({
