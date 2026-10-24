@@ -5,7 +5,8 @@ import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
   Printer, ArrowLeft, CheckCircle2, FileText,
-  Eye, Check, BookOpen, AlertCircle, RefreshCw, Award
+  Eye, Check, BookOpen, AlertCircle, RefreshCw, Award,
+  Columns, SlidersHorizontal, Image as ImageIcon, Type, Maximize2
 } from 'lucide-react'
 import { HtmlContent } from '@/components/HtmlContent'
 import { cleanAlternativeText, cleanQuestionStatementHtml } from '@/lib/provas-online/textSanitizer'
@@ -21,6 +22,20 @@ export default function ImprimirProvaPage() {
 
   // Modes: 'aluno' (sem gabarito) | 'professor' (com gabarito e critérios) | 'cartao_resposta' (folha óptica)
   const [modoImpressao, setModoImpressao] = useState<'aluno' | 'professor' | 'cartao_resposta'>('aluno')
+
+  // Interactive Print Framing & Layout Controls
+  const [margemPreset, setMargemPreset] = useState<'estreita' | 'padrao' | 'ampla'>('padrao')
+  const [colunas, setColunas] = useState<1 | 2>(1)
+  const [tamanhoFonte, setTamanhoFonte] = useState<11 | 13 | 15>(13)
+  const [limiteAlturaImagem, setLimiteAlturaImagem] = useState<150 | 250 | 380 | 900>(250)
+  const [linhasDissertativa, setLinhasDissertativa] = useState<4 | 6 | 10 | 14>(6)
+  const [mostrarGuiasMargem, setMostrarGuiasMargem] = useState<boolean>(false)
+
+  const marginConfig = {
+    estreita: { screenPad: '22px', pageMargin: '8mm', label: 'Estreita (8mm)' },
+    padrao: { screenPad: '38px', pageMargin: '14mm', label: 'Padrão (14mm)' },
+    ampla: { screenPad: '54px', pageMargin: '20mm', label: 'Ampla (20mm)' },
+  }[margemPreset]
 
   useEffect(() => {
     if (!id) return
@@ -116,167 +131,370 @@ export default function ImprimirProvaPage() {
   const questoes = prova.questoes || []
 
   return (
-    <div style={{ minHeight: '100vh', background: '#f1f5f9', color: '#0f172a' }}>
+    <div style={{ minHeight: '100vh', background: '#e2e8f0', color: '#0f172a', paddingBottom: '48px' }}>
+      <style>{`
+        @page {
+          size: A4 portrait;
+          margin: ${marginConfig.pageMargin};
+        }
+        @media print {
+          body {
+            background: #ffffff !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          .no-print {
+            display: none !important;
+          }
+          .printable-a4-sheet {
+            max-width: 100% !important;
+            width: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            border: none !important;
+            box-shadow: none !important;
+            border-radius: 0 !important;
+          }
+        }
+        .printable-a4-sheet .html-content img {
+          max-height: ${limiteAlturaImagem}px !important;
+          width: auto;
+          max-width: 100% !important;
+          object-fit: contain !important;
+        }
+      `}</style>
       
       {/* ── TOP CONTROL BAR (HIDDEN IN PRINT) ── */}
       <header
-        className="print:hidden"
+        className="print:hidden no-print"
         style={{
           position: 'sticky',
           top: 0,
           zIndex: 50,
           background: '#ffffff',
           borderBottom: '1px solid #cbd5e1',
-          boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
-          padding: '12px 24px'
+          boxShadow: '0 2px 10px rgba(15,23,42,0.06)',
+          padding: '10px 20px'
         }}
       >
         <div style={{
           maxWidth: '1200px',
           margin: '0 auto',
           display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: '16px',
-          flexWrap: 'wrap'
+          flexDirection: 'column',
+          gap: '10px'
         }}>
-          {/* Left: Back button & Title */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-            <Link
-              href="/provas-online"
-              style={{
-                width: '38px',
-                height: '38px',
-                borderRadius: '10px',
-                background: '#f8fafc',
-                border: '1px solid #cbd5e1',
-                color: '#334155',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                textDecoration: 'none',
-                cursor: 'pointer',
-                transition: 'all 0.15s'
-              }}
-              title="Voltar para Provas Online"
-            >
-              <ArrowLeft size={16} />
-            </Link>
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '2px' }}>
-                <span style={{
-                  padding: '2px 8px',
-                  borderRadius: '6px',
-                  fontSize: '11px',
-                  fontWeight: 800,
-                  background: '#f0f9ff',
-                  color: '#0284c7',
-                  border: '1px solid #bae6fd',
-                  textTransform: 'uppercase'
-                }}>
-                  {prova.disciplinaNome || prova.disciplina}
-                </span>
-                <span style={{ fontSize: '12px', color: '#64748b', fontWeight: 600 }}>
-                  {questoes.length} questões • {(prova.valorTotal || 10).toFixed(1)} pts
-                </span>
+          {/* Row 1: Title, Mode Tabs & Print Button */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '14px',
+            flexWrap: 'wrap'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <Link
+                href="/provas-online"
+                style={{
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: '10px',
+                  background: '#f8fafc',
+                  border: '1px solid #cbd5e1',
+                  color: '#334155',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  textDecoration: 'none',
+                  cursor: 'pointer'
+                }}
+                title="Voltar para Provas Online"
+              >
+                <ArrowLeft size={16} />
+              </Link>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '2px' }}>
+                  <span style={{
+                    padding: '2px 8px',
+                    borderRadius: '6px',
+                    fontSize: '10px',
+                    fontWeight: 800,
+                    background: '#f0f9ff',
+                    color: '#0284c7',
+                    border: '1px solid #bae6fd',
+                    textTransform: 'uppercase'
+                  }}>
+                    {prova.disciplinaNome || prova.disciplina}
+                  </span>
+                  <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 600 }}>
+                    {questoes.length} questões • {(prova.valorTotal || 10).toFixed(1)} pts
+                  </span>
+                </div>
+                <h1 style={{ margin: 0, fontSize: '16px', fontWeight: 900, color: '#0f172a' }}>
+                  {prova.titulo}
+                </h1>
               </div>
-              <h1 style={{ margin: 0, fontSize: '18px', fontWeight: 900, color: '#0f172a' }}>
-                {prova.titulo}
-              </h1>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+              {/* Mode Pills Segmented Control */}
+              <div style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                background: '#f1f5f9',
+                border: '1px solid #cbd5e1',
+                borderRadius: '10px',
+                padding: '3px',
+                gap: '3px'
+              }}>
+                <button
+                  type="button"
+                  onClick={() => setModoImpressao('aluno')}
+                  style={{
+                    padding: '6px 13px',
+                    borderRadius: '7px',
+                    fontSize: '12px',
+                    fontWeight: 800,
+                    cursor: 'pointer',
+                    border: 'none',
+                    background: modoImpressao === 'aluno' ? '#ffffff' : 'transparent',
+                    color: modoImpressao === 'aluno' ? '#0284c7' : '#64748b',
+                    boxShadow: modoImpressao === 'aluno' ? '0 1px 2px rgba(0,0,0,0.08)' : 'none'
+                  }}
+                >
+                  Caderno do Aluno
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setModoImpressao('professor')}
+                  style={{
+                    padding: '6px 13px',
+                    borderRadius: '7px',
+                    fontSize: '12px',
+                    fontWeight: 800,
+                    cursor: 'pointer',
+                    border: 'none',
+                    background: modoImpressao === 'professor' ? '#ffffff' : 'transparent',
+                    color: modoImpressao === 'professor' ? '#059669' : '#64748b',
+                    boxShadow: modoImpressao === 'professor' ? '0 1px 2px rgba(0,0,0,0.08)' : 'none'
+                  }}
+                >
+                  Gabarito Oficial
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setModoImpressao('cartao_resposta')}
+                  style={{
+                    padding: '6px 13px',
+                    borderRadius: '7px',
+                    fontSize: '12px',
+                    fontWeight: 800,
+                    cursor: 'pointer',
+                    border: 'none',
+                    background: modoImpressao === 'cartao_resposta' ? '#ffffff' : 'transparent',
+                    color: modoImpressao === 'cartao_resposta' ? '#7e22ce' : '#64748b',
+                    boxShadow: modoImpressao === 'cartao_resposta' ? '0 1px 2px rgba(0,0,0,0.08)' : 'none'
+                  }}
+                >
+                  Cartão-Resposta
+                </button>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => window.print()}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '7px',
+                  height: '36px',
+                  padding: '0 18px',
+                  borderRadius: '10px',
+                  background: '#0284c7',
+                  border: 'none',
+                  color: '#ffffff',
+                  fontSize: '12px',
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                  boxShadow: '0 2px 8px rgba(2, 132, 199, 0.3)'
+                }}
+              >
+                <Printer size={15} />
+                Imprimir / PDF
+              </button>
             </div>
           </div>
 
-          {/* Right: Mode Selector Tabs + Print Button */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-            {/* Mode Pills Segmented Control */}
-            <div style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              background: '#f1f5f9',
-              border: '1px solid #cbd5e1',
-              borderRadius: '12px',
-              padding: '4px',
-              gap: '4px'
-            }}>
-              <button
-                type="button"
-                onClick={() => setModoImpressao('aluno')}
-                style={{
-                  padding: '8px 16px',
-                  borderRadius: '8px',
-                  fontSize: '12px',
-                  fontWeight: 800,
-                  cursor: 'pointer',
-                  border: 'none',
-                  background: modoImpressao === 'aluno' ? '#ffffff' : 'transparent',
-                  color: modoImpressao === 'aluno' ? '#0284c7' : '#64748b',
-                  boxShadow: modoImpressao === 'aluno' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
-                  transition: 'all 0.15s'
-                }}
-              >
-                Caderno do Aluno
-              </button>
-              <button
-                type="button"
-                onClick={() => setModoImpressao('professor')}
-                style={{
-                  padding: '8px 16px',
-                  borderRadius: '8px',
-                  fontSize: '12px',
-                  fontWeight: 800,
-                  cursor: 'pointer',
-                  border: 'none',
-                  background: modoImpressao === 'professor' ? '#ffffff' : 'transparent',
-                  color: modoImpressao === 'professor' ? '#059669' : '#64748b',
-                  boxShadow: modoImpressao === 'professor' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
-                  transition: 'all 0.15s'
-                }}
-              >
-                Gabarito Oficial
-              </button>
-              <button
-                type="button"
-                onClick={() => setModoImpressao('cartao_resposta')}
-                style={{
-                  padding: '8px 16px',
-                  borderRadius: '8px',
-                  fontSize: '12px',
-                  fontWeight: 800,
-                  cursor: 'pointer',
-                  border: 'none',
-                  background: modoImpressao === 'cartao_resposta' ? '#ffffff' : 'transparent',
-                  color: modoImpressao === 'cartao_resposta' ? '#7e22ce' : '#64748b',
-                  boxShadow: modoImpressao === 'cartao_resposta' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
-                  transition: 'all 0.15s'
-                }}
-              >
-                Cartão-Resposta
-              </button>
+          {/* Row 2: A4 Framing, Margins, Columns, Font & Image Controls */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+            flexWrap: 'wrap',
+            paddingTop: '8px',
+            borderTop: '1px solid #f1f5f9',
+            fontSize: '11px'
+          }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontWeight: 800, color: '#334155', textTransform: 'uppercase' }}>
+              <SlidersHorizontal size={13} color="#0284c7" />
+              Enquadramento A4:
+            </span>
+
+            {/* Margens */}
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', background: '#f8fafc', padding: '3px 8px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+              <span style={{ color: '#64748b', fontWeight: 700 }}>Margens:</span>
+              {(['estreita', 'padrao', 'ampla'] as const).map(m => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => setMargemPreset(m)}
+                  style={{
+                    padding: '2px 7px',
+                    borderRadius: '5px',
+                    border: 'none',
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    background: margemPreset === m ? '#0284c7' : 'transparent',
+                    color: margemPreset === m ? '#ffffff' : '#475569'
+                  }}
+                >
+                  {m === 'estreita' ? 'Estreita' : m === 'padrao' ? 'Padrão' : 'Ampla'}
+                </button>
+              ))}
             </div>
 
-            {/* Print Trigger Button */}
+            {/* Colunas */}
+            {modoImpressao !== 'cartao_resposta' && (
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', background: '#f8fafc', padding: '3px 8px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                <Columns size={12} color="#64748b" />
+                <span style={{ color: '#64748b', fontWeight: 700 }}>Colunas:</span>
+                {([1, 2] as const).map(c => (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => setColunas(c)}
+                    style={{
+                      padding: '2px 7px',
+                      borderRadius: '5px',
+                      border: 'none',
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      background: colunas === c ? '#0284c7' : 'transparent',
+                      color: colunas === c ? '#ffffff' : '#475569'
+                    }}
+                  >
+                    {c === 1 ? '1 Coluna' : '2 Colunas'}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Tamanho da Fonte */}
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', background: '#f8fafc', padding: '3px 8px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+              <Type size={12} color="#64748b" />
+              <span style={{ color: '#64748b', fontWeight: 700 }}>Fonte:</span>
+              {([
+                { val: 11 as const, label: 'Compacta' },
+                { val: 13 as const, label: 'Normal' },
+                { val: 15 as const, label: 'Ampliada' },
+              ]).map(f => (
+                <button
+                  key={f.val}
+                  type="button"
+                  onClick={() => setTamanhoFonte(f.val)}
+                  style={{
+                    padding: '2px 7px',
+                    borderRadius: '5px',
+                    border: 'none',
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    background: tamanhoFonte === f.val ? '#0284c7' : 'transparent',
+                    color: tamanhoFonte === f.val ? '#ffffff' : '#475569'
+                  }}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Limite de Imagem */}
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', background: '#f8fafc', padding: '3px 8px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+              <ImageIcon size={12} color="#64748b" />
+              <span style={{ color: '#64748b', fontWeight: 700 }}>Figuras:</span>
+              {([
+                { val: 150 as const, label: 'P' },
+                { val: 250 as const, label: 'M' },
+                { val: 380 as const, label: 'G' },
+                { val: 900 as const, label: '100%' },
+              ]).map(im => (
+                <button
+                  key={im.val}
+                  type="button"
+                  onClick={() => setLimiteAlturaImagem(im.val)}
+                  style={{
+                    padding: '2px 6px',
+                    borderRadius: '5px',
+                    border: 'none',
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    background: limiteAlturaImagem === im.val ? '#0284c7' : 'transparent',
+                    color: limiteAlturaImagem === im.val ? '#ffffff' : '#475569'
+                  }}
+                >
+                  {im.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Linhas Dissertativas */}
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', background: '#f8fafc', padding: '3px 8px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+              <span style={{ color: '#64748b', fontWeight: 700 }}>Linhas Dissert.:</span>
+              {([4, 6, 10, 14] as const).map(ln => (
+                <button
+                  key={ln}
+                  type="button"
+                  onClick={() => setLinhasDissertativa(ln)}
+                  style={{
+                    padding: '2px 6px',
+                    borderRadius: '5px',
+                    border: 'none',
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    background: linhasDissertativa === ln ? '#0284c7' : 'transparent',
+                    color: linhasDissertativa === ln ? '#ffffff' : '#475569'
+                  }}
+                >
+                  {ln}
+                </button>
+              ))}
+            </div>
+
+            {/* Guias de Margem A4 */}
             <button
               type="button"
-              onClick={() => window.print()}
+              onClick={() => setMostrarGuiasMargem(prev => !prev)}
               style={{
+                marginLeft: 'auto',
+                padding: '4px 10px',
+                borderRadius: '8px',
+                border: mostrarGuiasMargem ? '1px solid #fb923c' : '1px solid #e2e8f0',
+                background: mostrarGuiasMargem ? '#fff7ed' : '#f8fafc',
+                color: mostrarGuiasMargem ? '#c2410c' : '#475569',
+                fontSize: '11px',
+                fontWeight: 700,
+                cursor: 'pointer',
                 display: 'inline-flex',
                 alignItems: 'center',
-                gap: '8px',
-                height: '38px',
-                padding: '0 20px',
-                borderRadius: '10px',
-                background: '#0284c7',
-                border: 'none',
-                color: '#ffffff',
-                fontSize: '13px',
-                fontWeight: 800,
-                cursor: 'pointer',
-                boxShadow: '0 2px 8px rgba(2, 132, 199, 0.3)',
-                transition: 'all 0.15s'
+                gap: '5px'
               }}
             >
-              <Printer size={16} />
-              Imprimir / Salvar PDF
+              <Maximize2 size={11} />
+              {mostrarGuiasMargem ? 'Ocultar Guias A4' : 'Ver Guias de Margem'}
             </button>
           </div>
         </div>
@@ -287,14 +505,43 @@ export default function ImprimirProvaPage() {
         style={{
           maxWidth: '860px',
           margin: '24px auto',
-          padding: '40px',
+          padding: marginConfig.screenPad,
           background: '#ffffff',
-          borderRadius: '20px',
+          borderRadius: '16px',
           border: '1px solid #cbd5e1',
-          boxShadow: '0 4px 20px rgba(0, 0, 0, 0.05)'
+          boxShadow: '0 8px 30px rgba(15, 23, 42, 0.08)',
+          position: 'relative'
         }}
-        className="print:border-none print:shadow-none print:m-0 print:p-0"
+        className="printable-a4-sheet print:border-none print:shadow-none print:m-0 print:p-0"
       >
+        {mostrarGuiasMargem && (
+          <div
+            className="no-print"
+            style={{
+              position: 'absolute',
+              inset: marginConfig.screenPad,
+              border: '1.5px dashed rgba(234, 88, 12, 0.55)',
+              pointerEvents: 'none',
+              zIndex: 20,
+              borderRadius: '4px'
+            }}
+          >
+            <span style={{
+              position: 'absolute',
+              top: '-18px',
+              right: '8px',
+              fontSize: '10px',
+              fontWeight: 800,
+              color: '#ea580c',
+              background: '#fff7ed',
+              padding: '1px 6px',
+              borderRadius: '4px',
+              border: '1px solid #fed7aa'
+            }}>
+              Área Útil de Impressão A4 • Margem {marginConfig.label}
+            </span>
+          </div>
+        )}
         {/* ── CABEÇALHO ESCOLAR OFICIAL ── */}
         <div style={{
           border: '2px solid #0f172a',
@@ -447,23 +694,41 @@ export default function ImprimirProvaPage() {
 
         {/* ── MODO 1 & 2: CADERNO DE QUESTÕES (ALUNO OU GABARITO PROFESSOR) ── */}
         {modoImpressao !== 'cartao_resposta' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          <div
+            style={
+              colunas === 2
+                ? {
+                    columnCount: 2,
+                    columnGap: '20px',
+                    columnRule: '1px solid #e2e8f0'
+                  }
+                : {
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '18px'
+                  }
+            }
+          >
             {questoes.map((q: any, idx: number) => {
               const valor = q.valorPontos || q.pontuacao || 1.0
               const isObjSingle = q.tipo === 'multipla_escolha' || q.tipo === 'unica_escolha'
               const isObjMulti = q.tipo === 'multipla_selecao'
               const isVF = q.tipo === 'verdadeiro_falso'
               const isDissertativa = q.tipo === 'dissertativa'
+              const vfItems = q.itensVF || q.itensVouF || []
+              const explicacaoTexto = q.explicacaoResposta || q.explicacao
 
               return (
                 <div
                   key={q.id || idx}
                   style={{
                     border: '1px solid #cbd5e1',
-                    borderRadius: '16px',
-                    padding: '20px',
+                    borderRadius: '14px',
+                    padding: colunas === 2 ? '14px' : '18px',
                     background: '#ffffff',
-                    pageBreakInside: 'avoid'
+                    pageBreakInside: 'avoid',
+                    breakInside: 'avoid',
+                    marginBottom: colunas === 2 ? '16px' : '0'
                   }}
                 >
                   {/* Questão Header */}
@@ -477,13 +742,13 @@ export default function ImprimirProvaPage() {
                   }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                       <span style={{
-                        width: '28px',
-                        height: '28px',
-                        borderRadius: '8px',
+                        width: '26px',
+                        height: '26px',
+                        borderRadius: '7px',
                         background: '#0f172a',
                         color: '#ffffff',
                         fontWeight: 900,
-                        fontSize: '13px',
+                        fontSize: '12px',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
@@ -491,7 +756,7 @@ export default function ImprimirProvaPage() {
                       }}>
                         {idx + 1}
                       </span>
-                      <span style={{ fontSize: '12px', fontWeight: 800, color: '#334155', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                      <span style={{ fontSize: '11px', fontWeight: 800, color: '#334155', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                         {isObjSingle && 'Múltipla Escolha'}
                         {isObjMulti && 'Múltipla Seleção'}
                         {isVF && 'Verdadeiro ou Falso'}
@@ -500,25 +765,25 @@ export default function ImprimirProvaPage() {
                     </div>
 
                     <div style={{
-                      fontSize: '12px',
+                      fontSize: '11px',
                       fontFamily: 'monospace',
                       fontWeight: 700,
                       color: '#0f172a',
                       background: '#f1f5f9',
-                      padding: '3px 10px',
-                      borderRadius: '8px',
+                      padding: '2px 9px',
+                      borderRadius: '7px',
                       border: '1px solid #e2e8f0'
                     }}>
-                      {valor.toFixed(1)} {valor === 1 ? 'ponto' : 'pontos'}
+                      {valor.toFixed(1)} {valor === 1 ? 'pt' : 'pts'}
                     </div>
                   </div>
 
                   {/* Enunciado */}
                   <div style={{
-                    fontSize: '13px',
+                    fontSize: `${tamanhoFonte}px`,
                     color: '#0f172a',
-                    lineHeight: 1.6,
-                    marginBottom: '16px',
+                    lineHeight: 1.55,
+                    marginBottom: '14px',
                     fontWeight: 500
                   }}>
                     <HtmlContent html={cleanQuestionStatementHtml(q.enunciado)} />
@@ -526,7 +791,7 @@ export default function ImprimirProvaPage() {
 
                   {/* Alternativas (Objetivas) */}
                   {(isObjSingle || isObjMulti) && q.alternativas && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '12px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '7px', marginBottom: '10px' }}>
                       {q.alternativas.map((alt: any, altIdx: number) => {
                         const letter = alt.letra || String.fromCharCode(65 + altIdx)
                         const isCorrect = alt.correta || q.gabaritoOficial === alt.id
@@ -537,8 +802,8 @@ export default function ImprimirProvaPage() {
                             style={{
                               display: 'flex',
                               alignItems: 'flex-start',
-                              gap: '12px',
-                              padding: '10px 14px',
+                              gap: '10px',
+                              padding: '8px 12px',
                               borderRadius: '10px',
                               border: modoImpressao === 'professor' && isCorrect
                                 ? '1.5px solid #86efac'
@@ -546,13 +811,13 @@ export default function ImprimirProvaPage() {
                               background: modoImpressao === 'professor' && isCorrect
                                 ? '#f0fdf4'
                                 : '#f8fafc',
-                              fontSize: '13px',
+                              fontSize: `${tamanhoFonte}px`,
                               color: '#0f172a'
                             }}
                           >
                             <span style={{
-                              width: '26px',
-                              height: '26px',
+                              width: '24px',
+                              height: '24px',
                               borderRadius: '50%',
                               border: modoImpressao === 'professor' && isCorrect
                                 ? '1.5px solid #059669'
@@ -568,17 +833,17 @@ export default function ImprimirProvaPage() {
                               justifyContent: 'center',
                               fontFamily: 'monospace',
                               fontWeight: 800,
-                              fontSize: '12px',
+                              fontSize: '11px',
                               flexShrink: 0
                             }}>
                               {letter}
                             </span>
-                            <div style={{ paddingTop: '3px', flex: 1, minWidth: 0, wordBreak: 'break-word', lineHeight: 1.5 }}>
+                            <div style={{ paddingTop: '2px', flex: 1, minWidth: 0, wordBreak: 'break-word', lineHeight: 1.5 }}>
                               <HtmlContent html={cleanAlternativeText(alt.texto)} />
                               {modoImpressao === 'professor' && isCorrect && (
                                 <span style={{
                                   marginLeft: '8px',
-                                  fontSize: '11px',
+                                  fontSize: '10px',
                                   fontWeight: 800,
                                   color: '#059669',
                                   textTransform: 'uppercase'
@@ -594,10 +859,11 @@ export default function ImprimirProvaPage() {
                   )}
 
                   {/* Verdadeiro ou Falso */}
-                  {isVF && q.itensVouF && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '12px' }}>
-                      {q.itensVouF.map((item: any, itIdx: number) => {
+                  {isVF && vfItems.length > 0 && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '7px', marginBottom: '10px' }}>
+                      {vfItems.map((item: any, itIdx: number) => {
                         const correctVal = item.respostaCorreta ?? item.correta
+                        const statementHtml = item.afirmacao || item.texto || ''
                         return (
                           <div
                             key={item.id || itIdx}
@@ -605,18 +871,21 @@ export default function ImprimirProvaPage() {
                               display: 'flex',
                               alignItems: 'center',
                               justifyContent: 'space-between',
-                              padding: '10px 14px',
+                              padding: '8px 12px',
                               borderRadius: '10px',
                               border: '1px solid #e2e8f0',
                               background: '#f8fafc',
-                              fontSize: '13px'
+                              fontSize: `${tamanhoFonte}px`,
+                              gap: '10px'
                             }}
                           >
-                            <span style={{ color: '#0f172a', paddingRight: '12px' }}>{item.texto}</span>
-                            <div style={{ fontFamily: 'monospace', fontWeight: 800, fontSize: '12px', flexShrink: 0 }}>
+                            <div style={{ color: '#0f172a', flex: 1, minWidth: 0 }}>
+                              <HtmlContent html={statementHtml} />
+                            </div>
+                            <div style={{ fontFamily: 'monospace', fontWeight: 800, fontSize: '11px', flexShrink: 0 }}>
                               {modoImpressao === 'professor' ? (
                                 <span style={{
-                                  padding: '4px 10px',
+                                  padding: '3px 9px',
                                   borderRadius: '6px',
                                   background: '#ecfdf5',
                                   color: '#065f46',
@@ -625,12 +894,12 @@ export default function ImprimirProvaPage() {
                                   Gabarito: {correctVal ? 'VERDADEIRO' : 'FALSO'}
                                 </span>
                               ) : (
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                                   <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#475569' }}>
-                                    <span style={{ width: '16px', height: '16px', borderRadius: '50%', border: '2px solid #64748b', display: 'inline-block' }} /> (V)
+                                    <span style={{ width: '15px', height: '15px', borderRadius: '50%', border: '1.5px solid #64748b', display: 'inline-block' }} /> (V)
                                   </span>
                                   <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#475569' }}>
-                                    <span style={{ width: '16px', height: '16px', borderRadius: '50%', border: '2px solid #64748b', display: 'inline-block' }} /> (F)
+                                    <span style={{ width: '15px', height: '15px', borderRadius: '50%', border: '1.5px solid #64748b', display: 'inline-block' }} /> (F)
                                   </span>
                                 </div>
                               )}
@@ -643,22 +912,22 @@ export default function ImprimirProvaPage() {
 
                   {/* Dissertativa: Pauta para resposta ou espelho de correção */}
                   {isDissertativa && (
-                    <div style={{ marginTop: '12px' }}>
+                    <div style={{ marginTop: '10px' }}>
                       {modoImpressao === 'aluno' ? (
                         <div>
-                          <span style={{ fontSize: '11px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', display: 'block', marginBottom: '8px' }}>
+                          <span style={{ fontSize: '10px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', display: 'block', marginBottom: '6px' }}>
                             Espaço para Resposta do Estudante:
                           </span>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '18px', padding: '8px 0' }}>
-                            {[1, 2, 3, 4, 5, 6].map(line => (
-                              <div key={line} style={{ borderBottom: '1px dashed #cbd5e1', height: '14px' }} />
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', padding: '6px 0' }}>
+                            {Array.from({ length: linhasDissertativa }).map((_, lineIdx) => (
+                              <div key={lineIdx} style={{ borderBottom: '1px dashed #94a3b8', height: '14px' }} />
                             ))}
                           </div>
                         </div>
                       ) : (
                         <div style={{
-                          padding: '14px',
-                          borderRadius: '12px',
+                          padding: '12px',
+                          borderRadius: '10px',
                           background: '#f0fdf4',
                           border: '1px solid #bbf7d0',
                           fontSize: '12px',
@@ -667,10 +936,10 @@ export default function ImprimirProvaPage() {
                           gap: '8px'
                         }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 800, color: '#065f46' }}>
-                            <CheckCircle2 size={16} color="#059669" />
+                            <CheckCircle2 size={15} color="#059669" />
                             <span>Espelho de Correção / Resposta Esperada da Banca:</span>
                           </div>
-                          <p style={{ margin: 0, color: '#334155', lineHeight: 1.6 }}>
+                          <p style={{ margin: 0, color: '#334155', lineHeight: 1.55 }}>
                             {q.respostaEsperada || q.gabaritoOficial || 'Critério de pontuação atribuído pelo professor conforme argumentação, coerência e domínio do conteúdo.'}
                           </p>
                           {q.criteriosAvaliacao && q.criteriosAvaliacao.length > 0 && (
@@ -691,18 +960,18 @@ export default function ImprimirProvaPage() {
                   )}
 
                   {/* Justificativa Pedagógica no modo Professor */}
-                  {modoImpressao === 'professor' && q.explicacao && (
+                  {modoImpressao === 'professor' && explicacaoTexto && (
                     <div style={{
-                      marginTop: '12px',
-                      padding: '12px',
+                      marginTop: '10px',
+                      padding: '10px 12px',
                       borderRadius: '10px',
                       background: '#f0f9ff',
                       border: '1px solid #bae6fd',
-                      fontSize: '12px',
+                      fontSize: '11px',
                       color: '#0369a1'
                     }}>
                       <strong>Comentário Pedagógico / Resolução: </strong>
-                      {q.explicacao}
+                      {explicacaoTexto}
                     </div>
                   )}
                 </div>

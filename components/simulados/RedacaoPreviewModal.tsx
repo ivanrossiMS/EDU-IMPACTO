@@ -43,6 +43,12 @@ export function RedacaoPreviewModal({ questoes, setQuestoes, prova, config, onCl
   const [enunciadoFontSize, setEnunciadoFontSize] = useState<number>(prova?.config_estudio?.config_fonte_enunciado || 14)
   const [alternativasFontSize, setAlternativasFontSize] = useState<number>(prova?.config_estudio?.config_fonte_alternativa || 12)
   const [alternativasLayout, setAlternativasLayout] = useState<'vertical' | 'horizontal'>(prova?.config_estudio?.config_layout_alternativas || 'vertical')
+  const [lineHeight, setLineHeight] = useState<number>(prova?.config_estudio?.config_line_height || 1.5)
+  const [questionSpacing, setQuestionSpacing] = useState<number>(prova?.config_estudio?.config_question_spacing ?? 28)
+  const [textAlign, setTextAlign] = useState<'justify' | 'left'>(prova?.config_estudio?.config_text_align || 'justify')
+  const [cleanPreviewMode, setCleanPreviewMode] = useState<boolean>(false)
+  const [zoom, setZoom] = useState<number>(100)
+  const [pagesCount, setPagesCount] = useState<number>(1)
   const ensureStableIds = (qs: any[], existing?: any[]) => {
     const existingMap = new Map((existing || []).map((q: any) => [q.id || q._internalId || q.numero, q]));
     return (qs || []).map((q, qIdx) => {
@@ -240,7 +246,7 @@ export function RedacaoPreviewModal({ questoes, setQuestoes, prova, config, onCl
     }
   }, [itemId, JSON.stringify((prova as any)?.config_estudio?.header_layout), config?.redacao_enem_header_layout])
   const [isEditHeaderMode, setIsEditHeaderMode] = useState(false)
-  const [showMargins, setShowMargins] = useState(true)
+  const [showMargins, setShowMargins] = useState(false)
   const [leftMarginOffset, setLeftMarginOffset] = useState<number>(() => {
     if ((prova as any)?.config_estudio?.config_margin_left !== undefined) return (prova as any).config_estudio.config_margin_left
     const savedMargins = readFromLocalStorage('simulador_margins')
@@ -828,13 +834,75 @@ export function RedacaoPreviewModal({ questoes, setQuestoes, prova, config, onCl
       )}
 
       {/* Área Central (Canvas / Papel) */}
-      <div className="canvas-layout" style={{ flex: 1, overflowY: 'auto', padding: '40px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+      <div className="canvas-layout" style={{ flex: 1, overflowY: 'auto', padding: '0 32px 48px 32px', display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative' }}>
+        <div
+          className="no-print"
+          style={{
+            position: 'sticky',
+            top: 14,
+            zIndex: 80,
+            marginBottom: 20,
+            marginTop: 14,
+            background: 'rgba(255, 255, 255, 0.92)',
+            backdropFilter: 'blur(12px)',
+            border: '1px solid rgba(203, 213, 225, 0.85)',
+            borderRadius: 14,
+            padding: '7px 14px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            boxShadow: '0 8px 24px rgba(15, 23, 42, 0.08)',
+            flexWrap: 'wrap'
+          }}
+        >
+          <span style={{ fontSize: 12, fontWeight: 800, color: '#0f172a', background: '#f1f5f9', padding: '4px 10px', borderRadius: 8 }}>
+            📄 {pagesCount} {pagesCount === 1 ? 'pág.' : 'págs.'}
+          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <button type="button" onClick={() => setZoom(z => Math.max(70, z - 10))} style={{ width: 26, height: 26, borderRadius: 6, border: '1px solid #e2e8f0', background: 'white', color: '#334155', fontWeight: 800, cursor: 'pointer', fontSize: 13 }}>-</button>
+            <button type="button" onClick={() => setZoom(100)} style={{ padding: '4px 8px', borderRadius: 6, border: 'none', background: 'transparent', color: '#334155', fontWeight: 700, cursor: 'pointer', fontSize: 12, minWidth: 46 }}>{zoom}%</button>
+            <button type="button" onClick={() => setZoom(z => Math.min(130, z + 10))} style={{ width: 26, height: 26, borderRadius: 6, border: '1px solid #e2e8f0', background: 'white', color: '#334155', fontWeight: 800, cursor: 'pointer', fontSize: 13 }}>+</button>
+          </div>
+          <button
+            type="button"
+            onClick={() => setCleanPreviewMode(!cleanPreviewMode)}
+            style={{
+              padding: '5px 10px', borderRadius: 8,
+              border: `1px solid ${cleanPreviewMode ? '#10b981' : '#e2e8f0'}`,
+              background: cleanPreviewMode ? 'rgba(16, 185, 129, 0.12)' : 'white',
+              color: cleanPreviewMode ? '#047857' : '#475569',
+              fontSize: 12, fontWeight: 700, cursor: 'pointer'
+            }}
+          >
+            {cleanPreviewMode ? '👁️ Modo Limpo (Ativo)' : '👁️ Modo Limpo'}
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowMargins(!showMargins)}
+            style={{
+              padding: '5px 10px', borderRadius: 8,
+              border: `1px solid ${showMargins ? '#93c5fd' : '#e2e8f0'}`,
+              background: showMargins ? '#eff6ff' : 'white',
+              color: showMargins ? '#1d4ed8' : '#64748b',
+              fontSize: 12, fontWeight: 700, cursor: 'pointer'
+            }}
+          >
+            {showMargins ? '📐 Margens: Visíveis' : '📐 Margens'}
+          </button>
+        </div>
+
         <div className="print-wrapper" style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           <PaginationEngine
             questoes={selectedQuestoes}
             columns={columns}
             enunciadoFontSize={enunciadoFontSize}
             alternativasFontSize={alternativasFontSize}
+            lineHeight={lineHeight}
+            questionSpacing={questionSpacing}
+            textAlign={textAlign}
+            cleanPreviewMode={cleanPreviewMode}
+            zoom={zoom}
+            onPagesCountChange={setPagesCount}
             config={config}
             simulado={redacaoSimulado}
             alternativasLayout={alternativasLayout}

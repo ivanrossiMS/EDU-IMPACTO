@@ -19,6 +19,10 @@ export default function ImprimirSimuladoPage() {
   const [fontSize, setFontSize] = useState<number>(14) // base font size in px (default 14pt)
   const [columns, setColumns] = useState<number>(1) // Layout de colunas
   const [config, setConfig] = useState<any>(null)
+  const [showMargins, setShowMargins] = useState<boolean>(false)
+  const [cleanPreviewMode, setCleanPreviewMode] = useState<boolean>(false)
+  const [zoom, setZoom] = useState<number>(100)
+  const [pagesCount, setPagesCount] = useState<number>(1)
 
   useEffect(() => {
     async function loadData() {
@@ -325,13 +329,73 @@ export default function ImprimirSimuladoPage() {
       </div>
 
       {/* Área Central (Canvas / Papel) */}
-      <div className="canvas-layout" style={{ flex: 1, overflowY: 'auto', padding: '40px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+      <div className="canvas-layout" style={{ flex: 1, overflowY: 'auto', padding: '0 32px 48px 32px', display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative' }}>
+        <div
+          className="no-print"
+          style={{
+            position: 'sticky',
+            top: 14,
+            zIndex: 80,
+            marginBottom: 20,
+            marginTop: 14,
+            background: 'rgba(255, 255, 255, 0.92)',
+            backdropFilter: 'blur(12px)',
+            border: '1px solid rgba(203, 213, 225, 0.85)',
+            borderRadius: 14,
+            padding: '7px 14px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            boxShadow: '0 8px 24px rgba(15, 23, 42, 0.08)',
+            flexWrap: 'wrap'
+          }}
+        >
+          <span style={{ fontSize: 12, fontWeight: 800, color: '#0f172a', background: '#f1f5f9', padding: '4px 10px', borderRadius: 8 }}>
+            📄 {pagesCount} {pagesCount === 1 ? 'pág.' : 'págs.'}
+          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <button type="button" onClick={() => setZoom(z => Math.max(70, z - 10))} style={{ width: 26, height: 26, borderRadius: 6, border: '1px solid #e2e8f0', background: 'white', color: '#334155', fontWeight: 800, cursor: 'pointer', fontSize: 13 }}>-</button>
+            <button type="button" onClick={() => setZoom(100)} style={{ padding: '4px 8px', borderRadius: 6, border: 'none', background: 'transparent', color: '#334155', fontWeight: 700, cursor: 'pointer', fontSize: 12, minWidth: 46 }}>{zoom}%</button>
+            <button type="button" onClick={() => setZoom(z => Math.min(130, z + 10))} style={{ width: 26, height: 26, borderRadius: 6, border: '1px solid #e2e8f0', background: 'white', color: '#334155', fontWeight: 800, cursor: 'pointer', fontSize: 13 }}>+</button>
+          </div>
+          <button
+            type="button"
+            onClick={() => setCleanPreviewMode(!cleanPreviewMode)}
+            style={{
+              padding: '5px 10px', borderRadius: 8,
+              border: `1px solid ${cleanPreviewMode ? '#10b981' : '#e2e8f0'}`,
+              background: cleanPreviewMode ? 'rgba(16, 185, 129, 0.12)' : 'white',
+              color: cleanPreviewMode ? '#047857' : '#475569',
+              fontSize: 12, fontWeight: 700, cursor: 'pointer'
+            }}
+          >
+            {cleanPreviewMode ? '👁️ Modo Limpo (Ativo)' : '👁️ Modo Limpo'}
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowMargins(!showMargins)}
+            style={{
+              padding: '5px 10px', borderRadius: 8,
+              border: `1px solid ${showMargins ? '#93c5fd' : '#e2e8f0'}`,
+              background: showMargins ? '#eff6ff' : 'white',
+              color: showMargins ? '#1d4ed8' : '#64748b',
+              fontSize: 12, fontWeight: 700, cursor: 'pointer'
+            }}
+          >
+            {showMargins ? '📐 Margens: Visíveis' : '📐 Margens'}
+          </button>
+        </div>
+
         <div className="print-wrapper" style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           <PaginationEngine 
             questoes={questoes.filter(q => selectedIds.has(q.id))}
             columns={columns}
             enunciadoFontSize={fontSize}
             alternativasFontSize={fontSize}
+            showMargins={showMargins}
+            cleanPreviewMode={cleanPreviewMode}
+            zoom={zoom}
+            onPagesCountChange={setPagesCount}
             config={config}
             simulado={simulado}
             onEditEnunciado={handleEditEnunciado}

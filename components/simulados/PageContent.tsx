@@ -34,7 +34,11 @@ export function PageContent({
   onPageMarginChange,
   readOnly = false,
   totalPages = 0,
-  adicionarPaginaRedacao = false
+  adicionarPaginaRedacao = false,
+  lineHeight = 1.5,
+  textAlign = 'justify',
+  showGabarito = true,
+  cleanPreviewMode = false
 }: any) {
   const effectiveTop = pageMargin?.top ?? topMarginOffset ?? -10;
   const effectiveBottom = pageMargin?.bottom ?? bottomMarginOffset ?? -90;
@@ -52,6 +56,45 @@ export function PageContent({
   const [linesType, setLinesType] = useState<'pautado' | 'branco'>('pautado');
   const [linesModalOpen, setLinesModalOpen] = useState<{qId: string, parts: any[], defaultCount: number, q: any} | null>(null);
   const [reorderMenuOpen, setReorderMenuOpen] = useState<string | null>(null);
+  const [coverImgFailed, setCoverImgFailed] = useState(false);
+  const [internalImgFailed, setInternalImgFailed] = useState(false);
+
+  const coverBgUrl = simulado?.isRedacao
+    ? config?.redacao_enem_modelo_pdf_url
+    : (simulado?.isProva ? config?.provas_modelo_pdf_url : config?.modelo_pdf_url);
+
+  const internalBgUrl = isLastRedacaoPage
+    ? config?.redacao_enem_modelo_pdf_outras_paginas_url
+    : (simulado?.isRedacao
+        ? config?.redacao_enem_modelo_pdf_outras_paginas_url
+        : (simulado?.isProva ? config?.provas_modelo_pdf_outras_paginas_url : config?.modelo_pdf_outras_paginas_url));
+
+  useEffect(() => {
+    setCoverImgFailed(false);
+  }, [coverBgUrl]);
+
+  useEffect(() => {
+    setInternalImgFailed(false);
+  }, [internalBgUrl]);
+
+  useEffect(() => {
+    if (!mainImgMenuOpen && !imgMenuOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (target?.closest?.('.floating-menu-dropdown') || target?.closest?.('.floating-menu-trigger')) {
+        return;
+      }
+      setMainImgMenuOpen(null);
+      setImgMenuOpen(null);
+    };
+    const timer = setTimeout(() => {
+      window.addEventListener('pointerdown', handleClickOutside);
+    }, 0);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('pointerdown', handleClickOutside);
+    };
+  }, [mainImgMenuOpen, imgMenuOpen]);
 
   useEffect(() => {
     if (!reorderMenuOpen) return;
@@ -280,6 +323,459 @@ export function PageContent({
       input.click();
     }
   };
+
+  const renderQuestionHoverToolbar = (q: any, qNumLabel?: number | null) => {
+    if (readOnly || cleanPreviewMode) return null;
+    const isAddMenuOpen = mainImgMenuOpen === `${q.id}-add`;
+    const metaAltCols = (() => {
+      const m = (q.enunciado || '').match(/<meta name="alt-cols" content="(\d+)">/i);
+      return m ? parseInt(m[1]) : 1;
+    })();
+    const metaRegex = /(<meta[^>]+>)/ig;
+    const setAltCols = (n: number) => {
+      if (!onEditEnunciado) return;
+      const currentMeta = (q.enunciado || '').match(metaRegex) || [];
+      const otherMetas = currentMeta.filter((mt: string) => !mt.includes('alt-cols'));
+      const newMetaTag = n > 1 ? `<meta name="alt-cols" content="${n}">` : '';
+      const strippedEnun = (q.enunciado || '').replace(metaRegex, '').trim();
+      const allMetas = [...otherMetas, ...(newMetaTag ? [newMetaTag] : [])];
+      const newEnun = allMetas.length > 0 ? allMetas.join('\n') + '\n' + strippedEnun : strippedEnun;
+      onEditEnunciado(q.id, newEnun);
+      forceRepaginate?.();
+    };
+
+    const showAltColsToggle =
+      q.tipo_questao !== 'descritiva' &&
+      q.tipo_questao !== 'texto_apoio' &&
+      q.simulados_alternativas?.length > 0 &&
+      Boolean(onEditEnunciado);
+
+    return (
+      <div
+        className={`no-print questao-floating-toolbar ${isAddMenuOpen ? 'is-open' : ''}`}
+        style={{
+          position: 'absolute',
+          top: -16,
+          right: 0,
+          zIndex: 40,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 5,
+          background: 'rgba(15, 23, 42, 0.94)',
+          backdropFilter: 'blur(8px)',
+          padding: '3px 8px',
+          borderRadius: 999,
+          boxShadow: '0 6px 18px rgba(15, 23, 42, 0.22)',
+          border: '1px solid rgba(255, 255, 255, 0.14)',
+        }}
+      >
+        <span style={{ fontSize: 10, fontWeight: 800, color: '#94a3b8', padding: '0 4px', letterSpacing: '0.03em', whiteSpace: 'nowrap' }}>
+          {q.tipo_questao === 'texto_apoio' ? 'Texto de Apoio' : `Q${qNumLabel ?? ''}`}
+        </span>
+        <div style={{ width: 1, height: 12, background: 'rgba(255,255,255,0.18)' }} />
+
+        {showAltColsToggle && (
+          <>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 2 }} title="Colunas das alternativas nesta questão">
+              {[1, 2, 3].map((n) => {
+                const isActive = metaAltCols === n;
+                return (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setAltCols(n);
+                    }}
+                    style={{
+                      padding: '2px 6px',
+                      height: 20,
+                      borderRadius: 999,
+                      border: 'none',
+                      background: isActive ? '#3b82f6' : 'transparent',
+                      color: isActive ? '#ffffff' : '#cbd5e1',
+                      fontSize: 10,
+                      fontWeight: 800,
+                      cursor: 'pointer',
+                      transition: 'all 0.15s',
+                    }}
+                    title={`Alternativas em ${n} coluna(s)`}
+                  >
+                    {n}col
+                  </button>
+                );
+              })}
+            </div>
+            <div style={{ width: 1, height: 12, background: 'rgba(255,255,255,0.18)' }} />
+          </>
+        )}
+
+        <div style={{ position: 'relative' }}>
+          <button
+            type="button"
+            className="floating-menu-trigger"
+            onClick={(e) => {
+              e.stopPropagation();
+              setMainImgMenuOpen(isAddMenuOpen ? null : `${q.id}-add`);
+            }}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 4,
+              padding: '2px 7px',
+              height: 20,
+              borderRadius: 999,
+              border: 'none',
+              background: isAddMenuOpen ? '#3b82f6' : 'rgba(255,255,255,0.1)',
+              color: '#f8fafc',
+              fontSize: 10,
+              fontWeight: 700,
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+            }}
+            title="Inserir imagem no enunciado"
+          >
+            <ImageIcon size={11} /> + Figura
+          </button>
+          {isAddMenuOpen && (
+            <div
+              className="floating-menu-dropdown"
+              style={{
+                position: 'absolute',
+                top: '100%',
+                right: 0,
+                zIndex: 9999,
+                marginTop: 6,
+                background: '#ffffff',
+                borderRadius: 10,
+                boxShadow: '0 10px 25px rgba(15,23,42,0.18)',
+                border: '1px solid #e2e8f0',
+                padding: 4,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 2,
+                width: 150,
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => handleMainImageAction(q.id, q.imagens?.length || 0, 'upload', q.enunciado)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '6px 8px',
+                  background: 'transparent',
+                  border: 'none',
+                  fontSize: 12,
+                  color: '#334155',
+                  cursor: 'pointer',
+                  borderRadius: 6,
+                  textAlign: 'left',
+                  fontWeight: 600,
+                }}
+              >
+                <Upload size={13} color="#2563eb" /> Fazer Upload
+              </button>
+              <button
+                type="button"
+                onClick={() => handleMainImageAction(q.id, q.imagens?.length || 0, 'ai', q.enunciado)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '6px 8px',
+                  background: 'transparent',
+                  border: 'none',
+                  fontSize: 12,
+                  color: '#7c3aed',
+                  cursor: 'pointer',
+                  borderRadius: 6,
+                  textAlign: 'left',
+                  fontWeight: 700,
+                }}
+              >
+                <Sparkles size={13} color="#7c3aed" /> Gerar com IA
+              </button>
+            </div>
+          )}
+        </div>
+
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            const parts = parseEnunciadoParts(q.enunciado, q.imagens || []);
+            const hasLines = parts.some((p: any) => p.type === 'lines');
+            if (hasLines) {
+              alert('Esta questão já possui linhas/espaço. Ajuste a quantidade nos botões + e − que aparecem ao passar o mouse sobre as linhas.');
+              return;
+            }
+            setLinesCount(5);
+            setLinesType('pautado');
+            setLinesModalOpen({ qId: q._internalId || q.id, parts, defaultCount: 5, q });
+          }}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 3,
+            padding: '2px 7px',
+            height: 20,
+            borderRadius: 999,
+            border: 'none',
+            background: 'rgba(255,255,255,0.1)',
+            color: '#f8fafc',
+            fontSize: 10,
+            fontWeight: 700,
+            cursor: 'pointer',
+            whiteSpace: 'nowrap',
+          }}
+          title="Adicionar linhas pautadas ou espaço em branco para resposta"
+        >
+          <Plus size={11} /> Linhas
+        </button>
+
+        {onToggleQuestion && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleQuestion(q.id || q._internalId);
+            }}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 20,
+              height: 20,
+              borderRadius: '50%',
+              border: 'none',
+              background: 'rgba(239, 68, 68, 0.2)',
+              color: '#fca5a5',
+              cursor: 'pointer',
+            }}
+            title="Ocultar esta questão da folha"
+          >
+            <Trash2 size={11} />
+          </button>
+        )}
+      </div>
+    );
+  };
+
+  const renderAlternativeRowToolbar = (
+    qId: string,
+    q: any,
+    a: any,
+    altParts: any[],
+    saveAltParts: (newParts: any[]) => void
+  ) => {
+    if (readOnly || cleanPreviewMode) return null;
+    const menuKey = `${qId}-${a.id}`;
+    const isImgOpen = imgMenuOpen === menuKey || imgMenuOpen === a.id;
+    const isReorderOpen = reorderMenuOpen === menuKey;
+    const isOpen = isImgOpen || isReorderOpen;
+
+    return (
+      <div
+        className={`no-print alt-row-toolbar ${isOpen ? 'is-open' : ''}`}
+        style={{
+          position: 'absolute',
+          right: 2,
+          top: -4,
+          zIndex: isOpen ? 90 : 30,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 3,
+          background: 'rgba(255, 255, 255, 0.97)',
+          border: '1px solid #cbd5e1',
+          borderRadius: 999,
+          padding: '2px 5px',
+          boxShadow: '0 4px 12px rgba(15, 23, 42, 0.12)',
+        }}
+      >
+        {onMoveAlternativa && (
+          <button
+            type="button"
+            className="reorder-trigger"
+            onClick={(e) => {
+              e.stopPropagation();
+              setReorderMenuOpen(isReorderOpen ? null : menuKey);
+            }}
+            title={`Mover alternativa ${a.letra} para outra posição`}
+            style={{
+              background: isReorderOpen ? '#2563eb' : '#eff6ff',
+              color: isReorderOpen ? '#ffffff' : '#2563eb',
+              border: 'none',
+              borderRadius: 999,
+              height: 20,
+              padding: '0 6px',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 3,
+              fontSize: 10,
+              fontWeight: 800,
+              cursor: 'pointer',
+            }}
+          >
+            <ArrowUpDown size={10} /> Mover
+          </button>
+        )}
+
+        {onEditAlternativa && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              const hasLines = altParts.some((p: any) => p.type === 'lines');
+              if (hasLines) {
+                alert('Esta alternativa já possui linhas/espaço. Use os botões + e − sobre as linhas para ajustar.');
+                return;
+              }
+              setAltLinesCount(3);
+              setAltLinesType('pautado');
+              setAltLinesModalOpen({ qId, altId: a.id, altParts, q, a });
+            }}
+            title="Adicionar linhas ou espaço nesta alternativa"
+            style={{
+              background: '#f5f3ff',
+              color: '#7c3aed',
+              border: 'none',
+              borderRadius: 999,
+              height: 20,
+              padding: '0 6px',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 2,
+              fontSize: 10,
+              fontWeight: 700,
+              cursor: 'pointer',
+            }}
+          >
+            <Plus size={10} /> Linhas
+          </button>
+        )}
+
+        {onEditAlternativaImage && (
+          <div style={{ position: 'relative' }}>
+            <button
+              type="button"
+              className="floating-menu-trigger"
+              onClick={(e) => {
+                e.stopPropagation();
+                setImgMenuOpen(isImgOpen ? null : menuKey);
+              }}
+              title="Adicionar ou alterar imagem desta alternativa"
+              style={{
+                background: isImgOpen ? '#2563eb' : '#f0f9ff',
+                color: isImgOpen ? '#ffffff' : '#0284c7',
+                border: 'none',
+                borderRadius: 999,
+                width: 20,
+                height: 20,
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+              }}
+            >
+              <ImageIcon size={11} />
+            </button>
+            {isImgOpen && (
+              <div
+                className="floating-menu-dropdown"
+                style={{
+                  position: 'absolute',
+                  top: '100%',
+                  right: 0,
+                  zIndex: 9999,
+                  marginTop: 4,
+                  background: '#ffffff',
+                  borderRadius: 10,
+                  boxShadow: '0 10px 25px rgba(15,23,42,0.18)',
+                  border: '1px solid #e2e8f0',
+                  padding: 4,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 2,
+                  width: 145,
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => handleImageAction(qId, a.id, 'upload', a.texto)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    padding: '6px 8px',
+                    background: 'transparent',
+                    border: 'none',
+                    fontSize: 12,
+                    color: '#334155',
+                    cursor: 'pointer',
+                    borderRadius: 6,
+                    textAlign: 'left',
+                    fontWeight: 600,
+                  }}
+                >
+                  <Upload size={13} color="#2563eb" /> Fazer Upload
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleImageAction(qId, a.id, 'ai', a.texto)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    padding: '6px 8px',
+                    background: 'transparent',
+                    border: 'none',
+                    fontSize: 12,
+                    color: '#7c3aed',
+                    cursor: 'pointer',
+                    borderRadius: 6,
+                    textAlign: 'left',
+                    fontWeight: 700,
+                  }}
+                >
+                  <Sparkles size={13} color="#7c3aed" /> Gerar com IA
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {onRemoveAlternativa && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setReorderMenuOpen(null);
+              onRemoveAlternativa(qId, a.id);
+              forceRepaginate?.();
+            }}
+            title="Remover alternativa"
+            style={{
+              background: '#fee2e2',
+              color: '#ef4444',
+              border: 'none',
+              borderRadius: '50%',
+              width: 20,
+              height: 20,
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+            }}
+          >
+            <X size={11} />
+          </button>
+        )}
+      </div>
+    );
+  };
+
   return (
     <>
       <style>{`
@@ -299,24 +795,84 @@ export function PageContent({
             color: #ffffff !important;
             border-color: #22c55e !important;
           }
-          
-          .alt-hover-group .alt-img-actions {
+          .hide-gabarito-preview .correct-bubble-preview {
+            background-color: transparent !important;
+            color: #475569 !important;
+            border-color: #cbd5e1 !important;
+          }
+
+          .questao-hover-block {
+            border-radius: 6px;
+            transition: background-color 0.15s ease;
+          }
+          .questao-hover-block:hover {
+            background-color: rgba(15, 23, 42, 0.014);
+          }
+          .questao-floating-toolbar {
             opacity: 0;
             pointer-events: none;
-            transition: opacity 0.2s;
+            transform: translateY(2px);
+            transition: opacity 0.16s ease, transform 0.16s ease;
           }
-          .alt-hover-group:hover .alt-img-actions {
+          .questao-hover-block:hover > .questao-floating-toolbar,
+          .questao-floating-toolbar.is-open {
+            opacity: 1;
+            pointer-events: auto;
+            transform: translateY(0);
+          }
+
+          .alt-row-item {
+            border-radius: 6px;
+            transition: background-color 0.14s ease;
+          }
+          .alt-row-item:hover {
+            background-color: rgba(59, 130, 246, 0.045);
+          }
+          .alt-row-toolbar {
+            opacity: 0;
+            pointer-events: none;
+            transform: translateY(2px);
+            transition: opacity 0.15s ease, transform 0.15s ease;
+          }
+          .alt-row-item:hover > .alt-row-toolbar,
+          .alt-row-toolbar.is-open {
+            opacity: 1;
+            pointer-events: auto;
+            transform: translateY(0);
+          }
+
+          .img-hover-wrapper .img-floating-toolbar {
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.18s ease;
+          }
+          .img-hover-wrapper:hover > .img-floating-toolbar,
+          .img-floating-toolbar.is-open {
             opacity: 1;
             pointer-events: auto;
           }
-          .alt-hover-group .alt-lines-btn {
+
+          .lines-hover-wrapper .lines-floating-toolbar {
             opacity: 0;
             pointer-events: none;
-            transition: opacity 0.2s;
+            transition: opacity 0.15s ease;
           }
-          .alt-hover-group:hover .alt-lines-btn {
+          .lines-hover-wrapper:hover > .lines-floating-toolbar {
             opacity: 1;
             pointer-events: auto;
+          }
+
+          .margin-guide-handle .margin-guide-badge {
+            opacity: 0;
+            transition: opacity 0.15s ease;
+          }
+          .margin-guide-handle:hover .margin-guide-badge,
+          .margin-guide-handle:active .margin-guide-badge {
+            opacity: 1;
+          }
+          .margin-guide-handle:hover .margin-guide-line-bar {
+            border-color: #ea580c !important;
+            background: rgba(234, 88, 12, 0.85) !important;
           }
         }
 
@@ -380,7 +936,7 @@ export function PageContent({
             border: none !important;
             cursor: default !important;
           }
-          .field-label-tag, .texto-apoio-badge, .texto-apoio-spacer, .no-print, .reorder-popover {
+          .field-label-tag, .texto-apoio-badge, .texto-apoio-spacer, .no-print, .reorder-popover, .questao-floating-toolbar, .alt-row-toolbar, .img-floating-toolbar, .lines-floating-toolbar {
             display: none !important;
           }
           .reorder-trigger {
@@ -407,18 +963,30 @@ export function PageContent({
           color: #1f2937;
         }
       `}</style>
-      {pIndex === 0 && (simulado?.isRedacao ? config?.redacao_enem_modelo_pdf_url : (simulado?.isProva ? config?.provas_modelo_pdf_url : config?.modelo_pdf_url)) && (
+      {pIndex === 0 && coverBgUrl && !coverImgFailed && (
         <div className="print-cover-image" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', zIndex: 1, pointerEvents: 'none', margin: 0, padding: 0 }}>
-          <img className="cover-bg-img" src={(simulado?.isRedacao ? config?.redacao_enem_modelo_pdf_url : (simulado?.isProva ? config.provas_modelo_pdf_url : config.modelo_pdf_url)) || undefined} alt="Capa" style={{ width: '100%', height: '100%', objectFit: 'fill', margin: 0, padding: 0, display: 'block' }} />
+          <img
+            className="cover-bg-img"
+            src={coverBgUrl || undefined}
+            alt=""
+            onError={() => setCoverImgFailed(true)}
+            style={{ width: '100%', height: '100%', objectFit: 'fill', margin: 0, padding: 0, display: 'block' }}
+          />
         </div>
       )}
-      {pIndex > 0 && (isLastRedacaoPage ? config?.redacao_enem_modelo_pdf_outras_paginas_url : (simulado?.isRedacao ? config?.redacao_enem_modelo_pdf_outras_paginas_url : (simulado?.isProva ? config?.provas_modelo_pdf_outras_paginas_url : config?.modelo_pdf_outras_paginas_url))) && (
+      {pIndex > 0 && internalBgUrl && !internalImgFailed && (
         <div className="print-repeating-bg" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', zIndex: 1, pointerEvents: 'none', margin: 0, padding: 0 }}>
-          <img className="cover-bg-img" src={(isLastRedacaoPage ? config?.redacao_enem_modelo_pdf_outras_paginas_url : (simulado?.isRedacao ? config?.redacao_enem_modelo_pdf_outras_paginas_url : (simulado?.isProva ? config.provas_modelo_pdf_outras_paginas_url : config.modelo_pdf_outras_paginas_url))) || undefined} alt="Fundo Interna" style={{ width: '100%', height: '100%', objectFit: 'fill', margin: 0, padding: 0, display: 'block' }} />
+          <img
+            className="cover-bg-img"
+            src={internalBgUrl || undefined}
+            alt=""
+            onError={() => setInternalImgFailed(true)}
+            style={{ width: '100%', height: '100%', objectFit: 'fill', margin: 0, padding: 0, display: 'block' }}
+          />
         </div>
       )}
 
-      {pIndex === 0 && (simulado?.isRedacao ? config?.redacao_enem_modelo_pdf_url : (simulado?.isProva ? config?.provas_modelo_pdf_url : config?.modelo_pdf_url)) && (
+      {pIndex === 0 && (
         <>
           {simulado?.isProva || simulado?.isRedacao ? (
             <div className="template-fields" ref={pageA4Ref} style={{ position: 'absolute', inset: 0, zIndex: 5, pointerEvents: isEditHeaderMode ? 'auto' : 'none' }}>
@@ -472,18 +1040,21 @@ export function PageContent({
         </>
       )}
 
-      <div style={{ 
-        position: 'relative', 
-        paddingTop: pIndex === 0 ? `calc(75mm + ${effectiveTop}px)` : `calc(18mm + ${effectiveTop}px)`, 
-        paddingLeft: `calc(18mm + ${effectiveLeft}px)`, 
-        paddingRight: `calc(18mm + ${effectiveRight}px)`, 
-        paddingBottom: `calc(42mm + ${effectiveBottom}px)`,
-        height: '100%', boxSizing: 'border-box',
-        zIndex: 2,
-        display: 'flex',
-        gap: 0,
-        overflow: 'hidden',
-      }}>
+      <div
+        className={`${!showGabarito || cleanPreviewMode ? 'hide-gabarito-preview' : ''}`}
+        style={{ 
+          position: 'relative', 
+          paddingTop: pIndex === 0 ? `calc(75mm + ${effectiveTop}px)` : `calc(18mm + ${effectiveTop}px)`, 
+          paddingLeft: `calc(18mm + ${effectiveLeft}px)`, 
+          paddingRight: `calc(18mm + ${effectiveRight}px)`, 
+          paddingBottom: `calc(42mm + ${effectiveBottom}px)`,
+          height: '100%', boxSizing: 'border-box',
+          zIndex: 2,
+          display: 'flex',
+          gap: 0,
+          overflow: 'hidden',
+        }}
+      >
         {page.map((col: any[], cIndex: number) => (
           <React.Fragment key={`col-${cIndex}`}>
             {cIndex > 0 && (
@@ -498,9 +1069,9 @@ export function PageContent({
               flex: 1, 
               minWidth: 0,
               fontSize: `${enunciadoFontSize}px`, 
-              lineHeight: 1.6, 
+              lineHeight: lineHeight || 1.5, 
               color: '#000', 
-              textAlign: 'justify',
+              textAlign: textAlign || 'justify',
               paddingLeft: cIndex > 0 ? '6mm' : 0,
               paddingRight: cIndex < page.length - 1 ? '6mm' : 0
             }}>
@@ -532,8 +1103,10 @@ export function PageContent({
 
               if (block.type === 'full') {
                 const q = block.q;
+                const qNumberLabel = block.qIndex !== null && block.qIndex !== undefined ? block.qIndex + 1 : null;
                 return (
-                  <div key={blockKey} className="questao-container alt-hover-group" style={{ position: 'relative', marginTop: block.renderMarginTop || 0, breakInside: 'avoid' }}>
+                  <div key={blockKey} className="questao-container questao-hover-block" style={{ position: 'relative', marginTop: block.renderMarginTop || 0, breakInside: 'avoid' }}>
+                    {renderQuestionHoverToolbar(q, qNumberLabel)}
 
                     {q.tipo_questao === 'texto_apoio' && (
                       <div className="no-print texto-apoio-badge" style={{
@@ -566,9 +1139,9 @@ export function PageContent({
                         <div style={{
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
                           width: '28px', height: '28px', minWidth: '28px', background: '#1e293b', color: '#ffffff',
-                          fontWeight: 900, borderRadius: '8px', fontSize: '11pt', marginTop: '4px'
+                          fontWeight: 900, borderRadius: '8px', fontSize: '11pt', marginTop: '2px'
                         }}>
-                          {block.qIndex !== null && block.qIndex !== undefined ? block.qIndex + 1 : ''}
+                          {qNumberLabel ?? ''}
                         </div>
                       )}
                       <div style={{ flex: 1, minWidth: 0 }}>
@@ -590,10 +1163,10 @@ export function PageContent({
                           });
 
                           return (
-                            <div className="alt-hover-group" style={{ position: 'relative' }}>
+                            <div style={{ position: 'relative' }}>
                               {groupedParts.map((group: any, gIdx: number) => (
                                 group.type === 'text' ? (
-                              <div key={`txt-${group.originalIndex}`} data-height-id={`${q.id}-enun-txt-${group.originalIndex}`} className="alt-hover-group" style={{ position: 'relative', width: '100%', marginTop: gIdx > 0 ? 8 : 0 }}>
+                              <div key={`txt-${group.originalIndex}`} data-height-id={`${q.id}-enun-txt-${group.originalIndex}`} style={{ position: 'relative', width: '100%', marginTop: gIdx > 0 ? 8 : 0 }}>
                                 <HtmlContent 
                                   editable={!readOnly}
                                   html={group.content || ''}
@@ -606,18 +1179,18 @@ export function PageContent({
                                          let txt = i === group.originalIndex ? newHtml : p.content;
                                          return (txt || '').replace(metaRegex, '');
                                       }
-                                      if (p.type === 'lines') return `[LINHAS_PAUTADAS:${p.count}]`;
+                                      if (p.type === 'lines') return p.style === 'branco' ? `[ESPACO_BRANCO:${p.count}]` : `[LINHAS_PAUTADAS:${p.count}]`;
                                       return `[IMAGEM ${p.index + 1}]`;
                                     }).join('');
                                     
                                     onEditEnunciado(q.id, metaTags.join('\n') + (metaTags.length > 0 ? '\n' : '') + newFullHtml);
                                     forceRepaginate();
                                   }}
-                                  style={{ outline: 'none', border: '1px dashed transparent', padding: '0 4px', wordBreak: 'break-word', cursor: 'text' }}
+                                  style={{ outline: 'none', wordBreak: 'break-word', cursor: readOnly ? 'default' : 'text' }}
                                 />
                               </div>
                             ) : group.type === 'lines' ? (
-                                <div key={`lines-${group.originalIndex}`} className="alt-hover-group" style={{ position: 'relative', marginTop: gIdx > 0 ? 8 : 0, width: '100%' }}>
+                                <div key={`lines-${group.originalIndex}`} className="lines-hover-wrapper" style={{ position: 'relative', marginTop: gIdx > 0 ? 8 : 0, width: '100%' }}>
                                   {Array.from({ length: group.count }).map((_, i) => (
                                     <div key={i} style={{ position: 'relative', width: '100%', borderBottom: group.style === 'branco' ? 'none' : '1px solid #000', height: 28 }}>
                                       {group.style !== 'branco' && (
@@ -641,44 +1214,47 @@ export function PageContent({
                                       )}
                                     </div>
                                   ))}
-                                 <div className="alt-actions" style={{ position: 'absolute', right: 0, top: 0, display: 'flex', gap: 4 }}>
-                                   <button onClick={() => {
-                                       const newFullHtml = parts.map((p: any, i: number) => {
-                                         if (p.type === 'text') return (p.content || '').replace(/(<meta[^>]+>)/ig, '');
-                                         if (p.type === 'lines') {
-                                           if (i === group.originalIndex) return p.style === 'branco' ? `[ESPACO_BRANCO:${Math.max(1, group.count - 1)}]` : `[LINHAS_PAUTADAS:${Math.max(1, group.count - 1)}]`;
-                                           return p.style === 'branco' ? `[ESPACO_BRANCO:${p.count}]` : `[LINHAS_PAUTADAS:${p.count}]`;
-                                         }
-                                         return `[IMAGEM ${p.index + 1}]`;
-                                       }).join('');
-                                       const metaTags = (q.enunciado || '').match(/(<meta[^>]+>)/ig) || [];
-                                       onEditEnunciado(q.id, metaTags.join('\n') + (metaTags.length > 0 ? '\n' : '') + newFullHtml);
-                                       forceRepaginate();
-                                   }} style={{ background: '#3b82f6', color: 'white', border: 'none', borderRadius: '50%', width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }} title="Remover uma linha">-</button>
-                                   <button onClick={() => {
-                                       const newFullHtml = parts.map((p: any, i: number) => {
-                                         if (p.type === 'text') return (p.content || '').replace(/(<meta[^>]+>)/ig, '');
-                                         if (p.type === 'lines') {
-                                           if (i === group.originalIndex) return p.style === 'branco' ? `[ESPACO_BRANCO:${group.count + 1}]` : `[LINHAS_PAUTADAS:${group.count + 1}]`;
-                                           return p.style === 'branco' ? `[ESPACO_BRANCO:${p.count}]` : `[LINHAS_PAUTADAS:${p.count}]`;
-                                         }
-                                         return `[IMAGEM ${p.index + 1}]`;
-                                       }).join('');
-                                       const metaTags = (q.enunciado || '').match(/(<meta[^>]+>)/ig) || [];
-                                       onEditEnunciado(q.id, metaTags.join('\n') + (metaTags.length > 0 ? '\n' : '') + newFullHtml);
-                                       forceRepaginate();
-                                   }} style={{ background: '#10b981', color: 'white', border: 'none', borderRadius: '50%', width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }} title="Adicionar uma linha">+</button>
-                                   <button onClick={() => {
-                                       const newFullHtml = parts.filter((p: any, i: number) => i !== group.originalIndex).map((p: any) => {
-                                         if (p.type === 'text') return (p.content || '').replace(/(<meta[^>]+>)/ig, '');
-                                         if (p.type === 'lines') return p.style === 'branco' ? `[ESPACO_BRANCO:${p.count}]` : `[LINHAS_PAUTADAS:${p.count}]`;
-                                         return `[IMAGEM ${p.index + 1}]`;
-                                       }).join('');
-                                       const metaTags = (q.enunciado || '').match(/(<meta[^>]+>)/ig) || [];
-                                       onEditEnunciado(q.id, metaTags.join('\n') + (metaTags.length > 0 ? '\n' : '') + newFullHtml);
-                                       forceRepaginate();
-                                   }} style={{ background: 'rgba(239,68,68,0.9)', color: 'white', border: 'none', borderRadius: '50%', width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }} title="Remover bloco de linhas"><Trash2 size={14} /></button>
-                                 </div>
+                                 {!readOnly && (
+                                   <div className="no-print lines-floating-toolbar" style={{ position: 'absolute', right: 4, top: 4, display: 'flex', gap: 4, zIndex: 20, background: 'rgba(255,255,255,0.95)', padding: '3px 6px', borderRadius: 20, boxShadow: '0 4px 12px rgba(15,23,42,0.12)', border: '1px solid #e2e8f0', alignItems: 'center' }}>
+                                     <span style={{ fontSize: 10, fontWeight: 700, color: '#64748b', padding: '0 4px' }}>{group.count} {group.count === 1 ? 'linha' : 'linhas'}</span>
+                                     <button onClick={() => {
+                                         const newFullHtml = parts.map((p: any, i: number) => {
+                                           if (p.type === 'text') return (p.content || '').replace(/(<meta[^>]+>)/ig, '');
+                                           if (p.type === 'lines') {
+                                             if (i === group.originalIndex) return p.style === 'branco' ? `[ESPACO_BRANCO:${Math.max(1, group.count - 1)}]` : `[LINHAS_PAUTADAS:${Math.max(1, group.count - 1)}]`;
+                                             return p.style === 'branco' ? `[ESPACO_BRANCO:${p.count}]` : `[LINHAS_PAUTADAS:${p.count}]`;
+                                           }
+                                           return `[IMAGEM ${p.index + 1}]`;
+                                         }).join('');
+                                         const metaTags = (q.enunciado || '').match(/(<meta[^>]+>)/ig) || [];
+                                         onEditEnunciado(q.id, metaTags.join('\n') + (metaTags.length > 0 ? '\n' : '') + newFullHtml);
+                                         forceRepaginate();
+                                     }} style={{ background: '#eff6ff', color: '#2563eb', border: 'none', borderRadius: '50%', width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontWeight: 800 }} title="Remover uma linha">−</button>
+                                     <button onClick={() => {
+                                         const newFullHtml = parts.map((p: any, i: number) => {
+                                           if (p.type === 'text') return (p.content || '').replace(/(<meta[^>]+>)/ig, '');
+                                           if (p.type === 'lines') {
+                                             if (i === group.originalIndex) return p.style === 'branco' ? `[ESPACO_BRANCO:${group.count + 1}]` : `[LINHAS_PAUTADAS:${group.count + 1}]`;
+                                             return p.style === 'branco' ? `[ESPACO_BRANCO:${p.count}]` : `[LINHAS_PAUTADAS:${p.count}]`;
+                                           }
+                                           return `[IMAGEM ${p.index + 1}]`;
+                                         }).join('');
+                                         const metaTags = (q.enunciado || '').match(/(<meta[^>]+>)/ig) || [];
+                                         onEditEnunciado(q.id, metaTags.join('\n') + (metaTags.length > 0 ? '\n' : '') + newFullHtml);
+                                         forceRepaginate();
+                                     }} style={{ background: '#ecfdf5', color: '#059669', border: 'none', borderRadius: '50%', width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontWeight: 800 }} title="Adicionar uma linha">+</button>
+                                     <button onClick={() => {
+                                         const newFullHtml = parts.filter((p: any, i: number) => i !== group.originalIndex).map((p: any) => {
+                                           if (p.type === 'text') return (p.content || '').replace(/(<meta[^>]+>)/ig, '');
+                                           if (p.type === 'lines') return p.style === 'branco' ? `[ESPACO_BRANCO:${p.count}]` : `[LINHAS_PAUTADAS:${p.count}]`;
+                                           return `[IMAGEM ${p.index + 1}]`;
+                                         }).join('');
+                                         const metaTags = (q.enunciado || '').match(/(<meta[^>]+>)/ig) || [];
+                                         onEditEnunciado(q.id, metaTags.join('\n') + (metaTags.length > 0 ? '\n' : '') + newFullHtml);
+                                         forceRepaginate();
+                                     }} style={{ background: '#fef2f2', color: '#ef4444', border: 'none', borderRadius: '50%', width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }} title="Remover bloco de linhas"><Trash2 size={12} /></button>
+                                   </div>
+                                 )}
                                </div>
                             ) : (
                               (() => {
@@ -690,7 +1266,7 @@ export function PageContent({
                                 const groupJustify = firstAlign === 'left' ? 'flex-start' : firstAlign === 'right' ? 'flex-end' : 'center';
 
                                 return (
-                                  <div key={`img-group-${gIdx}`} data-height-id={`${q.id}-img-group-${gIdx}`} style={{ display: 'flex', flexWrap: 'wrap', gap: 10, justifyContent: groupJustify, marginTop: 0, width: '100%' }}>
+                                  <div key={`img-group-${gIdx}`} data-height-id={`${q.id}-img-group-${gIdx}`} style={{ display: 'flex', flexWrap: 'wrap', gap: 10, justifyContent: groupJustify, marginTop: 4, width: '100%' }}>
                                     {group.images.map((part: any) => {
                                       const pIdx = part.originalIndex;
                                   const hashIndex = part.url ? part.url.indexOf('#') : -1;
@@ -707,6 +1283,7 @@ export function PageContent({
                                     p.set('w', w.toString());
                                     if (imgAlign !== 'center') p.set('a', imgAlign);
                                     onEditEnunciadoImage?.(q.id, part.index, `${imgBaseUrl}#${p.toString()}`);
+                                    forceRepaginate?.();
                                   };
 
                                   const setAlign = (a: string) => {
@@ -714,6 +1291,7 @@ export function PageContent({
                                     if (imgWidthStr) p.set('w', imgWidthStr);
                                     p.set('a', a);
                                     onEditEnunciadoImage?.(q.id, part.index, `${imgBaseUrl}#${p.toString()}`);
+                                    forceRepaginate?.();
                                   };
                                   
                                   const movePart = (direction: 'up' | 'down') => {
@@ -740,28 +1318,53 @@ export function PageContent({
                                     }).join('');
                                     
                                     onEditEnunciado(q.id, metaTags.join('\n') + (metaTags.length > 0 ? '\n' : '') + newFullHtml);
+                                    forceRepaginate?.();
                                   };
 
                                   return (
-                                    <div key={`img-${part.index}-${pIdx}`} className="alt-hover-group" style={{ position: 'relative', display: 'flex', justifyContent, width: imgWidth ? `${imgWidth}px` : 'auto', maxWidth: '100%' }}>
+                                    <div key={`img-${part.index}-${pIdx}`} className="img-hover-wrapper" style={{ position: 'relative', display: 'flex', justifyContent, width: imgWidth ? `${imgWidth}px` : 'auto', maxWidth: '100%' }}>
                                       <img src={imgBaseUrl || undefined} style={{ width: '100%', height: 'auto', borderRadius: 8, display: 'block' }} />
                                       {onEditEnunciadoImage && !readOnly && (
-                                        <div className="no-print alt-img-actions" style={{ position: 'absolute', bottom: 4, left: 4, display: 'flex', gap: 4, zIndex: 10, flexWrap: 'wrap', maxWidth: 280, justifyContent: 'flex-start' }}>
-                                          <div style={{ display: 'flex', background: 'rgba(255,255,255,0.95)', borderRadius: 20, padding: 4, gap: 4, boxShadow: '0 2px 4px rgba(0,0,0,0.1)', alignItems: 'center' }}>
-                                            <button onClick={() => movePart('up')} disabled={pIdx === 0} style={{ background: 'transparent', color: pIdx === 0 ? '#cbd5e1' : '#475569', border: 'none', borderRadius: '50%', width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: pIdx === 0 ? 'default' : 'pointer' }} title="Mover para cima"><ArrowUp size={14} /></button>
-                                            <button onClick={() => movePart('down')} disabled={pIdx === parts.length - 1} style={{ background: 'transparent', color: pIdx === parts.length - 1 ? '#cbd5e1' : '#475569', border: 'none', borderRadius: '50%', width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: pIdx === parts.length - 1 ? 'default' : 'pointer' }} title="Mover para baixo"><ArrowDown size={14} /></button>
+                                        <div className="no-print img-floating-toolbar" style={{ position: 'absolute', bottom: 6, left: 6, display: 'flex', gap: 4, zIndex: 25, flexWrap: 'wrap', maxWidth: 340, justifyContent: 'flex-start' }}>
+                                          <div style={{ display: 'flex', background: 'rgba(15,23,42,0.92)', backdropFilter: 'blur(8px)', borderRadius: 20, padding: '3px 6px', gap: 4, boxShadow: '0 4px 12px rgba(0,0,0,0.2)', alignItems: 'center' }}>
+                                            <button onClick={() => movePart('up')} disabled={pIdx === 0} style={{ background: 'transparent', color: pIdx === 0 ? '#475569' : '#f8fafc', border: 'none', borderRadius: '50%', width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: pIdx === 0 ? 'default' : 'pointer' }} title="Mover para cima"><ArrowUp size={13} /></button>
+                                            <button onClick={() => movePart('down')} disabled={pIdx === parts.length - 1} style={{ background: 'transparent', color: pIdx === parts.length - 1 ? '#475569' : '#f8fafc', border: 'none', borderRadius: '50%', width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: pIdx === parts.length - 1 ? 'default' : 'pointer' }} title="Mover para baixo"><ArrowDown size={13} /></button>
                                           </div>
-                                          <div style={{ display: 'flex', background: 'rgba(255,255,255,0.95)', borderRadius: 20, padding: '2px 8px', gap: 8, boxShadow: '0 2px 4px rgba(0,0,0,0.1)', alignItems: 'center' }}>
-                                            <span style={{ fontSize: 10, fontWeight: 700, color: '#64748b' }}>TAMANHO</span>
+                                          <div style={{ display: 'flex', background: 'rgba(15,23,42,0.92)', backdropFilter: 'blur(8px)', borderRadius: 20, padding: '3px 8px', gap: 6, boxShadow: '0 4px 12px rgba(0,0,0,0.2)', alignItems: 'center' }}>
+                                            {[
+                                              { label: 'P', w: 180 },
+                                              { label: 'M', w: 300 },
+                                              { label: 'G', w: 450 },
+                                              { label: '100%', w: 620 }
+                                            ].map(preset => (
+                                              <button
+                                                key={preset.label}
+                                                type="button"
+                                                onClick={() => setWidth(preset.w)}
+                                                style={{
+                                                  background: Math.abs((imgWidth || 600) - preset.w) < 25 ? '#3b82f6' : 'rgba(255,255,255,0.1)',
+                                                  color: '#fff',
+                                                  border: 'none',
+                                                  borderRadius: 6,
+                                                  padding: '2px 5px',
+                                                  fontSize: 9.5,
+                                                  fontWeight: 800,
+                                                  cursor: 'pointer'
+                                                }}
+                                                title={`Largura ${preset.label} (${preset.w}px)`}
+                                              >
+                                                {preset.label}
+                                              </button>
+                                            ))}
                                             <input 
                                               type="range" 
-                                              min="100" 
-                                              max="800" 
+                                              min="80" 
+                                              max="700" 
                                               step="10"
                                               defaultValue={imgWidth || 600}
                                               onMouseDown={(e) => {
                                                 const inputEl = e.currentTarget;
-                                                const menu = inputEl.closest('.alt-img-actions') as HTMLElement;
+                                                const menu = inputEl.closest('.img-floating-toolbar') as HTMLElement;
                                                 if (menu) {
                                                   const rect = menu.getBoundingClientRect();
                                                   menu.dataset.oldLeft = menu.style.left;
@@ -777,19 +1380,18 @@ export function PageContent({
                                                   window.removeEventListener('mouseup', handleEnd);
                                                   if (menu) {
                                                     menu.style.position = menu.dataset.oldPosition || 'absolute';
-                                                    menu.style.left = menu.dataset.oldLeft || '4px';
-                                                    menu.style.bottom = menu.dataset.oldBottom || '4px';
+                                                    menu.style.left = menu.dataset.oldLeft || '6px';
+                                                    menu.style.bottom = menu.dataset.oldBottom || '6px';
                                                     menu.style.top = 'auto';
                                                     menu.style.right = 'auto';
                                                   }
                                                   setWidth(parseInt(inputEl.value));
-                                                  forceRepaginate?.();
                                                 };
                                                 window.addEventListener('mouseup', handleEnd);
                                               }}
                                               onTouchStart={(e) => {
                                                 const inputEl = e.currentTarget;
-                                                const menu = inputEl.closest('.alt-img-actions') as HTMLElement;
+                                                const menu = inputEl.closest('.img-floating-toolbar') as HTMLElement;
                                                 if (menu) {
                                                   const rect = menu.getBoundingClientRect();
                                                   menu.dataset.oldLeft = menu.style.left;
@@ -805,36 +1407,49 @@ export function PageContent({
                                                   window.removeEventListener('touchend', handleEnd);
                                                   if (menu) {
                                                     menu.style.position = menu.dataset.oldPosition || 'absolute';
-                                                    menu.style.left = menu.dataset.oldLeft || '4px';
-                                                    menu.style.bottom = menu.dataset.oldBottom || '4px';
+                                                    menu.style.left = menu.dataset.oldLeft || '6px';
+                                                    menu.style.bottom = menu.dataset.oldBottom || '6px';
                                                     menu.style.top = 'auto';
                                                     menu.style.right = 'auto';
                                                   }
                                                   setWidth(parseInt(inputEl.value));
-                                                  forceRepaginate?.();
                                                 };
                                                 window.addEventListener('touchend', handleEnd);
                                               }}
                                               onChange={(e) => {
-                                                const groupEl = e.currentTarget.closest('.alt-hover-group') as HTMLElement;
+                                                const groupEl = e.currentTarget.closest('.img-hover-wrapper') as HTMLElement;
                                                 const imgEl = groupEl?.querySelector('img');
                                                 if (groupEl && imgEl) {
                                                   groupEl.style.width = `${e.currentTarget.value}px`;
                                                   imgEl.style.width = '100%';
-                                                  groupEl.style.maxWidth = 'none';
+                                                  groupEl.style.maxWidth = '100%';
                                                 }
                                               }}
                                               onBlur={(e) => {
                                                 setWidth(parseInt(e.currentTarget.value));
-                                                forceRepaginate?.();
                                               }}
-                                              style={{ width: 80, cursor: 'ew-resize' }}
+                                              style={{ width: 64, cursor: 'ew-resize', accentColor: '#3b82f6' }}
                                             />
                                           </div>
-                                          <div style={{ display: 'flex', background: 'rgba(255,255,255,0.95)', borderRadius: 20, padding: 2, gap: 2, boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
-                                            <button onClick={() => setAlign('left')} style={{ background: imgAlign === 'left' ? '#e2e8f0' : 'transparent', color: '#475569', border: 'none', borderRadius: '50%', width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }} title="Alinhar à Esquerda"><AlignLeft size={14} /></button>
-                                            <button onClick={() => setAlign('center')} style={{ background: imgAlign === 'center' ? '#e2e8f0' : 'transparent', color: '#475569', border: 'none', borderRadius: '50%', width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }} title="Centralizar"><AlignCenter size={14} /></button>
-                                            <button onClick={() => setAlign('right')} style={{ background: imgAlign === 'right' ? '#e2e8f0' : 'transparent', color: '#475569', border: 'none', borderRadius: '50%', width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }} title="Alinhar à Direita"><AlignRight size={14} /></button>
+                                          <div style={{ display: 'flex', background: 'rgba(15,23,42,0.92)', backdropFilter: 'blur(8px)', borderRadius: 20, padding: 2, gap: 2, boxShadow: '0 4px 12px rgba(0,0,0,0.2)' }}>
+                                            <button onClick={() => setAlign('left')} style={{ background: imgAlign === 'left' ? '#3b82f6' : 'transparent', color: '#fff', border: 'none', borderRadius: '50%', width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }} title="Alinhar à Esquerda"><AlignLeft size={13} /></button>
+                                            <button onClick={() => setAlign('center')} style={{ background: imgAlign === 'center' ? '#3b82f6' : 'transparent', color: '#fff', border: 'none', borderRadius: '50%', width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }} title="Centralizar"><AlignCenter size={13} /></button>
+                                            <button onClick={() => setAlign('right')} style={{ background: imgAlign === 'right' ? '#3b82f6' : 'transparent', color: '#fff', border: 'none', borderRadius: '50%', width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }} title="Alinhar à Direita"><AlignRight size={13} /></button>
+                                          </div>
+                                          <div style={{ position: 'relative' }}>
+                                            <button onClick={() => setMainImgMenuOpen(mainImgMenuOpen === `${q.id}-${part.index}` ? null : `${q.id}-${part.index}`)} style={{ background: '#3b82f6', color: 'white', border: 'none', borderRadius: 14, padding: '4px 8px', display: 'flex', alignItems: 'center', gap: 4, fontSize: 10.5, fontWeight: 700, cursor: 'pointer', boxShadow: '0 2px 8px rgba(59,130,246,0.3)', height: 26 }}>
+                                              <ImageIcon size={12} /> Trocar
+                                            </button>
+                                            {mainImgMenuOpen === `${q.id}-${part.index}` && (
+                                              <div style={{ position: 'absolute', bottom: '100%', left: 0, zIndex: 9999, marginBottom: 4, background: 'white', borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.16)', border: '1px solid #e2e8f0', padding: 4, display: 'flex', flexDirection: 'column', gap: 2, width: 145 }}>
+                                                <button onClick={() => handleMainImageAction(q.id, part.index, 'upload', q.enunciado)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 8px', background: 'transparent', border: 'none', fontSize: 12, color: '#334155', cursor: 'pointer', borderRadius: 6, textAlign: 'left', fontWeight: 600 }}>
+                                                  <Upload size={13} color="#2563eb" /> Fazer Upload
+                                                </button>
+                                                <button onClick={() => handleMainImageAction(q.id, part.index, 'ai', q.enunciado)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 8px', background: 'transparent', border: 'none', fontSize: 12, color: '#8b5cf6', cursor: 'pointer', borderRadius: 6, textAlign: 'left', fontWeight: 700 }}>
+                                                  <Sparkles size={13} /> Gerar com IA
+                                                </button>
+                                              </div>
+                                            )}
                                           </div>
                                           <button
                                             onClick={() => {
@@ -849,27 +1464,13 @@ export function PageContent({
                                               }).join('');
                                               onEditEnunciado(q.id, metaTags.join('\n') + (metaTags.length > 0 ? '\n' : '') + newFullHtml);
                                               onEditEnunciadoImage?.(q.id, part.index, '');
+                                              forceRepaginate?.();
                                             }}
-                                            style={{ background: 'rgba(239,68,68,0.9)', color: 'white', border: 'none', borderRadius: '50%', width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}
+                                            style={{ background: '#ef4444', color: 'white', border: 'none', borderRadius: '50%', width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 6px rgba(239,68,68,0.3)' }}
                                             title="Remover Imagem"
                                           >
-                                            <Trash2 size={14} />
+                                            <Trash2 size={13} />
                                           </button>
-                                          <div style={{ position: 'relative' }}>
-                                            <button onClick={() => setMainImgMenuOpen(mainImgMenuOpen === `${q.id}-${part.index}` ? null : `${q.id}-${part.index}`)} style={{ background: '#3b82f6', color: 'white', border: 'none', borderRadius: 12, padding: '4px 8px', display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 600, cursor: 'pointer', boxShadow: '0 2px 8px rgba(59,130,246,0.3)', height: 28 }}>
-                                              <ImageIcon size={12} /> Imagem
-                                            </button>
-                                            {mainImgMenuOpen === `${q.id}-${part.index}` && (
-                                              <div style={{ position: 'absolute', top: '100%', right: 0, zIndex: 9999, marginTop: 4, background: 'white', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', padding: 4, display: 'flex', flexDirection: 'column', gap: 2, width: 140 }}>
-                                                <button onClick={() => handleMainImageAction(q.id, part.index, 'upload', q.enunciado)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 8px', background: 'transparent', border: 'none', fontSize: 12, color: '#334155', cursor: 'pointer', borderRadius: 4, textAlign: 'left' }}>
-                                                  <Upload size={14} /> Fazer Upload
-                                                </button>
-                                                <button onClick={() => handleMainImageAction(q.id, part.index, 'ai', q.enunciado)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 8px', background: 'transparent', border: 'none', fontSize: 12, color: '#8b5cf6', cursor: 'pointer', borderRadius: 4, textAlign: 'left', fontWeight: 600 }}>
-                                                  <Sparkles size={14} /> Gerar com IA
-                                                </button>
-                                              </div>
-                                            )}
-                                          </div>
                                         </div>
                                       )}
                                     </div>
@@ -880,81 +1481,6 @@ export function PageContent({
                            })()
                          )
                        ))}
-                              {!readOnly && (
-                                <div className="no-print alt-actions" style={{ position: 'absolute', right: -36, top: 0, zIndex: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                                   <div style={{ position: 'relative' }}>
-                                     <button title="Inserir Imagem" onClick={() => setMainImgMenuOpen(mainImgMenuOpen === `${q.id}-add` ? null : `${q.id}-add`)} style={{ background: '#f8fafc', border: '1px solid #cbd5e1', width: 28, height: 28, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
-                                       <ImageIcon size={14} />
-                                     </button>
-                                     {mainImgMenuOpen === `${q.id}-add` && (
-                                       <div style={{ position: 'absolute', top: '0', right: '100%', zIndex: 9999, marginRight: 8, background: 'white', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', padding: 4, display: 'flex', flexDirection: 'column', gap: 2, width: 140 }}>
-                                         <button onClick={() => handleMainImageAction(q.id, q.imagens?.length || 0, 'upload', q.enunciado)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 8px', background: 'transparent', border: 'none', fontSize: 12, color: '#334155', cursor: 'pointer', borderRadius: 4, textAlign: 'left' }}>
-                                           <Upload size={14} /> Fazer Upload
-                                         </button>
-                                         <button onClick={() => handleMainImageAction(q.id, q.imagens?.length || 0, 'ai', q.enunciado)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 8px', background: 'transparent', border: 'none', fontSize: 12, color: '#8b5cf6', cursor: 'pointer', borderRadius: 4, textAlign: 'left', fontWeight: 600 }}>
-                                           <Sparkles size={14} /> Gerar com IA
-                                         </button>
-                                       </div>
-                                     )}
-                                   </div>
-                                   <button title="Adicionar Espaço / Linhas" onClick={() => {
-                                     const parts = parseEnunciadoParts(q.enunciado, q.imagens || []);
-                                     const hasLines = parts.some((p: any) => p.type === 'lines');
-                                     if (hasLines) {
-                                       alert("Esta questão já possui linhas/espaço. Você pode ajustar a quantidade nos botões + e - que aparecem ao passar o mouse.");
-                                       return;
-                                     }
-                                     setLinesCount(5);
-                                     setLinesType('pautado');
-                                     setLinesModalOpen({ qId: q._internalId || q.id, parts, defaultCount: 5, q });
-                                   }} style={{ background: '#f8fafc', border: '1px solid #cbd5e1', width: 28, height: 28, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
-                                     <Plus size={14} />
-                                   </button>
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })()}
-                        {/* Per-question columns toggle — 1col/2col/3col */}
-                        {!readOnly && q.tipo_questao !== 'descritiva' && q.tipo_questao !== 'texto_apoio' && q.simulados_alternativas?.length > 0 && onEditEnunciado && (() => {
-                          const metaAltCols = (() => {
-                            const m = (q.enunciado || '').match(/<meta name="alt-cols" content="(\d+)">/i);
-                            return m ? parseInt(m[1]) : 1;
-                          })();
-                          const metaRegex = /(<meta[^>]+>)/ig;
-                          const setAltCols = (n: number) => {
-                            const currentMeta = (q.enunciado || '').match(metaRegex) || [];
-                            const otherMetas = currentMeta.filter((mt: string) => !mt.includes('alt-cols'));
-                            const newMetaTag = n > 1 ? `<meta name="alt-cols" content="${n}">` : '';
-                            const strippedEnun = (q.enunciado || '').replace(metaRegex, '').trim();
-                            const allMetas = [...otherMetas, ...(newMetaTag ? [newMetaTag] : [])];
-                            const newEnun = allMetas.length > 0 ? allMetas.join('\n') + '\n' + strippedEnun : strippedEnun;
-                            onEditEnunciado(q.id, newEnun);
-                            forceRepaginate();
-                          };
-                          return (
-                            <div className="no-print" style={{ position: 'absolute', right: -42, bottom: 0, zIndex: 10, display: 'flex', flexDirection: 'column', gap: 3 }}>
-                              {[1, 2, 3].map(n => {
-                                const isActive = metaAltCols === n;
-                                return (
-                                  <button
-                                    key={n}
-                                    title={n === 1 ? 'Alternativas em 1 coluna' : `Alternativas em ${n} colunas`}
-                                    onClick={() => setAltCols(n)}
-                                    style={{
-                                      width: 32, height: 22, borderRadius: 6,
-                                      border: isActive ? 'none' : '1px solid #cbd5e1',
-                                      background: isActive ? 'linear-gradient(135deg,#6366f1,#8b5cf6)' : '#f8fafc',
-                                      color: isActive ? 'white' : '#64748b',
-                                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                      cursor: 'pointer', fontSize: 9, fontWeight: 800, letterSpacing: '-0.5px',
-                                      boxShadow: isActive ? '0 2px 6px rgba(99,102,241,0.4)' : '0 1px 2px rgba(0,0,0,0.05)'
-                                    }}
-                                  >
-                                    {n}col
-                                  </button>
-                                );
-                              })}
                             </div>
                           );
                         })()}
@@ -994,13 +1520,7 @@ export function PageContent({
                                 p.set('w', w.toString());
                                 if (imgAlign !== 'left') p.set('a', imgAlign);
                                 onEditAlternativaImage?.(q.id, a.id, `${imgBaseUrl}#${p.toString()}`);
-                              };
-
-                              const setAltAlign = (align: string) => {
-                                const p = new URLSearchParams(hashStr);
-                                if (imgWidthStr) p.set('w', imgWidthStr);
-                                p.set('a', align);
-                                onEditAlternativaImage?.(q.id, a.id, `${imgBaseUrl}#${p.toString()}`);
+                                forceRepaginate?.();
                               };
                               
                               const altParts = parseEnunciadoParts(a.texto || '', []);
@@ -1015,11 +1535,11 @@ export function PageContent({
                               };
 
                               return (
-                                <div key={a.id || `alt-${aIndex}`} className="alt-hover-group" style={{ 
+                                <div key={a.id || `alt-${aIndex}`} className="alt-row-item" style={{ 
                                   display: 'flex', gap: 12, 
                                   marginTop: 6, 
                                   alignItems: 'flex-start', position: 'relative',
-                                  zIndex: reorderMenuOpen === `${q.id}-${a.id}` ? 500 : (imgMenuOpen === `${q.id}-${a.id}` ? 50 : 1)
+                                  zIndex: reorderMenuOpen === `${q.id}-${a.id}` ? 500 : (imgMenuOpen === `${q.id}-${a.id}` ? 120 : 1)
                                 }}>
                                   <div 
                                     className={`reorder-trigger ${a.eh_correta ? 'correct-bubble-preview' : ''}`} 
@@ -1043,24 +1563,47 @@ export function PageContent({
                                     {a.letra}
                                   </div>
                                   {renderReorderPopover(q.id, a.id, a.letra, aIndex, totalAlts, aIndex === 0)}
+                                  {renderAlternativeRowToolbar(q.id, q, a, altParts, saveAltParts)}
                                   <div style={{ flex: 1, position: 'relative', minWidth: 0 }}>
                                      {a.imagem_url && (
                                        <div style={{ display: 'flex', justifyContent, width: '100%', marginBottom: 8 }}>
-                                         <div className="alt-img-wrapper" style={{ position: 'relative', width: effectiveWidth ? `${effectiveWidth}px` : 'auto', maxWidth: '100%' }}>
+                                         <div className="alt-img-wrapper img-hover-wrapper" style={{ position: 'relative', width: effectiveWidth ? `${effectiveWidth}px` : 'auto', maxWidth: '100%' }}>
                                            <img src={imgBaseUrl || undefined} style={{ width: '100%', height: 'auto', borderRadius: 8, display: 'block' }} />
                                            {onEditAlternativaImage && !readOnly && (
-                                             <div className="no-print alt-img-actions" style={{ position: 'absolute', bottom: 4, left: 4, display: 'flex', gap: 4, zIndex: 10, flexWrap: 'wrap', maxWidth: 280, justifyContent: 'flex-start' }}>
-                                               <div style={{ display: 'flex', background: 'rgba(255,255,255,0.95)', borderRadius: 20, padding: '2px 8px', gap: 8, boxShadow: '0 2px 4px rgba(0,0,0,0.1)', alignItems: 'center' }}>
-                                                 <span style={{ fontSize: 10, fontWeight: 700, color: '#64748b' }}>TAMANHO</span>
+                                             <div className="no-print img-floating-toolbar" style={{ position: 'absolute', bottom: 4, left: 4, display: 'flex', gap: 4, zIndex: 20, flexWrap: 'wrap', maxWidth: 280, justifyContent: 'flex-start' }}>
+                                               <div style={{ display: 'flex', background: 'rgba(15,23,42,0.92)', backdropFilter: 'blur(8px)', borderRadius: 20, padding: '2px 8px', gap: 6, boxShadow: '0 4px 12px rgba(0,0,0,0.2)', alignItems: 'center' }}>
+                                                 {[
+                                                   { label: 'P', w: 120 },
+                                                   { label: 'M', w: 220 },
+                                                   { label: 'G', w: 340 }
+                                                 ].map(preset => (
+                                                   <button
+                                                     key={preset.label}
+                                                     type="button"
+                                                     onClick={() => setAltWidth(preset.w)}
+                                                     style={{
+                                                       background: Math.abs((effectiveWidth || 250) - preset.w) < 25 ? '#3b82f6' : 'rgba(255,255,255,0.1)',
+                                                       color: '#fff',
+                                                       border: 'none',
+                                                       borderRadius: 5,
+                                                       padding: '1px 5px',
+                                                       fontSize: 9,
+                                                       fontWeight: 800,
+                                                       cursor: 'pointer'
+                                                     }}
+                                                   >
+                                                     {preset.label}
+                                                   </button>
+                                                 ))}
                                                  <input 
                                                    type="range" 
                                                    min="50" 
-                                                   max="800" 
+                                                   max="600" 
                                                    step="5"
                                                    defaultValue={effectiveWidth || 250}
                                                    onMouseDown={(e) => {
                                                      const inputEl = e.currentTarget;
-                                                     const menu = inputEl.closest('.alt-img-actions') as HTMLElement;
+                                                     const menu = inputEl.closest('.img-floating-toolbar') as HTMLElement;
                                                      if (menu) {
                                                        const rect = menu.getBoundingClientRect();
                                                        menu.dataset.oldLeft = menu.style.left;
@@ -1083,13 +1626,12 @@ export function PageContent({
                                                        }
                                                        const finalVal = parseInt(inputEl.value);
                                                        setAltWidth(finalVal);
-                                                       forceRepaginate?.();
                                                      };
                                                      window.addEventListener('mouseup', handleEnd);
                                                    }}
                                                    onTouchStart={(e) => {
                                                      const inputEl = e.currentTarget;
-                                                     const menu = inputEl.closest('.alt-img-actions') as HTMLElement;
+                                                     const menu = inputEl.closest('.img-floating-toolbar') as HTMLElement;
                                                      if (menu) {
                                                        const rect = menu.getBoundingClientRect();
                                                        menu.dataset.oldLeft = menu.style.left;
@@ -1112,7 +1654,6 @@ export function PageContent({
                                                        }
                                                        const finalVal = parseInt(inputEl.value);
                                                        setAltWidth(finalVal);
-                                                       forceRepaginate?.();
                                                      };
                                                      window.addEventListener('touchend', handleEnd);
                                                    }}
@@ -1121,27 +1662,29 @@ export function PageContent({
                                                      const wrapperEl = e.currentTarget.closest('.alt-img-wrapper') as HTMLElement;
                                                      if (wrapperEl) {
                                                        wrapperEl.style.width = `${val}px`;
-                                                       wrapperEl.style.maxWidth = 'none';
+                                                       wrapperEl.style.maxWidth = '100%';
                                                        const imgEl = wrapperEl.querySelector('img') as HTMLElement;
                                                        if (imgEl) {
                                                          imgEl.style.width = '100%';
-                                                         imgEl.style.maxWidth = 'none';
+                                                         imgEl.style.maxWidth = '100%';
                                                        }
                                                      }
                                                    }}
                                                    onBlur={(e) => {
                                                      setAltWidth(parseInt(e.currentTarget.value));
-                                                     forceRepaginate?.();
                                                    }}
-                                                   style={{ width: 80, cursor: 'ew-resize' }}
+                                                   style={{ width: 65, cursor: 'ew-resize', accentColor: '#3b82f6' }}
                                                  />
                                                </div>
                                               <button
-                                                onClick={() => onEditAlternativaImage(q.id, a.id, '')}
-                                                style={{ background: 'rgba(239,68,68,0.9)', color: 'white', border: 'none', borderRadius: '50%', width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}
+                                                onClick={() => {
+                                                  onEditAlternativaImage(q.id, a.id, '');
+                                                  forceRepaginate?.();
+                                                }}
+                                                style={{ background: '#ef4444', color: 'white', border: 'none', borderRadius: '50%', width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.15)' }}
                                                 title="Remover Imagem"
                                               >
-                                                <Trash2 size={14} />
+                                                <Trash2 size={12} />
                                               </button>
                                             </div>
                                           )}
@@ -1161,13 +1704,13 @@ export function PageContent({
                                                 const updated = altParts.map((p: any, i: number) => i === pIdx ? { ...p, content: newHtml } : p);
                                                 saveAltParts(updated);
                                               }}
-                                              style={{ wordBreak: 'break-word', outline: 'none', fontSize: `${alternativasFontSize}px` }}
+                                              style={{ wordBreak: 'break-word', outline: 'none', fontSize: `${alternativasFontSize}px`, cursor: readOnly ? 'default' : 'text' }}
                                             />
                                           );
                                         }
                                         if (part.type === 'lines') {
                                           return (
-                                            <div key={`alt-lines-${pIdx}`} className="alt-hover-group" style={{ position: 'relative', width: '100%', marginTop: 4 }}>
+                                            <div key={`alt-lines-${pIdx}`} className="lines-hover-wrapper" style={{ position: 'relative', width: '100%', marginTop: 4 }}>
                                               {Array.from({ length: part.count }).map((_: any, li: number) => (
                                                 <div key={li} style={{ position: 'relative', width: '100%', borderBottom: part.style === 'branco' ? 'none' : '1px solid #000', height: 22 }}>
                                                   {part.style !== 'branco' && (
@@ -1178,10 +1721,10 @@ export function PageContent({
                                                 </div>
                                               ))}
                                               {!readOnly && (
-                                                <div className="no-print" style={{ position: 'absolute', right: 4, bottom: 2, display: 'flex', gap: 4, zIndex: 10 }}>
-                                                  <button onClick={() => { const updated = altParts.map((p: any, i: number) => i === pIdx ? { ...p, count: Math.max(1, p.count - 1) } : p); saveAltParts(updated); }} style={{ background: '#3b82f6', color: 'white', border: 'none', borderRadius: '50%', width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: 14 }} title="Remover uma linha">-</button>
-                                                  <button onClick={() => { const updated = altParts.map((p: any, i: number) => i === pIdx ? { ...p, count: p.count + 1 } : p); saveAltParts(updated); }} style={{ background: '#10b981', color: 'white', border: 'none', borderRadius: '50%', width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: 14 }} title="Adicionar uma linha">+</button>
-                                                  <button onClick={() => { const updated = altParts.filter((_: any, i: number) => i !== pIdx); saveAltParts(updated); }} style={{ background: 'rgba(239,68,68,0.9)', color: 'white', border: 'none', borderRadius: '50%', width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }} title="Remover bloco de linhas"><Trash2 size={12} /></button>
+                                                <div className="no-print lines-floating-toolbar" style={{ position: 'absolute', right: 4, top: 2, display: 'flex', gap: 4, zIndex: 15, background: 'rgba(255,255,255,0.95)', padding: '2px 5px', borderRadius: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.1)', border: '1px solid #e2e8f0' }}>
+                                                  <button onClick={() => { const updated = altParts.map((p: any, i: number) => i === pIdx ? { ...p, count: Math.max(1, p.count - 1) } : p); saveAltParts(updated); }} style={{ background: '#eff6ff', color: '#2563eb', border: 'none', borderRadius: '50%', width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: 13, fontWeight: 800 }} title="Remover uma linha">−</button>
+                                                  <button onClick={() => { const updated = altParts.map((p: any, i: number) => i === pIdx ? { ...p, count: p.count + 1 } : p); saveAltParts(updated); }} style={{ background: '#ecfdf5', color: '#059669', border: 'none', borderRadius: '50%', width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: 13, fontWeight: 800 }} title="Adicionar uma linha">+</button>
+                                                  <button onClick={() => { const updated = altParts.filter((_: any, i: number) => i !== pIdx); saveAltParts(updated); }} style={{ background: '#fef2f2', color: '#ef4444', border: 'none', borderRadius: '50%', width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }} title="Remover bloco de linhas"><Trash2 size={11} /></button>
                                                 </div>
                                               )}
                                             </div>
@@ -1189,116 +1732,13 @@ export function PageContent({
                                         }
                                         return null;
                                       })}
-                                      {!readOnly && onEditAlternativa && (
-                                        <button
-                                          className="no-print alt-lines-btn"
-                                          title="Adicionar Linhas / Espaço à alternativa"
-                                          onClick={() => {
-                                            const hasLines = altParts.some((p: any) => p.type === 'lines');
-                                            if (hasLines) { alert('Esta alternativa já possui linhas/espaço. Use os botões + e − para ajustar.'); return; }
-                                            setAltLinesCount(3);
-                                            setAltLinesType('pautado');
-                                            setAltLinesModalOpen({ qId: q.id, altId: a.id, altParts, q, a });
-                                          }}
-                                          style={{ position: 'absolute', bottom: -20, left: 0, background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', border: 'none', width: 24, height: 24, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', cursor: 'pointer', boxShadow: '0 2px 6px rgba(99,102,241,0.4)', zIndex: 10 }}
-                                        >
-                                          <Plus size={12} />
-                                        </button>
-                                      )}
                                     </div>
-
-                                {onEditAlternativaImage && !readOnly && (
-                                  <div className="no-print alt-img-actions" style={{ position: 'absolute', bottom: -12, right: 0, zIndex: 10, opacity: imgMenuOpen === `${q.id}-${a.id}` ? 1 : undefined, pointerEvents: imgMenuOpen === `${q.id}-${a.id}` ? 'auto' : undefined }}>
-                                    <button 
-                                      onClick={() => setImgMenuOpen(imgMenuOpen === `${q.id}-${a.id}` ? null : `${q.id}-${a.id}`)}
-                                      style={{ background: '#3b82f6', color: 'white', border: 'none', borderRadius: '50%', width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 8px rgba(59,130,246,0.3)' }}
-                                      title="Adicionar/Editar Imagem"
-                                    >
-                                      <ImageIcon size={12} />
-                                    </button>
-                                    {imgMenuOpen === `${q.id}-${a.id}` && (
-                                      <div style={{ position: 'absolute', top: '100%', right: 0, zIndex: 9999, marginTop: 4, background: 'white', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', padding: 4, display: 'flex', flexDirection: 'column', gap: 2, width: 140 }}>
-                                        <button onClick={() => handleImageAction(q.id, a.id, 'upload', a.texto)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 8px', background: 'transparent', border: 'none', fontSize: 12, color: '#334155', cursor: 'pointer', borderRadius: 4, textAlign: 'left' }}>
-                                          <Upload size={14} /> Fazer Upload
-                                        </button>
-                                        <button onClick={() => handleImageAction(q.id, a.id, 'ai', a.texto)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 8px', background: 'transparent', border: 'none', fontSize: 12, color: '#8b5cf6', cursor: 'pointer', borderRadius: 4, textAlign: 'left', fontWeight: 600 }}>
-                                          <Sparkles size={14} /> Gerar com IA
-                                        </button>
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
                               </div>
-
-                                 {!readOnly && (onRemoveAlternativa || onMoveAlternativa) && (
-                                   <div className="no-print alt-control-btns" style={{
-                                     position: 'absolute',
-                                     left: onMoveAlternativa ? -50 : -26,
-                                     top: 4,
-                                     display: 'flex',
-                                     gap: 3,
-                                     alignItems: 'center',
-                                     zIndex: 20
-                                   }}>
-                                     {onMoveAlternativa && (
-                                       <button
-                                         type="button"
-                                         onClick={(e) => {
-                                           e.stopPropagation();
-                                           setReorderMenuOpen(reorderMenuOpen === `${q.id}-${a.id}` ? null : `${q.id}-${a.id}`);
-                                         }}
-                                         title="Mover alternativa para outra letra (A, B, C...)"
-                                         style={{
-                                           background: reorderMenuOpen === `${q.id}-${a.id}` ? '#2563eb' : '#eff6ff',
-                                           color: reorderMenuOpen === `${q.id}-${a.id}` ? '#ffffff' : '#2563eb',
-                                           border: 'none',
-                                           borderRadius: 20,
-                                           width: 18,
-                                           height: 18,
-                                           display: 'flex',
-                                           alignItems: 'center',
-                                           justifyContent: 'center',
-                                           cursor: 'pointer',
-                                           boxShadow: reorderMenuOpen === `${q.id}-${a.id}` ? '0 1px 3px rgba(37,99,235,0.3)' : 'none'
-                                         }}
-                                       >
-                                         <ArrowUpDown size={11} />
-                                       </button>
-                                     )}
-                                  {onRemoveAlternativa && (
-                                    <button
-                                      type="button"
-                                      className="no-print alt-delete-btn"
-                                      onClick={() => {
-                                        setReorderMenuOpen(null);
-                                        onRemoveAlternativa(q.id, a.id);
-                                        forceRepaginate?.();
-                                      }}
-                                      title="Remover alternativa"
-                                      style={{
-                                        background: '#fee2e2',
-                                        color: '#ef4444',
-                                        border: 'none',
-                                        borderRadius: 20,
-                                        width: 18,
-                                        height: 18,
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        cursor: 'pointer',
-                                      }}
-                                    >
-                                      <X size={12} />
-                                    </button>
-                                  )}
-                                </div>
-                              )}
                             </div>
                           )
                           })})()}
                         </div>
                         
-                        {/* Old button removed */}
                         {q.tipo_questao === 'descritiva' && (block.linhasResposta !== undefined ? block.linhasResposta : 5) > 0 && (
                           block.estiloEspaco === 'pautado' ? (
                             <div style={{ marginTop: 16, width: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -1365,8 +1805,10 @@ export function PageContent({
 
               if (block.type === 'part_enun_txt') {
                 const q = block.q;
+                const qNumberLabel = block.qIndex !== null && block.qIndex !== undefined ? block.qIndex + 1 : null;
                 return (
-                  <div key={blockKey} style={{ position: 'relative', marginTop: block.renderMarginTop || 0, display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                  <div key={blockKey} className={`questao-container ${block.isFirst ? 'questao-hover-block' : ''}`} style={{ position: 'relative', marginTop: block.renderMarginTop || 0, display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                    {block.isFirst && renderQuestionHoverToolbar(q, qNumberLabel)}
 
                     {q.tipo_questao === 'texto_apoio' && block.isFirst && (
                       <div className="no-print texto-apoio-badge" style={{
@@ -1398,9 +1840,9 @@ export function PageContent({
                       <div style={{
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                         width: '28px', height: '28px', minWidth: '28px', background: block.isFirst ? '#1e293b' : 'transparent', color: block.isFirst ? '#ffffff' : 'transparent',
-                        fontWeight: 900, borderRadius: '8px', fontSize: '11pt', marginTop: '4px'
+                        fontWeight: 900, borderRadius: '8px', fontSize: '11pt', marginTop: '2px'
                       }}>
-                        {block.isFirst && block.qIndex !== null && block.qIndex !== undefined ? block.qIndex + 1 : ''}
+                        {block.isFirst && qNumberLabel !== null ? qNumberLabel : ''}
                       </div>
                     )}
                     <div style={{ flex: 1, minWidth: 0, display: 'flow-root' }}>
@@ -1434,7 +1876,7 @@ export function PageContent({
                           onEditEnunciado(block.q.id, metaTags.join('\n') + (metaTags.length > 0 ? '\n' : '') + newFullHtml);
                           forceRepaginate();
                         }}
-                        style={{ wordBreak: 'break-word', outline: 'none', cursor: 'text' }}
+                        style={{ wordBreak: 'break-word', outline: 'none', cursor: readOnly ? 'default' : 'text' }}
                       />
                     </div>
                   </div>
@@ -1444,8 +1886,10 @@ export function PageContent({
               if (block.type === 'part_enun_lines_line') {
                 const q = block.q;
                 const parts = parseEnunciadoParts(q.enunciado, q.imagens || []);
+                const qNumberLabel = block.qIndex !== null && block.qIndex !== undefined ? block.qIndex + 1 : null;
                 return (
-                  <div key={blockKey} className="alt-hover-group" style={{ position: 'relative', marginTop: block.renderMarginTop || 0, display: 'flex', gap: 10 }}>
+                  <div key={blockKey} className={`lines-hover-wrapper ${block.isFirst ? 'questao-hover-block' : ''}`} style={{ position: 'relative', marginTop: block.renderMarginTop || 0, display: 'flex', gap: 10 }}>
+                    {block.isFirst && renderQuestionHoverToolbar(q, qNumberLabel)}
                     <div style={{
                       display: 'flex',
                       alignItems: block.isFirst ? 'center' : 'flex-end',
@@ -1456,17 +1900,18 @@ export function PageContent({
                       fontWeight: block.isFirst ? 900 : 500,
                       borderRadius: block.isFirst ? '8px' : '0px',
                       fontSize: block.isFirst ? '11pt' : '9pt',
-                      marginTop: block.isFirst ? '4px' : '0px',
+                      marginTop: block.isFirst ? '2px' : '0px',
                       paddingRight: block.isFirst ? '0px' : '6px',
                       userSelect: 'none'
                     }}>
-                      {block.isFirst ? (block.qIndex !== null && block.qIndex !== undefined ? block.qIndex + 1 : '') : (block.style !== 'branco' ? (block.lineIndex + 1) : '')}
+                      {block.isFirst ? (qNumberLabel ?? '') : (block.style !== 'branco' ? (block.lineIndex + 1) : '')}
                     </div>
                     <div style={{ flex: 1, minWidth: 0, position: 'relative' }}>
                       <div style={{ width: '100%', borderBottom: block.style === 'branco' ? 'none' : '1px solid #000', height: 28 }} />
                       
-                      {block.isFirstInGroup && (
-                        <div className="alt-actions" style={{ position: 'absolute', right: 0, top: 0, display: 'flex', gap: 4, transform: 'translateY(-50%)' }}>
+                      {block.isFirstInGroup && !readOnly && (
+                        <div className="no-print lines-floating-toolbar" style={{ position: 'absolute', right: 4, top: 2, display: 'flex', gap: 4, zIndex: 20, background: 'rgba(255,255,255,0.95)', padding: '3px 6px', borderRadius: 20, boxShadow: '0 4px 12px rgba(15,23,42,0.12)', border: '1px solid #e2e8f0', alignItems: 'center' }}>
+                          <span style={{ fontSize: 10, fontWeight: 700, color: '#64748b', padding: '0 4px' }}>{block.count} {block.count === 1 ? 'linha' : 'linhas'}</span>
                           <button onClick={() => {
                               const newFullHtml = parts.map((p: any, i: number) => {
                                 if (p.type === 'text') return (p.content || '').replace(/(<meta[^>]+>)/ig, '');
@@ -1481,7 +1926,7 @@ export function PageContent({
                               const metaTags = (q.enunciado || '').match(/(<meta[^>]+>)/ig) || [];
                               onEditEnunciado(q.id, metaTags.join('\n') + (metaTags.length > 0 ? '\n' : '') + newFullHtml);
                               forceRepaginate();
-                          }} style={{ background: '#3b82f6', color: 'white', border: 'none', borderRadius: '50%', width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }} title="Remover uma linha">-</button>
+                          }} style={{ background: '#eff6ff', color: '#2563eb', border: 'none', borderRadius: '50%', width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontWeight: 800 }} title="Remover uma linha">−</button>
                           <button onClick={() => {
                               const newFullHtml = parts.map((p: any, i: number) => {
                                 if (p.type === 'text') return (p.content || '').replace(/(<meta[^>]+>)/ig, '');
@@ -1496,7 +1941,7 @@ export function PageContent({
                               const metaTags = (q.enunciado || '').match(/(<meta[^>]+>)/ig) || [];
                               onEditEnunciado(q.id, metaTags.join('\n') + (metaTags.length > 0 ? '\n' : '') + newFullHtml);
                               forceRepaginate();
-                          }} style={{ background: '#10b981', color: 'white', border: 'none', borderRadius: '50%', width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }} title="Adicionar uma linha">+</button>
+                          }} style={{ background: '#ecfdf5', color: '#059669', border: 'none', borderRadius: '50%', width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontWeight: 800 }} title="Adicionar uma linha">+</button>
                           <button onClick={() => {
                               const newFullHtml = parts.filter((p: any, i: number) => i !== block.originalIndex).map((p: any) => {
                                 if (p.type === 'text') return (p.content || '').replace(/(<meta[^>]+>)/ig, '');
@@ -1506,7 +1951,7 @@ export function PageContent({
                               const metaTags = (q.enunciado || '').match(/(<meta[^>]+>)/ig) || [];
                               onEditEnunciado(q.id, metaTags.join('\n') + (metaTags.length > 0 ? '\n' : '') + newFullHtml);
                               forceRepaginate();
-                          }} style={{ background: 'rgba(239,68,68,0.9)', color: 'white', border: 'none', borderRadius: '50%', width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }} title="Remover bloco de linhas"><Trash2 size={14} /></button>
+                          }} style={{ background: '#fef2f2', color: '#ef4444', border: 'none', borderRadius: '50%', width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }} title="Remover bloco de linhas"><Trash2 size={12} /></button>
                         </div>
                       )}
                     </div>
@@ -1516,7 +1961,6 @@ export function PageContent({
 
               if (block.type === 'part_img_group') {
                 const q = block.q;
-                
                 const parts = parseEnunciadoParts(q.enunciado, q.imagens || []);
 
                 return (() => {
@@ -1532,7 +1976,7 @@ export function PageContent({
                       <div style={{ width: '28px', minWidth: '28px' }}></div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, justifyContent: groupJustify, width: '100%' }}>
-                          {block.images.map((part: any, idxInGroup: number) => {
+                          {block.images.map((part: any) => {
                           const i = part.index;
                           const pIdx = part.originalIndex;
                           const img = part.url || '';
@@ -1552,6 +1996,7 @@ export function PageContent({
                             p.set('w', w.toString());
                             if (imgAlign !== 'center') p.set('a', imgAlign);
                             onEditEnunciadoImage?.(q.id, i, `${imgBaseUrl}#${p.toString()}`);
+                            forceRepaginate?.();
                           };
                           
                           const setAlign = (a: string) => {
@@ -1559,6 +2004,7 @@ export function PageContent({
                             if (imgWidthStr) p.set('w', imgWidthStr);
                             p.set('a', a);
                             onEditEnunciadoImage?.(q.id, i, `${imgBaseUrl}#${p.toString()}`);
+                            forceRepaginate?.();
                           };
                           
                           const movePart = (direction: 'up' | 'down') => {
@@ -1581,29 +2027,54 @@ export function PageContent({
                               return `[IMAGEM ${p.index + 1}]`;
                             }).join('');
                             onEditEnunciado(q.id, metaTags.join('\n') + (metaTags.length > 0 ? '\n' : '') + newFullHtml);
+                            forceRepaginate?.();
                           };
 
                           return (
-                            <div key={`img-${i}-${pIdx}`} className="alt-hover-group" style={{ position: 'relative', display: 'flex', justifyContent, width: imgWidth ? `${imgWidth}px` : 'auto', maxWidth: '100%', margin: isSvg ? '4px auto' : undefined }}>
+                            <div key={`img-${i}-${pIdx}`} className="img-hover-wrapper" style={{ position: 'relative', display: 'flex', justifyContent, width: imgWidth ? `${imgWidth}px` : 'auto', maxWidth: '100%', margin: isSvg ? '4px auto' : undefined }}>
                               <img src={imgBaseUrl || undefined} style={{ width: imgWidth ? '100%' : 'auto', maxWidth: '100%', maxHeight: isSvg ? '75px' : '220mm', height: 'auto', borderRadius: isSvg ? 0 : 8, display: 'block', objectFit: 'contain' }} />
                               
                               {onEditEnunciadoImage && !readOnly && (
-                                <div className="no-print alt-img-actions" style={{ position: 'absolute', bottom: 4, left: 4, display: 'flex', gap: 4, zIndex: 10, flexWrap: 'wrap', maxWidth: 280, justifyContent: 'flex-start' }}>
-                                  <div style={{ display: 'flex', background: 'rgba(255,255,255,0.95)', borderRadius: 20, padding: 4, gap: 4, boxShadow: '0 2px 4px rgba(0,0,0,0.1)', alignItems: 'center' }}>
-                                    <button onClick={() => movePart('up')} disabled={pIdx <= 0} style={{ background: 'transparent', color: pIdx <= 0 ? '#cbd5e1' : '#475569', border: 'none', borderRadius: '50%', width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: pIdx <= 0 ? 'default' : 'pointer' }} title="Mover para cima"><ArrowUp size={14} /></button>
-                                    <button onClick={() => movePart('down')} disabled={pIdx === -1 || pIdx === parts.length - 1} style={{ background: 'transparent', color: pIdx === -1 || pIdx === parts.length - 1 ? '#cbd5e1' : '#475569', border: 'none', borderRadius: '50%', width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: pIdx === -1 || pIdx === parts.length - 1 ? 'default' : 'pointer' }} title="Mover para baixo"><ArrowDown size={14} /></button>
+                                <div className="no-print img-floating-toolbar" style={{ position: 'absolute', bottom: 6, left: 6, display: 'flex', gap: 4, zIndex: 25, flexWrap: 'wrap', maxWidth: 340, justifyContent: 'flex-start' }}>
+                                  <div style={{ display: 'flex', background: 'rgba(15,23,42,0.92)', backdropFilter: 'blur(8px)', borderRadius: 20, padding: '3px 6px', gap: 4, boxShadow: '0 4px 12px rgba(0,0,0,0.2)', alignItems: 'center' }}>
+                                    <button onClick={() => movePart('up')} disabled={pIdx <= 0} style={{ background: 'transparent', color: pIdx <= 0 ? '#475569' : '#f8fafc', border: 'none', borderRadius: '50%', width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: pIdx <= 0 ? 'default' : 'pointer' }} title="Mover para cima"><ArrowUp size={13} /></button>
+                                    <button onClick={() => movePart('down')} disabled={pIdx === -1 || pIdx === parts.length - 1} style={{ background: 'transparent', color: pIdx === -1 || pIdx === parts.length - 1 ? '#475569' : '#f8fafc', border: 'none', borderRadius: '50%', width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: pIdx === -1 || pIdx === parts.length - 1 ? 'default' : 'pointer' }} title="Mover para baixo"><ArrowDown size={13} /></button>
                                   </div>
-                                  <div style={{ display: 'flex', background: 'rgba(255,255,255,0.95)', borderRadius: 20, padding: '2px 8px', gap: 8, boxShadow: '0 2px 4px rgba(0,0,0,0.1)', alignItems: 'center' }}>
-                                    <span style={{ fontSize: 10, fontWeight: 700, color: '#64748b' }}>TAMANHO</span>
+                                  <div style={{ display: 'flex', background: 'rgba(15,23,42,0.92)', backdropFilter: 'blur(8px)', borderRadius: 20, padding: '3px 8px', gap: 6, boxShadow: '0 4px 12px rgba(0,0,0,0.2)', alignItems: 'center' }}>
+                                    {[
+                                      { label: 'P', w: 180 },
+                                      { label: 'M', w: 300 },
+                                      { label: 'G', w: 450 },
+                                      { label: '100%', w: 620 }
+                                    ].map(preset => (
+                                      <button
+                                        key={preset.label}
+                                        type="button"
+                                        onClick={() => setWidth(preset.w)}
+                                        style={{
+                                          background: Math.abs((imgWidth || 350) - preset.w) < 25 ? '#3b82f6' : 'rgba(255,255,255,0.1)',
+                                          color: '#fff',
+                                          border: 'none',
+                                          borderRadius: 6,
+                                          padding: '2px 5px',
+                                          fontSize: 9.5,
+                                          fontWeight: 800,
+                                          cursor: 'pointer'
+                                        }}
+                                        title={`Largura ${preset.label} (${preset.w}px)`}
+                                      >
+                                        {preset.label}
+                                      </button>
+                                    ))}
                                     <input 
                                       type="range" 
-                                      min="100" 
-                                      max="800" 
+                                      min="80" 
+                                      max="700" 
                                       step="10"
                                       defaultValue={imgWidth || 350}
                                       onMouseDown={(e) => {
                                         const inputEl = e.currentTarget;
-                                        const menu = inputEl.closest('.alt-img-actions') as HTMLElement;
+                                        const menu = inputEl.closest('.img-floating-toolbar') as HTMLElement;
                                         if (menu) {
                                           const rect = menu.getBoundingClientRect();
                                           menu.dataset.oldLeft = menu.style.left;
@@ -1619,19 +2090,18 @@ export function PageContent({
                                           window.removeEventListener('mouseup', handleEnd);
                                           if (menu) {
                                             menu.style.position = menu.dataset.oldPosition || 'absolute';
-                                            menu.style.left = menu.dataset.oldLeft || '4px';
-                                            menu.style.bottom = menu.dataset.oldBottom || '4px';
+                                            menu.style.left = menu.dataset.oldLeft || '6px';
+                                            menu.style.bottom = menu.dataset.oldBottom || '6px';
                                             menu.style.top = 'auto';
                                             menu.style.right = 'auto';
                                           }
                                           setWidth(parseInt(inputEl.value));
-                                          forceRepaginate?.();
                                         };
                                         window.addEventListener('mouseup', handleEnd);
                                       }}
                                       onTouchStart={(e) => {
                                         const inputEl = e.currentTarget;
-                                        const menu = inputEl.closest('.alt-img-actions') as HTMLElement;
+                                        const menu = inputEl.closest('.img-floating-toolbar') as HTMLElement;
                                         if (menu) {
                                           const rect = menu.getBoundingClientRect();
                                           menu.dataset.oldLeft = menu.style.left;
@@ -1647,36 +2117,45 @@ export function PageContent({
                                           window.removeEventListener('touchend', handleEnd);
                                           if (menu) {
                                             menu.style.position = menu.dataset.oldPosition || 'absolute';
-                                            menu.style.left = menu.dataset.oldLeft || '4px';
-                                            menu.style.bottom = menu.dataset.oldBottom || '4px';
+                                            menu.style.left = menu.dataset.oldLeft || '6px';
+                                            menu.style.bottom = menu.dataset.oldBottom || '6px';
                                             menu.style.top = 'auto';
                                             menu.style.right = 'auto';
                                           }
                                           setWidth(parseInt(inputEl.value));
-                                          forceRepaginate?.();
                                         };
                                         window.addEventListener('touchend', handleEnd);
                                       }}
                                       onChange={(e) => {
-                                        const groupEl = e.currentTarget.closest('.alt-hover-group') as HTMLElement;
+                                        const groupEl = e.currentTarget.closest('.img-hover-wrapper') as HTMLElement;
                                         const imgEl = groupEl?.querySelector('img');
                                         if (groupEl && imgEl) {
                                           groupEl.style.width = `${e.currentTarget.value}px`;
                                           imgEl.style.width = '100%';
-                                          groupEl.style.maxWidth = 'none';
+                                          groupEl.style.maxWidth = '100%';
                                         }
                                       }}
                                       onBlur={(e) => {
                                         setWidth(parseInt(e.currentTarget.value));
-                                        forceRepaginate?.();
                                       }}
-                                      style={{ width: 80, cursor: 'ew-resize' }}
+                                      style={{ width: 64, cursor: 'ew-resize', accentColor: '#3b82f6' }}
                                     />
                                   </div>
-                                  <div style={{ display: 'flex', background: 'rgba(255,255,255,0.95)', borderRadius: 20, padding: 2, gap: 2, boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
-                                    <button onClick={() => setAlign('left')} style={{ background: imgAlign === 'left' ? '#e2e8f0' : 'transparent', color: '#475569', border: 'none', borderRadius: '50%', width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }} title="Alinhar à Esquerda"><AlignLeft size={14} /></button>
-                                    <button onClick={() => setAlign('center')} style={{ background: imgAlign === 'center' ? '#e2e8f0' : 'transparent', color: '#475569', border: 'none', borderRadius: '50%', width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }} title="Centralizar"><AlignCenter size={14} /></button>
-                                    <button onClick={() => setAlign('right')} style={{ background: imgAlign === 'right' ? '#e2e8f0' : 'transparent', color: '#475569', border: 'none', borderRadius: '50%', width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }} title="Alinhar à Direita"><AlignRight size={14} /></button>
+                                  <div style={{ display: 'flex', background: 'rgba(15,23,42,0.92)', backdropFilter: 'blur(8px)', borderRadius: 20, padding: 2, gap: 2, boxShadow: '0 4px 12px rgba(0,0,0,0.2)' }}>
+                                    <button onClick={() => setAlign('left')} style={{ background: imgAlign === 'left' ? '#3b82f6' : 'transparent', color: '#fff', border: 'none', borderRadius: '50%', width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }} title="Alinhar à Esquerda"><AlignLeft size={13} /></button>
+                                    <button onClick={() => setAlign('center')} style={{ background: imgAlign === 'center' ? '#3b82f6' : 'transparent', color: '#fff', border: 'none', borderRadius: '50%', width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }} title="Centralizar"><AlignCenter size={13} /></button>
+                                    <button onClick={() => setAlign('right')} style={{ background: imgAlign === 'right' ? '#3b82f6' : 'transparent', color: '#fff', border: 'none', borderRadius: '50%', width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }} title="Alinhar à Direita"><AlignRight size={13} /></button>
+                                  </div>
+                                  <div style={{ position: 'relative' }}>
+                                    <button onClick={() => setMainImgMenuOpen(mainImgMenuOpen === menuKey ? null : menuKey)} style={{ background: '#3b82f6', color: 'white', border: 'none', borderRadius: 14, padding: '4px 8px', display: 'flex', alignItems: 'center', gap: 4, fontSize: 10.5, fontWeight: 700, cursor: 'pointer', boxShadow: '0 2px 8px rgba(59,130,246,0.3)', height: 26 }}>
+                                      <ImageIcon size={12} /> Trocar
+                                    </button>
+                                    {mainImgMenuOpen === menuKey && (
+                                      <div style={{ position: 'absolute', bottom: '100%', left: 0, zIndex: 9999, marginBottom: 4, background: 'white', borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.16)', border: '1px solid #e2e8f0', padding: 4, display: 'flex', flexDirection: 'column', gap: 2, width: 145 }}>
+                                        <button onClick={() => handleMainImageAction(q.id, i, 'upload', q.enunciado)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 8px', background: 'transparent', border: 'none', fontSize: 12, color: '#334155', cursor: 'pointer', borderRadius: 6, textAlign: 'left', fontWeight: 600 }}><Upload size={13} color="#2563eb" /> Fazer Upload</button>
+                                        <button onClick={() => handleMainImageAction(q.id, i, 'ai', q.enunciado)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 8px', background: 'transparent', border: 'none', fontSize: 12, color: '#8b5cf6', cursor: 'pointer', borderRadius: 6, textAlign: 'left', fontWeight: 700 }}><Sparkles size={13} /> Gerar com IA</button>
+                                      </div>
+                                    )}
                                   </div>
                                   <button
                                     onClick={() => {
@@ -1692,23 +2171,13 @@ export function PageContent({
                                       }).join('');
                                       onEditEnunciado(q.id, metaTags.join('\n') + (metaTags.length > 0 ? '\n' : '') + newFullHtml);
                                       onEditEnunciadoImage?.(q.id, i, '');
+                                      forceRepaginate?.();
                                     }}
-                                    style={{ background: 'rgba(239,68,68,0.9)', color: 'white', border: 'none', borderRadius: '50%', width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}
+                                    style={{ background: '#ef4444', color: 'white', border: 'none', borderRadius: '50%', width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 6px rgba(239,68,68,0.3)' }}
                                     title="Remover Imagem"
                                   >
-                                    <Trash2 size={14} />
+                                    <Trash2 size={13} />
                                   </button>
-                                  <div style={{ position: 'relative' }}>
-                                    <button onClick={() => setMainImgMenuOpen(mainImgMenuOpen === menuKey ? null : menuKey)} style={{ background: '#3b82f6', color: 'white', border: 'none', borderRadius: 12, padding: '4px 8px', display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 600, cursor: 'pointer', boxShadow: '0 2px 8px rgba(59,130,246,0.3)', height: 28 }}>
-                                      <ImageIcon size={12} /> Imagem
-                                    </button>
-                                    {mainImgMenuOpen === menuKey && (
-                                      <div style={{ position: 'absolute', top: '100%', right: 0, zIndex: 9999, marginTop: 4, background: 'white', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', padding: 4, display: 'flex', flexDirection: 'column', gap: 2, width: 140 }}>
-                                        <button onClick={() => handleMainImageAction(q.id, i, 'upload', q.enunciado)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 8px', background: 'transparent', border: 'none', fontSize: 12, color: '#334155', cursor: 'pointer', borderRadius: 4, textAlign: 'left' }}><Upload size={14} /> Fazer Upload</button>
-                                        <button onClick={() => handleMainImageAction(q.id, i, 'ai', q.enunciado)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 8px', background: 'transparent', border: 'none', fontSize: 12, color: '#8b5cf6', cursor: 'pointer', borderRadius: 4, textAlign: 'left', fontWeight: 600 }}><Sparkles size={14} /> Gerar com IA</button>
-                                      </div>
-                                    )}
-                                  </div>
                                 </div>
                               )}
                             </div>
@@ -1758,14 +2227,26 @@ export function PageContent({
                             const p = new URLSearchParams(hashStr);
                             p.set('w', w.toString());
                             onEditAlternativaImage?.(qId, a.id, `${imgBaseUrl}#${p.toString()}`);
+                            forceRepaginate?.();
+                          };
+
+                          const altParts = parseEnunciadoParts(a.texto || '', []);
+                          const saveAltParts = (newParts: any[]) => {
+                            const newTexto = newParts.map((p: any) => {
+                              if (p.type === 'text') return p.content || '';
+                              if (p.type === 'lines') return p.style === 'branco' ? `[ESPACO_BRANCO:${p.count}]` : `[LINHAS_PAUTADAS:${p.count}]`;
+                              return '';
+                            }).join('');
+                            onEditAlternativa(qId, a.id, newTexto);
+                            forceRepaginate();
                           };
 
                           return (
-                            <div key={a.id || `alt-${aIndex}`} className="alt-hover-group" style={{ 
+                            <div key={a.id || `alt-${aIndex}`} className="alt-row-item" style={{ 
                               display: 'flex', gap: 12, alignItems: 'flex-start', position: 'relative',
                               flex: qCols > 1 ? undefined : (effectiveWidth ? '0 0 auto' : '1 1 200px'),
                               fontSize: `${alternativasFontSize}px`,
-                              zIndex: reorderMenuOpen === `${qId}-${a.id}` ? 500 : (imgMenuOpen === a.id ? 50 : 1)
+                              zIndex: reorderMenuOpen === `${qId}-${a.id}` ? 500 : (imgMenuOpen === `${qId}-${a.id}` ? 120 : 1)
                             }}>
                           <div 
                             className={`reorder-trigger ${a.eh_correta ? 'correct-bubble-preview' : ''}`} 
@@ -1789,23 +2270,46 @@ export function PageContent({
                             {a.letra}
                           </div>
                           {renderReorderPopover(qId, a.id, a.letra, aIndex, totalAlts, aIndex === 0)}
+                          {renderAlternativeRowToolbar(qId, block.q, a, altParts, saveAltParts)}
                           <div style={{ flex: 1, position: 'relative', width: effectiveWidth ? `${effectiveWidth}px` : 'auto', minWidth: 0 }}>
                             {a.imagem_url && (
-                              <div className="alt-img-wrapper" style={{ position: 'relative', marginBottom: 8, width: '100%', maxWidth: '100%' }}>
+                              <div className="alt-img-wrapper img-hover-wrapper" style={{ position: 'relative', marginBottom: 8, width: '100%', maxWidth: '100%' }}>
                                 <img src={imgBaseUrl || undefined} style={{ width: '100%', maxWidth: '100%', height: 'auto', borderRadius: 8, display: 'block' }} />
                                 {onEditAlternativaImage && !readOnly && (
-                                  <div className="no-print alt-img-actions" style={{ position: 'absolute', bottom: 4, left: 4, display: 'flex', gap: 4, zIndex: 10, flexWrap: 'wrap', maxWidth: 280, justifyContent: 'flex-start' }}>
-                                    <div style={{ display: 'flex', background: 'rgba(255,255,255,0.95)', borderRadius: 20, padding: '2px 8px', gap: 8, boxShadow: '0 2px 4px rgba(0,0,0,0.1)', alignItems: 'center' }}>
-                                      <span style={{ fontSize: 10, fontWeight: 700, color: '#64748b' }}>TAMANHO</span>
+                                  <div className="no-print img-floating-toolbar" style={{ position: 'absolute', bottom: 4, left: 4, display: 'flex', gap: 4, zIndex: 20, flexWrap: 'wrap', maxWidth: 280, justifyContent: 'flex-start' }}>
+                                    <div style={{ display: 'flex', background: 'rgba(15,23,42,0.92)', backdropFilter: 'blur(8px)', borderRadius: 20, padding: '2px 8px', gap: 6, boxShadow: '0 4px 12px rgba(0,0,0,0.2)', alignItems: 'center' }}>
+                                      {[
+                                        { label: 'P', w: 120 },
+                                        { label: 'M', w: 220 },
+                                        { label: 'G', w: 340 }
+                                      ].map(preset => (
+                                        <button
+                                          key={preset.label}
+                                          type="button"
+                                          onClick={() => setWidth(preset.w)}
+                                          style={{
+                                            background: Math.abs((effectiveWidth || 250) - preset.w) < 25 ? '#3b82f6' : 'rgba(255,255,255,0.1)',
+                                            color: '#fff',
+                                            border: 'none',
+                                            borderRadius: 5,
+                                            padding: '1px 5px',
+                                            fontSize: 9,
+                                            fontWeight: 800,
+                                            cursor: 'pointer'
+                                          }}
+                                        >
+                                          {preset.label}
+                                        </button>
+                                      ))}
                                       <input 
                                         type="range" 
                                         min="50" 
-                                        max="800" 
+                                        max="600" 
                                         step="5"
                                         defaultValue={effectiveWidth || 250}
                                         onMouseDown={(e) => {
                                           const inputEl = e.currentTarget;
-                                          const menu = inputEl.closest('.alt-img-actions') as HTMLElement;
+                                          const menu = inputEl.closest('.img-floating-toolbar') as HTMLElement;
                                           if (menu) {
                                             const rect = menu.getBoundingClientRect();
                                             menu.dataset.oldLeft = menu.style.left;
@@ -1828,13 +2332,12 @@ export function PageContent({
                                             }
                                             const finalVal = parseInt(inputEl.value);
                                             setWidth(finalVal);
-                                            forceRepaginate?.();
                                           };
                                           window.addEventListener('mouseup', handleEnd);
                                         }}
                                         onTouchStart={(e) => {
                                           const inputEl = e.currentTarget;
-                                          const menu = inputEl.closest('.alt-img-actions') as HTMLElement;
+                                          const menu = inputEl.closest('.img-floating-toolbar') as HTMLElement;
                                           if (menu) {
                                             const rect = menu.getBoundingClientRect();
                                             menu.dataset.oldLeft = menu.style.left;
@@ -1857,159 +2360,89 @@ export function PageContent({
                                             }
                                             const finalVal = parseInt(inputEl.value);
                                             setWidth(finalVal);
-                                            forceRepaginate?.();
                                           };
                                           window.addEventListener('touchend', handleEnd);
                                         }}
                                         onChange={(e) => {
                                           const val = e.currentTarget.value;
-                                          const groupEl = e.currentTarget.closest('.alt-hover-group') as HTMLElement;
+                                          const groupEl = e.currentTarget.closest('.alt-row-item') as HTMLElement;
                                           if (groupEl) {
                                             groupEl.style.width = 'auto';
                                             groupEl.style.flex = '0 0 auto';
                                           }
-                                          const contentCol = e.currentTarget.closest('.alt-hover-group')?.querySelector('div:nth-child(2)') as HTMLElement;
-                                          if (contentCol) {
-                                            contentCol.style.width = `${val}px`;
-                                          }
                                           const wrapperEl = e.currentTarget.closest('.alt-img-wrapper') as HTMLElement;
                                           if (wrapperEl) {
                                             wrapperEl.style.width = `${val}px`;
-                                            wrapperEl.style.maxWidth = 'none';
+                                            wrapperEl.style.maxWidth = '100%';
                                             const imgEl = wrapperEl.querySelector('img') as HTMLElement;
                                             if (imgEl) {
                                               imgEl.style.width = '100%';
-                                              imgEl.style.maxWidth = 'none';
+                                              imgEl.style.maxWidth = '100%';
                                             }
                                           }
                                         }}
                                         onBlur={(e) => {
                                           setWidth(parseInt(e.currentTarget.value));
-                                          forceRepaginate?.();
                                         }}
-                                        style={{ width: 80, cursor: 'ew-resize' }}
+                                        style={{ width: 65, cursor: 'ew-resize', accentColor: '#3b82f6' }}
                                       />
                                     </div>
                                     <button
                                       onClick={() => {
                                         onEditAlternativaImage(qId, a.id, '');
+                                        forceRepaginate?.();
                                       }}
-                                      style={{ background: 'rgba(239,68,68,0.9)', color: 'white', border: 'none', borderRadius: '50%', width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}
+                                      style={{ background: '#ef4444', color: 'white', border: 'none', borderRadius: '50%', width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.15)' }}
                                       title="Remover Imagem"
                                     >
-                                      <Trash2 size={14} />
+                                      <Trash2 size={12} />
                                     </button>
                                   </div>
                                 )}
                               </div>
                             )}
-                            {(() => {
-                              const altParts = parseEnunciadoParts(a.texto || '', []);
-                              const saveAltParts = (newParts: any[]) => {
-                                const newTexto = newParts.map((p: any) => {
-                                  if (p.type === 'text') return p.content || '';
-                                  if (p.type === 'lines') return p.style === 'branco' ? `[ESPACO_BRANCO:${p.count}]` : `[LINHAS_PAUTADAS:${p.count}]`;
-                                  return '';
-                                }).join('');
-                                onEditAlternativa(qId, a.id, newTexto);
-                                forceRepaginate();
-                              };
-                              return (
-                                <div style={{ position: 'relative' }}>
-                                  {altParts.map((part: any, pIdx: number) => {
-                                    if (part.type === 'text') {
-                                      return (
-                                        <HtmlContent 
-                                          key={`alt-text-${a.id}-${pIdx}`}
-                                          editable={!readOnly}
-                                          html={part.content || ''}
-                                          onBlurHtml={(newHtml) => {
-                                            const updated = altParts.map((p: any, i: number) => i === pIdx ? { ...p, content: newHtml } : p);
-                                            saveAltParts(updated);
-                                          }}
-                                          style={{ wordBreak: 'break-word', outline: 'none' }}
-                                        />
-                                      );
-                                    }
-                                    if (part.type === 'lines') {
-                                      return (
-                                        <div key={`alt-lines-${pIdx}`} className="alt-hover-group" style={{ position: 'relative', width: '100%', marginTop: 4 }}>
-                                          {Array.from({ length: part.count }).map((_: any, li: number) => (
-                                            <div key={li} style={{ position: 'relative', width: '100%', borderBottom: part.style === 'branco' ? 'none' : '1px solid #000', height: 22 }}>
-                                              {part.style !== 'branco' && (
-                                                <div style={{ position: 'absolute', left: -22, bottom: 0, width: 18, display: 'flex', alignItems: 'flex-end', justifyContent: 'flex-end', paddingRight: 4, fontSize: '8pt', color: '#a1a1aa', fontWeight: 500, userSelect: 'none', height: 22 }}>
-                                                  {li + 1}
-                                                </div>
-                                              )}
-                                            </div>
-                                          ))}
-                                          {!readOnly && (
-                                            <div className="no-print alt-actions" style={{ position: 'absolute', right: 0, top: 0, display: 'flex', gap: 4 }}>
-                                              <button onClick={() => { const updated = altParts.map((p: any, i: number) => i === pIdx ? { ...p, count: Math.max(1, p.count - 1) } : p); saveAltParts(updated); }} style={{ background: '#3b82f6', color: 'white', border: 'none', borderRadius: '50%', width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: 14 }} title="Remover uma linha">-</button>
-                                              <button onClick={() => { const updated = altParts.map((p: any, i: number) => i === pIdx ? { ...p, count: p.count + 1 } : p); saveAltParts(updated); }} style={{ background: '#10b981', color: 'white', border: 'none', borderRadius: '50%', width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: 14 }} title="Adicionar uma linha">+</button>
-                                              <button onClick={() => { const updated = altParts.filter((_: any, i: number) => i !== pIdx); saveAltParts(updated); }} style={{ background: 'rgba(239,68,68,0.9)', color: 'white', border: 'none', borderRadius: '50%', width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }} title="Remover bloco de linhas"><Trash2 size={12} /></button>
+                            <div style={{ position: 'relative' }}>
+                              {altParts.map((part: any, pIdx: number) => {
+                                if (part.type === 'text') {
+                                  return (
+                                    <HtmlContent 
+                                      key={`alt-text-${a.id}-${pIdx}`}
+                                      editable={!readOnly}
+                                      html={part.content || ''}
+                                      onBlurHtml={(newHtml) => {
+                                        const updated = altParts.map((p: any, i: number) => i === pIdx ? { ...p, content: newHtml } : p);
+                                        saveAltParts(updated);
+                                      }}
+                                      style={{ wordBreak: 'break-word', outline: 'none', cursor: readOnly ? 'default' : 'text' }}
+                                    />
+                                  );
+                                }
+                                if (part.type === 'lines') {
+                                  return (
+                                    <div key={`alt-lines-${pIdx}`} className="lines-hover-wrapper" style={{ position: 'relative', width: '100%', marginTop: 4 }}>
+                                      {Array.from({ length: part.count }).map((_: any, li: number) => (
+                                        <div key={li} style={{ position: 'relative', width: '100%', borderBottom: part.style === 'branco' ? 'none' : '1px solid #000', height: 22 }}>
+                                          {part.style !== 'branco' && (
+                                            <div style={{ position: 'absolute', left: -22, bottom: 0, width: 18, display: 'flex', alignItems: 'flex-end', justifyContent: 'flex-end', paddingRight: 4, fontSize: '8pt', color: '#a1a1aa', fontWeight: 500, userSelect: 'none', height: 22 }}>
+                                              {li + 1}
                                             </div>
                                           )}
                                         </div>
-                                      );
-                                    }
-                                    return null;
-                                  })}
-                                </div>
-                              );
-                            })()}
-                            {onEditAlternativaImage && !readOnly && (
-                              <div className="no-print alt-img-actions" style={{ position: 'absolute', bottom: -12, right: 0, zIndex: 10, opacity: imgMenuOpen === a.id ? 1 : undefined, pointerEvents: imgMenuOpen === a.id ? 'auto' : undefined }}>
-                                <button onClick={() => setImgMenuOpen(imgMenuOpen === a.id ? null : a.id)} style={{ background: '#3b82f6', color: 'white', border: 'none', borderRadius: '50%', width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 8px rgba(59,130,246,0.3)' }} title="Adicionar/Editar Imagem"><ImageIcon size={12} /></button>
-                                {imgMenuOpen === a.id && (
-                                  <div style={{ position: 'absolute', top: '100%', right: 0, zIndex: 9999, marginTop: 4, background: 'white', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', padding: 4, display: 'flex', flexDirection: 'column', gap: 2, width: 140 }}>
-                                    <button onClick={() => handleImageAction(qId, a.id, 'upload', a.texto)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 8px', background: 'transparent', border: 'none', fontSize: 12, color: '#334155', cursor: 'pointer', borderRadius: 4, textAlign: 'left' }}><Upload size={14} /> Fazer Upload</button>
-                                    <button onClick={() => handleImageAction(qId, a.id, 'ai', a.texto)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 8px', background: 'transparent', border: 'none', fontSize: 12, color: '#8b5cf6', cursor: 'pointer', borderRadius: 4, textAlign: 'left', fontWeight: 600 }}><Sparkles size={14} /> Gerar com IA</button>
-                                  </div>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                          {!readOnly && (onRemoveAlternativa || onMoveAlternativa) && (
-                            <div className="no-print alt-control-btns" style={{
-                              position: 'absolute',
-                              left: onMoveAlternativa ? -50 : -26,
-                              top: 4,
-                              display: 'flex',
-                              gap: 3,
-                              alignItems: 'center',
-                              zIndex: 20
-                            }}>
-                              {onMoveAlternativa && (
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setReorderMenuOpen(reorderMenuOpen === `${qId}-${a.id}` ? null : `${qId}-${a.id}`);
-                                  }}
-                                  title="Mover direto para outra letra (A, B, C...)"
-                                  style={{
-                                    background: reorderMenuOpen === `${qId}-${a.id}` ? '#2563eb' : '#eff6ff',
-                                    color: reorderMenuOpen === `${qId}-${a.id}` ? '#ffffff' : '#2563eb',
-                                    border: 'none',
-                                    borderRadius: 20,
-                                    width: 18,
-                                    height: 18,
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    cursor: 'pointer',
-                                    boxShadow: reorderMenuOpen === `${qId}-${a.id}` ? '0 1px 3px rgba(37,99,235,0.3)' : 'none'
-                                  }}
-                                >
-                                  <ArrowUpDown size={11} />
-                                </button>
-                              )}
-                              {onRemoveAlternativa && (
-                                <button className="no-print alt-delete-btn" onClick={() => { setReorderMenuOpen(null); onRemoveAlternativa(qId, a.id); forceRepaginate(); }} title="Remover alternativa" style={{ background: '#fee2e2', color: '#ef4444', border: 'none', borderRadius: 20, width: 18, height: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><X size={12} /></button>
-                              )}
+                                      ))}
+                                      {!readOnly && (
+                                        <div className="no-print lines-floating-toolbar" style={{ position: 'absolute', right: 4, top: 2, display: 'flex', gap: 4, zIndex: 15, background: 'rgba(255,255,255,0.95)', padding: '2px 5px', borderRadius: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.1)', border: '1px solid #e2e8f0' }}>
+                                          <button onClick={() => { const updated = altParts.map((p: any, i: number) => i === pIdx ? { ...p, count: Math.max(1, p.count - 1) } : p); saveAltParts(updated); }} style={{ background: '#eff6ff', color: '#2563eb', border: 'none', borderRadius: '50%', width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: 13, fontWeight: 800 }} title="Remover uma linha">−</button>
+                                          <button onClick={() => { const updated = altParts.map((p: any, i: number) => i === pIdx ? { ...p, count: p.count + 1 } : p); saveAltParts(updated); }} style={{ background: '#ecfdf5', color: '#059669', border: 'none', borderRadius: '50%', width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: 13, fontWeight: 800 }} title="Adicionar uma linha">+</button>
+                                          <button onClick={() => { const updated = altParts.filter((_: any, i: number) => i !== pIdx); saveAltParts(updated); }} style={{ background: '#fef2f2', color: '#ef4444', border: 'none', borderRadius: '50%', width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }} title="Remover bloco de linhas"><Trash2 size={11} /></button>
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                }
+                                return null;
+                              })}
                             </div>
-                          )}
+                          </div>
                         </div>
                       );
                     });
@@ -2030,10 +2463,20 @@ export function PageContent({
                   aIndex = alts.findIndex((item: any) => item.letra === a.letra || item.letter === a.letra);
                 }
                 const totalAlts = alts.length;
+                const altParts = parseEnunciadoParts(a.texto || '', []);
+                const saveAltParts = (newParts: any[]) => {
+                  const newTexto = newParts.map((p: any) => {
+                    if (p.type === 'text') return p.content || '';
+                    if (p.type === 'lines') return p.style === 'branco' ? `[ESPACO_BRANCO:${p.count}]` : `[LINHAS_PAUTADAS:${p.count}]`;
+                    return '';
+                  }).join('');
+                  onEditAlternativa(q.id, a.id, newTexto);
+                  forceRepaginate();
+                };
                 return (
-                  <div key={blockKey} className="alt-hover-group" style={{ display: 'flex', gap: 10, marginTop: block.renderMarginTop || 0, fontSize: `${alternativasFontSize}px` }}>
+                  <div key={blockKey} style={{ display: 'flex', gap: 10, marginTop: block.renderMarginTop || 0, fontSize: `${alternativasFontSize}px` }}>
                     <div style={{ width: '28px', minWidth: '28px' }}></div>
-                    <div style={{ flex: 1, display: 'flex', gap: 12, alignItems: 'flex-start', position: 'relative', zIndex: reorderMenuOpen === `${q.id}-${a.id}` ? 500 : 1 }}>
+                    <div className="alt-row-item" style={{ flex: 1, display: 'flex', gap: 12, alignItems: 'flex-start', position: 'relative', zIndex: reorderMenuOpen === `${q.id}-${a.id}` ? 500 : (imgMenuOpen === `${q.id}-${a.id}` ? 120 : 1) }}>
                       <div 
                         className={`reorder-trigger ${a.eh_correta ? 'correct-bubble-preview' : ''}`} 
                         onClick={!readOnly && onMoveAlternativa ? (e) => {
@@ -2056,6 +2499,7 @@ export function PageContent({
                         {a.letra}
                       </div>
                       {renderReorderPopover(q.id, a.id, a.letra, aIndex, totalAlts, aIndex === 0)}
+                      {renderAlternativeRowToolbar(q.id, q, a, altParts, saveAltParts)}
                       <div style={{ flex: 1, position: 'relative' }}>
                         {(() => {
                           const imgWidths = q.simulados_alternativas
@@ -2080,26 +2524,49 @@ export function PageContent({
                             const p = new URLSearchParams(hashStr);
                             p.set('w', w.toString());
                             onEditAlternativaImage?.(q.id, a.id, `${imgBaseUrl}#${p.toString()}`);
+                            forceRepaginate?.();
                           };
 
                           return (
                             <div style={{ width: '100%', minWidth: 0 }}>
                               {a.imagem_url && (
-                                <div className="alt-img-wrapper" style={{ position: 'relative', marginBottom: 8, width: effectiveWidth ? `${effectiveWidth}px` : 'auto', maxWidth: '100%' }}>
+                                <div className="alt-img-wrapper img-hover-wrapper" style={{ position: 'relative', marginBottom: 8, width: effectiveWidth ? `${effectiveWidth}px` : 'auto', maxWidth: '100%' }}>
                                   <img src={imgBaseUrl || undefined} style={{ width: '100%', height: 'auto', borderRadius: 8, display: 'block' }} />
                                   {onEditAlternativaImage && !readOnly && (
-                                    <div className="no-print alt-img-actions" style={{ position: 'absolute', bottom: 4, left: 4, display: 'flex', gap: 4, zIndex: 10, flexWrap: 'wrap', maxWidth: 280, justifyContent: 'flex-start' }}>
-                                      <div style={{ display: 'flex', background: 'rgba(255,255,255,0.95)', borderRadius: 20, padding: '2px 8px', gap: 8, boxShadow: '0 2px 4px rgba(0,0,0,0.1)', alignItems: 'center' }}>
-                                        <span style={{ fontSize: 10, fontWeight: 700, color: '#64748b' }}>TAMANHO</span>
+                                    <div className="no-print img-floating-toolbar" style={{ position: 'absolute', bottom: 4, left: 4, display: 'flex', gap: 4, zIndex: 20, flexWrap: 'wrap', maxWidth: 280, justifyContent: 'flex-start' }}>
+                                      <div style={{ display: 'flex', background: 'rgba(15,23,42,0.92)', backdropFilter: 'blur(8px)', borderRadius: 20, padding: '2px 8px', gap: 6, boxShadow: '0 4px 12px rgba(0,0,0,0.2)', alignItems: 'center' }}>
+                                        {[
+                                          { label: 'P', w: 120 },
+                                          { label: 'M', w: 220 },
+                                          { label: 'G', w: 340 }
+                                        ].map(preset => (
+                                          <button
+                                            key={preset.label}
+                                            type="button"
+                                            onClick={() => setAltWidth(preset.w)}
+                                            style={{
+                                              background: Math.abs((effectiveWidth || 250) - preset.w) < 25 ? '#3b82f6' : 'rgba(255,255,255,0.1)',
+                                              color: '#fff',
+                                              border: 'none',
+                                              borderRadius: 5,
+                                              padding: '1px 5px',
+                                              fontSize: 9,
+                                              fontWeight: 800,
+                                              cursor: 'pointer'
+                                            }}
+                                          >
+                                            {preset.label}
+                                          </button>
+                                        ))}
                                         <input 
                                           type="range" 
                                           min="50" 
-                                          max="800" 
+                                          max="600" 
                                           step="5"
                                           defaultValue={effectiveWidth || 250}
                                           onMouseDown={(e) => {
                                             const inputEl = e.currentTarget;
-                                            const menu = inputEl.closest('.alt-img-actions') as HTMLElement;
+                                            const menu = inputEl.closest('.img-floating-toolbar') as HTMLElement;
                                             if (menu) {
                                               const rect = menu.getBoundingClientRect();
                                               menu.dataset.oldLeft = menu.style.left;
@@ -2122,13 +2589,12 @@ export function PageContent({
                                               }
                                               const finalVal = parseInt(inputEl.value);
                                               setAltWidth(finalVal);
-                                              forceRepaginate?.();
                                             };
                                             window.addEventListener('mouseup', handleEnd);
                                           }}
                                           onTouchStart={(e) => {
                                             const inputEl = e.currentTarget;
-                                            const menu = inputEl.closest('.alt-img-actions') as HTMLElement;
+                                            const menu = inputEl.closest('.img-floating-toolbar') as HTMLElement;
                                             if (menu) {
                                               const rect = menu.getBoundingClientRect();
                                               menu.dataset.oldLeft = menu.style.left;
@@ -2151,7 +2617,6 @@ export function PageContent({
                                               }
                                               const finalVal = parseInt(inputEl.value);
                                               setAltWidth(finalVal);
-                                              forceRepaginate?.();
                                             };
                                             window.addEventListener('touchend', handleEnd);
                                           }}
@@ -2160,153 +2625,79 @@ export function PageContent({
                                             const wrapperEl = e.currentTarget.closest('.alt-img-wrapper') as HTMLElement;
                                             if (wrapperEl) {
                                               wrapperEl.style.width = `${val}px`;
-                                              wrapperEl.style.maxWidth = 'none';
+                                              wrapperEl.style.maxWidth = '100%';
                                               const imgEl = wrapperEl.querySelector('img') as HTMLElement;
                                               if (imgEl) {
                                                 imgEl.style.width = '100%';
-                                                imgEl.style.maxWidth = 'none';
+                                                imgEl.style.maxWidth = '100%';
                                               }
                                             }
                                           }}
                                           onBlur={(e) => {
                                             setAltWidth(parseInt(e.currentTarget.value));
-                                            forceRepaginate?.();
                                           }}
-                                          style={{ width: 80, cursor: 'ew-resize' }}
+                                          style={{ width: 65, cursor: 'ew-resize', accentColor: '#3b82f6' }}
                                         />
                                       </div>
                                       <button
-                                        onClick={() => onEditAlternativaImage(q.id, a.id, '')}
-                                        style={{ background: 'rgba(239,68,68,0.9)', color: 'white', border: 'none', borderRadius: '50%', width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}
+                                        onClick={() => {
+                                          onEditAlternativaImage(q.id, a.id, '');
+                                          forceRepaginate?.();
+                                        }}
+                                        style={{ background: '#ef4444', color: 'white', border: 'none', borderRadius: '50%', width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.15)' }}
                                         title="Remover Imagem"
                                       >
-                                        <Trash2 size={14} />
+                                        <Trash2 size={12} />
                                       </button>
                                     </div>
                                   )}
                                 </div>
                               )}
-                              {(() => {
-                                const altParts = parseEnunciadoParts(a.texto || '', []);
-                                const saveAltParts = (newParts: any[]) => {
-                                  const newTexto = newParts.map((p: any) => {
-                                    if (p.type === 'text') return p.content || '';
-                                    if (p.type === 'lines') return p.style === 'branco' ? `[ESPACO_BRANCO:${p.count}]` : `[LINHAS_PAUTADAS:${p.count}]`;
-                                    return '';
-                                  }).join('');
-                                  onEditAlternativa(q.id, a.id, newTexto);
-                                  forceRepaginate();
-                                };
-                                return (
-                                  <div style={{ position: 'relative' }}>
-                                    {altParts.map((part: any, pIdx: number) => {
-                                      if (part.type === 'text') {
-                                        return (
-                                          <HtmlContent 
-                                            key={`alt-text-${a.id}-${pIdx}`}
-                                            editable={!readOnly}
-                                            html={part.content || ''}
-                                            onBlurHtml={(newHtml) => {
-                                              const updated = altParts.map((p: any, i: number) => i === pIdx ? { ...p, content: newHtml } : p);
-                                              saveAltParts(updated);
-                                            }}
-                                            style={{ outline: 'none', border: '1px dashed transparent', padding: '0 4px', wordBreak: 'break-word', cursor: 'text', fontSize: `${alternativasFontSize}px` }}
-                                          />
-                                        );
-                                      }
-                                      if (part.type === 'lines') {
-                                        return (
-                                          <div key={`alt-lines-${pIdx}`} className="alt-hover-group" style={{ position: 'relative', width: '100%', marginTop: 4 }}>
-                                            {Array.from({ length: part.count }).map((_: any, li: number) => (
-                                              <div key={li} style={{ position: 'relative', width: '100%', borderBottom: part.style === 'branco' ? 'none' : '1px solid #000', height: 22 }}>
-                                                {part.style !== 'branco' && (
-                                                  <div style={{ position: 'absolute', left: -22, bottom: 0, width: 18, display: 'flex', alignItems: 'flex-end', justifyContent: 'flex-end', paddingRight: 4, fontSize: '8pt', color: '#a1a1aa', fontWeight: 500, userSelect: 'none', height: 22 }}>
-                                                    {li + 1}
-                                                  </div>
-                                                )}
-                                              </div>
-                                            ))}
-                                            {!readOnly && (
-                                              <div className="no-print alt-actions" style={{ position: 'absolute', right: 0, top: 0, display: 'flex', gap: 4 }}>
-                                                <button onClick={() => { const updated = altParts.map((p: any, i: number) => i === pIdx ? { ...p, count: Math.max(1, p.count - 1) } : p); saveAltParts(updated); }} style={{ background: '#3b82f6', color: 'white', border: 'none', borderRadius: '50%', width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: 14 }} title="Remover uma linha">-</button>
-                                                <button onClick={() => { const updated = altParts.map((p: any, i: number) => i === pIdx ? { ...p, count: p.count + 1 } : p); saveAltParts(updated); }} style={{ background: '#10b981', color: 'white', border: 'none', borderRadius: '50%', width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: 14 }} title="Adicionar uma linha">+</button>
-                                                <button onClick={() => { const updated = altParts.filter((_: any, i: number) => i !== pIdx); saveAltParts(updated); }} style={{ background: 'rgba(239,68,68,0.9)', color: 'white', border: 'none', borderRadius: '50%', width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }} title="Remover bloco de linhas"><Trash2 size={12} /></button>
+                              <div style={{ position: 'relative' }}>
+                                {altParts.map((part: any, pIdx: number) => {
+                                  if (part.type === 'text') {
+                                    return (
+                                      <HtmlContent 
+                                        key={`alt-text-${a.id}-${pIdx}`}
+                                        editable={!readOnly}
+                                        html={part.content || ''}
+                                        onBlurHtml={(newHtml) => {
+                                          const updated = altParts.map((p: any, i: number) => i === pIdx ? { ...p, content: newHtml } : p);
+                                          saveAltParts(updated);
+                                        }}
+                                        style={{ outline: 'none', wordBreak: 'break-word', cursor: readOnly ? 'default' : 'text', fontSize: `${alternativasFontSize}px` }}
+                                      />
+                                    );
+                                  }
+                                  if (part.type === 'lines') {
+                                    return (
+                                      <div key={`alt-lines-${pIdx}`} className="lines-hover-wrapper" style={{ position: 'relative', width: '100%', marginTop: 4 }}>
+                                        {Array.from({ length: part.count }).map((_: any, li: number) => (
+                                          <div key={li} style={{ position: 'relative', width: '100%', borderBottom: part.style === 'branco' ? 'none' : '1px solid #000', height: 22 }}>
+                                            {part.style !== 'branco' && (
+                                              <div style={{ position: 'absolute', left: -22, bottom: 0, width: 18, display: 'flex', alignItems: 'flex-end', justifyContent: 'flex-end', paddingRight: 4, fontSize: '8pt', color: '#a1a1aa', fontWeight: 500, userSelect: 'none', height: 22 }}>
+                                                {li + 1}
                                               </div>
                                             )}
                                           </div>
-                                        );
-                                      }
-                                      return null;
-                                    })}
-                                  </div>
-                                );
-                              })()}
-                              {onEditAlternativaImage && !readOnly && (
-                                <div className="no-print alt-img-actions" style={{ position: 'absolute', bottom: -12, right: 0, zIndex: 10, opacity: imgMenuOpen === a.id ? 1 : undefined, pointerEvents: imgMenuOpen === a.id ? 'auto' : undefined }}>
-                                  <button onClick={() => setImgMenuOpen(imgMenuOpen === a.id ? null : a.id)} style={{ background: '#3b82f6', color: 'white', border: 'none', borderRadius: '50%', width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 8px rgba(59,130,246,0.3)' }} title="Adicionar/Editar Imagem"><ImageIcon size={12} /></button>
-                                  {imgMenuOpen === a.id && (
-                                    <div style={{ position: 'absolute', top: '100%', right: 0, zIndex: 9999, marginTop: 4, background: 'white', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', padding: 4, display: 'flex', flexDirection: 'column', gap: 2, width: 140 }}>
-                                      <button onClick={() => handleImageAction(q.id, a.id, 'upload', a.texto)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 8px', background: 'transparent', border: 'none', fontSize: 12, color: '#334155', cursor: 'pointer', borderRadius: 4, textAlign: 'left' }}><Upload size={14} /> Fazer Upload</button>
-                                      <button onClick={() => handleImageAction(q.id, a.id, 'ai', a.texto)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 8px', background: 'transparent', border: 'none', fontSize: 12, color: '#8b5cf6', cursor: 'pointer', borderRadius: 4, textAlign: 'left', fontWeight: 600 }}><Sparkles size={14} /> Gerar com IA</button>
-                                    </div>
-                                  )}
-                                </div>
-                              )}
+                                        ))}
+                                        {!readOnly && (
+                                          <div className="no-print lines-floating-toolbar" style={{ position: 'absolute', right: 4, top: 2, display: 'flex', gap: 4, zIndex: 15, background: 'rgba(255,255,255,0.95)', padding: '2px 5px', borderRadius: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.1)', border: '1px solid #e2e8f0' }}>
+                                            <button onClick={() => { const updated = altParts.map((p: any, i: number) => i === pIdx ? { ...p, count: Math.max(1, p.count - 1) } : p); saveAltParts(updated); }} style={{ background: '#eff6ff', color: '#2563eb', border: 'none', borderRadius: '50%', width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: 13, fontWeight: 800 }} title="Remover uma linha">−</button>
+                                            <button onClick={() => { const updated = altParts.map((p: any, i: number) => i === pIdx ? { ...p, count: p.count + 1 } : p); saveAltParts(updated); }} style={{ background: '#ecfdf5', color: '#059669', border: 'none', borderRadius: '50%', width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: 13, fontWeight: 800 }} title="Adicionar uma linha">+</button>
+                                            <button onClick={() => { const updated = altParts.filter((_: any, i: number) => i !== pIdx); saveAltParts(updated); }} style={{ background: '#fef2f2', color: '#ef4444', border: 'none', borderRadius: '50%', width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }} title="Remover bloco de linhas"><Trash2 size={11} /></button>
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  }
+                                  return null;
+                                })}
+                              </div>
                             </div>
                           );
                         })()}
                       </div>
-                      {!readOnly && (onRemoveAlternativa || onMoveAlternativa) && (
-                        <div className="no-print alt-control-btns" style={{
-                          position: 'absolute',
-                          left: onMoveAlternativa ? -50 : -26,
-                          top: 4,
-                          display: 'flex',
-                          gap: 3,
-                          alignItems: 'center',
-                          zIndex: 20
-                        }}>
-                          {onMoveAlternativa && (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setReorderMenuOpen(reorderMenuOpen === `${q.id}-${a.id}` ? null : `${q.id}-${a.id}`);
-                              }}
-                              title="Mover direto para outra letra (A, B, C...)"
-                              style={{
-                                background: reorderMenuOpen === `${q.id}-${a.id}` ? '#2563eb' : '#eff6ff',
-                                color: reorderMenuOpen === `${q.id}-${a.id}` ? '#ffffff' : '#2563eb',
-                                border: 'none',
-                                borderRadius: 20,
-                                width: 18,
-                                height: 18,
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                cursor: 'pointer',
-                                boxShadow: reorderMenuOpen === `${q.id}-${a.id}` ? '0 1px 3px rgba(37,99,235,0.3)' : 'none'
-                              }}
-                            >
-                              <ArrowUpDown size={11} />
-                            </button>
-                          )}
-                          {onRemoveAlternativa && (
-                            <button
-                              className="no-print alt-delete-btn"
-                              onClick={() => {
-                                setReorderMenuOpen(null);
-                                onRemoveAlternativa(q.id, a.id);
-                                forceRepaginate();
-                              }}
-                              style={{ background: '#fee2e2', color: '#ef4444', border: 'none', borderRadius: 20, width: 18, height: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
-                              title="Remover alternativa"
-                            >
-                              <X size={12} />
-                            </button>
-                          )}
-                        </div>
-                      )}
                     </div>
                   </div>
                 );
@@ -2318,22 +2709,46 @@ export function PageContent({
           </React.Fragment>
         ))}
       </div>
+
+      {/* Subtle On-Screen Page Badge */}
+      <div
+        className="no-print"
+        style={{
+          position: 'absolute',
+          bottom: 10,
+          right: 16,
+          padding: '3px 10px',
+          borderRadius: 12,
+          background: 'rgba(15, 23, 42, 0.06)',
+          color: '#64748b',
+          fontSize: 10.5,
+          fontWeight: 700,
+          letterSpacing: '0.02em',
+          pointerEvents: 'none',
+          userSelect: 'none',
+          zIndex: 5
+        }}
+      >
+        Página {pIndex + 1} {totalPages ? `de ${totalPages}` : ''}
+      </div>
       
-      {showMargins && (onPageMarginChange || onTopMarginOffsetChange) && (() => {
+      {showMargins && !cleanPreviewMode && (onPageMarginChange || onTopMarginOffsetChange) && (() => {
         const MM = 3.7795275591;
         const baseTopMm = pIndex === 0 ? 75 : 18;
         const guideTop = baseTopMm * MM + effectiveTop;
         return (
           <div
-            className="no-print"
+            className="no-print margin-guide-handle"
             style={{
               position: 'absolute',
-              top: guideTop - 10,
-              left: 0, right: 0, height: 20, cursor: 'ns-resize', zIndex: 50,
+              top: guideTop - 8,
+              left: 0, right: 0, height: 16, cursor: 'ns-resize', zIndex: 50,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}
             onMouseDown={(e) => {
               e.preventDefault();
+              const handleEl = e.currentTarget;
+              handleEl.classList.add('is-dragging');
               const startY = e.clientY;
               const startOffset = effectiveTop;
               const handleMouseMove = (moveEvent: MouseEvent) => {
@@ -2346,6 +2761,7 @@ export function PageContent({
                 }
               };
               const handleMouseUp = () => {
+                handleEl.classList.remove('is-dragging');
                 window.removeEventListener('mousemove', handleMouseMove);
                 window.removeEventListener('mouseup', handleMouseUp);
               };
@@ -2353,28 +2769,30 @@ export function PageContent({
               window.addEventListener('mouseup', handleMouseUp);
             }}
           >
-            <div style={{ width: '100%', height: 2, background: 'rgba(249,115,22,0.7)', borderBottom: '1px dashed #ea580c', pointerEvents: 'none' }} />
-            <div style={{ position: 'absolute', background: '#ea580c', color: 'white', fontSize: 10, padding: '2px 6px', borderRadius: 4, right: 20, top: 2, pointerEvents: 'none', zIndex: 60, whiteSpace: 'nowrap' }}>
-              Pág. {pIndex + 1} • Margem Superior ({effectiveTop.toFixed(0)}px)
+            <div className="margin-guide-line-bar" style={{ width: '100%', height: 0, borderBottom: '1px dashed rgba(59, 130, 246, 0.55)', pointerEvents: 'none' }} />
+            <div className="margin-guide-badge" style={{ position: 'absolute', background: '#1e293b', color: 'white', fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 10, right: 12, top: -18, pointerEvents: 'none', zIndex: 60, whiteSpace: 'nowrap', boxShadow: '0 2px 6px rgba(0,0,0,0.15)' }}>
+              Topo Pág. {pIndex + 1} ({effectiveTop >= 0 ? `+${effectiveTop.toFixed(0)}` : effectiveTop.toFixed(0)}px)
             </div>
           </div>
         );
       })()}
 
-      {showMargins && (onPageMarginChange || onBottomMarginOffsetChange) && (() => {
+      {showMargins && !cleanPreviewMode && (onPageMarginChange || onBottomMarginOffsetChange) && (() => {
         const MM = 3.7795275591;
         const guideBottom = 42 * MM + effectiveBottom;
         return (
           <div
-            className="no-print"
+            className="no-print margin-guide-handle"
             style={{
               position: 'absolute',
-              bottom: guideBottom - 10,
-              left: 0, right: 0, height: 20, cursor: 'ns-resize', zIndex: 50,
+              bottom: guideBottom - 8,
+              left: 0, right: 0, height: 16, cursor: 'ns-resize', zIndex: 50,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}
             onMouseDown={(e) => {
               e.preventDefault();
+              const handleEl = e.currentTarget;
+              handleEl.classList.add('is-dragging');
               const startY = e.clientY;
               const startOffset = effectiveBottom;
               const handleMouseMove = (moveEvent: MouseEvent) => {
@@ -2387,6 +2805,7 @@ export function PageContent({
                 }
               };
               const handleMouseUp = () => {
+                handleEl.classList.remove('is-dragging');
                 window.removeEventListener('mousemove', handleMouseMove);
                 window.removeEventListener('mouseup', handleMouseUp);
               };
@@ -2394,28 +2813,30 @@ export function PageContent({
               window.addEventListener('mouseup', handleMouseUp);
             }}
           >
-            <div style={{ width: '100%', height: 2, background: 'rgba(249,115,22,0.7)', borderBottom: '1px dashed #ea580c', pointerEvents: 'none' }} />
-            <div style={{ position: 'absolute', background: '#ea580c', color: 'white', fontSize: 10, padding: '2px 6px', borderRadius: 4, right: 20, bottom: 2, pointerEvents: 'none', zIndex: 60, whiteSpace: 'nowrap' }}>
-              Pág. {pIndex + 1} • Margem Inferior ({effectiveBottom.toFixed(0)}px)
+            <div className="margin-guide-line-bar" style={{ width: '100%', height: 0, borderBottom: '1px dashed rgba(59, 130, 246, 0.55)', pointerEvents: 'none' }} />
+            <div className="margin-guide-badge" style={{ position: 'absolute', background: '#1e293b', color: 'white', fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 10, right: 12, bottom: -18, pointerEvents: 'none', zIndex: 60, whiteSpace: 'nowrap', boxShadow: '0 2px 6px rgba(0,0,0,0.15)' }}>
+              Rodapé Pág. {pIndex + 1} ({effectiveBottom >= 0 ? `+${effectiveBottom.toFixed(0)}` : effectiveBottom.toFixed(0)}px)
             </div>
           </div>
         );
       })()}
 
-      {showMargins && (onPageMarginChange || onLeftMarginOffsetChange) && (() => {
+      {showMargins && !cleanPreviewMode && (onPageMarginChange || onLeftMarginOffsetChange) && (() => {
         const MM = 3.7795275591;
         const guideLeft = 18 * MM + effectiveLeft;
         return (
           <div
-            className="no-print"
+            className="no-print margin-guide-handle"
             style={{
               position: 'absolute',
-              left: guideLeft - 10,
-              top: 0, bottom: 0, width: 20, cursor: 'ew-resize', zIndex: 50,
+              left: guideLeft - 8,
+              top: 0, bottom: 0, width: 16, cursor: 'ew-resize', zIndex: 50,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}
             onMouseDown={(e) => {
               e.preventDefault();
+              const handleEl = e.currentTarget;
+              handleEl.classList.add('is-dragging');
               const startX = e.clientX;
               const startOffset = effectiveLeft;
               const handleMouseMove = (moveEvent: MouseEvent) => {
@@ -2428,6 +2849,7 @@ export function PageContent({
                 }
               };
               const handleMouseUp = () => {
+                handleEl.classList.remove('is-dragging');
                 window.removeEventListener('mousemove', handleMouseMove);
                 window.removeEventListener('mouseup', handleMouseUp);
               };
@@ -2435,28 +2857,30 @@ export function PageContent({
               window.addEventListener('mouseup', handleMouseUp);
             }}
           >
-            <div style={{ width: 2, height: '100%', background: 'rgba(249,115,22,0.7)', borderRight: '1px dashed #ea580c', pointerEvents: 'none' }} />
-            <div style={{ position: 'absolute', background: '#ea580c', color: 'white', fontSize: 10, padding: '2px 6px', borderRadius: 4, top: pIndex === 0 ? 180 : 100, left: 14, whiteSpace: 'nowrap', pointerEvents: 'none', zIndex: 60 }}>
-              Pág. {pIndex + 1} • Margem Esquerda ({effectiveLeft.toFixed(0)}px)
+            <div className="margin-guide-line-bar" style={{ width: 0, height: '100%', borderRight: '1px dashed rgba(59, 130, 246, 0.45)', pointerEvents: 'none' }} />
+            <div className="margin-guide-badge" style={{ position: 'absolute', background: '#1e293b', color: 'white', fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 10, top: 24, left: 12, whiteSpace: 'nowrap', pointerEvents: 'none', zIndex: 60, boxShadow: '0 2px 6px rgba(0,0,0,0.15)' }}>
+              Esq. Pág. {pIndex + 1} ({effectiveLeft >= 0 ? `+${effectiveLeft.toFixed(0)}` : effectiveLeft.toFixed(0)}px)
             </div>
           </div>
         );
       })()}
 
-      {showMargins && (onPageMarginChange || onRightMarginOffsetChange) && (() => {
+      {showMargins && !cleanPreviewMode && (onPageMarginChange || onRightMarginOffsetChange) && (() => {
         const MM = 3.7795275591;
         const guideRight = 18 * MM + effectiveRight;
         return (
           <div
-            className="no-print"
+            className="no-print margin-guide-handle"
             style={{
               position: 'absolute',
-              right: guideRight - 10,
-              top: 0, bottom: 0, width: 20, cursor: 'ew-resize', zIndex: 50,
+              right: guideRight - 8,
+              top: 0, bottom: 0, width: 16, cursor: 'ew-resize', zIndex: 50,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}
             onMouseDown={(e) => {
               e.preventDefault();
+              const handleEl = e.currentTarget;
+              handleEl.classList.add('is-dragging');
               const startX = e.clientX;
               const startOffset = effectiveRight;
               const handleMouseMove = (moveEvent: MouseEvent) => {
@@ -2469,6 +2893,7 @@ export function PageContent({
                 }
               };
               const handleMouseUp = () => {
+                handleEl.classList.remove('is-dragging');
                 window.removeEventListener('mousemove', handleMouseMove);
                 window.removeEventListener('mouseup', handleMouseUp);
               };
@@ -2476,9 +2901,9 @@ export function PageContent({
               window.addEventListener('mouseup', handleMouseUp);
             }}
           >
-            <div style={{ width: 2, height: '100%', background: 'rgba(249,115,22,0.7)', borderLeft: '1px dashed #ea580c', pointerEvents: 'none' }} />
-            <div style={{ position: 'absolute', background: '#ea580c', color: 'white', fontSize: 10, padding: '2px 6px', borderRadius: 4, top: pIndex === 0 ? 180 : 100, right: 14, whiteSpace: 'nowrap', pointerEvents: 'none', zIndex: 60 }}>
-              Pág. {pIndex + 1} • Margem Direita ({effectiveRight.toFixed(0)}px)
+            <div className="margin-guide-line-bar" style={{ width: 0, height: '100%', borderLeft: '1px dashed rgba(59, 130, 246, 0.45)', pointerEvents: 'none' }} />
+            <div className="margin-guide-badge" style={{ position: 'absolute', background: '#1e293b', color: 'white', fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 10, top: 24, right: 12, whiteSpace: 'nowrap', pointerEvents: 'none', zIndex: 60, boxShadow: '0 2px 6px rgba(0,0,0,0.15)' }}>
+              Dir. Pág. {pIndex + 1} ({effectiveRight >= 0 ? `+${effectiveRight.toFixed(0)}` : effectiveRight.toFixed(0)}px)
             </div>
           </div>
         );

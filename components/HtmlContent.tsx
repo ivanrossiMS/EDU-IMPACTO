@@ -1,7 +1,7 @@
 import React, { useMemo, useRef, useEffect, useState } from 'react'
 import 'katex/dist/katex.min.css'
 import katex from 'katex'
-import { Bold, Italic, Underline, Subscript, Superscript, RemoveFormatting } from 'lucide-react'
+import { Bold, Italic, Underline, Subscript, Superscript, RemoveFormatting, AlignLeft, AlignCenter, AlignRight, AlignJustify } from 'lucide-react'
 import { cleanEnunciadoHtml } from '@/components/simulados/PaginationEngine'
 
 interface HtmlContentProps extends React.HTMLAttributes<HTMLDivElement> {
@@ -164,8 +164,10 @@ export function HtmlContent({ html, onBlurHtml, onBackspaceAtStart, editable, ..
       
       if (toolbarRef.current) {
         toolbarRef.current.style.display = 'flex'
-        toolbarRef.current.style.top = `${rect.top - 40}px`
-        toolbarRef.current.style.left = `${rect.left + (rect.width / 2)}px`
+        const safeTop = Math.max(12, rect.top - 44)
+        const safeLeft = Math.min(Math.max(180, rect.left + (rect.width / 2)), window.innerWidth - 180)
+        toolbarRef.current.style.top = `${safeTop}px`
+        toolbarRef.current.style.left = `${safeLeft}px`
         
         const isBold = document.queryCommandState('bold')
         const isItalic = document.queryCommandState('italic')
@@ -299,7 +301,7 @@ export function HtmlContent({ html, onBlurHtml, onBackspaceAtStart, editable, ..
       <style>{`
         .html-content p {
           margin-top: 0;
-          margin-bottom: 0.25em;
+          margin-bottom: 0.35em;
         }
         .html-content p:first-child {
           margin-top: 0 !important;
@@ -313,12 +315,12 @@ export function HtmlContent({ html, onBlurHtml, onBackspaceAtStart, editable, ..
         .html-content ul {
           list-style-type: disc !important;
           padding-left: 1.25rem !important;
-          margin: 0.25rem 0 !important;
+          margin: 0.3rem 0 !important;
         }
         .html-content ol {
           list-style-type: decimal !important;
           padding-left: 1.25rem !important;
-          margin: 0.25rem 0 !important;
+          margin: 0.3rem 0 !important;
         }
         .html-content li {
           margin-bottom: 0.15rem !important;
@@ -327,10 +329,50 @@ export function HtmlContent({ html, onBlurHtml, onBackspaceAtStart, editable, ..
           border-collapse: collapse;
           width: 100%;
           margin: 0.5rem 0;
+          font-size: 0.92em;
         }
         .html-content th, .html-content td {
           border: 1px solid #cbd5e1;
-          padding: 4px 8px;
+          padding: 5px 8px;
+        }
+        .html-content th {
+          background-color: #f8fafc;
+          font-weight: 700;
+        }
+        .html-content blockquote {
+          margin: 0.5rem 0;
+          padding: 0.65rem 0.9rem;
+          border-left: 3px solid #0284c7;
+          background: #f8fafc;
+          border-radius: 0 0.5rem 0.5rem 0;
+          color: #334155;
+        }
+        .html-content img {
+          max-width: 100%;
+          height: auto;
+          border-radius: 0.5rem;
+          object-fit: contain;
+        }
+        .html-content img[data-align="center"] {
+          display: block;
+          margin-left: auto !important;
+          margin-right: auto !important;
+        }
+        .html-content img[data-align="left"] {
+          display: block;
+          margin-left: 0 !important;
+          margin-right: auto !important;
+        }
+        .html-content img[data-align="right"] {
+          display: block;
+          margin-left: auto !important;
+          margin-right: 0 !important;
+        }
+        .html-content img[data-framed="true"] {
+          border: 1px solid #cbd5e1 !important;
+          padding: 6px !important;
+          background: #ffffff !important;
+          box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06) !important;
         }
         .html-content sub, .html-content sup {
           font-size: 75%;
@@ -343,6 +385,16 @@ export function HtmlContent({ html, onBlurHtml, onBackspaceAtStart, editable, ..
         }
         .html-content sup {
           top: -0.5em;
+        }
+        .html-content[contenteditable="true"]:hover {
+          background-color: rgba(59, 130, 246, 0.015);
+          border-radius: 3px;
+        }
+        .html-content[contenteditable="true"]:focus {
+          outline: 1.5px dashed rgba(59, 130, 246, 0.5) !important;
+          outline-offset: 2px;
+          background-color: rgba(59, 130, 246, 0.03);
+          border-radius: 3px;
         }
       `}</style>
       <div 
@@ -370,8 +422,8 @@ export function HtmlContent({ html, onBlurHtml, onBackspaceAtStart, editable, ..
             zIndex: 999999,
             background: '#1e293b',
             padding: '4px',
-            borderRadius: '6px',
-            boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
+            borderRadius: '8px',
+            boxShadow: '0 8px 20px rgba(0,0,0,0.28)',
             display: 'none',
             alignItems: 'center',
             gap: '2px'
@@ -383,7 +435,7 @@ export function HtmlContent({ html, onBlurHtml, onBackspaceAtStart, editable, ..
             style={{ background: 'transparent', color: 'white', border: 'none', padding: '6px', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
             title="Negrito"
           >
-            <Bold size={16}/>
+            <Bold size={15}/>
           </button>
           <button 
             id="btn-italic"
@@ -391,7 +443,7 @@ export function HtmlContent({ html, onBlurHtml, onBackspaceAtStart, editable, ..
             style={{ background: 'transparent', color: 'white', border: 'none', padding: '6px', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
             title="Itálico"
           >
-            <Italic size={16}/>
+            <Italic size={15}/>
           </button>
           <button 
             id="btn-underline"
@@ -399,7 +451,7 @@ export function HtmlContent({ html, onBlurHtml, onBackspaceAtStart, editable, ..
             style={{ background: 'transparent', color: 'white', border: 'none', padding: '6px', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
             title="Sublinhado"
           >
-            <Underline size={16}/>
+            <Underline size={15}/>
           </button>
           <button 
             id="btn-subscript"
@@ -407,7 +459,7 @@ export function HtmlContent({ html, onBlurHtml, onBackspaceAtStart, editable, ..
             style={{ background: 'transparent', color: 'white', border: 'none', padding: '6px', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
             title="Subescrito (H₂O)"
           >
-            <Subscript size={16}/>
+            <Subscript size={15}/>
           </button>
           <button 
             id="btn-superscript"
@@ -415,7 +467,40 @@ export function HtmlContent({ html, onBlurHtml, onBackspaceAtStart, editable, ..
             style={{ background: 'transparent', color: 'white', border: 'none', padding: '6px', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
             title="Sobrescrito (x²)"
           >
-            <Superscript size={16}/>
+            <Superscript size={15}/>
+          </button>
+          <div style={{ width: 1, height: 16, background: 'rgba(255,255,255,0.2)', margin: '0 2px' }} />
+          <button 
+            id="btn-justifyLeft"
+            onMouseDown={e => formatText(e, 'justifyLeft')} 
+            style={{ background: 'transparent', color: 'white', border: 'none', padding: '6px', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            title="Alinhar à Esquerda"
+          >
+            <AlignLeft size={15}/>
+          </button>
+          <button 
+            id="btn-justifyCenter"
+            onMouseDown={e => formatText(e, 'justifyCenter')} 
+            style={{ background: 'transparent', color: 'white', border: 'none', padding: '6px', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            title="Centralizar"
+          >
+            <AlignCenter size={15}/>
+          </button>
+          <button 
+            id="btn-justifyRight"
+            onMouseDown={e => formatText(e, 'justifyRight')} 
+            style={{ background: 'transparent', color: 'white', border: 'none', padding: '6px', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            title="Alinhar à Direita"
+          >
+            <AlignRight size={15}/>
+          </button>
+          <button 
+            id="btn-justifyFull"
+            onMouseDown={e => formatText(e, 'justifyFull')} 
+            style={{ background: 'transparent', color: 'white', border: 'none', padding: '6px', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            title="Justificar Texto"
+          >
+            <AlignJustify size={15}/>
           </button>
           <div style={{ width: 1, height: 16, background: 'rgba(255,255,255,0.2)', margin: '0 2px' }} />
           <button 
@@ -424,7 +509,7 @@ export function HtmlContent({ html, onBlurHtml, onBackspaceAtStart, editable, ..
             style={{ background: 'transparent', color: 'white', border: 'none', padding: '6px', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
             title="Texto Normal (Remover Formatação)"
           >
-            <RemoveFormatting size={16}/>
+            <RemoveFormatting size={15}/>
           </button>
         </div>
       )}

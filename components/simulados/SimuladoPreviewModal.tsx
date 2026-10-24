@@ -44,6 +44,15 @@ export function SimuladoPreviewModal({ questoes, setQuestoes, simulado, config, 
   const [enunciadoFontSize, setEnunciadoFontSize] = useState<number>(simulado?.config_estudio?.config_fonte_enunciado || 14)
   const [alternativasFontSize, setAlternativasFontSize] = useState<number>(simulado?.config_estudio?.config_fonte_alternativa || 12)
   const [alternativasLayout, setAlternativasLayout] = useState<'vertical' | 'horizontal'>(simulado?.config_estudio?.config_layout_alternativas || 'vertical')
+  const [lineHeight, setLineHeight] = useState<number>(simulado?.config_estudio?.config_line_height || 1.5)
+  const [questionSpacing, setQuestionSpacing] = useState<number>(simulado?.config_estudio?.config_question_spacing ?? 28)
+  const [textAlign, setTextAlign] = useState<'justify' | 'left'>(simulado?.config_estudio?.config_text_align || 'justify')
+  const [showGabarito, setShowGabarito] = useState<boolean>(simulado?.config_estudio?.config_show_gabarito ?? true)
+  const [cleanPreviewMode, setCleanPreviewMode] = useState<boolean>(false)
+  const [zoom, setZoom] = useState<number>(100)
+  const [pagesCount, setPagesCount] = useState<number>(1)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(false)
+  const [activeTab, setActiveTab] = useState<'layout' | 'margens' | 'questoes'>('layout')
   const ensureStableIds = (qs: any[], existing?: any[]) => {
     const existingMap = new Map((existing || []).map((q: any) => [q.id || q._internalId || q.numero, q]));
     return (qs || []).map((q, qIdx) => {
@@ -245,7 +254,7 @@ export function SimuladoPreviewModal({ questoes, setQuestoes, simulado, config, 
     }
   }, [itemId, JSON.stringify(simulado?.config_estudio?.header_layout), config?.provas_header_layout])
   const [isEditHeaderMode, setIsEditHeaderMode] = useState(false)
-  const [showMargins, setShowMargins] = useState(true)
+  const [showMargins, setShowMargins] = useState(false)
   const [leftMarginOffset, setLeftMarginOffset] = useState<number>(() => {
     if (simulado?.config_estudio?.config_margin_left !== undefined) return simulado.config_estudio.config_margin_left
     const savedMargins = readFromLocalStorage('simulador_margins')
@@ -434,6 +443,10 @@ export function SimuladoPreviewModal({ questoes, setQuestoes, simulado, config, 
         config_fonte_alternativa: alternativasFontSize,
         config_colunas: columns,
         config_layout_alternativas: alternativasLayout,
+        config_line_height: lineHeight,
+        config_question_spacing: questionSpacing,
+        config_text_align: textAlign,
+        config_show_gabarito: showGabarito,
         config_margin_left: leftMarginOffset,
         config_margin_right: rightMarginOffset,
         config_margin_top: topMarginOffset,
@@ -450,7 +463,7 @@ export function SimuladoPreviewModal({ questoes, setQuestoes, simulado, config, 
     }, 600);
 
     return () => clearTimeout(timer);
-  }, [leftMarginOffset, rightMarginOffset, topMarginOffset, bottomMarginOffset, pageMargins, enunciadoFontSize, alternativasFontSize, columns, alternativasLayout, adicionarPaginaRedacao, headerLayout, mounted]);
+  }, [leftMarginOffset, rightMarginOffset, topMarginOffset, bottomMarginOffset, pageMargins, enunciadoFontSize, alternativasFontSize, columns, alternativasLayout, lineHeight, questionSpacing, textAlign, showGabarito, adicionarPaginaRedacao, headerLayout, mounted]);
 
   const mappedQuestoes = useMemo(() => {
     return localQuestoes.map((rawQ, idx) => {
@@ -965,13 +978,141 @@ export function SimuladoPreviewModal({ questoes, setQuestoes, simulado, config, 
       )}
 
       {/* Área Central (Canvas / Papel) */}
-      <div className="canvas-layout" style={{ flex: 1, overflowY: 'auto', padding: '40px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+      <div className="canvas-layout" style={{ flex: 1, overflowY: 'auto', padding: '0 32px 48px 32px', display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative' }}>
+        {/* Barra Superior Flutuante de Visualização Rápida (No Print) */}
+        <div
+          className="no-print"
+          style={{
+            position: 'sticky',
+            top: 14,
+            zIndex: 80,
+            marginBottom: 20,
+            marginTop: 14,
+            background: 'rgba(255, 255, 255, 0.92)',
+            backdropFilter: 'blur(12px)',
+            border: '1px solid rgba(203, 213, 225, 0.85)',
+            borderRadius: 14,
+            padding: '7px 14px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            boxShadow: '0 8px 24px rgba(15, 23, 42, 0.08)',
+            flexWrap: 'wrap'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, paddingRight: 8, borderRight: '1px solid #e2e8f0' }}>
+            <span style={{ fontSize: 12, fontWeight: 800, color: '#0f172a', background: '#f1f5f9', padding: '4px 10px', borderRadius: 8 }}>
+              📄 {pagesCount} {pagesCount === 1 ? 'pág.' : 'págs.'}
+            </span>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, paddingRight: 8, borderRight: '1px solid #e2e8f0' }}>
+            <button
+              type="button"
+              onClick={() => setZoom(z => Math.max(70, z - 10))}
+              style={{ width: 26, height: 26, borderRadius: 6, border: '1px solid #e2e8f0', background: 'white', color: '#334155', fontWeight: 800, cursor: 'pointer', fontSize: 13 }}
+              title="Diminuir Zoom"
+            >
+              -
+            </button>
+            <button
+              type="button"
+              onClick={() => setZoom(100)}
+              style={{ padding: '4px 8px', borderRadius: 6, border: 'none', background: 'transparent', color: '#334155', fontWeight: 700, cursor: 'pointer', fontSize: 12, minWidth: 46 }}
+              title="Redefinir Zoom (100%)"
+            >
+              {zoom}%
+            </button>
+            <button
+              type="button"
+              onClick={() => setZoom(z => Math.min(130, z + 10))}
+              style={{ width: 26, height: 26, borderRadius: 6, border: '1px solid #e2e8f0', background: 'white', color: '#334155', fontWeight: 800, cursor: 'pointer', fontSize: 13 }}
+              title="Aumentar Zoom"
+            >
+              +
+            </button>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setCleanPreviewMode(!cleanPreviewMode)}
+            style={{
+              padding: '5px 10px', borderRadius: 8,
+              border: `1px solid ${cleanPreviewMode ? '#10b981' : '#e2e8f0'}`,
+              background: cleanPreviewMode ? 'rgba(16, 185, 129, 0.12)' : 'white',
+              color: cleanPreviewMode ? '#047857' : '#475569',
+              fontSize: 12, fontWeight: 700, cursor: 'pointer'
+            }}
+          >
+            {cleanPreviewMode ? '👁️ Modo Limpo (Ativo)' : '👁️ Modo Limpo'}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setShowGabarito(!showGabarito)}
+            style={{
+              padding: '5px 10px', borderRadius: 8,
+              border: `1px solid ${showGabarito ? '#c7d2fe' : '#e2e8f0'}`,
+              background: showGabarito ? '#eef2ff' : 'white',
+              color: showGabarito ? '#4338ca' : '#64748b',
+              fontSize: 12, fontWeight: 700, cursor: 'pointer'
+            }}
+          >
+            {showGabarito ? '✓ Gabarito' : 'Gabarito Oculto'}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setShowMargins(!showMargins)}
+            style={{
+              padding: '5px 10px', borderRadius: 8,
+              border: `1px solid ${showMargins ? '#93c5fd' : '#e2e8f0'}`,
+              background: showMargins ? '#eff6ff' : 'white',
+              color: showMargins ? '#1d4ed8' : '#64748b',
+              fontSize: 12, fontWeight: 700, cursor: 'pointer'
+            }}
+          >
+            {showMargins ? '📐 Margens: Visíveis' : '📐 Margens'}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setLeftMarginOffset(-25);
+              setRightMarginOffset(-20);
+              setTopMarginOffset(-10);
+              setBottomMarginOffset(-90);
+              setLineHeight(1.45);
+              setQuestionSpacing(24);
+              setTextAlign('justify');
+              handleResetAllPageMargins();
+            }}
+            style={{
+              padding: '5px 10px', borderRadius: 8,
+              border: '1px solid rgba(59, 130, 246, 0.3)',
+              background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)',
+              color: '#1d4ed8',
+              fontSize: 12, fontWeight: 800, cursor: 'pointer'
+            }}
+            title="Ajusta margens, entrelinha e espaçamento para o enquadramento ideal na folha A4"
+          >
+            ✨ Auto-Enquadrar
+          </button>
+        </div>
+
         <div className="print-wrapper" style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           <PaginationEngine
             questoes={selectedQuestoes}
             columns={columns}
             enunciadoFontSize={enunciadoFontSize}
             alternativasFontSize={alternativasFontSize}
+            lineHeight={lineHeight}
+            questionSpacing={questionSpacing}
+            textAlign={textAlign}
+            showGabarito={showGabarito}
+            cleanPreviewMode={cleanPreviewMode}
+            zoom={zoom}
+            onPagesCountChange={setPagesCount}
             config={config}
             simulado={simulado}
             alternativasLayout={alternativasLayout}

@@ -50,6 +50,13 @@ interface PaginationEngineProps {
   onPageMarginChange?: (pageIndex: number, delta: Partial<PageMargin>) => void;
   adicionarPaginaRedacao?: boolean;
   onPaginatingChange?: (isPaginating: boolean) => void;
+  lineHeight?: number;
+  questionSpacing?: number;
+  textAlign?: 'justify' | 'left';
+  showGabarito?: boolean;
+  cleanPreviewMode?: boolean;
+  zoom?: number;
+  onPagesCountChange?: (count: number) => void;
 }
 
 export function cleanEnunciadoHtml(html: string): string {
@@ -329,7 +336,9 @@ export function PaginationEngine({
   showMargins, topMarginOffset, onTopMarginOffsetChange, bottomMarginOffset, onBottomMarginOffsetChange,
   leftMarginOffset, onLeftMarginOffsetChange, rightMarginOffset, onRightMarginOffsetChange,
   pageMargins, onPageMarginChange,
-  readOnly = false, adicionarPaginaRedacao, onPaginatingChange
+  readOnly = false, adicionarPaginaRedacao, onPaginatingChange,
+  lineHeight = 1.5, questionSpacing = 28, textAlign = 'justify',
+  showGabarito = true, cleanPreviewMode = false, zoom = 100, onPagesCountChange
 }: PaginationEngineProps) {
   // Inject unified, robust print styles into document.head
   useEffect(() => {
@@ -680,8 +689,9 @@ export function PaginationEngine({
         return currentQNumber - 1;
       });
 
+      const effectiveBlockSpacing = questionSpacing ?? BLOCK_SPACING;
       questoes.forEach((q, idx) => {
-        let questionMargin = currentY > 0 ? BLOCK_SPACING : 0;
+        let questionMargin = currentY > 0 ? effectiveBlockSpacing : 0;
         const qIndex = questionDisplayNumbers[idx];
 
         const currentDiscName = q.disciplina_nome || q.disciplina || q.simulados_disciplinas?.nome;
@@ -691,7 +701,7 @@ export function PaginationEngine({
           const discId = `disc-${q.id_disciplina || currentDiscName}-${idx}`;
           const discH = heights[discId] || 40;
           pushBlock({ type: 'part_disciplina', q, discName: currentDiscName }, discH, questionMargin);
-          questionMargin = BLOCK_SPACING; // Ensure margin between disc header and question
+          questionMargin = effectiveBlockSpacing; // Ensure margin between disc header and question
         }
 
         const parsedParts = parseEnunciadoParts(q.enunciado, q.imagens || []);
@@ -1071,10 +1081,11 @@ export function PaginationEngine({
       });
 
       setPages(mergedPages);
+      onPagesCountChange?.(mergedPages.length);
       setIsPaginating(false);
     }, 300);
     
-  }, [questoesKey, columns, enunciadoFontSize, alternativasFontSize, trigger, forceExtraPage, headerLayoutKey, alternativasLayout, simulado?.isRedacao, adicionarPaginaRedacao, topMarginOffset, bottomMarginOffset, leftMarginOffset, rightMarginOffset, pageMarginsKey]);
+  }, [questoesKey, columns, enunciadoFontSize, alternativasFontSize, lineHeight, questionSpacing, textAlign, trigger, forceExtraPage, headerLayoutKey, alternativasLayout, simulado?.isRedacao, adicionarPaginaRedacao, topMarginOffset, bottomMarginOffset, leftMarginOffset, rightMarginOffset, pageMarginsKey]);
 
   const forceRepaginate = () => setTrigger(t => t + 1);
   const MM = 3.7795275591;
@@ -1101,9 +1112,9 @@ export function PaginationEngine({
           top: 0, left: 0, 
           width: shadowColWidth,
           fontSize: `${enunciadoFontSize}px`, 
-          lineHeight: 1.6, 
+          lineHeight: lineHeight || 1.5, 
           color: '#000',
-          textAlign: 'justify',
+          textAlign: textAlign || 'justify',
           zIndex: -1000 
         }}
       >
@@ -1137,7 +1148,7 @@ export function PaginationEngine({
               <div style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 width: '28px', height: '28px', minWidth: '28px', background: '#1e293b', color: '#ffffff',
-                fontWeight: 900, borderRadius: '8px', fontSize: '11pt', marginTop: '4px'
+                fontWeight: 900, borderRadius: '8px', fontSize: '11pt', marginTop: '2px'
               }}>
                 {idx + 1}
               </div>
@@ -1206,6 +1217,7 @@ export function PaginationEngine({
                             <img 
                               key={`img-${imgPart.index}-${imgPart.originalIndex}`}
                               src={imgBaseUrl} 
+                              onLoad={forceRepaginate}
                               style={{ width: imgWidth ? `${imgWidth}px` : 'auto', maxWidth: '100%', height: 'auto', borderRadius: 8, display: 'block' }} 
                             />
                           );
@@ -1217,7 +1229,6 @@ export function PaginationEngine({
                   ));
                 })()}
 
-                {/* Alternatives measured inside the 38px-indented content column */}
                 {/* Alternatives measured inside the 38px-indented content column */}
                 {(() => {
                   const metaAltColsMatch = (q.enunciado || '').match(/<meta name="alt-cols" content="(\d+)">/i);
@@ -1246,7 +1257,7 @@ export function PaginationEngine({
                           gap: colsNum > 1 ? '4px 16px' : 24, 
                           marginTop: 12,
                           fontSize: `${alternativasFontSize}px`,
-                          lineHeight: 1.6
+                          lineHeight: lineHeight || 1.5
                         }}
                       >
                         {q.simulados_alternativas?.map((a: any) => {
@@ -1272,7 +1283,7 @@ export function PaginationEngine({
                                 {a.letra}
                               </div>
                               <div style={{ flex: 1, position: 'relative', width: effectiveWidth ? `${effectiveWidth}px` : 'auto', maxWidth: '100%' }}>
-                                {a.imagem_url && <img src={imgBaseUrl} style={{ width: '100%', height: 'auto', borderRadius: 8, marginBottom: 8, display: 'block' }} />}
+                                {a.imagem_url && <img src={imgBaseUrl} onLoad={forceRepaginate} style={{ width: '100%', height: 'auto', borderRadius: 8, marginBottom: 8, display: 'block' }} />}
                                 {(() => {
                                   const altParts = parseEnunciadoParts(a.texto || '', []);
                                   return altParts.map((part: any, pIdx: number) => {
@@ -1321,7 +1332,7 @@ export function PaginationEngine({
                     const effectiveWidth = imgWidth || maxImgWidth;
                     
                     return (
-                      <div key={`shadow-alt-${a.id}`} data-measure data-id={`${q.id}-alt-${a.id}`} style={{ display: 'flex', gap: 12, marginTop: 6, width: '100%', fontSize: `${alternativasFontSize}px`, lineHeight: 1.6 }}>
+                      <div key={`shadow-alt-${a.id}`} data-measure data-id={`${q.id}-alt-${a.id}`} style={{ display: 'flex', gap: 12, marginTop: 6, width: '100%', fontSize: `${alternativasFontSize}px`, lineHeight: lineHeight || 1.5 }}>
                         <div style={{
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
                           width: '24px', height: '24px', minWidth: '24px', borderRadius: '24px',
@@ -1333,7 +1344,7 @@ export function PaginationEngine({
                           {a.imagem_url && (
                             <div style={{ display: 'flex', justifyContent, width: '100%', marginBottom: 8 }}>
                               <div style={{ position: 'relative', width: effectiveWidth ? `${effectiveWidth}px` : 'auto', maxWidth: '100%' }}>
-                                <img src={imgBaseUrl} style={{ width: '100%', height: 'auto', borderRadius: 8, display: 'block' }} />
+                                <img src={imgBaseUrl} onLoad={forceRepaginate} style={{ width: '100%', height: 'auto', borderRadius: 8, display: 'block' }} />
                               </div>
                             </div>
                           )}
@@ -1376,20 +1387,25 @@ export function PaginationEngine({
       {/* Screen Preview */}
       <div className="no-print" style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative' }}>
         {isPaginating && pages.length > 0 && (
-          <div style={{ position: 'absolute', top: 20, right: 20, zIndex: 50, background: 'rgba(59,130,246,0.9)', color: 'white', padding: '8px 16px', borderRadius: 20, display: 'flex', alignItems: 'center', gap: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
-            <Loader2 className="animate-spin" size={16} />
-            <span style={{ fontSize: 12, fontWeight: 600 }}>Atualizando...</span>
+          <div style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 50, background: 'rgba(15, 23, 42, 0.92)', backdropFilter: 'blur(8px)', color: 'white', padding: '8px 16px', borderRadius: 20, display: 'flex', alignItems: 'center', gap: 8, boxShadow: '0 8px 24px rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.1)' }}>
+            <Loader2 className="animate-spin" size={15} color="#38bdf8" />
+            <span style={{ fontSize: 12, fontWeight: 700 }}>Ajustando paginação...</span>
           </div>
         )}
-        <div style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', opacity: isPaginating ? 0.6 : 1, transition: 'opacity 0.2s' }}>
+        <div style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', opacity: isPaginating ? 0.72 : 1, transition: 'opacity 0.2s', zoom: zoom && zoom !== 100 ? `${zoom}%` : undefined }}>
           {pages.map((page, pIndex) => (
             <div 
             key={`preview-page-${pIndex}`} 
+            id={`preview-page-${pIndex}`}
             className="preview-area" 
             style={{ 
               width: '210mm', height: '297mm', background: 'white', 
-              position: 'relative', boxShadow: '0 10px 40px rgba(0,0,0,0.08)', boxSizing: 'border-box',
-              marginBottom: '40px', overflow: 'hidden'
+              position: 'relative',
+              borderRadius: 4,
+              border: '1px solid rgba(148, 163, 184, 0.28)',
+              boxShadow: '0 14px 36px -6px rgba(15, 23, 42, 0.12), 0 4px 12px -2px rgba(15, 23, 42, 0.06)',
+              boxSizing: 'border-box',
+              marginBottom: '32px', overflow: 'hidden'
             }}
           >
             <PageContent 
@@ -1397,6 +1413,10 @@ export function PaginationEngine({
               pIndex={pIndex} 
               enunciadoFontSize={enunciadoFontSize} 
               alternativasFontSize={alternativasFontSize} 
+              lineHeight={lineHeight}
+              textAlign={textAlign}
+              showGabarito={showGabarito}
+              cleanPreviewMode={cleanPreviewMode}
               config={config} 
               simulado={simulado} 
               onEditEnunciado={onEditEnunciado} 
@@ -1450,6 +1470,10 @@ export function PaginationEngine({
                 pIndex={pIndex}
                 enunciadoFontSize={enunciadoFontSize} 
                 alternativasFontSize={alternativasFontSize} 
+                lineHeight={lineHeight}
+                textAlign={textAlign}
+                showGabarito={false}
+                cleanPreviewMode={true}
                 config={config} 
                 simulado={simulado} 
                 onEditEnunciado={() => {}} 

@@ -9,7 +9,8 @@ import {
   Layers, Users, HelpCircle, CheckCircle2, AlertCircle, X,
   ChevronDown, ChevronUp, GripVertical, FileText, Image as ImageIcon,
   Calculator, AlertTriangle, RefreshCw, Search, UserCheck, Link2,
-  UploadCloud, Edit3, Loader2, CameraOff
+  UploadCloud, Edit3, Loader2, CameraOff, ArrowUp, ArrowDown, Scale,
+  Monitor, Tablet, Smartphone, Printer
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { HtmlContent } from '@/components/HtmlContent'
@@ -574,6 +575,46 @@ export function ExamWizard({ initialExam, isEditing = false }: ExamWizardProps) 
     setStep(s => Math.min(5, s + 1) as any)
   }
 
+  // Step 2 organization & Preview Modal states
+  const [compactQuestionList, setCompactQuestionList] = useState(false)
+  const [questionSearch, setQuestionSearch] = useState('')
+  const [questionTypeFilter, setQuestionTypeFilter] = useState<'todas' | TipoQuestao>('todas')
+  const [previewDevice, setPreviewDevice] = useState<'desktop' | 'tablet' | 'mobile'>('desktop')
+  const [previewShowGabarito, setPreviewShowGabarito] = useState(false)
+
+  const handleMoveQuestion = (fromIdx: number, toIdx: number) => {
+    setExam(prev => {
+      const current = [...(prev.questoes || [])]
+      if (toIdx < 0 || toIdx >= current.length || fromIdx === toIdx) return prev
+      const [moved] = current.splice(fromIdx, 1)
+      current.splice(toIdx, 0, moved)
+      const reordered = current.map((q, i) => ({ ...q, ordem: i }))
+      return { ...prev, questoes: reordered }
+    })
+  }
+
+  const handleDistributePointsEvenly = () => {
+    const qs = exam.questoes || []
+    if (qs.length === 0) return
+    const targetTotal = Math.max(0.5, Number(exam.valorTotal) || 10)
+    const perQ = Number((targetTotal / qs.length).toFixed(2))
+    const balanced = qs.map((q, idx) => {
+      if (idx === qs.length - 1) {
+        const prevSum = perQ * (qs.length - 1)
+        return { ...q, pontuacao: Number(Math.max(0.05, targetTotal - prevSum).toFixed(2)) }
+      }
+      return { ...q, pontuacao: perQ }
+    })
+    setExam(prev => ({ ...prev, questoes: balanced }))
+    toast.success(`Pontuação de ${targetTotal} pts distribuída igualmente entre as ${qs.length} questões!`)
+  }
+
+  const handleMatchTotalToAllocated = () => {
+    if (totalPointsAllocated <= 0) return
+    setExam(prev => ({ ...prev, valorTotal: Number(totalPointsAllocated.toFixed(2)) }))
+    toast.success(`Valor total da prova ajustado para ${totalPointsAllocated} pts!`)
+  }
+
   const handleDuplicateQuestion = (idx: number) => {
     const target = (exam.questoes || [])[idx]
     if (!target) return
@@ -902,20 +943,42 @@ export function ExamWizard({ initialExam, isEditing = false }: ExamWizardProps) 
 
         {/* ── STEP 2: QUESTÕES ─────────────────────────────────── */}
         {step === 2 && (
-          <div className="space-y-6">
+          <div className="space-y-5">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-100">
               <div>
                 <h2 className="text-lg font-extrabold text-slate-900 tracking-tight">Etapa 2: Questões da Prova</h2>
-                <div className="flex items-center gap-2 mt-1 text-xs text-slate-500 flex-wrap">
+                <div className="flex items-center gap-2 mt-1.5 text-xs text-slate-500 flex-wrap">
                   <span className="font-medium text-slate-600">Total acumulado:</span>
                   <span className="font-extrabold text-sky-800 bg-sky-50 px-2.5 py-0.5 rounded-lg border border-sky-200">
                     {totalPointsAllocated} pts / {exam.valorTotal} pts
                   </span>
                   {Math.abs(pointsDifference) > 0.01 ? (
-                    <span className="font-bold text-rose-700 bg-rose-50 px-2.5 py-0.5 rounded-lg border border-rose-200 inline-flex items-center gap-1">
-                      <AlertCircle size={12} />
-                      {pointsDifference > 0 ? `Faltam ${pointsDifference} pts` : `Excedeu ${Math.abs(pointsDifference)} pts`}
-                    </span>
+                    <>
+                      <span className="font-bold text-rose-700 bg-rose-50 px-2.5 py-0.5 rounded-lg border border-rose-200 inline-flex items-center gap-1">
+                        <AlertCircle size={12} />
+                        {pointsDifference > 0 ? `Faltam ${pointsDifference} pts` : `Excedeu ${Math.abs(pointsDifference)} pts`}
+                      </span>
+                      {(exam.questoes || []).length > 0 && (
+                        <button
+                          type="button"
+                          onClick={handleDistributePointsEvenly}
+                          className="px-2.5 py-0.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 font-bold text-[11px] inline-flex items-center gap-1 transition-colors cursor-pointer"
+                          title="Divide o Valor Total da prova igualmente entre todas as questões"
+                        >
+                          <Scale size={11} /> Distribuir {exam.valorTotal} pts Igualmente
+                        </button>
+                      )}
+                      {totalPointsAllocated > 0 && (
+                        <button
+                          type="button"
+                          onClick={handleMatchTotalToAllocated}
+                          className="px-2.5 py-0.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 font-bold text-[11px] inline-flex items-center gap-1 transition-colors cursor-pointer"
+                          title="Define o Valor Total da prova igual à soma atual das questões"
+                        >
+                          Ajustar Total p/ {totalPointsAllocated} pts
+                        </button>
+                      )}
+                    </>
                   ) : (
                     <span className="font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-lg border border-emerald-200 inline-flex items-center gap-1">
                       <Check size={12} strokeWidth={2.5} /> Pontuação balanceada
@@ -961,6 +1024,81 @@ export function ExamWizard({ initialExam, isEditing = false }: ExamWizardProps) 
                 </button>
               </div>
             </div>
+
+            {/* Barra de Organização, Busca e Modo de Exibição (Exibida quando há questões) */}
+            {(exam.questoes || []).length > 0 && (
+              <div className="p-3 rounded-2xl bg-slate-50/90 border border-slate-200/80 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
+                <div className="flex items-center gap-2 flex-1 flex-wrap">
+                  <div className="relative flex-1 min-w-[180px] sm:max-w-xs">
+                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                    <input
+                      type="text"
+                      value={questionSearch}
+                      onChange={e => setQuestionSearch(e.target.value)}
+                      placeholder="Filtrar questões por texto ou BNCC..."
+                      className="w-full h-8 pl-8 pr-7 rounded-xl bg-white border border-slate-200 text-xs text-slate-800 focus:outline-none focus:border-sky-500"
+                    />
+                    {questionSearch && (
+                      <button
+                        type="button"
+                        onClick={() => setQuestionSearch('')}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                      >
+                        <X size={12} />
+                      </button>
+                    )}
+                  </div>
+
+                  <select
+                    value={questionTypeFilter}
+                    onChange={e => setQuestionTypeFilter(e.target.value as any)}
+                    className="h-8 px-2.5 rounded-xl bg-white border border-slate-200 text-xs font-semibold text-slate-700 focus:outline-none focus:border-sky-500 cursor-pointer"
+                  >
+                    <option value="todas">Todos os Tipos ({(exam.questoes || []).length})</option>
+                    <option value="multipla_escolha">Objetiva Única</option>
+                    <option value="multipla_selecao">Múltipla Seleção</option>
+                    <option value="verdadeiro_falso">Verdadeiro ou Falso</option>
+                    <option value="dissertativa">Dissertativa</option>
+                  </select>
+                </div>
+
+                <div className="flex items-center gap-2 self-end sm:self-auto">
+                  {(exam.questoes || []).length > 1 && (
+                    <button
+                      type="button"
+                      onClick={handleDistributePointsEvenly}
+                      className="h-8 px-2.5 rounded-xl bg-white hover:bg-sky-50 text-slate-700 hover:text-sky-700 border border-slate-200 text-[11px] font-bold inline-flex items-center gap-1.5 transition-colors cursor-pointer"
+                      title="Igualar pontuação de todas as questões"
+                    >
+                      <Scale size={12} className="text-sky-600" />
+                      <span className="hidden sm:inline">Igualar Pontos</span>
+                    </button>
+                  )}
+
+                  <div className="flex items-center bg-slate-200/75 p-0.5 rounded-xl border border-slate-200">
+                    <button
+                      type="button"
+                      onClick={() => setCompactQuestionList(false)}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                        !compactQuestionList ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      Detalhada
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCompactQuestionList(true)}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                        compactQuestionList ? 'bg-white text-sky-700 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                      title="Modo compacto ideal para organizar e reordenar muitas questões"
+                    >
+                      Compacta
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Questions List */}
             {(exam.questoes || []).length === 0 ? (
@@ -1009,171 +1147,234 @@ export function ExamWizard({ initialExam, isEditing = false }: ExamWizardProps) 
                 </div>
               </div>
             ) : (
-              <div className="space-y-4">
-                {(exam.questoes || []).map((q, idx) => (
-                  <div
-                    key={q.id}
-                    className="bg-white border border-slate-200 hover:border-slate-300 rounded-2xl p-4 sm:p-5 shadow-2xs transition-all space-y-3.5"
-                  >
-                    <div className="flex items-center justify-between flex-wrap gap-2.5 pb-3 border-b border-slate-100">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="w-7 h-7 rounded-lg bg-sky-100/70 border border-sky-200 text-sky-800 font-extrabold text-xs flex items-center justify-center shadow-2xs">
-                          {idx + 1}
-                        </span>
-                        <span className="text-[11px] font-bold text-slate-700 bg-slate-100 border border-slate-200/80 px-2.5 py-1 rounded-lg">
-                          {q.tipo === 'multipla_escolha' && 'Objetiva (Única)'}
-                          {q.tipo === 'multipla_selecao' && 'Múltipla Seleção'}
-                          {q.tipo === 'verdadeiro_falso' && 'Verdadeiro ou Falso'}
-                          {q.tipo === 'dissertativa' && 'Dissertativa'}
-                        </span>
-                        {q.habilidadeBNCC && (
-                          <span className="text-[11px] font-bold font-mono px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200">
-                            {q.habilidadeBNCC}
-                          </span>
-                        )}
-                        {q.dificuldade && (
-                          <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full ${
-                            q.dificuldade === 'facil' ? 'bg-emerald-100 text-emerald-800' :
-                            q.dificuldade === 'dificil' ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-800'
-                          }`}>
-                            {q.dificuldade}
-                          </span>
-                        )}
-                      </div>
+              <div className="space-y-3.5">
+                {(exam.questoes || []).map((q, idx) => {
+                  if (questionTypeFilter !== 'todas' && q.tipo !== questionTypeFilter) return null
+                  if (questionSearch.trim()) {
+                    const term = questionSearch.toLowerCase()
+                    const plainEnun = (q.enunciado || '').replace(/<[^>]+>/g, ' ').toLowerCase()
+                    const bncc = (q.habilidadeBNCC || '').toLowerCase()
+                    if (!plainEnun.includes(term) && !bncc.includes(term)) return null
+                  }
+                  const hasImageInQ = /<img\b/i.test(q.enunciado || '')
+                  const totalQs = (exam.questoes || []).length
 
-                      <div className="flex items-center gap-2">
-                        <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1">
-                          <span className="text-xs text-slate-500 font-medium">Pontos:</span>
-                          <input
-                            type="number"
-                            step="0.25"
-                            min="0"
-                            value={q.pontuacao}
-                            onChange={e => {
-                              const val = Math.max(0, Number(e.target.value))
-                              setExam(p => ({
-                                ...p,
-                                questoes: p.questoes?.map((item, i) => i === idx ? { ...item, pontuacao: val } : item)
-                              }))
-                            }}
-                            className="w-14 h-6 px-1 rounded bg-white border border-slate-300 text-slate-900 text-xs font-bold text-center focus:outline-none focus:border-sky-500"
-                          />
-                        </div>
+                  return (
+                    <div
+                      key={q.id}
+                      className="bg-white border border-slate-200 hover:border-slate-300 rounded-2xl p-4 sm:p-5 shadow-2xs transition-all space-y-3"
+                    >
+                      <div className={`flex items-center justify-between flex-wrap gap-2.5 ${compactQuestionList ? '' : 'pb-3 border-b border-slate-100'}`}>
+                        <div className="flex items-center gap-2 flex-wrap min-w-0 flex-1">
+                          {/* Direct Position Selector / Badge */}
+                          <div className="flex items-center gap-1">
+                            <select
+                              value={idx}
+                              onChange={e => handleMoveQuestion(idx, Number(e.target.value))}
+                              title="Mudar posição da questão na prova"
+                              className="h-7 px-2 rounded-lg bg-sky-100/80 border border-sky-200 text-sky-900 font-extrabold text-xs cursor-pointer focus:outline-none focus:border-sky-500"
+                            >
+                              {Array.from({ length: totalQs }).map((_, posIdx) => (
+                                <option key={posIdx} value={posIdx}>
+                                  #{posIdx + 1}
+                                </option>
+                              ))}
+                            </select>
 
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setCurrentEditingQuestion(q)
-                            setEditingQuestionModalOpen(true)
-                          }}
-                          className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 transition-colors cursor-pointer"
-                          title="Editar Questão"
-                        >
-                          <Edit3 size={14} />
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => handleDuplicateQuestion(idx)}
-                          className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 transition-colors cursor-pointer"
-                          title="Duplicar Questão"
-                        >
-                          <Copy size={14} />
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setExam(p => ({
-                              ...p,
-                              questoes: p.questoes?.filter((_, i) => i !== idx)
-                            }))
-                          }}
-                          className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-600 transition-colors cursor-pointer"
-                          title="Excluir Questão"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Enunciado preview */}
-                    <div className="p-3.5 rounded-xl bg-slate-50/80 border border-slate-100 text-xs sm:text-sm text-slate-800 leading-relaxed max-h-60 overflow-y-auto">
-                      <HtmlContent html={q.enunciado} />
-                    </div>
-
-                    {/* Alternativas preview (Apenas Múltipla Escolha e Seleção) */}
-                    {(q.tipo === 'multipla_escolha' || q.tipo === 'multipla_selecao') && q.alternativas && q.alternativas.length > 0 && (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        {q.alternativas.map(a => (
-                          <div
-                            key={a.id}
-                            className={`p-2.5 rounded-xl flex items-center gap-2.5 text-xs transition-colors ${
-                              a.correta
-                                ? 'bg-emerald-50/70 border border-emerald-300 text-emerald-950 font-semibold'
-                                : 'bg-white border border-slate-200 text-slate-700'
-                            }`}
-                          >
-                            <span className={`w-6 h-6 rounded-md flex items-center justify-center font-extrabold text-[11px] shrink-0 ${
-                              a.correta
-                                ? 'bg-emerald-200/80 text-emerald-900'
-                                : 'bg-slate-100 text-slate-600'
-                            }`}>
-                              {a.letra}
-                            </span>
-                            <div className="flex-1 min-w-0">
-                              <HtmlContent html={a.texto || '(Em branco)'} />
-                            </div>
-                            {a.correta && <Check size={14} className="text-emerald-600 shrink-0" />}
+                            {totalQs > 1 && (
+                              <div className="flex items-center bg-slate-100 rounded-lg border border-slate-200/80 p-0.5">
+                                <button
+                                  type="button"
+                                  disabled={idx === 0}
+                                  onClick={() => handleMoveQuestion(idx, idx - 1)}
+                                  className="w-6 h-6 rounded flex items-center justify-center text-slate-600 hover:bg-white hover:text-sky-700 disabled:opacity-30 cursor-pointer"
+                                  title="Mover questão para cima"
+                                >
+                                  <ArrowUp size={12} />
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={idx === totalQs - 1}
+                                  onClick={() => handleMoveQuestion(idx, idx + 1)}
+                                  className="w-6 h-6 rounded flex items-center justify-center text-slate-600 hover:bg-white hover:text-sky-700 disabled:opacity-30 cursor-pointer"
+                                  title="Mover questão para baixo"
+                                >
+                                  <ArrowDown size={12} />
+                                </button>
+                              </div>
+                            )}
                           </div>
-                        ))}
-                      </div>
-                    )}
 
-                    {/* Verdadeiro ou Falso preview */}
-                    {q.tipo === 'verdadeiro_falso' && q.itensVF && q.itensVF.length > 0 && (
-                      <div className="space-y-1.5">
-                        {q.itensVF.map((it, i) => (
-                          <div
-                            key={it.id || i}
-                            className="p-2.5 rounded-xl bg-white border border-slate-200 text-xs flex items-center justify-between gap-3"
-                          >
-                            <div className="flex-1 min-w-0 text-slate-800">
-                              <HtmlContent html={it.afirmacao || '(Afirmação pendente)'} />
-                            </div>
-                            <span className={`px-2 py-0.5 rounded-md font-extrabold text-[10px] shrink-0 border ${
-                              it.correta
-                                ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
-                                : 'bg-rose-100 text-rose-800 border-rose-200'
-                            }`}>
-                              Gabarito: {it.correta ? 'V' : 'F'}
+                          <span className="text-[11px] font-bold text-slate-700 bg-slate-100 border border-slate-200/80 px-2.5 py-1 rounded-lg">
+                            {q.tipo === 'multipla_escolha' && 'Objetiva (Única)'}
+                            {q.tipo === 'multipla_selecao' && 'Múltipla Seleção'}
+                            {q.tipo === 'verdadeiro_falso' && 'Verdadeiro ou Falso'}
+                            {q.tipo === 'dissertativa' && 'Dissertativa'}
+                          </span>
+                          {hasImageInQ && (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-sky-50 text-sky-700 border border-sky-200 inline-flex items-center gap-1">
+                              <ImageIcon size={11} /> Com Figura
                             </span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                          )}
+                          {q.habilidadeBNCC && (
+                            <span className="text-[11px] font-bold font-mono px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200">
+                              {q.habilidadeBNCC}
+                            </span>
+                          )}
+                          {q.dificuldade && (
+                            <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full ${
+                              q.dificuldade === 'facil' ? 'bg-emerald-100 text-emerald-800' :
+                              q.dificuldade === 'dificil' ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-800'
+                            }`}>
+                              {q.dificuldade}
+                            </span>
+                          )}
 
-                    {/* Dissertativa preview */}
-                    {q.tipo === 'dissertativa' && (
-                      <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-600 space-y-1.5">
-                        <div className="flex items-center gap-2">
-                          <FileText size={14} className="text-sky-600" />
-                          <strong className="text-slate-800">Resposta Dissertativa</strong>
-                          {q.limitePalavras && (
-                            <span className="ml-auto text-[11px] text-slate-500">
-                              Limite: até {q.limitePalavras} palavras
+                          {compactQuestionList && (
+                            <span className="text-xs text-slate-600 truncate max-w-xs sm:max-w-md ml-1">
+                              {(q.enunciado || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() || '(Questão com figura)'}
                             </span>
                           )}
                         </div>
-                        {q.respostaEsperada && (
-                          <div className="text-xs text-slate-700 italic">
-                            <strong className="not-italic text-slate-900">Padrão de Resposta:</strong> {q.respostaEsperada}
+
+                        <div className="flex items-center gap-1.5 sm:gap-2">
+                          <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1">
+                            <span className="text-xs text-slate-500 font-medium">Pontos:</span>
+                            <input
+                              type="number"
+                              step="0.25"
+                              min="0"
+                              value={q.pontuacao}
+                              onChange={e => {
+                                const val = Math.max(0, Number(e.target.value))
+                                setExam(p => ({
+                                  ...p,
+                                  questoes: p.questoes?.map((item, i) => i === idx ? { ...item, pontuacao: val } : item)
+                                }))
+                              }}
+                              className="w-14 h-6 px-1 rounded bg-white border border-slate-300 text-slate-900 text-xs font-bold text-center focus:outline-none focus:border-sky-500"
+                            />
                           </div>
-                        )}
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setCurrentEditingQuestion(q)
+                              setEditingQuestionModalOpen(true)
+                            }}
+                            className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-sky-50 hover:bg-sky-100 border border-sky-200 text-sky-700 transition-colors cursor-pointer"
+                            title="Editar Questão e Enquadramento"
+                          >
+                            <Edit3 size={14} />
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleDuplicateQuestion(idx)}
+                            className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 transition-colors cursor-pointer"
+                            title="Duplicar Questão"
+                          >
+                            <Copy size={14} />
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setExam(p => ({
+                                ...p,
+                                questoes: p.questoes?.filter((_, i) => i !== idx)
+                              }))
+                            }}
+                            className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-600 transition-colors cursor-pointer"
+                            title="Excluir Questão"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
                       </div>
-                    )}
-                  </div>
-                ))}
+
+                      {!compactQuestionList && (
+                        <>
+                          {/* Enunciado preview */}
+                          <div className="p-3.5 rounded-xl bg-slate-50/80 border border-slate-100 text-xs sm:text-sm text-slate-800 leading-relaxed max-h-72 overflow-y-auto">
+                            <HtmlContent html={q.enunciado} />
+                          </div>
+
+                          {/* Alternativas preview (Apenas Múltipla Escolha e Seleção) */}
+                          {(q.tipo === 'multipla_escolha' || q.tipo === 'multipla_selecao') && q.alternativas && q.alternativas.length > 0 && (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                              {q.alternativas.map(a => (
+                                <div
+                                  key={a.id}
+                                  className={`p-2.5 rounded-xl flex items-center gap-2.5 text-xs transition-colors ${
+                                    a.correta
+                                      ? 'bg-emerald-50/70 border border-emerald-300 text-emerald-950 font-semibold'
+                                      : 'bg-white border border-slate-200 text-slate-700'
+                                  }`}
+                                >
+                                  <span className={`w-6 h-6 rounded-md flex items-center justify-center font-extrabold text-[11px] shrink-0 ${
+                                    a.correta
+                                      ? 'bg-emerald-200/80 text-emerald-900'
+                                      : 'bg-slate-100 text-slate-600'
+                                  }`}>
+                                    {a.letra}
+                                  </span>
+                                  <div className="flex-1 min-w-0">
+                                    <HtmlContent html={a.texto || '(Em branco)'} />
+                                  </div>
+                                  {a.correta && <Check size={14} className="text-emerald-600 shrink-0" />}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          {/* Verdadeiro ou Falso preview */}
+                          {q.tipo === 'verdadeiro_falso' && q.itensVF && q.itensVF.length > 0 && (
+                            <div className="space-y-1.5">
+                              {q.itensVF.map((it, i) => (
+                                <div
+                                  key={it.id || i}
+                                  className="p-2.5 rounded-xl bg-white border border-slate-200 text-xs flex items-center justify-between gap-3"
+                                >
+                                  <div className="flex-1 min-w-0 text-slate-800">
+                                    <HtmlContent html={it.afirmacao || '(Afirmação pendente)'} />
+                                  </div>
+                                  <span className={`px-2 py-0.5 rounded-md font-extrabold text-[10px] shrink-0 border ${
+                                    it.correta
+                                      ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
+                                      : 'bg-rose-100 text-rose-800 border-rose-200'
+                                  }`}>
+                                    Gabarito: {it.correta ? 'V' : 'F'}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          {/* Dissertativa preview */}
+                          {q.tipo === 'dissertativa' && (
+                            <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-600 space-y-1.5">
+                              <div className="flex items-center gap-2">
+                                <FileText size={14} className="text-sky-600" />
+                                <strong className="text-slate-800">Resposta Dissertativa</strong>
+                                {q.limitePalavras && (
+                                  <span className="ml-auto text-[11px] text-slate-500">
+                                    Limite: até {q.limitePalavras} palavras
+                                  </span>
+                                )}
+                              </div>
+                              {q.respostaEsperada && (
+                                <div className="text-xs text-slate-700 italic">
+                                  <strong className="not-italic text-slate-900">Padrão de Resposta:</strong> {q.respostaEsperada}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  )
+                })}
               </div>
             )}
           </div>
@@ -2219,127 +2420,248 @@ export function ExamWizard({ initialExam, isEditing = false }: ExamWizardProps) 
       {/* ── MODAL: PRÉ-VISUALIZAÇÃO COMO ALUNO ─────────────────── */}
       {previewModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4 md:p-6 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="w-full h-full sm:h-auto sm:max-h-[90vh] sm:max-w-3xl bg-white sm:rounded-3xl border border-slate-200 shadow-2xl flex flex-col overflow-hidden">
+          <div className="w-full h-full sm:h-auto sm:max-h-[92vh] sm:max-w-4xl bg-white sm:rounded-3xl border border-slate-200 shadow-2xl flex flex-col overflow-hidden">
             {/* Modal Header */}
-            <div className="px-5 py-3.5 sm:px-6 sm:py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50/80 shrink-0">
+            <div className="px-4 py-3 sm:px-6 sm:py-4 border-b border-slate-200 flex items-center justify-between gap-3 flex-wrap bg-slate-50/90 shrink-0">
               <div className="flex items-center gap-2">
                 <Eye size={17} className="text-sky-600" />
                 <span className="text-xs font-extrabold text-sky-900 uppercase tracking-wider">
-                  Modo Pré-visualização do Aluno (Simulação)
+                  Simulação & Enquadramento da Prova
                 </span>
               </div>
-              <button
-                type="button"
-                onClick={() => setPreviewModalOpen(false)}
-                className="w-8 h-8 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 flex items-center justify-center text-slate-500 transition-colors cursor-pointer"
-              >
-                <X size={15} />
-              </button>
+
+              <div className="flex items-center gap-2 ml-auto flex-wrap">
+                {/* Device Framing Switcher */}
+                <div className="hidden sm:flex items-center bg-slate-200/75 p-0.5 rounded-xl border border-slate-200">
+                  {[
+                    { id: 'desktop' as const, label: 'Desktop', icon: Monitor },
+                    { id: 'tablet' as const, label: 'Tablet', icon: Tablet },
+                    { id: 'mobile' as const, label: 'Celular', icon: Smartphone },
+                  ].map(dev => {
+                    const Icon = dev.icon
+                    return (
+                      <button
+                        key={dev.id}
+                        type="button"
+                        onClick={() => setPreviewDevice(dev.id)}
+                        className={`px-2.5 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer ${
+                          previewDevice === dev.id
+                            ? 'bg-white text-sky-700 shadow-2xs'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        <Icon size={12} />
+                        <span>{dev.label}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+
+                {/* Toggle Gabarito */}
+                <button
+                  type="button"
+                  onClick={() => setPreviewShowGabarito(prev => !prev)}
+                  className={`h-8 px-2.5 rounded-xl border text-[11px] font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                    previewShowGabarito
+                      ? 'bg-emerald-50 border-emerald-300 text-emerald-800'
+                      : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  <CheckCircle2 size={13} className={previewShowGabarito ? 'text-emerald-600' : 'text-slate-400'} />
+                  <span>{previewShowGabarito ? 'Gabarito Visível' : 'Ver Gabarito'}</span>
+                </button>
+
+                {exam.id && (
+                  <button
+                    type="button"
+                    onClick={() => window.open(`/provas-online/${exam.id}/imprimir`, '_blank')}
+                    className="h-8 px-2.5 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-[11px] font-bold inline-flex items-center gap-1.5 cursor-pointer"
+                    title="Abrir Estúdio de Impressão A4"
+                  >
+                    <Printer size={13} className="text-sky-600" />
+                    <span className="hidden md:inline">Versão Impressa A4</span>
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => setPreviewModalOpen(false)}
+                  className="w-8 h-8 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 flex items-center justify-center text-slate-500 transition-colors cursor-pointer"
+                >
+                  <X size={15} />
+                </button>
+              </div>
             </div>
 
-            {/* Modal Body */}
-            <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
-              {/* Header preview */}
-              <div className="p-4 sm:p-5 rounded-2xl bg-slate-50/80 border border-slate-200 space-y-2">
-                <span className="text-[11px] font-bold text-sky-700 bg-sky-100/70 px-2 py-0.5 rounded-md uppercase tracking-wider inline-block">
-                  {exam.disciplina}
-                </span>
-                <h2 className="text-base sm:text-lg font-bold text-slate-900">
-                  {exam.titulo}
-                </h2>
-                <p className="text-xs text-slate-600 leading-relaxed">
-                  {exam.instrucoes || 'Leia atentamente cada questão. Responda com calma.'}
-                </p>
-                <div className="pt-3 border-t border-slate-200/80 flex items-center gap-3 sm:gap-4 flex-wrap text-xs text-slate-600">
-                  <span><strong>Duração:</strong> {exam.duracaoMinutos} min</span>
-                </div>
-              </div>
-
-              {/* Questions list or Empty State */}
-              {(exam.questoes || []).length === 0 ? (
-                <div className="p-8 sm:p-12 text-center rounded-2xl bg-slate-50 border border-dashed border-slate-300 flex flex-col items-center gap-2.5">
-                  <div className="w-12 h-12 rounded-xl bg-white border border-slate-200 flex items-center justify-center shadow-2xs">
-                    <BookOpen size={22} className="text-slate-400" />
-                  </div>
-                  <div className="text-sm font-bold text-slate-800">
-                    Nenhuma questão adicionada ainda
-                  </div>
-                  <p className="text-xs text-slate-500 max-w-sm">
-                    Adicione questões na Etapa 2 para pré-visualizar a experiência completa do aluno nesta tela.
+            {/* Modal Body with Device Framing Container */}
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-slate-100/70">
+              <div
+                className={`mx-auto space-y-4 transition-all duration-200 ${
+                  previewDevice === 'mobile'
+                    ? 'max-w-[390px]'
+                    : previewDevice === 'tablet'
+                    ? 'max-w-[620px]'
+                    : 'max-w-3xl'
+                }`}
+              >
+                {/* Header preview */}
+                <div className="p-4 sm:p-5 rounded-2xl bg-white border border-slate-200 shadow-2xs space-y-2">
+                  <span className="text-[11px] font-bold text-sky-700 bg-sky-100/70 px-2 py-0.5 rounded-md uppercase tracking-wider inline-block">
+                    {exam.disciplina}
+                  </span>
+                  <h2 className="text-base sm:text-lg font-bold text-slate-900">
+                    {exam.titulo || 'Título da Avaliação'}
+                  </h2>
+                  <p className="text-xs text-slate-600 leading-relaxed">
+                    {exam.instrucoes || 'Leia atentamente cada questão. Responda com calma.'}
                   </p>
-                </div>
-              ) : (
-                (exam.questoes || []).map((q, idx) => (
-                  <div
-                    key={q.id}
-                    className="p-4 sm:p-5 rounded-2xl bg-white border border-slate-200 shadow-2xs space-y-3"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs sm:text-sm font-bold text-slate-900">Questão {idx + 1}</span>
-                      <span className="text-xs font-bold text-sky-700 bg-sky-50 px-2 py-0.5 rounded-md border border-sky-200">
-                        {q.pontuacao} pts
-                      </span>
-                    </div>
-
-                    <div className="text-xs sm:text-sm text-slate-800 leading-relaxed">
-                      <HtmlContent html={q.enunciado} />
-                    </div>
-
-                    {/* Alternativas (Apenas múltipla escolha ou múltipla seleção) */}
-                    {(q.tipo === 'multipla_escolha' || q.tipo === 'multipla_selecao') && q.alternativas && q.alternativas.length > 0 && (
-                      <div className="space-y-2">
-                        {q.alternativas.map(a => (
-                          <div
-                            key={a.id}
-                            className="p-3 rounded-xl bg-slate-50/70 border border-slate-200 text-xs text-slate-800 flex items-center gap-3 hover:bg-slate-100/70 transition-colors"
-                          >
-                            <span className="w-6 h-6 rounded-md border border-slate-300 bg-white flex items-center justify-center font-extrabold text-[11px] text-slate-600 shrink-0">
-                              {a.letra}
-                            </span>
-                            <div className="flex-1 min-w-0">
-                              <HtmlContent html={a.texto || '(Em branco)'} />
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    {/* Verdadeiro ou Falso (Apenas verdadeiro_falso) */}
-                    {q.tipo === 'verdadeiro_falso' && q.itensVF && q.itensVF.length > 0 && (
-                      <div className="space-y-2">
-                        {q.itensVF.map(item => (
-                          <div
-                            key={item.id}
-                            className="p-3 rounded-xl bg-slate-50/70 border border-slate-200 text-xs text-slate-800 flex items-center justify-between gap-3"
-                          >
-                            <div className="flex-1 min-w-0">
-                              <HtmlContent html={item.afirmacao} />
-                            </div>
-                            <div className="flex gap-1.5 shrink-0">
-                              <span className="px-2.5 py-1 rounded-md bg-white border border-slate-300 font-extrabold text-xs text-slate-700">V</span>
-                              <span className="px-2.5 py-1 rounded-md bg-white border border-slate-300 font-extrabold text-xs text-slate-700">F</span>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    {/* Dissertativa */}
-                    {q.tipo === 'dissertativa' && (
-                      <div className="space-y-1.5">
-                        <textarea
-                          disabled
-                          placeholder="Espaço para digitação da resposta pelo aluno..."
-                          className="w-full p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-400 h-24 resize-none cursor-not-allowed"
-                        />
-                        {q.limitePalavras && (
-                          <span className="text-[11px] text-slate-400 block">Limite: até {q.limitePalavras} palavras</span>
-                        )}
-                      </div>
-                    )}
+                  <div className="pt-3 border-t border-slate-200/80 flex items-center gap-3 sm:gap-4 flex-wrap text-xs text-slate-600">
+                    <span><strong>Duração:</strong> {exam.duracaoMinutos} min</span>
+                    <span><strong>Valor:</strong> {exam.valorTotal} pts</span>
+                    <span><strong>Questões:</strong> {(exam.questoes || []).length}</span>
                   </div>
-                ))
-              )}
+                </div>
+
+                {/* Questions list or Empty State */}
+                {(exam.questoes || []).length === 0 ? (
+                  <div className="p-8 sm:p-12 text-center rounded-2xl bg-white border border-dashed border-slate-300 flex flex-col items-center gap-2.5">
+                    <div className="w-12 h-12 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-center shadow-2xs">
+                      <BookOpen size={22} className="text-slate-400" />
+                    </div>
+                    <div className="text-sm font-bold text-slate-800">
+                      Nenhuma questão adicionada ainda
+                    </div>
+                    <p className="text-xs text-slate-500 max-w-sm">
+                      Adicione questões na Etapa 2 para pré-visualizar a experiência completa do aluno nesta tela.
+                    </p>
+                  </div>
+                ) : (
+                  (exam.questoes || []).map((q, idx) => (
+                    <div
+                      key={q.id}
+                      className="p-4 sm:p-5 rounded-2xl bg-white border border-slate-200 shadow-2xs space-y-3"
+                    >
+                      <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                        <div className="flex items-center gap-2">
+                          <span className="px-2 py-0.5 rounded-md bg-slate-900 text-white text-xs font-extrabold">
+                            Questão {idx + 1}
+                          </span>
+                          {q.habilidadeBNCC && (
+                            <span className="text-[10px] font-mono font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded">
+                              {q.habilidadeBNCC}
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-xs font-bold text-sky-700 bg-sky-50 px-2 py-0.5 rounded-md border border-sky-200">
+                          {q.pontuacao} pts
+                        </span>
+                      </div>
+
+                      <div className="text-xs sm:text-sm text-slate-800 leading-relaxed">
+                        <HtmlContent html={q.enunciado} />
+                      </div>
+
+                      {/* Alternativas (Apenas múltipla escolha ou múltipla seleção) */}
+                      {(q.tipo === 'multipla_escolha' || q.tipo === 'multipla_selecao') && q.alternativas && q.alternativas.length > 0 && (
+                        <div className="space-y-2">
+                          {q.alternativas.map(a => {
+                            const showCorrect = previewShowGabarito && a.correta
+                            return (
+                              <div
+                                key={a.id}
+                                className={`p-3 rounded-xl border text-xs flex items-center gap-3 transition-colors ${
+                                  showCorrect
+                                    ? 'bg-emerald-50/80 border-emerald-300 text-emerald-950 font-semibold'
+                                    : 'bg-slate-50/70 border-slate-200 text-slate-800 hover:bg-slate-100/70'
+                                }`}
+                              >
+                                <span
+                                  className={`w-6 h-6 rounded-md border flex items-center justify-center font-extrabold text-[11px] shrink-0 ${
+                                    showCorrect
+                                      ? 'bg-emerald-600 border-emerald-600 text-white'
+                                      : 'border-slate-300 bg-white text-slate-600'
+                                  }`}
+                                >
+                                  {a.letra}
+                                </span>
+                                <div className="flex-1 min-w-0">
+                                  <HtmlContent html={a.texto || '(Em branco)'} />
+                                </div>
+                                {showCorrect && (
+                                  <span className="text-[10px] font-extrabold uppercase bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded shrink-0">
+                                    Correta
+                                  </span>
+                                )}
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )}
+
+                      {/* Verdadeiro ou Falso (Apenas verdadeiro_falso) */}
+                      {q.tipo === 'verdadeiro_falso' && q.itensVF && q.itensVF.length > 0 && (
+                        <div className="space-y-2">
+                          {q.itensVF.map(item => (
+                            <div
+                              key={item.id}
+                              className="p-3 rounded-xl bg-slate-50/70 border border-slate-200 text-xs text-slate-800 flex items-center justify-between gap-3"
+                            >
+                              <div className="flex-1 min-w-0">
+                                <HtmlContent html={item.afirmacao} />
+                              </div>
+                              <div className="flex gap-1.5 shrink-0">
+                                <span
+                                  className={`px-2.5 py-1 rounded-md border font-extrabold text-xs ${
+                                    previewShowGabarito && item.correta
+                                      ? 'bg-emerald-600 border-emerald-600 text-white'
+                                      : 'bg-white border-slate-300 text-slate-700'
+                                  }`}
+                                >
+                                  V
+                                </span>
+                                <span
+                                  className={`px-2.5 py-1 rounded-md border font-extrabold text-xs ${
+                                    previewShowGabarito && !item.correta
+                                      ? 'bg-rose-600 border-rose-600 text-white'
+                                      : 'bg-white border-slate-300 text-slate-700'
+                                  }`}
+                                >
+                                  F
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Dissertativa */}
+                      {q.tipo === 'dissertativa' && (
+                        <div className="space-y-2">
+                          <textarea
+                            disabled
+                            placeholder="Espaço para digitação da resposta pelo aluno..."
+                            className="w-full p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-400 h-24 resize-none cursor-not-allowed"
+                          />
+                          {q.limitePalavras && (
+                            <span className="text-[11px] text-slate-400 block">Limite: até {q.limitePalavras} palavras</span>
+                          )}
+                          {previewShowGabarito && q.respostaEsperada && (
+                            <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-950">
+                              <strong>Padrão de Resposta:</strong> {q.respostaEsperada}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {previewShowGabarito && q.explicacaoResposta && (
+                        <div className="p-3 rounded-xl bg-sky-50 border border-sky-200 text-xs text-sky-900">
+                          <strong>Comentário Pedagógico:</strong> {q.explicacaoResposta}
+                        </div>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
 
             {/* Modal Footer */}
