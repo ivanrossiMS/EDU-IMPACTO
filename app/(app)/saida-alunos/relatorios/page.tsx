@@ -133,30 +133,73 @@ function resolveOriginDetails(c: any) {
     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(c.guardianId || '').trim())
   const isSoloPortaria =
     !isCatraca && (c.guardianId === 'sozinho' || c.tipo === 'sozinho')
+  const isConfirmed =
+    c.status === 'confirmed' ||
+    Boolean(c.confirmedAt) ||
+    Boolean(c.confirmedOut)
 
-  const rawUser =
-    c.authorizedBy ||
-    c.operatorId ||
-    c.confirmedBy ||
-    c.saidaUsuario ||
-    ''
-  const cleanUser = typeof rawUser === 'string' ? rawUser.trim() : ''
   const cleanGuardian = typeof c.guardianName === 'string' ? c.guardianName.trim() : ''
+  const isGuardianOrGeneric = (val: unknown) => {
+    if (typeof val !== 'string') return true
+    const v = val.trim()
+    if (!v || v === 'Admin Logado' || v === 'Sistema') return true
+    const lower = v.toLowerCase()
+    if (lower.includes('(app agenda digital)') || lower.includes('responsável autorizado') || lower.includes('cartão rfid')) return true
+    if (cleanGuardian && lower === cleanGuardian.toLowerCase()) return true
+    return false
+  }
 
-  let userLabel = ''
+  // Usuário do sistema que efetivamente confirmou a saída
+  const rawConfirmedUser =
+    (!isGuardianOrGeneric(c.confirmedBy) ? String(c.confirmedBy).trim() : '') ||
+    (!isGuardianOrGeneric(c.saidaUsuario) ? String(c.saidaUsuario).trim() : '') ||
+    (isConfirmed && !isAgendaDigitalCall && !isRfid && !isCatraca && c.status !== 'special_auth' && !isGuardianOrGeneric(c.operatorId)
+      ? String(c.operatorId).trim()
+      : '') ||
+    (isConfirmed && !isAgendaDigitalCall && !isRfid && !isCatraca && c.status !== 'special_auth' && !isGuardianOrGeneric(c.authorizedBy)
+      ? String(c.authorizedBy).trim()
+      : '')
+
+  // Usuário / origem que lançou ou autorizou a chamada
+  const rawAuthUser =
+    (typeof c.authorizedBy === 'string' && c.authorizedBy.trim() ? c.authorizedBy.trim() : '') ||
+    (typeof c.operatorId === 'string' && c.operatorId.trim() ? c.operatorId.trim() : '') ||
+    rawConfirmedUser
+
+  let authorizedByLabel = ''
   if (isCatraca) {
-    userLabel = cleanUser
-      ? `${cleanUser} (Autorização Especial)`
+    authorizedByLabel = rawAuthUser && !isGuardianOrGeneric(rawAuthUser)
+      ? `${rawAuthUser} (Autorização Especial)`
       : 'Ficha do Aluno — Autorizado a Sair Sozinho (Biometria iDFace)'
   } else if (isRfid) {
-    userLabel = `${cleanGuardian ? `${cleanGuardian} · ` : ''}Cartão RFID${c.rfidCode ? ` (${c.rfidCode})` : ''}`
+    authorizedByLabel = `${cleanGuardian ? `${cleanGuardian} · ` : ''}Cartão RFID${c.rfidCode ? ` (${c.rfidCode})` : ''}`
   } else if (isAgendaDigitalCall) {
-    userLabel = cleanUser || (cleanGuardian ? `${cleanGuardian} (App Agenda Digital)` : 'Responsável (App Agenda Digital)')
+    authorizedByLabel = rawAuthUser && rawAuthUser.toLowerCase().includes('(app agenda digital)')
+      ? rawAuthUser
+      : (cleanGuardian ? `${cleanGuardian} (App Agenda Digital)` : (rawAuthUser || 'Responsável (App Agenda Digital)'))
   } else if (isSoloPortaria) {
-    userLabel = cleanUser || 'Ficha do Aluno — Autorizado a Sair Sozinho (Portaria)'
+    authorizedByLabel = (!isGuardianOrGeneric(rawAuthUser) ? rawAuthUser : '') || rawConfirmedUser || 'Ficha do Aluno — Autorizado a Sair Sozinho (Portaria)'
   } else {
-    userLabel = cleanUser || (cleanGuardian ? `${cleanGuardian} (Responsável Autorizado · Portaria)` : 'Portaria')
+    authorizedByLabel =
+      (!isGuardianOrGeneric(rawAuthUser) ? rawAuthUser : '') ||
+      rawConfirmedUser ||
+      (isSpecialAuth ? rawAuthUser : '') ||
+      'Portaria'
   }
+
+  let confirmedByLabel: string | undefined
+  if (isCatraca) {
+    confirmedByLabel = rawConfirmedUser || (isConfirmed ? 'Catraca Biométrica iDFace (Automático)' : undefined)
+  } else if (isConfirmed) {
+    confirmedByLabel = rawConfirmedUser || (!isGuardianOrGeneric(rawAuthUser) ? rawAuthUser : '') || 'Portaria'
+  } else if (rawConfirmedUser) {
+    confirmedByLabel = rawConfirmedUser
+  }
+
+  // Quando a saída está confirmada, o destaque principal deve ser o usuário que confirmou a saída
+  const userLabel = isConfirmed
+    ? (isCatraca ? (rawConfirmedUser || authorizedByLabel) : (confirmedByLabel || authorizedByLabel))
+    : authorizedByLabel
 
   let originTypeLabel = 'Chamada Manual (Portaria)'
   if (isRfid) originTypeLabel = `Cartão RFID${c.rfidCode ? ` · Tag ${c.rfidCode}` : ''}`
@@ -192,9 +235,11 @@ function resolveOriginDetails(c: any) {
     isSpecialAuth,
     isDiarioManual,
     isAgendaDigitalCall,
-    hasExplicitUser: Boolean(cleanUser || isAgendaDigitalCall || isRfid || isCatraca),
+    isConfirmed,
+    hasExplicitUser: Boolean(rawConfirmedUser || (!isGuardianOrGeneric(rawAuthUser) && rawAuthUser) || isAgendaDigitalCall || isRfid || isCatraca),
     userLabel,
-    confirmedBy: typeof c.confirmedBy === 'string' && c.confirmedBy.trim() ? c.confirmedBy.trim() : undefined,
+    authorizedByLabel,
+    confirmedBy: confirmedByLabel,
     originTypeLabel,
     badgeText,
     badgeBg,
@@ -297,22 +342,33 @@ function TabHistoricoChamadas() {
   const filtered = useMemo(() => {
     if (!hasSearched) return []
     const all = historicoCalls || []
-    // Vincula apenas autorizações especiais (special_auth) do mesmo aluno na mesma data
+    // Vincula autorizações especiais (special_auth) e confirmadores do mesmo aluno na mesma data
     const specialAuthByStudentDate = new Map<string, string>()
+    const confirmedByStudentDate = new Map<string, string>()
     for (const item of all) {
       const sId = item?.studentId ? String(item.studentId).trim() : ''
+      if (!sId) continue
+      const dtKey = fmtOnlyDate(item.calledAt || item.confirmedAt)
       const isSpecial =
         item?.status === 'special_auth' ||
         item?.guardianId === 'special' ||
         item?.guardianId === 'special-auth'
       const op = item?.authorizedBy || item?.operatorId
-      if (sId && isSpecial && typeof op === 'string' && op.trim()) {
+      if (isSpecial && typeof op === 'string' && op.trim()) {
         const cleanOp = op.trim()
-        const dtKey = fmtOnlyDate(item.calledAt || item.confirmedAt)
         specialAuthByStudentDate.set(`${sId}_${dtKey}`, cleanOp)
         if (!specialAuthByStudentDate.has(sId)) {
           specialAuthByStudentDate.set(sId, cleanOp)
         }
+      }
+      const confOp = typeof item?.confirmedBy === 'string' ? item.confirmedBy.trim() : ''
+      const cleanGuard = typeof item?.guardianName === 'string' ? item.guardianName.trim().toLowerCase() : ''
+      if (
+        confOp &&
+        !confOp.toLowerCase().includes('(app agenda digital)') &&
+        (!cleanGuard || confOp.toLowerCase() !== cleanGuard)
+      ) {
+        confirmedByStudentDate.set(`${sId}_${dtKey}`, confOp)
       }
     }
 
@@ -338,24 +394,34 @@ function TabHistoricoChamadas() {
           c.source === 'agenda_digital' ||
           c.guardianId === 'usr-fam' ||
           /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(c.guardianId || '').trim())
+        const isConfirmed =
+          c.status === 'confirmed' ||
+          Boolean(c.confirmedAt) ||
+          Boolean(c.confirmedOut)
 
         const specialOp = sId ? (specialAuthByStudentDate.get(`${sId}_${dtKey}`) || specialAuthByStudentDate.get(sId)) : undefined
+        const siblingConfOp = sId ? confirmedByStudentDate.get(`${sId}_${dtKey}`) : undefined
 
-        if (!c.operatorId && !c.authorizedBy) {
+        let next = c
+        if (isConfirmed && !next.confirmedBy && siblingConfOp && !isCatraca) {
+          next = { ...next, confirmedBy: siblingConfOp }
+        }
+
+        if (!next.operatorId && !next.authorizedBy) {
           if (isCatraca || isRfid) {
-            if (specialOp) return { ...c, authorizedBy: specialOp }
-            return c
+            if (specialOp) return { ...next, authorizedBy: specialOp }
+            return next
           }
           if (isAgendaDigitalCall) {
-            const famLabel = c.guardianName ? `${String(c.guardianName).trim()} (App Agenda Digital)` : undefined
-            if (famLabel) return { ...c, operatorId: famLabel, authorizedBy: famLabel }
-            return c
+            const famLabel = next.guardianName ? `${String(next.guardianName).trim()} (App Agenda Digital)` : undefined
+            if (famLabel) return { ...next, operatorId: famLabel, authorizedBy: famLabel }
+            return next
           }
           if (specialOp) {
-            return { ...c, operatorId: specialOp, authorizedBy: specialOp }
+            return { ...next, operatorId: specialOp, authorizedBy: specialOp }
           }
         }
-        return c
+        return next
       })
       .filter(c => {
         const idStr = String(c.id || '')
@@ -422,7 +488,8 @@ function TabHistoricoChamadas() {
         'Turma':          getTurmaNome(c.studentClass),
         'Responsável':    c.guardianName,
         'Origem':         orig.originTypeLabel,
-        'Autorizado por': orig.userLabel,
+        'Confirmado por': orig.confirmedBy ?? '—',
+        'Autorizado por': orig.authorizedByLabel,
         'RFID':           c.rfidCode ?? '—',
         'Chamado em':     fmtTime(c.calledAt),
         'Confirmado em':  fmtTime(c.confirmedAt),
@@ -436,10 +503,10 @@ function TabHistoricoChamadas() {
   }
 
   const exportCSV = () => {
-    const header = 'Data,Aluno,Turma,Responsável,Origem,Autorizado por,Chamado em,Confirmado em,Status\n'
+    const header = 'Data,Aluno,Turma,Responsável,Origem,Confirmado por,Autorizado por,Chamado em,Confirmado em,Status\n'
     const rows = filtered.map(c => {
       const orig = resolveOriginDetails(c)
-      return `"${fmtOnlyDate(c.calledAt)}","${c.studentName}","${getTurmaNome(c.studentClass)}","${c.guardianName}","${orig.originTypeLabel}","${orig.userLabel}","${fmtTime(c.calledAt)}","${fmtTime(c.confirmedAt)}","${STATUS_LABEL[c.status] ?? c.status}"`
+      return `"${fmtOnlyDate(c.calledAt)}","${c.studentName}","${getTurmaNome(c.studentClass)}","${c.guardianName}","${orig.originTypeLabel}","${orig.confirmedBy ?? '—'}","${orig.authorizedByLabel}","${fmtTime(c.calledAt)}","${fmtTime(c.confirmedAt)}","${STATUS_LABEL[c.status] ?? c.status}"`
     }).join('\n')
     const blob = new Blob([header + rows], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
@@ -563,7 +630,7 @@ function TabHistoricoChamadas() {
                     type="button"
                     data-origin-trigger="true"
                     onClick={(e) => handleOriginClick(e, c)}
-                    title="Clique para ver qual usuário fez a autorização"
+                    title="Clique para ver qual usuário confirmou / autorizou a saída"
                     style={{
                       fontSize: 10, padding: '2px 8px', borderRadius: 100,
                       background: orig.badgeBg,
@@ -584,7 +651,9 @@ function TabHistoricoChamadas() {
                     fontSize: 11, color: 'hsl(var(--text-primary))', display: 'flex', alignItems: 'center', gap: 6
                   }}>
                     <User size={12} color="#a78bfa" style={{ flexShrink: 0 }} />
-                    <span><strong>Autorizado por:</strong> {orig.userLabel}</span>
+                    <span>
+                      <strong>{orig.isConfirmed ? 'Confirmado por:' : 'Autorizado por:'}</strong> {orig.userLabel}
+                    </span>
                   </div>
                 )}
               </div>
@@ -614,7 +683,7 @@ function TabHistoricoChamadas() {
                 <th style={{ width: '18%', padding: '12px 14px', textAlign: 'left', fontSize: 10, fontWeight: 800, color: 'hsl(var(--text-muted))', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
                   Responsável
                 </th>
-                <th title="Clique na origem de um aluno para ver qual usuário realizou a autorização" style={{ width: '10%', padding: '12px 14px', textAlign: 'center', fontSize: 10, fontWeight: 800, color: 'hsl(var(--text-muted))', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                <th title="Clique na origem de um aluno para ver qual usuário confirmou ou autorizou a saída" style={{ width: '10%', padding: '12px 14px', textAlign: 'center', fontSize: 10, fontWeight: 800, color: 'hsl(var(--text-muted))', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
                   Origem
                 </th>
                 <th style={{ width: '8%', padding: '12px 14px', textAlign: 'center', fontSize: 10, fontWeight: 800, color: 'hsl(var(--text-muted))', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
@@ -684,7 +753,7 @@ function TabHistoricoChamadas() {
                     <td
                       data-origin-trigger="true"
                       onClick={(e) => handleOriginClick(e, c)}
-                      title="Clique para ver qual usuário fez a autorização"
+                      title="Clique para ver qual usuário confirmou / autorizou a saída"
                       style={{
                         padding: '10px 10px', width: '10%', textAlign: 'center',
                         cursor: 'pointer', userSelect: 'none'
@@ -792,7 +861,7 @@ function TabHistoricoChamadas() {
                 </div>
                 <div>
                   <div style={{ fontSize: 11, fontWeight: 800, color: 'hsl(var(--text-primary))', lineHeight: 1.2 }}>
-                    Detalhes da Autorização
+                    {orig.isConfirmed ? 'Detalhes da Confirmação' : 'Detalhes da Autorização'}
                   </div>
                   <div style={{ fontSize: 10, color: 'hsl(var(--text-muted))' }}>
                     {orig.originTypeLabel}
@@ -820,17 +889,19 @@ function TabHistoricoChamadas() {
                 border: `1px solid ${orig.hasExplicitUser ? 'rgba(124,58,237,0.25)' : 'hsl(var(--border-subtle))'}`
               }}>
                 <div style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'hsl(var(--text-muted))', marginBottom: 2 }}>
-                  Usuário que autorizou / lançou
+                  {orig.isConfirmed
+                    ? (orig.isCatraca ? 'Confirmação / Liberação da Saída' : 'Usuário que confirmou a saída')
+                    : 'Usuário que autorizou / lançou'}
                 </div>
                 <div style={{ fontSize: 12, fontWeight: 800, color: orig.hasExplicitUser ? '#7c3aed' : 'hsl(var(--text-primary))', wordBreak: 'break-word' }}>
-                  {orig.userLabel}
+                  {orig.isConfirmed ? (orig.confirmedBy || orig.userLabel) : orig.authorizedByLabel}
                 </div>
               </div>
 
-              {orig.confirmedBy && orig.confirmedBy !== orig.userLabel && (
+              {orig.isConfirmed && orig.authorizedByLabel && orig.authorizedByLabel !== (orig.confirmedBy || orig.userLabel) && (
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                  <span style={{ color: 'hsl(var(--text-muted))' }}>Confirmado por:</span>
-                  <span style={{ fontWeight: 700, textAlign: 'right' }}>{orig.confirmedBy}</span>
+                  <span style={{ color: 'hsl(var(--text-muted))' }}>Autorizado / Lançado por:</span>
+                  <span style={{ fontWeight: 700, textAlign: 'right' }}>{orig.authorizedByLabel}</span>
                 </div>
               )}
 

@@ -1241,9 +1241,9 @@ function SaidaProviderInner({ children, enabled = true }: { children: React.Reac
        (studentIdToConfirm && c.studentId != null && String(c.studentId) === studentIdToConfirm) ||
        (studentNameToConfirm && c.studentName && c.studentName.trim().toLowerCase() === studentNameToConfirm))
     )
+    const currentOperator = resolveOperatorName()
     const fixCall = (c: PickupCall) => {
       const conf = currentNow
-      const currentOperator = resolveOperatorName()
       const cTime = (c.calledAt && new Date(c.calledAt).getTime() > new Date(conf).getTime()) ? conf : c.calledAt
       return {
         ...c,
@@ -1271,6 +1271,7 @@ function SaidaProviderInner({ children, enabled = true }: { children: React.Reac
       })
       .map(c => ({
         ...c,
+        confirmedBy: currentOperator || c.confirmedBy,
         confirmedDates: { ...(c.confirmedDates || {}), [todayKey]: currentNow }
       }))
 
@@ -1284,7 +1285,11 @@ function SaidaProviderInner({ children, enabled = true }: { children: React.Reac
           (studentNameToConfirm && cStudentName === studentNameToConfirm)
         if (c.status === 'special_auth') {
           if (matchesStudent) {
-            return { ...c, confirmedDates: { ...(c.confirmedDates || {}), [todayKey]: currentNow } }
+            return {
+              ...c,
+              confirmedBy: currentOperator || c.confirmedBy,
+              confirmedDates: { ...(c.confirmedDates || {}), [todayKey]: currentNow }
+            }
           }
           return c
         }
@@ -1541,6 +1546,7 @@ function SaidaProviderInner({ children, enabled = true }: { children: React.Reac
       })
       .map(c => ({
         ...c,
+        confirmedBy: currentOperator || c.confirmedBy || specialAuthOperator,
         confirmedDates: { ...(c.confirmedDates || {}), [todayKey]: currentNow }
       }))
 
@@ -1552,12 +1558,21 @@ function SaidaProviderInner({ children, enabled = true }: { children: React.Reac
         const matchesStudent = (sIdStr && cId === sIdStr) || (sNameNorm && cName === sNameNorm)
         if (c.status === 'special_auth') {
           if (matchesStudent) {
-            return { ...c, confirmedDates: { ...(c.confirmedDates || {}), [todayKey]: currentNow } }
+            return {
+              ...c,
+              confirmedBy: currentOperator || c.confirmedBy || specialAuthOperator,
+              confirmedDates: { ...(c.confirmedDates || {}), [todayKey]: currentNow }
+            }
           }
           return c
         }
         if (c.status !== 'cancelled' && isFromToday(c.confirmedAt || c.calledAt) && matchesStudent) {
-          return { ...c, status: 'confirmed' as const, confirmedAt: currentNow }
+          return {
+            ...c,
+            status: 'confirmed' as const,
+            confirmedAt: currentNow,
+            confirmedBy: currentOperator || c.confirmedBy || specialAuthOperator,
+          }
         }
         return c
       })
@@ -1584,6 +1599,7 @@ function SaidaProviderInner({ children, enabled = true }: { children: React.Reac
   ): PickupCall | null => {
     const currentNow = now()
     const todayKey = getCampoGrandeDateStr(currentNow)
+    const currentOperator = resolveOperatorName()
     const sIdStr = studentId ? String(studentId) : ''
     const sNameNorm = studentName ? studentName.trim().toLowerCase() : ''
 
@@ -1597,6 +1613,7 @@ function SaidaProviderInner({ children, enabled = true }: { children: React.Reac
       })
       .map(c => ({
         ...c,
+        confirmedBy: currentOperator || c.confirmedBy,
         confirmedDates: { ...(c.confirmedDates || {}), [todayKey]: currentNow }
       }))
 
@@ -1618,6 +1635,9 @@ function SaidaProviderInner({ children, enabled = true }: { children: React.Reac
         ...c,
         guardianId: 'sozinho',
         guardianName: 'Saiu Sozinho',
+        operatorId: c.operatorId || currentOperator,
+        authorizedBy: c.authorizedBy || c.operatorId || currentOperator,
+        confirmedBy: currentOperator || c.confirmedBy || c.operatorId,
         status: 'confirmed' as const,
         tipo: 'sozinho',
         origem: 'manual',
@@ -1631,10 +1651,25 @@ function SaidaProviderInner({ children, enabled = true }: { children: React.Reac
         const matchesStudent = (sIdStr && cId === sIdStr) || (sNameNorm && cName === sNameNorm)
         if (!matchesStudent) return c
         if (c.status === 'special_auth') {
-          return { ...c, confirmedDates: { ...(c.confirmedDates || {}), [todayKey]: currentNow } }
+          return {
+            ...c,
+            confirmedBy: currentOperator || c.confirmedBy,
+            confirmedDates: { ...(c.confirmedDates || {}), [todayKey]: currentNow }
+          }
         }
         if (c.status !== 'cancelled' && isFromToday(c.confirmedAt || c.calledAt)) {
-          return { ...c, guardianId: 'sozinho', guardianName: 'Saiu Sozinho', status: 'confirmed', tipo: 'sozinho', origem: 'manual', confirmedAt: currentNow }
+          return {
+            ...c,
+            guardianId: 'sozinho',
+            guardianName: 'Saiu Sozinho',
+            operatorId: c.operatorId || currentOperator,
+            authorizedBy: c.authorizedBy || c.operatorId || currentOperator,
+            confirmedBy: currentOperator || c.confirmedBy || c.operatorId,
+            status: 'confirmed',
+            tipo: 'sozinho',
+            origem: 'manual',
+            confirmedAt: currentNow
+          }
         }
         return c
       }))
@@ -1658,7 +1693,6 @@ function SaidaProviderInner({ children, enabled = true }: { children: React.Reac
     }
 
     // 3. Caso contrário, cria uma nova chamada já com status 'confirmed' (sem acionar chamada na TV/som)
-    const currentOperator = resolveOperatorName()
     const newCall: PickupCall = {
       id: uid(),
       studentId: sIdStr,
@@ -1684,7 +1718,11 @@ function SaidaProviderInner({ children, enabled = true }: { children: React.Reac
         const cId = c.studentId ? String(c.studentId) : ''
         const cName = c.studentName ? c.studentName.trim().toLowerCase() : ''
         if ((sIdStr && cId === sIdStr) || (sNameNorm && cName === sNameNorm)) {
-          return { ...c, confirmedDates: { ...(c.confirmedDates || {}), [todayKey]: currentNow } }
+          return {
+            ...c,
+            confirmedBy: currentOperator || c.confirmedBy,
+            confirmedDates: { ...(c.confirmedDates || {}), [todayKey]: currentNow }
+          }
         }
         return c
       })

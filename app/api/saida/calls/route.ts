@@ -323,7 +323,7 @@ export async function GET(request: Request) {
       let freqQuery = supabase
         .from('frequencias')
         .select('id, aluno_id, turma_id, data, dados, created_at')
-        .or('dados->>saidaHorario.not.is.null,dados->saidas.not.is.null,dados->>saidaCancelada.eq.true')
+        .or('dados->>saidaHorario.not.is.null,dados->saidas.not.is.null,dados->>saidaCancelada.eq.true,dados->>usuarioNome.not.is.null')
 
       if (studentIdsToMatch.length === 1) {
         freqQuery = freqQuery.eq('aluno_id', studentIdsToMatch[0])
@@ -444,18 +444,16 @@ export async function GET(request: Request) {
 
       const extractExplicitSaidaOperator = (fDados: any): string | undefined => {
         if (!fDados || typeof fDados !== 'object') return undefined
-        for (const candidate of [fDados.saidaUsuario, fDados.operatorId, fDados.authorizedBy]) {
+        for (const candidate of [fDados.saidaUsuario, fDados.confirmedBy, fDados.operatorId, fDados.authorizedBy]) {
           if (typeof candidate === 'string' && candidate.trim()) return candidate.trim()
         }
         return undefined
       }
 
-      const extractDiarioManualOperator = (fDados: any): string | undefined => {
+      const extractFreqUserOperator = (fDados: any): string | undefined => {
         if (!fDados || typeof fDados !== 'object') return undefined
         const explicit = extractExplicitSaidaOperator(fDados)
         if (explicit) return explicit
-        // Somente considera usuarioNome / registradoPor da frequência quando a saída foi lançada manualmente no Diário
-        if (String(fDados.saidaOrigem || '').toLowerCase() !== 'manual') return undefined
         if (typeof fDados.usuarioNome === 'string' && fDados.usuarioNome.trim()) {
           return fDados.usuarioNome.trim()
         }
@@ -471,6 +469,15 @@ export async function GET(request: Request) {
           }
         }
         return undefined
+      }
+
+      const extractDiarioManualOperator = (fDados: any): string | undefined => {
+        if (!fDados || typeof fDados !== 'object') return undefined
+        const explicit = extractExplicitSaidaOperator(fDados)
+        if (explicit) return explicit
+        // Somente considera usuarioNome / registradoPor da frequência como lançamento manual quando a saída foi lançada manualmente no Diário
+        if (String(fDados.saidaOrigem || '').toLowerCase() !== 'manual') return undefined
+        return extractFreqUserOperator(fDados)
       }
 
       const existingCallKeys = new Set(rawResult.map((c: any) => getCallTimeKey(c.studentId, c.confirmedAt || c.calledAt)).filter(Boolean))
@@ -498,15 +505,33 @@ export async function GET(request: Request) {
         return hasArraySaidas || hasSingleSaida
       })
 
-      // Mapas de operador por aluno+data (separando saída explícita vs lançamento manual no diário)
+      // Mapas de operador por aluno+data e por turma+data (separando saída explícita vs operador da frequência / turma)
       const freqExplicitOperatorByStudentDate = new Map<string, string>()
+      const freqUserOperatorByStudentDate = new Map<string, string>()
       const freqManualOperatorByStudentDate = new Map<string, string>()
+      const freqTurmaByStudentDate = new Map<string, string>()
+      const freqTurmaOpCounts = new Map<string, Record<string, number>>()
 
       for (const fRecord of (freqRecords || [])) {
         const aId = String(fRecord.aluno_id || '').trim()
-        if (!aId) continue
         const recordDate = fRecord.data || targetDate
+        const tId = fRecord.turma_id ? String(fRecord.turma_id).trim() : ''
+        const userOp = extractFreqUserOperator(fRecord.dados)
+
+        if (tId && userOp) {
+          const tKey = `${tId}_${recordDate}`
+          const counts = freqTurmaOpCounts.get(tKey) || {}
+          counts[userOp] = (counts[userOp] || 0) + 1
+          freqTurmaOpCounts.set(tKey, counts)
+        }
+
+        if (!aId) continue
         const normId = aId.replace(/^0+/, '') || '0'
+
+        if (tId) {
+          freqTurmaByStudentDate.set(`${aId}_${recordDate}`, tId)
+          freqTurmaByStudentDate.set(`${normId}_${recordDate}`, tId)
+        }
 
         const explicitOp = extractExplicitSaidaOperator(fRecord.dados)
         if (explicitOp) {
@@ -514,11 +539,22 @@ export async function GET(request: Request) {
           freqExplicitOperatorByStudentDate.set(`${normId}_${recordDate}`, explicitOp)
         }
 
+        if (userOp) {
+          freqUserOperatorByStudentDate.set(`${aId}_${recordDate}`, userOp)
+          freqUserOperatorByStudentDate.set(`${normId}_${recordDate}`, userOp)
+        }
+
         const diarioOp = extractDiarioManualOperator(fRecord.dados)
         if (diarioOp) {
           freqManualOperatorByStudentDate.set(`${aId}_${recordDate}`, diarioOp)
           freqManualOperatorByStudentDate.set(`${normId}_${recordDate}`, diarioOp)
         }
+      }
+
+      const freqOperatorByTurmaDate = new Map<string, string>()
+      for (const [tKey, counts] of freqTurmaOpCounts.entries()) {
+        const topOp = Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0]
+        if (topOp) freqOperatorByTurmaDate.set(tKey, topOp)
       }
 
       // Busca única unificada de alunos para enriquecer frequências, eventos de catraca e chamadas
@@ -697,7 +733,37 @@ export async function GET(request: Request) {
       }
       rawResult = Array.from(byIdMap.values())
 
-      // Retroalimentação / Enriquecimento de foto e operador (autorizado por / lançado por)
+      // Mapa de usuário que confirmou a saída por aluno+data (cruzando chamadas irmãs do mesmo aluno no mesmo dia)
+      const confirmedByStudentDate = new Map<string, string>()
+      for (const c of rawResult) {
+        const sId = c.studentId ? String(c.studentId).trim() : ''
+        if (!sId) continue
+        const cDate = toCampoGrandeYmd(c.confirmedAt || c.calledAt || c.created_at) || targetDate
+        const isConfirmed = c.status === 'confirmed' || Boolean(c.confirmedAt) || Boolean(c.confirmedOut)
+        if (!isConfirmed) continue
+        const cleanGuardian = String(c.guardianName || '').trim().toLowerCase()
+        const isAgendaCall =
+          c.source === 'agenda_digital' ||
+          c.guardianId === 'usr-fam' ||
+          /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(c.guardianId || '').trim())
+        const isSpecialRecord = c.status === 'special_auth' || c.guardianId === 'special'
+        const candidate = String(
+          c.confirmedBy ||
+          (!isAgendaCall && !isSpecialRecord ? c.operatorId : '') ||
+          ''
+        ).trim()
+        if (
+          candidate &&
+          candidate !== 'Admin Logado' &&
+          candidate !== 'Sistema' &&
+          !candidate.toLowerCase().includes('(app agenda digital)') &&
+          (!cleanGuardian || candidate.toLowerCase() !== cleanGuardian)
+        ) {
+          confirmedByStudentDate.set(`${sId}_${cDate}`, candidate)
+        }
+      }
+
+      // Retroalimentação / Enriquecimento de foto e operador (confirmado por / autorizado por / lançado por)
       for (const c of rawResult) {
         const sId = c.studentId ? String(c.studentId).trim() : ''
         const alunoInfo = sId ? unifiedAlunosMap[sId] : undefined
@@ -710,7 +776,11 @@ export async function GET(request: Request) {
           const cDate = toCampoGrandeYmd(c.confirmedAt || c.calledAt || c.created_at) || targetDate
           const specialOp = specialAuthOperatorByStudent.get(`${sId}_${cDate}`) || specialAuthOperatorByStudent.get(sId)
           const explicitFreqOp = freqExplicitOperatorByStudentDate.get(`${sId}_${cDate}`)
+          const freqUserOp = freqUserOperatorByStudentDate.get(`${sId}_${cDate}`)
           const diarioManualOp = freqManualOperatorByStudentDate.get(`${sId}_${cDate}`)
+          const studentTurmaId = freqTurmaByStudentDate.get(`${sId}_${cDate}`) || String(alunoInfo?.turma || c.studentClass || '').trim()
+          const turmaFreqOp = studentTurmaId ? freqOperatorByTurmaDate.get(`${studentTurmaId}_${cDate}`) : undefined
+          const siblingConfirmedOp = confirmedByStudentDate.get(`${sId}_${cDate}`)
 
           const isRfid =
             c.source === 'rfid' ||
@@ -739,28 +809,69 @@ export async function GET(request: Request) {
             c.source === 'agenda_digital' ||
             c.guardianId === 'usr-fam' ||
             /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(c.guardianId || '').trim())
+          const isConfirmedCall =
+            c.status === 'confirmed' ||
+            Boolean(c.confirmedAt) ||
+            Boolean(c.confirmedOut)
+
+          const cleanGuardian = String(c.guardianName || '').trim().toLowerCase()
+          const isNotGuardian = (val?: string) => {
+            if (!val || typeof val !== 'string') return false
+            const v = val.trim()
+            if (!v || v === 'Admin Logado' || v === 'Sistema') return false
+            if (v.toLowerCase().includes('(app agenda digital)')) return false
+            if (cleanGuardian && v.toLowerCase() === cleanGuardian) return false
+            return true
+          }
+
+          const resolvedConfirmer =
+            (isNotGuardian(c.confirmedBy) ? String(c.confirmedBy).trim() : undefined) ||
+            (isNotGuardian(explicitFreqOp) ? explicitFreqOp : undefined) ||
+            siblingConfirmedOp ||
+            (!isAgendaDigitalCall && !isRfid && !isCatraca && c.status !== 'special_auth' && isNotGuardian(c.operatorId) ? String(c.operatorId).trim() : undefined) ||
+            (isNotGuardian(freqUserOp) ? freqUserOp : undefined) ||
+            (isNotGuardian(turmaFreqOp) ? turmaFreqOp : undefined)
 
           if (isSpecialAuth) {
-            if (!c.operatorId) c.operatorId = specialOp || explicitFreqOp || diarioManualOp
-            if (!c.authorizedBy) c.authorizedBy = c.operatorId || specialOp
-          } else if (isCatraca || isRfid) {
-            // Saída automatizada (Catraca Biométrica iDFace ou Cartão RFID): apenas herda se houve Autorização Especial para o aluno no dia
+            if (!c.operatorId) c.operatorId = specialOp || explicitFreqOp || diarioManualOp || freqUserOp || turmaFreqOp
+            if (!c.authorizedBy) c.authorizedBy = specialOp || c.operatorId
+            if (isConfirmedCall && resolvedConfirmer) {
+              c.confirmedBy = resolvedConfirmer
+            }
+          } else if (isCatraca) {
+            // Saída automatizada por Catraca Biométrica iDFace: apenas herda autorizador se houve Autorização Especial para o aluno no dia
             if (!c.authorizedBy && specialOp) {
               c.authorizedBy = specialOp
+            }
+          } else if (isRfid) {
+            if (!c.authorizedBy && specialOp) {
+              c.authorizedBy = specialOp
+            }
+            if (isConfirmedCall && resolvedConfirmer) {
+              c.confirmedBy = resolvedConfirmer
             }
           } else if (isAgendaDigitalCall) {
             // Chamada disparada pelo próprio responsável via App Agenda Digital
             const famLabel = c.guardianName ? `${String(c.guardianName).trim()} (App Agenda Digital)` : undefined
-            if (!c.operatorId) c.operatorId = explicitFreqOp || famLabel
-            if (!c.authorizedBy) c.authorizedBy = c.operatorId || famLabel
+            if (!c.operatorId) c.operatorId = famLabel || explicitFreqOp
+            if (!c.authorizedBy) c.authorizedBy = famLabel || c.operatorId
+            if (isConfirmedCall && resolvedConfirmer) {
+              c.confirmedBy = resolvedConfirmer
+            }
           } else if (isDiarioManual) {
             // Lançamento manual feito pelo professor/equipe no Diário de Frequência / Educação Infantil
-            if (!c.operatorId) c.operatorId = specialOp || diarioManualOp || explicitFreqOp
-            if (!c.authorizedBy) c.authorizedBy = c.operatorId
+            if (!c.operatorId) c.operatorId = diarioManualOp || explicitFreqOp || freqUserOp || turmaFreqOp || specialOp
+            if (!c.authorizedBy) c.authorizedBy = specialOp || c.operatorId
+            if (isConfirmedCall) {
+              c.confirmedBy = resolvedConfirmer || c.operatorId
+            }
           } else {
             // Chamada manual na Portaria / Painel de Chamadas (resp-*, erp-*, saude-aut-*, sozinho, etc.)
-            if (!c.operatorId) c.operatorId = c.authorizedBy || c.confirmedBy || explicitFreqOp || specialOp
-            if (!c.authorizedBy) c.authorizedBy = c.operatorId || specialOp || explicitFreqOp
+            if (isConfirmedCall && resolvedConfirmer) {
+              c.confirmedBy = resolvedConfirmer
+            }
+            if (!c.operatorId) c.operatorId = c.confirmedBy || c.authorizedBy || explicitFreqOp || freqUserOp || turmaFreqOp || specialOp
+            if (!c.authorizedBy) c.authorizedBy = specialOp || c.operatorId || c.confirmedBy || explicitFreqOp || freqUserOp || turmaFreqOp
           }
         }
       }
@@ -833,8 +944,16 @@ export async function POST(request: Request) {
     if (!dados.authorizedBy) {
       dados.authorizedBy = existingDados?.authorizedBy || dados.operatorId || resolvedOperatorName || undefined
     }
-    if (dados.status === 'confirmed' && !dados.confirmedBy) {
-      dados.confirmedBy = existingDados?.confirmedBy || resolvedOperatorName || dados.operatorId || undefined
+    const currentConfirmedBy = typeof dados.confirmedBy === 'string' ? dados.confirmedBy.trim() : ''
+    const cleanGuard = typeof dados.guardianName === 'string' ? dados.guardianName.trim().toLowerCase() : ''
+    const isGenericOrGuardianConfirmer =
+      !currentConfirmedBy ||
+      currentConfirmedBy === 'Admin Logado' ||
+      currentConfirmedBy === 'Sistema' ||
+      currentConfirmedBy.toLowerCase().includes('(app agenda digital)') ||
+      (cleanGuard && currentConfirmedBy.toLowerCase() === cleanGuard)
+    if (dados.status === 'confirmed' && isGenericOrGuardianConfirmer) {
+      dados.confirmedBy = resolvedOperatorName || existingDados?.confirmedBy || (!isGenericOp ? currentOp : undefined) || prevOp || undefined
     }
     return dados
   }
@@ -1484,7 +1603,7 @@ async function dispatchSaidaConfirmadaPush({
         saidaHorario: horaSaida,
         saidaResponsavel: guardianName || '',
         saidaOrigem: resolvedSaidaOrigem,
-        ...(operatorName ? { saidaUsuario: operatorName } : {}),
+        ...(operatorName ? { saidaUsuario: operatorName, confirmedBy: operatorName } : {}),
         anoLetivo,
         diarioId: `DIARIO-${turmaAluno}-${anoLetivo}`
       }
