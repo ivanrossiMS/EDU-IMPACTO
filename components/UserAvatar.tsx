@@ -146,6 +146,33 @@ export function UserAvatar({
         alt={name} 
         loading="lazy"
         className={className}
+        onError={() => {
+          const failedUrl = foto;
+          setFoto('');
+          const cacheKey = userId || `name:${name}`;
+          photoCache[cacheKey] = null;
+          if (userId) photoCache[userId] = null;
+          if (name) photoCache[`name:${name}`] = null;
+          try {
+            if (userId) {
+              localStorage.removeItem(`edu-profile-extra-${userId}`);
+              if (localStorage.getItem(`edu-user-photo-${userId}`)?.includes(failedUrl)) {
+                localStorage.removeItem(`edu-user-photo-${userId}`);
+              }
+            }
+            if (name) {
+              localStorage.removeItem(`edu-profile-extra-name-${name}`);
+            }
+            const rawUser = localStorage.getItem('edu-current-user');
+            if (rawUser && rawUser.includes(failedUrl)) {
+              const parsed = JSON.parse(rawUser);
+              if (parsed && parsed.foto === failedUrl) {
+                delete parsed.foto;
+                localStorage.setItem('edu-current-user', JSON.stringify(parsed));
+              }
+            }
+          } catch {}
+        }}
         style={{ 
           width: size, 
           height: size, 

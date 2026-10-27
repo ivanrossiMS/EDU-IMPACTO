@@ -199,6 +199,11 @@ export async function GET(request: Request) {
     }
 
     const computePromise = (async () => {
+      const isUnboundedStudentHistory =
+        studentIdsToMatch.length > 0 &&
+        effectiveFrom === '2020-01-01' &&
+        (!effectiveTo || effectiveTo >= '2030-01-01')
+
       let query = supabase.from('saida_calls').select('id, dados, created_at').order('created_at', { ascending: false }).limit(limit)
       
       if (studentIdsToMatch.length === 1) {
@@ -207,28 +212,32 @@ export async function GET(request: Request) {
         query = query.or(studentIdsToMatch.map(id => `dados->>studentId.eq.${id}`).join(','))
       }
       
-      if (effectiveFrom) {
+      if (effectiveFrom && !isUnboundedStudentHistory) {
         query = query.gte('created_at', `${effectiveFrom}T00:00:00-04:00`)
       }
-      if (effectiveTo) {
+      if (effectiveTo && !isUnboundedStudentHistory) {
         query = query.lte('created_at', `${effectiveTo}T23:59:59.999-04:00`)
       }
 
       // Query adicional para autorizações especiais multi-dias criadas em dias anteriores mas vigentes no período
-      let multiDaySpecialQuery = supabase
-        .from('saida_calls')
-        .select('id, dados, created_at')
-        .eq('dados->>status', 'special_auth')
-        .gte('dados->>validUntil', effectiveFrom || todayStr)
-        .limit(200)
+      // Desnecessária quando isUnboundedStudentHistory = true pois a query principal já traz todo o histórico do aluno
+      let multiDaySpecialQuery: any = null
+      if (!isUnboundedStudentHistory) {
+        multiDaySpecialQuery = supabase
+          .from('saida_calls')
+          .select('id, dados, created_at')
+          .eq('dados->>status', 'special_auth')
+          .gte('dados->>validUntil', effectiveFrom || todayStr)
+          .limit(200)
 
-      if (studentIdsToMatch.length === 1) {
-        multiDaySpecialQuery = multiDaySpecialQuery.eq('dados->>studentId', studentIdsToMatch[0])
-      } else if (studentIdsToMatch.length > 1) {
-        multiDaySpecialQuery = multiDaySpecialQuery.or(studentIdsToMatch.map(id => `dados->>studentId.eq.${id}`).join(','))
-      }
-      if (effectiveTo) {
-        multiDaySpecialQuery = multiDaySpecialQuery.lte('dados->>validFrom', effectiveTo)
+        if (studentIdsToMatch.length === 1) {
+          multiDaySpecialQuery = multiDaySpecialQuery.eq('dados->>studentId', studentIdsToMatch[0])
+        } else if (studentIdsToMatch.length > 1) {
+          multiDaySpecialQuery = multiDaySpecialQuery.or(studentIdsToMatch.map(id => `dados->>studentId.eq.${id}`).join(','))
+        }
+        if (effectiveTo) {
+          multiDaySpecialQuery = multiDaySpecialQuery.lte('dados->>validFrom', effectiveTo)
+        }
       }
 
       const toCampoGrandeYmd = (dt?: string | null): string => {
@@ -845,7 +854,13 @@ export async function POST(request: Request) {
       
       const supabaseService = getAdminClient()
 
-      // Backfill photo if missing
+      // Backfill photo in memory for notifications without bloating DB TOAST with Base64
+      const resolvedPhotosById = new Map<string, string>()
+      rows.forEach((r: any) => {
+        if (r.dados?.studentPhoto) {
+          resolvedPhotosById.set(r.id, r.dados.studentPhoto)
+        }
+      })
       const missingPhotoIds = rows
         .filter((r: any) => !r.dados?.studentPhoto && r.dados?.studentId)
         .map((r: any) => String(r.dados.studentId).trim())
@@ -855,7 +870,7 @@ export async function POST(request: Request) {
           if (!r.dados?.studentPhoto && r.dados?.studentId) {
             const p = photoMap[String(r.dados.studentId).trim()]
             if (p?.foto || p?.foto_url) {
-              r.dados.studentPhoto = p.foto || p.foto_url
+              resolvedPhotosById.set(r.id, p.foto || p.foto_url)
             }
           }
         })
@@ -884,7 +899,7 @@ export async function POST(request: Request) {
       }))
 
       rows.forEach((r: any) => {
-        r.dados = applyOperatorMetadata(r.dados, existingDadosMap.get(r.id))
+        r.dados = sanitizeDadosForStorage(applyOperatorMetadata(r.dados, existingDadosMap.get(r.id)))
       })
 
       const { error } = await supabaseService.from('saida_calls').upsert(rows, { onConflict: 'id' })
@@ -934,7 +949,7 @@ export async function POST(request: Request) {
               authorizedPerson: row.dados?.guardianName,
               targetTime: row.dados?.targetTime,
               operatorName: row.dados?.operatorId,
-              studentPhoto: row.dados?.studentPhoto,
+              studentPhoto: resolvedPhotosById.get(row.id) || row.dados?.studentPhoto,
               validDays: row.dados?.validDays,
               validFrom: row.dados?.validFrom,
               validUntil: row.dados?.validUntil,
@@ -956,9 +971,10 @@ export async function POST(request: Request) {
     const studentId = row.dados?.studentId ? String(row.dados.studentId) : null
     const incomingStatus = row.dados?.status
     const isRevert = !!row.dados?.isRevert
+    let resolvedStudentPhoto: string | null = row.dados?.studentPhoto || null
 
     // Consultas preliminares em paralelo: foto faltante, chamadas do aluno hoje, e registro existente
-    const photoPromise = (studentId && !row.dados?.studentPhoto)
+    const photoPromise = (studentId && !resolvedStudentPhoto)
       ? supabaseService.from('alunos').select('foto, foto_url').eq('id', studentId).maybeSingle()
       : Promise.resolve({ data: null })
 
@@ -979,8 +995,8 @@ export async function POST(request: Request) {
     ])
 
     const sPhoto = photoRes?.data as any
-    if (sPhoto?.foto || sPhoto?.foto_url) {
-      row.dados.studentPhoto = sPhoto.foto || sPhoto.foto_url
+    if (!resolvedStudentPhoto && (sPhoto?.foto || sPhoto?.foto_url)) {
+      resolvedStudentPhoto = sPhoto.foto || sPhoto.foto_url
     }
 
     if (studentCallsRes?.data) {
@@ -1036,7 +1052,7 @@ export async function POST(request: Request) {
       }
     }
 
-    row.dados = applyOperatorMetadata(row.dados, existingDadosParsed)
+    row.dados = sanitizeDadosForStorage(applyOperatorMetadata(row.dados, existingDadosParsed))
 
     const { data, error } = await supabaseService.from('saida_calls').upsert(row).select().single()
     if (error) throw new Error(error.message)
@@ -1071,7 +1087,7 @@ export async function POST(request: Request) {
             sDados.confirmedAt = data.dados?.confirmedAt || new Date().toISOString()
             if (resolvedOperatorName && !sDados.confirmedBy) sDados.confirmedBy = resolvedOperatorName
             if (resolvedOperatorName && !sDados.operatorId) sDados.operatorId = resolvedOperatorName
-            await supabaseService.from('saida_calls').update({ dados: sDados }).eq('id', sRow.id)
+            await supabaseService.from('saida_calls').update({ dados: sanitizeDadosForStorage(sDados) }).eq('id', sRow.id)
           }
         })
 
@@ -1096,13 +1112,13 @@ export async function POST(request: Request) {
             saDados.confirmedOut = true
             saDados.confirmedAt = confTime
             if (resolvedOperatorName) saDados.confirmedBy = resolvedOperatorName
-            await supabaseService.from('saida_calls').update({ dados: saDados }).eq('id', saRow.id)
+            await supabaseService.from('saida_calls').update({ dados: sanitizeDadosForStorage(saDados) }).eq('id', saRow.id)
           } else if (isRevert) {
             delete prevConfirmedDates[todayStr]
             saDados.confirmedDates = prevConfirmedDates
             saDados.confirmedOut = false
             delete saDados.confirmedAt
-            await supabaseService.from('saida_calls').update({ dados: saDados }).eq('id', saRow.id)
+            await supabaseService.from('saida_calls').update({ dados: sanitizeDadosForStorage(saDados) }).eq('id', saRow.id)
           }
         })
 
@@ -1150,7 +1166,7 @@ export async function POST(request: Request) {
           authorizedPerson: data.dados?.guardianName,
           targetTime: data.dados?.targetTime,
           operatorName: data.dados?.operatorId,
-          studentPhoto: data.dados?.studentPhoto,
+          studentPhoto: resolvedStudentPhoto || data.dados?.studentPhoto,
           validDays: data.dados?.validDays,
           validFrom: data.dados?.validFrom,
           validUntil: data.dados?.validUntil,
@@ -1158,7 +1174,14 @@ export async function POST(request: Request) {
       }
     }
 
-    return NextResponse.json({ id: data.id, ...(data.dados || {}) }, { status: 201 })
+    return NextResponse.json(
+      {
+        id: data.id,
+        ...(data.dados || {}),
+        ...(resolvedStudentPhoto ? { studentPhoto: resolvedStudentPhoto } : {}),
+      },
+      { status: 201 }
+    )
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 400 })
   }
@@ -1247,7 +1270,7 @@ export async function DELETE(request: Request) {
               }
               await supabaseService
                 .from('saida_calls')
-                .update({ dados: updatedDados })
+                .update({ dados: sanitizeDadosForStorage(updatedDados) })
                 .eq('id', row.id)
             }
           } else {
@@ -1279,6 +1302,23 @@ export async function DELETE(request: Request) {
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 400 })
   }
+}
+
+/**
+ * Remove strings Base64 (data:image/...) do JSONB persistido em saida_calls
+ * para evitar bloat de ~500MB na tabela TOAST do PostgreSQL e statement timeouts (57014).
+ * As fotos de alunos são enriquecidas em memória via fetchAlunosBatch (cache 5min).
+ */
+function sanitizeDadosForStorage(dados: any) {
+  if (!dados || typeof dados !== 'object') return dados
+  const copy = { ...dados }
+  if (typeof copy.studentPhoto === 'string' && copy.studentPhoto.startsWith('data:')) {
+    delete copy.studentPhoto
+  }
+  if (typeof copy.guardianPhoto === 'string' && copy.guardianPhoto.startsWith('data:')) {
+    delete copy.guardianPhoto
+  }
+  return copy
 }
 
 function buildRow(body: any) {

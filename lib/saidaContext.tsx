@@ -676,8 +676,11 @@ function SaidaProviderInner({ children, enabled = true }: { children: React.Reac
                 const idx = arr.findIndex(c => c.id === call.id)
                 if (idx >= 0) {
                   const updated = [...arr]
-                  updated[idx] = { ...updated[idx], ...call }
+                  updated[idx] = { ...updated[idx], ...call, studentPhoto: call.studentPhoto || updated[idx].studentPhoto }
                   return updated
+                }
+                if (!isFromTodayRef.current(call.confirmedAt || call.calledAt)) {
+                  return arr
                 }
                 return [call, ...arr]
               })
@@ -700,7 +703,7 @@ function SaidaProviderInner({ children, enabled = true }: { children: React.Reac
                     const validFrom = call.validFrom || (call as any).dados?.validFrom || existingCall.validFrom || undefined
                     const validUntil = call.validUntil || (call as any).dados?.validUntil || existingCall.validUntil || undefined
                     const confirmedDates = { ...(existingCall.confirmedDates || {}), ...((call as any).dados?.confirmedDates || {}), ...(call.confirmedDates || {}) }
-                    updated[idx] = { ...existingCall, ...call, targetTime, validDays, validFrom, validUntil, confirmedDates, status: 'special_auth' }
+                    updated[idx] = { ...existingCall, ...call, studentPhoto: call.studentPhoto || existingCall.studentPhoto, targetTime, validDays, validFrom, validUntil, confirmedDates, status: 'special_auth' }
                     return updated
                   }
                   return [call, ...arr]
@@ -720,7 +723,7 @@ function SaidaProviderInner({ children, enabled = true }: { children: React.Reac
                   })
                   const idx = synced.findIndex(c => c.id === call.id)
                   if (idx >= 0) {
-                    return synced.map(c => c.id === call.id ? { ...c, ...call } : c)
+                    return synced.map(c => c.id === call.id ? { ...c, ...call, studentPhoto: call.studentPhoto || c.studentPhoto } : c)
                   }
                   return [call, ...synced]
                 }
@@ -730,7 +733,10 @@ function SaidaProviderInner({ children, enabled = true }: { children: React.Reac
                 }
                 const idx = arr.findIndex(c => c.id === call.id)
                 if (idx >= 0) {
-                  return arr.map(c => c.id === call.id ? { ...c, ...call } : c)
+                  return arr.map(c => c.id === call.id ? { ...c, ...call, studentPhoto: call.studentPhoto || c.studentPhoto } : c)
+                }
+                if (!isFromTodayRef.current(call.confirmedAt || call.calledAt)) {
+                  return arr
                 }
                 return [call, ...arr]
               })

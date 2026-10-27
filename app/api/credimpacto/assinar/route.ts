@@ -137,17 +137,11 @@ export async function POST(request: Request) {
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
       )
-      let { error: signInError } = await supabaseAnon.auth.signInWithPassword({
+      const isShortPassword = String(senha).length > 0 && String(senha).length < 6
+      const { error: signInError } = await supabaseAnon.auth.signInWithPassword({
         email: user.email,
-        password: senha
+        password: isShortPassword ? `${senha}::imp6` : String(senha)
       })
-      if (signInError && String(senha).length > 0 && String(senha).length < 6) {
-        const retry = await supabaseAnon.auth.signInWithPassword({
-          email: user.email,
-          password: `${senha}::imp6`
-        })
-        signInError = retry.error
-      }
       if (signInError) {
         return NextResponse.json({ error: 'Senha incorreta para validação da assinatura eletrônica.' }, { status: 401 })
       }

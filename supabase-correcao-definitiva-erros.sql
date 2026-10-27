@@ -407,12 +407,27 @@ ON public.momentos USING GIN ((dados->'funcionariosIds') jsonb_path_ops);
 CREATE INDEX IF NOT EXISTS idx_momentos_dados_authorid
 ON public.momentos ((dados->>'authorId'));
 
--- 4.1 saida_calls: busca e ordenação por created_at e studentId
+-- 4.1 saida_calls: saneamento de TOAST Base64, REPLICA IDENTITY DEFAULT e índices compostos
+ALTER TABLE public.saida_calls REPLICA IDENTITY DEFAULT;
+
+UPDATE public.saida_calls
+SET dados = dados - 'studentPhoto'
+WHERE dados->>'studentPhoto' LIKE 'data:%';
+
 CREATE INDEX IF NOT EXISTS idx_saida_calls_created_at_desc 
 ON public.saida_calls (created_at DESC);
 
 CREATE INDEX IF NOT EXISTS idx_saida_calls_dados_studentid 
 ON public.saida_calls ((dados->>'studentId'));
+
+CREATE INDEX IF NOT EXISTS idx_saida_calls_student_created
+ON public.saida_calls ((dados->>'studentId'), created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_saida_calls_dados_source
+ON public.saida_calls ((dados->>'source'));
+
+CREATE INDEX IF NOT EXISTS idx_saida_calls_dados_status
+ON public.saida_calls ((dados->>'status'));
 
 -- 4.2 frequencias: busca por data e por aluno_id (usado pelo painel de saída e presenças)
 CREATE INDEX IF NOT EXISTS idx_frequencias_data_desc 

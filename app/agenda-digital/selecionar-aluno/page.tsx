@@ -1643,12 +1643,14 @@ function SelecionarAlunoContent() {
   }, [hydrated, currentUser, meusAlunos, router, redirectTarget, getForwardParams, searchParams])
 
   const firstName = currentUser?.nome ? currentUser.nome.split(' ')[0] : 'Responsável';
+  const [brokenAvatarUrl, setBrokenAvatarUrl] = useState<string | null>(null);
 
-  const userPhoto = currentUser?.foto || (mounted && typeof window !== 'undefined' ? (
+  const rawUserPhoto = currentUser?.foto || (mounted && typeof window !== 'undefined' ? (
     (currentUser?.id && localStorage.getItem(`edu-user-photo-${currentUser.id}`)) ||
     (respId && localStorage.getItem(`edu-user-photo-${respId}`)) ||
     null
   ) : null);
+  const userPhoto = rawUserPhoto && rawUserPhoto !== brokenAvatarUrl ? rawUserPhoto : null;
 
   return (
     <>
@@ -1663,7 +1665,21 @@ function SelecionarAlunoContent() {
         <div className="welcome-avatar-wrapper">
           <div className="welcome-avatar-glow" />
           {userPhoto ? (
-            <img src={userPhoto} alt={currentUser?.nome || 'Avatar'} className="welcome-avatar-img" />
+            <img
+              src={userPhoto}
+              alt={currentUser?.nome || 'Avatar'}
+              className="welcome-avatar-img"
+              onError={() => {
+                setBrokenAvatarUrl(userPhoto);
+                try {
+                  if (currentUser?.id) localStorage.removeItem(`edu-user-photo-${currentUser.id}`);
+                  if (respId) localStorage.removeItem(`edu-user-photo-${respId}`);
+                  if (currentUser && currentUser.foto === userPhoto) {
+                    setCurrentUser({ ...currentUser, foto: undefined } as any);
+                  }
+                } catch (_) {}
+              }}
+            />
           ) : (
             <div className="welcome-initials">
               {getInitials(currentUser?.nome || 'User')}

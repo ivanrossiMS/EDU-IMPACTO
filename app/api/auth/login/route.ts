@@ -88,18 +88,11 @@ export async function POST(request: NextRequest) {
     let signInResult: any = null
     const isShortPassword = String(password).length > 0 && String(password).length < 6
     const primaryPassword = isShortPassword ? `${password}::imp6` : password
-    const secondaryPassword = isShortPassword ? password : null
     try {
       signInResult = await Promise.race([
         supabase.auth.signInWithPassword({ email: resolvedEmail, password: primaryPassword }),
         new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT_SUPABASE')), 18000))
       ])
-      if (signInResult?.error && secondaryPassword) {
-        signInResult = await Promise.race([
-          supabase.auth.signInWithPassword({ email: resolvedEmail, password: secondaryPassword }),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT_SUPABASE')), 18000))
-        ])
-      }
     } catch (e: any) {
       if (e?.message === 'TIMEOUT_SUPABASE') {
         return NextResponse.json({ 
@@ -130,17 +123,10 @@ export async function POST(request: NextRequest) {
         const virtualEmail = `aluno.${matricula}@impactoedu.local`
         
         if (resolvedEmail !== virtualEmail) {
-          let fallbackAttempt: any = await Promise.race([
+          const fallbackAttempt: any = await Promise.race([
             supabase.auth.signInWithPassword({ email: virtualEmail, password: primaryPassword }),
             new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT_SUPABASE')), 8000))
           ]).catch(() => null)
-
-          if ((!fallbackAttempt || fallbackAttempt.error) && secondaryPassword) {
-            fallbackAttempt = await Promise.race([
-              supabase.auth.signInWithPassword({ email: virtualEmail, password: secondaryPassword }),
-              new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT_SUPABASE')), 8000))
-            ]).catch(() => null)
-          }
 
           if (fallbackAttempt && !fallbackAttempt.error && fallbackAttempt.data?.user) {
             user = fallbackAttempt.data.user

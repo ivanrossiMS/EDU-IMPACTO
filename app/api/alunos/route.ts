@@ -2310,7 +2310,7 @@ export async function DELETE(request: Request) {
       }
 
       // 5. Delete Exit Module entries
-      await supabaseAdmin.from('saida_calls').delete().filter('dados->>alunoId', 'eq', studentId)
+      await supabaseAdmin.from('saida_calls').delete().eq('dados->>studentId', studentId)
       await supabaseAdmin.from('saida_rfid').delete().filter('dados->>alunoId', 'eq', studentId)
       await supabaseAdmin.from('saida_rfid').delete().ilike('id', `${studentId}%`)
       await supabaseAdmin.from('saida_student_guardians').delete().filter('dados->>alunoId', 'eq', studentId)

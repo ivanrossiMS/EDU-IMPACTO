@@ -586,21 +586,6 @@ export async function POST(request: Request) {
           }
           
           const colabTargetUrl = `/agenda-digital/colaborador/comunicados?id=${finalComunicadoId}`;
-          try {
-            for (const uid of targetUserIds) {
-              await supabase.from('notificacoes').insert({
-                user_id: uid,
-                titulo: `Nova resposta: ${comData.titulo}`,
-                mensagem: `${remetenteNome} comentou: "${msgTexto}"`,
-                link: colabTargetUrl,
-                lida: false,
-                tipo: 'comunicado',
-                created_at: new Date().toISOString()
-              });
-            }
-          } catch (err) {
-            console.error("Notificacao DB erro:", err);
-          }
 
           if (targetUserIds.length > 0) {
             try {
@@ -678,20 +663,6 @@ export async function POST(request: Request) {
           const studentUrl = targetAlunoId 
             ? `/agenda-digital/${targetAlunoId}/comunicados?id=${finalComunicadoId}`
             : `/agenda-digital/selecionar-aluno?redirect=comunicados&id=${finalComunicadoId}`;
-
-          try {
-            await supabase.from('notificacoes').insert({
-              user_id: targetUserId,
-              titulo: `Nova resposta de ${remetenteNome}`,
-              mensagem: `Resposta no comunicado "${tituloCom}": "${msgTexto}"`,
-              link: studentUrl,
-              lida: false,
-              tipo: 'comunicado',
-              created_at: new Date().toISOString()
-            });
-          } catch (err) {
-            console.error("Notificacao DB erro:", err);
-          }
 
           try {
             await sendAgendaPushNotification({

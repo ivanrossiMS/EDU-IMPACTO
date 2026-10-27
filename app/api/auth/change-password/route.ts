@@ -47,18 +47,11 @@ export async function POST(request: Request) {
       }
     )
 
+    const isShortCurrent = currentPassword.length > 0 && currentPassword.length < 6
     let { error: verifyErr } = await verifyClient.auth.signInWithPassword({
       email: userEmail,
-      password: currentPassword,
+      password: isShortCurrent ? toAuthPw(currentPassword) : currentPassword,
     })
-
-    if (verifyErr && currentPassword.length < 6) {
-      const retry = await verifyClient.auth.signInWithPassword({
-        email: userEmail,
-        password: toAuthPw(currentPassword),
-      })
-      verifyErr = retry.error
-    }
 
     if (verifyErr) {
       return NextResponse.json({ error: 'Senha atual incorreta.' }, { status: 400 })
