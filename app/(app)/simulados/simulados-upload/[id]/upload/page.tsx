@@ -138,8 +138,16 @@ export default function UploadSimuladoPage() {
       const formattedDate = data?.data_aplicacao ? data.data_aplicacao.split('-').reverse().join('/') : '____ / ____ / ________'
       const formattedSeries = Array.isArray(data?.series) ? data.series.join(', ') : (data?.series || '')
 
+      let bimestreNome = ''
+      if (data?.id_bimestre) {
+        const { data: bimData } = await (supabase as any).from('simulados_bimestres').select('nome').eq('id', data.id_bimestre).maybeSingle()
+        if (bimData?.nome) bimestreNome = bimData.nome
+      }
+
       const simuladoData = { 
         ...data, 
+        bimestre_nome: bimestreNome || data?.bimestre_nome || '',
+        simulados_bimestres: bimestreNome ? { nome: bimestreNome } : data?.simulados_bimestres,
         simulados_upload_requisicoes: reqs,
         formattedDisciplinas,
         formattedProfessors,

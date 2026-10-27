@@ -215,6 +215,78 @@ export function DraggableHeaderField({
             cursor: 'text'
           }}
         />
+      ) : field.isBimestreBadge ? (
+        <div
+          style={{
+            width: '100%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent:
+              field.align === 'left'
+                ? 'flex-start'
+                : field.align === 'right'
+                ? 'flex-end'
+                : 'center',
+          }}
+        >
+          <div
+            className="simulado-bimestre-badge"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 7,
+              padding: '3.5px 14px',
+              borderRadius: 9999,
+              background: 'linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)',
+              border: '1px solid #cbd5e1',
+              boxShadow:
+                '0 0 0 3.5px #ffffff, 0 2px 6px rgba(15, 23, 42, 0.06)',
+              WebkitPrintColorAdjust: 'exact',
+              printColorAdjust: 'exact',
+            }}
+          >
+            <span
+              style={{
+                width: 4.5,
+                height: 4.5,
+                borderRadius: '50%',
+                background: '#94a3b8',
+                flexShrink: 0,
+                display: 'inline-block',
+                WebkitPrintColorAdjust: 'exact',
+                printColorAdjust: 'exact',
+              }}
+            />
+            <span
+              style={{
+                color: '#1e293b',
+                fontSize: `${field.fontSize || 8.5}pt`,
+                fontWeight: 800,
+                letterSpacing: '0.12em',
+                textTransform: 'uppercase',
+                lineHeight: 1.1,
+                whiteSpace: 'nowrap',
+                fontFamily:
+                  "'Inter', 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+              }}
+            >
+              {field.value}
+            </span>
+            <span
+              style={{
+                width: 4.5,
+                height: 4.5,
+                borderRadius: '50%',
+                background: '#94a3b8',
+                flexShrink: 0,
+                display: 'inline-block',
+                WebkitPrintColorAdjust: 'exact',
+                printColorAdjust: 'exact',
+              }}
+            />
+          </div>
+        </div>
       ) : (
         <div style={{ whiteSpace: field.whiteSpace || 'nowrap' }}>{field.value}</div>
       )}

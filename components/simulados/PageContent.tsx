@@ -936,6 +936,11 @@ export function PageContent({
             border: none !important;
             cursor: default !important;
           }
+          .simulado-bimestre-badge,
+          .simulado-bimestre-badge * {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
           .field-label-tag, .texto-apoio-badge, .texto-apoio-spacer, .no-print, .reorder-popover, .questao-floating-toolbar, .alt-row-toolbar, .img-floating-toolbar, .lines-floating-toolbar {
             display: none !important;
           }
@@ -991,6 +996,7 @@ export function PageContent({
           {simulado?.isProva || simulado?.isRedacao ? (
             <div className="template-fields" ref={pageA4Ref} style={{ position: 'absolute', inset: 0, zIndex: 5, pointerEvents: isEditHeaderMode ? 'auto' : 'none' }}>
               {headerLayout && Object.keys(headerLayout).map((key) => {
+                if (key === 'bimestre') return null;
                 const field = headerLayout[key];
                 // Injetar o valor dinâmico baseado na chave
                 let value = '';
@@ -1035,6 +1041,36 @@ export function PageContent({
                   pageRef={pageA4Ref}
                 />
               )}
+              {(() => {
+                const bimestreText =
+                  simulado?.bimestre_nome ||
+                  simulado?.simulados_bimestres?.nome ||
+                  simulado?.bimestre ||
+                  (isEditHeaderMode ? '1º Bimestre' : '');
+                if (!bimestreText) return null;
+                const bimField = headerLayout?.bimestre || {
+                  label: 'Bimestre',
+                  x: 52.33,
+                  y: 14.45,
+                  fontSize: 8.5,
+                  width: 30,
+                  align: 'center'
+                };
+                return (
+                  <DraggableHeaderField
+                    key="bimestre"
+                    fieldKey="bimestre"
+                    field={{
+                      ...bimField,
+                      value: bimestreText,
+                      isBimestreBadge: true
+                    }}
+                    isEditMode={isEditHeaderMode}
+                    onChange={onUpdateHeaderField}
+                    pageRef={pageA4Ref}
+                  />
+                );
+              })()}
             </div>
           )}
         </>

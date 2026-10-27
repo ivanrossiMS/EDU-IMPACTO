@@ -34,7 +34,17 @@ export default function ImprimirSimuladoPage() {
       const { data: simData } = await supabase.from('simulados').select('*').eq('id', id).single()
       if (simData) {
         const s = simData as any
-        setSimulado({ ...s })
+        let bimestreNome = ''
+        if (s.id_bimestre) {
+          const { data: bimData } = await (supabase as any).from('simulados_bimestres').select('nome').eq('id', s.id_bimestre).maybeSingle()
+          if (bimData?.nome) bimestreNome = bimData.nome
+        }
+        setSimulado({
+          ...s,
+          bimestre_nome: bimestreNome || s.bimestre_nome || '',
+          simulados_bimestres: bimestreNome ? { nome: bimestreNome } : s.simulados_bimestres,
+          isSimulado: true
+        })
         if (s.config_estudio?.config_fonte_enunciado) {
           setFontSize(s.config_estudio.config_fonte_enunciado)
         }

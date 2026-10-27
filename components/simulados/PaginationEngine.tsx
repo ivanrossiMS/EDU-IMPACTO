@@ -446,6 +446,12 @@ export function PaginationEngine({
           border: none !important;
           cursor: default !important;
         }
+
+        .simulado-bimestre-badge,
+        .simulado-bimestre-badge * {
+          -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important;
+        }
       }
     `;
     document.head.appendChild(style);
@@ -454,6 +460,60 @@ export function PaginationEngine({
       if (el) el.remove();
     };
   }, []);
+
+  const [fetchedBimestreNome, setFetchedBimestreNome] = useState<string>('');
+
+  useEffect(() => {
+    const existingBim =
+      simulado?.bimestre_nome ||
+      simulado?.simulados_bimestres?.nome ||
+      simulado?.bimestre ||
+      '';
+    if (existingBim) {
+      setFetchedBimestreNome(existingBim);
+      return;
+    }
+    const idBim = simulado?.id_bimestre;
+    if (!idBim) {
+      setFetchedBimestreNome('');
+      return;
+    }
+    let cancelled = false;
+    (supabase as any)
+      .from('simulados_bimestres')
+      .select('nome')
+      .eq('id', idBim)
+      .maybeSingle()
+      .then(({ data }: any) => {
+        if (!cancelled && data?.nome) {
+          setFetchedBimestreNome(data.nome);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    simulado?.id_bimestre,
+    simulado?.bimestre_nome,
+    simulado?.simulados_bimestres?.nome,
+    simulado?.bimestre,
+  ]);
+
+  const enrichedSimulado = useMemo(() => {
+    if (!simulado) return simulado;
+    const bimNome =
+      simulado.bimestre_nome ||
+      simulado.simulados_bimestres?.nome ||
+      simulado.bimestre ||
+      fetchedBimestreNome;
+    if (!bimNome || simulado.bimestre_nome === bimNome) return simulado;
+    return {
+      ...simulado,
+      bimestre_nome: bimNome,
+      simulados_bimestres: simulado.simulados_bimestres || { nome: bimNome },
+    };
+  }, [simulado, fetchedBimestreNome]);
 
   const getAllItemIds = () => {
     const ids = [
@@ -486,6 +546,7 @@ export function PaginationEngine({
     }
     const defaultHeaderLayout = {
       title: { label: "Título", x: 60, y: 6.5, fontSize: 13, width: 25, align: "left" },
+      bimestre: { label: "Bimestre", x: 52.33, y: 14.45, fontSize: 8.5, width: 30, align: "center" },
       disciplina: { label: "Disciplina", x: 62.3, y: 8.9, fontSize: 8, width: 15, align: "left" },
       professor: { label: "Professor", x: 84.2, y: 8.9, fontSize: 8, width: 10, align: "left" },
       data: { label: "Data", x: 59.5, y: 11.4, fontSize: 8, width: 15, align: "left" },
@@ -1418,7 +1479,7 @@ export function PaginationEngine({
               showGabarito={showGabarito}
               cleanPreviewMode={cleanPreviewMode}
               config={config} 
-              simulado={simulado} 
+              simulado={enrichedSimulado} 
               onEditEnunciado={onEditEnunciado} 
               onEditEnunciadoImage={onEditEnunciadoImage}
               onEditAlternativa={onEditAlternativa} 
@@ -1475,7 +1536,7 @@ export function PaginationEngine({
                 showGabarito={false}
                 cleanPreviewMode={true}
                 config={config} 
-                simulado={simulado} 
+                simulado={enrichedSimulado} 
                 onEditEnunciado={() => {}} 
                 onEditEnunciadoImage={() => {}} 
                 onEditAlternativa={() => {}} 

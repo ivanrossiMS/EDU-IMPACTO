@@ -128,6 +128,7 @@ export function SimuladoPreviewModal({ questoes, setQuestoes, simulado, config, 
   
   const defaultHeaderLayout = {
     title: { label: "Título", x: 60, y: 6.5, fontSize: 13, width: 25, align: "left" },
+    bimestre: { label: "Bimestre", x: 52.33, y: 14.45, fontSize: 8.5, width: 30, align: "center" },
     disciplina: { label: "Disciplina", x: 62.3, y: 8.9, fontSize: 8, width: 15, align: "left" },
     professor: { label: "Professor", x: 84.2, y: 8.9, fontSize: 8, width: 10, align: "left" },
     data: { label: "Data", x: 59.5, y: 11.4, fontSize: 8, width: 15, align: "left" },
