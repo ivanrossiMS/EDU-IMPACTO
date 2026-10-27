@@ -5,6 +5,7 @@ import { useSupabaseArray, useSupabaseCollection, invalidateCache } from '@/lib/
 import { supabase } from '@/lib/supabase'
 import { fetchSingleStudentPhoto } from '@/lib/studentPhotoCache'
 import { apiFetch } from '@/lib/api/apiClient'
+import { useApp } from '@/lib/context'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 export type GuardianType = 'mae' | 'pai' | 'avo' | 'motorista' | 'outro'
@@ -45,6 +46,8 @@ export interface PickupCall {
   guardianName: string
   rfidCode?: string
   operatorId?: string
+  authorizedBy?: string
+  confirmedBy?: string
   calledAt: string
   confirmedAt?: string
   status: CallStatus
@@ -304,6 +307,11 @@ function save(key: string, val: unknown) {
 }
 function uid() { return crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2) }
 function now() { return new Date().toISOString() }
+function getCurrentOperatorName(): string | undefined {
+  const u = load<any>('edu-current-user', null)
+  const name = u?.nome || u?.name
+  return typeof name === 'string' && name.trim() ? name.trim() : undefined
+}
 async function fetchStudentPhotoFromDb(studentId: string): Promise<string | null> {
   return fetchSingleStudentPhoto(studentId)
 }
@@ -380,6 +388,16 @@ function SaidaProviderInner({ children, enabled = true }: { children: React.Reac
   const [config, setConfig, { loading: isConfigLoading }] = useSupabaseCollection<SaidaConfig>('saida/config', DEFAULT_CONFIG, { enabled })
 
   const { emit, on } = useBroadcastRealtime()
+  const { currentUser } = useApp()
+  const currentUserRef = useRef(currentUser)
+  useEffect(() => {
+    currentUserRef.current = currentUser
+  }, [currentUser])
+  const resolveOperatorName = useCallback(() => {
+    const fromCtx = currentUserRef.current?.nome
+    if (typeof fromCtx === 'string' && fromCtx.trim()) return fromCtx.trim()
+    return getCurrentOperatorName()
+  }, [])
   const [realtimeStatus, setRealtimeStatus] = useState<'online' | 'connecting' | 'offline'>('connecting')
 
   const setActiveCallsLocalRef = useRef(setActiveCallsLocal)
@@ -1114,6 +1132,13 @@ function SaidaProviderInner({ children, enabled = true }: { children: React.Reac
     }
 
     const currentNow = now()
+    const currentOperator = resolveOperatorName()
+    const matchingSpecialAuth = activeCalls.find(c =>
+      c.status === 'special_auth' && c.studentId != null && String(c.studentId) === sIdStr && c.operatorId
+    )
+    const effectiveOperator = (guardianId === 'special-auth' && matchingSpecialAuth?.operatorId)
+      ? matchingSpecialAuth.operatorId
+      : (currentOperator || matchingSpecialAuth?.operatorId)
     const isSoloCall = isSaiuSozinhoCall({ guardianId, guardianName })
     const call: PickupCall = {
       id: uid(), studentId: sIdStr, studentName, studentClass,
@@ -1121,6 +1146,9 @@ function SaidaProviderInner({ children, enabled = true }: { children: React.Reac
       guardianId: isSoloCall ? 'sozinho' : guardianId,
       guardianName: isSoloCall ? 'Saiu Sozinho' : guardianName,
       rfidCode,
+      operatorId: effectiveOperator,
+      authorizedBy: effectiveOperator,
+      confirmedBy: isSoloCall ? currentOperator : undefined,
       calledAt: currentNow,
       confirmedAt: isSoloCall ? currentNow : undefined,
       status: isSoloCall ? 'confirmed' : 'waiting',
@@ -1209,8 +1237,17 @@ function SaidaProviderInner({ children, enabled = true }: { children: React.Reac
     )
     const fixCall = (c: PickupCall) => {
       const conf = currentNow
+      const currentOperator = resolveOperatorName()
       const cTime = (c.calledAt && new Date(c.calledAt).getTime() > new Date(conf).getTime()) ? conf : c.calledAt
-      return { ...c, calledAt: cTime, status: 'confirmed' as const, confirmedAt: conf }
+      return {
+        ...c,
+        calledAt: cTime,
+        status: 'confirmed' as const,
+        confirmedAt: conf,
+        operatorId: c.operatorId || currentOperator,
+        authorizedBy: c.authorizedBy || c.operatorId || currentOperator,
+        confirmedBy: currentOperator || c.confirmedBy || c.operatorId,
+      }
     }
 
     const updatedCalls: PickupCall[] = callsToConfirm.length > 0
@@ -1439,6 +1476,14 @@ function SaidaProviderInner({ children, enabled = true }: { children: React.Reac
     const sNameNorm = studentName ? studentName.trim().toLowerCase() : ''
     const currentNow = now()
     const todayKey = getCampoGrandeDateStr(currentNow)
+    const currentOperator = resolveOperatorName()
+    const matchingSpecialAuth = activeCalls.find(c => {
+      if (c.status !== 'special_auth') return false
+      const cId = c.studentId ? String(c.studentId) : ''
+      const cName = c.studentName ? c.studentName.trim().toLowerCase() : ''
+      return (sIdStr && cId === sIdStr) || (sNameNorm && cName === sNameNorm)
+    })
+    const specialAuthOperator = matchingSpecialAuth?.operatorId || currentOperator
 
     // Encontrar ou atualizar a chamada de saída do aluno DE HOJE para 'confirmed'
     // (não cria novo registro special_auth ao apenas confirmar a saída)
@@ -1455,6 +1500,9 @@ function SaidaProviderInner({ children, enabled = true }: { children: React.Reac
       confirmedCall = {
         ...existingCall,
         guardianName: authorizedPerson || existingCall.guardianName,
+        operatorId: existingCall.operatorId || specialAuthOperator,
+        authorizedBy: existingCall.authorizedBy || specialAuthOperator || existingCall.operatorId,
+        confirmedBy: currentOperator || existingCall.confirmedBy || specialAuthOperator,
         status: 'confirmed',
         confirmedAt: currentNow
       }
@@ -1467,6 +1515,9 @@ function SaidaProviderInner({ children, enabled = true }: { children: React.Reac
         studentPhoto: studentPhoto ?? null,
         guardianId: 'special-auth',
         guardianName: authorizedPerson,
+        operatorId: specialAuthOperator,
+        authorizedBy: specialAuthOperator,
+        confirmedBy: currentOperator || specialAuthOperator,
         calledAt: currentNow,
         confirmedAt: currentNow,
         status: 'confirmed',
@@ -1601,6 +1652,7 @@ function SaidaProviderInner({ children, enabled = true }: { children: React.Reac
     }
 
     // 3. Caso contrário, cria uma nova chamada já com status 'confirmed' (sem acionar chamada na TV/som)
+    const currentOperator = resolveOperatorName()
     const newCall: PickupCall = {
       id: uid(),
       studentId: sIdStr,
@@ -1609,6 +1661,9 @@ function SaidaProviderInner({ children, enabled = true }: { children: React.Reac
       studentPhoto: studentPhoto ?? null,
       guardianId: 'sozinho',
       guardianName: 'Saiu Sozinho',
+      operatorId: currentOperator,
+      authorizedBy: currentOperator,
+      confirmedBy: currentOperator,
       calledAt: currentNow,
       confirmedAt: currentNow,
       status: 'confirmed',

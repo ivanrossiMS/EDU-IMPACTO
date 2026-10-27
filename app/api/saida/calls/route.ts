@@ -314,7 +314,7 @@ export async function GET(request: Request) {
       let freqQuery = supabase
         .from('frequencias')
         .select('id, aluno_id, turma_id, data, dados, created_at')
-        .or('dados->>saidaHorario.not.is.null,dados->saidas.not.is.null')
+        .or('dados->>saidaHorario.not.is.null,dados->saidas.not.is.null,dados->>saidaCancelada.eq.true')
 
       if (studentIdsToMatch.length === 1) {
         freqQuery = freqQuery.eq('aluno_id', studentIdsToMatch[0])
@@ -395,11 +395,37 @@ export async function GET(request: Request) {
       // Normaliza o status diário de confirmação de autorizações especiais para a data alvo (targetDate)
       rawResult = rawResult.map((c: any) => c.status === 'special_auth' ? normalizeSpecialAuthForDate(c, targetDate) : c)
 
+      // Identifica saídas explicitamente canceladas no Diário de Frequência para não reexibir eventos de catraca/chamadas antigas
+      const cancelledSaidaKeys = new Set<string>()
+      for (const fRecord of (freqRecords || [])) {
+        if (fRecord.dados?.saidaCancelada === true && !fRecord.dados?.saidaHorario) {
+          const aId = String(fRecord.aluno_id || '').trim()
+          const dt = String(fRecord.data || targetDate).trim()
+          if (aId && dt) {
+            cancelledSaidaKeys.add(`${aId}_${dt}`)
+            const normId = aId.replace(/^0+/, '') || '0'
+            cancelledSaidaKeys.add(`${normId}_${dt}`)
+          }
+        }
+      }
+
+      if (cancelledSaidaKeys.size > 0) {
+        rawResult = rawResult.filter((c: any) => {
+          if (c.status !== 'confirmed') return true
+          const sId = String(c.studentId || '').trim()
+          const normId = sId.replace(/^0+/, '') || '0'
+          const callDate = toCampoGrandeYmd(c.confirmedAt || c.calledAt || c.created_at) || targetDate
+          return !cancelledSaidaKeys.has(`${sId}_${callDate}`) && !cancelledSaidaKeys.has(`${normId}_${callDate}`)
+        })
+      }
+
       const getCallTimeKey = (sId: string, dtStr?: string) => {
         if (!sId || !dtStr) return ''
         try {
-          const d = new Date(dtStr.includes('T') && !dtStr.endsWith('Z') && !dtStr.includes('-') && !dtStr.includes('+') ? `${dtStr}-04:00` : dtStr)
-          const ymd = d.toISOString().slice(0, 10)
+          const safeStr = dtStr.includes('T') && !dtStr.endsWith('Z') && !/[+-]\d{2}:?\d{2}$/.test(dtStr) ? `${dtStr}-04:00` : dtStr
+          const d = new Date(safeStr)
+          if (isNaN(d.getTime())) return `${sId}_${String(dtStr).slice(0, 16)}`
+          const ymd = toCampoGrandeYmd(safeStr)
           const hm = d.toLocaleTimeString('pt-BR', { timeZone: 'America/Campo_Grande', hour: '2-digit', minute: '2-digit' })
           return `${sId}_${ymd}_${hm}`
         } catch {
@@ -407,16 +433,86 @@ export async function GET(request: Request) {
         }
       }
 
-      const existingCallKeys = new Set(rawResult.map((c: any) => getCallTimeKey(c.studentId, c.confirmedAt || c.calledAt)))
+      const extractExplicitSaidaOperator = (fDados: any): string | undefined => {
+        if (!fDados || typeof fDados !== 'object') return undefined
+        for (const candidate of [fDados.saidaUsuario, fDados.operatorId, fDados.authorizedBy]) {
+          if (typeof candidate === 'string' && candidate.trim()) return candidate.trim()
+        }
+        return undefined
+      }
 
-      // Pré-filtra apenas frequências que efetivamente possuem registro de saída
+      const extractDiarioManualOperator = (fDados: any): string | undefined => {
+        if (!fDados || typeof fDados !== 'object') return undefined
+        const explicit = extractExplicitSaidaOperator(fDados)
+        if (explicit) return explicit
+        // Somente considera usuarioNome / registradoPor da frequência quando a saída foi lançada manualmente no Diário
+        if (String(fDados.saidaOrigem || '').toLowerCase() !== 'manual') return undefined
+        if (typeof fDados.usuarioNome === 'string' && fDados.usuarioNome.trim()) {
+          return fDados.usuarioNome.trim()
+        }
+        const reg = typeof fDados.registradoPor === 'string' ? fDados.registradoPor.trim() : ''
+        if (reg) {
+          const m = reg.match(/^Manual\s*\((.+)\)$/i)
+          if (m && m[1] && m[1].trim().toLowerCase() !== 'auto') {
+            return m[1].trim()
+          }
+          const lower = reg.toLowerCase()
+          if (lower !== 'manual' && lower !== 'manual (auto)' && !lower.includes('catraca') && !lower.includes('idface') && !lower.includes('totem')) {
+            return reg
+          }
+        }
+        return undefined
+      }
+
+      const existingCallKeys = new Set(rawResult.map((c: any) => getCallTimeKey(c.studentId, c.confirmedAt || c.calledAt)).filter(Boolean))
+      const existingCallIds = new Set(rawResult.map((c: any) => String(c.id || '').trim()).filter(Boolean))
+
+      // Mapa de operador por aluno+data vindo de autorizações especiais (special_auth)
+      const specialAuthOperatorByStudent = new Map<string, string>()
+      for (const c of rawResult) {
+        if ((c.status === 'special_auth' || c.guardianId === 'special' || c.guardianId === 'special-auth') && c.studentId && (c.operatorId || c.authorizedBy)) {
+          const sId = String(c.studentId).trim()
+          const op = String(c.authorizedBy || c.operatorId).trim()
+          if (sId && op) {
+            specialAuthOperatorByStudent.set(sId, op)
+            const cDate = toCampoGrandeYmd(c.confirmedAt || c.calledAt || c.created_at) || targetDate
+            specialAuthOperatorByStudent.set(`${sId}_${cDate}`, op)
+          }
+        }
+      }
+
+      // Pré-filtra apenas frequências que efetivamente possuem registro de saída (e não foram canceladas)
       const freqRecordsWithSaidas = (freqRecords || []).filter((fRecord: any) => {
+        if (fRecord.dados?.saidaCancelada === true && !fRecord.dados?.saidaHorario) return false
         const hasArraySaidas = Array.isArray(fRecord.dados?.saidas) && fRecord.dados.saidas.length > 0
         const hasSingleSaida = Boolean(fRecord.dados?.saidaHorario)
         return hasArraySaidas || hasSingleSaida
       })
 
-      // Busca única unificada de alunos para enriquecer frequências, eventos de catraca e chamadas sem foto
+      // Mapas de operador por aluno+data (separando saída explícita vs lançamento manual no diário)
+      const freqExplicitOperatorByStudentDate = new Map<string, string>()
+      const freqManualOperatorByStudentDate = new Map<string, string>()
+
+      for (const fRecord of (freqRecords || [])) {
+        const aId = String(fRecord.aluno_id || '').trim()
+        if (!aId) continue
+        const recordDate = fRecord.data || targetDate
+        const normId = aId.replace(/^0+/, '') || '0'
+
+        const explicitOp = extractExplicitSaidaOperator(fRecord.dados)
+        if (explicitOp) {
+          freqExplicitOperatorByStudentDate.set(`${aId}_${recordDate}`, explicitOp)
+          freqExplicitOperatorByStudentDate.set(`${normId}_${recordDate}`, explicitOp)
+        }
+
+        const diarioOp = extractDiarioManualOperator(fRecord.dados)
+        if (diarioOp) {
+          freqManualOperatorByStudentDate.set(`${aId}_${recordDate}`, diarioOp)
+          freqManualOperatorByStudentDate.set(`${normId}_${recordDate}`, diarioOp)
+        }
+      }
+
+      // Busca única unificada de alunos para enriquecer frequências, eventos de catraca e chamadas
       const unifiedStudentIds = new Set<string>()
       for (const f of freqRecordsWithSaidas) {
         const id = String(f.aluno_id || '').trim()
@@ -427,7 +523,7 @@ export async function GET(request: Request) {
         if (id) unifiedStudentIds.add(id)
       }
       for (const c of rawResult) {
-        if (!c.studentPhoto && c.studentId) {
+        if (c.studentId) {
           const id = String(c.studentId).trim()
           if (id) unifiedStudentIds.add(id)
         }
@@ -443,6 +539,8 @@ export async function GET(request: Request) {
           if (!aId) continue
           const recordDate = fRecord.data || targetDate
           const al = unifiedAlunosMap[aId]
+          const freqOp = extractDiarioManualOperator(fRecord.dados)
+          const specialOpForSynth = specialAuthOperatorByStudent.get(`${aId}_${recordDate}`) || specialAuthOperatorByStudent.get(aId)
 
           const todasSaidas = Array.isArray(fRecord.dados?.saidas) && fRecord.dados.saidas.length > 0
             ? fRecord.dados.saidas
@@ -462,22 +560,32 @@ export async function GET(request: Request) {
               const isCatraca = sOrigem === 'catraca' || (sResp && String(sResp).toLowerCase().includes('catraca'))
               const isRfid = sOrigem === 'rfid'
               const isSolo = isCatraca || (sResp && String(sResp).toLowerCase().includes('sozinho'))
-              const callTime = s.data_hora
-                ? (String(s.data_hora).includes('T') && (String(s.data_hora).endsWith('Z') || /\.\d+/.test(String(s.data_hora)))
-                    ? String(s.data_hora)
-                    : String(s.data_hora).replace(/(?:Z|\+00(?::00)?)$/i, '-04:00'))
-                : `${recordDate}T${sHorario || '12:00'}:00-04:00`
+              const expectedIso = `${recordDate}T${sHorario || '12:00'}:00-04:00`
+              let callTime = expectedIso
+              if (s.data_hora) {
+                const candidateTime = String(s.data_hora).includes('T') && (String(s.data_hora).endsWith('Z') || /\.\d+/.test(String(s.data_hora)))
+                  ? String(s.data_hora)
+                  : String(s.data_hora).replace(/(?:Z|\+00(?::00)?)$/i, '-04:00')
+                if (!sHorario || formatHoraSaida(candidateTime) === sHorario) {
+                  callTime = candidateTime
+                }
+              }
+              const synthId = `freq-saida-${aId}-${recordDate}-${String(sHorario || '').replace(':', '')}`
               const callKey = getCallTimeKey(aId, callTime)
-              if (!existingCallKeys.has(callKey)) {
-                existingCallKeys.add(callKey)
+              if (!existingCallKeys.has(callKey) && !existingCallIds.has(synthId)) {
+                if (callKey) existingCallKeys.add(callKey)
+                existingCallIds.add(synthId)
+                const itemOp = s.usuario || s.operatorId || ((!isCatraca && !isRfid) ? (specialOpForSynth || freqOp) : specialOpForSynth)
                 rawResult.push({
-                  id: `freq-saida-${aId}-${recordDate}-${String(sHorario || '').replace(':', '')}`,
+                  id: synthId,
                   studentId: aId,
                   studentName: al?.nome || aId,
                   studentClass: al?.turma || fRecord.turma_id || '',
                   studentPhoto: al?.foto || al?.foto_url || null,
                   guardianId: isCatraca ? 'catraca-saida' : (isRfid ? 'rfid' : (isSolo ? 'sozinho' : 'frequencia-diario')),
                   guardianName: sResp || (isSolo ? 'Saiu Sozinho' : 'Responsável Cadastrado'),
+                  operatorId: itemOp,
+                  authorizedBy: itemOp,
                   calledAt: callTime,
                   confirmedAt: callTime,
                   created_at: callTime,
@@ -496,17 +604,23 @@ export async function GET(request: Request) {
         for (const ev of exitEvents) {
           const aId = String(ev.aluno_id || '').trim()
           if (!aId) continue
+          const normId = aId.replace(/^0+/, '') || '0'
           const dispNome = ev.dispositivo_nome || 'Catraca de Saída'
           const recordDate = ev.data_hora ? ev.data_hora.slice(0, 10) : targetDate
+          if (cancelledSaidaKeys.has(`${aId}_${recordDate}`) || cancelledSaidaKeys.has(`${normId}_${recordDate}`)) {
+            continue
+          }
           const rawTimePart = ev.data_hora ? ev.data_hora.slice(11, 19) : '12:00:00'
           const normalizedExitIso = `${recordDate}T${rawTimePart.length === 5 ? rawTimePart + ':00' : (rawTimePart || '12:00:00')}-04:00`
           const evTimeKey = getCallTimeKey(aId, normalizedExitIso)
-          if (!existingCallKeys.has(evTimeKey)) {
-            existingCallKeys.add(evTimeKey)
+          const timeToken = ev.data_hora ? ev.data_hora.slice(11, 16).replace(':', '') : '1200'
+          const synthCatracaId = `catraca-saida-${aId}-${recordDate}-${timeToken}`
+          if (!existingCallKeys.has(evTimeKey) && !existingCallIds.has(synthCatracaId)) {
+            if (evTimeKey) existingCallKeys.add(evTimeKey)
+            existingCallIds.add(synthCatracaId)
             const al = unifiedAlunosMap[aId]
-            const timeToken = ev.data_hora ? ev.data_hora.slice(11, 16).replace(':', '') : '1200'
             rawResult.push({
-              id: `catraca-saida-${aId}-${recordDate}-${timeToken}`,
+              id: synthCatracaId,
               studentId: aId,
               studentName: ev.aluno_nome || al?.nome || aId,
               studentClass: al?.turma || '',
@@ -531,7 +645,7 @@ export async function GET(request: Request) {
         rawResult = rawResult.filter((c: any) => matchSet.has(String(c.studentId || '').trim()))
       }
 
-      // Deduplicação final por chave de minuto para evitar duplicidade de chamada entre tabelas
+      // Deduplicação final por chave de minuto + garantia de ID único para evitar duplicidade de chaves no React
       const uniqueMap = new Map<string, any>()
       for (const c of rawResult) {
         const k = c.status === 'special_auth' ? `special_auth_${c.id}` : (getCallTimeKey(c.studentId, c.confirmedAt || c.calledAt) || c.id)
@@ -539,17 +653,105 @@ export async function GET(request: Request) {
           uniqueMap.set(k, c)
         } else {
           const old = uniqueMap.get(k)
-          uniqueMap.set(k, { ...old, ...c, studentPhoto: old.studentPhoto || c.studentPhoto })
+          // Se um registro confirmado e um cancelado colidirem ou mesmo ID colidir, preserva o mais relevante e mescla metadados
+          const preferred = (old.status === 'confirmed' && c.status === 'cancelled') ? old : c
+          const secondary = preferred === old ? c : old
+          uniqueMap.set(k, {
+            ...secondary,
+            ...preferred,
+            studentPhoto: old.studentPhoto || c.studentPhoto,
+            operatorId: preferred.operatorId || secondary.operatorId,
+            authorizedBy: preferred.authorizedBy || secondary.authorizedBy || preferred.operatorId || secondary.operatorId,
+            confirmedBy: preferred.confirmedBy || secondary.confirmedBy,
+          })
         }
       }
-      rawResult = Array.from(uniqueMap.values())
 
-      // Retroalimentação / Enriquecimento de foto para chamadas que possuem studentId mas vieram sem foto
+      const byIdMap = new Map<string, any>()
+      for (const c of uniqueMap.values()) {
+        const idKey = String(c.id || '').trim() || crypto.randomUUID()
+        if (!byIdMap.has(idKey)) {
+          byIdMap.set(idKey, c)
+        } else {
+          const old = byIdMap.get(idKey)
+          const preferred = (c.status === 'confirmed' && old.status !== 'confirmed') ? c : old
+          const secondary = preferred === old ? c : old
+          byIdMap.set(idKey, {
+            ...secondary,
+            ...preferred,
+            studentPhoto: old.studentPhoto || c.studentPhoto,
+            operatorId: preferred.operatorId || secondary.operatorId,
+            authorizedBy: preferred.authorizedBy || secondary.authorizedBy || preferred.operatorId || secondary.operatorId,
+            confirmedBy: preferred.confirmedBy || secondary.confirmedBy,
+          })
+        }
+      }
+      rawResult = Array.from(byIdMap.values())
+
+      // Retroalimentação / Enriquecimento de foto e operador (autorizado por / lançado por)
       for (const c of rawResult) {
-        if (!c.studentPhoto && c.studentId) {
-          const p = unifiedAlunosMap[String(c.studentId).trim()]
-          if (p?.foto || p?.foto_url) {
-            c.studentPhoto = p.foto || p.foto_url
+        const sId = c.studentId ? String(c.studentId).trim() : ''
+        const alunoInfo = sId ? unifiedAlunosMap[sId] : undefined
+        if (!c.studentPhoto && alunoInfo) {
+          if (alunoInfo.foto || alunoInfo.foto_url) {
+            c.studentPhoto = alunoInfo.foto || alunoInfo.foto_url
+          }
+        }
+        if (sId) {
+          const cDate = toCampoGrandeYmd(c.confirmedAt || c.calledAt || c.created_at) || targetDate
+          const specialOp = specialAuthOperatorByStudent.get(`${sId}_${cDate}`) || specialAuthOperatorByStudent.get(sId)
+          const explicitFreqOp = freqExplicitOperatorByStudentDate.get(`${sId}_${cDate}`)
+          const diarioManualOp = freqManualOperatorByStudentDate.get(`${sId}_${cDate}`)
+
+          const isRfid =
+            c.source === 'rfid' ||
+            String(c.guardianId || '').startsWith('rfid-') ||
+            Boolean(c.rfidCode)
+          const isCatraca =
+            c.source === 'catraca' ||
+            c.guardianId === 'catraca-saida' ||
+            c.origem === 'catraca_idface' ||
+            String(c.id || '').startsWith('saida-catraca-') ||
+            String(c.id || '').startsWith('catraca-saida-') ||
+            Boolean(c.dispositivoNome) ||
+            String(c.guardianName || '').toLowerCase().includes('catraca') ||
+            String(c.guardianName || '').toLowerCase().includes('rua das garças')
+          const isSpecialAuth =
+            c.status === 'special_auth' ||
+            c.guardianId === 'special' ||
+            c.guardianId === 'special-auth'
+          const isDiarioManual =
+            c.guardianId === 'manual-infantil' ||
+            c.guardianId === 'frequencia-diario' ||
+            c.source === 'frequencia' ||
+            String(c.id || '').startsWith('infantil-') ||
+            String(c.id || '').startsWith('freq-saida-')
+          const isAgendaDigitalCall =
+            c.source === 'agenda_digital' ||
+            c.guardianId === 'usr-fam' ||
+            /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(c.guardianId || '').trim())
+
+          if (isSpecialAuth) {
+            if (!c.operatorId) c.operatorId = specialOp || explicitFreqOp || diarioManualOp
+            if (!c.authorizedBy) c.authorizedBy = c.operatorId || specialOp
+          } else if (isCatraca || isRfid) {
+            // Saída automatizada (Catraca Biométrica iDFace ou Cartão RFID): apenas herda se houve Autorização Especial para o aluno no dia
+            if (!c.authorizedBy && specialOp) {
+              c.authorizedBy = specialOp
+            }
+          } else if (isAgendaDigitalCall) {
+            // Chamada disparada pelo próprio responsável via App Agenda Digital
+            const famLabel = c.guardianName ? `${String(c.guardianName).trim()} (App Agenda Digital)` : undefined
+            if (!c.operatorId) c.operatorId = explicitFreqOp || famLabel
+            if (!c.authorizedBy) c.authorizedBy = c.operatorId || famLabel
+          } else if (isDiarioManual) {
+            // Lançamento manual feito pelo professor/equipe no Diário de Frequência / Educação Infantil
+            if (!c.operatorId) c.operatorId = specialOp || diarioManualOp || explicitFreqOp
+            if (!c.authorizedBy) c.authorizedBy = c.operatorId
+          } else {
+            // Chamada manual na Portaria / Painel de Chamadas (resp-*, erp-*, saude-aut-*, sozinho, etc.)
+            if (!c.operatorId) c.operatorId = c.authorizedBy || c.confirmedBy || explicitFreqOp || specialOp
+            if (!c.authorizedBy) c.authorizedBy = c.operatorId || specialOp || explicitFreqOp
           }
         }
       }
@@ -598,8 +800,35 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const { user, errorResponse } = await requireAuth()
+  const { resolveUserRole } = await import('@/lib/server/authGuard')
+  const { user, dbUser, errorResponse } = await resolveUserRole(request)
   if (errorResponse) return errorResponse
+
+  const resolvedOperatorName =
+    dbUser?.nome ||
+    user?.user_metadata?.nome ||
+    user?.user_metadata?.name ||
+    (user?.email ? user.email.split('@')[0] : undefined)
+
+  const applyOperatorMetadata = (dados: any, existingDados?: any) => {
+    if (!dados || typeof dados !== 'object') return dados
+    const currentOp = typeof dados.operatorId === 'string' ? dados.operatorId.trim() : ''
+    const isGenericOp = !currentOp || currentOp === 'Admin Logado' || currentOp === 'Sistema'
+    const prevOp = typeof existingDados?.operatorId === 'string' && existingDados.operatorId.trim()
+      ? existingDados.operatorId.trim()
+      : ''
+
+    if (isGenericOp) {
+      dados.operatorId = prevOp || resolvedOperatorName || currentOp || undefined
+    }
+    if (!dados.authorizedBy) {
+      dados.authorizedBy = existingDados?.authorizedBy || dados.operatorId || resolvedOperatorName || undefined
+    }
+    if (dados.status === 'confirmed' && !dados.confirmedBy) {
+      dados.confirmedBy = existingDados?.confirmedBy || resolvedOperatorName || dados.operatorId || undefined
+    }
+    return dados
+  }
 
   try {
     invalidateSaidaCallsCache()
@@ -634,21 +863,29 @@ export async function POST(request: Request) {
       
       const { data: existingRows } = await supabaseService.from('saida_calls').select('id, dados').in('id', ids)
       
+      const existingDadosMap = new Map<string, any>()
       const existingStatusMap = new Map((existingRows || []).map(r => {
         let status = null
         let calledAt = null
+        let parsedDados: any = null
         if (typeof r.dados === 'string') {
           try { 
-            const d = JSON.parse(r.dados)
-            status = d.status 
-            calledAt = d.calledAt
+            parsedDados = JSON.parse(r.dados)
+            status = parsedDados.status 
+            calledAt = parsedDados.calledAt
           } catch(e){}
         } else if (r.dados) {
+          parsedDados = r.dados
           status = (r.dados as any).status
           calledAt = (r.dados as any).calledAt
         }
+        if (parsedDados) existingDadosMap.set(r.id, parsedDados)
         return [r.id, { status, calledAt }]
       }))
+
+      rows.forEach((r: any) => {
+        r.dados = applyOperatorMetadata(r.dados, existingDadosMap.get(r.id))
+      })
 
       const { error } = await supabaseService.from('saida_calls').upsert(rows, { onConflict: 'id' })
       if (error) throw new Error(error.message)
@@ -670,6 +907,7 @@ export async function POST(request: Request) {
             guardianName: row.dados?.guardianName,
             source: row.dados?.source,
             guardianId: row.dados?.guardianId,
+            operatorName: row.dados?.confirmedBy || row.dados?.operatorId || resolvedOperatorName,
           })
         } else if ((row.dados?.status === 'waiting' || row.dados?.status === 'called') && !row.dados?.isRevert && studentId) {
           const isNewCall = !existing
@@ -777,26 +1015,28 @@ export async function POST(request: Request) {
     let wasConfirmed = false
     let previousStatus: string | null = null
     let previousCalledAt: string | null = null
+    let existingDadosParsed: any = {}
     if (existingRow?.dados) {
-      let existingDados: any = {}
       if (typeof existingRow.dados === 'string') {
-        try { existingDados = JSON.parse(existingRow.dados) } catch(e){}
+        try { existingDadosParsed = JSON.parse(existingRow.dados) } catch(e){}
       } else {
-        existingDados = existingRow.dados
+        existingDadosParsed = existingRow.dados
       }
-      wasConfirmed = existingDados.status === 'confirmed'
-      previousStatus = existingDados.status
-      previousCalledAt = existingDados.calledAt
+      wasConfirmed = existingDadosParsed.status === 'confirmed'
+      previousStatus = existingDadosParsed.status
+      previousCalledAt = existingDadosParsed.calledAt
 
-      if ((wasConfirmed || existingDados.status === 'cancelled') && (row.dados.status === 'waiting' || row.dados.status === 'called') && !isRevert) {
+      if ((wasConfirmed || existingDadosParsed.status === 'cancelled') && (row.dados.status === 'waiting' || row.dados.status === 'called') && !isRevert) {
         const incomingCalledAt = new Date(row.dados.calledAt || 0).getTime()
-        const existingConfirmedAt = new Date(existingDados.confirmedAt || 0).getTime()
+        const existingConfirmedAt = new Date(existingDadosParsed.confirmedAt || 0).getTime()
         if (incomingCalledAt < existingConfirmedAt) {
-          console.warn(`[API Saida] Stale update prevented for call ${row.id}. Incoming status: ${row.dados.status}, Existing status: ${existingDados.status}`)
-          return NextResponse.json({ id: row.id, ...(existingDados || {}) }, { status: 200 })
+          console.warn(`[API Saida] Stale update prevented for call ${row.id}. Incoming status: ${row.dados.status}, Existing status: ${existingDadosParsed.status}`)
+          return NextResponse.json({ id: row.id, ...(existingDadosParsed || {}) }, { status: 200 })
         }
       }
     }
+
+    row.dados = applyOperatorMetadata(row.dados, existingDadosParsed)
 
     const { data, error } = await supabaseService.from('saida_calls').upsert(row).select().single()
     if (error) throw new Error(error.message)
@@ -829,6 +1069,8 @@ export async function POST(request: Request) {
           if (sDados && (sDados.status === 'waiting' || sDados.status === 'called') && !sDados.isRevert) {
             sDados.status = 'confirmed'
             sDados.confirmedAt = data.dados?.confirmedAt || new Date().toISOString()
+            if (resolvedOperatorName && !sDados.confirmedBy) sDados.confirmedBy = resolvedOperatorName
+            if (resolvedOperatorName && !sDados.operatorId) sDados.operatorId = resolvedOperatorName
             await supabaseService.from('saida_calls').update({ dados: sDados }).eq('id', sRow.id)
           }
         })
@@ -853,6 +1095,7 @@ export async function POST(request: Request) {
             saDados.confirmedDates = prevConfirmedDates
             saDados.confirmedOut = true
             saDados.confirmedAt = confTime
+            if (resolvedOperatorName) saDados.confirmedBy = resolvedOperatorName
             await supabaseService.from('saida_calls').update({ dados: saDados }).eq('id', saRow.id)
           } else if (isRevert) {
             delete prevConfirmedDates[todayStr]
@@ -880,6 +1123,7 @@ export async function POST(request: Request) {
         guardianName: data.dados?.guardianName,
         source: data.dados?.source,
         guardianId: data.dados?.guardianId,
+        operatorName: data.dados?.confirmedBy || data.dados?.operatorId || resolvedOperatorName,
       })
     } else if ((data.dados?.status === 'waiting' || data.dados?.status === 'called') && !isRevert && studentId) {
       const isNewCall = !existingRow
@@ -928,7 +1172,7 @@ export async function DELETE(request: Request) {
   try {
     invalidateSaidaCallsCache()
     const body = await request.json()
-    const { id, clearToday } = body
+    const { id, studentId, date, cancelStudentDate, clearToday } = body
     const supabaseService = getAdminClient()
 
     if (clearToday) {
@@ -949,6 +1193,80 @@ export async function DELETE(request: Request) {
       invalidateSaidaCallsCache()
 
       return NextResponse.json({ ok: true, clearedToday: true })
+    }
+
+    if ((studentId && date) || cancelStudentDate) {
+      const rawStudentId = String(studentId || '').trim()
+      const targetDate = String(date || '').trim()
+      if (rawStudentId && targetDate) {
+        const unpaddedId = rawStudentId.replace(/^0+/, '') || '0'
+        const studentVariants = Array.from(new Set([rawStudentId, unpaddedId, unpaddedId.padStart(6, '0')].filter(Boolean)))
+        const { data: studentRows } = await supabaseService
+          .from('saida_calls')
+          .select('id, created_at, dados')
+          .in('dados->>studentId', studentVariants)
+
+        const idsToDelete = new Set<string>()
+        if (id) idsToDelete.add(String(id))
+        for (const vId of studentVariants) {
+          idsToDelete.add(`infantil-${vId}-${targetDate}`)
+          idsToDelete.add(`saida-catraca-${vId}-${targetDate}`)
+        }
+
+        const toDateYmd = (isoStr?: string) => {
+          if (!isoStr) return ''
+          try {
+            const normalized = isoStr.includes('T') && !isoStr.endsWith('Z') && !isoStr.includes('-') && !isoStr.includes('+')
+              ? `${isoStr}-04:00`
+              : isoStr
+            const d = new Date(normalized)
+            if (isNaN(d.getTime())) return String(isoStr).slice(0, 10)
+            return new Intl.DateTimeFormat('en-CA', {
+              timeZone: 'America/Campo_Grande',
+              year: 'numeric',
+              month: '2-digit',
+              day: '2-digit'
+            }).format(d)
+          } catch {
+            return String(isoStr).slice(0, 10)
+          }
+        }
+
+        for (const row of (studentRows || [])) {
+          const d = row.dados || {}
+          if (d.status === 'special_auth') {
+            const confirmedDates = d.confirmedDates && typeof d.confirmedDates === 'object' ? { ...d.confirmedDates } : {}
+            const rowConfirmDate = toDateYmd(d.confirmedAt || d.calledAt)
+            if (confirmedDates[targetDate] || (d.confirmedOut && rowConfirmDate === targetDate)) {
+              delete confirmedDates[targetDate]
+              const updatedDados = {
+                ...d,
+                confirmedDates,
+                confirmedOut: false,
+                confirmedAt: null
+              }
+              await supabaseService
+                .from('saida_calls')
+                .update({ dados: updatedDados })
+                .eq('id', row.id)
+            }
+          } else {
+            const callYmd = toDateYmd(d.confirmedAt || d.calledAt || row.created_at)
+            if (callYmd === targetDate || String(row.id).includes(targetDate)) {
+              idsToDelete.add(String(row.id))
+            }
+          }
+        }
+
+        if (idsToDelete.size > 0) {
+          await supabaseService
+            .from('saida_calls')
+            .delete()
+            .in('id', Array.from(idsToDelete))
+        }
+        invalidateSaidaCallsCache()
+        return NextResponse.json({ ok: true, deletedCount: idsToDelete.size })
+      }
     }
 
     if (!id) return NextResponse.json({ error: 'ID is required' }, { status: 400 })
@@ -1057,6 +1375,7 @@ async function dispatchSaidaConfirmadaPush({
   guardianName,
   source,
   guardianId,
+  operatorName,
 }: {
   callId: string
   studentId: string
@@ -1066,6 +1385,7 @@ async function dispatchSaidaConfirmadaPush({
   guardianName?: string
   source?: string
   guardianId?: string
+  operatorName?: string
 }) {
   try {
     const { sendAgendaPushNotification } = await import('@/lib/server/agendaNotifications')
@@ -1120,9 +1440,11 @@ async function dispatchSaidaConfirmadaPush({
       presente: hasValidExistingEntry ? true : (existingFreq?.presente ?? false),
       dados: {
         ...(existingFreq?.dados || {}),
+        saidaCancelada: false,
         saidaHorario: horaSaida,
         saidaResponsavel: guardianName || '',
         saidaOrigem: resolvedSaidaOrigem,
+        ...(operatorName ? { saidaUsuario: operatorName } : {}),
         anoLetivo,
         diarioId: `DIARIO-${turmaAluno}-${anoLetivo}`
       }

@@ -2,7 +2,7 @@
 
 import { useData, newId, Turma } from '@/lib/dataContext'
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
-import { getInitials } from '@/lib/utils'
+import { getInitials, isValidStudentPhoto } from '@/lib/utils'
 import { useApiQuery } from '@/hooks/useApi'
 import { useEnsalamento } from '@/lib/useEnsalamento'
 import {
@@ -318,7 +318,11 @@ function getOrigemFrequenciaCompleta(
   const horaSaidaFormatted = formatTimeFromIso(horaSaidaRaw)
   const respSaida = responsavelSaidaState || chamadaConfirmada?.guardianName || chamadaConfirmada?.responsavel || freqSaidaResp
 
-  if (isSaidaCleared) {
+  const effectiveSaidaCleared = isSaidaCleared !== undefined
+    ? isSaidaCleared
+    : Boolean(freqRecord?.dados?.saidaCancelada || freqRecord?.saidaCancelada)
+
+  if (effectiveSaidaCleared) {
     saida = null
   } else if (horaSaidaFormatted || chamadaConfirmada || portariaEvSaida || (freqRecord && (freqSaidaHorario || freqSaidaResp))) {
     const callSourceNorm = String(chamadaConfirmada?.source || '').toLowerCase()
@@ -1002,6 +1006,12 @@ export default function FrequenciaPage() {
   const [horariosEntrada, setHorariosEntrada] = useState<Record<string, Record<string, string>>>({})
   const [horariosSaida, setHorariosSaida] = useState<Record<string, Record<string, string>>>({})
   const [responsaveisSaida, setResponsaveisSaida] = useState<Record<string, Record<string, string>>>({})
+  const [saidasCanceladas, setSaidasCanceladas] = useState<Record<string, Record<string, boolean>>>({})
+  const recentlyCancelledRef = useRef<Record<string, number>>({})
+  const [studentPhotosMap, setStudentPhotosMap] = useState<Record<string, string>>({})
+  const [failedPhotoIds, setFailedPhotoIds] = useState<Record<string, boolean>>({})
+  const fetchedPhotoIdsRef = useRef<Set<string>>(new Set())
+  const [photoPreviewModal, setPhotoPreviewModal] = useState<{ nome: string; foto: string; id?: string; turma?: string } | null>(null)
   const [saidaModalData, setSaidaModalData] = useState<{ aluno: any; dia: string } | null>(null)
   const [saidaModalHora, setSaidaModalHora] = useState<string>('')
   const [saidaModalResponsavel, setSaidaModalResponsavel] = useState<string>('')
@@ -1154,7 +1164,31 @@ export default function FrequenciaPage() {
           if (isAllDash) {
             map.delete(`${canonicalAId}_${dt}`)
           } else {
-            map.set(`${canonicalAId}_${dt}`, { ...f, aluno_id: canonicalAId })
+            const key = `${canonicalAId}_${dt}`
+            const recentCancelTs = recentlyCancelledRef.current[key]
+            const isRecentCancel = Boolean(recentCancelTs && (Date.now() - recentCancelTs < 15000))
+            if (isRecentCancel) {
+              map.set(key, {
+                ...f,
+                aluno_id: canonicalAId,
+                saidaCancelada: true,
+                saidaHorario: null,
+                saidaResponsavel: null,
+                saidaOrigem: null,
+                dados: {
+                  ...(f.dados || {}),
+                  saidaCancelada: true,
+                  saidaHorario: null,
+                  saidaResponsavel: null,
+                  saidaOrigem: null,
+                  saidas: [],
+                  totalSaidas: 0,
+                  ultimaSaida: null
+                }
+              })
+            } else {
+              map.set(key, { ...f, aluno_id: canonicalAId })
+            }
           }
         }
       })
@@ -1162,8 +1196,8 @@ export default function FrequenciaPage() {
 
     upsertFreqSource(contextFreqs)
     upsertFreqSource(allFreqs)
-    upsertFreqSource(freqTurma)
     upsertFreqSource(freqDia)
+    upsertFreqSource(freqTurma)
 
     // Sintetizar presença a partir de eventos de ENTRADA da portaria/catraca caso não haja registro explícito de entrada
     ;(portariaEventsList || []).forEach((ev: any) => {
@@ -1239,6 +1273,304 @@ export default function FrequenciaPage() {
 
   const [absences, setAbsences] = useState<Record<string, Record<string, Record<string, PresStatus>>>>({})
 
+  // Carregamento sob demanda de fotos dos alunos visíveis (Diário da Turma, Registro Manual, Relatórios e Busca)
+  useEffect(() => {
+    const targetStudents: any[] = []
+    if (alunosDaTurma && alunosDaTurma.length > 0) {
+      targetStudents.push(...alunosDaTurma)
+    }
+    if (showRegistroManualModal && Array.isArray(alunos)) {
+      targetStudents.push(...alunos)
+    }
+    if (showRelatorioModal && Array.isArray(alunos)) {
+      if (relatorioAlunoId) {
+        const found = alunos.find((a: any) => String(a.id) === String(relatorioAlunoId))
+        if (found) targetStudents.push(found)
+      }
+      if (relatorioConsultado) {
+        targetStudents.push(...alunos)
+      }
+    }
+    if (!turmaSel && filtroBusca.trim().length >= 2 && Array.isArray(alunos)) {
+      const q = normalizeSearchText(filtroBusca)
+      const matched = alunos.filter((a: any) =>
+        normalizeSearchText(a.nome).includes(q) ||
+        normalizeSearchText(a.id).includes(q) ||
+        normalizeSearchText(a.matricula).includes(q)
+      ).slice(0, 60)
+      targetStudents.push(...matched)
+    }
+
+    const idsToFetch: string[] = []
+    for (const s of targetStudents) {
+      const sId = String(s?.id || '').trim()
+      if (!sId) continue
+      if (fetchedPhotoIdsRef.current.has(sId)) continue
+      const directPhoto = s?.foto || s?.foto_url || s?.imagem1 || s?.dados?.foto || s?.dados?.avatarUrl || s?.dados?.fotoUrl
+      if (isValidStudentPhoto(directPhoto)) {
+        fetchedPhotoIdsRef.current.add(sId)
+        continue
+      }
+      idsToFetch.push(sId)
+    }
+
+    const uniqueIds = Array.from(new Set(idsToFetch))
+    if (uniqueIds.length === 0) return
+
+    uniqueIds.forEach(id => fetchedPhotoIdsRef.current.add(id))
+
+    let cancelled = false
+    const fetchPhotosInBatches = async () => {
+      const chunkSize = 80
+      for (let i = 0; i < uniqueIds.length; i += chunkSize) {
+        if (cancelled) break
+        const chunk = uniqueIds.slice(i, i + chunkSize)
+        try {
+          const res = await fetch(`/api/alunos?photosOnly=true&ids=${encodeURIComponent(chunk.join(','))}`)
+          if (!res.ok) continue
+          const json = await res.json()
+          if (json?.photos && typeof json.photos === 'object' && !cancelled) {
+            setStudentPhotosMap(prev => ({ ...prev, ...json.photos }))
+          }
+        } catch (err) {
+          console.error('Erro ao buscar fotos dos alunos:', err)
+        }
+      }
+    }
+
+    fetchPhotosInBatches()
+    return () => {
+      cancelled = true
+    }
+  }, [alunosDaTurma, showRegistroManualModal, showRelatorioModal, relatorioAlunoId, relatorioConsultado, turmaSel, filtroBusca, alunos])
+
+  const getStudentPhoto = useCallback((aluno: any): string | null => {
+    if (!aluno) return null
+    const candidates = [
+      aluno.foto,
+      aluno.foto_url,
+      aluno.imagem1,
+      aluno.dados?.foto,
+      aluno.dados?.avatarUrl,
+      aluno.dados?.fotoUrl,
+    ]
+    for (const c of candidates) {
+      if (isValidStudentPhoto(c)) return String(c).trim()
+    }
+    const rawId = String(aluno.id || '').trim()
+    const normId = normalizeAlunoIdKey(rawId)
+    const matId = String(aluno.matricula || '').trim()
+    const mapped =
+      (rawId && studentPhotosMap[rawId]) ||
+      (normId && studentPhotosMap[normId]) ||
+      (matId && studentPhotosMap[matId])
+    if (isValidStudentPhoto(mapped)) return mapped
+
+    if (Array.isArray(saidaCallsList) && saidaCallsList.length > 0 && rawId) {
+      const callWithPhoto = saidaCallsList.find((c: any) =>
+        (String(c?.studentId || '').trim() === rawId || normalizeAlunoIdKey(c?.studentId) === normId) &&
+        isValidStudentPhoto(c?.studentPhoto)
+      )
+      if (callWithPhoto?.studentPhoto) return String(callWithPhoto.studentPhoto).trim()
+    }
+    return null
+  }, [studentPhotosMap, saidaCallsList])
+
+  const renderStudentAvatar = (
+    aluno: any,
+    opts?: {
+      size?: number
+      borderRadius?: string
+      fontSize?: number
+      border?: string
+      bg?: string
+      color?: string
+      interactive?: boolean
+      turmaLabel?: string
+    }
+  ) => {
+    const size = opts?.size ?? 56
+    const borderRadius = opts?.borderRadius ?? '14px'
+    const fontSize = opts?.fontSize ?? Math.max(11, Math.round(size * 0.32))
+    const interactive = opts?.interactive !== false
+    const aIdStr = String(aluno?.id || aluno?.nome || '')
+    const photo = !failedPhotoIds[aIdStr] ? getStudentPhoto(aluno) : null
+
+    if (photo) {
+      return (
+        <div
+          onClick={interactive ? (e) => {
+            e.stopPropagation()
+            setPhotoPreviewModal({
+              nome: aluno?.nome || 'Aluno',
+              foto: photo,
+              id: String(aluno?.id || ''),
+              turma: opts?.turmaLabel || aluno?.turmaNome || turmaObj?.nome || aluno?.turma || ''
+            })
+          } : undefined}
+          title={interactive ? `Clique para ampliar a foto de ${aluno?.nome || 'Aluno'}` : (aluno?.nome || 'Aluno')}
+          style={{
+            width: `${size}px`,
+            height: `${size}px`,
+            minWidth: `${size}px`,
+            borderRadius,
+            overflow: 'hidden',
+            position: 'relative',
+            border: opts?.border || '2px solid #7dd3fc',
+            boxShadow: '0 3px 10px rgba(3, 105, 161, 0.16)',
+            background: '#f8fafc',
+            cursor: interactive ? 'zoom-in' : 'default',
+            flexShrink: 0,
+            transition: 'transform 0.18s ease, box-shadow 0.18s ease'
+          }}
+          onMouseEnter={interactive ? (e) => {
+            e.currentTarget.style.transform = 'scale(1.06)'
+            e.currentTarget.style.boxShadow = '0 6px 16px rgba(3, 105, 161, 0.26)'
+          } : undefined}
+          onMouseLeave={interactive ? (e) => {
+            e.currentTarget.style.transform = 'scale(1)'
+            e.currentTarget.style.boxShadow = '0 3px 10px rgba(3, 105, 161, 0.16)'
+          } : undefined}
+        >
+          <img
+            src={photo}
+            alt={aluno?.nome || 'Aluno'}
+            loading="lazy"
+            onError={() => setFailedPhotoIds(prev => ({ ...prev, [aIdStr]: true }))}
+            style={{
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
+              objectPosition: 'center top',
+              display: 'block'
+            }}
+          />
+        </div>
+      )
+    }
+
+    return (
+      <div
+        style={{
+          width: `${size}px`,
+          height: `${size}px`,
+          minWidth: `${size}px`,
+          background: opts?.bg || 'linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%)',
+          color: opts?.color || '#0369a1',
+          borderRadius,
+          border: opts?.border || '1.5px solid #bae6fd',
+          boxShadow: '0 2px 8px rgba(3, 105, 161, 0.1)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontWeight: 800,
+          fontSize: `${fontSize}px`,
+          flexShrink: 0,
+          letterSpacing: '-0.3px'
+        }}
+      >
+        {getInitials(aluno?.nome || 'AL')}
+      </div>
+    )
+  }
+
+  const renderPhotoPreviewModal = () => {
+    if (!photoPreviewModal) return null
+    return (
+      <div
+        onClick={() => setPhotoPreviewModal(null)}
+        style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          zIndex: 100000,
+          background: 'rgba(15, 23, 42, 0.75)',
+          backdropFilter: 'blur(8px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '20px',
+          animation: 'fadeIn 0.15s ease-out'
+        }}
+      >
+        <div
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            background: '#fff',
+            borderRadius: '24px',
+            padding: '24px',
+            maxWidth: '380px',
+            width: '100%',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.35)',
+            border: '1px solid #e2e8f0',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: '16px',
+            position: 'relative'
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => setPhotoPreviewModal(null)}
+            style={{
+              position: 'absolute',
+              top: '14px',
+              right: '14px',
+              background: '#f1f5f9',
+              border: 'none',
+              borderRadius: '50%',
+              width: '32px',
+              height: '32px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              color: '#475569'
+            }}
+          >
+            <X size={18} />
+          </button>
+          <div
+            style={{
+              width: '240px',
+              height: '240px',
+              borderRadius: '20px',
+              overflow: 'hidden',
+              border: '3px solid #38bdf8',
+              boxShadow: '0 10px 25px rgba(3, 105, 161, 0.2)',
+              background: '#f8fafc'
+            }}
+          >
+            <img
+              src={photoPreviewModal.foto}
+              alt={photoPreviewModal.nome}
+              style={{
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover',
+                objectPosition: 'center top',
+                display: 'block'
+              }}
+            />
+          </div>
+          <div style={{ textAlign: 'center' }}>
+            <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 800, color: '#0f172a', fontFamily: 'Outfit, sans-serif' }}>
+              {photoPreviewModal.nome}
+            </h3>
+            <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#64748b', fontWeight: 600 }}>
+              {photoPreviewModal.id ? `Matrícula: #${photoPreviewModal.id}` : ''}
+              {photoPreviewModal.id && photoPreviewModal.turma ? ' • ' : ''}
+              {photoPreviewModal.turma || ''}
+            </p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   useEffect(() => {
     if (freqTurma) {
       console.log('Frequências carregadas:', freqTurma.length)
@@ -1246,6 +1578,7 @@ export default function FrequenciaPage() {
       const newHorariosEntrada: Record<string, Record<string, string>> = {}
       const newHorariosSaida: Record<string, Record<string, string>> = {}
       const newResponsaveisSaida: Record<string, Record<string, string>> = {}
+      const newSaidasCanceladas: Record<string, Record<string, boolean>> = {}
 
       freqTurma.forEach(f => {
         const aId = String(f.aluno_id || f.alunoId)
@@ -1275,26 +1608,55 @@ export default function FrequenciaPage() {
         const hEntrada = (!isSaidaOnly && f.presente !== false)
           ? (f.dados?.horaEntrada || f.dados?.horaRegistro || f.horaRegistro)
           : null
-        const hSaida = f.dados?.saidaHorario || f.saidaHorario
-        const rSaida = f.dados?.saidaResponsavel || f.saidaResponsavel
+        const rawHSaida = f.dados?.saidaHorario || f.saidaHorario
+        const rawRSaida = f.dados?.saidaResponsavel || f.saidaResponsavel
+        const hSaida = rawHSaida && String(rawHSaida) !== 'null' ? rawHSaida : null
+        const rSaida = rawRSaida && String(rawRSaida) !== 'null' ? rawRSaida : null
+
+        const cancelKey = `${aId}_${dia}`
+        const isRecentlyCancelled = Boolean(
+          recentlyCancelledRef.current[cancelKey] &&
+          (Date.now() - recentlyCancelledRef.current[cancelKey] < 15000)
+        )
+        const isCancelada = isRecentlyCancelled || (!hSaida && Boolean(f.dados?.saidaCancelada || f.saidaCancelada))
+
+        if (isCancelada) {
+          if (!newSaidasCanceladas[aId]) newSaidasCanceladas[aId] = {}
+          newSaidasCanceladas[aId][dia] = true
+        }
 
         if (hEntrada) {
           if (!newHorariosEntrada[aId]) newHorariosEntrada[aId] = {}
           newHorariosEntrada[aId][dia] = hEntrada
         }
-        if (hSaida) {
+        if (hSaida && !isCancelada) {
           if (!newHorariosSaida[aId]) newHorariosSaida[aId] = {}
           newHorariosSaida[aId][dia] = formatTimeFromIso(hSaida) || hSaida
         }
-        if (rSaida) {
+        if (rSaida && !isCancelada) {
           if (!newResponsaveisSaida[aId]) newResponsaveisSaida[aId] = {}
           newResponsaveisSaida[aId][dia] = rSaida
         }
       })
+
+      // Preservar cancelamentos recentes mesmo que o aluno ainda não possuía linha em freqTurma
+      Object.entries(recentlyCancelledRef.current).forEach(([k, ts]) => {
+        if (Date.now() - ts < 15000) {
+          const [aId, dia] = k.split('_')
+          if (aId && dia) {
+            if (!newSaidasCanceladas[aId]) newSaidasCanceladas[aId] = {}
+            newSaidasCanceladas[aId][dia] = true
+            if (newHorariosSaida[aId]) delete newHorariosSaida[aId][dia]
+            if (newResponsaveisSaida[aId]) delete newResponsaveisSaida[aId][dia]
+          }
+        }
+      })
+
       setAbsences(newAbsences)
       setHorariosEntrada(newHorariosEntrada)
       setHorariosSaida(newHorariosSaida)
       setResponsaveisSaida(newResponsaveisSaida)
+      setSaidasCanceladas(newSaidasCanceladas)
     }
   }, [freqTurma, turmaObj])
 
@@ -1359,6 +1721,12 @@ export default function FrequenciaPage() {
 
     setSalvandoSaida(true)
     try {
+      delete recentlyCancelledRef.current[`${aId}_${dia}`]
+      setSaidasCanceladas(prev => ({
+        ...prev,
+        [aId]: { ...(prev[aId] || {}), [dia]: false }
+      }))
+
       // 1. Atualiza estado local de saída e responsável
       setHorariosSaida(prev => ({
         ...prev,
@@ -1372,6 +1740,14 @@ export default function FrequenciaPage() {
       // 2. Transmite a saída para a API /api/saida/calls (POST) que atualiza /chamadas e dispara Realtime para o Monitor TV
       const nowIso = new Date().toISOString()
       const confirmedAtIso = getLocalIsoString(dia, horaSaida)
+      let currentOperatorName: string | undefined
+      try {
+        const rawUser = typeof window !== 'undefined' ? localStorage.getItem('edu-current-user') : null
+        if (rawUser) {
+          const parsedUser = JSON.parse(rawUser)
+          currentOperatorName = parsedUser?.nome || parsedUser?.name || parsedUser?.email || undefined
+        }
+      } catch { /* ignore */ }
       
       await fetch('/api/saida/calls', {
         method: 'POST',
@@ -1381,25 +1757,29 @@ export default function FrequenciaPage() {
           studentId: aId,
           studentName: aluno.nome,
           studentClass: aluno.turmaNome || turmaObj?.nome || aluno.turma || '',
-          studentPhoto: aluno.foto || aluno.imagem1 || null,
+          studentPhoto: getStudentPhoto(aluno) || aluno.foto || aluno.imagem1 || null,
           guardianId: 'manual-infantil',
           guardianName: quemRetirou,
           calledAt: nowIso,
           confirmedAt: confirmedAtIso,
           status: 'confirmed',
-          source: 'manual'
+          source: 'manual',
+          operatorId: currentOperatorName,
+          authorizedBy: currentOperatorName,
+          confirmedBy: currentOperatorName,
         })
       })
 
       // 3. Salvar o registro de saída na API de frequências sem alterar os tempos nem criar entrada manual fictícia
       const existing = (freqTurma || combinedFreqs)?.find(f => normalizeAlunoIdKey(f.aluno_id || f.alunoId) === normalizeAlunoIdKey(aId) && isSameDay(f.data, dia))
+      const safeExistingId = existing?.id && !String(existing.id).startsWith('CATRACA-') ? existing.id : undefined
       const existingEntrada = !isRegistroApenasSaida(existing)
         ? (horariosEntrada[aId]?.[dia] || existing?.dados?.horaEntrada || existing?.horaRegistro || existing?.dados?.horaRegistro || undefined)
         : undefined
       const isIndef = existingEntrada === 'indefinido' || Boolean(existing?.dados?.horarioIndefinido || existing?.horarioIndefinido)
 
       const recordsToSave = [{
-        id: existing?.id,
+        id: safeExistingId,
         alunoId: aluno.id,
         turmaId: turmaId,
         data: dia,
@@ -1408,7 +1788,7 @@ export default function FrequenciaPage() {
         justificativa: existing?.justificativa || '',
         tempos: existing?.tempos || existing?.dados?.tempos || null,
         notifyPush: false,
-        registradoPor: existing?.registradoPor || existing?.dados?.registradoPor || null,
+        registradoPor: existing?.registradoPor || existing?.dados?.registradoPor || currentOperatorName || null,
         origem: existing?.origem || existing?.dados?.origem || null,
         horaRegistro: isIndef ? null : existingEntrada,
         horaEntrada: isIndef ? null : existingEntrada,
@@ -1417,9 +1797,11 @@ export default function FrequenciaPage() {
           ...(existing?.dados || {}),
           ...(existingEntrada && !isIndef ? { horaEntrada: existingEntrada, horaRegistro: existingEntrada } : {}),
           horarioIndefinido: isIndef,
+          saidaCancelada: false,
           saidaHorario: horaSaida,
           saidaResponsavel: quemRetirou,
           saidaOrigem: 'manual',
+          ...(currentOperatorName ? { saidaUsuario: currentOperatorName } : {}),
           anoLetivo: filtroAno
         }
       }]
@@ -1447,81 +1829,117 @@ export default function FrequenciaPage() {
 
   const handleCancelarSaidaInfantil = async (aluno: any, dia: string) => {
     const aId = String(aluno.id)
+    recentlyCancelledRef.current[`${aId}_${dia}`] = Date.now()
     
-    // 1. Limpa o estado local
+    // 1. Marca explicitamente como cancelada e limpa o estado local de saída
+    setSaidasCanceladas(prev => ({
+      ...prev,
+      [aId]: { ...(prev[aId] || {}), [dia]: true }
+    }))
     setHorariosSaida(prev => {
       const copy = { ...prev }
-      if (copy[aId]) delete copy[aId][dia]
+      if (copy[aId]) {
+        const dayCopy = { ...copy[aId] }
+        delete dayCopy[dia]
+        copy[aId] = dayCopy
+      }
       return copy
     })
     setResponsaveisSaida(prev => {
       const copy = { ...prev }
-      if (copy[aId]) delete copy[aId][dia]
+      if (copy[aId]) {
+        const dayCopy = { ...copy[aId] }
+        delete dayCopy[dia]
+        copy[aId] = dayCopy
+      }
       return copy
     })
 
-    // 2. Persiste a remoção da saída no banco de dados (/api/academico/frequencias)
+    // 2. Persiste a remoção da saída no banco de dados (/api/academico/frequencias) e em /api/saida/calls
     try {
-      const existing = freqTurma?.find(f => String(f.aluno_id) === aId && String(f.data).startsWith(dia))
-      const nowTime = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
-      const currentEntrada = horariosEntrada[aId]?.[dia] || existing?.horaRegistro || nowTime
+      const existing =
+        freqTurma?.find(f => normalizeAlunoIdKey(f.aluno_id || f.alunoId) === normalizeAlunoIdKey(aId) && isSameDay(f.data, dia)) ||
+        combinedFreqs?.find(f => normalizeAlunoIdKey(f.aluno_id || f.alunoId) === normalizeAlunoIdKey(aId) && isSameDay(f.data, dia))
+      const safeExistingId = existing?.id && !String(existing.id).startsWith('CATRACA-') ? existing.id : undefined
+      const existingEntrada = !isRegistroApenasSaida(existing)
+        ? (horariosEntrada[aId]?.[dia] || existing?.dados?.horaEntrada || existing?.horaRegistro || existing?.dados?.horaRegistro || undefined)
+        : undefined
+      const isIndef = existingEntrada === 'indefinido' || Boolean(existing?.dados?.horarioIndefinido || existing?.horarioIndefinido)
 
       const recordToSave = {
-        id: existing?.id,
+        id: safeExistingId,
         alunoId: aluno.id,
-        turmaId: turmaId,
+        turmaId: turmaId || existing?.turma_id || aluno.turma,
         data: dia,
         anoLetivo: filtroAno,
-        presente: true,
+        presente: existing?.presente ?? true,
         justificativa: existing?.justificativa || '',
-        tempos: existing?.tempos || { '1': 'P', '2': 'P', '3': 'P', '4': 'P' },
+        tempos: existing?.tempos || existing?.dados?.tempos || { '1': 'P', '2': 'P', '3': 'P', '4': 'P' },
         notifyPush: false,
-        registradoPor: existing?.registradoPor || 'Manual',
-        origem: existing?.origem || 'manual',
-        horaRegistro: currentEntrada,
+        registradoPor: (!isRegistroApenasSaida(existing) && (existing?.registradoPor || existing?.dados?.registradoPor)) || 'Manual',
+        origem: (!isRegistroApenasSaida(existing) && (existing?.origem || existing?.dados?.origem)) || 'manual',
+        horaRegistro: isIndef ? null : (existingEntrada || null),
+        horaEntrada: isIndef ? null : (existingEntrada || null),
+        horarioIndefinido: isIndef,
         dados: {
           ...(existing?.dados || {}),
+          ...(existingEntrada && !isIndef ? { horaEntrada: existingEntrada, horaRegistro: existingEntrada } : { horaEntrada: null, horaRegistro: null }),
+          horarioIndefinido: isIndef,
+          saidaCancelada: true,
           saidaHorario: null,
           saidaResponsavel: null,
           saidaOrigem: null,
+          saidas: [],
+          totalSaidas: 0,
+          ultimaSaida: null,
+          anoLetivo: filtroAno
         }
       }
 
-      await fetch('/api/academico/frequencias', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify([recordToSave])
-      })
-
-      // 3. Atualiza / cancela o registro no painel de chamadas da portaria e deleta da dita tabela
       const nowIso = new Date().toISOString()
-      await fetch('/api/saida/calls', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: `infantil-${aId}-${dia}`,
-          studentId: aId,
-          studentName: aluno.nome,
-          studentClass: turmaObj?.nome || '',
-          guardianId: 'manual-infantil',
-          guardianName: 'Saída Cancelada',
-          calledAt: nowIso,
-          confirmedAt: null,
-          status: 'cancelled',
-          isRevert: true,
-          source: 'manual'
-        })
-      })
+
+      await Promise.all([
+        fetch('/api/academico/frequencias', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify([recordToSave])
+        }),
+        fetch('/api/saida/calls', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: `infantil-${aId}-${dia}`,
+            studentId: aId,
+            studentName: aluno.nome,
+            studentClass: turmaObj?.nome || '',
+            guardianId: 'manual-infantil',
+            guardianName: 'Saída Cancelada',
+            calledAt: nowIso,
+            confirmedAt: null,
+            status: 'cancelled',
+            isRevert: true,
+            source: 'manual'
+          })
+        }).catch(console.error)
+      ])
 
       await fetch('/api/saida/calls', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: `infantil-${aId}-${dia}` })
+        body: JSON.stringify({
+          id: `infantil-${aId}-${dia}`,
+          studentId: aId,
+          date: dia,
+          cancelStudentDate: true
+        })
       }).catch(console.error)
 
-      if (refetchFreq) refetchFreq()
-      if (refetchAllFreqs) refetchAllFreqs()
-      if (refetchSaidaCalls) refetchSaidaCalls()
+      await Promise.allSettled([
+        refetchFreq ? refetchFreq() : Promise.resolve(),
+        refetchFreqDia ? refetchFreqDia() : Promise.resolve(),
+        refetchAllFreqs ? refetchAllFreqs() : Promise.resolve(),
+        refetchSaidaCalls ? refetchSaidaCalls() : Promise.resolve(),
+      ])
     } catch (err: any) {
       console.error('Erro ao salvar cancelamento de saída:', err)
     }
@@ -1544,6 +1962,7 @@ export default function FrequenciaPage() {
         
         const calc = calcularFrequenciaDia(tempos, schedule.segmento)
         const existing = freqTurma?.find(f => String(f.aluno_id) === String(a.id) && String(f.data).startsWith(dia))
+        const safeExistingId = existing?.id && !String(existing.id).startsWith('CATRACA-') ? existing.id : undefined
         
         const isAllDash = Object.values(tempos).every(v => v === '-')
         if (isAllDash) {
@@ -1569,7 +1988,7 @@ export default function FrequenciaPage() {
               return copy
             })
 
-            const queryParam = `id=${existing?.id || ''}&aluno_id=${a.id}&data=${dia}`
+            const queryParam = `id=${safeExistingId || ''}&aluno_id=${a.id}&data=${dia}`
             deletePromises.push(fetch(`/api/academico/frequencias?${queryParam}`, { method: 'DELETE' }))
           }
           return
@@ -1618,6 +2037,10 @@ export default function FrequenciaPage() {
         const customEntrada = horariosEntrada[String(a.id)]?.[dia]
         const customSaida = horariosSaida[String(a.id)]?.[dia]
         const customRespSaida = responsaveisSaida[String(a.id)]?.[dia]
+        const isSaidaCancelada = Boolean(
+          saidasCanceladas[String(a.id)]?.[dia] ||
+          (!customSaida && (existing?.dados?.saidaCancelada || existing?.saidaCancelada))
+        )
 
         const isHorarioIndefinido =
           calc.presente &&
@@ -1640,7 +2063,7 @@ export default function FrequenciaPage() {
         const hasChanged = !existing || isPresenteDifferent || isJustificativaDifferent || isTemposDifferent
 
         recordsToSave.push({
-          id: existing?.id,
+          id: safeExistingId,
           alunoId: a.id,
           turmaId: turmaId,
           data: dia,
@@ -1659,8 +2082,11 @@ export default function FrequenciaPage() {
             horarioIndefinido: isHorarioIndefinido,
             horaEntrada: finalHoraEntrada,
             horaRegistro: finalHoraEntrada,
-            saidaHorario: customSaida || existing?.dados?.saidaHorario || null,
-            saidaResponsavel: customRespSaida || existing?.dados?.saidaResponsavel || null,
+            saidaCancelada: isSaidaCancelada && !customSaida ? true : false,
+            saidaHorario: isSaidaCancelada && !customSaida ? null : (customSaida || existing?.dados?.saidaHorario || null),
+            saidaResponsavel: isSaidaCancelada && !customSaida ? null : (customRespSaida || existing?.dados?.saidaResponsavel || null),
+            saidaOrigem: isSaidaCancelada && !customSaida ? null : (existing?.dados?.saidaOrigem || null),
+            ...(isSaidaCancelada && !customSaida ? { saidas: [], totalSaidas: 0, ultimaSaida: null } : {}),
           }
         })
       })
@@ -1788,8 +2214,10 @@ export default function FrequenciaPage() {
         }
       }
 
+      const safeManualId = existingFreq?.id && !String(existingFreq.id).startsWith('CATRACA-') ? existingFreq.id : undefined
+
       recordsToSave.push({
-        id: existingFreq?.id,
+        id: safeManualId,
         alunoId: aluno.id,
         turmaId: turmaObj.id,
         data: registroManualData,
@@ -3585,10 +4013,8 @@ export default function FrequenciaPage() {
                 </div>
 
                 {alunoSelObj && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: '#fff', padding: '4px 12px', borderRadius: '8px', border: '1px solid #7dd3fc', alignSelf: 'flex-end', height: '34px' }}>
-                    <div style={{ width: '24px', height: '24px', borderRadius: '50%', background: '#2563eb', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 800 }}>
-                      {getInitials(alunoSelObj.nome)}
-                    </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: '#fff', padding: '4px 12px', borderRadius: '8px', border: '1px solid #7dd3fc', alignSelf: 'flex-end', height: '38px' }}>
+                    {renderStudentAvatar(alunoSelObj, { size: 30, borderRadius: '50%', fontSize: 11, bg: '#2563eb', color: '#fff', border: '1.5px solid #93c5fd' })}
                     <div>
                       <div style={{ fontSize: '12px', fontWeight: 800, color: '#0369a1', lineHeight: '1.2' }}>{alunoSelObj.nome}</div>
                       <div style={{ fontSize: '10px', color: '#64748b', lineHeight: '1' }}>#{alunoSelObj.id} • {alunoSelObj.turma_nome || alunoSelObj.turma}</div>
@@ -3789,9 +4215,15 @@ export default function FrequenciaPage() {
                     {/* Header com Dados do Aluno */}
                     <div style={{ padding: '18px 24px', background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                        <div style={{ width: '50px', height: '50px', borderRadius: '50%', background: a.pctFrequencia === null ? '#f1f5f9' : (a.isCritico ? '#fee2e2' : '#dcfce7'), color: a.pctFrequencia === null ? '#64748b' : (a.isCritico ? '#dc2626' : '#15803d'), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px', fontWeight: 900, border: '2px solid #fff', boxShadow: '0 2px 4px rgba(0,0,0,0.08)' }}>
-                          {getInitials(a.nome)}
-                        </div>
+                        {renderStudentAvatar(a, {
+                          size: 64,
+                          borderRadius: '16px',
+                          fontSize: 20,
+                          bg: a.pctFrequencia === null ? '#f1f5f9' : (a.isCritico ? '#fee2e2' : '#dcfce7'),
+                          color: a.pctFrequencia === null ? '#64748b' : (a.isCritico ? '#dc2626' : '#15803d'),
+                          border: a.isCritico ? '2px solid #fca5a5' : '2px solid #86efac',
+                          turmaLabel: a.turmaNome
+                        })}
                         <div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
                             <span style={{ fontSize: '17px', fontWeight: 800, color: '#0f172a', fontFamily: 'Outfit, sans-serif' }}>{a.nome}</span>
@@ -3897,9 +4329,15 @@ export default function FrequenciaPage() {
                 {reportDataFiltered.map((a: any) => (
                   <div key={a.id} style={{ borderRadius: '14px', border: a.isCritico ? '1px solid #fecdd3' : '1px solid #e2e8f0', background: a.isCritico ? '#fff5f5' : '#fff', padding: '14px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-                      <div style={{ width: '42px', height: '42px', borderRadius: '50%', background: a.isCritico ? '#fee2e2' : '#fef3c7', color: a.isCritico ? '#dc2626' : '#b45309', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: 900 }}>
-                        {getInitials(a.nome)}
-                      </div>
+                      {renderStudentAvatar(a, {
+                        size: 50,
+                        borderRadius: '14px',
+                        fontSize: 16,
+                        bg: a.isCritico ? '#fee2e2' : '#fef3c7',
+                        color: a.isCritico ? '#dc2626' : '#b45309',
+                        border: a.isCritico ? '2px solid #fca5a5' : '2px solid #fde68a',
+                        turmaLabel: a.turmaNome
+                      })}
                       <div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                           <span style={{ fontSize: '15px', fontWeight: 800, color: '#0f172a' }}>{a.nome}</span>
@@ -3982,9 +4420,15 @@ export default function FrequenciaPage() {
                         style={{ padding: '14px 20px', background: isExpanded ? '#f8fafc' : '#fff', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px', transition: 'background 0.2s' }}
                       >
                         <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flex: 1, minWidth: '240px' }}>
-                          <div style={{ width: '38px', height: '38px', borderRadius: '50%', background: a.isCritico ? '#fee2e2' : '#e0f2fe', color: a.isCritico ? '#dc2626' : '#0284c7', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 800 }}>
-                            {getInitials(a.nome)}
-                          </div>
+                          {renderStudentAvatar(a, {
+                            size: 48,
+                            borderRadius: '13px',
+                            fontSize: 15,
+                            bg: a.isCritico ? '#fee2e2' : '#e0f2fe',
+                            color: a.isCritico ? '#dc2626' : '#0284c7',
+                            border: a.isCritico ? '2px solid #fca5a5' : '2px solid #7dd3fc',
+                            turmaLabel: a.turmaNome
+                          })}
                           <div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                               <span style={{ fontSize: '14px', fontWeight: 800, color: '#0f172a' }}>{a.nome}</span>
@@ -4173,16 +4617,14 @@ export default function FrequenciaPage() {
             background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)', color: '#fff',
             display: 'flex', justifyContent: 'space-between', alignItems: 'center'
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <div style={{ background: 'rgba(168, 85, 247, 0.2)', color: '#c026d3', width: '40px', height: '40px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid rgba(192, 38, 211, 0.3)' }}>
-                <LogOut size={20} />
-              </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+              {renderStudentAvatar(aluno, { size: 48, borderRadius: '14px', fontSize: 16, border: '2px solid rgba(192, 38, 211, 0.5)', turmaLabel: turmaObj?.nome })}
               <div>
                 <h3 style={{ margin: 0, fontFamily: 'Outfit, sans-serif', fontSize: '18px', fontWeight: 900, color: '#fff' }}>
                   Confirmar Saída do Aluno
                 </h3>
-                <p style={{ margin: '2px 0 0', fontSize: '12px', color: '#cbd5e1' }}>
-                  {aluno.nome} ({turmaObj?.nome || ''})
+                <p style={{ margin: '2px 0 0', fontSize: '13px', color: '#e2e8f0', fontWeight: 600 }}>
+                  {aluno.nome} {turmaObj?.nome ? `(${turmaObj.nome})` : ''}
                 </p>
               </div>
             </div>
@@ -4401,14 +4843,7 @@ export default function FrequenciaPage() {
           boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)', overflow: 'hidden', border: '1px solid #e2e8f0'
         }}>
           <div style={{ padding: '28px 28px 20px 28px', display: 'flex', alignItems: 'flex-start', gap: '16px' }}>
-            <div style={{
-              width: '48px', height: '48px', borderRadius: '14px',
-              background: '#fee2e2', color: '#dc2626',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-              boxShadow: '0 4px 12px rgba(220, 38, 38, 0.15)'
-            }}>
-              <AlertTriangle size={24} />
-            </div>
+            {renderStudentAvatar(aluno, { size: 52, borderRadius: '14px', fontSize: 17, border: '2px solid #fca5a5', bg: '#fee2e2', color: '#dc2626', turmaLabel: turmaObj?.nome })}
             <div>
               <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 800, color: '#0f172a', fontFamily: 'Outfit, sans-serif' }}>
                 Cancelar Registro de Saída
@@ -4776,9 +5211,7 @@ export default function FrequenciaPage() {
                           <div key={aluno.id} style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', padding: '14px 18px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '14px', gap: '16px', boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}>
                             {/* Dados do Aluno */}
                             <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flex: '1', minWidth: '220px' }}>
-                              <div style={{ width: '40px', height: '40px', background: 'linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%)', color: '#0369a1', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '14px', boxShadow: '0 2px 4px rgba(3, 105, 161, 0.1)' }}>
-                                {getInitials(aluno.nome)}
-                              </div>
+                              {renderStudentAvatar(aluno, { size: 54, borderRadius: '14px', fontSize: 17, turmaLabel: turmaNome })}
                               <div>
                                 <div style={{ fontWeight: 700, fontSize: '15px', color: '#0f172a' }}>{aluno.nome}</div>
                                 <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px', marginBottom: '4px' }}>
@@ -5652,9 +6085,9 @@ export default function FrequenciaPage() {
                           <p style={{ fontSize: '14px', fontWeight: 600, color: '#0f172a', margin: 0 }}>{turma.nome}</p>
                           <p style={{ fontSize: '12px', color: '#64748b', margin: 0 }}>{turma.serie} • {turma.turno}</p>
                           {alunosMatchBusca.length > 0 && (
-                            <div style={{ marginTop: '6px', display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
-                              <span style={{ fontSize: '11px', background: '#dbeafe', color: '#1d4ed8', border: '1px solid #bfdbfe', padding: '2px 8px', borderRadius: '6px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                                <User size={12} />
+                            <div style={{ marginTop: '6px', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                              <span style={{ fontSize: '11px', background: '#dbeafe', color: '#1d4ed8', border: '1px solid #bfdbfe', padding: '3px 9px', borderRadius: '8px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                                {renderStudentAvatar(alunosMatchBusca[0], { size: 24, borderRadius: '50%', fontSize: 9, border: '1.5px solid #93c5fd', turmaLabel: turma.nome })}
                                 {alunosMatchBusca.length === 1
                                   ? `Aluno: ${alunosMatchBusca[0].nome}`
                                   : `Alunos (${alunosMatchBusca.length}): ${alunosMatchBusca.map((a: any) => a.nome).slice(0, 2).join(', ')}${alunosMatchBusca.length > 2 ? '...' : ''}`}
@@ -5717,6 +6150,7 @@ export default function FrequenciaPage() {
         {renderRelatorioModal()}
         {renderRegistroManualModal()}
         {renderSaidaModal()}
+        {renderPhotoPreviewModal()}
         <SyncAcessosModal 
           isOpen={showAcessosModal} 
           onClose={() => setShowAcessosModal(false)}
@@ -6005,7 +6439,10 @@ export default function FrequenciaPage() {
                 const freqRecordDia = combinedFreqs?.find(f => normalizeAlunoIdKey(f.aluno_id || f.alunoId) === normalizeAlunoIdKey(aluno.id) && isSameDay(f.data, dataSel))
                 const status1 = getStatus(aluno.id, dataSel, '1')
                 const isStatusDash = status1 === '-'
-                const isSaidaCleared = horariosSaida[aluno.id] !== undefined && !horariosSaida[aluno.id]?.[dataSel]
+                const isSaidaCleared = Boolean(
+                  saidasCanceladas[aluno.id]?.[dataSel] ||
+                  (!horariosSaida[aluno.id]?.[dataSel] && (freqRecordDia?.dados?.saidaCancelada || freqRecordDia?.saidaCancelada))
+                )
 
                 const origemInfoCompleta = getOrigemFrequenciaCompleta(
                   aluno.id,
@@ -6014,23 +6451,21 @@ export default function FrequenciaPage() {
                   portariaEventsList,
                   saidaCallsList,
                   horariosEntrada[aluno.id]?.[dataSel],
-                  horariosSaida[aluno.id]?.[dataSel],
-                  responsaveisSaida[aluno.id]?.[dataSel],
+                  isSaidaCleared ? undefined : horariosSaida[aluno.id]?.[dataSel],
+                  isSaidaCleared ? undefined : responsaveisSaida[aluno.id]?.[dataSel],
                   isStatusDash,
                   isSaidaCleared
                 )
 
                 return (
                   <tr key={aluno.id} style={{ background: '#fff', transition: 'all 0.2s' }}>
-                    {/* Nome do Aluno */}
-                    <td style={{ padding: '10px 12px', borderTop: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9', borderLeft: '1px solid #f1f5f9', borderTopLeftRadius: '10px', borderBottomLeftRadius: '10px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <div style={{ width: '32px', height: '32px', minWidth: '32px', background: 'linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%)', color: '#0369a1', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '12px' }}>
-                          {getInitials(aluno.nome)}
-                        </div>
+                    {/* Nome e Foto do Aluno */}
+                    <td style={{ padding: '12px 14px', borderTop: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9', borderLeft: '1px solid #f1f5f9', borderTopLeftRadius: '12px', borderBottomLeftRadius: '12px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                        {renderStudentAvatar(aluno, { size: 56, borderRadius: '14px', fontSize: 18, turmaLabel: turmaObj?.nome })}
                         <div>
-                          <p style={{ fontSize: '13.5px', fontWeight: 600, color: '#0f172a', margin: 0, lineHeight: '1.2' }}>{aluno.nome}</p>
-                          <p style={{ fontSize: '11px', color: '#64748b', margin: '2px 0 2px 0' }}>ID: {aluno.id} • {turmaObj?.nome} ({turmaObj?.turno})</p>
+                          <p style={{ fontSize: '15px', fontWeight: 700, color: '#0f172a', margin: 0, lineHeight: '1.25' }}>{aluno.nome}</p>
+                          <p style={{ fontSize: '11.5px', color: '#64748b', margin: '3px 0 4px 0', fontWeight: 500 }}>ID: {aluno.id} • {turmaObj?.nome} ({turmaObj?.turno})</p>
                           <div style={{ marginTop: '2px' }}>
                             <OrigemBadgePair infoCompleta={origemInfoCompleta} compact />
                           </div>
@@ -6241,8 +6676,12 @@ export default function FrequenciaPage() {
                     <td style={{ padding: '10px 6px', textAlign: 'center', borderTop: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9', borderRight: '1px solid #f1f5f9', borderTopRightRadius: '10px', borderBottomRightRadius: '10px' }}>
                       {diasPeriodo.map(dia => {
                         const status1 = getStatus(aluno.id, dia, '1')
-                        const hSaida = horariosSaida[aluno.id]?.[dia] || origemInfoCompleta.saida?.horario
-                        const rSaida = responsaveisSaida[aluno.id]?.[dia] || origemInfoCompleta.saida?.responsavel
+                        const isDiaSaidaCleared = Boolean(
+                          saidasCanceladas[aluno.id]?.[dia] ||
+                          (!horariosSaida[aluno.id]?.[dia] && (freqRecordDia?.dados?.saidaCancelada || freqRecordDia?.saidaCancelada))
+                        )
+                        const hSaida = isDiaSaidaCleared ? undefined : (horariosSaida[aluno.id]?.[dia] || origemInfoCompleta.saida?.horario)
+                        const rSaida = isDiaSaidaCleared ? undefined : (responsaveisSaida[aluno.id]?.[dia] || origemInfoCompleta.saida?.responsavel)
 
                         if (hSaida && rSaida) {
                           return (
@@ -6331,6 +6770,7 @@ export default function FrequenciaPage() {
       {renderRegistroManualModal()}
       {renderSaidaModal()}
       {renderConfirmCancelSaidaModal()}
+      {renderPhotoPreviewModal()}
       <SyncAcessosModal 
         isOpen={showAcessosModal} 
         onClose={() => setShowAcessosModal(false)}

@@ -106,6 +106,62 @@ export async function GET(request: Request) {
 
   try {
     const url = new URL(request.url)
+
+    // Fast-path para buscar apenas fotos/avatares de um conjunto de alunos por ID/matrícula
+    if (url.searchParams.get('photosOnly') === 'true') {
+      const idsParam = url.searchParams.get('ids') || ''
+      const rawIds = Array.from(new Set(
+        idsParam
+          .split(',')
+          .flatMap(s => {
+            const clean = s.trim()
+            if (!clean) return []
+            const unpadded = clean.replace(/^0+/, '') || clean
+            return [clean, unpadded]
+          })
+          .filter(Boolean)
+      ))
+
+      if (rawIds.length === 0) {
+        return NextResponse.json({ photos: {} })
+      }
+
+      const allowedSet = !isStaff ? await getAuthorizedAlunoIdsForUser(user) : null
+      const filteredIds = (!isStaff && allowedSet)
+        ? rawIds.filter(id => allowedSet.has(id) || allowedSet.has(id.replace(/^0+/, '')))
+        : rawIds
+
+      if (filteredIds.length === 0) {
+        return NextResponse.json({ photos: {} })
+      }
+
+      const photos: Record<string, string> = {}
+      const CHUNK_SIZE = 60
+      for (let i = 0; i < filteredIds.length; i += CHUNK_SIZE) {
+        const chunk = filteredIds.slice(i, i + CHUNK_SIZE)
+        const { data: rows } = await supabase
+          .from('alunos')
+          .select('id, matricula, foto, foto_url, dados_foto:dados->>foto, dados_avatar:dados->>avatarUrl, dados_foto_url:dados->>fotoUrl')
+          .in('id', chunk)
+
+        for (const r of (rows || [])) {
+          const candidate = r.foto || r.foto_url || (r as any).dados_foto || (r as any).dados_avatar || (r as any).dados_foto_url || null
+          if (isValidStudentPhoto(candidate)) {
+            const idStr = String(r.id).trim()
+            const normId = idStr.replace(/^0+/, '') || idStr
+            photos[idStr] = candidate
+            photos[normId] = candidate
+            if (r.matricula) {
+              const matStr = String(r.matricula).trim()
+              if (matStr) photos[matStr] = candidate
+            }
+          }
+        }
+      }
+
+      return NextResponse.json({ photos })
+    }
+
     const pageParam = url.searchParams.get('page')
     const limitParam = url.searchParams.get('limit')
     // Removemos fallback oculto; agora sempre paginado a menos que force explicitamente, mas limitado.

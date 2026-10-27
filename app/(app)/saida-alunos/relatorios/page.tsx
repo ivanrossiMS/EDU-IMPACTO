@@ -1,6 +1,7 @@
 'use client'
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { SaidaProvider, useSaida } from '@/lib/saidaContext'
+import { useApp } from '@/lib/context'
 import { DataProvider } from '@/lib/dataContext'
 import { useIsMobile } from '@/lib/hooks/useIsMobile'
 import { useSupabaseArray } from '@/lib/useSupabaseCollection'
@@ -10,7 +11,7 @@ import * as XLSX from 'xlsx'
 import {
   Download, FileText, Filter, Calendar, Clock, GraduationCap,
   Users, WifiOff, UserCheck, ShieldOff, AlertTriangle, XCircle,
-  Search, ChevronDown, Wifi
+  Search, ChevronDown, Wifi, User, X
 } from 'lucide-react'
 
 // ── Helper functions ──
@@ -98,7 +99,108 @@ function normalizeDay(day: string): string {
 
 const STATUS_LABEL: Record<string, string> = {
   waiting: 'Aguardando', called: 'Chamado', confirmed: 'Confirmado',
-  cancelled: 'Cancelado', recalled: 'Rechamado',
+  cancelled: 'Cancelado', recalled: 'Rechamado', special_auth: 'Aut. Especial',
+  blocked: 'Bloqueado',
+}
+
+function resolveOriginDetails(c: any) {
+  const isRfid =
+    c.source === 'rfid' ||
+    String(c.guardianId || '').startsWith('rfid-') ||
+    Boolean(c.rfidCode)
+  const isCatraca =
+    c.source === 'catraca' ||
+    c.guardianId === 'catraca-saida' ||
+    c.origem === 'catraca_idface' ||
+    String(c.id || '').startsWith('saida-catraca-') ||
+    String(c.id || '').startsWith('catraca-saida-') ||
+    Boolean(c.dispositivoNome) ||
+    String(c.guardianName || '').toLowerCase().includes('catraca') ||
+    String(c.guardianName || '').toLowerCase().includes('rua das garças')
+  const isSpecialAuth =
+    c.status === 'special_auth' ||
+    c.guardianId === 'special' ||
+    c.guardianId === 'special-auth'
+  const isDiarioManual =
+    c.guardianId === 'manual-infantil' ||
+    c.guardianId === 'frequencia-diario' ||
+    c.source === 'frequencia' ||
+    String(c.id || '').startsWith('infantil-') ||
+    String(c.id || '').startsWith('freq-saida-')
+  const isAgendaDigitalCall =
+    c.source === 'agenda_digital' ||
+    c.guardianId === 'usr-fam' ||
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(c.guardianId || '').trim())
+  const isSoloPortaria =
+    !isCatraca && (c.guardianId === 'sozinho' || c.tipo === 'sozinho')
+
+  const rawUser =
+    c.authorizedBy ||
+    c.operatorId ||
+    c.confirmedBy ||
+    c.saidaUsuario ||
+    ''
+  const cleanUser = typeof rawUser === 'string' ? rawUser.trim() : ''
+  const cleanGuardian = typeof c.guardianName === 'string' ? c.guardianName.trim() : ''
+
+  let userLabel = ''
+  if (isCatraca) {
+    userLabel = cleanUser
+      ? `${cleanUser} (Autorização Especial)`
+      : 'Ficha do Aluno — Autorizado a Sair Sozinho (Biometria iDFace)'
+  } else if (isRfid) {
+    userLabel = `${cleanGuardian ? `${cleanGuardian} · ` : ''}Cartão RFID${c.rfidCode ? ` (${c.rfidCode})` : ''}`
+  } else if (isAgendaDigitalCall) {
+    userLabel = cleanUser || (cleanGuardian ? `${cleanGuardian} (App Agenda Digital)` : 'Responsável (App Agenda Digital)')
+  } else if (isSoloPortaria) {
+    userLabel = cleanUser || 'Ficha do Aluno — Autorizado a Sair Sozinho (Portaria)'
+  } else {
+    userLabel = cleanUser || (cleanGuardian ? `${cleanGuardian} (Responsável Autorizado · Portaria)` : 'Portaria')
+  }
+
+  let originTypeLabel = 'Chamada Manual (Portaria)'
+  if (isRfid) originTypeLabel = `Cartão RFID${c.rfidCode ? ` · Tag ${c.rfidCode}` : ''}`
+  else if (isCatraca) originTypeLabel = `Catraca Biométrica iDFace${c.dispositivoNome ? ` (${c.dispositivoNome})` : ''}`
+  else if (isSpecialAuth) originTypeLabel = 'Autorização Especial de Saída'
+  else if (isAgendaDigitalCall) originTypeLabel = 'Chamada pelo App Agenda Digital'
+  else if (isDiarioManual) originTypeLabel = 'Lançamento Manual (Diário / Infantil)'
+
+  let badgeText = '🖱 Manual'
+  let badgeBg = 'rgba(167,139,250,0.1)'
+  let badgeColor = '#a78bfa'
+  let badgeBorder = 'rgba(167,139,250,0.28)'
+  if (isRfid) {
+    badgeText = '📡 RFID'
+    badgeBg = 'rgba(6,182,212,0.1)'
+    badgeColor = '#06b6d4'
+    badgeBorder = 'rgba(6,182,212,0.28)'
+  } else if (isCatraca) {
+    badgeText = '🤖 Catraca'
+    badgeBg = 'rgba(16,185,129,0.1)'
+    badgeColor = '#10b981'
+    badgeBorder = 'rgba(16,185,129,0.28)'
+  } else if (isAgendaDigitalCall) {
+    badgeText = '📱 App'
+    badgeBg = 'rgba(59,130,246,0.1)'
+    badgeColor = '#3b82f6'
+    badgeBorder = 'rgba(59,130,246,0.28)'
+  }
+
+  return {
+    isRfid,
+    isCatraca,
+    isSpecialAuth,
+    isDiarioManual,
+    isAgendaDigitalCall,
+    hasExplicitUser: Boolean(cleanUser || isAgendaDigitalCall || isRfid || isCatraca),
+    userLabel,
+    confirmedBy: typeof c.confirmedBy === 'string' && c.confirmedBy.trim() ? c.confirmedBy.trim() : undefined,
+    originTypeLabel,
+    badgeText,
+    badgeBg,
+    badgeColor,
+    badgeBorder,
+  }
 }
 
 const DIAS_SEMANA = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb']
@@ -131,8 +233,20 @@ interface AlunoRow {
 // ─────────────────────────────────────────────────────────────────────────────
 function TabHistoricoChamadas() {
   const { logs } = useSaida()
+  const { currentUser } = useApp()
   const isMobile = useIsMobile()
   const [turmas] = useSupabaseArray<any>('turmas');
+  const loggedUserName = useMemo(() => {
+    if (currentUser?.nome && currentUser.nome.trim()) return currentUser.nome.trim()
+    try {
+      const raw = typeof window !== 'undefined' ? window.localStorage.getItem('edu-current-user') : null
+      if (raw) {
+        const parsed = JSON.parse(raw)
+        if (parsed?.nome) return String(parsed.nome).trim()
+      }
+    } catch {}
+    return ''
+  }, [currentUser?.nome])
   
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo]   = useState('')
@@ -151,6 +265,30 @@ function TabHistoricoChamadas() {
   
   const [historicoCalls, setHistoricoCalls] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(false)
+  const [expandedOriginIds, setExpandedOriginIds] = useState<Record<string, boolean>>({})
+  const [activeOriginPopover, setActiveOriginPopover] = useState<{
+    call: any
+    top: number
+    left: number
+  } | null>(null)
+
+  useEffect(() => {
+    if (!activeOriginPopover) return
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setActiveOriginPopover(null)
+    }
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement | null
+      if (target?.closest('[data-origin-popover]') || target?.closest('[data-origin-trigger]')) return
+      setActiveOriginPopover(null)
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    window.addEventListener('mousedown', handleClickOutside)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+      window.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [activeOriginPopover])
 
   const getTurmaNome = (id: string) => {
     return (turmas || []).find((t: any) => String(t.id) === String(id))?.nome || id
@@ -158,17 +296,101 @@ function TabHistoricoChamadas() {
 
   const filtered = useMemo(() => {
     if (!hasSearched) return []
-    return (historicoCalls || []).filter(c => {
-      if (appliedFilters.searchStudent && !c.studentName.toLowerCase().includes(appliedFilters.searchStudent.toLowerCase())) return false
-      if (appliedFilters.searchGuardian && !c.guardianName.toLowerCase().includes(appliedFilters.searchGuardian.toLowerCase())) return false
-      if (appliedFilters.statusFilter && c.status !== appliedFilters.statusFilter) return false
-      return true
-    }).sort((a, b) => parseTimeMs(b.calledAt) - parseTimeMs(a.calledAt))
+    const all = historicoCalls || []
+    // Vincula apenas autorizações especiais (special_auth) do mesmo aluno na mesma data
+    const specialAuthByStudentDate = new Map<string, string>()
+    for (const item of all) {
+      const sId = item?.studentId ? String(item.studentId).trim() : ''
+      const isSpecial =
+        item?.status === 'special_auth' ||
+        item?.guardianId === 'special' ||
+        item?.guardianId === 'special-auth'
+      const op = item?.authorizedBy || item?.operatorId
+      if (sId && isSpecial && typeof op === 'string' && op.trim()) {
+        const cleanOp = op.trim()
+        const dtKey = fmtOnlyDate(item.calledAt || item.confirmedAt)
+        specialAuthByStudentDate.set(`${sId}_${dtKey}`, cleanOp)
+        if (!specialAuthByStudentDate.has(sId)) {
+          specialAuthByStudentDate.set(sId, cleanOp)
+        }
+      }
+    }
+
+    const seenIds = new Set<string>()
+    return all
+      .map(c => {
+        const sId = c?.studentId ? String(c.studentId).trim() : ''
+        const dtKey = fmtOnlyDate(c.calledAt || c.confirmedAt)
+        const isRfid =
+          c.source === 'rfid' ||
+          String(c.guardianId || '').startsWith('rfid-') ||
+          Boolean(c.rfidCode)
+        const isCatraca =
+          c.source === 'catraca' ||
+          c.guardianId === 'catraca-saida' ||
+          c.origem === 'catraca_idface' ||
+          String(c.id || '').startsWith('saida-catraca-') ||
+          String(c.id || '').startsWith('catraca-saida-') ||
+          Boolean(c.dispositivoNome) ||
+          String(c.guardianName || '').toLowerCase().includes('catraca') ||
+          String(c.guardianName || '').toLowerCase().includes('rua das garças')
+        const isAgendaDigitalCall =
+          c.source === 'agenda_digital' ||
+          c.guardianId === 'usr-fam' ||
+          /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(c.guardianId || '').trim())
+
+        const specialOp = sId ? (specialAuthByStudentDate.get(`${sId}_${dtKey}`) || specialAuthByStudentDate.get(sId)) : undefined
+
+        if (!c.operatorId && !c.authorizedBy) {
+          if (isCatraca || isRfid) {
+            if (specialOp) return { ...c, authorizedBy: specialOp }
+            return c
+          }
+          if (isAgendaDigitalCall) {
+            const famLabel = c.guardianName ? `${String(c.guardianName).trim()} (App Agenda Digital)` : undefined
+            if (famLabel) return { ...c, operatorId: famLabel, authorizedBy: famLabel }
+            return c
+          }
+          if (specialOp) {
+            return { ...c, operatorId: specialOp, authorizedBy: specialOp }
+          }
+        }
+        return c
+      })
+      .filter(c => {
+        const idStr = String(c.id || '')
+        if (idStr) {
+          if (seenIds.has(idStr)) return false
+          seenIds.add(idStr)
+        }
+        if (appliedFilters.searchStudent && !String(c.studentName || '').toLowerCase().includes(appliedFilters.searchStudent.toLowerCase())) return false
+        if (appliedFilters.searchGuardian && !String(c.guardianName || '').toLowerCase().includes(appliedFilters.searchGuardian.toLowerCase())) return false
+        if (appliedFilters.statusFilter && c.status !== appliedFilters.statusFilter) return false
+        return true
+      })
+      .sort((a, b) => parseTimeMs(b.calledAt) - parseTimeMs(a.calledAt))
   }, [historicoCalls, appliedFilters, hasSearched])
+
+  const handleOriginClick = (e: React.MouseEvent<HTMLElement>, c: any) => {
+    e.stopPropagation()
+    const idKey = String(c.id)
+    setExpandedOriginIds(prev => ({ ...prev, [idKey]: !prev[idKey] }))
+    if (activeOriginPopover?.call?.id === c.id) {
+      setActiveOriginPopover(null)
+      return
+    }
+    const rect = e.currentTarget.getBoundingClientRect()
+    const popWidth = 300
+    const safeLeft = Math.max(12, Math.min(window.innerWidth - popWidth - 12, rect.left + rect.width / 2 - popWidth / 2))
+    const spaceBelow = window.innerHeight - rect.bottom
+    const safeTop = spaceBelow < 210 ? Math.max(12, rect.top - 185) : rect.bottom + 8
+    setActiveOriginPopover({ call: c, top: safeTop, left: safeLeft })
+  }
 
   const handleBuscar = async () => {
     setIsLoading(true)
     setHasSearched(true)
+    setActiveOriginPopover(null)
     setAppliedFilters({ dateFrom, dateTo, searchStudent, searchGuardian, statusFilter })
     
     try {
@@ -192,17 +414,21 @@ function TabHistoricoChamadas() {
   }
 
   const exportExcel = () => {
-    const rows = filtered.map(c => ({
-      'Data':         fmtOnlyDate(c.calledAt),
-      'Aluno':        c.studentName,
-      'Turma':        getTurmaNome(c.studentClass),
-      'Responsável':  c.guardianName,
-      'Origem':       c.source === 'rfid' ? 'RFID' : 'Manual',
-      'RFID':         c.rfidCode ?? '—',
-      'Chamado em':   fmtTime(c.calledAt),
-      'Confirmado em':fmtTime(c.confirmedAt),
-      'Status':       STATUS_LABEL[c.status] ?? c.status,
-    }))
+    const rows = filtered.map(c => {
+      const orig = resolveOriginDetails(c)
+      return {
+        'Data':           fmtOnlyDate(c.calledAt),
+        'Aluno':          c.studentName,
+        'Turma':          getTurmaNome(c.studentClass),
+        'Responsável':    c.guardianName,
+        'Origem':         orig.originTypeLabel,
+        'Autorizado por': orig.userLabel,
+        'RFID':           c.rfidCode ?? '—',
+        'Chamado em':     fmtTime(c.calledAt),
+        'Confirmado em':  fmtTime(c.confirmedAt),
+        'Status':         STATUS_LABEL[c.status] ?? c.status,
+      }
+    })
     const ws = XLSX.utils.json_to_sheet(rows)
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Saída de Alunos')
@@ -210,10 +436,11 @@ function TabHistoricoChamadas() {
   }
 
   const exportCSV = () => {
-    const header = 'Data,Aluno,Turma,Responsável,Origem,Chamado em,Confirmado em,Status\n'
-    const rows = filtered.map(c =>
-      `"${fmtOnlyDate(c.calledAt)}","${c.studentName}","${getTurmaNome(c.studentClass)}","${c.guardianName}","${c.source === 'rfid' ? 'RFID' : 'Manual'}","${fmtTime(c.calledAt)}","${fmtTime(c.confirmedAt)}","${STATUS_LABEL[c.status] ?? c.status}"`
-    ).join('\n')
+    const header = 'Data,Aluno,Turma,Responsável,Origem,Autorizado por,Chamado em,Confirmado em,Status\n'
+    const rows = filtered.map(c => {
+      const orig = resolveOriginDetails(c)
+      return `"${fmtOnlyDate(c.calledAt)}","${c.studentName}","${getTurmaNome(c.studentClass)}","${c.guardianName}","${orig.originTypeLabel}","${orig.userLabel}","${fmtTime(c.calledAt)}","${fmtTime(c.confirmedAt)}","${STATUS_LABEL[c.status] ?? c.status}"`
+    }).join('\n')
     const blob = new Blob([header + rows], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a'); a.href = url; a.download = 'relatorio-saida.csv'; a.click()
@@ -314,10 +541,12 @@ function TabHistoricoChamadas() {
             <div style={{ textAlign: 'center', padding: '40px', color: 'hsl(var(--text-muted))', fontSize: 13 }}>
               Nenhum registro encontrado
             </div>
-          ) : filtered.map(c => {
+          ) : filtered.map((c, idx) => {
             const statusColor = ({ confirmed: '#10b981', cancelled: '#ef4444', waiting: '#f59e0b', called: '#f59e0b', recalled: '#f59e0b' } as Record<string,string>)[c.status] ?? '#64748b'
+            const orig = resolveOriginDetails(c)
+            const isExpanded = Boolean(expandedOriginIds[String(c.id)])
             return (
-              <div key={c.id} style={{ background: 'hsl(var(--bg-elevated))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 14, padding: '14px 16px', borderLeft: `4px solid ${statusColor}` }}>
+              <div key={`${c.id}-${idx}`} style={{ background: 'hsl(var(--bg-elevated))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 14, padding: '14px 16px', borderLeft: `4px solid ${statusColor}` }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
                   <div style={{ fontWeight: 800, fontSize: 14, color: 'hsl(var(--text-primary))' }}>{c.studentName}</div>
                   <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 100, background: `${statusColor}14`, color: statusColor, border: `1px solid ${statusColor}30`, fontWeight: 800, flexShrink: 0 }}>
@@ -330,12 +559,34 @@ function TabHistoricoChamadas() {
                     <Calendar size={11} color="#06b6d4" />
                     {fmtOnlyDate(c.calledAt)}
                   </span>
-                  <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 100, background: c.source === 'rfid' ? 'rgba(6,182,212,0.1)' : 'rgba(167,139,250,0.1)', color: c.source === 'rfid' ? '#06b6d4' : '#a78bfa', fontWeight: 700 }}>
-                    {c.source === 'rfid' ? '📡 RFID' : '🖱 Manual'}
-                  </span>
+                  <button
+                    type="button"
+                    data-origin-trigger="true"
+                    onClick={(e) => handleOriginClick(e, c)}
+                    title="Clique para ver qual usuário fez a autorização"
+                    style={{
+                      fontSize: 10, padding: '2px 8px', borderRadius: 100,
+                      background: orig.badgeBg,
+                      color: orig.badgeColor,
+                      border: `1px solid ${orig.badgeBorder}`,
+                      fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4
+                    }}
+                  >
+                    {orig.badgeText}
+                  </button>
                   <span style={{ fontSize: 11, fontFamily: 'monospace', color: 'hsl(var(--text-muted))', padding: '2px 4px' }}>{fmtTime(c.calledAt)}</span>
                   {c.confirmedAt && <span style={{ fontSize: 11, fontFamily: 'monospace', color: '#10b981', fontWeight: 700, padding: '2px 4px' }}>→ {fmtTime(c.confirmedAt)}</span>}
                 </div>
+                {isExpanded && (
+                  <div style={{
+                    marginTop: 8, padding: '7px 10px', borderRadius: 8,
+                    background: 'rgba(167,139,250,0.08)', border: '1px solid rgba(167,139,250,0.22)',
+                    fontSize: 11, color: 'hsl(var(--text-primary))', display: 'flex', alignItems: 'center', gap: 6
+                  }}>
+                    <User size={12} color="#a78bfa" style={{ flexShrink: 0 }} />
+                    <span><strong>Autorizado por:</strong> {orig.userLabel}</span>
+                  </div>
+                )}
               </div>
             )
           })}
@@ -363,7 +614,7 @@ function TabHistoricoChamadas() {
                 <th style={{ width: '18%', padding: '12px 14px', textAlign: 'left', fontSize: 10, fontWeight: 800, color: 'hsl(var(--text-muted))', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
                   Responsável
                 </th>
-                <th style={{ width: '10%', padding: '12px 14px', textAlign: 'center', fontSize: 10, fontWeight: 800, color: 'hsl(var(--text-muted))', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                <th title="Clique na origem de um aluno para ver qual usuário realizou a autorização" style={{ width: '10%', padding: '12px 14px', textAlign: 'center', fontSize: 10, fontWeight: 800, color: 'hsl(var(--text-muted))', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
                   Origem
                 </th>
                 <th style={{ width: '8%', padding: '12px 14px', textAlign: 'center', fontSize: 10, fontWeight: 800, color: 'hsl(var(--text-muted))', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
@@ -386,8 +637,11 @@ function TabHistoricoChamadas() {
                 </tr>
               ) : filtered.map((c, i) => {
                 const statusColor = ({ confirmed: '#10b981', cancelled: '#ef4444', waiting: '#f59e0b', called: '#f59e0b', recalled: '#f59e0b' } as Record<string,string>)[c.status] ?? '#64748b'
+                const orig = resolveOriginDetails(c)
+                const isExpanded = Boolean(expandedOriginIds[String(c.id)])
+                const isPopoverActive = String(activeOriginPopover?.call?.id ?? '') === String(c.id)
                 return (
-                  <tr key={c.id} style={{
+                  <tr key={`${c.id}-${i}`} style={{
                     borderBottom: '1px solid hsl(var(--border-subtle))',
                     background: i % 2 === 0 ? 'transparent' : 'hsl(var(--bg-overlay) / 0.4)',
                     transition: 'background 0.15s ease'
@@ -427,16 +681,44 @@ function TabHistoricoChamadas() {
                     </td>
 
                     {/* ORIGEM */}
-                    <td style={{ padding: '12px 14px', width: '10%', whiteSpace: 'nowrap', textAlign: 'center' }}>
-                      <span style={{
-                        fontSize: 10, padding: '3px 8px', borderRadius: 100, fontWeight: 700,
-                        background: c.source === 'rfid' ? 'rgba(6,182,212,0.1)' : 'rgba(167,139,250,0.1)',
-                        color: c.source === 'rfid' ? '#06b6d4' : '#a78bfa',
-                        border: `1px solid ${c.source === 'rfid' ? 'rgba(6,182,212,0.25)' : 'rgba(167,139,250,0.25)'}`,
-                        display: 'inline-block'
-                      }}>
-                        {c.source === 'rfid' ? '📡 RFID' : '🖱 Manual'}
-                      </span>
+                    <td
+                      data-origin-trigger="true"
+                      onClick={(e) => handleOriginClick(e, c)}
+                      title="Clique para ver qual usuário fez a autorização"
+                      style={{
+                        padding: '10px 10px', width: '10%', textAlign: 'center',
+                        cursor: 'pointer', userSelect: 'none'
+                      }}
+                    >
+                      <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: 4, maxWidth: '100%' }}>
+                        <span style={{
+                          fontSize: 10, padding: '3px 8px', borderRadius: 100, fontWeight: 700,
+                          background: orig.badgeBg,
+                          color: orig.badgeColor,
+                          border: `1px solid ${isPopoverActive ? orig.badgeColor : orig.badgeBorder}`,
+                          boxShadow: isPopoverActive ? `0 0 0 2px ${orig.badgeBorder}` : 'none',
+                          display: 'inline-flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap',
+                          transition: 'all 0.15s ease'
+                        }}>
+                          {orig.badgeText}
+                        </span>
+                        {isExpanded && (
+                          <span
+                            title={orig.userLabel}
+                            style={{
+                              fontSize: 9, fontWeight: 700, color: orig.hasExplicitUser ? '#7c3aed' : 'hsl(var(--text-muted))',
+                              background: orig.hasExplicitUser ? 'rgba(124,58,237,0.1)' : 'hsl(var(--bg-overlay))',
+                              border: `1px solid ${orig.hasExplicitUser ? 'rgba(124,58,237,0.25)' : 'hsl(var(--border-subtle))'}`,
+                              borderRadius: 6, padding: '2px 6px', maxWidth: '100%',
+                              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                              display: 'inline-flex', alignItems: 'center', gap: 3
+                            }}
+                          >
+                            <User size={9} style={{ flexShrink: 0 }} />
+                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{orig.userLabel}</span>
+                          </span>
+                        )}
+                      </div>
                     </td>
 
                     {/* CHAMADO */}
@@ -476,6 +758,103 @@ function TabHistoricoChamadas() {
           </table>
         </div>
       )}
+
+      {/* Popover de Detalhes da Autorização / Origem */}
+      {activeOriginPopover && (() => {
+        const call = activeOriginPopover.call
+        const orig = resolveOriginDetails(call)
+        return (
+          <div
+            data-origin-popover="true"
+            style={{
+              position: 'fixed',
+              top: activeOriginPopover.top,
+              left: activeOriginPopover.left,
+              width: 310,
+              zIndex: 9999,
+              background: 'hsl(var(--bg-elevated))',
+              border: '1px solid hsl(var(--border-subtle))',
+              borderRadius: 14,
+              padding: '14px 16px',
+              boxShadow: '0 14px 36px -6px rgba(0,0,0,0.22), 0 4px 12px -2px rgba(0,0,0,0.1)',
+              color: 'hsl(var(--text-primary))'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, paddingBottom: 8, borderBottom: '1px solid hsl(var(--border-subtle))' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                <div style={{
+                  width: 26, height: 26, borderRadius: 8,
+                  background: orig.isRfid ? 'rgba(6,182,212,0.14)' : 'rgba(167,139,250,0.14)',
+                  color: orig.isRfid ? '#06b6d4' : '#a78bfa',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center'
+                }}>
+                  <User size={14} />
+                </div>
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 800, color: 'hsl(var(--text-primary))', lineHeight: 1.2 }}>
+                    Detalhes da Autorização
+                  </div>
+                  <div style={{ fontSize: 10, color: 'hsl(var(--text-muted))' }}>
+                    {orig.originTypeLabel}
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActiveOriginPopover(null)}
+                style={{
+                  background: 'transparent', border: 'none', cursor: 'pointer',
+                  color: 'hsl(var(--text-muted))', padding: 4, borderRadius: 6,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center'
+                }}
+                title="Fechar"
+              >
+                <X size={14} />
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, fontSize: 11 }}>
+              <div style={{
+                padding: '8px 10px', borderRadius: 9,
+                background: orig.hasExplicitUser ? 'rgba(124,58,237,0.08)' : 'hsl(var(--bg-overlay))',
+                border: `1px solid ${orig.hasExplicitUser ? 'rgba(124,58,237,0.25)' : 'hsl(var(--border-subtle))'}`
+              }}>
+                <div style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'hsl(var(--text-muted))', marginBottom: 2 }}>
+                  Usuário que autorizou / lançou
+                </div>
+                <div style={{ fontSize: 12, fontWeight: 800, color: orig.hasExplicitUser ? '#7c3aed' : 'hsl(var(--text-primary))', wordBreak: 'break-word' }}>
+                  {orig.userLabel}
+                </div>
+              </div>
+
+              {orig.confirmedBy && orig.confirmedBy !== orig.userLabel && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                  <span style={{ color: 'hsl(var(--text-muted))' }}>Confirmado por:</span>
+                  <span style={{ fontWeight: 700, textAlign: 'right' }}>{orig.confirmedBy}</span>
+                </div>
+              )}
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                <span style={{ color: 'hsl(var(--text-muted))' }}>Aluno:</span>
+                <span style={{ fontWeight: 700, textAlign: 'right' }}>{call.studentName}</span>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                <span style={{ color: 'hsl(var(--text-muted))' }}>Responsável / Motivo:</span>
+                <span style={{ fontWeight: 600, textAlign: 'right' }}>{call.guardianName || '—'}</span>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                <span style={{ color: 'hsl(var(--text-muted))' }}>Data / Horário:</span>
+                <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>
+                  {fmtOnlyDate(call.calledAt)} · {fmtTime(call.calledAt)}
+                  {call.confirmedAt ? ` → ${fmtTime(call.confirmedAt)}` : ''}
+                </span>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* System Logs */}
       <div style={{ marginTop: 36 }}>

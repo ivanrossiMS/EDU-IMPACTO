@@ -217,18 +217,37 @@ export async function POST(request: Request) {
         .from('frequencias')
         .select('id, dados')
         .in('id', rowIds)
-      if (!existingRows || existingRows.length === 0) return rowsToSave
-      const existingMap = new Map<string, any>(existingRows.map(r => [String(r.id), r.dados || {}]))
+      const existingMap = new Map<string, any>((existingRows || []).map(r => [String(r.id), r.dados || {}]))
+      const saidaKeys = new Set(['saidas', 'totalSaidas', 'ultimaSaida', 'saidaHorario', 'saidaResponsavel', 'saidaOrigem'])
       const preserveKeys = ['saidas', 'entradas', 'totalSaidas', 'totalEntradas', 'ultimaSaida', 'ultimaEntrada', 'saidaHorario', 'saidaResponsavel', 'saidaOrigem', 'horaEntrada']
       return rowsToSave.map(r => {
-        const prevDados = existingMap.get(String(r.id))
-        if (!prevDados) return r
+        const prevDados = existingMap.get(String(r.id)) || {}
         const mergedDados: Record<string, any> = { ...(r.dados || {}) }
+        const hasNewSaida = Boolean(mergedDados.saidaHorario && String(mergedDados.saidaHorario).trim().length > 0)
+        const isSaidaCancelada = !hasNewSaida && (
+          mergedDados.saidaCancelada === true ||
+          (mergedDados.saidaCancelada === undefined && prevDados.saidaCancelada === true)
+        )
+
         for (const k of preserveKeys) {
+          if (isSaidaCancelada && saidaKeys.has(k)) continue
           if ((mergedDados[k] === undefined || mergedDados[k] === null) && prevDados[k] !== undefined && prevDados[k] !== null) {
             mergedDados[k] = prevDados[k]
           }
         }
+
+        if (isSaidaCancelada) {
+          mergedDados.saidaCancelada = true
+          mergedDados.saidaHorario = null
+          mergedDados.saidaResponsavel = null
+          mergedDados.saidaOrigem = null
+          mergedDados.saidas = []
+          mergedDados.totalSaidas = 0
+          mergedDados.ultimaSaida = null
+        } else if (hasNewSaida) {
+          mergedDados.saidaCancelada = false
+        }
+
         // Se o registro anterior no banco já possuía entrada biométrica na catraca (e não era apenas saída),
         // preservar a origem e o horário da catraca quando o aluno permanece presente e não foi marcado como horário indefinido
         const prevRegPor = String(prevDados.registradoPor || '').toLowerCase()
@@ -259,6 +278,20 @@ export async function POST(request: Request) {
 
       const { error } = await supabase.from('frequencias').upsert(rows)
       if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+
+      const cancelledRows = rows.filter(r => r.dados?.saidaCancelada === true && r.aluno_id && r.data)
+      if (cancelledRows.length > 0) {
+        await Promise.allSettled(
+          cancelledRows.map(r =>
+            supabaseServer
+              .from('frequencias')
+              .delete()
+              .eq('aluno_id', String(r.aluno_id))
+              .eq('data', String(r.data))
+              .neq('id', String(r.id))
+          )
+        )
+      }
 
       // ⚡ OTIMIZAÇÃO: Processamento de Push em background assíncrono em lotes reais de 20
       const dispatchBatchPushes = async () => {
@@ -340,6 +373,15 @@ export async function POST(request: Request) {
     const [mergedRow] = await mergeExistingAttendanceLogs([item.row])
     const { data, error } = await supabase.from('frequencias').upsert(mergedRow).select().single()
     if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+
+    if (mergedRow.dados?.saidaCancelada === true && mergedRow.aluno_id && mergedRow.data) {
+      await supabaseServer
+        .from('frequencias')
+        .delete()
+        .eq('aluno_id', String(mergedRow.aluno_id))
+        .eq('data', String(mergedRow.data))
+        .neq('id', String(mergedRow.id))
+    }
 
     if (item.notifyPush !== false) {
       const targetIds = await getResponsavelIdsForTargets({ targetStudents: [data.aluno_id] })

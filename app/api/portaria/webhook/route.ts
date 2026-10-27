@@ -627,7 +627,7 @@ export async function POST(req: Request) {
             : (existingFreq?.dados?.saidaHorario ? [{
                 hora: existingFreq.dados.saidaHorario,
                 dispositivo: existingFreq.dados.saidaResponsavel || labelCatraca,
-                data_hora: existingFreq.dados?.horaRegistro ? `${localDate}T${existingFreq.dados.horaRegistro}:00.000Z` : eventTime,
+                data_hora: `${localDate}T${existingFreq.dados.saidaHorario}:00-04:00`,
                 tipo: 'saida'
               }] : [])
 
@@ -686,6 +686,7 @@ export async function POST(req: Request) {
             justificativa: existingFreq?.justificativa || '',
             dados: {
               ...(existingFreq?.dados || {}),
+              saidaCancelada: false,
               saidas: saidasExistentes,
               totalSaidas: saidasExistentes.length,
               ultimaSaida: localTimeStr,
