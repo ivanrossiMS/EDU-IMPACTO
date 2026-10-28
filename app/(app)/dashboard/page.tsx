@@ -8,7 +8,8 @@ import { useApp } from '@/lib/context'
 import { 
   Users, AlertTriangle, GraduationCap, UserPlus,
   Calendar as CalendarIcon, ClipboardCheck, BookMarked,
-  CheckCircle, CalendarDays, Cake, ShieldCheck, X, Loader2
+  CheckCircle, CalendarDays, Cake, ShieldCheck, X, Loader2,
+  Layers, PackageCheck, Clock, ArrowUpRight, CheckCircle2, BookOpen
 } from 'lucide-react'
 import Link from 'next/link'
 import { useMemo, useState } from 'react'
@@ -76,6 +77,7 @@ export default function DashboardPage() {
   
   // ── Filtros Dashboard
   const [filtroTarefas, setFiltroTarefas] = useState<'todas' | 'pendentes' | 'concluidas'>('todas')
+  const [filtroPedidos, setFiltroPedidos] = useState<'todos' | 'pendentes' | 'feitos' | 'entregues'>('todos')
   const [diaSelecionadoOffset, setDiaSelecionadoOffset] = useState<number>(0)
   const [apenasMinhasTarefas, setApenasMinhasTarefas] = useState(true)
 
@@ -318,42 +320,54 @@ export default function DashboardPage() {
         <div className="dashboard-card" style={{ height: '100%', minWidth: 0 }}>
           {/* Header Ultra Moderno com Gradiente */}
           <div className="dashboard-card-header" style={{ 
-            background: 'linear-gradient(135deg, #1e3a8a 0%, #2563eb 45%, #06b6d4 100%)', 
+            background: 'linear-gradient(135deg, #0f172a 0%, #1d4ed8 48%, #0ea5e9 100%)', 
           }}>
             {/* Efeito sutil de luz glass reflexiva */}
             <div style={{ 
               position: 'absolute', 
-              top: '-40px', 
-              right: '-20px', 
-              width: 120, 
-              height: 120, 
+              top: '-45px', 
+              right: '-15px', 
+              width: 140, 
+              height: 140, 
               borderRadius: '50%', 
-              background: 'radial-gradient(circle, rgba(255,255,255,0.22) 0%, transparent 70%)', 
+              background: 'radial-gradient(circle, rgba(255,255,255,0.24) 0%, transparent 70%)', 
+              pointerEvents: 'none' 
+            }} />
+            <div style={{ 
+              position: 'absolute', 
+              bottom: '-30px', 
+              left: '25%', 
+              width: 100, 
+              height: 80, 
+              borderRadius: '50%', 
+              background: 'radial-gradient(circle, rgba(56,189,248,0.22) 0%, transparent 70%)', 
               pointerEvents: 'none' 
             }} />
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, position: 'relative', zIndex: 1 }}>
               <div style={{ 
-                width: 36, 
-                height: 36, 
-                background: 'rgba(255,255,255,0.2)', 
-                backdropFilter: 'blur(8px)', 
-                WebkitBackdropFilter: 'blur(8px)',
-                borderRadius: '10px', 
+                width: 38, 
+                height: 38, 
+                background: 'rgba(255,255,255,0.18)', 
+                backdropFilter: 'blur(10px)', 
+                WebkitBackdropFilter: 'blur(10px)',
+                borderRadius: '11px', 
                 display: 'flex', 
                 alignItems: 'center', 
                 justifyContent: 'center',
-                boxShadow: '0 4px 12px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.3)',
-                border: '1px solid rgba(255,255,255,0.25)',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.35)',
+                border: '1px solid rgba(255,255,255,0.28)',
                 color: '#ffffff'
               }}>
                 <BookMarked size={18} strokeWidth={2.4} />
               </div>
               <div>
-                <span style={{ fontWeight: 900, fontSize: '15px', fontFamily: 'Outfit, sans-serif', color: '#ffffff', letterSpacing: '-0.01em', textShadow: '0 1px 2px rgba(0,0,0,0.12)' }}>
-                  Pedido de Livros/Apostilas
-                </span>
-                <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.85)', fontWeight: 600 }}>Controle de materiais</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontWeight: 900, fontSize: '15px', fontFamily: 'Outfit, sans-serif', color: '#ffffff', letterSpacing: '-0.01em', textShadow: '0 1px 2px rgba(0,0,0,0.12)' }}>
+                    Pedido de Livros/Apostilas
+                  </span>
+                </div>
+                <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.85)', fontWeight: 600 }}>Controle e logística de materiais</div>
               </div>
             </div>
 
@@ -364,99 +378,556 @@ export default function DashboardPage() {
                 color: '#ffffff', 
                 textDecoration: 'none', 
                 fontWeight: 800,
-                background: 'rgba(255,255,255,0.2)',
+                background: 'rgba(255,255,255,0.18)',
                 backdropFilter: 'blur(8px)',
                 WebkitBackdropFilter: 'blur(8px)',
                 border: '1px solid rgba(255,255,255,0.3)',
-                padding: '6px 14px',
+                padding: '6px 13px',
                 borderRadius: '14px',
                 transition: 'all 0.2s',
-                boxShadow: '0 2px 6px rgba(0,0,0,0.06)',
+                boxShadow: '0 2px 6px rgba(0,0,0,0.08)',
                 position: 'relative',
                 zIndex: 1,
                 display: 'inline-flex',
-                alignItems: 'center'
+                alignItems: 'center',
+                gap: 4
               }}
             >
-              Ver todos
+              <span>Ver todos</span>
+              <ArrowUpRight size={13} strokeWidth={2.5} />
             </Link>
           </div>
 
-          <div className="dashboard-card-body">
+          <div className="dashboard-card-body" style={{ padding: '18px 20px', gap: 14 }}>
             {loadOrders ? (
               <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 0' }}>
                 <Loader2 className="animate-spin" size={32} color="#3b82f6" />
               </div>
-            ) : (
-              <>
-            <div className="dashboard-books-grid">
-              <div className="dashboard-book-stat" style={{ background: 'hsl(var(--bg-elevated))' }}>
-                <div className="dashboard-book-stat-label" style={{ color: 'hsl(var(--text-secondary))' }}>Total</div>
-                <div className="dashboard-book-stat-value" style={{ color: 'hsl(var(--text-primary))' }}>{ordersSummary.totalOrders}</div>
-              </div>
-              <div className="dashboard-book-stat" style={{ background: 'rgba(239, 68, 68, 0.1)' }}>
-                <div className="dashboard-book-stat-label" style={{ color: '#ef4444' }}>Pendentes</div>
-                <div className="dashboard-book-stat-value" style={{ color: '#ef4444' }}>{ordersSummary.pendenteCount}</div>
-              </div>
-              <div className="dashboard-book-stat" style={{ background: 'rgba(245, 158, 11, 0.1)' }}>
-                <div className="dashboard-book-stat-label" style={{ color: '#f59e0b' }}>Pedido Feito</div>
-                <div className="dashboard-book-stat-value" style={{ color: '#f59e0b' }}>{ordersSummary.preparadoCount}</div>
-              </div>
-              <div className="dashboard-book-stat" style={{ background: 'rgba(16, 185, 129, 0.1)' }}>
-                <div className="dashboard-book-stat-label" style={{ color: '#10b981' }}>Entregues</div>
-                <div className="dashboard-book-stat-value" style={{ color: '#10b981' }}>{ordersSummary.entregueCount}</div>
-              </div>
-            </div>
+            ) : (() => {
+              const total = ordersSummary.totalOrders || 0
+              const pendentes = ordersSummary.pendenteCount || 0
+              const feitos = ordersSummary.preparadoCount || 0
+              const entregues = ordersSummary.entregueCount || 0
 
-            <div style={{ marginBottom: 24 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', fontWeight: 800, color: 'hsl(var(--text-secondary))', marginBottom: 8 }}>
-                <span>Taxa de Entrega</span>
-                <span style={{ color: '#10b981' }}>{ordersSummary.totalOrders > 0 ? ((ordersSummary.entregueCount / ordersSummary.totalOrders) * 100).toFixed(0) : 0}%</span>
-              </div>
-              <div style={{ width: '100%', height: 6, background: 'hsl(var(--bg-hover))', borderRadius: 3, overflow: 'hidden', display: 'flex' }}>
-                <div style={{ width: `${ordersSummary.totalOrders > 0 ? (ordersSummary.entregueCount / ordersSummary.totalOrders) * 100 : 0}%`, height: '100%', background: '#10b981' }} />
-              </div>
-            </div>
+              const pctEntregue = total > 0 ? Math.round((entregues / total) * 100) : 0
+              const pctFeito = total > 0 ? Math.round((feitos / total) * 100) : 0
+              const pctPendente = total > 0 ? Math.max(0, 100 - pctEntregue - pctFeito) : 0
 
-            <div style={{ fontSize: '13px', fontWeight: 800, color: 'hsl(var(--text-secondary))', marginBottom: 12 }}>Recentes</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {ordersSummary.recentOrders.length === 0 ? (
-                <div style={{ fontSize: '12px', color: 'hsl(var(--text-muted))', textAlign: 'center', padding: '10px 0', fontWeight: 600 }}>Nenhum material registrado.</div>
-              ) : (
-                ordersSummary.recentOrders.slice(0, 3).map((o: any) => {
-                  const IconComponent = o.material.toLowerCase().includes('livro') ? BookMarked : Users;
-                  const iconColor = o.entregue ? '#10b981' : (o.feito ? '#f59e0b' : '#3b82f6');
-                  const iconBg = o.entregue ? '#ecfdf5' : (o.feito ? '#fef3c7' : '#eff6ff');
+              const allRecent: any[] = Array.isArray(ordersSummary.recentOrders) ? ordersSummary.recentOrders : []
+              const filteredOrders = allRecent.filter((o: any) => {
+                if (filtroPedidos === 'pendentes') return !o.feito && !o.entregue
+                if (filtroPedidos === 'feitos') return o.feito && !o.entregue
+                if (filtroPedidos === 'entregues') return !!o.entregue
+                return true
+              })
 
-                  return (
-                    <div key={o.id} style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '0px', background: 'transparent' }}>
-                      <div className="dashboard-recent-icon" style={{ background: iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: iconColor }}>
-                        <IconComponent size={20} strokeWidth={2} />
+              return (
+                <div style={{ display: 'flex', flexDirection: 'column', flex: 1, gap: 14, minWidth: 0 }}>
+                  {/* ── Bento Grid 2x2 Proporcional ──────────────────────── */}
+                  <div className="dashboard-books-grid" style={{ marginBottom: 0 }}>
+                    {/* Card 1: TOTAL */}
+                    <div
+                      onClick={() => setFiltroPedidos('todos')}
+                      className="dashboard-book-stat"
+                      style={{
+                        background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
+                        borderColor: filtroPedidos === 'todos' ? '#3b82f6' : '#e2e8f0',
+                        boxShadow: filtroPedidos === 'todos' ? '0 0 0 3px rgba(59, 130, 246, 0.14), 0 4px 12px rgba(15, 23, 42, 0.04)' : '0 2px 6px rgba(15, 23, 42, 0.02)'
+                      }}
+                    >
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
+                          <span className="dashboard-book-stat-label" style={{ color: '#475569' }}>Total</span>
+                          <span style={{ fontSize: '9px', fontWeight: 800, color: '#2563eb', background: 'rgba(37, 99, 235, 0.1)', padding: '1px 6px', borderRadius: 999 }}>100%</span>
+                        </div>
+                        <div className="dashboard-book-stat-value" style={{ color: '#0f172a' }}>{total}</div>
+                        <div style={{ fontSize: '10.5px', fontWeight: 600, color: '#64748b', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          Materiais no ano
+                        </div>
                       </div>
-                      <div style={{ flex: 1, minWidth: 0, borderBottom: '1px solid hsl(var(--border-subtle))', paddingBottom: 14, paddingTop: 6, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: '14px', fontWeight: 800, color: 'hsl(var(--text-primary))', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.aluno}</div>
-                          <div style={{ fontSize: '12px', color: 'hsl(var(--text-secondary))', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 2 }}>{o.turma} • {o.material}</div>
-                        </div>
-                        <div style={{ marginLeft: 12, flexShrink: 0 }}>
-                          {!o.feito && !o.entregue && (
-                            <span style={{ fontSize: '9px', fontWeight: 900, color: '#ef4444', textTransform: 'uppercase' }}>Novo</span>
-                          )}
-                          {o.feito && !o.entregue && (
-                            <span style={{ fontSize: '9px', fontWeight: 900, color: '#f59e0b', textTransform: 'uppercase' }}>Pedido Feito</span>
-                          )}
-                          {o.entregue && (
-                            <span style={{ fontSize: '9px', fontWeight: 900, color: '#10b981', textTransform: 'uppercase' }}>Entregue</span>
-                          )}
-                        </div>
+                      <div style={{
+                        width: 38,
+                        height: 38,
+                        borderRadius: 12,
+                        background: 'linear-gradient(135deg, rgba(37, 99, 235, 0.12) 0%, rgba(14, 165, 233, 0.12) 100%)',
+                        border: '1px solid rgba(37, 99, 235, 0.2)',
+                        color: '#2563eb',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0
+                      }}>
+                        <Layers size={18} strokeWidth={2.2} />
                       </div>
                     </div>
-                  )
-                })
-              )}
-            </div>
-              </>
-            )}
+
+                    {/* Card 2: PENDENTES (Destaque Animado Pulsante) */}
+                    <div
+                      onClick={() => setFiltroPedidos(filtroPedidos === 'pendentes' ? 'todos' : 'pendentes')}
+                      className="dashboard-book-stat dashboard-book-stat-pending"
+                      style={{
+                        outline: filtroPedidos === 'pendentes' ? '2px solid #be123c' : 'none',
+                        outlineOffset: '1px'
+                      }}
+                    >
+                      <div style={{ minWidth: 0, flex: 1, position: 'relative', zIndex: 1 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 3 }}>
+                          <span className="dashboard-pending-radar">
+                            <span className="dashboard-pending-radar-ring" />
+                            <span className="dashboard-pending-radar-dot" />
+                          </span>
+                          <span className="dashboard-book-stat-label" style={{ color: '#be123c', fontWeight: 900 }}>Pendentes</span>
+                          <span style={{
+                            fontSize: '8.5px',
+                            fontWeight: 900,
+                            color: '#ffffff',
+                            background: pendentes > 0 ? '#e11d48' : '#f43f5e',
+                            padding: '1.5px 5.5px',
+                            borderRadius: 999,
+                            letterSpacing: '0.04em',
+                            textTransform: 'uppercase',
+                            animation: 'pendingBadgePulse 1.6s infinite ease-in-out',
+                            boxShadow: '0 2px 6px rgba(225, 29, 72, 0.35)'
+                          }}>
+                            {pendentes > 0 ? 'Urgente' : 'Atenção'}
+                          </span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                          <div className="dashboard-book-stat-value" style={{ color: '#be123c' }}>{pendentes}</div>
+                          <span style={{ fontSize: '10px', fontWeight: 800, color: '#e11d48' }}>
+                            {pendentes > 0 ? `${pctPendente}% do total` : 'Em alerta'}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: '10.5px', fontWeight: 700, color: '#9f1239', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {pendentes > 0 ? 'Requer ação imediata' : 'Aguardando solicitação'}
+                        </div>
+                      </div>
+                      <div
+                        className="dashboard-pending-icon-box"
+                        style={{
+                          width: 38,
+                          height: 38,
+                          borderRadius: 12,
+                          background: 'linear-gradient(135deg, #ef4444 0%, #be123c 100%)',
+                          border: '1px solid rgba(255, 255, 255, 0.35)',
+                          color: '#ffffff',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexShrink: 0,
+                          position: 'relative',
+                          zIndex: 1
+                        }}
+                      >
+                        <AlertTriangle size={18} strokeWidth={2.4} />
+                      </div>
+                    </div>
+
+                    {/* Card 3: PEDIDO FEITO */}
+                    <div
+                      onClick={() => setFiltroPedidos(filtroPedidos === 'feitos' ? 'todos' : 'feitos')}
+                      className="dashboard-book-stat"
+                      style={{
+                        background: 'linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%)',
+                        borderColor: filtroPedidos === 'feitos' ? '#d97706' : 'rgba(245, 158, 11, 0.32)',
+                        boxShadow: filtroPedidos === 'feitos' ? '0 0 0 3px rgba(245, 158, 11, 0.18), 0 4px 12px rgba(217, 119, 6, 0.08)' : '0 2px 6px rgba(217, 119, 6, 0.04)'
+                      }}
+                    >
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
+                          <span className="dashboard-book-stat-label" style={{ color: '#b45309' }}>Pedido Feito</span>
+                          <span style={{ fontSize: '9px', fontWeight: 800, color: '#b45309', background: 'rgba(245, 158, 11, 0.18)', padding: '1px 6px', borderRadius: 999 }}>{pctFeito}%</span>
+                        </div>
+                        <div className="dashboard-book-stat-value" style={{ color: '#d97706' }}>{feitos}</div>
+                        <div style={{ fontSize: '10.5px', fontWeight: 600, color: '#92400e', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          Em processamento
+                        </div>
+                      </div>
+                      <div style={{
+                        width: 38,
+                        height: 38,
+                        borderRadius: 12,
+                        background: 'rgba(245, 158, 11, 0.18)',
+                        border: '1px solid rgba(245, 158, 11, 0.3)',
+                        color: '#d97706',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0
+                      }}>
+                        <Clock size={18} strokeWidth={2.2} />
+                      </div>
+                    </div>
+
+                    {/* Card 4: ENTREGUES */}
+                    <div
+                      onClick={() => setFiltroPedidos(filtroPedidos === 'entregues' ? 'todos' : 'entregues')}
+                      className="dashboard-book-stat"
+                      style={{
+                        background: 'linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%)',
+                        borderColor: filtroPedidos === 'entregues' ? '#059669' : 'rgba(16, 185, 129, 0.32)',
+                        boxShadow: filtroPedidos === 'entregues' ? '0 0 0 3px rgba(16, 185, 129, 0.18), 0 4px 12px rgba(5, 150, 105, 0.08)' : '0 2px 6px rgba(5, 150, 105, 0.04)'
+                      }}
+                    >
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
+                          <span className="dashboard-book-stat-label" style={{ color: '#047857' }}>Entregues</span>
+                          <span style={{ fontSize: '9px', fontWeight: 800, color: '#047857', background: 'rgba(16, 185, 129, 0.18)', padding: '1px 6px', borderRadius: 999 }}>{pctEntregue}%</span>
+                        </div>
+                        <div className="dashboard-book-stat-value" style={{ color: '#059669' }}>{entregues}</div>
+                        <div style={{ fontSize: '10.5px', fontWeight: 600, color: '#065f46', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          Ciclo finalizado
+                        </div>
+                      </div>
+                      <div style={{
+                        width: 38,
+                        height: 38,
+                        borderRadius: 12,
+                        background: 'rgba(16, 185, 129, 0.18)',
+                        border: '1px solid rgba(16, 185, 129, 0.3)',
+                        color: '#059669',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0
+                      }}>
+                        <PackageCheck size={18} strokeWidth={2.2} />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* ── Barra de Progresso Multissegmentada ──────────────── */}
+                  <div style={{
+                    padding: '12px 14px',
+                    borderRadius: 14,
+                    background: '#f8fafc',
+                    border: '1px solid hsl(var(--border-subtle))',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 8
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ fontSize: '11.5px', fontWeight: 800, color: 'hsl(var(--text-primary))' }}>Taxa de Entrega</span>
+                        <span style={{ fontSize: '10.5px', fontWeight: 700, color: 'hsl(var(--text-muted))' }}>
+                          ({entregues} de {total})
+                        </span>
+                      </div>
+                      <span style={{
+                        fontSize: '11px',
+                        fontWeight: 900,
+                        color: '#059669',
+                        background: 'rgba(16, 185, 129, 0.12)',
+                        border: '1px solid rgba(16, 185, 129, 0.25)',
+                        padding: '2px 8px',
+                        borderRadius: 999
+                      }}>
+                        {pctEntregue}% concluído
+                      </span>
+                    </div>
+
+                    <div style={{
+                      width: '100%',
+                      height: 8,
+                      background: '#e2e8f0',
+                      borderRadius: 999,
+                      overflow: 'hidden',
+                      display: 'flex',
+                      gap: total > 0 ? 2 : 0
+                    }}>
+                      {entregues > 0 && (
+                        <div
+                          title={`Entregues: ${entregues} (${pctEntregue}%)`}
+                          style={{
+                            width: `${(entregues / total) * 100}%`,
+                            height: '100%',
+                            background: 'linear-gradient(90deg, #10b981 0%, #059669 100%)',
+                            borderRadius: 999,
+                            transition: 'width 0.4s ease'
+                          }}
+                        />
+                      )}
+                      {feitos > 0 && (
+                        <div
+                          title={`Pedido Feito: ${feitos} (${pctFeito}%)`}
+                          style={{
+                            width: `${(feitos / total) * 100}%`,
+                            height: '100%',
+                            background: 'linear-gradient(90deg, #fbbf24 0%, #d97706 100%)',
+                            borderRadius: 999,
+                            transition: 'width 0.4s ease'
+                          }}
+                        />
+                      )}
+                      {pendentes > 0 && (
+                        <div
+                          title={`Pendentes: ${pendentes} (${pctPendente}%)`}
+                          style={{
+                            width: `${(pendentes / total) * 100}%`,
+                            height: '100%',
+                            background: 'linear-gradient(90deg, #fb7185 0%, #e11d48 100%)',
+                            borderRadius: 999,
+                            transition: 'width 0.4s ease'
+                          }}
+                        />
+                      )}
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '10px', fontWeight: 700, color: '#64748b' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                          <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10b981' }} />
+                          Entregues ({entregues})
+                        </span>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                          <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#f59e0b' }} />
+                          Feitos ({feitos})
+                        </span>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: pendentes > 0 ? '#e11d48' : '#64748b', fontWeight: pendentes > 0 ? 800 : 700 }}>
+                          <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#e11d48' }} />
+                          Pendentes ({pendentes})
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* ── Seção de Pedidos Recentes com Filtro Rápido ──────── */}
+                  <div style={{ display: 'flex', flexDirection: 'column', flex: 1, gap: 8, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ fontSize: '12.5px', fontWeight: 800, color: 'hsl(var(--text-primary))' }}>
+                          {filtroPedidos === 'todos' ? 'Movimentações Recentes' : filtroPedidos === 'pendentes' ? 'Pedidos Pendentes' : filtroPedidos === 'feitos' ? 'Pedidos Realizados' : 'Materiais Entregues'}
+                        </span>
+                        <span style={{
+                          fontSize: '10px',
+                          fontWeight: 800,
+                          color: '#475569',
+                          background: '#f1f5f9',
+                          padding: '1px 7px',
+                          borderRadius: 999
+                        }}>
+                          {filteredOrders.length}
+                        </span>
+                      </div>
+
+                      {filtroPedidos !== 'todos' && (
+                        <button
+                          onClick={() => setFiltroPedidos('todos')}
+                          style={{
+                            fontSize: '10.5px',
+                            fontWeight: 800,
+                            color: '#2563eb',
+                            background: 'rgba(37, 99, 235, 0.08)',
+                            border: 'none',
+                            borderRadius: 999,
+                            padding: '2px 8px',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          Limpar filtro ×
+                        </button>
+                      )}
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1 }}>
+                      {filteredOrders.length === 0 ? (
+                        <div style={{
+                          flex: 1,
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          textAlign: 'center',
+                          padding: '20px 14px',
+                          borderRadius: 14,
+                          background: '#f8fafc',
+                          border: '1px dashed #cbd5e1',
+                          gap: 6
+                        }}>
+                          <div style={{
+                            width: 36,
+                            height: 36,
+                            borderRadius: '50%',
+                            background: filtroPedidos === 'pendentes' ? '#ecfdf5' : '#f1f5f9',
+                            color: filtroPedidos === 'pendentes' ? '#10b981' : '#64748b',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                          }}>
+                            <CheckCircle2 size={18} strokeWidth={2.3} />
+                          </div>
+                          <div style={{ fontSize: '12.5px', fontWeight: 800, color: 'hsl(var(--text-primary))' }}>
+                            {filtroPedidos === 'pendentes' ? 'Nenhum pedido pendente!' : 'Nenhum registro neste filtro'}
+                          </div>
+                          <div style={{ fontSize: '11px', color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>
+                            {filtroPedidos === 'pendentes' ? 'Todos os materiais já foram solicitados ou entregues.' : 'Experimente selecionar outra categoria acima.'}
+                          </div>
+                        </div>
+                      ) : (
+                        filteredOrders.slice(0, 4).map((o: any) => {
+                          const isEntregue = !!o.entregue
+                          const isFeito = !!o.feito && !o.entregue
+                          const statusColor = isEntregue ? '#10b981' : isFeito ? '#f59e0b' : '#e11d48'
+                          const statusBg = isEntregue ? 'rgba(16, 185, 129, 0.1)' : isFeito ? 'rgba(245, 158, 11, 0.12)' : 'rgba(225, 29, 72, 0.12)'
+                          const statusBorder = isEntregue ? 'rgba(16, 185, 129, 0.25)' : isFeito ? 'rgba(245, 158, 11, 0.28)' : 'rgba(225, 29, 72, 0.3)'
+
+                          return (
+                            <Link
+                              href="/administrativo/pedidos-livros"
+                              key={o.id}
+                              className="dashboard-order-row"
+                              style={{ borderLeft: `3.5px solid ${statusColor}` }}
+                            >
+                              <div style={{
+                                width: 34,
+                                height: 34,
+                                borderRadius: 10,
+                                background: statusBg,
+                                border: `1px solid ${statusBorder}`,
+                                color: statusColor,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontWeight: 800,
+                                fontSize: '12px',
+                                flexShrink: 0
+                              }}>
+                                {getInitials(o.aluno)}
+                              </div>
+
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{
+                                  fontSize: '13px',
+                                  fontWeight: 800,
+                                  color: 'hsl(var(--text-primary))',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  whiteSpace: 'nowrap'
+                                }}>
+                                  {o.aluno}
+                                </div>
+                                <div style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: 5,
+                                  marginTop: 2,
+                                  fontSize: '11px',
+                                  color: 'hsl(var(--text-secondary))',
+                                  fontWeight: 600,
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  whiteSpace: 'nowrap'
+                                }}>
+                                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.turma}</span>
+                                  <span style={{ opacity: 0.4 }}>•</span>
+                                  <span style={{
+                                    color: '#2563eb',
+                                    background: 'rgba(37, 99, 235, 0.08)',
+                                    padding: '0.5px 6px',
+                                    borderRadius: 6,
+                                    fontSize: '10px',
+                                    fontWeight: 700,
+                                    flexShrink: 0
+                                  }}>
+                                    {o.material}
+                                  </span>
+                                </div>
+                              </div>
+
+                              <div style={{ flexShrink: 0 }}>
+                                {!o.feito && !o.entregue && (
+                                  <span style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: 4,
+                                    fontSize: '9.5px',
+                                    fontWeight: 900,
+                                    color: '#be123c',
+                                    background: '#ffe4e6',
+                                    border: '1px solid #fda4af',
+                                    padding: '3px 8px',
+                                    borderRadius: 999,
+                                    textTransform: 'uppercase',
+                                    letterSpacing: '0.03em'
+                                  }}>
+                                    <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#e11d48' }} />
+                                    Pendente
+                                  </span>
+                                )}
+                                {o.feito && !o.entregue && (
+                                  <span style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: 4,
+                                    fontSize: '9.5px',
+                                    fontWeight: 900,
+                                    color: '#b45309',
+                                    background: '#fef3c7',
+                                    border: '1px solid #fcd34d',
+                                    padding: '3px 8px',
+                                    borderRadius: 999,
+                                    textTransform: 'uppercase',
+                                    letterSpacing: '0.03em'
+                                  }}>
+                                    <Clock size={10} strokeWidth={2.5} />
+                                    Pedido Feito
+                                  </span>
+                                )}
+                                {o.entregue && (
+                                  <span style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: 4,
+                                    fontSize: '9.5px',
+                                    fontWeight: 900,
+                                    color: '#047857',
+                                    background: '#d1fae5',
+                                    border: '1px solid #6ee7b7',
+                                    padding: '3px 8px',
+                                    borderRadius: 999,
+                                    textTransform: 'uppercase',
+                                    letterSpacing: '0.03em'
+                                  }}>
+                                    <CheckCircle2 size={10} strokeWidth={2.5} />
+                                    Entregue
+                                  </span>
+                                )}
+                              </div>
+                            </Link>
+                          )
+                        })
+                      )}
+                    </div>
+                  </div>
+
+                  {/* ── Footer CTA Ultra Moderno ─────────────────────────── */}
+                  <Link
+                    href="/administrativo/pedidos-livros"
+                    style={{
+                      marginTop: 'auto',
+                      width: '100%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 6,
+                      fontSize: '12.5px',
+                      fontWeight: 800,
+                      color: '#1d4ed8',
+                      background: 'linear-gradient(135deg, rgba(37, 99, 235, 0.08) 0%, rgba(14, 165, 233, 0.1) 100%)',
+                      border: '1px solid rgba(37, 99, 235, 0.18)',
+                      padding: '10px 16px',
+                      borderRadius: 14,
+                      textDecoration: 'none',
+                      transition: 'all 0.2s ease'
+                    }}
+                  >
+                    <BookOpen size={14} strokeWidth={2.3} />
+                    <span>Gerenciar controle de materiais</span>
+                    <ArrowUpRight size={14} strokeWidth={2.5} />
+                  </Link>
+                </div>
+              )
+            })()}
           </div>
         </div>
 

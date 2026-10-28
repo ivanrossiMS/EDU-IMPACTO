@@ -14,7 +14,7 @@ import { sanitizeAutorizacaoForViewer } from '@/lib/autorizacoes/autorizacaoUtil
 import { sanitizeEnqueteForViewer } from '@/lib/enquetes/enqueteUtils'
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
-export const maxDuration = 30
+export const maxDuration = 60
 
 // Cache de resolução de relatórios individuais associados a relatórios consolidados (TTL 30 min)
 const colabToStuIdsCache = new Map<string, { stuIds: string[]; timestamp: number }>();
@@ -1454,7 +1454,7 @@ export async function POST(request: Request) {
             );
           }
         }
-        const BATCH_SIZE = 20;
+        const BATCH_SIZE = 35;
         for (let i = 0; i < pushTasks.length; i += BATCH_SIZE) {
           await Promise.allSettled(pushTasks.slice(i, i + BATCH_SIZE).map(fn => fn()));
         }
@@ -1667,7 +1667,7 @@ export async function POST(request: Request) {
           console.log(`[Push Comunicado][${data.id}] Nenhum colaborador para push. dados.funcionariosIds=${JSON.stringify(data.dados?.funcionariosIds)}, dados.colaboradoresIds=${JSON.stringify(data.dados?.colaboradoresIds)}`);
         }
         
-        const BATCH_SIZE = 20;
+        const BATCH_SIZE = 35;
         for (let i = 0; i < pushTasks.length; i += BATCH_SIZE) {
           await Promise.allSettled(pushTasks.slice(i, i + BATCH_SIZE).map(fn => fn()));
         }

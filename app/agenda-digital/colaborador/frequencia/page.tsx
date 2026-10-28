@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { 
   CheckCircle2, AlertTriangle, FileText, Clock, ChevronRight, ChevronLeft, ChevronDown,
   Calendar as CalendarIcon, Loader2, Info, LogOut, X, Users, Search,
-  School, Activity, Sparkles, Filter, Check, ArrowRight
+  School, Activity, Sparkles, Filter, Check, ArrowRight, ShieldCheck
 } from 'lucide-react'
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths, isFuture } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
@@ -619,6 +619,152 @@ export default function ColaboradorFrequenciaPage() {
         </div>
       ) : (
         <>
+          {/* ─── CARD AVISO ULTRA MODERNO ANTES DO CALENDÁRIO ─── */}
+          <motion.div
+            initial={{ opacity: 0, y: 14 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+            className="frequencia-notice-banner"
+            style={{
+              position: 'relative',
+              overflow: 'hidden',
+              borderRadius: 22,
+              padding: '22px 26px',
+              marginBottom: 24,
+              background: 'linear-gradient(135deg, #0f172a 0%, #1e1b4b 45%, #312e81 80%, #1d4ed8 100%)',
+              boxShadow: '0 18px 40px -10px rgba(30, 27, 75, 0.32), 0 4px 14px rgba(15, 23, 42, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.14)',
+              border: '1px solid rgba(99, 102, 241, 0.35)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 20,
+              boxSizing: 'border-box'
+            }}
+          >
+            {/* Barra superior luminosa neon */}
+            <div
+              aria-hidden="true"
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                height: 4,
+                background: 'linear-gradient(90deg, #f59e0b 0%, #ec4899 35%, #6366f1 70%, #38bdf8 100%)',
+                boxShadow: '0 0 16px rgba(245, 158, 11, 0.55)'
+              }}
+            />
+
+            {/* Brilhos ambientais decorativos */}
+            <div
+              aria-hidden="true"
+              style={{
+                position: 'absolute',
+                top: -50,
+                left: -30,
+                width: 180,
+                height: 180,
+                borderRadius: '50%',
+                background: 'radial-gradient(circle, rgba(245, 158, 11, 0.22) 0%, transparent 70%)',
+                pointerEvents: 'none'
+              }}
+            />
+            <div
+              aria-hidden="true"
+              style={{
+                position: 'absolute',
+                bottom: -60,
+                right: -20,
+                width: 240,
+                height: 240,
+                borderRadius: '50%',
+                background: 'radial-gradient(circle, rgba(56, 189, 248, 0.2) 0%, transparent 70%)',
+                pointerEvents: 'none'
+              }}
+            />
+
+            {/* Ícone em destaque com halo luminoso */}
+            <div
+              className="frequencia-notice-icon"
+              style={{
+                width: 52,
+                height: 52,
+                borderRadius: 16,
+                background: 'linear-gradient(135deg, #f59e0b 0%, #ea580c 100%)',
+                boxShadow: '0 10px 24px -4px rgba(245, 158, 11, 0.55), 0 0 0 4px rgba(245, 158, 11, 0.16), inset 0 1px 1px rgba(255, 255, 255, 0.4)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+                position: 'relative',
+                zIndex: 1
+              }}
+            >
+              <AlertTriangle size={25} color="#ffffff" strokeWidth={2.4} />
+            </div>
+
+            {/* Conteúdo textual */}
+            <div style={{ flex: 1, minWidth: 0, position: 'relative', zIndex: 1 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <span style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    padding: '4px 11px',
+                    borderRadius: 999,
+                    background: 'rgba(245, 158, 11, 0.18)',
+                    border: '1px solid rgba(251, 191, 36, 0.45)',
+                    color: '#fde68a',
+                    fontSize: 10.5,
+                    fontWeight: 900,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.08em'
+                  }}>
+                    <span style={{
+                      width: 6,
+                      height: 6,
+                      borderRadius: '50%',
+                      background: '#fbbf24',
+                      boxShadow: '0 0 8px #fbbf24'
+                    }} />
+                    Aviso Importante
+                  </span>
+
+                  <span style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 5,
+                    padding: '4px 10px',
+                    borderRadius: 999,
+                    background: 'rgba(56, 189, 248, 0.14)',
+                    border: '1px solid rgba(56, 189, 248, 0.32)',
+                    color: '#7dd3fc',
+                    fontSize: 10.5,
+                    fontWeight: 800,
+                    letterSpacing: '0.03em'
+                  }}>
+                    <ShieldCheck size={12} strokeWidth={2.5} />
+                    Controle Oficial em Sala
+                  </span>
+                </div>
+              </div>
+
+              <p
+                className="frequencia-notice-text"
+                style={{
+                  margin: 0,
+                  fontSize: 14,
+                  lineHeight: 1.6,
+                  color: 'rgba(255, 255, 255, 0.94)',
+                  fontWeight: 500,
+                  letterSpacing: '0.005em'
+                }}
+              >
+                A frequência exibida neste aplicativo <strong style={{ color: '#fde68a', fontWeight: 800 }}>é informativa e pode apresentar divergências</strong>, pois, eventualmente, os equipamentos podem não identificar a entrada do aluno. A chamada é realizada <strong style={{ color: '#ffffff', fontWeight: 800 }}>manualmente em sala de aula</strong> e registrada diretamente em nosso <strong style={{ color: '#7dd3fc', fontWeight: 800 }}>sistema pedagógico</strong>, onde é feito o controle oficial de frequência.
+              </p>
+            </div>
+          </motion.div>
+
           {/* ─── CALENDÁRIO DINÂMICO INTERATIVO ─── */}
       <motion.div 
         initial={{ opacity: 0, y: 20 }} 
@@ -1484,6 +1630,23 @@ export default function ColaboradorFrequenciaPage() {
           .frequencia-header-wrapper {
             margin-bottom: 12px !important;
             gap: 10px !important;
+          }
+          .frequencia-notice-banner {
+            padding: 16px 16px !important;
+            border-radius: 18px !important;
+            gap: 14px !important;
+            align-items: flex-start !important;
+            margin-bottom: 16px !important;
+          }
+          .frequencia-notice-icon {
+            width: 42px !important;
+            height: 42px !important;
+            border-radius: 13px !important;
+            margin-top: 2px !important;
+          }
+          .frequencia-notice-text {
+            font-size: 12.5px !important;
+            line-height: 1.55 !important;
           }
         }
       `}} />

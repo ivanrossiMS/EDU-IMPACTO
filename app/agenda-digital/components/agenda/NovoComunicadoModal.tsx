@@ -840,11 +840,16 @@ export default function NovoComunicadoModal({
               
               {selectedDest.length > 0 && (
                 <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 6, maxHeight: 120, overflowY: 'auto' }}>
-                  {selectedDest.map((d, i) => {
+                  {selectedDest
+                    .filter((d, index, self) => {
+                      const key = d.id ? `${d.type || ''}:${d.id}` : `idx_${index}`
+                      return self.findIndex(x => (x.id ? `${x.type || ''}:${x.id}` : '') === key) === index
+                    })
+                    .map((d, i) => {
                     const isEquipe = d.type === 'grupo' || d.type === 'funcionario'
                     return (
                       <div 
-                        key={d.id || `dest_${i}`} 
+                        key={d.id ? `${d.type || 'dest'}_${d.id}` : `dest_${i}`} 
                         className="ad-nc-chip" 
                         style={{
                           background: isEquipe ? '#F5F3FF' : '#EEF2FF',

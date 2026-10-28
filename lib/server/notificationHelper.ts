@@ -46,6 +46,31 @@ async function fetchInChunks<T>(
   return results
 }
 
+async function fetchAllRows<T>(
+  supabase: any,
+  table: string,
+  select: string,
+  pageSize = 1000
+): Promise<T[]> {
+  const results: T[] = []
+  let from = 0
+  while (true) {
+    const { data, error } = await supabase
+      .from(table)
+      .select(select)
+      .range(from, from + pageSize - 1)
+    if (error) {
+      console.error(`[fetchAllRows] Error fetching from ${table}:`, error.message)
+      break
+    }
+    if (!data || data.length === 0) break
+    results.push(...data)
+    if (data.length < pageSize) break
+    from += pageSize
+  }
+  return results
+}
+
 /**
  * Normaliza um termo de turma removendo acentuação, caracteres especiais (º, ª, °, hífens, etc.)
  * e espaços, permitindo comparações resilientes entre formatos variados (ex: "4 ano A - matutino" e "4º Ano A - Matutino").
@@ -162,14 +187,11 @@ export async function getResponsavelIdsForTargets(dados: TargetParams | null | u
     let allResponsavelIds = new Set<string>()
 
     if (isTodos && !todosAnoMatch) {
-      const { data, error } = await supabase
-        .from('aluno_responsavel')
-        .select('responsavel_id, aluno_id')
-
-      if (error) {
-        console.error('[NotifHelper] Erro ao buscar todos os responsáveis:', error.message)
-        return []
-      }
+      const data = await fetchAllRows<any>(
+        supabase,
+        'aluno_responsavel',
+        'responsavel_id, aluno_id'
+      )
 
       ;(data || []).forEach((d: any) => {
         if (d.responsavel_id) allResponsavelIds.add(String(d.responsavel_id))

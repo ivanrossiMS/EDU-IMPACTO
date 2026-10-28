@@ -331,8 +331,14 @@ export async function POST(request: NextRequest) {
     const aliases: Record<string, string> = {
       external_id: cleanUserId,
     }
-    if (responsavelId) aliases['responsavel_id'] = String(responsavelId).trim()
-    if (effectiveAlunoId) aliases['aluno_id'] = String(effectiveAlunoId).trim()
+    if (responsavelId) {
+      aliases['responsavel_id'] = String(responsavelId).trim()
+    } else if (effectiveAlunoId && !colabIdent) {
+      // No OneSignal v5, aliases de identidade são 1-para-1 globalmente únicos no app.
+      // Registra 'aluno_id' como alias de identidade apenas para login direto de aluno/responsável virtual
+      // sem responsavel_id, evitando conflito 409 entre pai/mãe do mesmo aluno ou múltiplos filhos.
+      aliases['aluno_id'] = String(effectiveAlunoId).trim()
+    }
     if (colabIdent) {
       aliases['colaborador_id'] = String(colabIdent).trim()
       aliases['system_user_id'] = String(colabIdent).trim()

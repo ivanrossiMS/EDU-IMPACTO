@@ -583,11 +583,11 @@ export default function ADAdminComunicados() {
         autorizacao: autorizacao || null,
         dataAgendamento: dataAgendamento || null,
         status: (asRascunho ? 'rascunho' : dataAgendamento ? 'agendado' : 'enviado') as 'rascunho' | 'agendado' | 'enviado',
-        turmas: selectedDest.filter(d => d.type === 'turma').map(d => d.name),
-        turmasIds: selectedDest.filter(d => d.type === 'turma').map(d => String(d.id).replace(/^t_?/, '')),
-        grupos: selectedDest.filter(d => d.type === 'grupo').map(d => d.name),
-        alunosIds: selectedDest.filter(d => d.type === 'aluno').map(d => String(d.id).replace(/^a_?/, '')),
-        funcionariosIds: selectedDest.filter(d => d.type === 'funcionario').map(d => String(d.id).replace(/^f_?/, '')),
+        turmas: Array.from(new Set(selectedDest.filter(d => d.type === 'turma').map(d => d.name))),
+        turmasIds: Array.from(new Set(selectedDest.filter(d => d.type === 'turma').map(d => String(d.id).replace(/^t_/, '')))),
+        grupos: Array.from(new Set(selectedDest.filter(d => d.type === 'grupo').map(d => d.name))),
+        alunosIds: Array.from(new Set(selectedDest.filter(d => d.type === 'aluno').map(d => String(d.id).replace(/^a_/, '')))),
+        funcionariosIds: Array.from(new Set(selectedDest.filter(d => d.type === 'funcionario').map(d => String(d.id).replace(/^f_/, '')))),
         destino: selectedDest.length === 0 ? 'todos' : 'selecionados'
       }
 
@@ -616,11 +616,11 @@ export default function ADAdminComunicados() {
         autorCargo: currentUser?.cargo || currentUser?.perfil || 'Administração',
         autorId: currentUser?.id || '',
         autorFoto: currentUser?.foto || null,
-        turmas: selectedDest.filter(d => d.type === 'turma').map(d => d.name),
-        turmasIds: selectedDest.filter(d => d.type === 'turma').map(d => String(d.id).replace(/^t_?/, '')),
-        grupos: selectedDest.filter(d => d.type === 'grupo').map(d => d.name),
-        alunosIds: selectedDest.filter(d => d.type === 'aluno').map(d => String(d.id).replace(/^a_?/, '')),
-        funcionariosIds: selectedDest.filter(d => d.type === 'funcionario').map(d => String(d.id).replace(/^f_?/, '')),
+        turmas: Array.from(new Set(selectedDest.filter(d => d.type === 'turma').map(d => d.name))),
+        turmasIds: Array.from(new Set(selectedDest.filter(d => d.type === 'turma').map(d => String(d.id).replace(/^t_/, '')))),
+        grupos: Array.from(new Set(selectedDest.filter(d => d.type === 'grupo').map(d => d.name))),
+        alunosIds: Array.from(new Set(selectedDest.filter(d => d.type === 'aluno').map(d => String(d.id).replace(/^a_/, '')))),
+        funcionariosIds: Array.from(new Set(selectedDest.filter(d => d.type === 'funcionario').map(d => String(d.id).replace(/^f_/, '')))),
         destino: selectedDest.length === 0 ? 'todos' : 'selecionados',
         prioridade: 'normal',
         fixado: false,
@@ -703,13 +703,32 @@ export default function ADAdminComunicados() {
     setEditComId(c.id)
     setForwardComData(null)
     
-    const mappedDest: {id: string, name: string, type: 'turma' | 'aluno'}[] = []
-    c.turmas.forEach((t, i) => mappedDest.push({id: `t${c.id}${i}`, name: t, type: 'turma'}))
-    c.alunosIds.forEach((a) => {
-       const idReal = a.replace(/^_/, '')
-       const alunoObj = alunos?.find(al => al.id === a || al.id === `_${idReal}` || al.id === `_ALU${idReal.replace('ALU', '')}`)
-       mappedDest.push({id: `a_${a.replace(/^_+/, '_')}`, name: alunoObj ? alunoObj.nome : a, type: 'aluno'})
+    const mappedDest: {id: string, name: string, type: 'turma' | 'funcionario' | 'aluno' | 'grupo'}[] = []
+    const seenIds = new Set<string>()
+    const pushUnique = (item: {id: string, name: string, type: 'turma' | 'funcionario' | 'aluno' | 'grupo'}) => {
+      if (!item.id || seenIds.has(item.id)) return
+      seenIds.add(item.id)
+      mappedDest.push(item)
+    }
+
+    ;(c.turmas || []).forEach((t, i) => pushUnique({id: `t_${t || i}`, name: t, type: 'turma'}))
+    ;(c.grupos || []).forEach((g) => pushUnique({id: `g_${g}`, name: g, type: 'grupo'}))
+    ;(c.alunosIds || []).forEach((a) => {
+       const idReal = String(a).replace(/^a_/, '').replace(/^_/, '')
+       const alunoObj = alunos?.find(al => al.id === a || al.id === idReal || al.id === `_${idReal}` || al.id === `_ALU${idReal.replace('ALU', '')}`)
+       const finalId = alunoObj ? String(alunoObj.id).replace(/^a_/, '') : idReal
+       pushUnique({id: `a_${finalId}`, name: alunoObj ? alunoObj.nome : a, type: 'aluno'})
      })
+    ;((c as any).funcionariosIds || []).forEach((fId: string) => {
+       const cleanTarget = String(fId).replace(/^f_/, '')
+       const col = (colaboradores || []).find((colItem: any) => {
+         const cleanCol = String(colItem.id).replace(/^f_/, '')
+         return cleanCol === cleanTarget || cleanCol.replace(/^f_?/, '') === cleanTarget.replace(/^f_?/, '')
+       })
+       if (col) {
+         pushUnique({ id: `f_${String(col.id).replace(/^f_/, '')}`, name: col.nome, type: 'funcionario' })
+       }
+    })
     setSelectedDest(mappedDest)
 
     setShowComposer(true)

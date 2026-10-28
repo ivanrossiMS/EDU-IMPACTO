@@ -77,10 +77,17 @@ export function resolveDestinationFromPayload(data: any, currentUser?: any): str
   const rawCargo = (currentUser?.cargo || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
   const isFamilyUser = rawPerfil === 'familia' || rawPerfil === 'responsavel' || rawPerfil === 'aluno' || rawCargo === 'responsavel' || rawCargo === 'aluno'
 
+  const isExplicitFamily =
+    data.perfil_destino === 'familiar' ||
+    data.perfil_destino === 'familia' ||
+    data.context === 'familia' ||
+    Boolean(data.aluno_id || data.metadata?.aluno_id || data.student_id || data.targetAlunoId)
+
   const isColab =
     data.perfil_destino === 'colaborador' ||
+    data.context === 'colaborador' ||
     data.isColab === true ||
-    (!isFamilyUser && Boolean(currentUser?.perfil || currentUser?.cargo))
+    (!isExplicitFamily && !isFamilyUser && Boolean(currentUser?.perfil || currentUser?.cargo))
 
   const candidateAlunoId =
     data.aluno_id ||
@@ -233,29 +240,47 @@ export function GlobalNotificationProvider() {
   const wasLoggedInRef = useRef(false)
   const lastNavigatedDestRef = useRef<{ url: string; timestamp: number } | null>(null)
 
-  // ── Estado do Banner Flutuante de Notificação Push em Primeiro Plano (In-App Push) ──
-  const [activeBanner, setActiveBanner] = useState<ForegroundPushBanner | null>(null)
-  const [isDismissing, setIsDismissing] = useState(false)
-  const dismissTimerRef = useRef<NodeJS.Timeout | null>(null)
-  const lastProcessedIdRef = useRef<string>('')
+  // ── Estado dos Banners Flutuantes de Notificação Push em Primeiro Plano (In-App Push Empilhado) ──
+  // Suporta múltiplos banners simultâneos (ex: responsável com 2 ou 3 alunos recebendo comunicado da escola)
+  const [activeBanners, setActiveBanners] = useState<ForegroundPushBanner[]>([])
+  const [dismissingIds, setDismissingIds] = useState<Record<string, boolean>>({})
+  const dismissTimersRef = useRef<Map<string, NodeJS.Timeout>>(new Map())
+  const recentProcessedIdsRef = useRef<Map<string, number>>(new Map())
   const touchStartYRef = useRef<number | null>(null)
 
-  const dismissBanner = useCallback(() => {
-    setIsDismissing(true)
+  const dismissBanner = useCallback((bannerId?: string) => {
+    if (!bannerId) {
+      dismissTimersRef.current.forEach(t => clearTimeout(t))
+      dismissTimersRef.current.clear()
+      setActiveBanners([])
+      setDismissingIds({})
+      return
+    }
+
+    const existingTimer = dismissTimersRef.current.get(bannerId)
+    if (existingTimer) {
+      clearTimeout(existingTimer)
+      dismissTimersRef.current.delete(bannerId)
+    }
+
+    setDismissingIds(prev => ({ ...prev, [bannerId]: true }))
     setTimeout(() => {
-      setActiveBanner(null)
-      setIsDismissing(false)
+      setActiveBanners(prev => prev.filter(b => b.id !== bannerId))
+      setDismissingIds(prev => {
+        const next = { ...prev }
+        delete next[bannerId]
+        return next
+      })
     }, 280)
   }, [])
 
   // Desativa qualquer banner de notificação imediatamente ao iniciar logout
   useEffect(() => {
     const handleLogoutStart = () => {
-      if (dismissTimerRef.current) {
-        clearTimeout(dismissTimerRef.current)
-      }
-      setActiveBanner(null)
-      setIsDismissing(false)
+      dismissTimersRef.current.forEach(t => clearTimeout(t))
+      dismissTimersRef.current.clear()
+      setActiveBanners([])
+      setDismissingIds({})
     }
 
     if (loadingPath === 'logout') {
@@ -269,9 +294,25 @@ export function GlobalNotificationProvider() {
   const showForegroundPushBanner = useCallback((banner: ForegroundPushBanner) => {
     if (!banner || !banner.title) return
     if (loadingPath === 'logout') return
-    const bannerId = banner.id || `${Date.now()}-${Math.random().toString(36).substring(2, 7)}`
-    if (bannerId && bannerId === lastProcessedIdRef.current) return
-    lastProcessedIdRef.current = bannerId
+
+    const now = Date.now()
+    // Limpa IDs processados há mais de 15 segundos
+    recentProcessedIdsRef.current.forEach((ts, key) => {
+      if (now - ts > 15000) recentProcessedIdsRef.current.delete(key)
+    })
+
+    const studentPart = banner.data?.aluno_id || banner.data?.metadata?.aluno_id || ''
+    const bannerId = banner.id
+      ? (studentPart && !String(banner.id).includes(String(studentPart)) ? `${banner.id}_${studentPart}` : String(banner.id))
+      : `${now}_${studentPart}_${Math.random().toString(36).substring(2, 7)}`
+
+    if (recentProcessedIdsRef.current.has(bannerId)) return
+    recentProcessedIdsRef.current.set(bannerId, now)
+
+    const normalizedBanner: ForegroundPushBanner = {
+      ...banner,
+      id: bannerId,
+    }
 
     // 1. Vibração háptica tátil no dispositivo móvel (iOS e Android via Capacitor Haptics)
     triggerHaptic('success').catch(() => {})
@@ -279,29 +320,37 @@ export function GlobalNotificationProvider() {
     // 2. Chime de notificação nítido via Web Audio API
     playForegroundChime()
 
-    // 3. Atualizar estado do banner flutuante
-    setIsDismissing(false)
-    setActiveBanner(banner)
+    // 3. Empilhar banner flutuante (mantém até 4 simultâneos para múltiplos filhos sem sobrescrever)
+    setDismissingIds(prev => {
+      if (!prev[bannerId]) return prev
+      const next = { ...prev }
+      delete next[bannerId]
+      return next
+    })
+    setActiveBanners(prev => {
+      const filtered = prev.filter(b => b.id !== bannerId)
+      return [normalizedBanner, ...filtered].slice(0, 4)
+    })
 
-    // 4. Limpar timer anterior e agendar auto-dismiss após 6.5s
-    if (dismissTimerRef.current) {
-      clearTimeout(dismissTimerRef.current)
-    }
-    dismissTimerRef.current = setTimeout(() => {
-      dismissBanner()
-    }, 6500)
+    // 4. Agendar auto-dismiss individual após 7.5s
+    const prevTimer = dismissTimersRef.current.get(bannerId)
+    if (prevTimer) clearTimeout(prevTimer)
+    const timer = setTimeout(() => {
+      dismissBanner(bannerId)
+    }, 7500)
+    dismissTimersRef.current.set(bannerId, timer)
   }, [dismissBanner, loadingPath])
 
   const onTouchStart = (e: React.TouchEvent) => {
     touchStartYRef.current = e.touches[0].clientY
   }
 
-  const onTouchMove = (e: React.TouchEvent) => {
+  const onTouchMove = (e: React.TouchEvent, bannerId?: string) => {
     if (touchStartYRef.current === null) return
     const currentY = e.touches[0].clientY
     if (touchStartYRef.current - currentY > 25) {
       touchStartYRef.current = null
-      dismissBanner()
+      dismissBanner(bannerId)
     }
   }
 
@@ -972,133 +1021,146 @@ export function GlobalNotificationProvider() {
 
   return (
     <>
-      {activeBanner && (
+      {activeBanners.length > 0 && (
         <div
-          role="alert"
-          aria-live="assertive"
+          role="region"
+          aria-label="Notificações em tempo real"
           style={{
             position: 'fixed',
             top: 'calc(env(safe-area-inset-top, 0px) + 12px)',
             left: 0,
             right: 0,
             display: 'flex',
-            justifyContent: 'center',
+            flexDirection: 'column',
+            justifyContent: 'flex-start',
             alignItems: 'center',
+            gap: 8,
             zIndex: 999999,
             pointerEvents: 'none',
             padding: '0 14px',
-            animation: isDismissing
-              ? 'pushBannerSlideUp 0.28s cubic-bezier(0.4, 0, 0.2, 1) forwards'
-              : 'pushBannerSlideDown 0.38s cubic-bezier(0.16, 1, 0.3, 1) forwards',
           }}
         >
-          <div
-            onClick={() => {
-              dismissBanner()
-              handlePushClick(activeBanner.data)
-            }}
-            onTouchStart={onTouchStart}
-            onTouchMove={onTouchMove}
-            onTouchEnd={onTouchEnd}
-            onMouseEnter={() => {
-              if (dismissTimerRef.current) clearTimeout(dismissTimerRef.current)
-            }}
-            onMouseLeave={() => {
-              if (dismissTimerRef.current) clearTimeout(dismissTimerRef.current)
-              dismissTimerRef.current = setTimeout(dismissBanner, 4000)
-            }}
-            style={{
-              pointerEvents: 'auto',
-              width: '100%',
-              maxWidth: 440,
-              background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.96), rgba(30, 41, 59, 0.94))',
-              backdropFilter: 'blur(20px)',
-              WebkitBackdropFilter: 'blur(20px)',
-              border: '1px solid rgba(255, 255, 255, 0.16)',
-              borderRadius: 18,
-              padding: '12px 14px',
-              boxShadow: '0 20px 40px -10px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.08)',
-              color: '#ffffff',
-              cursor: 'pointer',
-              userSelect: 'none',
-              touchAction: 'pan-y',
-            }}
-          >
-            {/* Header da notificação: Ícone + App Nome + Hora + Botão Fechar */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                <img
-                  src="/logo-impacto.png"
-                  alt="Impacto EDU"
-                  width={20}
-                  height={20}
-                  style={{ borderRadius: 5, objectFit: 'contain' }}
-                  onError={(e: any) => {
-                    e.currentTarget.style.display = 'none'
-                  }}
-                />
-                <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.6px', color: '#94a3b8', textTransform: 'uppercase' }}>
-                  Impacto EDU
-                </span>
-                <span style={{ fontSize: 10, color: '#64748b' }}>•</span>
-                <span style={{ fontSize: 10, color: '#94a3b8', fontWeight: 600 }}>
-                  {activeBanner.time || 'Agora'}
-                </span>
-              </div>
-
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  dismissBanner()
+          {activeBanners.map((banner) => {
+            const isBannerDismissing = Boolean(dismissingIds[banner.id])
+            return (
+              <div
+                key={banner.id}
+                role="alert"
+                aria-live="assertive"
+                onClick={() => {
+                  dismissBanner(banner.id)
+                  handlePushClick(banner.data)
+                }}
+                onTouchStart={onTouchStart}
+                onTouchMove={(e) => onTouchMove(e, banner.id)}
+                onTouchEnd={onTouchEnd}
+                onMouseEnter={() => {
+                  const t = dismissTimersRef.current.get(banner.id)
+                  if (t) clearTimeout(t)
+                }}
+                onMouseLeave={() => {
+                  const prev = dismissTimersRef.current.get(banner.id)
+                  if (prev) clearTimeout(prev)
+                  const t = setTimeout(() => dismissBanner(banner.id), 4000)
+                  dismissTimersRef.current.set(banner.id, t)
                 }}
                 style={{
-                  background: 'rgba(255, 255, 255, 0.1)',
-                  border: 'none',
-                  borderRadius: '50%',
-                  width: 22,
-                  height: 22,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: '#94a3b8',
+                  pointerEvents: 'auto',
+                  width: '100%',
+                  maxWidth: 440,
+                  background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.96), rgba(30, 41, 59, 0.94))',
+                  backdropFilter: 'blur(20px)',
+                  WebkitBackdropFilter: 'blur(20px)',
+                  border: '1px solid rgba(255, 255, 255, 0.16)',
+                  borderRadius: 18,
+                  padding: '12px 14px',
+                  boxShadow: '0 20px 40px -10px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.08)',
+                  color: '#ffffff',
                   cursor: 'pointer',
-                  padding: 0,
-                  transition: 'background 0.2s, color 0.2s',
+                  userSelect: 'none',
+                  touchAction: 'pan-y',
+                  animation: isBannerDismissing
+                    ? 'pushBannerSlideUp 0.28s cubic-bezier(0.4, 0, 0.2, 1) forwards'
+                    : 'pushBannerSlideDown 0.38s cubic-bezier(0.16, 1, 0.3, 1) forwards',
                 }}
-                title="Fechar"
               >
-                <X size={13} />
-              </button>
-            </div>
+                {/* Header da notificação: Ícone + App Nome + Hora + Botão Fechar */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                    <img
+                      src="/logo-impacto.png"
+                      alt="Impacto EDU"
+                      width={20}
+                      height={20}
+                      style={{ borderRadius: 5, objectFit: 'contain' }}
+                      onError={(e: any) => {
+                        e.currentTarget.style.display = 'none'
+                      }}
+                    />
+                    <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.6px', color: '#94a3b8', textTransform: 'uppercase' }}>
+                      Impacto EDU
+                    </span>
+                    <span style={{ fontSize: 10, color: '#64748b' }}>•</span>
+                    <span style={{ fontSize: 10, color: '#94a3b8', fontWeight: 600 }}>
+                      {banner.time || 'Agora'}
+                    </span>
+                  </div>
 
-            {/* Conteúdo: Título e Mensagem */}
-            <div style={{ paddingLeft: 2 }}>
-              <div style={{ fontSize: 14, fontWeight: 800, color: '#f8fafc', lineHeight: 1.3, marginBottom: 2 }}>
-                {activeBanner.title}
-              </div>
-              {activeBanner.body && (
-                <div style={{
-                  fontSize: 12.5,
-                  fontWeight: 500,
-                  color: '#cbd5e1',
-                  lineHeight: 1.4,
-                  display: '-webkit-box',
-                  WebkitLineClamp: 2,
-                  WebkitBoxOrient: 'vertical',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                }}>
-                  {activeBanner.body}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      dismissBanner(banner.id)
+                    }}
+                    style={{
+                      background: 'rgba(255, 255, 255, 0.1)',
+                      border: 'none',
+                      borderRadius: '50%',
+                      width: 22,
+                      height: 22,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#94a3b8',
+                      cursor: 'pointer',
+                      padding: 0,
+                      transition: 'background 0.2s, color 0.2s',
+                    }}
+                    title="Fechar"
+                  >
+                    <X size={13} />
+                  </button>
                 </div>
-              )}
-            </div>
 
-            {/* Barra indicadora inferior sutil para arrastar ou tocar */}
-            <div style={{ display: 'flex', justifyContent: 'center', marginTop: 6 }}>
-              <div style={{ width: 36, height: 3, borderRadius: 2, background: 'rgba(255, 255, 255, 0.2)' }} />
-            </div>
-          </div>
+                {/* Conteúdo: Título e Mensagem */}
+                <div style={{ paddingLeft: 2 }}>
+                  <div style={{ fontSize: 14, fontWeight: 800, color: '#f8fafc', lineHeight: 1.3, marginBottom: 2 }}>
+                    {banner.title}
+                  </div>
+                  {banner.body && (
+                    <div style={{
+                      fontSize: 12.5,
+                      fontWeight: 500,
+                      color: '#cbd5e1',
+                      lineHeight: 1.4,
+                      display: '-webkit-box',
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: 'vertical',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                    }}>
+                      {banner.body}
+                    </div>
+                  )}
+                </div>
+
+                {/* Barra indicadora inferior sutil para arrastar ou tocar */}
+                <div style={{ display: 'flex', justifyContent: 'center', marginTop: 6 }}>
+                  <div style={{ width: 36, height: 3, borderRadius: 2, background: 'rgba(255, 255, 255, 0.2)' }} />
+                </div>
+              </div>
+            )
+          })}
         </div>
       )}
 

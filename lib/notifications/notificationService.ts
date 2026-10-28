@@ -817,32 +817,20 @@ class NotificationService {
         })
       }
 
-      // Aliases para permitir envio flexível pelo backend (por ID de responsável, aluno, email, etc.)
+      // Aliases para permitir envio flexível pelo backend (por ID de responsável, colaborador, email, etc.)
+      // IMPORTANTE: No OneSignal v5, aliases de identidade são 1-para-1 globalmente únicos no app.
+      // Portanto, 'aluno_id' só deve ser registrado como alias de identidade quando o login for direto do aluno
+      // (sem responsavel_id), evitando conflito 409 entre pai e mãe do mesmo aluno ou sobrescrita quando há múltiplos filhos
+      // (os vínculos de todos os filhos já ficam registrados nas tags `aluno_<id>: 'true'`).
       const aliasesToRegister: Array<{ label: string; id: string }> = []
       const rId = user.responsavel_id || user.user_metadata?.responsavel_id || user.responsavelId
       if (rId) {
         aliasesToRegister.push({ label: 'responsavel_id', id: String(rId) })
-      }
-      if (user.aluno_id) {
-        aliasesToRegister.push({ label: 'aluno_id', id: String(user.aluno_id) })
-      }
-      if (
-        effectiveExtra?.alunoId &&
-        String(effectiveExtra.alunoId) !== String(user.aluno_id) &&
-        (!effectiveExtra.alunoObj || !isStudentRowInactive(effectiveExtra.alunoObj))
-      ) {
-        aliasesToRegister.push({ label: 'aluno_id', id: String(effectiveExtra.alunoId) })
-      }
-      if (activeMeusAlunos) {
-        activeMeusAlunos.forEach((s: any) => {
-          if (s?.id) {
-            aliasesToRegister.push({ label: 'aluno_id', id: String(s.id) })
-            const cleanId = String(s.id).replace(/^(a_|_ALU)/, '')
-            if (cleanId !== String(s.id)) {
-              aliasesToRegister.push({ label: 'aluno_id', id: cleanId })
-            }
-          }
-        })
+      } else {
+        const directStudentId = user.aluno_id || effectiveExtra?.alunoId
+        if (directStudentId) {
+          aliasesToRegister.push({ label: 'aluno_id', id: String(directStudentId).replace(/^(a_|_ALU)/, '') })
+        }
       }
       const staffIds = effectiveExtra?.extraStaffIds || []
       const colabId =

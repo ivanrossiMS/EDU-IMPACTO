@@ -159,7 +159,7 @@ export async function GET(request: Request) {
     }
 
         const sortedOrders = uniqueOrders.sort((a, b) => b.timestamp - a.timestamp)
-        const recentOrders = sortedOrders.slice(0, 4)
+        const recentOrders = sortedOrders.slice(0, 50)
 
         const payload = {
           totalOrders: uniqueOrders.length,

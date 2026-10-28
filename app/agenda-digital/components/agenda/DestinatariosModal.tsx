@@ -672,7 +672,7 @@ export function DestinatariosModal({
       const type = s.type || (s.id && (s.id.startsWith('f_') || s.id === 'func') ? 'funcionario' : s.id && s.id.startsWith('a_') ? 'aluno' : s.id && s.id.startsWith('g_') ? 'grupo' : 'turma')
       
       if (type === 'turma') {
-         const t = turmas.find((x: any) => String(x.id) === String(s.id) || String(x.nome) === String(s.name))
+         const t = turmas.find((x: any) => String(x.id) === String(s.id).replace(/^t_/, '') || String(x.nome) === String(s.name))
          if (t) {
            const tAlunos = getTurmaAlunos(t)
            tAlunos.forEach((a: any) => {
@@ -680,7 +680,7 @@ export function DestinatariosModal({
            })
          }
       } else if (type === 'grupo') {
-         const g = gruposManuais.find((x: any) => String(x.id) === String(s.id).replace('g_', ''))
+         const g = gruposManuais.find((x: any) => String(x.id) === String(s.id).replace('g_', '') || String(x.nome) === String(s.name))
          if (g) {
            let aIds = g.alunosIds || []
            if (typeof aIds === 'string') {
@@ -698,6 +698,9 @@ export function DestinatariosModal({
       } else if (type === 'funcionario') {
         const key = s.id.startsWith('f_') ? s.id : `f_${s.id}`
         map[key] = { id: key, name: s.name, type: 'funcionario' }
+      } else if (type === 'aluno') {
+        const key = s.id.startsWith('a_') ? s.id : `a_${s.id}`
+        map[key] = { id: key, name: s.name, type: 'aluno' }
       } else {
         map[s.id] = { id: s.id, name: s.name, type: type as any }
       }
@@ -1190,6 +1193,13 @@ export function DestinatariosModal({
   // Confirmação com reconstrução elegante de grupos e turmas
   const handleConfirm = () => {
     const result: any[] = []
+    const seenResultIds = new Set<string>()
+    const pushResult = (entry: any) => {
+      if (!entry || !entry.id || seenResultIds.has(entry.id)) return
+      seenResultIds.add(entry.id)
+      result.push(entry)
+    }
+
     const selectedLeaves = new Set(Object.keys(selected))
     const coveredLeaves = new Set<string>()
     
@@ -1208,16 +1218,13 @@ export function DestinatariosModal({
       if (item.type === 'turma' || item.type === 'grupo') {
         const selectableLeafIds = (item.leafIds || []).filter((id: string) => id !== `f_${currentUserId}`)
         if (selectableLeafIds.length > 0 && selectableLeafIds.every((id: string) => selectedLeaves.has(id))) {
-           result.push({ id: item.id, name: item.title, type: item.type })
+           pushResult({ id: item.id, name: item.title, type: item.type })
            selectableLeafIds.forEach((id: string) => coveredLeaves.add(id))
 
            if (item.payloads) {
              item.payloads.forEach((p: any) => {
                if (p.type === 'funcionario') {
-                 const alreadyInResult = result.some(r => r.id === p.id)
-                 if (!alreadyInResult) {
-                   result.push({ id: p.id, name: p.name, type: 'funcionario' })
-                 }
+                 pushResult({ id: p.id, name: p.name, type: 'funcionario' })
                }
              })
            }
@@ -1227,7 +1234,7 @@ export function DestinatariosModal({
 
     selectedLeaves.forEach(id => {
       if (!coveredLeaves.has(id)) {
-        result.push(selected[id])
+        pushResult(selected[id])
       }
     })
 

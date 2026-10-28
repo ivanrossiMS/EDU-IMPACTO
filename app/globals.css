@@ -1900,27 +1900,169 @@ select option {
 
 .dashboard-books-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-  margin-bottom: 24px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
 }
 
 .dashboard-book-stat {
-  padding: 16px;
+  padding: 12px 14px;
   border-radius: 16px;
+  border: 1.5px solid transparent;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+  transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.2s ease, border-color 0.2s ease;
+  user-select: none;
+}
+
+.dashboard-book-stat:hover {
+  transform: translateY(-2px);
+}
+
+.dashboard-book-stat:active {
+  transform: translateY(0px) scale(0.99);
 }
 
 .dashboard-book-stat-label {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 800;
   text-transform: uppercase;
-  margin-bottom: 4px;
+  letter-spacing: 0.05em;
+  line-height: 1.2;
 }
 
 .dashboard-book-stat-value {
-  font-size: 24px;
+  font-size: 25px;
   font-weight: 900;
   font-family: Outfit, sans-serif;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+}
+
+/* Pulsing "Pendentes" Card & Animations */
+@keyframes pendingCardPulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(244, 63, 94, 0.42), 0 8px 20px -6px rgba(225, 29, 72, 0.26);
+    border-color: rgba(244, 63, 94, 0.65);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(244, 63, 94, 0), 0 12px 24px -4px rgba(225, 29, 72, 0.38);
+    border-color: rgba(225, 29, 72, 0.95);
+  }
+}
+
+@keyframes pendingRadarPing {
+  0% {
+    transform: scale(1);
+    opacity: 0.85;
+  }
+  75%, 100% {
+    transform: scale(2.6);
+    opacity: 0;
+  }
+}
+
+@keyframes pendingIconPulse {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 6px 14px rgba(225, 29, 72, 0.32), 0 0 0 0 rgba(244, 63, 94, 0.4);
+  }
+  50% {
+    transform: scale(1.06);
+    box-shadow: 0 8px 18px rgba(225, 29, 72, 0.48), 0 0 0 5px rgba(244, 63, 94, 0);
+  }
+}
+
+@keyframes pendingBadgePulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.85;
+    transform: scale(1.04);
+  }
+}
+
+@keyframes pendingShimmer {
+  0% {
+    transform: translateX(-140%) skewX(-20deg);
+  }
+  45%, 100% {
+    transform: translateX(220%) skewX(-20deg);
+  }
+}
+
+.dashboard-book-stat-pending {
+  background: linear-gradient(135deg, #fff1f2 0%, #ffe4e6 55%, #fecdd3 100%) !important;
+  border: 1.5px solid rgba(244, 63, 94, 0.7);
+  animation: pendingCardPulse 2.2s infinite ease-in-out;
+}
+
+.dashboard-book-stat-pending::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 55%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.65), transparent);
+  pointer-events: none;
+  animation: pendingShimmer 3.6s infinite ease-in-out;
+}
+
+.dashboard-pending-radar {
+  position: relative;
+  display: inline-flex;
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+}
+
+.dashboard-pending-radar-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  background-color: #e11d48;
+  animation: pendingRadarPing 1.5s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+.dashboard-pending-radar-dot {
+  position: relative;
+  display: inline-flex;
+  width: 8px;
+  height: 8px;
+  border-radius: 9999px;
+  background-color: #e11d48;
+  box-shadow: 0 0 6px rgba(225, 29, 72, 0.8);
+}
+
+.dashboard-pending-icon-box {
+  animation: pendingIconPulse 2.2s infinite ease-in-out;
+}
+
+.dashboard-order-row {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 9px 11px;
+  border-radius: 13px;
+  background: hsl(var(--bg-surface));
+  border: 1px solid hsl(var(--border-subtle));
+  transition: all 0.18s ease;
+  text-decoration: none;
+}
+
+.dashboard-order-row:hover {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+  transform: translateX(2px);
+  box-shadow: 0 3px 10px rgba(15, 23, 42, 0.04);
 }
 
 .dashboard-card {

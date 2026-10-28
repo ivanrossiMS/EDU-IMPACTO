@@ -327,6 +327,39 @@ export async function sendPushNotification(params: PushPayload): Promise<PushRes
     !params.url.startsWith('https://')
   ) ? params.url : undefined
 
+  const resolvedCollapseId = (() => {
+    const rawBase = params.collapseId || params.data?.call_id || params.data?.item_id
+    if (!rawBase) return undefined
+    const baseStr = String(rawBase).trim()
+    if (!baseStr) return undefined
+
+    const rawAlunoId = params.data?.aluno_id || params.data?.alunoId || params.data?.student_id
+    const rawPerfil = params.data?.perfil_destino || params.data?.context
+    const cleanAlunoId = rawAlunoId ? String(rawAlunoId).trim().replace(/[^a-zA-Z0-9_-]/g, '') : ''
+    const cleanPerfil = rawPerfil ? String(rawPerfil).trim().replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 8) : ''
+
+    const scopePrefix = cleanAlunoId
+      ? `alu_${cleanAlunoId}_`
+      : cleanPerfil
+        ? `prf_${cleanPerfil}_`
+        : ''
+
+    const combined =
+      scopePrefix && !baseStr.startsWith(scopePrefix) && !(cleanAlunoId && baseStr.includes(`_${cleanAlunoId}`))
+        ? `${scopePrefix}${baseStr}`
+        : baseStr
+
+    if (combined.length <= 64) return combined
+
+    if (scopePrefix && combined.startsWith(scopePrefix)) {
+      const remaining = 64 - scopePrefix.length
+      if (remaining > 8) {
+        return `${scopePrefix}${baseStr.slice(-remaining)}`
+      }
+    }
+    return combined.slice(0, 64)
+  })()
+
   const commonFields = {
     app_id: ONESIGNAL_APP_ID,
     headings: { en: params.title, pt: params.title },
@@ -344,9 +377,7 @@ export async function sendPushNotification(params: PushPayload): Promise<PushRes
         route: relativeRoute,
       }),
     },
-    ...((params.collapseId || params.data?.call_id || params.data?.item_id)
-      ? { collapse_id: String(params.collapseId || params.data?.call_id || params.data?.item_id).slice(0, 64) }
-      : {}),
+    ...(resolvedCollapseId ? { collapse_id: resolvedCollapseId } : {}),
     ...(params.sendAfter && { send_after: params.sendAfter }),
     chrome_web_icon: params.largeIcon || `${process.env.NEXT_PUBLIC_APP_URL || 'https://impacto-edu.net'}/logo-impacto.png`,
     adm_large_icon: params.largeIcon || `${process.env.NEXT_PUBLIC_APP_URL || 'https://impacto-edu.net'}/logo-impacto.png`,

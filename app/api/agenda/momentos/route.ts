@@ -13,7 +13,7 @@ import { getCachedTurmasAndGrupos, getCachedEquipes } from '@/lib/server/turmasG
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
-export const maxDuration = 30
+export const maxDuration = 60
 
 export async function GET(request: Request) {
   const { user, errorResponse } = await requireAuth()
@@ -597,7 +597,7 @@ export async function POST(request: Request) {
             )
           }
         }
-        const BATCH_SIZE = 20;
+        const BATCH_SIZE = 35;
         for (let i = 0; i < pushTasks.length; i += BATCH_SIZE) {
           await Promise.allSettled(pushTasks.slice(i, i + BATCH_SIZE).map(fn => fn()));
         }
@@ -710,7 +710,7 @@ export async function POST(request: Request) {
             }).catch(err => console.error('Momento Push Error Colab:', err))
           )
         }
-        const BATCH_SIZE = 20;
+        const BATCH_SIZE = 35;
         for (let i = 0; i < pushTasks.length; i += BATCH_SIZE) {
           await Promise.allSettled(pushTasks.slice(i, i + BATCH_SIZE).map(fn => fn()));
         }

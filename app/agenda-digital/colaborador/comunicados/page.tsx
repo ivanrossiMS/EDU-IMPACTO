@@ -601,7 +601,7 @@ function ColaboradorComunicadosContent() {
           }
           if (Array.isArray(colabs)) {
             colabs.forEach((cid: any) => {
-              const clean = String(cid).replace(/^f_?/, '').trim();
+              const clean = String(cid).replace(/^f_/, '').trim();
               if (clean && !extraFuncsFromGroups.includes(clean)) extraFuncsFromGroups.push(clean);
             });
           }
@@ -611,7 +611,7 @@ function ColaboradorComunicadosContent() {
           }
           if (Array.isArray(stus)) {
             stus.forEach((aid: any) => {
-              const clean = String(aid).replace(/^a_?/, '').trim();
+              const clean = String(aid).replace(/^a_/, '').trim();
               if (clean && !extraAlunosFromGroups.includes(clean)) extraAlunosFromGroups.push(clean);
             });
           }
@@ -619,10 +619,10 @@ function ColaboradorComunicadosContent() {
       });
     }
 
-    const directFuncs = selectedDest.filter(d => d.type === 'funcionario').map(d => d.id.replace(/^f_?/, ''));
+    const directFuncs = selectedDest.filter(d => d.type === 'funcionario').map(d => String(d.id).replace(/^f_/, ''));
     const allResolvedFuncs = Array.from(new Set([...directFuncs, ...extraFuncsFromGroups]));
 
-    const directAlunos = selectedDest.filter(d => d.type === 'aluno').map(d => d.id.replace(/^a_?/, ''));
+    const directAlunos = selectedDest.filter(d => d.type === 'aluno').map(d => String(d.id).replace(/^a_/, ''));
     const allResolvedAlunos = Array.from(new Set([...directAlunos, ...extraAlunosFromGroups]));
 
     if (editComId) {
@@ -798,15 +798,36 @@ function ColaboradorComunicadosContent() {
     setForwardComData(null)
     
     const dests: any[] = []
-    if (c.turmas) c.turmas.forEach((t: string) => dests.push({ type: 'turma', id: `t_${t}`, name: t }))
+    const seenIds = new Set<string>()
+    const pushUnique = (item: { type: 'turma' | 'funcionario' | 'aluno' | 'grupo', id: string, name: string }) => {
+      if (!item.id || seenIds.has(item.id)) return
+      seenIds.add(item.id)
+      dests.push(item)
+    }
+
+    if (c.turmas) c.turmas.forEach((t: string) => pushUnique({ type: 'turma', id: `t_${t}`, name: t }))
     if (c.alunosIds) c.alunosIds.forEach((id: string) => {
-       const al = alunosAtivos.find((a: any) => a.id.replace(/^a_?/, '') === id.replace(/^a_?/, ''))
-       if (al) dests.push({ type: 'aluno', id: al.id, name: al.nome })
+       const cleanTarget = String(id).replace(/^a_/, '')
+       const al = alunosAtivos.find((a: any) => {
+         const cleanA = String(a.id).replace(/^a_/, '')
+         return cleanA === cleanTarget || cleanA.replace(/^a_?/, '') === cleanTarget.replace(/^a_?/, '')
+       })
+       if (al) {
+         const rawAlId = String(al.id).replace(/^a_/, '')
+         pushUnique({ type: 'aluno', id: `a_${rawAlId}`, name: al.nome })
+       }
     })
-    if (c.grupos) c.grupos.forEach((g: string) => dests.push({ type: 'grupo', id: `g_${g}`, name: g }))
+    if (c.grupos) c.grupos.forEach((g: string) => pushUnique({ type: 'grupo', id: `g_${g}`, name: g }))
     if (c.funcionariosIds) c.funcionariosIds.forEach((id: string) => {
-       const col = colaboradores.find((colItem: any) => colItem.id.replace(/^f_?/, '') === id.replace(/^f_?/, ''))
-       if (col) dests.push({ type: 'funcionario', id: col.id, name: col.nome })
+       const cleanTarget = String(id).replace(/^f_/, '')
+       const col = colaboradores.find((colItem: any) => {
+         const cleanCol = String(colItem.id).replace(/^f_/, '')
+         return cleanCol === cleanTarget || cleanCol.replace(/^f_?/, '') === cleanTarget.replace(/^f_?/, '')
+       })
+       if (col) {
+         const rawColId = String(col.id).replace(/^f_/, '')
+         pushUnique({ type: 'funcionario', id: `f_${rawColId}`, name: col.nome })
+       }
     })
     setSelectedDest(dests)
     setShowComposer(true)

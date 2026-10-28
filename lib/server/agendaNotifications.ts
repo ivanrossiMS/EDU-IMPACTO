@@ -132,6 +132,59 @@ function _buildTargetUrl(targetUrl: string, itemId: string): string {
 }
 
 /**
+ * Constrói um collapse_id único por aluno/contexto e respeitando o limite estrito de 64 bytes da Apple APNs (apns-collapse-id)
+ * e do OneSignal. O discriminador do aluno (alu_<id>_) ou perfil (prf_<perfil>_) é posicionado no INÍCIO da string para que,
+ * mesmo em IDs de itens longos, um corte em 64 caracteres jamais elimine a diferenciação entre irmãos do mesmo responsável.
+ */
+export function buildUniqueCollapseId(
+  explicitCollapseId: string | undefined,
+  itemId: string,
+  metadata?: Record<string, any>
+): string | undefined {
+  const rawAlunoId = metadata?.aluno_id || metadata?.alunoId || metadata?.student_id
+  const rawPerfil = metadata?.perfil_destino || metadata?.context
+  const cleanAlunoId = rawAlunoId ? String(rawAlunoId).trim().replace(/[^a-zA-Z0-9_-]/g, '') : ''
+  const cleanPerfil = rawPerfil ? String(rawPerfil).trim().replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 8) : ''
+
+  const scopePrefix = cleanAlunoId
+    ? `alu_${cleanAlunoId}_`
+    : cleanPerfil
+      ? `prf_${cleanPerfil}_`
+      : ''
+
+  const baseId = explicitCollapseId
+    ? String(explicitCollapseId).trim()
+    : metadata?.call_id
+      ? `call_${metadata.call_id}`
+      : itemId
+        ? `item_${itemId}`
+        : ''
+
+  if (!baseId) return undefined
+
+  // Evita duplicar o prefixo caso já tenha sido incluído pelo chamador
+  const combined =
+    scopePrefix && !baseId.startsWith(scopePrefix) && !(cleanAlunoId && baseId.includes(`_${cleanAlunoId}`))
+      ? `${scopePrefix}${baseId}`
+      : baseId
+
+  if (combined.length <= 64) {
+    return combined
+  }
+
+  // Se ultrapassar 64 caracteres, preserva o prefixo (identificador do aluno) no início
+  // e mantém a parte final (mais específica/timestamp) do baseId.
+  if (scopePrefix && combined.startsWith(scopePrefix)) {
+    const remaining = 64 - scopePrefix.length
+    if (remaining > 8) {
+      return `${scopePrefix}${baseId.slice(-remaining)}`
+    }
+  }
+
+  return combined.slice(0, 64)
+}
+
+/**
  * Envia uma notificação push para os usuários da Agenda Digital.
  * Controla duplicidade por itemId + type via:
  *   1. Cache em memória (rápido, protege contra hot-reload e chamadas paralelas)
@@ -362,12 +415,14 @@ export async function sendAgendaPushNotification({
     // Construir URL segura com URLSearchParams (evita duplicar parâmetro 'id=')
     const fullUrl = _buildTargetUrl(targetUrl, itemId)
 
+    const resolvedCollapseId = buildUniqueCollapseId(collapseId, itemId, metadata)
+
     const pushResponse = await sendPushNotification({
       title,
       body: message,
       targetUserIds: cleanTargetIds,
       targetSubscriptionIds,
-      collapseId: collapseId || (metadata?.call_id ? `call_${metadata.call_id}` : itemId ? `item_${itemId}` : undefined),
+      collapseId: resolvedCollapseId,
       url: fullUrl,
       data: {
         type,

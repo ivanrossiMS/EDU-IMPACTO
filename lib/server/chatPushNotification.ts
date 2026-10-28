@@ -445,13 +445,17 @@ export async function dispatchChatPushNotification({
         : `resp_${finalFamilyIds[0] || 'direto'}`
       const familyItemId = `chat_${conversationId}_${targetTag}_msg_${messageId}_familia`
 
+      const familyCollapseId = resolvedFamilyAlunoId
+        ? `alu_${resolvedFamilyAlunoId}_chat_${conversationId}`
+        : `prf_familia_chat_${conversationId}`
+
       const familyPromise = (async () => {
         try {
           const pushRes = await sendPushNotification({
             title: pushTitle,
             body: pushBody,
             targetUserIds: finalFamilyIds,
-            collapseId,
+            collapseId: familyCollapseId,
             url: familyUrl,
             data: {
               type: 'chat',
@@ -534,13 +538,15 @@ export async function dispatchChatPushNotification({
       const colabUrl = `${appBaseUrl}/agenda-digital/colaborador/comunicados?conversation_id=${conversationId}`
       const colabItemId = `chat_${conversationId}_msg_${messageId}_colaborador`
 
+      const colabCollapseId = `prf_colab_chat_${conversationId}`
+
       const colabPromise = (async () => {
         try {
           const pushRes = await sendPushNotification({
             title: pushTitle,
             body: pushBody,
             targetUserIds: finalColabIds,
-            collapseId,
+            collapseId: colabCollapseId,
             url: colabUrl,
             data: {
               type: 'chat',
