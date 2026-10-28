@@ -201,13 +201,14 @@ export async function GET(request: Request) {
       if (user?.email) {
         const { data: resp } = await supabase
           .from('responsaveis')
-          .select('id, cpf')
+          .select('id, dados')
           .eq('email', user.email)
           .maybeSingle()
 
         if (resp?.id) {
           loggedRespId = String(resp.id)
-          if (resp.cpf) guardianTaxIds.add(resp.cpf)
+          const rCpf = resp.dados?.cpf || (resp as any).cpf
+          if (rCpf) guardianTaxIds.add(String(rCpf))
         }
       }
     }

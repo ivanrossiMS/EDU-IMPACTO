@@ -275,6 +275,7 @@ export interface EvidenceCertificateParams {
     assinaturaBase64?: string | null
     estiloCaligrafico?: string | null
     representantes?: RepresentanteEscolaItem[]
+    semAssinaturaRepresentante?: boolean
   }
   eventosAuditoria: EventoAuditoriaItem[]
   validationUrl?: string
@@ -428,8 +429,17 @@ export async function anexarCertificadoEvidencias(
 
   if (totalPaginasOriginais > 0) {
     // 1. Se houver assinaturas posicionadas, estampa cada uma no local exato configurado pelo usuário
+    const semAssinaturaRep = Boolean(
+      params.representanteEscola?.semAssinaturaRepresentante ||
+      (Array.isArray(params.representanteEscola?.representantes) &&
+        params.representanteEscola!.representantes!.length === 0 &&
+        !params.representanteEscola?.nome)
+    )
     if (temPosicoesCustomizadas) {
       for (const pos of params.posicoesAssinaturas!) {
+        if (pos.tipo === 'escola' && semAssinaturaRep) {
+          continue
+        }
         const pageIndex = Math.max(0, Math.min(pos.pagina - 1, totalPaginasOriginais - 1))
         const targetPage = pdfDoc.getPage(pageIndex)
         const { width: pWidth, height: pHeight } = targetPage.getSize()
@@ -1129,15 +1139,21 @@ export async function anexarCertificadoEvidencias(
     razaoSocial: 'COLÉGIO IMPACTO',
     cnpj: '04.395.789/0001-88',
   }
-  const repsEscola: RepresentanteEscolaItem[] = Array.isArray(repEscolaSafe.representantes) && repEscolaSafe.representantes.length > 0
-    ? repEscolaSafe.representantes
-    : [{
-        nome: repEscolaSafe.nome,
-        cpf: repEscolaSafe.cpf,
-        cargo: repEscolaSafe.cargo,
-        assinaturaBase64: repEscolaSafe.assinaturaBase64,
-        estiloCaligrafico: repEscolaSafe.estiloCaligrafico,
-      }]
+  const semAssinaturaRepCert = Boolean(
+    repEscolaSafe.semAssinaturaRepresentante ||
+    (Array.isArray(repEscolaSafe.representantes) && repEscolaSafe.representantes.length === 0 && !repEscolaSafe.nome)
+  )
+  const repsEscola: RepresentanteEscolaItem[] = semAssinaturaRepCert
+    ? []
+    : Array.isArray(repEscolaSafe.representantes) && repEscolaSafe.representantes.length > 0
+      ? repEscolaSafe.representantes
+      : [{
+          nome: repEscolaSafe.nome,
+          cpf: repEscolaSafe.cpf,
+          cargo: repEscolaSafe.cargo,
+          assinaturaBase64: repEscolaSafe.assinaturaBase64,
+          estiloCaligrafico: repEscolaSafe.estiloCaligrafico,
+        }]
 
   const numReps = repsEscola.length
   let repBoxHeight: number
@@ -1146,7 +1162,13 @@ export async function anexarCertificadoEvidencias(
   let gridCardWidth: number
   let gridCardHeight: number
 
-  if (numReps === 1) {
+  if (numReps === 0) {
+    repBoxHeight = 68
+    gridCols = 1
+    gridRows = 1
+    gridCardWidth = 152
+    gridCardHeight = 46
+  } else if (numReps === 1) {
     repBoxHeight = 84
     gridCols = 1
     gridRows = 1
@@ -1203,9 +1225,11 @@ export async function anexarCertificadoEvidencias(
     borderWidth: 0.8,
   })
 
-  const repHeaderTitle = repsEscola.length > 1
-    ? `2. REPRESENTANTES LEGAIS DA INSTITUIÇÃO DE ENSINO (${repsEscola.length} CO-SIGNATÁRIOS)`
-    : '2. REPRESENTANTE LEGAL DA INSTITUIÇÃO DE ENSINO (CONTRATADA)'
+  const repHeaderTitle = numReps === 0
+    ? '2. IDENTIFICAÇÃO DA INSTITUIÇÃO EMISSORA (ASSINATURA EXCLUSIVA DO SIGNATÁRIO)'
+    : repsEscola.length > 1
+      ? `2. REPRESENTANTES LEGAIS DA INSTITUIÇÃO DE ENSINO (${repsEscola.length} CO-SIGNATÁRIOS)`
+      : '2. REPRESENTANTE LEGAL DA INSTITUIÇÃO DE ENSINO (CONTRATADA)'
 
   certPage.drawText(repHeaderTitle, {
     x: marginX + 10,
@@ -1215,8 +1239,42 @@ export async function anexarCertificadoEvidencias(
     color: colorPrimary,
   })
 
-  // ── Renderização do Bloco 2: 1 Representante vs Múltiplos Representantes ──
-  if (numReps === 1) {
+  // ── Renderização do Bloco 2: Sem Representante vs 1 Representante vs Múltiplos Representantes ──
+  if (numReps === 0) {
+    let repY = currentY - 30
+    certPage.drawText(
+      sanitizeWinAnsi(`Instituição Emissora: ${repEscolaSafe.razaoSocial || 'COLÉGIO IMPACTO'} — CNPJ: ${repEscolaSafe.cnpj || '04.395.789/0001-88'}`),
+      {
+        x: colLeftX,
+        y: repY,
+        size: 7.5,
+        font: fontBold,
+        color: colorDark,
+      }
+    )
+    repY -= 12
+    certPage.drawText(
+      sanitizeWinAnsi('Modalidade de Emissão: Assinatura exclusiva do signatário (documento emitido sem co-assinatura de representante da instituição)'),
+      {
+        x: colLeftX,
+        y: repY,
+        size: 7,
+        font: fontRegular,
+        color: colorDark,
+      }
+    )
+    repY -= 12
+    certPage.drawText(
+      sanitizeWinAnsi(`Selo Criptográfico Institucional PKCS#7: Concluído em ${formatDatePtBr(repEscolaSafe.dataHoraAssinatura || params.signatario.dataHoraAssinatura)}`),
+      {
+        x: colLeftX,
+        y: repY,
+        size: 7,
+        font: fontBold,
+        color: colorSecondary,
+      }
+    )
+  } else if (numReps === 1) {
     // 1 Único Representante: Card tradicional na coluna direita
     const rep = repsEscola[0]
     const repCardHeight = 58

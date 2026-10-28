@@ -1459,42 +1459,49 @@ export async function GET(request: Request) {
 
       // 4. Filtro por Busca Textual (com suporte a Remetente/Autor)
       if (filterSearch) {
-        const searchOrs: string[] = [
-          `title.ilike.%${filterSearch}%`,
-          `message.ilike.%${filterSearch}%`,
-          `item_id.ilike.%${filterSearch}%`
-        ]
+        const safeOrSearch = filterSearch.replace(/[,()"'\\]/g, '').trim()
+        const searchOrs: string[] = safeOrSearch
+          ? [
+              `title.ilike.%${safeOrSearch}%`,
+              `message.ilike.%${safeOrSearch}%`,
+              `item_id.ilike.%${safeOrSearch}%`
+            ]
+          : []
 
-        try {
-          const [{ data: matchedUsers }, { data: matchedMoms }, { data: matchedComs }] = await Promise.all([
-            supabase.from('system_users').select('id, auth_id').ilike('nome', `%${filterSearch}%`).limit(10),
-            supabase.from('momentos').select('id').ilike('dados->>author', `%${filterSearch}%`).limit(25),
-            supabase.from('comunicados').select('id').or(`autor.ilike.%${filterSearch}%,dados->>autor.ilike.%${filterSearch}%`).limit(25)
-          ])
+        if (safeOrSearch.length >= 2) {
+          try {
+            const [{ data: matchedUsers }, { data: matchedMoms }, { data: matchedComs }] = await Promise.all([
+              supabase.from('system_users').select('id, auth_id').ilike('nome', `%${safeOrSearch}%`).limit(10),
+              supabase.from('momentos').select('id').ilike('dados->>author', `%${safeOrSearch}%`).limit(25),
+              supabase.from('comunicados').select('id').ilike('autor', `%${safeOrSearch}%`).not('id', 'like', 'AD-COM-REL-STU-%').limit(25)
+            ])
 
-          if (matchedUsers && matchedUsers.length > 0) {
-            matchedUsers.forEach((u: any) => {
-              if (u.id) searchOrs.push(`user_id.eq.${u.id}`)
-              if (u.auth_id) searchOrs.push(`user_id.eq.${u.auth_id}`)
-            })
+            if (matchedUsers && matchedUsers.length > 0) {
+              matchedUsers.forEach((u: any) => {
+                if (u.id) searchOrs.push(`user_id.eq.${u.id}`)
+                if (u.auth_id) searchOrs.push(`user_id.eq.${u.auth_id}`)
+              })
+            }
+
+            if (matchedMoms && matchedMoms.length > 0) {
+              matchedMoms.forEach((m: any) => {
+                if (m.id) searchOrs.push(`item_id.ilike.%${m.id}%`)
+              })
+            }
+
+            if (matchedComs && matchedComs.length > 0) {
+              matchedComs.forEach((c: any) => {
+                if (c.id) searchOrs.push(`item_id.ilike.%${c.id}%`)
+              })
+            }
+          } catch (searchEnhanceErr) {
+            console.warn('Aviso ao expandir busca por autor:', searchEnhanceErr)
           }
-
-          if (matchedMoms && matchedMoms.length > 0) {
-            matchedMoms.forEach((m: any) => {
-              if (m.id) searchOrs.push(`item_id.ilike.%${m.id}%`)
-            })
-          }
-
-          if (matchedComs && matchedComs.length > 0) {
-            matchedComs.forEach((c: any) => {
-              if (c.id) searchOrs.push(`item_id.ilike.%${c.id}%`)
-            })
-          }
-        } catch (searchEnhanceErr) {
-          console.warn('Aviso ao expandir busca por autor:', searchEnhanceErr)
         }
 
-        query = query.or(searchOrs.join(','))
+        if (searchOrs.length > 0) {
+          query = query.or(searchOrs.join(','))
+        }
       }
 
       // 5. Filtro por Usuário Específico
@@ -2217,7 +2224,7 @@ export async function GET(request: Request) {
       // 1. Buscar se existem contas em system_users para esses responsáveis
       const { data: sysUsers } = await supabase
         .from('system_users')
-        .select('id, auth_id, email, nome, ultimo_acesso, created_at, dados')
+        .select('id, auth_id, email, nome, ultimoacesso, created_at, dados')
         .limit(2000)
 
       // 2. Buscar usuários do Supabase Auth para verificar contas ativas dos responsáveis
@@ -2261,7 +2268,7 @@ export async function GET(request: Request) {
 
         const temContaAtiva = Boolean(sysUser || authUser)
         const resolvedAuthId = authUser?.id || sysUser?.auth_id || (sysUser ? sysUser.id : null)
-        const resolvedUltimoAcesso = authUser?.last_sign_in_at || sysUser?.ultimo_acesso || null
+        const resolvedUltimoAcesso = authUser?.last_sign_in_at || sysUser?.ultimoacesso || sysUser?.dados?.ultimo_acesso || null
 
         // NUNCA exibir ID puro — resolver nome real ou papel
         let resolvedNome = (rInfo.nome || '').trim()

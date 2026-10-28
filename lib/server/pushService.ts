@@ -851,7 +851,12 @@ export async function cleanupOneSignalForInactiveStudent(
 
       // Verificar se o responsável é colaborador ativo da escola
       const sysOrConds = [`dados->>responsavel_id.eq.${respId}`, `id.eq.${respId}`]
-      if (guardianAuthId) sysOrConds.push(`id.eq.${guardianAuthId}`, `auth_id.eq.${guardianAuthId}`)
+      if (guardianAuthId) {
+        sysOrConds.push(`id.eq.${guardianAuthId}`)
+        if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(guardianAuthId)) {
+          sysOrConds.push(`auth_id.eq.${guardianAuthId}`)
+        }
+      }
       if (guardianEmail) sysOrConds.push(`email.ilike.${guardianEmail}`)
 
       const [{ data: sysRows }, { data: funcRows }] = await Promise.all([

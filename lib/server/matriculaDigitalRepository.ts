@@ -394,6 +394,7 @@ export async function gerarPdfEvidenciasFallback(
         cnpj: rep.cnpj,
         dataHoraAssinatura: rep.dataHoraAssinatura || contrato.created_at,
         representantes: rep.representantes || undefined,
+        semAssinaturaRepresentante: Boolean(rep.semAssinaturaRepresentante),
       },
       eventosAuditoria: contrato.historico_eventos || [],
       documentosAnexados: contrato.evidencias?.documentosAnexados || null,

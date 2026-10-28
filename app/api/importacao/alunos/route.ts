@@ -406,7 +406,7 @@ export async function POST(request: Request) {
 
           // 2º: Se não achou no cache, buscar no banco pelo CPF ou Nome+Telefone
           if (!existingResp && respCpfClean) {
-            const { data } = await supabase.from('responsaveis').select('*').eq('cpf', respCpfClean).maybeSingle()
+            const { data } = await supabase.from('responsaveis').select('*').eq('dados->>cpf', respCpfClean).maybeSingle()
             existingResp = data
           }
           if (!existingResp && respTelClean) {
@@ -422,7 +422,6 @@ export async function POST(request: Request) {
             nome: respNomeTrim,
             updated_at: new Date().toISOString()
           }
-          if (respCpfClean) respObj.cpf = respCpfClean
           if (respTelClean) {
             respObj.telefone = respTelClean
             respObj.celular = respTelClean
@@ -436,14 +435,22 @@ export async function POST(request: Request) {
 
           if (existingResp) {
             savedRespId = existingResp.id
-            const mergedResp = { ...existingResp, ...respObj }
+            const mergedDados = {
+              ...(existingResp.dados || {}),
+              ...(respCpfClean ? { cpf: respCpfClean } : {}),
+              ...(respInfo.parentesco || defaultParentesco ? { parentesco: respInfo.parentesco || defaultParentesco } : {})
+            }
+            const mergedResp = { ...existingResp, ...respObj, dados: mergedDados }
             await supabase.from('responsaveis').update(mergedResp).eq('id', savedRespId)
           } else {
             savedRespId = crypto.randomUUID()
             respObj.id = savedRespId
             respObj.created_at = new Date().toISOString()
-            respObj.parentesco = respInfo.parentesco || defaultParentesco
-            respObj.dados = { importBatchId: batchId }
+            respObj.dados = {
+              importBatchId: batchId,
+              ...(respCpfClean ? { cpf: respCpfClean } : {}),
+              parentesco: respInfo.parentesco || defaultParentesco
+            }
             const { error: insRespErr } = await supabase.from('responsaveis').insert(respObj)
             if (insRespErr) throw new Error(`Erro ao salvar responsável: ${insRespErr.message}`)
             batchTracker.respIdsCriados.push(savedRespId)

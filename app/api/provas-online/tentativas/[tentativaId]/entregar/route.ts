@@ -33,22 +33,22 @@ async function canAccessTentativa(user: any, isStaff: boolean, tentativa: any): 
     const adminClient = getAdminClient()
     const { data: aluno } = await adminClient
       .from('alunos')
-      .select('id, matricula, email, email_responsavel, cpf_responsavel, responsavel_id, dados')
+      .select('id, matricula, email, dados')
       .or(`id.eq."${tentativa.alunoId}",matricula.eq."${tentativa.alunoId}"`)
       .maybeSingle()
 
     if (aluno) {
       const userEmail = String(user.email || '').trim().toLowerCase()
       const alunoEmail = String(aluno.email || aluno.dados?.email || '').trim().toLowerCase()
-      const respEmail = String(aluno.email_responsavel || aluno.dados?.email_responsavel || '').trim().toLowerCase()
+      const respEmail = String((aluno as any).email_responsavel || aluno.dados?.email_responsavel || '').trim().toLowerCase()
       const userCpf = String(user.user_metadata?.cpf || '').replace(/\D/g, '')
-      const respCpf = String(aluno.cpf_responsavel || aluno.dados?.cpf_responsavel || '').replace(/\D/g, '')
+      const respCpf = String((aluno as any).cpf_responsavel || aluno.dados?.cpf_responsavel || '').replace(/\D/g, '')
       const respId = String(user.user_metadata?.responsavel_id || '')
 
       if (
         (userEmail && (userEmail === alunoEmail || userEmail === respEmail)) ||
         (userCpf && respCpf && userCpf === respCpf) ||
-        (respId && String(aluno.responsavel_id || '') === respId)
+        (respId && String((aluno as any).responsavel_id || aluno.dados?.responsavel_id || '') === respId)
       ) {
         return true
       }

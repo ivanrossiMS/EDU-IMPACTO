@@ -67,7 +67,7 @@ export async function GET(request: Request) {
     if (autorIdParam) {
       comQuery = comQuery.or(`dados->>autorId.eq."${autorIdParam}",dados->>autorId.eq."f_${autorIdParam}"`)
     } else if (autorParam && autorParam !== 'todos') {
-      comQuery = comQuery.or(`autor.ilike."%${autorParam}%",dados->>autor.ilike."%${autorParam}%"`)
+      comQuery = comQuery.ilike('autor', `%${autorParam}%`)
     }
 
     // 2. Buscar momentos

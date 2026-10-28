@@ -48,9 +48,17 @@ export function PushHistoryTab({ onSwitchToTesterWithPayload }: PushHistoryTabPr
   const [selectedUser, setSelectedUser] = useState<SelectedHistoryUser | null>(null)
   const [isUserSearchOpen, setIsUserSearchOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('')
   const [selectedCategory, setSelectedCategory] = useState<string>('all')
   const [selectedStatus, setSelectedStatus] = useState<string>('all')
   const [selectedDateRange, setSelectedDateRange] = useState<string>('7d')
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery)
+    }, 350)
+    return () => clearTimeout(timer)
+  }, [searchQuery])
 
   // Paginação e dados
   const [page, setPage] = useState(1)
@@ -84,8 +92,8 @@ export function PushHistoryTab({ onSwitchToTesterWithPayload }: PushHistoryTabPr
       if (selectedStatus && selectedStatus !== 'all') {
         params.append('status', selectedStatus)
       }
-      if (searchQuery.trim()) {
-        params.append('search', searchQuery.trim())
+      if (debouncedSearchQuery.trim()) {
+        params.append('search', debouncedSearchQuery.trim())
       }
       if (selectedUser) {
         params.append('user_id', selectedUser.id)
@@ -110,7 +118,7 @@ export function PushHistoryTab({ onSwitchToTesterWithPayload }: PushHistoryTabPr
     } finally {
       setIsLoading(false)
     }
-  }, [page, limit, selectedDateRange, selectedCategory, selectedStatus, searchQuery, selectedUser])
+  }, [page, limit, selectedDateRange, selectedCategory, selectedStatus, debouncedSearchQuery, selectedUser])
 
   useEffect(() => {
     loadHistory()

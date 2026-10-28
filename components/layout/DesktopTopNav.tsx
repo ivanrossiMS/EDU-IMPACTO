@@ -106,6 +106,9 @@ export function DesktopTopNav() {
 
     // Se possui permissões explícitas no perfil
     if (!isPrivilegedAdmin && userPerms && userPerms.length > 0) {
+      if (href === '/matriculas/negociacoes' && (userPerms.includes('/matriculas/negociacoes') || userPerms.includes('matriculas') || userPerms.includes('/matriculas/valores') || userPerms.includes('/matriculas/digital'))) {
+        return true
+      }
       return userPerms.some(perm => href === perm || href.startsWith(perm + '/'))
     }
     return true
@@ -129,7 +132,8 @@ export function DesktopTopNav() {
       columns: 1,
       items: [
         { id: 'mat-dig', label: 'Matrícula Digital', href: '/matriculas/digital', icon: <FileCheck2 size={15} />, badge: 'NOVO', badgeColor: 'green' },
-        { id: 'mat-val', label: 'Valores', href: '/matriculas/valores', icon: <Calculator size={15} />, badge: '2027', badgeColor: 'green' }
+        { id: 'mat-val', label: 'Valores', href: '/matriculas/valores', icon: <Calculator size={15} />, badge: '2027', badgeColor: 'green' },
+        { id: 'mat-neg', label: 'Negociações', href: '/matriculas/negociacoes', icon: <Handshake size={15} />, badge: '2027', badgeColor: 'green' }
       ],
       matchPaths: (path) => path.startsWith('/matriculas')
     },

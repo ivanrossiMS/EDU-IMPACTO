@@ -50,6 +50,7 @@ interface ContratoProps {
     razaoSocial: string
     cnpj: string
     assinaturaUrl?: string
+    semAssinaturaRepresentante?: boolean
     representantes?: Array<{
       id?: string
       nome: string
@@ -1043,62 +1044,90 @@ export function SigningPortalClient({ contrato }: { contrato: ContratoProps }) {
               </div>
             </div>
 
-            {/* Card 2: Representante do Colégio & Chancela */}
-            <div className="bg-slate-50/80 border border-slate-200/90 rounded-xl p-3.5 flex flex-col gap-2.5">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-[11px] font-bold text-slate-600 uppercase tracking-wider flex items-center gap-1.5">
-                  <Building2 size={13} className="text-blue-600" />
-                  Representante do Colégio
-                </span>
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100/80 border border-emerald-200 text-emerald-800 text-[10px] font-semibold">
-                  <CheckCircle2 size={11} className="text-emerald-600" />
-                  Autenticado
-                </span>
-              </div>
-
-              {contrato.representanteEscola?.representantes && contrato.representanteEscola.representantes.length > 1 ? (
-                <div className="flex flex-col gap-2">
-                  <div className="text-[11px] font-bold text-[#14213D] uppercase tracking-wide">
-                    {contrato.representanteEscola.representantes.length} Representantes da Instituição:
+            {/* Card 2: Instituição Emissora / Representante do Colégio */}
+            {(() => {
+              const semAssinaturaEscola = Boolean(
+                contrato.evidencias?.assinadoPelaEscola === false ||
+                contrato.representanteEscola?.semAssinaturaRepresentante ||
+                (Array.isArray(contrato.representanteEscola?.representantes) &&
+                  contrato.representanteEscola.representantes.length === 0 &&
+                  !contrato.representanteEscola?.nome)
+              )
+              return (
+                <div className="bg-slate-50/80 border border-slate-200/90 rounded-xl p-3.5 flex flex-col gap-2.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[11px] font-bold text-slate-600 uppercase tracking-wider flex items-center gap-1.5">
+                      <Building2 size={13} className="text-blue-600" />
+                      {semAssinaturaEscola ? 'Instituição Emissora' : 'Representante do Colégio'}
+                    </span>
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100/80 border border-emerald-200 text-emerald-800 text-[10px] font-semibold">
+                      <CheckCircle2 size={11} className="text-emerald-600" />
+                      {semAssinaturaEscola ? 'Emissão Oficial' : 'Autenticado'}
+                    </span>
                   </div>
-                  {contrato.representanteEscola.representantes.map((rep: any, idx: number) => (
-                    <div key={idx} className="flex items-start gap-2.5 bg-white border border-slate-200/70 rounded-lg p-2.5 shadow-2xs">
-                      <div className="w-7 h-7 rounded-full bg-[#EFF6FF] border border-blue-100 text-[#2563EB] flex items-center justify-center shrink-0 mt-0.5">
-                        <Building2 size={13} className="text-[#2563EB]" />
+
+                  {semAssinaturaEscola ? (
+                    <div className="flex items-start gap-3 bg-white border border-slate-200/70 rounded-lg p-3 shadow-2xs">
+                      <div className="w-10 h-10 rounded-full bg-[#EFF6FF] border border-blue-100 text-[#2563EB] flex items-center justify-center shrink-0">
+                        <Building2 size={18} className="text-[#2563EB]" />
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="text-xs font-bold text-[#14213D] uppercase truncate">
-                          {rep.nome}
+                          {contrato.representanteEscola?.razaoSocial || 'Colégio Impacto Ltda'}
                         </div>
-                        <div className="text-[11px] text-slate-500 truncate">
-                          {rep.cargo}
+                        <div className="text-[11px] text-slate-500 mt-0.5 truncate">
+                          CNPJ: {contrato.representanteEscola?.cnpj || '04.395.789/0001-88'}
+                        </div>
+                        <div className="text-[11px] text-emerald-700 font-medium mt-0.5">
+                          Assinatura exclusiva do signatário
                         </div>
                       </div>
                     </div>
-                  ))}
-                  <div className="text-[11px] text-slate-500 px-1 truncate">
-                    {contrato.representanteEscola?.razaoSocial || 'Colégio Impacto Ltda'}
-                  </div>
+                  ) : contrato.representanteEscola?.representantes && contrato.representanteEscola.representantes.length > 1 ? (
+                    <div className="flex flex-col gap-2">
+                      <div className="text-[11px] font-bold text-[#14213D] uppercase tracking-wide">
+                        {contrato.representanteEscola.representantes.length} Representantes da Instituição:
+                      </div>
+                      {contrato.representanteEscola.representantes.map((rep: any, idx: number) => (
+                        <div key={idx} className="flex items-start gap-2.5 bg-white border border-slate-200/70 rounded-lg p-2.5 shadow-2xs">
+                          <div className="w-7 h-7 rounded-full bg-[#EFF6FF] border border-blue-100 text-[#2563EB] flex items-center justify-center shrink-0 mt-0.5">
+                            <Building2 size={13} className="text-[#2563EB]" />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="text-xs font-bold text-[#14213D] uppercase truncate">
+                              {rep.nome}
+                            </div>
+                            <div className="text-[11px] text-slate-500 truncate">
+                              {rep.cargo}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                      <div className="text-[11px] text-slate-500 px-1 truncate">
+                        {contrato.representanteEscola?.razaoSocial || 'Colégio Impacto Ltda'}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-start gap-3 bg-white border border-slate-200/70 rounded-lg p-3 shadow-2xs">
+                      <div className="w-10 h-10 rounded-full bg-[#EFF6FF] border border-blue-100 text-[#2563EB] flex items-center justify-center shrink-0">
+                        <Building2 size={18} className="text-[#2563EB]" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-sm font-bold text-[#14213D] uppercase truncate">
+                          {contrato.representanteEscola?.nome || 'IVAN ROSSI SAMBRANA'}
+                        </div>
+                        <div className="text-xs text-slate-500 mt-0.5 truncate">
+                          {contrato.representanteEscola?.cargo || 'Representante legal / Diretor'}
+                        </div>
+                        <div className="text-xs text-slate-400 truncate">
+                          {contrato.representanteEscola?.razaoSocial || 'Colégio Impacto Ltda'}
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
-              ) : (
-                <div className="flex items-start gap-3 bg-white border border-slate-200/70 rounded-lg p-3 shadow-2xs">
-                  <div className="w-10 h-10 rounded-full bg-[#EFF6FF] border border-blue-100 text-[#2563EB] flex items-center justify-center shrink-0">
-                    <Building2 size={18} className="text-[#2563EB]" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="text-sm font-bold text-[#14213D] uppercase truncate">
-                      {contrato.representanteEscola?.nome || 'IVAN ROSSI SAMBRANA'}
-                    </div>
-                    <div className="text-xs text-slate-500 mt-0.5 truncate">
-                      {contrato.representanteEscola?.cargo || 'Representante legal / Diretor'}
-                    </div>
-                    <div className="text-xs text-slate-400 truncate">
-                      {contrato.representanteEscola?.razaoSocial || 'Colégio Impacto Ltda'}
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
+              )
+            })()}
 
             {/* Ação Principal */}
             <div className="flex flex-col gap-3 pt-2 border-t border-slate-100">
@@ -3047,45 +3076,60 @@ export function SigningPortalClient({ contrato }: { contrato: ContratoProps }) {
                     </div>
 
                     {/* Signatário 2 - Escola */}
-                    <div
-                      style={{
-                        background: 'rgba(30, 41, 59, 0.5)',
-                        border: '1px solid rgba(255, 255, 255, 0.08)',
-                        borderRadius: 14,
-                        padding: '16px',
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#38bdf8', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', marginBottom: 6 }}>
-                        <ShieldCheck size={14} /> 2. {contrato.representanteEscola?.representantes && contrato.representanteEscola.representantes.length > 1 ? `${contrato.representanteEscola.representantes.length} Representantes Institucionais` : 'Representante Institucional'}
-                      </div>
-                      {contrato.representanteEscola?.representantes && contrato.representanteEscola.representantes.length > 1 ? (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 8 }}>
-                          {contrato.representanteEscola.representantes.map((rep: any, idx: number) => (
-                            <div key={idx} style={{ background: 'rgba(255, 255, 255, 0.04)', padding: '6px 10px', borderRadius: 8, border: '1px solid rgba(255, 255, 255, 0.06)' }}>
-                              <div style={{ fontSize: 13, fontWeight: 700, color: '#ffffff' }}>{rep.nome}</div>
-                              <div style={{ fontSize: 11, color: '#94a3b8' }}>{rep.cargo}{rep.cpf ? ` • CPF: ${rep.cpf}` : ''}</div>
+                    {(() => {
+                      const semAssinaturaEscola = Boolean(
+                        contrato.evidencias?.assinadoPelaEscola === false ||
+                        contrato.representanteEscola?.semAssinaturaRepresentante ||
+                        (Array.isArray(contrato.representanteEscola?.representantes) &&
+                          contrato.representanteEscola.representantes.length === 0 &&
+                          !contrato.representanteEscola?.nome)
+                      )
+                      return (
+                        <div
+                          style={{
+                            background: 'rgba(30, 41, 59, 0.5)',
+                            border: '1px solid rgba(255, 255, 255, 0.08)',
+                            borderRadius: 14,
+                            padding: '16px',
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#38bdf8', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', marginBottom: 6 }}>
+                            <ShieldCheck size={14} /> 2. {semAssinaturaEscola ? 'Instituição Emissora' : contrato.representanteEscola?.representantes && contrato.representanteEscola.representantes.length > 1 ? `${contrato.representanteEscola.representantes.length} Representantes Institucionais` : 'Representante Institucional'}
+                          </div>
+                          {semAssinaturaEscola ? (
+                            <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 6 }}>
+                              Assinatura exclusiva do signatário (documento emitido sem co-assinatura de representante da instituição)
                             </div>
-                          ))}
+                          ) : contrato.representanteEscola?.representantes && contrato.representanteEscola.representantes.length > 1 ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 8 }}>
+                              {contrato.representanteEscola.representantes.map((rep: any, idx: number) => (
+                                <div key={idx} style={{ background: 'rgba(255, 255, 255, 0.04)', padding: '6px 10px', borderRadius: 8, border: '1px solid rgba(255, 255, 255, 0.06)' }}>
+                                  <div style={{ fontSize: 13, fontWeight: 700, color: '#ffffff' }}>{rep.nome}</div>
+                                  <div style={{ fontSize: 11, color: '#94a3b8' }}>{rep.cargo}{rep.cpf ? ` • CPF: ${rep.cpf}` : ''}</div>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <>
+                              <div style={{ fontSize: 15, fontWeight: 800, color: '#ffffff' }}>
+                                {contrato.representanteEscola?.nome || 'IVAN ROSSI SAMBRANA'}
+                              </div>
+                              <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 3 }}>
+                                {contrato.representanteEscola?.cargo || 'Diretor Geral / Representante Legal'}
+                              </div>
+                            </>
+                          )}
+                          <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>
+                            {contrato.representanteEscola?.razaoSocial || 'COLÉGIO IMPACTO CENTRO DE ENSINO LTDA'}
+                            <br />
+                            CNPJ: {contrato.representanteEscola?.cnpj || '04.395.789/0001-88'}
+                          </div>
+                          <div style={{ marginTop: 10, display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(56, 189, 248, 0.12)', color: '#38bdf8', padding: '3px 8px', borderRadius: 6, fontSize: 11, fontWeight: 600 }}>
+                            <BadgeCheck size={13} /> Chancela Institucional Autêntica
+                          </div>
                         </div>
-                      ) : (
-                        <>
-                          <div style={{ fontSize: 15, fontWeight: 800, color: '#ffffff' }}>
-                            {contrato.representanteEscola?.nome || 'IVAN ROSSI SAMBRANA'}
-                          </div>
-                          <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 3 }}>
-                            {contrato.representanteEscola?.cargo || 'Diretor Geral / Representante Legal'}
-                          </div>
-                        </>
-                      )}
-                      <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>
-                        {contrato.representanteEscola?.razaoSocial || 'COLÉGIO IMPACTO CENTRO DE ENSINO LTDA'}
-                        <br />
-                        CNPJ: {contrato.representanteEscola?.cnpj || '04.395.789/0001-88'}
-                      </div>
-                      <div style={{ marginTop: 10, display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(56, 189, 248, 0.12)', color: '#38bdf8', padding: '3px 8px', borderRadius: 6, fontSize: 11, fontWeight: 600 }}>
-                        <BadgeCheck size={13} /> Chancela Institucional Autêntica
-                      </div>
-                    </div>
+                      )
+                    })()}
                   </div>
                 </div>
 

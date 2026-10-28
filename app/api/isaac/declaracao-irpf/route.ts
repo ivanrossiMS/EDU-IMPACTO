@@ -249,7 +249,7 @@ export async function GET(request: Request) {
       const { data: resp } = await supabase
         .from('responsaveis')
         .select('*')
-        .or(`cpf.eq.${cleanCpf},cpf.eq.${responsavelCpfParam.replace(/[^0-9.-]/g, '')}`)
+        .or(`dados->>cpf.eq.${cleanCpf},dados->>cpf.ilike.%${cleanCpf}%`)
         .maybeSingle()
       if (resp) dbResponsavel = resp
     }

@@ -197,7 +197,7 @@ export async function GET(request: Request) {
     if (cpfParam) {
       const cleanDigits = cpfParam.replace(/\D/g, '')
       if (cleanDigits) {
-        query = query.or(`cpf.eq.${cleanDigits},dados->>cpf.eq.${cleanDigits},dados->>cpf.ilike.%${cleanDigits}%`)
+        query = query.or(`dados->>cpf.eq.${cleanDigits},dados->>cpf.ilike.%${cleanDigits}%`)
       }
     }
 

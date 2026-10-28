@@ -171,13 +171,28 @@ export async function POST(request: Request) {
       cfgLogo = map.get('cfgEscolaLogo')
     } catch {}
 
-    const repEscola = { ...(contrato.evidencias?.escolaRepresentante || cfgRep || {}) }
-    if (!repEscola.nome) repEscola.nome = 'IVAN ROSSI SAMBRANA'
-    if (!repEscola.cpf) repEscola.cpf = '00130220167'
-    if (!repEscola.cargo) repEscola.cargo = 'Diretor Geral / Representante Legal'
+    const rawRep = contrato.evidencias?.escolaRepresentante
+    const semAssinaturaRep = Boolean(
+      contrato.evidencias?.assinadoPelaEscola === false ||
+      rawRep?.semAssinaturaRepresentante ||
+      (Array.isArray(rawRep?.representantes) && rawRep.representantes.length === 0 && !rawRep?.nome)
+    )
+
+    const repEscola = { ...(rawRep || (semAssinaturaRep ? {} : cfgRep) || {}) }
+    if (!semAssinaturaRep) {
+      if (!repEscola.nome) repEscola.nome = 'IVAN ROSSI SAMBRANA'
+      if (!repEscola.cpf) repEscola.cpf = '00130220167'
+      if (!repEscola.cargo) repEscola.cargo = 'Diretor Geral / Representante Legal'
+      if (!repEscola.dataHoraAssinatura) repEscola.dataHoraAssinatura = contrato.created_at
+    } else {
+      repEscola.nome = ''
+      repEscola.cpf = ''
+      repEscola.cargo = ''
+      repEscola.representantes = []
+      repEscola.semAssinaturaRepresentante = true
+    }
     if (!repEscola.razaoSocial) repEscola.razaoSocial = 'COLÉGIO IMPACTO CENTRO DE ENSINO LTDA'
     if (!repEscola.cnpj) repEscola.cnpj = '04.395.789/0001-88'
-    if (!repEscola.dataHoraAssinatura) repEscola.dataHoraAssinatura = contrato.created_at
 
     // Enriquecimento resiliente de assinaturas dos representantes a partir das configurações salvas
     if (Array.isArray(repEscola.representantes) && repEscola.representantes.length > 0) {
@@ -286,6 +301,7 @@ export async function POST(request: Request) {
         dataHoraAssinatura: repEscola.dataHoraAssinatura || contrato.created_at,
         assinaturaBase64: repEscola.assinaturaBase64 || null,
         representantes: repEscola.representantes || undefined,
+        semAssinaturaRepresentante: Boolean(repEscola.semAssinaturaRepresentante),
       },
       eventosAuditoria: contrato.historico_eventos,
       validationUrl,

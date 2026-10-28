@@ -47,6 +47,7 @@ interface DossierData {
     estiloCaligrafico?: string | null
     assinaturaBase64?: string | null
     dataHoraAssinatura?: string | null
+    semAssinaturaRepresentante?: boolean
     representantes?: Array<{
       id?: string
       nome: string
@@ -611,7 +612,24 @@ export function ValidarAssinaturaClient({
                 </div>
 
                 <div className="p-3.5 sm:p-5 md:p-6 flex-1 flex flex-col">
-                  {dossier.escolaRepresentante?.representantes && dossier.escolaRepresentante.representantes.length > 1 ? (
+                  {Boolean(
+                    dossier.escolaRepresentante?.semAssinaturaRepresentante ||
+                    (Array.isArray(dossier.escolaRepresentante?.representantes) &&
+                      dossier.escolaRepresentante.representantes.length === 0 &&
+                      !dossier.escolaRepresentante?.nome)
+                  ) ? (
+                    <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-3 sm:p-4 mb-2">
+                      <div className="font-extrabold text-sm sm:text-base text-slate-900">
+                        {dossier.escolaRepresentante?.razaoSocial || 'COLÉGIO IMPACTO CENTRO DE ENSINO LTDA'}
+                      </div>
+                      <div className="text-xs sm:text-[13px] text-slate-600 mt-1">
+                        CNPJ: {dossier.escolaRepresentante?.cnpj || '04.395.789/0001-88'}
+                      </div>
+                      <div className="text-xs text-slate-600 mt-2 leading-relaxed">
+                        Documento emitido para assinatura exclusiva do signatário (sem co-assinatura de representante da instituição).
+                      </div>
+                    </div>
+                  ) : dossier.escolaRepresentante?.representantes && dossier.escolaRepresentante.representantes.length > 1 ? (
                     <div className="space-y-2 mb-2">
                       <div className="text-[11px] font-bold text-blue-900 uppercase tracking-wide flex items-center gap-1.5">
                         <CheckCircle2 size={13} className="text-blue-600 shrink-0" />

@@ -586,7 +586,6 @@ export async function GET(request: Request) {
       const cleanName = autorParam.trim().replace(/["\\]/g, '');
       if (cleanName) {
         authorConds.push(`autor.ilike."%${cleanName}%"`);
-        authorConds.push(`dados->>autor.ilike."%${cleanName}%"`);
       }
     }
     if (authorConds.length > 0) {

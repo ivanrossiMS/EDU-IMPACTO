@@ -444,15 +444,16 @@ export async function POST(request: Request) {
           // Busca um filho deste autor naquele intervalo que contenha o remetente_id nos alunosIds
           const { data: relatedComs } = await supabase
             .from('comunicados')
-            .select('id, alunosIds')
+            .select('id, dados')
             .eq('dados->>autorId', parentAutorId)
             .like('id', 'AD-COM-REL-STU%')
             .gte('created_at', minTime)
             .lte('created_at', maxTime);
             
           if (relatedComs) {
-            const studentChild = relatedComs.find(c => {
-               const alIds = Array.isArray(c.alunosIds) ? c.alunosIds : (c.alunosIds ? JSON.parse(c.alunosIds) : []);
+            const studentChild = relatedComs.find((c: any) => {
+               const rawAlIds = c.dados?.alunosIds ?? c.alunosIds;
+               const alIds = Array.isArray(rawAlIds) ? rawAlIds : (rawAlIds ? JSON.parse(rawAlIds) : []);
                return alIds.some((id: any) => String(id) === String(body.remetente_id));
             });
             if (studentChild) {
@@ -560,18 +561,18 @@ export async function POST(request: Request) {
           // Se o comunicado antigo só tiver o nome do autor, resolve o ID pelo nome
           if (candidateColabTokens.size === 0 && rawAutorName) {
             const [{ data: byNameColab }, { data: byNameSys }] = await Promise.all([
-              supabase.from('colaboradores').select('id, email, auth_id').ilike('nome', rawAutorName).limit(5),
-              supabase.from('system_users').select('id, email, auth_id, colaborador_id').ilike('nome', rawAutorName).limit(5),
+              supabase.from('funcionarios').select('id, email, dados').ilike('nome', rawAutorName).limit(5),
+              supabase.from('system_users').select('id, email, auth_id, dados').ilike('nome', rawAutorName).limit(5),
             ]);
             byNameColab?.forEach((c: any) => {
               if (c.id) candidateColabTokens.add(String(c.id));
-              if (c.auth_id) candidateColabTokens.add(String(c.auth_id));
+              if (c.dados?.auth_id) candidateColabTokens.add(String(c.dados.auth_id));
               if (c.email) candidateColabTokens.add(String(c.email).toLowerCase());
             });
             byNameSys?.forEach((u: any) => {
               if (u.id) candidateColabTokens.add(String(u.id));
               if (u.auth_id) candidateColabTokens.add(String(u.auth_id));
-              if (u.colaborador_id) candidateColabTokens.add(String(u.colaborador_id));
+              if (u.dados?.colaborador_id) candidateColabTokens.add(String(u.dados.colaborador_id));
               if (u.email) candidateColabTokens.add(String(u.email).toLowerCase());
             });
           }
@@ -623,10 +624,14 @@ export async function POST(request: Request) {
 
           try {
             const isNumericId = /^\d+$/.test(cleanTargetId);
+            const isUuidTarget = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanTargetId);
+            const respOrFilter = isUuidTarget
+              ? `id.eq.${cleanTargetId},auth_id.eq.${cleanTargetId}`
+              : `id.eq.${cleanTargetId}`;
             const { data: respRows } = await supabase
               .from('responsaveis')
               .select('id, auth_id, email')
-              .or(isNumericId ? `id.eq.${cleanTargetId},auth_id.eq.${cleanTargetId}` : `auth_id.eq.${cleanTargetId}`)
+              .or(respOrFilter)
               .limit(5);
 
             const numericRespIds: string[] = [];
@@ -643,17 +648,44 @@ export async function POST(request: Request) {
             }
 
             if (numericRespIds.length > 0) {
+              const vincOrFilter = isNumericId
+                ? `responsavel_id.in.(${numericRespIds.join(',')}),aluno_id.eq.${cleanTargetId}`
+                : `responsavel_id.in.(${numericRespIds.join(',')})`;
               const { data: vincs } = await supabase
                 .from('aluno_responsavel')
-                .select('aluno_id')
-                .in('responsavel_id', numericRespIds);
+                .select('aluno_id, responsavel_id')
+                .or(vincOrFilter);
               if (vincs && vincs.length > 0) {
                 if (!targetAlunoId && vincs.length === 1 && vincs[0].aluno_id) {
                   targetAlunoId = String(vincs[0].aluno_id);
                 }
+                const extraRespIdsToFetch: string[] = [];
                 vincs.forEach((v: any) => {
-                  if (v.aluno_id) expandedFamilyTargets.add(String(v.aluno_id));
+                  if (v.aluno_id) {
+                    expandedFamilyTargets.add(String(v.aluno_id));
+                    if (!targetAlunoId && String(v.aluno_id) === cleanTargetId) {
+                      targetAlunoId = cleanTargetId;
+                    }
+                  }
+                  if (v.responsavel_id) {
+                    const rIdStr = String(v.responsavel_id);
+                    expandedFamilyTargets.add(rIdStr);
+                    if (!respRows?.some((r: any) => String(r.id) === rIdStr)) {
+                      extraRespIdsToFetch.push(rIdStr);
+                    }
+                  }
                 });
+                if (extraRespIdsToFetch.length > 0) {
+                  const { data: extraResps } = await supabase
+                    .from('responsaveis')
+                    .select('id, auth_id, email')
+                    .in('id', Array.from(new Set(extraRespIdsToFetch)));
+                  extraResps?.forEach((er: any) => {
+                    if (er.id) expandedFamilyTargets.add(String(er.id));
+                    if (er.auth_id) expandedFamilyTargets.add(String(er.auth_id));
+                    if (er.email) expandedFamilyTargets.add(String(er.email).trim().toLowerCase());
+                  });
+                }
               }
             }
           } catch (expandErr) {

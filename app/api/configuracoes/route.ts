@@ -21,6 +21,7 @@ const SENSITIVE_STAFF_ONLY_CONFIG_KEYS = new Set([
   'matriculas_digitais_list',
   'matriculas_digitais_registros_v1',
   'matriculas_contratos_list',
+  'matriculas_negociacoes_v1',
   'cfgBackupSnapshots',
   'catraca_ip',
   'catraca_user',

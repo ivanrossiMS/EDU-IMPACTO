@@ -641,15 +641,6 @@ export default function MatriculaDigitalPage() {
 
     const signatariosEscolhidos = signatariosDoRep.filter(s => idsSelecionados.includes(s.id))
 
-    if (signatariosEscolhidos.length === 0 && repAtivo) {
-      signatariosEscolhidos.push({
-        id: repAtivo.id,
-        nome: repAtivo.nome,
-        cargo: repAtivo.cargo,
-        cpf: repAtivo.cpf,
-      })
-    }
-
     signatariosEscolhidos.forEach((s, idx) => {
       list.push({
         id: s.id,
@@ -685,6 +676,23 @@ export default function MatriculaDigitalPage() {
     formNovo.signatario_cargo,
     formNovo.signatario_cpf,
   ])
+
+  // Remove posições órfãs quando um representante da escola é desmarcado
+  useEffect(() => {
+    const idsAtivos = new Set(signatariosPosicionaveis.map(s => s.id))
+    setPosicoesAssinaturas(prev => {
+      let alterou = false
+      const cp: Record<string, PosicaoAssinatura> = {}
+      for (const [k, pos] of Object.entries(prev)) {
+        if (pos.tipo === 'escola' && !idsAtivos.has(pos.signatarioId)) {
+          alterou = true
+        } else {
+          cp[k] = pos
+        }
+      }
+      return alterou ? cp : prev
+    })
+  }, [signatariosPosicionaveis])
 
   const diagnosticoPosicionamento = useMemo(() => {
     let acumulado = 0
@@ -730,7 +738,7 @@ export default function MatriculaDigitalPage() {
   // Ação rápida: auto-posicionar signatários no rodapé da última página de cada documento
   const handleAutoPosicionarRodape = () => {
     if (signatariosPosicionaveis.length === 0) {
-      toast.error('Selecione primeiro a instituição e os signatários que assinarão o documento.')
+      toast.error('Informe primeiro o nome do signatário (ou selecione representantes) para posicionar as assinaturas.')
       return
     }
     const docs = documentosUpload.map((d) => ({
@@ -1509,43 +1517,29 @@ export default function MatriculaDigitalPage() {
       }
     }
 
-    if (!formNovo.escola_representante_id) {
-      toast.error('Por favor, selecione a Instituição Emissora (Passo 1).')
-      return
-    }
-
     const idsSelecionados = Array.isArray(formNovo.escola_signatarios_ids)
       ? formNovo.escola_signatarios_ids
       : (formNovo.escola_signatario_id ? [formNovo.escola_signatario_id] : [])
-
-    if (idsSelecionados.length === 0) {
-      toast.error('Por favor, selecione ao menos um representante da instituição para assinar o documento (Passo 2).')
-      return
-    }
 
     setSalvandoContrato(true)
     try {
       const listaTodosReps = Array.isArray(configData.representantes) && configData.representantes.length > 0
         ? configData.representantes
         : DEFAULT_REPRESENTANTES_INICIAIS
-      const repEscolhido = listaTodosReps.find(r => r.id === formNovo.escola_representante_id)
-      if (!repEscolhido) {
-        toast.error('Instituição emissora não encontrada. Selecione a instituição no Passo 1.')
-        setSalvandoContrato(false)
-        return
-      }
-      const signatarios = garantirSignatarios(repEscolhido)
+      const repEscolhido =
+        listaTodosReps.find(r => r.id === formNovo.escola_representante_id) ||
+        listaTodosReps.find(r => r.padrao) ||
+        listaTodosReps[0]
+      const signatarios = repEscolhido ? garantirSignatarios(repEscolhido) : []
       const signatariosEscolhidos = signatarios.filter(s => idsSelecionados.includes(s.id))
-      if (signatariosEscolhidos.length === 0) {
-        toast.error('Por favor, selecione ao menos um representante da instituição para assinar o documento (Passo 2).')
-        setSalvandoContrato(false)
-        return
-      }
       const sigsFinais = signatariosEscolhidos
-      const sigPrincipal = sigsFinais[0]
+      const sigPrincipal = sigsFinais[0] || null
 
       // Prepara as posições visuais das assinaturas (ou auto-posiciona no rodapé caso não definidas manualmente)
-      let posicoesArray = Object.values(posicoesAssinaturas)
+      const idsAtivos = new Set(signatariosPosicionaveis.map(s => s.id))
+      let posicoesArray = Object.values(posicoesAssinaturas).filter(
+        p => !p.signatarioId || idsAtivos.has(p.signatarioId)
+      )
       if (posicoesArray.length === 0 && signatariosPosicionaveis.length > 0) {
         const autoPos = gerarPosicionamentoDocumentos(
           signatariosPosicionaveis,
@@ -1593,7 +1587,7 @@ export default function MatriculaDigitalPage() {
         aluno_nome: formNovo.aluno_nome || undefined,
         ano_letivo: formNovo.ano_letivo || ultimoAnoCadastrado,
         escola_representante_id: repEscolhido?.id,
-        escola_signatario_id: sigPrincipal?.id,
+        escola_signatario_id: sigPrincipal?.id || undefined,
         escola_signatarios_ids: sigsFinais.map(s => s.id),
         escola_representantes: sigsFinais.map(s => ({
           id: s.id,
@@ -1604,9 +1598,10 @@ export default function MatriculaDigitalPage() {
           telefone: s.telefone,
           assinaturaBase64: s.assinaturaBase64 || undefined,
         })),
-        escola_representante_nome: sigPrincipal?.nome || repEscolhido?.nome,
-        escola_representante_cpf: sigPrincipal?.cpf || repEscolhido?.cpf,
-        escola_representante_cargo: sigPrincipal?.cargo || repEscolhido?.cargo,
+        sem_assinatura_escola: sigsFinais.length === 0,
+        escola_representante_nome: sigPrincipal?.nome || '',
+        escola_representante_cpf: sigPrincipal?.cpf || '',
+        escola_representante_cargo: sigPrincipal?.cargo || '',
         escola_representante_assinatura: sigPrincipal?.assinaturaBase64 || undefined,
         escola_razao_social: repEscolhido?.razaoSocial,
         escola_cnpj: repEscolhido?.cnpj,
@@ -5055,7 +5050,7 @@ export default function MatriculaDigitalPage() {
 
                     const signatariosEscolhidos = signatariosDoRep.filter(s => idsSelecionados.includes(s.id))
                     const temSignatariosSelecionados = signatariosEscolhidos.length > 0
-                    const tudoPronto = temInstituicaoSelecionada && temSignatariosSelecionados
+                    const tudoPronto = temInstituicaoSelecionada
 
                     return (
                       <div
@@ -5071,7 +5066,7 @@ export default function MatriculaDigitalPage() {
                           transition: 'all 0.2s ease',
                         }}
                       >
-                        {/* Topo do Bloco: Título e Status Global (Amarelo -> Verde) */}
+                        {/* Topo do Bloco: Título e Status Global */}
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                             <div
@@ -5092,10 +5087,10 @@ export default function MatriculaDigitalPage() {
                             </div>
                             <div>
                               <label style={{ fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-secondary))', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                                Instituição Emissora e Representantes *
+                                Instituição Emissora e Representantes
                               </label>
                               <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', marginTop: 1 }}>
-                                Selecione a pessoa jurídica emissora e os representantes que assinarão (Obrigatório)
+                                Selecione a pessoa jurídica emissora. A assinatura de representantes da empresa é opcional.
                               </div>
                             </div>
                           </div>
@@ -5116,7 +5111,7 @@ export default function MatriculaDigitalPage() {
                               transition: 'all 0.2s ease',
                             }}
                           >
-                            {tudoPronto ? (
+                            {temInstituicaoSelecionada && temSignatariosSelecionados ? (
                               <>
                                 <Check size={13} color="#10b981" strokeWidth={2.5} style={{ flexShrink: 0 }} />
                                 {signatariosEscolhidos.length === 1 ? (
@@ -5135,15 +5130,17 @@ export default function MatriculaDigitalPage() {
                                   </>
                                 )}
                               </>
-                            ) : !temInstituicaoSelecionada ? (
+                            ) : temInstituicaoSelecionada ? (
                               <>
-                                <AlertCircle size={13} color="#f59e0b" style={{ flexShrink: 0 }} />
-                                <span style={{ fontWeight: 600 }}>1º Passo Obrigatório: Escolha a Instituição abaixo</span>
+                                <Check size={13} color="#10b981" strokeWidth={2.5} style={{ flexShrink: 0 }} />
+                                <span style={{ color: '#047857', fontWeight: 600 }}>
+                                  Sem assinatura da empresa (Apenas o signatário assinará)
+                                </span>
                               </>
                             ) : (
                               <>
                                 <AlertCircle size={13} color="#f59e0b" style={{ flexShrink: 0 }} />
-                                <span style={{ fontWeight: 600 }}>2º Passo Obrigatório: Escolha quem vai assinar</span>
+                                <span style={{ fontWeight: 600 }}>Escolha a Instituição Emissora abaixo (Representante opcional)</span>
                               </>
                             )}
                           </div>
@@ -5153,7 +5150,7 @@ export default function MatriculaDigitalPage() {
                         <div>
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6, flexWrap: 'wrap', gap: 6 }}>
                             <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10.5, fontWeight: 700, color: 'hsl(var(--text-muted))', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                              1. Escolha a Instituição Emissora *
+                              1. Escolha a Instituição Emissora
                             </label>
                             {temInstituicaoSelecionada ? (
                               <span
@@ -5187,7 +5184,7 @@ export default function MatriculaDigitalPage() {
                                   borderRadius: 999,
                                 }}
                               >
-                                <AlertCircle size={11} /> Seleção Obrigatória (Pendente)
+                                <AlertCircle size={11} /> Clique para selecionar a instituição
                               </span>
                             )}
                           </div>
@@ -5237,7 +5234,7 @@ export default function MatriculaDigitalPage() {
                                       ...prev,
                                       escola_representante_id: r.id,
                                       escola_signatario_id: '',
-                                      escola_signatarios_ids: [], // Começa sem representantes selecionados, em amarelo!
+                                      escola_signatarios_ids: [],
                                     }))
                                   }}
                                   style={{
@@ -5292,7 +5289,7 @@ export default function MatriculaDigitalPage() {
                                           borderRadius: 6,
                                         }}
                                       >
-                                        ⚠️ Clique p/ Selecionar
+                                        Clique p/ Selecionar
                                       </span>
                                     ) : (
                                       <span
@@ -5323,29 +5320,29 @@ export default function MatriculaDigitalPage() {
                           </div>
                         </div>
 
-                        {/* Subseção de Seleção dos Representantes Signatários (Passo 2) */}
+                        {/* Subseção de Seleção dos Representantes Signatários (Passo 2 - Opcional) */}
                         <div style={{ borderTop: '1px solid hsl(var(--border-subtle))', paddingTop: 10 }}>
                           {!temInstituicaoSelecionada ? (
                             <div
                               style={{
                                 padding: '12px 14px',
                                 borderRadius: 10,
-                                border: '1.5px dashed #f59e0b',
-                                background: 'rgba(245, 158, 11, 0.05)',
+                                border: '1px dashed hsl(var(--border-subtle))',
+                                background: 'hsl(var(--bg-surface))',
                                 display: 'flex',
                                 alignItems: 'center',
                                 gap: 10,
-                                color: '#b45309',
+                                color: 'hsl(var(--text-secondary))',
                                 fontSize: 12,
                               }}
                             >
-                              <AlertCircle size={18} color="#f59e0b" style={{ flexShrink: 0 }} />
+                              <PenTool size={16} color="hsl(var(--text-muted))" style={{ flexShrink: 0 }} />
                               <div>
-                                <strong style={{ display: 'block', fontSize: 12, marginBottom: 2 }}>
-                                  2. Selecione Quais Representantes Vão Assinar * (Aguardando Passo 1)
+                                <strong style={{ display: 'block', fontSize: 12, marginBottom: 2, color: 'hsl(var(--text-primary))' }}>
+                                  2. Selecione Quais Representantes Vão Assinar (Opcional)
                                 </strong>
                                 <span style={{ fontSize: 11.5, opacity: 0.9 }}>
-                                  Por favor, escolha a <strong>Instituição Emissora (Passo 1)</strong> acima para carregar a lista de representantes autorizados a assinar.
+                                  Escolha a <strong>Instituição Emissora (Passo 1)</strong> acima caso deseje incluir a assinatura de representantes da instituição, ou emita direto apenas para os signatários.
                                 </span>
                               </div>
                             </div>
@@ -5354,31 +5351,31 @@ export default function MatriculaDigitalPage() {
                               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, flexWrap: 'wrap', gap: 6 }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                                   <label style={{ fontSize: 10.5, fontWeight: 700, color: 'hsl(var(--text-secondary))', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: 5 }}>
-                                    <PenTool size={12} color={temSignatariosSelecionados ? '#10b981' : '#f59e0b'} />
-                                    2. Selecione Quais Representantes Vão Assinar *
+                                    <PenTool size={12} color={temSignatariosSelecionados ? '#10b981' : 'hsl(var(--text-muted))'} />
+                                    2. Selecione Quais Representantes Vão Assinar (Opcional)
                                   </label>
                                   <span
                                     style={{
                                       fontSize: 10,
                                       fontWeight: 700,
-                                      color: temSignatariosSelecionados ? '#059669' : '#b45309',
-                                      background: temSignatariosSelecionados ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)',
-                                      border: temSignatariosSelecionados ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid rgba(245, 158, 11, 0.35)',
+                                      color: temSignatariosSelecionados ? '#059669' : 'hsl(var(--text-secondary))',
+                                      background: temSignatariosSelecionados ? 'rgba(16, 185, 129, 0.15)' : 'hsl(var(--bg-subtle))',
+                                      border: temSignatariosSelecionados ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid hsl(var(--border-subtle))',
                                       padding: '2px 8px',
                                       borderRadius: 999,
                                     }}
                                   >
                                     {temSignatariosSelecionados
                                       ? (signatariosEscolhidos.length > 1
-                                          ? `✓ ${signatariosEscolhidos.length} assinaturas selecionadas (Verde)`
+                                          ? `✓ ${signatariosEscolhidos.length} assinaturas selecionadas`
                                           : `✓ 1 assinatura selecionada (${signatariosEscolhidos[0]?.nome.split(' ')[0]})`)
-                                      : '⚠️ Seleção Obrigatória: Nenhum selecionado (Amarelo)'}
+                                      : 'Opcional: Nenhum selecionado (Apenas o signatário assinará)'}
                                   </span>
                                 </div>
 
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                                  {signatariosDoRep.length > 1 && (
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                    {signatariosDoRep.length > 1 && (
                                       <button
                                         type="button"
                                         onClick={() => {
@@ -5405,32 +5402,32 @@ export default function MatriculaDigitalPage() {
                                       >
                                         <Check size={10} strokeWidth={2.5} /> Selecionar Todos ({signatariosDoRep.length})
                                       </button>
-                                      {temSignatariosSelecionados && (
-                                        <button
-                                          type="button"
-                                          onClick={() => {
-                                            setFormNovo(prev => ({
-                                              ...prev,
-                                              escola_signatarios_ids: [],
-                                              escola_signatario_id: '',
-                                            }))
-                                          }}
-                                          style={{
-                                            background: 'rgba(245, 158, 11, 0.08)',
-                                            border: '1px solid rgba(245, 158, 11, 0.3)',
-                                            color: '#b45309',
-                                            fontSize: 10,
-                                            fontWeight: 500,
-                                            cursor: 'pointer',
-                                            borderRadius: 6,
-                                            padding: '2px 7px',
-                                          }}
-                                        >
-                                          Limpar Seleção
-                                        </button>
-                                      )}
-                                    </div>
-                                  )}
+                                    )}
+                                    {temSignatariosSelecionados && (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setFormNovo(prev => ({
+                                            ...prev,
+                                            escola_signatarios_ids: [],
+                                            escola_signatario_id: '',
+                                          }))
+                                        }}
+                                        style={{
+                                          background: 'rgba(245, 158, 11, 0.08)',
+                                          border: '1px solid rgba(245, 158, 11, 0.3)',
+                                          color: '#b45309',
+                                          fontSize: 10,
+                                          fontWeight: 500,
+                                          cursor: 'pointer',
+                                          borderRadius: 6,
+                                          padding: '2px 7px',
+                                        }}
+                                      >
+                                        Limpar Seleção (Sem assinatura da empresa)
+                                      </button>
+                                    )}
+                                  </div>
 
                                   <button
                                     type="button"
@@ -5455,7 +5452,7 @@ export default function MatriculaDigitalPage() {
                                 </div>
                               </div>
 
-                              {/* Grid de Representantes Signatários (Amarelo se não selecionado, Verde se selecionado) */}
+                              {/* Grid de Representantes Signatários (Opcional) */}
                               <div
                                 style={{
                                   display: 'grid',
@@ -5484,10 +5481,10 @@ export default function MatriculaDigitalPage() {
                                         borderRadius: 10,
                                         border: isSigSelected
                                           ? '2px solid #10b981'
-                                          : '1.5px dashed #f59e0b',
+                                          : '1px solid hsl(var(--border-subtle))',
                                         background: isSigSelected
                                           ? 'rgba(16, 185, 129, 0.08)'
-                                          : 'rgba(245, 158, 11, 0.04)',
+                                          : 'hsl(var(--bg-surface))',
                                         display: 'flex',
                                         alignItems: 'center',
                                         justifyContent: 'space-between',
@@ -5496,14 +5493,14 @@ export default function MatriculaDigitalPage() {
                                       }}
                                     >
                                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-                                        {/* Checkbox multi-select: Amarelo se pendente, Verde se selecionado */}
+                                        {/* Checkbox multi-select */}
                                         <div
                                           style={{
                                             width: 16,
                                             height: 16,
                                             borderRadius: 4,
-                                            border: isSigSelected ? '2px solid #10b981' : '1.5px solid #f59e0b',
-                                            background: isSigSelected ? '#10b981' : 'rgba(245, 158, 11, 0.08)',
+                                            border: isSigSelected ? '2px solid #10b981' : '1.5px solid hsl(var(--border-strong))',
+                                            background: isSigSelected ? '#10b981' : 'transparent',
                                             display: 'flex',
                                             alignItems: 'center',
                                             justifyContent: 'center',
@@ -5515,16 +5512,16 @@ export default function MatriculaDigitalPage() {
                                         </div>
                                         <div style={{ minWidth: 0 }}>
                                           <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                                            <span style={{ fontSize: 12, fontWeight: 700, color: isSigSelected ? '#065f46' : '#92400e', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                            <span style={{ fontSize: 12, fontWeight: 700, color: isSigSelected ? '#065f46' : 'hsl(var(--text-primary))', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                               {sig.nome}
                                             </span>
                                             {sig.padrao && (
-                                              <span style={{ fontSize: 9.5, fontWeight: 700, color: isSigSelected ? '#059669' : '#b45309', background: isSigSelected ? 'rgba(16, 185, 129, 0.12)' : 'rgba(245, 158, 11, 0.12)', padding: '1px 5px', borderRadius: 4 }}>
+                                              <span style={{ fontSize: 9.5, fontWeight: 700, color: isSigSelected ? '#059669' : 'hsl(var(--text-secondary))', background: isSigSelected ? 'rgba(16, 185, 129, 0.12)' : 'hsl(var(--bg-subtle))', padding: '1px 5px', borderRadius: 4 }}>
                                                 Padrão
                                               </span>
                                             )}
                                           </div>
-                                          <div style={{ fontSize: 10.5, color: isSigSelected ? '#047857' : '#b45309', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                          <div style={{ fontSize: 10.5, color: isSigSelected ? '#047857' : 'hsl(var(--text-secondary))', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                             {sig.cargo} • CPF: {formatarCpf(sig.cpf)}
                                           </div>
                                         </div>
@@ -5534,8 +5531,8 @@ export default function MatriculaDigitalPage() {
                                           ✓ Assina
                                         </span>
                                       ) : (
-                                        <span style={{ fontSize: 9.5, fontWeight: 600, color: '#b45309', flexShrink: 0, background: 'rgba(245, 158, 11, 0.15)', border: '1px solid rgba(245, 158, 11, 0.3)', padding: '2px 6px', borderRadius: 6 }}>
-                                          ⚠️ Clique p/ Selecionar
+                                        <span style={{ fontSize: 9.5, fontWeight: 600, color: 'hsl(var(--text-secondary))', flexShrink: 0, background: 'hsl(var(--bg-subtle))', border: '1px solid hsl(var(--border-subtle))', padding: '2px 6px', borderRadius: 6 }}>
+                                          Opcional
                                         </span>
                                       )}
                                     </div>
@@ -7030,7 +7027,7 @@ export default function MatriculaDigitalPage() {
                               return
                             }
                             if (signatariosPosicionaveis.length === 0) {
-                              toast.error('Selecione primeiro a instituição e os signatários que assinarão o documento.')
+                              toast.error('Informe primeiro o nome do signatário (ou selecione representantes opcionais) para posicionar as assinaturas.')
                               return
                             }
                             setModalPosicionadorAberto(true)
@@ -7091,7 +7088,7 @@ export default function MatriculaDigitalPage() {
                           color: '#b45309',
                         }}
                       >
-                        Selecione a instituição e os representantes no <strong>Passo 1</strong> para configurar as assinaturas.
+                        Preencha os <strong>Dados do Signatário</strong> acima (ou selecione representantes opcionais da instituição) para posicionar as assinaturas no documento.
                       </div>
                     ) : (
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 10 }}>

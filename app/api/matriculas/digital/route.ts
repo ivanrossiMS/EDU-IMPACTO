@@ -78,13 +78,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'O e-mail do signatário é obrigatório para validação.' }, { status: 400 })
     }
 
-    if (!body.escola_representante_id && !body.escola_cnpj && !body.escola_razao_social) {
-      return NextResponse.json({ error: 'A instituição emissora é obrigatória (Passo 1).' }, { status: 400 })
-    }
-
     const appUrl = getAppBaseUrl(request)
     const anoLetivo = String(body.ano_letivo || new Date().getFullYear())
     const dataCriacao = new Date().toISOString()
+
+    const semAssinaturaEscola = Boolean(
+      body.sem_assinatura_escola ||
+      (Array.isArray(body.escola_representantes) && body.escola_representantes.length === 0)
+    )
 
     const escolaRepresentantes: Array<{
       id?: string
@@ -94,41 +95,41 @@ export async function POST(request: Request) {
       email?: string
       telefone?: string
       assinaturaBase64?: string | null
-    }> = Array.isArray(body.escola_representantes) && body.escola_representantes.length > 0
-      ? body.escola_representantes.map((rep: any) => ({
-          ...rep,
-          assinaturaBase64: rep.assinaturaBase64 || undefined,
-        }))
-      : (body.escola_signatario_id || body.escola_representante_nome
-          ? [
-              {
-                id: body.escola_signatario_id || body.escola_representante_id || undefined,
-                nome: body.escola_representante_nome || 'IVAN ROSSI SAMBRANA',
-                cpf: body.escola_representante_cpf || '00130220167',
-                cargo: body.escola_representante_cargo || 'Representante Legal / Diretor Geral',
-                email: body.escola_representante_email || undefined,
-                telefone: body.escola_representante_telefone || undefined,
-                assinaturaBase64: body.escola_representante_assinatura || undefined,
-              },
-            ]
-          : [])
+    }> = semAssinaturaEscola
+      ? []
+      : Array.isArray(body.escola_representantes) && body.escola_representantes.length > 0
+        ? body.escola_representantes.map((rep: any) => ({
+            ...rep,
+            assinaturaBase64: rep.assinaturaBase64 || undefined,
+          }))
+        : (body.escola_signatario_id || body.escola_representante_nome
+            ? [
+                {
+                  id: body.escola_signatario_id || body.escola_representante_id || undefined,
+                  nome: body.escola_representante_nome || 'IVAN ROSSI SAMBRANA',
+                  cpf: body.escola_representante_cpf || '00130220167',
+                  cargo: body.escola_representante_cargo || 'Representante Legal / Diretor Geral',
+                  email: body.escola_representante_email || undefined,
+                  telefone: body.escola_representante_telefone || undefined,
+                  assinaturaBase64: body.escola_representante_assinatura || undefined,
+                },
+              ]
+            : [])
 
-    if (escolaRepresentantes.length === 0) {
-      return NextResponse.json({ error: 'É obrigatório selecionar ao menos um representante da instituição para emissão do documento (Passo 2).' }, { status: 400 })
-    }
-
+    const temAssinaturaEscola = escolaRepresentantes.length > 0
     const repPrincipal = escolaRepresentantes[0]
     const repInfo = {
       id: body.escola_representante_id || undefined,
-      signatarioId: body.escola_signatario_id || repPrincipal?.id || undefined,
-      nome: repPrincipal?.nome || body.escola_representante_nome || 'IVAN ROSSI SAMBRANA',
-      cpf: repPrincipal?.cpf || body.escola_representante_cpf || '00130220167',
-      cargo: repPrincipal?.cargo || body.escola_representante_cargo || 'Representante Legal / Diretor Geral',
+      signatarioId: temAssinaturaEscola ? (body.escola_signatario_id || repPrincipal?.id || undefined) : undefined,
+      nome: temAssinaturaEscola ? (repPrincipal?.nome || body.escola_representante_nome || '') : '',
+      cpf: temAssinaturaEscola ? (repPrincipal?.cpf || body.escola_representante_cpf || '') : '',
+      cargo: temAssinaturaEscola ? (repPrincipal?.cargo || body.escola_representante_cargo || '') : '',
       razaoSocial: body.escola_razao_social || 'COLÉGIO IMPACTO CENTRO DE ENSINO LTDA',
       cnpj: body.escola_cnpj || '04.395.789/0001-88',
-      dataHoraAssinatura: dataCriacao,
-      assinaturaBase64: repPrincipal?.assinaturaBase64 || undefined,
+      dataHoraAssinatura: temAssinaturaEscola ? dataCriacao : undefined,
+      assinaturaBase64: temAssinaturaEscola ? (repPrincipal?.assinaturaBase64 || undefined) : undefined,
       representantes: escolaRepresentantes,
+      semAssinaturaRepresentante: !temAssinaturaEscola,
     }
 
     // Consulta o template personalizado de WhatsApp configurado para a escola
@@ -258,7 +259,7 @@ export async function POST(request: Request) {
             evidencias: {
               criadoPor: user?.email || 'Administração Escolar',
               ipCriacao: clientIp,
-              assinadoPelaEscola: true,
+              assinadoPelaEscola: temAssinaturaEscola,
               arquivoOriginalNome: itemNomeOriginal,
               formatoOriginal: itemFormat,
               tamanhoBytes: itemPdfBytes.length,
@@ -452,7 +453,7 @@ export async function POST(request: Request) {
       evidencias: {
         criadoPor: user?.email || 'Administração Escolar',
         ipCriacao: clientIp,
-        assinadoPelaEscola: true,
+        assinadoPelaEscola: temAssinaturaEscola,
         arquivoOriginalNome: arquivoNomeOriginal,
         formatoOriginal: inputFormat,
         tamanhoBytes: pdfBytes.length,

@@ -121,37 +121,45 @@ export default async function ValidarCodigoPage({ params }: Props) {
     } catch {}
 
     const rawRep = contrato.evidencias?.escolaRepresentante
+    const semAssinaturaRep = Boolean(
+      contrato.evidencias?.assinadoPelaEscola === false ||
+      rawRep?.semAssinaturaRepresentante ||
+      (Array.isArray(rawRep?.representantes) && rawRep.representantes.length === 0 && !rawRep?.nome)
+    )
     const posAssinaturas: any[] = Array.isArray(contrato.evidencias?.posicoesAssinaturas)
       ? contrato.evidencias.posicoesAssinaturas
       : []
 
     const escolaRepresentante = rawRep
       ? {
-          nome: rawRep.nome || 'IVAN ROSSI SAMBRANA',
-          cargo: rawRep.cargo || 'Representante Legal / Diretor Geral',
+          nome: semAssinaturaRep ? '' : (rawRep.nome || 'IVAN ROSSI SAMBRANA'),
+          cargo: semAssinaturaRep ? '' : (rawRep.cargo || 'Representante Legal / Diretor Geral'),
           razaoSocial: rawRep.razaoSocial || 'COLÉGIO IMPACTO CENTRO DE ENSINO LTDA',
           cnpj: rawRep.cnpj || '04.395.789/0001-88',
           estiloCaligrafico: rawRep.estiloCaligrafico || 'classica',
           assinaturaBase64: rawRep.estiloCaligrafico === 'custom' ? rawRep.assinaturaBase64 : null,
           dataHoraAssinatura: rawRep.dataHoraAssinatura || contrato.created_at,
-          representantes: Array.isArray(rawRep.representantes)
-            ? rawRep.representantes.map((r: any) => {
-                const matchPos = posAssinaturas.find(
-                  (p: any) =>
-                    (r.id && p.signatarioId === r.id) ||
-                    (p.nome && r.nome && String(p.nome).trim().toLowerCase() === String(r.nome).trim().toLowerCase())
-                )
-                const estilo = matchPos?.estiloCaligrafico || r.estiloCaligrafico || 'classica'
-                return {
-                  id: r.id,
-                  nome: r.nome,
-                  cargo: r.cargo,
-                  cpf: r.cpf,
-                  estiloCaligrafico: estilo,
-                  assinaturaBase64: estilo === 'custom' ? (matchPos?.assinaturaBase64 || r.assinaturaBase64 || null) : null,
-                }
-              })
-            : undefined,
+          semAssinaturaRepresentante: semAssinaturaRep,
+          representantes: semAssinaturaRep
+            ? []
+            : Array.isArray(rawRep.representantes)
+              ? rawRep.representantes.map((r: any) => {
+                  const matchPos = posAssinaturas.find(
+                    (p: any) =>
+                      (r.id && p.signatarioId === r.id) ||
+                      (p.nome && r.nome && String(p.nome).trim().toLowerCase() === String(r.nome).trim().toLowerCase())
+                  )
+                  const estilo = matchPos?.estiloCaligrafico || r.estiloCaligrafico || 'classica'
+                  return {
+                    id: r.id,
+                    nome: r.nome,
+                    cargo: r.cargo,
+                    cpf: r.cpf,
+                    estiloCaligrafico: estilo,
+                    assinaturaBase64: estilo === 'custom' ? (matchPos?.assinaturaBase64 || r.assinaturaBase64 || null) : null,
+                  }
+                })
+              : undefined,
         }
       : {
           nome: 'IVAN ROSSI SAMBRANA',

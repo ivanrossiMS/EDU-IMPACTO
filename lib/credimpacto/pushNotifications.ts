@@ -155,20 +155,20 @@ export async function resolveColaboradorPushTargets(params: {
     const [{ data: sysUsers }, { data: funcUsers }] = await Promise.all([
       sb
         .from('system_users')
-        .select('id, auth_id, colaborador_id, nome, email, cpf, ativo')
-        .neq('ativo', false),
+        .select('id, auth_id, nome, email, status, dados')
+        .or('status.neq.inativo,status.is.null'),
       sb
         .from('funcionarios')
-        .select('id, auth_id, nome, email, cpf, ativo')
-        .neq('ativo', false)
+        .select('id, nome, email, cpf, status, dados')
+        .or('status.neq.inativo,status.is.null')
     ])
 
     const matchRecord = (r: any): boolean => {
       const rId = String(r.id || '').trim()
-      const rAuthId = String(r.auth_id || '').trim()
-      const rColabId = String(r.colaborador_id || '').trim()
+      const rAuthId = String(r.auth_id || r.dados?.auth_id || '').trim()
+      const rColabId = String(r.colaborador_id || r.dados?.colaborador_id || '').trim()
       const rEmail = String(r.email || '').toLowerCase().trim()
-      const rCpf = cleanCpfDigits(r.cpf)
+      const rCpf = cleanCpfDigits(r.cpf || r.dados?.cpf)
       const rNome = String(r.nome || '').trim().toLowerCase()
 
       if (rawId && (rId === rawId || rAuthId === rawId || rColabId === rawId)) return true
@@ -185,22 +185,25 @@ export async function resolveColaboradorPushTargets(params: {
     const allCandidates: any[] = [...(sysUsers || []), ...(funcUsers || [])]
     for (const r of allCandidates) {
       if (matchRecord(r)) {
+        const rAuthId = r.auth_id || r.dados?.auth_id
+        const rColabId = r.colaborador_id || r.dados?.colaborador_id
+        const rCpf = r.cpf || r.dados?.cpf
         if (r.id) targetUserIds.add(String(r.id).trim())
-        if (r.auth_id) targetUserIds.add(String(r.auth_id).trim())
-        if (r.colaborador_id) targetUserIds.add(String(r.colaborador_id).trim())
+        if (rAuthId) targetUserIds.add(String(rAuthId).trim())
+        if (rColabId) targetUserIds.add(String(rColabId).trim())
         if (r.email && String(r.email).includes('@')) {
           targetUserIds.add(String(r.email).toLowerCase().trim())
         }
 
-        const key = String(r.id || r.auth_id || r.email)
+        const key = String(r.id || rAuthId || r.email)
         if (!seenUserKeys.has(key)) {
           seenUserKeys.add(key)
           resolvedUsers.push({
             id: String(r.id),
-            auth_id: r.auth_id ? String(r.auth_id) : undefined,
+            auth_id: rAuthId ? String(rAuthId) : undefined,
             nome: r.nome || params.colaboradorNome || 'Colaborador',
             email: r.email ? String(r.email).toLowerCase().trim() : undefined,
-            cpf: r.cpf ? String(r.cpf) : undefined
+            cpf: rCpf ? String(rCpf) : undefined
           })
         }
       }
@@ -211,8 +214,8 @@ export async function resolveColaboradorPushTargets(params: {
     if (targetUserIds.size > 0) {
       for (const r of allCandidates) {
         const rId = String(r.id || '').trim()
-        const rAuthId = String(r.auth_id || '').trim()
-        const rColabId = String(r.colaborador_id || '').trim()
+        const rAuthId = String(r.auth_id || r.dados?.auth_id || '').trim()
+        const rColabId = String(r.colaborador_id || r.dados?.colaborador_id || '').trim()
         const rEmail = String(r.email || '').toLowerCase().trim()
         if (
           (rId && targetUserIds.has(rId)) ||
@@ -263,19 +266,20 @@ export async function resolveCredImpactoAdminPushTargets(): Promise<PushTargetRe
     const [{ data: sysUsers }, { data: funcUsers }] = await Promise.all([
       sb
         .from('system_users')
-        .select('id, auth_id, colaborador_id, nome, email, perfil, cargo, ativo')
-        .neq('ativo', false),
+        .select('id, auth_id, nome, email, perfil, cargo, status, dados')
+        .or('status.neq.inativo,status.is.null'),
       sb
         .from('funcionarios')
-        .select('id, auth_id, nome, email, perfil, cargo, funcao, ativo')
-        .neq('ativo', false)
+        .select('id, nome, email, perfil_sistema, cargo, status, dados')
+        .or('status.neq.inativo,status.is.null')
     ])
 
     for (const u of sysUsers || []) {
       if (isCredImpactoAdmin(u.perfil, u.cargo)) {
+        const uColabId = (u as any).colaborador_id || u.dados?.colaborador_id
         if (u.id) targetUserIds.add(String(u.id).trim())
         if (u.auth_id) targetUserIds.add(String(u.auth_id).trim())
-        if (u.colaborador_id) targetUserIds.add(String(u.colaborador_id).trim())
+        if (uColabId) targetUserIds.add(String(uColabId).trim())
         if (u.email && String(u.email).includes('@')) {
           targetUserIds.add(String(u.email).toLowerCase().trim())
         }
@@ -293,10 +297,12 @@ export async function resolveCredImpactoAdminPushTargets(): Promise<PushTargetRe
     }
 
     for (const f of funcUsers || []) {
-      const cargo = [f.cargo, f.funcao].filter(Boolean).join(' ')
-      if (isCredImpactoAdmin(f.perfil, cargo)) {
+      const cargo = [f.cargo, f.dados?.funcao].filter(Boolean).join(' ')
+      const perfil = f.perfil_sistema || f.dados?.perfil
+      const fAuthId = (f as any).auth_id || f.dados?.auth_id
+      if (isCredImpactoAdmin(perfil, cargo)) {
         if (f.id) targetUserIds.add(String(f.id).trim())
-        if (f.auth_id) targetUserIds.add(String(f.auth_id).trim())
+        if (fAuthId) targetUserIds.add(String(fAuthId).trim())
         if (f.email && String(f.email).includes('@')) {
           targetUserIds.add(String(f.email).toLowerCase().trim())
         }
@@ -305,7 +311,7 @@ export async function resolveCredImpactoAdminPushTargets(): Promise<PushTargetRe
           seenUserKeys.add(key)
           resolvedUsers.push({
             id: String(f.id),
-            auth_id: f.auth_id ? String(f.auth_id) : undefined,
+            auth_id: fAuthId ? String(fAuthId) : undefined,
             nome: f.nome || 'Administrador',
             email: f.email ? String(f.email).toLowerCase().trim() : undefined
           })

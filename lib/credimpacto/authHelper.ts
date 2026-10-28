@@ -47,11 +47,12 @@ export async function resolveCredImpactoUser(authUser: any): Promise<ResolvedUse
     dbFunc = func1
 
     // Se não achou e dbUser tiver colaborador_id
-    if (!dbFunc && dbUser?.colaborador_id) {
+    const dbUserColabId = dbUser?.colaborador_id || dbUser?.dados?.colaborador_id
+    if (!dbFunc && dbUserColabId) {
       const { data: func2 } = await sb
         .from('funcionarios')
         .select('*')
-        .eq('id', dbUser.colaborador_id)
+        .eq('id', dbUserColabId)
         .maybeSingle()
       if (func2) dbFunc = func2
     }
